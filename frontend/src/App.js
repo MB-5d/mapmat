@@ -254,8 +254,24 @@ const SitemapTree = ({
   const [paths, setPaths] = useState([]);
   const [expandedStacks, setExpandedStacks] = useState({});
 
-  // Check if children should be stacked (many similar siblings)
-  const shouldStack = data.children?.length >= STACK_THRESHOLD;
+  // Check if children should be stacked (many similar siblings with same URL pattern)
+  // Only stack if children share a common path pattern (e.g., /blog/*, /articles/*)
+  const shouldStack = (() => {
+    if (!data.children || data.children.length < STACK_THRESHOLD) return false;
+    // Don't stack root level or first level children (main nav items)
+    if (depth < 2) return false;
+    // Check if children have similar URL patterns
+    try {
+      const paths = data.children.map(c => new URL(c.url).pathname);
+      // Get the parent path of first child
+      const firstPath = paths[0].split('/').slice(0, -1).join('/');
+      // Check if at least 80% of children share the same parent path
+      const matchingPaths = paths.filter(p => p.startsWith(firstPath + '/'));
+      return matchingPaths.length >= data.children.length * 0.8;
+    } catch {
+      return false;
+    }
+  })();
   const isStackExpanded = expandedStacks[data.id];
 
   const toggleStack = () => {
