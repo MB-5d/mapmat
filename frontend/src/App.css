@@ -1755,6 +1755,141 @@ body {
   color: #64748b;
 }
 
+/* Import Modal */
+.import-modal {
+  max-width: 480px;
+  padding: 0;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.import-modal .modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.import-modal .modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.import-modal .modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.import-modal .modal-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.import-modal .modal-body {
+  padding: 24px;
+}
+
+.import-info {
+  margin-bottom: 20px;
+}
+
+.import-info p {
+  color: #64748b;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.import-formats {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.import-formats li {
+  padding: 6px 0;
+}
+
+.import-formats strong {
+  color: #6366f1;
+}
+
+.import-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  gap: 12px;
+  color: #64748b;
+}
+
+.import-dropzone:hover {
+  border-color: #6366f1;
+  background: #f5f3ff;
+}
+
+.import-dropzone:hover svg {
+  color: #6366f1;
+}
+
+.import-dropzone input {
+  display: none;
+}
+
+.import-dropzone svg {
+  color: #94a3b8;
+  transition: color 0.2s;
+}
+
+.import-dropzone span {
+  font-size: 14px;
+}
+
+.import-hint {
+  font-size: 12px !important;
+  color: #94a3b8 !important;
+}
+
+.import-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #6366f1;
+}
+
+.import-loading .spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .save-map-form {
   padding: 20px 24px;
 }
@@ -2922,6 +3057,67 @@ body {
 
   .export-btn-desc {
     color: #9f8fb8;
+  }
+
+  /* Import Modal - Dark Mode */
+  .import-modal {
+    background: #1a1022;
+  }
+
+  .import-modal .modal-header {
+    border-bottom-color: #2d1f3d;
+  }
+
+  .import-modal .modal-header h2 {
+    color: #f3f0f7;
+  }
+
+  .import-modal .modal-close {
+    color: #9f8fb8;
+  }
+
+  .import-modal .modal-close:hover {
+    background: #2d1f3d;
+    color: #f3f0f7;
+  }
+
+  .import-info p {
+    color: #9f8fb8;
+  }
+
+  .import-formats {
+    color: #d4c8e0;
+  }
+
+  .import-formats strong {
+    color: #a78bfa;
+  }
+
+  .import-dropzone {
+    background: #0d0812;
+    border-color: #2d1f3d;
+    color: #9f8fb8;
+  }
+
+  .import-dropzone:hover {
+    border-color: #7c3aed;
+    background: #1a1022;
+  }
+
+  .import-dropzone svg {
+    color: #6b5a80;
+  }
+
+  .import-dropzone:hover svg {
+    color: #a78bfa;
+  }
+
+  .import-hint {
+    color: #6b5a80 !important;
+  }
+
+  .import-loading {
+    color: #a78bfa;
   }
 
   .share-section {

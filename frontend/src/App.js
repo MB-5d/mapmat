@@ -41,6 +41,8 @@ import {
   User,
   Eye,
   EyeOff,
+  Upload,
+  FileUp,
 } from 'lucide-react';
 import './App.css';
 import * as api from './api';
@@ -913,6 +915,8 @@ export default function App() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
 
   const canvasRef = useRef(null);
   const scanAbortRef = useRef(null);
@@ -2190,7 +2194,280 @@ const findNodeById = (node, id) => {
     setColors(newColors);
     setEditingColorDepth(null);
   };
-// Show landing page or app
+// File import parsing functions
+  const generateId = () => `import_${Math.random().toString(36).slice(2, 10)}`;
+
+  const parseXmlSitemap = (text) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/xml');
+    const urls = [];
+
+    // Standard sitemap.xml format
+    doc.querySelectorAll('url > loc').forEach(loc => {
+      urls.push(loc.textContent.trim());
+    });
+
+    // Sitemap index format
+    doc.querySelectorAll('sitemap > loc').forEach(loc => {
+      urls.push(loc.textContent.trim());
+    });
+
+    return urls;
+  };
+
+  const parseRssAtom = (text) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/xml');
+    const urls = [];
+
+    // RSS format
+    doc.querySelectorAll('item > link').forEach(link => {
+      urls.push(link.textContent.trim());
+    });
+
+    // Atom format
+    doc.querySelectorAll('entry > link[href]').forEach(link => {
+      urls.push(link.getAttribute('href'));
+    });
+
+    return urls;
+  };
+
+  const parseHtml = (text, baseUrl = '') => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, 'text/html');
+    const urls = [];
+
+    doc.querySelectorAll('a[href]').forEach(a => {
+      let href = a.getAttribute('href');
+      if (href && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:')) {
+        try {
+          // Try to resolve relative URLs
+          if (baseUrl && !href.startsWith('http')) {
+            href = new URL(href, baseUrl).href;
+          }
+          if (href.startsWith('http')) {
+            urls.push(href);
+          }
+        } catch {
+          // Skip invalid URLs
+        }
+      }
+    });
+
+    return [...new Set(urls)];
+  };
+
+  const parseCsv = (text) => {
+    const urls = [];
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+    for (const line of lines) {
+      // Split by common delimiters
+      const parts = line.split(/[,;\t]+/);
+      for (const part of parts) {
+        const trimmed = part.trim().replace(/^["']|["']$/g, '');
+        if (trimmed.match(/^https?:\/\//i)) {
+          urls.push(trimmed);
+        }
+      }
+    }
+
+    return urls;
+  };
+
+  const parseMarkdown = (text) => {
+    const urls = [];
+
+    // Markdown links: [text](url)
+    const mdLinkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
+    let match;
+    while ((match = mdLinkRegex.exec(text)) !== null) {
+      if (match[2].match(/^https?:\/\//i)) {
+        urls.push(match[2]);
+      }
+    }
+
+    // Plain URLs
+    const urlRegex = /https?:\/\/[^\s<>"')\]]+/gi;
+    while ((match = urlRegex.exec(text)) !== null) {
+      urls.push(match[0]);
+    }
+
+    return [...new Set(urls)];
+  };
+
+  const parsePlainText = (text) => {
+    const urls = [];
+    const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+    let match;
+    while ((match = urlRegex.exec(text)) !== null) {
+      urls.push(match[0]);
+    }
+    return [...new Set(urls)];
+  };
+
+  const buildTreeFromUrls = (urls) => {
+    if (!urls.length) return null;
+
+    // Group URLs by domain
+    const byDomain = {};
+    for (const url of urls) {
+      try {
+        const u = new URL(url);
+        const domain = u.hostname;
+        if (!byDomain[domain]) byDomain[domain] = [];
+        byDomain[domain].push(url);
+      } catch {
+        // Skip invalid URLs
+      }
+    }
+
+    const domains = Object.keys(byDomain);
+
+    // If only one domain, build hierarchical tree
+    if (domains.length === 1) {
+      const domain = domains[0];
+      const domainUrls = byDomain[domain];
+
+      // Find the root URL (shortest path or homepage)
+      const sorted = [...domainUrls].sort((a, b) => {
+        const pathA = new URL(a).pathname;
+        const pathB = new URL(b).pathname;
+        return pathA.length - pathB.length;
+      });
+
+      const rootUrl = sorted[0];
+      const root = {
+        id: generateId(),
+        title: domain,
+        url: rootUrl,
+        children: []
+      };
+
+      // Build tree based on URL paths
+      const urlMap = new Map();
+      urlMap.set(rootUrl, root);
+
+      for (const url of sorted.slice(1)) {
+        try {
+          const u = new URL(url);
+          const pathParts = u.pathname.split('/').filter(Boolean);
+          const title = pathParts[pathParts.length - 1] || u.pathname || 'Page';
+
+          const node = {
+            id: generateId(),
+            title: decodeURIComponent(title).replace(/[-_]/g, ' '),
+            url: url,
+            children: []
+          };
+
+          // Find parent by matching path
+          let parent = root;
+          let parentPath = '';
+          for (let i = 0; i < pathParts.length - 1; i++) {
+            parentPath += '/' + pathParts[i];
+            const parentUrl = `${u.origin}${parentPath}`;
+            if (urlMap.has(parentUrl)) {
+              parent = urlMap.get(parentUrl);
+            }
+          }
+
+          parent.children.push(node);
+          urlMap.set(url, node);
+        } catch {
+          // Skip invalid URLs
+        }
+      }
+
+      return root;
+    }
+
+    // Multiple domains: create a root with domain children
+    const root = {
+      id: generateId(),
+      title: 'Imported Sites',
+      url: urls[0],
+      children: []
+    };
+
+    for (const domain of domains) {
+      const domainUrls = byDomain[domain];
+      const domainNode = {
+        id: generateId(),
+        title: domain,
+        url: domainUrls[0],
+        children: domainUrls.slice(1).map(url => ({
+          id: generateId(),
+          title: new URL(url).pathname || 'Page',
+          url: url,
+          children: []
+        }))
+      };
+      root.children.push(domainNode);
+    }
+
+    return root;
+  };
+
+  const handleFileImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportLoading(true);
+
+    try {
+      const text = await file.text();
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      let urls = [];
+
+      if (ext === 'xml') {
+        // Could be sitemap or RSS/Atom
+        if (text.includes('<rss') || text.includes('<feed')) {
+          urls = parseRssAtom(text);
+        } else {
+          urls = parseXmlSitemap(text);
+        }
+      } else if (ext === 'rss' || ext === 'atom') {
+        urls = parseRssAtom(text);
+      } else if (ext === 'html' || ext === 'htm') {
+        urls = parseHtml(text);
+      } else if (ext === 'csv') {
+        urls = parseCsv(text);
+      } else if (ext === 'md' || ext === 'markdown') {
+        urls = parseMarkdown(text);
+      } else {
+        urls = parsePlainText(text);
+      }
+
+      if (urls.length === 0) {
+        showToast('No URLs found in file', 'error');
+        setImportLoading(false);
+        return;
+      }
+
+      const tree = buildTreeFromUrls(urls);
+      if (tree) {
+        setRoot(tree);
+        setCurrentMap(null);
+        setScale(1);
+        setPan({ x: 0, y: 0 });
+        setUrlInput(tree.url || '');
+        setShowImportModal(false);
+        showToast(`Imported ${urls.length} URLs`, 'success');
+      } else {
+        showToast('Could not build sitemap from file', 'error');
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      showToast('Failed to import file', 'error');
+    }
+
+    setImportLoading(false);
+    e.target.value = ''; // Reset input
+  };
+
+  // Show landing page or app
   if (showLanding) {
     return <LandingPage onLaunchApp={() => setShowLanding(false)} />;
   }
@@ -2246,6 +2523,14 @@ const findNodeById = (node, id) => {
         </div>
 
         <div className="topbar-right">
+          <button
+            className="icon-btn"
+            title="Import File"
+            onClick={() => setShowImportModal(true)}
+          >
+            <Upload size={18} />
+          </button>
+
           <button
             className="icon-btn"
             title="Save Map"
@@ -2834,6 +3119,52 @@ const findNodeById = (node, id) => {
           onLogout={handleLogout}
           showToast={showToast}
         />
+      )}
+
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="modal import-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Import Sitemap</h2>
+              <button className="modal-close" onClick={() => setShowImportModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="import-info">
+                <p>Import a sitemap from a file. Supported formats:</p>
+                <ul className="import-formats">
+                  <li><strong>XML</strong> - Standard sitemap.xml files</li>
+                  <li><strong>RSS/Atom</strong> - Feed files with links</li>
+                  <li><strong>HTML</strong> - Extracts all links from the page</li>
+                  <li><strong>CSV</strong> - Comma-separated URLs</li>
+                  <li><strong>Markdown</strong> - Extracts URLs from markdown</li>
+                  <li><strong>TXT</strong> - Plain text with URLs</li>
+                </ul>
+              </div>
+              <label className="import-dropzone">
+                <input
+                  type="file"
+                  accept=".xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
+                  onChange={handleFileImport}
+                  disabled={importLoading}
+                />
+                {importLoading ? (
+                  <div className="import-loading">
+                    <Loader2 size={32} className="spin" />
+                    <span>Processing file...</span>
+                  </div>
+                ) : (
+                  <>
+                    <FileUp size={48} />
+                    <span>Click to select file or drag and drop</span>
+                    <span className="import-hint">.xml, .rss, .atom, .html, .csv, .md, .txt</span>
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (
