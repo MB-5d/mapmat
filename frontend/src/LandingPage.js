@@ -15,6 +15,18 @@ const LandingPage = ({ onLaunchApp }) => {
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [activeFaq, setActiveFaq] = useState(null);
 
+  // Enable scrolling on landing page
+  useEffect(() => {
+    document.body.style.overflow = 'auto';
+    document.body.style.height = 'auto';
+    document.documentElement.style.overflow = 'auto';
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.height = '';
+      document.documentElement.style.overflow = '';
+    };
+  }, []);
+
   // Track scroll for parallax
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
