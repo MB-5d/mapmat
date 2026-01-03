@@ -462,9 +462,18 @@ app.get('/scan-stream', async (req, res) => {
 });
 
 // Screenshot endpoint - captures full-page screenshot
+// Note: Playwright requires browser binaries which may not be available on all hosts
 app.get('/screenshot', async (req, res) => {
   const { url, type = 'full' } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
+
+  // Check if we're in production without Playwright support
+  if (process.env.DISABLE_SCREENSHOTS === 'true') {
+    return res.status(503).json({
+      error: 'Screenshots not available',
+      reason: 'Feature disabled in this environment'
+    });
+  }
 
   try {
     // Create a unique filename based on URL hash
@@ -477,8 +486,11 @@ app.get('/screenshot', async (req, res) => {
       const stats = fs.statSync(filepath);
       const ageMs = Date.now() - stats.mtimeMs;
       if (ageMs < 3600000) { // 1 hour
+        const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+          ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+          : `http://localhost:${PORT}`;
         return res.json({
-          url: `http://localhost:${PORT}/screenshots/${filename}`,
+          url: `${baseUrl}/screenshots/${filename}`,
           cached: true
         });
       }
@@ -497,14 +509,12 @@ app.get('/screenshot', async (req, res) => {
     await page.waitForTimeout(1000);
 
     if (type === 'full') {
-      // Full page screenshot
       await page.screenshot({
         path: filepath,
         fullPage: true,
         type: 'png'
       });
     } else {
-      // Thumbnail (viewport only)
       await page.screenshot({
         path: filepath,
         fullPage: false,
@@ -514,13 +524,20 @@ app.get('/screenshot', async (req, res) => {
 
     await page.close();
 
+    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : `http://localhost:${PORT}`;
     res.json({
-      url: `http://localhost:${PORT}/screenshots/${filename}`,
+      url: `${baseUrl}/screenshots/${filename}`,
       cached: false
     });
   } catch (e) {
     console.error('Screenshot error:', e.message);
-    res.status(500).json({ error: e.message || 'Screenshot failed' });
+    // Return a short, user-friendly error
+    const shortError = e.message?.includes('Executable')
+      ? 'Screenshots not available in this environment'
+      : 'Screenshot failed';
+    res.status(500).json({ error: shortError });
   }
 });
 
