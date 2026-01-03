@@ -13,12 +13,21 @@
   --border: #e5e7eb;
 }
 
+/* Force scrolling on landing page */
+html:has(.landing),
+body:has(.landing) {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  height: auto !important;
+}
+
 .landing {
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   overflow-x: hidden;
+  overflow-y: visible;
 }
 
 /* Navigation */
