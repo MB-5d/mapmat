@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import './App.css';
 import * as api from './api';
+import LandingPage from './LandingPage';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4000';
 const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -911,6 +912,7 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [showLanding, setShowLanding] = useState(true);
 
   const canvasRef = useRef(null);
   const scanAbortRef = useRef(null);
@@ -2188,7 +2190,12 @@ const findNodeById = (node, id) => {
     setColors(newColors);
     setEditingColorDepth(null);
   };
-return (
+// Show landing page or app
+  if (showLanding) {
+    return <LandingPage onLaunchApp={() => setShowLanding(false)} />;
+  }
+
+  return (
     <div className="app">
       <div className="topbar">
         <div className="topbar-left">
