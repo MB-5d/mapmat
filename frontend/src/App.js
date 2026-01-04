@@ -2358,20 +2358,29 @@ const findNodeById = (node, id) => {
   const buildTreeFromUrls = (urls) => {
     if (!urls.length) return null;
 
+    // Filter to only valid URLs first
+    const validUrls = urls.filter(url => {
+      try {
+        new URL(url);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+
+    if (!validUrls.length) return null;
+
     // Group URLs by domain
     const byDomain = {};
-    for (const url of urls) {
-      try {
-        const u = new URL(url);
-        const domain = u.hostname;
-        if (!byDomain[domain]) byDomain[domain] = [];
-        byDomain[domain].push(url);
-      } catch {
-        // Skip invalid URLs
-      }
+    for (const url of validUrls) {
+      const u = new URL(url);
+      const domain = u.hostname;
+      if (!byDomain[domain]) byDomain[domain] = [];
+      byDomain[domain].push(url);
     }
 
     const domains = Object.keys(byDomain);
+    if (!domains.length) return null;
 
     // If only one domain, build hierarchical tree
     if (domains.length === 1) {
@@ -2380,9 +2389,13 @@ const findNodeById = (node, id) => {
 
       // Find the root URL (shortest path or homepage)
       const sorted = [...domainUrls].sort((a, b) => {
-        const pathA = new URL(a).pathname;
-        const pathB = new URL(b).pathname;
-        return pathA.length - pathB.length;
+        try {
+          const pathA = new URL(a).pathname;
+          const pathB = new URL(b).pathname;
+          return pathA.length - pathB.length;
+        } catch {
+          return 0;
+        }
       });
 
       const rootUrl = sorted[0];
@@ -2393,9 +2406,9 @@ const findNodeById = (node, id) => {
         children: []
       };
 
-      // Build tree based on URL paths
-      const urlMap = new Map();
-      urlMap.set(rootUrl, root);
+      // Build tree based on URL paths using a plain object instead of Map
+      const urlMap = {};
+      urlMap[rootUrl] = root;
 
       for (const url of sorted.slice(1)) {
         try {
@@ -2415,16 +2428,16 @@ const findNodeById = (node, id) => {
           let parentPath = '';
           for (let i = 0; i < pathParts.length - 1; i++) {
             parentPath += '/' + pathParts[i];
-            const parentUrl = `${u.origin}${parentPath}`;
-            if (urlMap.has(parentUrl)) {
-              parent = urlMap.get(parentUrl);
+            const parentUrl = u.origin + parentPath;
+            if (urlMap[parentUrl]) {
+              parent = urlMap[parentUrl];
             }
           }
 
           parent.children.push(node);
-          urlMap.set(url, node);
-        } catch {
-          // Skip invalid URLs
+          urlMap[url] = node;
+        } catch (e) {
+          console.error('Error processing URL:', url, e);
         }
       }
 
@@ -2435,22 +2448,32 @@ const findNodeById = (node, id) => {
     const root = {
       id: generateId(),
       title: 'Imported Sites',
-      url: urls[0],
+      url: validUrls[0],
       children: []
     };
 
     for (const domain of domains) {
       const domainUrls = byDomain[domain];
+      const children = [];
+
+      for (const url of domainUrls.slice(1)) {
+        try {
+          children.push({
+            id: generateId(),
+            title: new URL(url).pathname || 'Page',
+            url: url,
+            children: []
+          });
+        } catch {
+          // Skip invalid URL
+        }
+      }
+
       const domainNode = {
         id: generateId(),
         title: domain,
         url: domainUrls[0],
-        children: domainUrls.slice(1).map(url => ({
-          id: generateId(),
-          title: new URL(url).pathname || 'Page',
-          url: url,
-          children: []
-        }))
+        children: children
       };
       root.children.push(domainNode);
     }
