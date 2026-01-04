@@ -2206,19 +2206,33 @@ const findNodeById = (node, id) => {
     const parseError = doc.querySelector('parsererror');
     if (parseError) {
       console.error('XML parse error:', parseError.textContent);
-      return urls;
+      // Try parsing as HTML instead (some "xml" files are actually HTML)
+      return parseHtml(text);
     }
 
     // Use getElementsByTagName which ignores namespaces
     const locElements = doc.getElementsByTagName('loc');
+    console.log('Found loc elements:', locElements.length);
+
     for (let i = 0; i < locElements.length; i++) {
       const url = locElements[i].textContent?.trim();
-      if (url && url.startsWith('http')) {
+      console.log('loc content:', url);
+      if (url) {
         urls.push(url);
       }
     }
 
-    return urls;
+    // If no loc elements, try to find any URLs in the text
+    if (urls.length === 0) {
+      console.log('No loc elements found, trying regex fallback');
+      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+      let match;
+      while ((match = urlRegex.exec(text)) !== null) {
+        urls.push(match[0]);
+      }
+    }
+
+    return [...new Set(urls)];
   };
 
   const parseRssAtom = (text) => {
