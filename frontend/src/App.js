@@ -2202,21 +2202,23 @@ const findNodeById = (node, id) => {
     const doc = parser.parseFromString(text, 'text/xml');
     const urls = [];
 
-    // Check for parse errors
+    // Check for parse errors - if XML is invalid, fall back to regex
     const parseError = doc.querySelector('parsererror');
     if (parseError) {
-      console.error('XML parse error:', parseError.textContent);
-      // Try parsing as HTML instead (some "xml" files are actually HTML)
-      return parseHtml(text);
+      console.error('XML parse error, using regex fallback');
+      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+      let match;
+      while ((match = urlRegex.exec(text)) !== null) {
+        urls.push(match[0]);
+      }
+      return [...new Set(urls)];
     }
 
     // Use getElementsByTagName which ignores namespaces
     const locElements = doc.getElementsByTagName('loc');
-    console.log('Found loc elements:', locElements.length);
 
     for (let i = 0; i < locElements.length; i++) {
       const url = locElements[i].textContent?.trim();
-      console.log('loc content:', url);
       if (url) {
         urls.push(url);
       }
@@ -2224,7 +2226,6 @@ const findNodeById = (node, id) => {
 
     // If no loc elements, try to find any URLs in the text
     if (urls.length === 0) {
-      console.log('No loc elements found, trying regex fallback');
       const urlRegex = /https?:\/\/[^\s<>"']+/gi;
       let match;
       while ((match = urlRegex.exec(text)) !== null) {
