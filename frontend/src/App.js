@@ -2202,15 +2202,21 @@ const findNodeById = (node, id) => {
     const doc = parser.parseFromString(text, 'text/xml');
     const urls = [];
 
-    // Standard sitemap.xml format
-    doc.querySelectorAll('url > loc').forEach(loc => {
-      urls.push(loc.textContent.trim());
-    });
+    // Check for parse errors
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+      console.error('XML parse error:', parseError.textContent);
+      return urls;
+    }
 
-    // Sitemap index format
-    doc.querySelectorAll('sitemap > loc').forEach(loc => {
-      urls.push(loc.textContent.trim());
-    });
+    // Use getElementsByTagName which ignores namespaces
+    const locElements = doc.getElementsByTagName('loc');
+    for (let i = 0; i < locElements.length; i++) {
+      const url = locElements[i].textContent?.trim();
+      if (url && url.startsWith('http')) {
+        urls.push(url);
+      }
+    }
 
     return urls;
   };
@@ -2220,17 +2226,44 @@ const findNodeById = (node, id) => {
     const doc = parser.parseFromString(text, 'text/xml');
     const urls = [];
 
-    // RSS format
-    doc.querySelectorAll('item > link').forEach(link => {
-      urls.push(link.textContent.trim());
-    });
+    // Check for parse errors
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+      console.error('XML parse error:', parseError.textContent);
+      return urls;
+    }
+
+    // RSS format - use getElementsByTagName for namespace compatibility
+    const items = doc.getElementsByTagName('item');
+    for (let i = 0; i < items.length; i++) {
+      const link = items[i].getElementsByTagName('link')[0];
+      if (link?.textContent?.trim()) {
+        urls.push(link.textContent.trim());
+      }
+    }
 
     // Atom format
-    doc.querySelectorAll('entry > link[href]').forEach(link => {
-      urls.push(link.getAttribute('href'));
-    });
+    const entries = doc.getElementsByTagName('entry');
+    for (let i = 0; i < entries.length; i++) {
+      const links = entries[i].getElementsByTagName('link');
+      for (let j = 0; j < links.length; j++) {
+        const href = links[j].getAttribute('href');
+        if (href && href.startsWith('http')) {
+          urls.push(href);
+        }
+      }
+    }
 
-    return urls;
+    // Also check for channel link in RSS
+    const channelLinks = doc.getElementsByTagName('link');
+    for (let i = 0; i < channelLinks.length; i++) {
+      const url = channelLinks[i].textContent?.trim();
+      if (url && url.startsWith('http') && !urls.includes(url)) {
+        urls.push(url);
+      }
+    }
+
+    return [...new Set(urls)];
   };
 
   const parseHtml = (text, baseUrl = '') => {
@@ -2420,29 +2453,40 @@ const findNodeById = (node, id) => {
       const text = await file.text();
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       let urls = [];
+      let parseType = '';
 
       if (ext === 'xml') {
         // Could be sitemap or RSS/Atom
         if (text.includes('<rss') || text.includes('<feed')) {
           urls = parseRssAtom(text);
+          parseType = 'RSS/Atom';
         } else {
           urls = parseXmlSitemap(text);
+          parseType = 'XML Sitemap';
         }
       } else if (ext === 'rss' || ext === 'atom') {
         urls = parseRssAtom(text);
+        parseType = 'RSS/Atom';
       } else if (ext === 'html' || ext === 'htm') {
         urls = parseHtml(text);
+        parseType = 'HTML';
       } else if (ext === 'csv') {
         urls = parseCsv(text);
+        parseType = 'CSV';
       } else if (ext === 'md' || ext === 'markdown') {
         urls = parseMarkdown(text);
+        parseType = 'Markdown';
       } else {
         urls = parsePlainText(text);
+        parseType = 'Text';
       }
 
+      console.log(`Parsed ${parseType}: found ${urls.length} URLs`);
+
       if (urls.length === 0) {
-        showToast('No URLs found in file', 'error');
+        showToast(`No URLs found in ${parseType} file`, 'error');
         setImportLoading(false);
+        e.target.value = '';
         return;
       }
 
@@ -2454,13 +2498,13 @@ const findNodeById = (node, id) => {
         setPan({ x: 0, y: 0 });
         setUrlInput(tree.url || '');
         setShowImportModal(false);
-        showToast(`Imported ${urls.length} URLs`, 'success');
+        showToast(`Imported ${urls.length} URLs from ${parseType}`, 'success');
       } else {
-        showToast('Could not build sitemap from file', 'error');
+        showToast('Could not build sitemap from URLs', 'error');
       }
     } catch (err) {
       console.error('Import error:', err);
-      showToast('Failed to import file', 'error');
+      showToast(`Import failed: ${err.message || 'Unknown error'}`, 'error');
     }
 
     setImportLoading(false);
