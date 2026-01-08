@@ -3239,3 +3239,133 @@ body {
     color: #e2e0e8;
   }
 }
+
+/* ===========================================
+   DRAG & DROP STYLES
+   =========================================== */
+
+/* Drag handle in card header */
+.drag-handle {
+  opacity: 0.5;
+  cursor: grab;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.node-card:hover .drag-handle {
+  opacity: 0.8;
+}
+
+.card-header:active .drag-handle {
+  cursor: grabbing;
+}
+
+/* Dragging state - the original card being dragged */
+.node-card.dragging {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Floating drag card that follows the cursor */
+.floating-drag-card {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.floating-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.1);
+  border: 2px solid #6366f1;
+  max-width: 200px;
+}
+
+.floating-card-inner .drag-handle {
+  opacity: 1;
+  color: #6366f1;
+}
+
+.floating-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sibling drop indicator - slim line */
+.drop-indicator-sibling {
+  background: #6366f1;
+  border-radius: 2px;
+  flex-shrink: 0;
+  animation: pulse-indicator 1s ease-in-out infinite;
+}
+
+.drop-indicator-sibling.horizontal {
+  /* For root level children (horizontal layout) */
+  width: 3px;
+  height: 80px;
+  margin: 0 -8px;
+}
+
+.drop-indicator-sibling.vertical {
+  /* For nested children (vertical layout) */
+  width: 80%;
+  height: 3px;
+  margin: -8px auto;
+}
+
+.drop-indicator-sibling.after {
+  /* After last child */
+}
+
+/* Child drop indicator - card-sized ghost */
+.drop-indicator-child {
+  width: 200px;
+  height: 120px;
+  border: 2px dashed #6366f1;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.1);
+  animation: pulse-indicator 1s ease-in-out infinite;
+}
+
+@keyframes pulse-indicator {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Dark mode drag styles */
+@media (prefers-color-scheme: dark) {
+  .floating-card-inner {
+    background: #1f2937;
+    border-color: #818cf8;
+  }
+
+  .floating-card-inner .drag-handle {
+    color: #818cf8;
+  }
+
+  .floating-card-title {
+    color: #f3f4f6;
+  }
+
+  .drop-indicator-sibling {
+    background: #818cf8;
+  }
+
+  .drop-indicator-child {
+    border-color: #818cf8;
+    background: rgba(129, 140, 248, 0.15);
+  }
+}

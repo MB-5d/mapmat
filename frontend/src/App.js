@@ -1,9 +1,10 @@
-import React, { useLayoutEffect, useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Download,
   Share2,
   Bookmark,
   Plus,
+  GripVertical,
   Trash2,
   Edit2,
   X,
@@ -127,6 +128,8 @@ const NodeCard = ({
   onEdit,
   onViewImage,
   isRoot,
+  onDragStart,
+  isDragging,
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
@@ -160,9 +163,23 @@ const NodeCard = ({
     onViewImage(node.url);
   };
 
+  const handleDragHandlePointerDown = (e) => {
+    if (isRoot) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onDragStart?.(node, e);
+  };
+
   return (
-    <div className="node-card" data-node-card="1">
-      <div className="card-header" style={{ backgroundColor: color }} />
+    <div className={`node-card ${isDragging ? 'dragging' : ''}`} data-node-card="1" data-node-id={node.id}>
+      <div
+        className="card-header"
+        style={{ backgroundColor: color }}
+        onPointerDown={handleDragHandlePointerDown}
+        title={isRoot ? undefined : 'Drag to reorder'}
+      >
+        {!isRoot && <GripVertical size={14} className="drag-handle" />}
+      </div>
 
       {showThumbnails && (
         <div
@@ -248,6 +265,9 @@ const SitemapTree = ({
   onEdit,
   onViewImage,
   onNodeDoubleClick,
+  onDragStart,
+  draggedNodeId,
+  dropIndicator,
 }) => {
   const myColor = colors[Math.min(depth, colors.length - 1)];
 
@@ -373,7 +393,13 @@ const SitemapTree = ({
           onDelete={onDelete}
           onEdit={onEdit}
           onViewImage={onViewImage}
+          onDragStart={onDragStart}
+          isDragging={draggedNodeId === data.id}
         />
+        {/* Child drop zone indicator - card-sized ghost */}
+        {dropIndicator?.type === 'child' && dropIndicator?.parentId === data.id && !data.children?.length && (
+          <div className="drop-indicator-child" />
+        )}
       </div>
 
       {!!data.children?.length && (
@@ -408,6 +434,9 @@ const SitemapTree = ({
                     onEdit={onEdit}
                     onViewImage={onViewImage}
                     onNodeDoubleClick={onNodeDoubleClick}
+                    onDragStart={onDragStart}
+                    draggedNodeId={draggedNodeId}
+                    dropIndicator={dropIndicator}
                   />
                 </div>
                 <div className="stacked-count">
@@ -423,6 +452,10 @@ const SitemapTree = ({
                 className="child-wrap"
                 ref={(el) => (childRefs.current[idx] = el)}
               >
+                {/* Sibling drop zone indicator - slim line BEFORE this child */}
+                {dropIndicator?.type === 'sibling' && dropIndicator?.parentId === data.id && dropIndicator?.index === idx && (
+                  <div className={`drop-indicator-sibling ${depth === 0 ? 'horizontal' : 'vertical'}`} />
+                )}
                 <SitemapTree
                   data={child}
                   depth={depth + 1}
@@ -435,9 +468,20 @@ const SitemapTree = ({
                   onEdit={onEdit}
                   onViewImage={onViewImage}
                   onNodeDoubleClick={onNodeDoubleClick}
+                  onDragStart={onDragStart}
+                  draggedNodeId={draggedNodeId}
+                  dropIndicator={dropIndicator}
                 />
+                {/* Sibling drop zone indicator - slim line AFTER last child */}
+                {idx === data.children.length - 1 && dropIndicator?.type === 'sibling' && dropIndicator?.parentId === data.id && dropIndicator?.index === data.children.length && (
+                  <div className={`drop-indicator-sibling after ${depth === 0 ? 'horizontal' : 'vertical'}`} />
+                )}
               </div>
             ))
+          )}
+          {/* Child drop zone indicator - card ghost at end of children */}
+          {dropIndicator?.type === 'child' && dropIndicator?.parentId === data.id && data.children?.length > 0 && (
+            <div className="drop-indicator-child" />
           )}
 
           {shouldStack && isStackExpanded && (
@@ -913,10 +957,24 @@ export default function App() {
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [, setAuthLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+
+  // Drag & Drop state
+  const [dragState, setDragState] = useState({
+    isDragging: false,
+    draggedNode: null,
+    draggedNodeId: null,
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+  });
+  const [dropIndicator, setDropIndicator] = useState(null);
+  const activeDropZoneRef = useRef(null);
+  const dropZonesRef = useRef([]);
 
   const canvasRef = useRef(null);
   const scanAbortRef = useRef(null);
@@ -1527,6 +1585,12 @@ export default function App() {
   };
 
   const onPointerMove = (e) => {
+    // Handle node dragging
+    if (dragState.isDragging) {
+      handleDragMove(e);
+      return;
+    }
+    // Handle canvas panning
     if (!dragRef.current.dragging) return;
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
@@ -1535,6 +1599,12 @@ export default function App() {
   };
 
   const onPointerUp = (e) => {
+    // Handle node drag end
+    if (dragState.isDragging) {
+      handleDragEnd();
+      return;
+    }
+    // Handle canvas pan end
     dragRef.current.dragging = false;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -2188,6 +2258,215 @@ const findNodeById = (node, id) => {
     });
   };
 
+  // ========== DRAG & DROP ==========
+
+  const findParent = (tree, nodeId, parent = null) => {
+    if (!tree) return null;
+    if (tree.id === nodeId) return parent;
+    for (const child of tree.children || []) {
+      const found = findParent(child, nodeId, tree);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const isDescendantOf = (tree, nodeId, ancestorId) => {
+    const ancestor = findNodeById(tree, ancestorId);
+    if (!ancestor) return false;
+    return !!findNodeById(ancestor, nodeId);
+  };
+
+  const moveNode = (nodeId, newParentId, insertIndex) => {
+    if (!root || nodeId === root.id) return;
+    if (nodeId === newParentId) return;
+    if (isDescendantOf(root, newParentId, nodeId)) return;
+
+    setRoot((prev) => {
+      const copy = structuredClone(prev);
+      const nodeToMove = findNodeById(copy, nodeId);
+      if (!nodeToMove) return prev;
+
+      const oldParent = findParent(copy, nodeId);
+      if (!oldParent) return prev;
+
+      const oldIndex = oldParent.children.findIndex(c => c.id === nodeId);
+      if (oldIndex === -1) return prev;
+
+      oldParent.children.splice(oldIndex, 1);
+
+      const newParent = findNodeById(copy, newParentId);
+      if (!newParent) return prev;
+
+      newParent.children = newParent.children || [];
+
+      let adjustedIndex = insertIndex;
+      if (oldParent.id === newParentId && oldIndex < insertIndex) {
+        adjustedIndex = insertIndex - 1;
+      }
+
+      newParent.children.splice(adjustedIndex, 0, nodeToMove);
+      return copy;
+    });
+  };
+
+  const calculateDropZones = () => {
+    if (!contentRef.current || !root) return [];
+    const zones = [];
+    const cards = contentRef.current.querySelectorAll('[data-node-card="1"]');
+
+    cards.forEach((card) => {
+      const nodeId = card.getAttribute('data-node-id');
+      if (!nodeId) return;
+
+      const rect = card.getBoundingClientRect();
+      const node = findNodeById(root, nodeId);
+      if (!node) return;
+
+      const parent = findParent(root, nodeId);
+      if (!parent) return;
+
+      const siblingIndex = parent.children.findIndex(c => c.id === nodeId);
+      const parentWrap = card.closest('.parent-wrap');
+      const depth = parseInt(parentWrap?.getAttribute('data-depth') || '0', 10);
+
+      if (depth === 0) {
+        zones.push({
+          type: 'sibling',
+          parentId: parent.id,
+          index: siblingIndex,
+          rect: { left: rect.left - 40, top: rect.top, width: 40, height: rect.height },
+        });
+        if (siblingIndex === parent.children.length - 1) {
+          zones.push({
+            type: 'sibling',
+            parentId: parent.id,
+            index: siblingIndex + 1,
+            rect: { left: rect.right, top: rect.top, width: 40, height: rect.height },
+          });
+        }
+      } else {
+        zones.push({
+          type: 'sibling',
+          parentId: parent.id,
+          index: siblingIndex,
+          rect: { left: rect.left, top: rect.top - 40, width: rect.width, height: 40 },
+        });
+        if (siblingIndex === parent.children.length - 1) {
+          zones.push({
+            type: 'sibling',
+            parentId: parent.id,
+            index: siblingIndex + 1,
+            rect: { left: rect.left, top: rect.bottom, width: rect.width, height: 40 },
+          });
+        }
+      }
+
+      if (!node.children?.length) {
+        zones.push({
+          type: 'child',
+          parentId: nodeId,
+          index: 0,
+          rect: { left: rect.left, top: rect.bottom + 40, width: rect.width, height: rect.height },
+        });
+      }
+    });
+
+    return zones;
+  };
+
+  const findNearestDropZone = (x, y, threshold = 60) => {
+    const zones = dropZonesRef.current;
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    for (const zone of zones) {
+      if (dragState.draggedNodeId === zone.parentId) continue;
+      if (zone.type === 'sibling') {
+        const parent = findNodeById(root, zone.parentId);
+        if (parent?.children?.[zone.index]?.id === dragState.draggedNodeId) continue;
+        if (zone.index > 0 && parent?.children?.[zone.index - 1]?.id === dragState.draggedNodeId) continue;
+      }
+      if (isDescendantOf(root, zone.parentId, dragState.draggedNodeId)) continue;
+
+      const r = zone.rect;
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+      const inZone = x >= r.left - threshold && x <= r.left + r.width + threshold &&
+                     y >= r.top - threshold && y <= r.top + r.height + threshold;
+
+      if (inZone && dist < nearestDist) {
+        nearestDist = dist;
+        nearest = zone;
+      }
+    }
+
+    return nearest;
+  };
+
+  const handleNodeDragStart = (node, e) => {
+    if (!node || node.id === root?.id) return;
+    dropZonesRef.current = calculateDropZones();
+
+    setDragState({
+      isDragging: true,
+      draggedNode: node,
+      draggedNodeId: node.id,
+      startX: e.clientX,
+      startY: e.clientY,
+      currentX: e.clientX,
+      currentY: e.clientY,
+    });
+  };
+
+  const handleDragMove = (e) => {
+    if (!dragState.isDragging) return;
+
+    setDragState(prev => ({
+      ...prev,
+      currentX: e.clientX,
+      currentY: e.clientY,
+    }));
+
+    const nearest = findNearestDropZone(e.clientX, e.clientY);
+
+    if (activeDropZoneRef.current && !nearest) {
+      const current = activeDropZoneRef.current;
+      const stillNear = findNearestDropZone(e.clientX, e.clientY, 80);
+      if (stillNear?.parentId === current.parentId && stillNear?.index === current.index && stillNear?.type === current.type) {
+        return;
+      }
+    }
+
+    activeDropZoneRef.current = nearest;
+    setDropIndicator(nearest ? { type: nearest.type, parentId: nearest.parentId, index: nearest.index } : null);
+  };
+
+  const handleDragEnd = () => {
+    if (!dragState.isDragging) return;
+
+    if (dropIndicator && dragState.draggedNodeId) {
+      if (dropIndicator.type === 'sibling') {
+        moveNode(dragState.draggedNodeId, dropIndicator.parentId, dropIndicator.index);
+      } else if (dropIndicator.type === 'child') {
+        moveNode(dragState.draggedNodeId, dropIndicator.parentId, 0);
+      }
+    }
+
+    setDragState({
+      isDragging: false,
+      draggedNode: null,
+      draggedNodeId: null,
+      startX: 0,
+      startY: 0,
+      currentX: 0,
+      currentY: 0,
+    });
+    setDropIndicator(null);
+    activeDropZoneRef.current = null;
+    dropZonesRef.current = [];
+  };
+
   const updateLevelColor = (depth, color) => {
     const newColors = [...colors];
     newColors[depth] = color;
@@ -2358,29 +2637,20 @@ const findNodeById = (node, id) => {
   const buildTreeFromUrls = (urls) => {
     if (!urls.length) return null;
 
-    // Filter to only valid URLs first
-    const validUrls = urls.filter(url => {
-      try {
-        new URL(url);
-        return true;
-      } catch {
-        return false;
-      }
-    });
-
-    if (!validUrls.length) return null;
-
     // Group URLs by domain
     const byDomain = {};
-    for (const url of validUrls) {
-      const u = new URL(url);
-      const domain = u.hostname;
-      if (!byDomain[domain]) byDomain[domain] = [];
-      byDomain[domain].push(url);
+    for (const url of urls) {
+      try {
+        const u = new URL(url);
+        const domain = u.hostname;
+        if (!byDomain[domain]) byDomain[domain] = [];
+        byDomain[domain].push(url);
+      } catch {
+        // Skip invalid URLs
+      }
     }
 
     const domains = Object.keys(byDomain);
-    if (!domains.length) return null;
 
     // If only one domain, build hierarchical tree
     if (domains.length === 1) {
@@ -2389,13 +2659,9 @@ const findNodeById = (node, id) => {
 
       // Find the root URL (shortest path or homepage)
       const sorted = [...domainUrls].sort((a, b) => {
-        try {
-          const pathA = new URL(a).pathname;
-          const pathB = new URL(b).pathname;
-          return pathA.length - pathB.length;
-        } catch {
-          return 0;
-        }
+        const pathA = new URL(a).pathname;
+        const pathB = new URL(b).pathname;
+        return pathA.length - pathB.length;
       });
 
       const rootUrl = sorted[0];
@@ -2406,9 +2672,9 @@ const findNodeById = (node, id) => {
         children: []
       };
 
-      // Build tree based on URL paths using a plain object instead of Map
-      const urlMap = {};
-      urlMap[rootUrl] = root;
+      // Build tree based on URL paths
+      const urlMap = new Map();
+      urlMap.set(rootUrl, root);
 
       for (const url of sorted.slice(1)) {
         try {
@@ -2428,16 +2694,16 @@ const findNodeById = (node, id) => {
           let parentPath = '';
           for (let i = 0; i < pathParts.length - 1; i++) {
             parentPath += '/' + pathParts[i];
-            const parentUrl = u.origin + parentPath;
-            if (urlMap[parentUrl]) {
-              parent = urlMap[parentUrl];
+            const parentUrl = `${u.origin}${parentPath}`;
+            if (urlMap.has(parentUrl)) {
+              parent = urlMap.get(parentUrl);
             }
           }
 
           parent.children.push(node);
-          urlMap[url] = node;
-        } catch (e) {
-          console.error('Error processing URL:', url, e);
+          urlMap.set(url, node);
+        } catch {
+          // Skip invalid URLs
         }
       }
 
@@ -2448,32 +2714,22 @@ const findNodeById = (node, id) => {
     const root = {
       id: generateId(),
       title: 'Imported Sites',
-      url: validUrls[0],
+      url: urls[0],
       children: []
     };
 
     for (const domain of domains) {
       const domainUrls = byDomain[domain];
-      const children = [];
-
-      for (const url of domainUrls.slice(1)) {
-        try {
-          children.push({
-            id: generateId(),
-            title: new URL(url).pathname || 'Page',
-            url: url,
-            children: []
-          });
-        } catch {
-          // Skip invalid URL
-        }
-      }
-
       const domainNode = {
         id: generateId(),
         title: domain,
         url: domainUrls[0],
-        children: children
+        children: domainUrls.slice(1).map(url => ({
+          id: generateId(),
+          title: new URL(url).pathname || 'Page',
+          url: url,
+          children: []
+        }))
       };
       root.children.push(domainNode);
     }
@@ -2723,6 +2979,9 @@ const findNodeById = (node, id) => {
                 onDelete={deleteNode}
                 onEdit={editNode}
                 onViewImage={viewFullScreenshot}
+                onDragStart={handleNodeDragStart}
+                draggedNodeId={dragState.draggedNodeId}
+                dropIndicator={dropIndicator}
                 onNodeDoubleClick={(id) => {
                   if (scale < 0.95) {
                     const el = contentRef.current?.querySelector(`[data-node-id="${id}"]`);
@@ -2778,6 +3037,22 @@ const findNodeById = (node, id) => {
               </button>
             </div>
           </>
+        )}
+
+        {/* Floating drag card */}
+        {dragState.isDragging && dragState.draggedNode && (
+          <div
+            className="floating-drag-card"
+            style={{
+              left: dragState.currentX,
+              top: dragState.currentY,
+            }}
+          >
+            <div className="floating-card-inner">
+              <GripVertical size={14} className="drag-handle" />
+              <span className="floating-card-title">{dragState.draggedNode.title || 'Untitled'}</span>
+            </div>
+          </div>
         )}
 
       </div>
