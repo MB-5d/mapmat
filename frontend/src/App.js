@@ -311,80 +311,82 @@ const DraggableNodeCard = ({
 // Minimum number of similar children to trigger stacking
 const STACK_THRESHOLD = 5;
 
-const SitemapTree = ({
-  data,
-  depth = 0,
-  numberPrefix = '1',
+// Indentation per depth level for Level 2+ nodes
+const INDENT_PER_LEVEL = 40;
+
+// Check if children should be stacked (many similar siblings with same URL pattern)
+const shouldStackChildren = (children, depth) => {
+  if (!children || children.length < STACK_THRESHOLD) return false;
+  // Don't stack root level or first level children (main nav items)
+  if (depth < 2) return false;
+  // Check if children have similar URL patterns
+  try {
+    const paths = children.map(c => new URL(c.url).pathname);
+    const firstPath = paths[0].split('/').slice(0, -1).join('/');
+    const matchingPaths = paths.filter(p => p.startsWith(firstPath + '/'));
+    return matchingPaths.length >= children.length * 0.8;
+  } catch {
+    return false;
+  }
+};
+
+// VerticalBranch: Renders a vertical stack of nodes for Level 2+ with indentation
+const VerticalBranch = ({
+  node,
+  depth,
+  numberPrefix,
   showThumbnails,
   colors,
-  scale = 1,
+  scale,
   onDelete,
   onEdit,
   onDuplicate,
   onViewImage,
   onNodeDoubleClick,
   activeId,
+  expandedStacks,
+  toggleStack,
 }) => {
-  const myColor = colors[Math.min(depth, colors.length - 1)];
-
-  const parentWrapRef = useRef(null);
-  const childrenWrapRef = useRef(null);
+  const color = colors[Math.min(depth, colors.length - 1)];
+  const nodeRef = useRef(null);
+  const childrenRef = useRef(null);
   const childRefs = useRef([]);
   const [paths, setPaths] = useState([]);
-  const [expandedStacks, setExpandedStacks] = useState({});
 
-  // Check if children should be stacked (many similar siblings with same URL pattern)
-  // Only stack if children share a common path pattern (e.g., /blog/*, /articles/*)
-  const shouldStack = (() => {
-    if (!data.children || data.children.length < STACK_THRESHOLD) return false;
-    // Don't stack root level or first level children (main nav items)
-    if (depth < 2) return false;
-    // Check if children have similar URL patterns
-    try {
-      const paths = data.children.map(c => new URL(c.url).pathname);
-      // Get the parent path of first child
-      const firstPath = paths[0].split('/').slice(0, -1).join('/');
-      // Check if at least 80% of children share the same parent path
-      const matchingPaths = paths.filter(p => p.startsWith(firstPath + '/'));
-      return matchingPaths.length >= data.children.length * 0.8;
-    } catch {
-      return false;
-    }
-  })();
-  const isStackExpanded = expandedStacks[data.id];
+  const shouldStack = shouldStackChildren(node.children, depth);
+  const isStackExpanded = expandedStacks[node.id];
 
-  const toggleStack = () => {
-    setExpandedStacks(prev => ({ ...prev, [data.id]: !prev[data.id] }));
-  };
-
-  childRefs.current = [];
-
+  // Calculate connector paths for vertical branch (left-edge connectors)
   useLayoutEffect(() => {
-    if (!childrenWrapRef.current || !parentWrapRef.current) return;
-    if (!data?.children?.length) return;
-
-    const container = childrenWrapRef.current;
-    const parent = parentWrapRef.current;
+    if (!childrenRef.current || !nodeRef.current) return;
+    if (!node?.children?.length) return;
 
     const calc = () => {
-      const crect = container.getBoundingClientRect();
-      const prect = parent.getBoundingClientRect();
+      const containerRect = childrenRef.current.getBoundingClientRect();
+      const nodeCard = nodeRef.current.querySelector('[data-node-card="1"]');
+      if (!nodeCard) return;
 
-      // Divide by scale to convert viewport coords to local SVG coords
+      const nodeRect = nodeCard.getBoundingClientRect();
       const s = scale || 1;
-      const px = (prect.left + prect.width / 2 - crect.left) / s;
-      const py = (prect.bottom - crect.top) / s;
 
-      const gap = 40; // Equal spacing above and below trunk line (half of children margin-top: 80px)
-      const trunkY = py + gap;
+      // Parent connection point: left edge, vertically centered
+      const parentX = (nodeRect.left - containerRect.left) / s;
+      const parentY = (nodeRect.top + nodeRect.height / 2 - containerRect.top) / s;
+
+      // Spine X position (aligned with parent's left edge)
+      const spineX = parentX;
 
       const childPoints = childRefs.current
         .map((el) => {
           if (!el) return null;
-          // Find the actual node card inside the child-wrap
-          const nodeCard = el.querySelector('[data-node-card="1"]');
-          const r = nodeCard ? nodeCard.getBoundingClientRect() : el.getBoundingClientRect();
-          return { x: (r.left + r.width / 2 - crect.left) / s, y: (r.top - crect.top) / s };
+          const childCard = el.querySelector('[data-node-card="1"]');
+          if (!childCard) return null;
+          const r = childCard.getBoundingClientRect();
+          // Left edge, vertically centered
+          return {
+            x: (r.left - containerRect.left) / s,
+            y: (r.top + r.height / 2 - containerRect.top) / s,
+          };
         })
         .filter(Boolean);
 
@@ -394,57 +396,46 @@ const SitemapTree = ({
       }
 
       const p = [];
-      p.push(`M ${px} ${py} L ${px} ${trunkY}`);
 
-      if (childPoints.length === 1) {
-        const c = childPoints[0];
-        p.push(`M ${px} ${trunkY} L ${c.x} ${trunkY} L ${c.x} ${c.y}`);
-      } else {
-        const xs = childPoints.map((c) => c.x);
-        const minX = Math.min(...xs, px);
-        const maxX = Math.max(...xs, px);
+      // Vertical spine from parent down to last child
+      const lastChildY = Math.max(...childPoints.map(c => c.y));
+      p.push(`M ${spineX} ${parentY} L ${spineX} ${lastChildY}`);
 
-        p.push(`M ${minX} ${trunkY} L ${maxX} ${trunkY}`);
+      // Horizontal ticks to each child
+      childPoints.forEach((c) => {
+        p.push(`M ${spineX} ${c.y} L ${c.x} ${c.y}`);
+      });
 
-        childPoints.forEach((c) => {
-          p.push(`M ${c.x} ${trunkY} L ${c.x} ${c.y}`);
-        });
-      }
       setPaths(p);
     };
 
     calc();
 
     const ro = new ResizeObserver(() => calc());
-    ro.observe(container);
-    ro.observe(parent);
+    ro.observe(childrenRef.current);
+    ro.observe(nodeRef.current);
     childRefs.current.forEach((el) => el && ro.observe(el));
 
-    window.addEventListener('resize', calc);
-    return () => {
-      window.removeEventListener('resize', calc);
-      ro.disconnect();
-    };
-  }, [data, showThumbnails, depth, scale]);
+    return () => ro.disconnect();
+  }, [node, showThumbnails, depth, scale, expandedStacks]);
 
-  const childrenClass = depth === 0 ? 'children children-row' : 'children children-col';
+  childRefs.current = [];
 
   return (
-    <div className="tree">
+    <div className="vertical-branch" style={{ marginLeft: depth >= 2 ? INDENT_PER_LEVEL : 0 }}>
       <div
-        ref={parentWrapRef}
-        className="parent-wrap"
-        data-node-id={data.id}
+        ref={nodeRef}
+        className="branch-node"
+        data-node-id={node.id}
         data-depth={depth}
-        onDoubleClick={() => onNodeDoubleClick?.(data.id)}
+        onDoubleClick={() => onNodeDoubleClick?.(node.id)}
       >
         <DraggableNodeCard
-          key={data.id}
-          node={data}
+          node={node}
           number={numberPrefix}
-          color={myColor}
+          color={color}
           showThumbnails={showThumbnails}
-          isRoot={depth === 0}
+          isRoot={false}
           onDelete={onDelete}
           onEdit={onEdit}
           onDuplicate={onDuplicate}
@@ -453,28 +444,29 @@ const SitemapTree = ({
         />
       </div>
 
-      {!!data.children?.length && (
-        <div className={childrenClass} ref={childrenWrapRef}>
-          <svg className="connector-svg" aria-hidden="true">
+      {!!node.children?.length && (
+        <div className="branch-children" ref={childrenRef}>
+          <svg className="connector-svg vertical-connector" aria-hidden="true">
             {paths.map((d, i) => (
               <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
             ))}
           </svg>
 
           {shouldStack && !isStackExpanded ? (
-            // Render stacked view
             <div
               className="child-wrap stacked-wrap"
               ref={(el) => (childRefs.current[0] = el)}
             >
-              <div className="stacked-cards" onClick={toggleStack} title={`Click to expand ${data.children.length} pages`}>
-                {/* Background cards (visual only) */}
+              <div
+                className="stacked-cards"
+                onClick={() => toggleStack(node.id)}
+                title={`Click to expand ${node.children.length} pages`}
+              >
                 <div className="stacked-card stacked-card-3" />
                 <div className="stacked-card stacked-card-2" />
-                {/* Top card (the actual node) */}
                 <div className="stacked-card stacked-card-1">
-                  <SitemapTree
-                    data={data.children[0]}
+                  <VerticalBranch
+                    node={node.children[0]}
                     depth={depth + 1}
                     numberPrefix={`${numberPrefix}.1`}
                     showThumbnails={showThumbnails}
@@ -486,23 +478,22 @@ const SitemapTree = ({
                     onViewImage={onViewImage}
                     onNodeDoubleClick={onNodeDoubleClick}
                     activeId={activeId}
+                    expandedStacks={expandedStacks}
+                    toggleStack={toggleStack}
                   />
                 </div>
-                <div className="stacked-count">
-                  +{data.children.length - 1} more
-                </div>
+                <div className="stacked-count">+{node.children.length - 1} more</div>
               </div>
             </div>
           ) : (
-            // Render normal expanded view
-            data.children.map((child, idx) => (
+            node.children.map((child, idx) => (
               <div
                 key={child.id}
                 className="child-wrap"
                 ref={(el) => (childRefs.current[idx] = el)}
               >
-                <SitemapTree
-                  data={child}
+                <VerticalBranch
+                  node={child}
                   depth={depth + 1}
                   numberPrefix={`${numberPrefix}.${idx + 1}`}
                   showThumbnails={showThumbnails}
@@ -514,16 +505,398 @@ const SitemapTree = ({
                   onViewImage={onViewImage}
                   onNodeDoubleClick={onNodeDoubleClick}
                   activeId={activeId}
+                  expandedStacks={expandedStacks}
+                  toggleStack={toggleStack}
                 />
               </div>
             ))
           )}
 
           {shouldStack && isStackExpanded && (
-            <button className="collapse-stack-btn" onClick={toggleStack}>
-              Collapse ({data.children.length} pages)
+            <button className="collapse-stack-btn" onClick={() => toggleStack(node.id)}>
+              Collapse ({node.children.length} pages)
             </button>
           )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Level1Branch: Renders a Level 1 node and its vertical subtree
+const Level1Branch = ({
+  node,
+  numberPrefix,
+  showThumbnails,
+  colors,
+  scale,
+  onDelete,
+  onEdit,
+  onDuplicate,
+  onViewImage,
+  onNodeDoubleClick,
+  activeId,
+  expandedStacks,
+  toggleStack,
+}) => {
+  const color = colors[Math.min(1, colors.length - 1)];
+  const nodeRef = useRef(null);
+  const childrenRef = useRef(null);
+  const childRefs = useRef([]);
+  const [paths, setPaths] = useState([]);
+
+  const shouldStack = shouldStackChildren(node.children, 1);
+  const isStackExpanded = expandedStacks[node.id];
+
+  // Calculate connector paths for Level 1 → Level 2+ (vertical spine with ticks)
+  useLayoutEffect(() => {
+    if (!childrenRef.current || !nodeRef.current) return;
+    if (!node?.children?.length) return;
+
+    const calc = () => {
+      const containerRect = childrenRef.current.getBoundingClientRect();
+      const nodeCard = nodeRef.current.querySelector('[data-node-card="1"]');
+      if (!nodeCard) return;
+
+      const nodeRect = nodeCard.getBoundingClientRect();
+      const s = scale || 1;
+
+      // Parent connection point: left edge, vertically centered
+      const parentX = (nodeRect.left - containerRect.left) / s;
+      const parentY = (nodeRect.bottom - containerRect.top) / s;
+
+      // Spine X position
+      const spineX = parentX;
+
+      const childPoints = childRefs.current
+        .map((el) => {
+          if (!el) return null;
+          const childCard = el.querySelector('[data-node-card="1"]');
+          if (!childCard) return null;
+          const r = childCard.getBoundingClientRect();
+          return {
+            x: (r.left - containerRect.left) / s,
+            y: (r.top + r.height / 2 - containerRect.top) / s,
+          };
+        })
+        .filter(Boolean);
+
+      if (!childPoints.length) {
+        setPaths([]);
+        return;
+      }
+
+      const p = [];
+
+      // Vertical spine from parent bottom to last child
+      const lastChildY = Math.max(...childPoints.map(c => c.y));
+      p.push(`M ${spineX} ${parentY} L ${spineX} ${lastChildY}`);
+
+      // Horizontal ticks to each child
+      childPoints.forEach((c) => {
+        p.push(`M ${spineX} ${c.y} L ${c.x} ${c.y}`);
+      });
+
+      setPaths(p);
+    };
+
+    calc();
+
+    const ro = new ResizeObserver(() => calc());
+    ro.observe(childrenRef.current);
+    ro.observe(nodeRef.current);
+    childRefs.current.forEach((el) => el && ro.observe(el));
+
+    return () => ro.disconnect();
+  }, [node, showThumbnails, scale, expandedStacks]);
+
+  childRefs.current = [];
+
+  return (
+    <div className="level1-branch">
+      <div
+        ref={nodeRef}
+        className="level1-node"
+        data-node-id={node.id}
+        data-depth={1}
+        onDoubleClick={() => onNodeDoubleClick?.(node.id)}
+      >
+        <DraggableNodeCard
+          node={node}
+          number={numberPrefix}
+          color={color}
+          showThumbnails={showThumbnails}
+          isRoot={false}
+          onDelete={onDelete}
+          onEdit={onEdit}
+          onDuplicate={onDuplicate}
+          onViewImage={onViewImage}
+          activeId={activeId}
+        />
+      </div>
+
+      {!!node.children?.length && (
+        <div className="level1-children" ref={childrenRef}>
+          <svg className="connector-svg vertical-connector" aria-hidden="true">
+            {paths.map((d, i) => (
+              <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
+            ))}
+          </svg>
+
+          {shouldStack && !isStackExpanded ? (
+            <div
+              className="child-wrap stacked-wrap"
+              ref={(el) => (childRefs.current[0] = el)}
+            >
+              <div
+                className="stacked-cards"
+                onClick={() => toggleStack(node.id)}
+                title={`Click to expand ${node.children.length} pages`}
+              >
+                <div className="stacked-card stacked-card-3" />
+                <div className="stacked-card stacked-card-2" />
+                <div className="stacked-card stacked-card-1">
+                  <VerticalBranch
+                    node={node.children[0]}
+                    depth={2}
+                    numberPrefix={`${numberPrefix}.1`}
+                    showThumbnails={showThumbnails}
+                    colors={colors}
+                    scale={scale}
+                    onDelete={onDelete}
+                    onEdit={onEdit}
+                    onDuplicate={onDuplicate}
+                    onViewImage={onViewImage}
+                    onNodeDoubleClick={onNodeDoubleClick}
+                    activeId={activeId}
+                    expandedStacks={expandedStacks}
+                    toggleStack={toggleStack}
+                  />
+                </div>
+                <div className="stacked-count">+{node.children.length - 1} more</div>
+              </div>
+            </div>
+          ) : (
+            node.children.map((child, idx) => (
+              <div
+                key={child.id}
+                className="child-wrap"
+                ref={(el) => (childRefs.current[idx] = el)}
+              >
+                <VerticalBranch
+                  node={child}
+                  depth={2}
+                  numberPrefix={`${numberPrefix}.${idx + 1}`}
+                  showThumbnails={showThumbnails}
+                  colors={colors}
+                  scale={scale}
+                  onDelete={onDelete}
+                  onEdit={onEdit}
+                  onDuplicate={onDuplicate}
+                  onViewImage={onViewImage}
+                  onNodeDoubleClick={onNodeDoubleClick}
+                  activeId={activeId}
+                  expandedStacks={expandedStacks}
+                  toggleStack={toggleStack}
+                />
+              </div>
+            ))
+          )}
+
+          {shouldStack && isStackExpanded && (
+            <button className="collapse-stack-btn" onClick={() => toggleStack(node.id)}>
+              Collapse ({node.children.length} pages)
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Main SitemapTree component
+const SitemapTree = ({
+  data,
+  orphans = [],
+  showThumbnails,
+  colors,
+  scale = 1,
+  onDelete,
+  onEdit,
+  onDuplicate,
+  onViewImage,
+  onNodeDoubleClick,
+  activeId,
+}) => {
+  const rootColor = colors[0];
+  const rootRef = useRef(null);
+  const level1ContainerRef = useRef(null);
+  const level1Refs = useRef([]);
+  const [rootPaths, setRootPaths] = useState([]);
+  const [expandedStacks, setExpandedStacks] = useState({});
+
+  const toggleStack = (nodeId) => {
+    setExpandedStacks(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
+  };
+
+  // Calculate connector from Root to Level 1 row (horizontal bus)
+  useLayoutEffect(() => {
+    if (!level1ContainerRef.current || !rootRef.current) return;
+    if (!data?.children?.length) return;
+
+    const calc = () => {
+      const containerRect = level1ContainerRef.current.getBoundingClientRect();
+      const rootCard = rootRef.current.querySelector('[data-node-card="1"]');
+      if (!rootCard) return;
+
+      const rootRect = rootCard.getBoundingClientRect();
+      const s = scale || 1;
+
+      // Root connection point: bottom center
+      const rootX = (rootRect.left + rootRect.width / 2 - containerRect.left) / s;
+      const rootY = (rootRect.bottom - containerRect.top) / s;
+
+      // Bus line Y position (midway between root and level 1)
+      const busY = rootY + 40;
+
+      const childPoints = level1Refs.current
+        .map((el) => {
+          if (!el) return null;
+          const childCard = el.querySelector('[data-node-card="1"]');
+          if (!childCard) return null;
+          const r = childCard.getBoundingClientRect();
+          return {
+            x: (r.left + r.width / 2 - containerRect.left) / s,
+            y: (r.top - containerRect.top) / s,
+          };
+        })
+        .filter(Boolean);
+
+      if (!childPoints.length) {
+        setRootPaths([]);
+        return;
+      }
+
+      const p = [];
+
+      // Vertical line from root to bus
+      p.push(`M ${rootX} ${rootY} L ${rootX} ${busY}`);
+
+      // Horizontal bus line
+      const xs = childPoints.map(c => c.x);
+      const minX = Math.min(...xs, rootX);
+      const maxX = Math.max(...xs, rootX);
+      p.push(`M ${minX} ${busY} L ${maxX} ${busY}`);
+
+      // Vertical drops to each Level 1 node
+      childPoints.forEach((c) => {
+        p.push(`M ${c.x} ${busY} L ${c.x} ${c.y}`);
+      });
+
+      setRootPaths(p);
+    };
+
+    calc();
+
+    const ro = new ResizeObserver(() => calc());
+    ro.observe(level1ContainerRef.current);
+    ro.observe(rootRef.current);
+    level1Refs.current.forEach((el) => el && ro.observe(el));
+
+    return () => ro.disconnect();
+  }, [data, showThumbnails, scale, expandedStacks]);
+
+  level1Refs.current = [];
+
+  return (
+    <div className="sitemap-tree-wrapper">
+      {/* Main Tree */}
+      <div className="sitemap-tree">
+        {/* Root Node */}
+        <div
+          ref={rootRef}
+          className="root-node"
+          data-node-id={data.id}
+          data-depth={0}
+          onDoubleClick={() => onNodeDoubleClick?.(data.id)}
+        >
+          <DraggableNodeCard
+            node={data}
+            number="1"
+            color={rootColor}
+            showThumbnails={showThumbnails}
+            isRoot={true}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            onDuplicate={onDuplicate}
+            onViewImage={onViewImage}
+            activeId={activeId}
+          />
+        </div>
+
+        {/* Level 1 Row + Subtrees */}
+        {!!data.children?.length && (
+          <div className="level1-container" ref={level1ContainerRef}>
+            <svg className="connector-svg root-connector" aria-hidden="true">
+              {rootPaths.map((d, i) => (
+                <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
+              ))}
+            </svg>
+
+            <div className="level1-row">
+              {data.children.map((child, idx) => (
+                <div
+                  key={child.id}
+                  className="level1-wrap"
+                  ref={(el) => (level1Refs.current[idx] = el)}
+                >
+                  <Level1Branch
+                    node={child}
+                    numberPrefix={`1.${idx + 1}`}
+                    showThumbnails={showThumbnails}
+                    colors={colors}
+                    scale={scale}
+                    onDelete={onDelete}
+                    onEdit={onEdit}
+                    onDuplicate={onDuplicate}
+                    onViewImage={onViewImage}
+                    onNodeDoubleClick={onNodeDoubleClick}
+                    activeId={activeId}
+                    expandedStacks={expandedStacks}
+                    toggleStack={toggleStack}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Orphan Nodes - to the right of main tree */}
+      {orphans.length > 0 && (
+        <div className="orphans-container">
+          <div className="orphans-label">Orphan Pages</div>
+          <div className="orphans-column">
+            {orphans.map((orphan, idx) => (
+              <div key={orphan.id} className="orphan-wrap">
+                <Level1Branch
+                  node={orphan}
+                  numberPrefix={`0.${idx + 1}`}
+                  showThumbnails={showThumbnails}
+                  colors={colors}
+                  scale={scale}
+                  onDelete={onDelete}
+                  onEdit={onEdit}
+                  onDuplicate={onDuplicate}
+                  onViewImage={onViewImage}
+                  onNodeDoubleClick={onNodeDoubleClick}
+                  activeId={activeId}
+                  expandedStacks={expandedStacks}
+                  toggleStack={toggleStack}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -916,7 +1289,7 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
                 value={parentId}
                 onChange={(e) => setParentId(e.target.value)}
               >
-                <option value="">None (Root level)</option>
+                <option value="">No Parent (Orphan)</option>
                 {parentOptions.map(n => {
                   const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(n.depth);
                   const displayTitle = n.title || n.url || 'Untitled';
@@ -1223,6 +1596,7 @@ export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [root, setRoot] = useState(null);
+  const [orphans, setOrphans] = useState([]); // Pages with no parent (numbered 0.x)
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [fullImageUrl, setFullImageUrl] = useState(null);
@@ -1407,6 +1781,7 @@ export default function App() {
         .then(({ share }) => {
           if (share?.root) {
             setRoot(share.root);
+            setOrphans(share.orphans || []);
             if (share.colors) setColors(share.colors);
             setUrlInput(share.root.url || '');
             showToast('Shared map loaded!', 'success');
@@ -1419,9 +1794,10 @@ export default function App() {
           const sharedData = localStorage.getItem(shareId);
           if (sharedData) {
             try {
-              const { root: sharedRoot, colors: sharedColors } = JSON.parse(sharedData);
+              const { root: sharedRoot, colors: sharedColors, orphans: sharedOrphans } = JSON.parse(sharedData);
               if (sharedRoot) {
                 setRoot(sharedRoot);
+                setOrphans(sharedOrphans || []);
                 if (sharedColors) setColors(sharedColors);
                 setUrlInput(sharedRoot.url || '');
                 showToast('Shared map loaded!', 'success');
@@ -1649,6 +2025,7 @@ export default function App() {
         const { map } = await api.updateMap(currentMap.id, {
           name: mapName.trim(),
           root,
+          orphans,
           colors,
           project_id: projectId || null,
         });
@@ -1659,6 +2036,7 @@ export default function App() {
           name: mapName.trim(),
           url: root.url,
           root,
+          orphans,
           colors,
           project_id: projectId || null,
         });
@@ -1694,6 +2072,7 @@ export default function App() {
 
   const loadMap = (map) => {
     setRoot(map.root);
+    setOrphans(map.orphans || []);
     setColors(map.colors || DEFAULT_COLORS);
     setCurrentMap(map);
     setShowProjectsModal(false);
@@ -1870,6 +2249,7 @@ export default function App() {
       try {
         const data = JSON.parse(e.data);
         setRoot(data.root);
+        setOrphans([]); // Clear orphans when starting new scan
         setCurrentMap(null);
         setScale(1);
         setPan({ x: 0, y: 0 });
@@ -2576,16 +2956,32 @@ const findNodeById = (node, id) => {
   const requestDeleteNode = (id) => {
     if (!root) return;
     if (root.id === id) return; // Can't delete root
+    // Check tree first
     const nodeToDelete = findNodeById(root, id);
     if (nodeToDelete) {
       setDeleteConfirmNode(nodeToDelete);
+      return;
+    }
+    // Check orphans
+    const orphanToDelete = orphans.find(o => o.id === id);
+    if (orphanToDelete) {
+      setDeleteConfirmNode(orphanToDelete);
     }
   };
 
   // Actually deletes the node (called after confirmation)
   const confirmDeleteNode = () => {
-    if (!deleteConfirmNode || !root) return;
+    if (!deleteConfirmNode) return;
     const id = deleteConfirmNode.id;
+
+    // Check if it's an orphan
+    if (orphans.some(o => o.id === id)) {
+      setOrphans(prev => prev.filter(o => o.id !== id));
+      setDeleteConfirmNode(null);
+      return;
+    }
+
+    if (!root) return;
 
     const remove = (node) => {
       if (!node.children) return;
@@ -2614,7 +3010,16 @@ const findNodeById = (node, id) => {
   };
 
   const openEditModal = (node) => {
-    // Find the current parent of this node
+    // Check if it's an orphan
+    if (orphans.some(o => o.id === node.id)) {
+      setEditModalNode({
+        ...node,
+        parentId: '', // Orphans have no parent
+      });
+      setEditModalMode('edit');
+      return;
+    }
+    // Find the current parent of this node in tree
     const parent = findParentOf(root, node.id);
     setEditModalNode({
       ...node,
@@ -2624,7 +3029,18 @@ const findNodeById = (node, id) => {
   };
 
   const duplicateNode = (node) => {
-    // Find the current parent of this node
+    // Check if it's an orphan
+    if (orphans.some(o => o.id === node.id)) {
+      setEditModalNode({
+        ...node,
+        id: undefined,
+        title: `${node.title} (Copy)`,
+        parentId: '', // Orphans have no parent by default
+      });
+      setEditModalMode('duplicate');
+      return;
+    }
+    // Find the current parent of this node in tree
     const parent = findParentOf(root, node.id);
     setEditModalNode({
       ...node,
@@ -2660,53 +3076,96 @@ const findNodeById = (node, id) => {
       }
     };
 
+    // Check if node is currently an orphan
+    const isCurrentlyOrphan = orphans.some(o => o.id === updatedNode.id);
+    const newParentId = updatedNode.parentId || '';
+
     if (editModalMode === 'edit') {
       // Update existing node
       pushToUndoStack(structuredClone(root));
-      setRoot((prev) => {
-        const copy = structuredClone(prev);
-        const target = findNodeById(copy, updatedNode.id);
-        if (!target) return prev;
 
-        // Update node properties
-        Object.assign(target, {
-          title: updatedNode.title,
-          url: updatedNode.url,
-          pageType: updatedNode.pageType,
-          thumbnailUrl: updatedNode.thumbnailUrl,
-          description: updatedNode.description,
-          metaTags: updatedNode.metaTags,
-        });
-
-        // Check if parent changed
-        const currentParent = findParentInTree(copy, updatedNode.id);
-        const currentParentId = currentParent?.id || '';
-        const newParentId = updatedNode.parentId || '';
-
-        if (currentParentId !== newParentId) {
-          // Parent changed - need to move the node
-          // Don't allow moving root node or making a node its own descendant
-          if (copy.id === updatedNode.id) return copy; // Can't move root
-
-          // Remove from current parent
-          removeFromParent(copy, updatedNode.id);
-
-          // Add to new parent
-          if (newParentId === '') {
-            // Moving to root level - add as child of root
-            copy.children = copy.children || [];
-            copy.children.push(target);
-          } else {
-            const newParent = findNodeById(copy, newParentId);
-            if (newParent) {
-              newParent.children = newParent.children || [];
-              newParent.children.push(target);
-            }
+      if (isCurrentlyOrphan) {
+        // Node is currently an orphan
+        if (newParentId === '') {
+          // Stays as orphan - just update properties
+          setOrphans(prev => prev.map(o =>
+            o.id === updatedNode.id
+              ? { ...o, title: updatedNode.title, url: updatedNode.url, pageType: updatedNode.pageType,
+                  thumbnailUrl: updatedNode.thumbnailUrl, description: updatedNode.description, metaTags: updatedNode.metaTags }
+              : o
+          ));
+        } else {
+          // Moving from orphans to tree
+          const orphanNode = orphans.find(o => o.id === updatedNode.id);
+          if (orphanNode) {
+            const nodeToMove = {
+              ...orphanNode,
+              title: updatedNode.title,
+              url: updatedNode.url,
+              pageType: updatedNode.pageType,
+              thumbnailUrl: updatedNode.thumbnailUrl,
+              description: updatedNode.description,
+              metaTags: updatedNode.metaTags
+            };
+            // Remove from orphans
+            setOrphans(prev => prev.filter(o => o.id !== updatedNode.id));
+            // Add to tree
+            setRoot(prev => {
+              const copy = structuredClone(prev);
+              const newParent = findNodeById(copy, newParentId);
+              if (newParent) {
+                newParent.children = newParent.children || [];
+                newParent.children.push(nodeToMove);
+              }
+              return copy;
+            });
           }
         }
+      } else {
+        // Node is in the tree
+        setRoot((prev) => {
+          const copy = structuredClone(prev);
+          const target = findNodeById(copy, updatedNode.id);
+          if (!target) return prev;
 
-        return copy;
-      });
+          // Update node properties
+          Object.assign(target, {
+            title: updatedNode.title,
+            url: updatedNode.url,
+            pageType: updatedNode.pageType,
+            thumbnailUrl: updatedNode.thumbnailUrl,
+            description: updatedNode.description,
+            metaTags: updatedNode.metaTags,
+          });
+
+          // Check if parent changed
+          const currentParent = findParentInTree(copy, updatedNode.id);
+          const currentParentId = currentParent?.id || '';
+
+          if (currentParentId !== newParentId) {
+            // Parent changed - need to move the node
+            // Don't allow moving root node
+            if (copy.id === updatedNode.id) return copy;
+
+            // Remove from current parent
+            removeFromParent(copy, updatedNode.id);
+
+            if (newParentId === '') {
+              // Moving to orphans
+              setOrphans(prev => [...prev, { ...target }]);
+            } else {
+              // Moving to different parent in tree
+              const newParent = findNodeById(copy, newParentId);
+              if (newParent) {
+                newParent.children = newParent.children || [];
+                newParent.children.push(target);
+              }
+            }
+          }
+
+          return copy;
+        });
+      }
     } else if (editModalMode === 'duplicate') {
       // Create a copy of the node
       const newNode = {
@@ -2716,27 +3175,21 @@ const findNodeById = (node, id) => {
       };
 
       pushToUndoStack(structuredClone(root));
-      setRoot((prev) => {
-        const copy = structuredClone(prev);
-        const targetParentId = updatedNode.parentId || '';
 
-        if (targetParentId === '') {
-          // Add to root's children
-          copy.children = copy.children || [];
-          copy.children.push(newNode);
-        } else {
-          const parent = findNodeById(copy, targetParentId);
+      if (newParentId === '') {
+        // Add to orphans
+        setOrphans(prev => [...prev, newNode]);
+      } else {
+        setRoot((prev) => {
+          const copy = structuredClone(prev);
+          const parent = findNodeById(copy, newParentId);
           if (parent) {
             parent.children = parent.children || [];
             parent.children.push(newNode);
-          } else {
-            // Fallback: add to root
-            copy.children = copy.children || [];
-            copy.children.push(newNode);
           }
-        }
-        return copy;
-      });
+          return copy;
+        });
+      }
     }
     setEditModalNode(null);
   };
@@ -3253,6 +3706,7 @@ const findNodeById = (node, id) => {
       const tree = buildTreeFromUrls(urls);
       if (tree) {
         setRoot(tree);
+        setOrphans([]); // Clear orphans when importing new URLs
         setCurrentMap(null);
         setScale(1);
         setPan({ x: 0, y: 0 });
@@ -3302,6 +3756,7 @@ const findNodeById = (node, id) => {
                 onClick={() => {
                   if (window.confirm('Clear the canvas?')) {
                     setRoot(null);
+                    setOrphans([]);
                     setCurrentMap(null);
                     setScale(1);
                     setPan({ x: 0, y: 0 });
@@ -3442,6 +3897,7 @@ const findNodeById = (node, id) => {
             >
               <SitemapTree
                 data={root}
+                orphans={orphans}
                 showThumbnails={showThumbnails}
                 colors={colors}
                 scale={scale}

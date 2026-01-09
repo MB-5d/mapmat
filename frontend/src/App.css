@@ -311,47 +311,127 @@ body {
   display: none;
 }
 
-.parent-wrap {
+/* New Sitemap Layout */
+.sitemap-tree-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 120px;
+}
+
+.sitemap-tree {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.root-node {
   position: relative;
   display: inline-block;
+  margin-bottom: 0;
+}
+
+.level1-container {
+  position: relative;
+  margin-top: 80px;
+}
+
+.level1-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 48px;
+}
+
+.level1-wrap {
+  position: relative;
+}
+
+.level1-branch {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.level1-node {
+  position: relative;
+}
+
+.level1-children {
+  position: relative;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.vertical-branch {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.branch-node {
+  position: relative;
+}
+
+.branch-children {
+  position: relative;
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .child-wrap {
   position: relative;
 }
 
-.tree { 
-  position: relative; 
+/* Orphan pages section */
+.orphans-container {
+  position: relative;
+  margin-top: 0;
 }
 
-.parent-wrap { 
-  position: relative; 
-  display: inline-block; 
+.orphans-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+  padding-left: 4px;
 }
 
-.children { 
-  position: relative; 
-  margin-top: 80px;
-  padding-top: 0px; 
-}
-
-.children-row {
+.orphans-column {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 96px;
-  justify-content: center;
+  gap: 24px;
 }
 
-.children-col { 
-  display: flex; 
-  flex-direction: column; 
-  align-items: center;
-  gap: 80px; 
+.orphan-wrap {
+  position: relative;
 }
 
-.child-wrap { 
-  position: relative; 
+/* Connector SVG positioning */
+.connector-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.root-connector {
+  z-index: 1;
+}
+
+.vertical-connector {
+  z-index: 1;
 }
 
 /* Stacked cards for repetitive pages (blog posts, articles, etc.) */
