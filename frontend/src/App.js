@@ -11,7 +11,6 @@ import {
   Download,
   Share2,
   Bookmark,
-  Plus,
   GripVertical,
   Trash2,
   Edit2,
@@ -131,9 +130,9 @@ const NodeCard = ({
   number,
   color,
   showThumbnails,
-  onAdd,
   onDelete,
   onEdit,
+  onDuplicate,
   onViewImage,
   isRoot,
   isDragging,
@@ -236,27 +235,31 @@ const NodeCard = ({
       </div>
 
       <div className="card-actions">
-        <button className="btn-icon" title="Add Child" onClick={() => onAdd(node.id)}>
-          <Plus size={14} />
-        </button>
-        {!isRoot && (
-          <button className="btn-icon danger" title="Delete" onClick={() => onDelete(node.id)}>
-            <Trash2 size={14} />
+        <div className="card-actions-left">
+          <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
+            <Edit2 size={16} />
           </button>
+          {!isRoot && (
+            <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
+              <Trash2 size={16} />
+            </button>
+          )}
+          <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
+            <Copy size={16} />
+          </button>
+        </div>
+        {node.url && (
+          <a
+            href={node.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-icon-flat external-link-btn"
+            title="Open in new tab"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink size={16} />
+          </a>
         )}
-        <button className="btn-icon" title="Edit Title" onClick={() => onEdit(node)}>
-          <Edit2 size={14} />
-        </button>
-        <a
-          href={node.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-icon external-link-btn"
-          title="Open in new tab"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <ExternalLink size={14} />
-        </a>
       </div>
     </div>
   );
@@ -268,9 +271,9 @@ const DraggableNodeCard = ({
   number,
   color,
   showThumbnails,
-  onAdd,
   onDelete,
   onEdit,
+  onDuplicate,
   onViewImage,
   isRoot,
   activeId,
@@ -288,9 +291,9 @@ const DraggableNodeCard = ({
         number={number}
         color={color}
         showThumbnails={showThumbnails}
-        onAdd={onAdd}
         onDelete={onDelete}
         onEdit={onEdit}
+        onDuplicate={onDuplicate}
         onViewImage={onViewImage}
         isRoot={isRoot}
         isDragging={isDragging || activeId === node.id}
@@ -310,9 +313,9 @@ const SitemapTree = ({
   showThumbnails,
   colors,
   scale = 1,
-  onAdd,
   onDelete,
   onEdit,
+  onDuplicate,
   onViewImage,
   onNodeDoubleClick,
   activeId,
@@ -437,9 +440,9 @@ const SitemapTree = ({
           color={myColor}
           showThumbnails={showThumbnails}
           isRoot={depth === 0}
-          onAdd={onAdd}
           onDelete={onDelete}
           onEdit={onEdit}
+          onDuplicate={onDuplicate}
           onViewImage={onViewImage}
           activeId={activeId}
         />
@@ -472,9 +475,9 @@ const SitemapTree = ({
                     showThumbnails={showThumbnails}
                     colors={colors}
                     scale={scale}
-                    onAdd={onAdd}
                     onDelete={onDelete}
                     onEdit={onEdit}
+                    onDuplicate={onDuplicate}
                     onViewImage={onViewImage}
                     onNodeDoubleClick={onNodeDoubleClick}
                     activeId={activeId}
@@ -500,9 +503,9 @@ const SitemapTree = ({
                   showThumbnails={showThumbnails}
                   colors={colors}
                   scale={scale}
-                  onAdd={onAdd}
                   onDelete={onDelete}
                   onEdit={onEdit}
+                  onDuplicate={onDuplicate}
                   onViewImage={onViewImage}
                   onNodeDoubleClick={onNodeDoubleClick}
                   activeId={activeId}
@@ -728,6 +731,222 @@ const ProfileModal = ({ user, onClose, onUpdate, onLogout, showToast }) => {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Page types for dropdown
+const PAGE_TYPES = [
+  'Page',
+  'Blog Post',
+  'Product',
+  'Category',
+  'Landing Page',
+  'Contact',
+  'About',
+  'FAQ',
+  'Service',
+  'Portfolio',
+];
+
+// Helper to collect all nodes from tree
+const collectAllNodes = (node, result = []) => {
+  if (!node) return result;
+  result.push({ id: node.id, title: node.title, url: node.url });
+  if (node.children) {
+    node.children.forEach(child => collectAllNodes(child, result));
+  }
+  return result;
+};
+
+// Edit Node Modal
+const EditNodeModal = ({ node, allNodes, onClose, onSave, mode = 'edit' }) => {
+  const [title, setTitle] = useState(node?.title || '');
+  const [url, setUrl] = useState(node?.url || '');
+  const [pageType, setPageType] = useState(node?.pageType || '');
+  const [customPageType, setCustomPageType] = useState('');
+  const [parentId, setParentId] = useState(node?.parentId || '');
+  const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
+  const [description, setDescription] = useState(node?.description || '');
+  const [metaTags, setMetaTags] = useState(node?.metaTags || '');
+  const fileInputRef = useRef(null);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const finalPageType = pageType === '__custom__' ? customPageType : pageType;
+    onSave({
+      ...node,
+      title,
+      url,
+      pageType: finalPageType,
+      parentId: parentId || null,
+      thumbnailUrl,
+      description,
+      metaTags,
+    });
+    onClose();
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setThumbnailUrl(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
+
+  // Filter out current node from parent options (can't be parent of itself)
+  const parentOptions = allNodes.filter(n => n.id !== node?.id);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card edit-node-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="edit-node-header">
+          <h2 className="modal-title">{modalTitle}</h2>
+          <button className="modal-close" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="edit-node-form">
+          <div className="edit-node-form-content">
+            <div className="form-group">
+              <label>Page Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Enter page title"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>URL</label>
+              <input
+                type="url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://example.com/page"
+              />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Page Type</label>
+                <select
+                  value={pageType}
+                  onChange={(e) => setPageType(e.target.value)}
+                >
+                  <option value="">Select type...</option>
+                  {PAGE_TYPES.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                  <option value="__custom__">Custom...</option>
+                </select>
+              </div>
+
+              {pageType === '__custom__' && (
+                <div className="form-group">
+                  <label>Custom Type</label>
+                  <input
+                    type="text"
+                    value={customPageType}
+                    onChange={(e) => setCustomPageType(e.target.value)}
+                    placeholder="Enter custom type"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label>Parent Page</label>
+              <select
+                value={parentId}
+                onChange={(e) => setParentId(e.target.value)}
+              >
+                <option value="">None (Root level)</option>
+                {parentOptions.map(n => (
+                  <option key={n.id} value={n.id}>{n.title || n.url}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Thumbnail / Image</label>
+              <div className="thumbnail-input-group">
+                <input
+                  type="text"
+                  value={thumbnailUrl}
+                  onChange={(e) => setThumbnailUrl(e.target.value)}
+                  placeholder="Paste image URL"
+                />
+                <button
+                  type="button"
+                  className="btn-upload"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload size={16} />
+                  Upload
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  style={{ display: 'none' }}
+                />
+              </div>
+              {thumbnailUrl && (
+                <div className="thumbnail-preview">
+                  <img src={thumbnailUrl} alt="Thumbnail preview" />
+                  <button
+                    type="button"
+                    className="btn-remove-thumb"
+                    onClick={() => setThumbnailUrl('')}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label>Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Page description (meta description)"
+                rows={3}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Meta Tags</label>
+              <textarea
+                value={metaTags}
+                onChange={(e) => setMetaTags(e.target.value)}
+                placeholder="Comma-separated tags: seo, marketing, landing"
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <div className="edit-node-footer">
+            <button type="button" className="modal-btn secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="modal-btn primary">
+              {mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -988,6 +1207,8 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [editModalNode, setEditModalNode] = useState(null);
+  const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -2227,23 +2448,6 @@ const findNodeById = (node, id) => {
     return null;
   };
 
-  const addChild = (parentId) => {
-    setRoot((prev) => {
-      const copy = structuredClone(prev);
-      const parent = findNodeById(copy, parentId);
-      if (!parent) return prev;
-      parent.children = parent.children || [];
-      const newNode = {
-        id: `manual_${Math.random().toString(36).slice(2, 10)}`,
-        title: 'New Page',
-        url: 'https://example.com/new',
-        children: [],
-      };
-      parent.children.push(newNode);
-      return copy;
-    });
-  };
-
   const deleteNode = (id) => {
     if (!root) return;
     if (root.id === id) return;
@@ -2261,17 +2465,71 @@ const findNodeById = (node, id) => {
     });
   };
 
-  const editNode = (node) => {
-    const title = window.prompt('Edit page title:', node.title || '');
-    if (title == null) return;
+  const openEditModal = (node) => {
+    setEditModalNode(node);
+    setEditModalMode('edit');
+  };
 
-    setRoot((prev) => {
-      const copy = structuredClone(prev);
-      const target = findNodeById(copy, node.id);
-      if (!target) return prev;
-      target.title = title;
-      return copy;
+  const duplicateNode = (node) => {
+    setEditModalNode({
+      ...node,
+      id: undefined, // Will get a new ID
+      title: `${node.title} (Copy)`,
     });
+    setEditModalMode('duplicate');
+  };
+
+  const saveNodeChanges = (updatedNode) => {
+    if (editModalMode === 'edit') {
+      // Update existing node
+      setRoot((prev) => {
+        const copy = structuredClone(prev);
+        const target = findNodeById(copy, updatedNode.id);
+        if (!target) return prev;
+        Object.assign(target, {
+          title: updatedNode.title,
+          url: updatedNode.url,
+          pageType: updatedNode.pageType,
+          thumbnailUrl: updatedNode.thumbnailUrl,
+          description: updatedNode.description,
+          metaTags: updatedNode.metaTags,
+        });
+        return copy;
+      });
+    } else if (editModalMode === 'duplicate') {
+      // Create a copy of the node as a sibling
+      const newNode = {
+        ...updatedNode,
+        id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        children: [], // Don't copy children for duplicates
+      };
+
+      setRoot((prev) => {
+        const copy = structuredClone(prev);
+        // Find parent of the original node
+        const findParentNode = (tree, nodeId, parent = null) => {
+          if (!tree) return null;
+          if (tree.id === nodeId) return parent;
+          for (const child of tree.children || []) {
+            const found = findParentNode(child, nodeId, tree);
+            if (found) return found;
+          }
+          return null;
+        };
+
+        const parent = findParentNode(copy, editModalNode.id);
+        if (parent) {
+          parent.children = parent.children || [];
+          parent.children.push(newNode);
+        } else {
+          // It's a root node, add as sibling (or just add to root's children)
+          copy.children = copy.children || [];
+          copy.children.push(newNode);
+        }
+        return copy;
+      });
+    }
+    setEditModalNode(null);
   };
 
   // ========== DRAG & DROP ==========
@@ -2977,9 +3235,9 @@ const findNodeById = (node, id) => {
                 showThumbnails={showThumbnails}
                 colors={colors}
                 scale={scale}
-                onAdd={addChild}
                 onDelete={deleteNode}
-                onEdit={editNode}
+                onEdit={openEditModal}
+                onDuplicate={duplicateNode}
                 onViewImage={viewFullScreenshot}
                 activeId={activeId}
                 onNodeDoubleClick={(id) => {
@@ -3467,6 +3725,16 @@ const findNodeById = (node, id) => {
           onUpdate={(updatedUser) => setCurrentUser(updatedUser)}
           onLogout={handleLogout}
           showToast={showToast}
+        />
+      )}
+
+      {editModalNode && (
+        <EditNodeModal
+          node={editModalNode}
+          allNodes={root ? collectAllNodes(root) : []}
+          onClose={() => setEditModalNode(null)}
+          onSave={saveNodeChanges}
+          mode={editModalMode}
         />
       )}
 
