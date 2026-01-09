@@ -2444,26 +2444,47 @@ export default function App() {
     }, 50);
   };
 
+  // Refs to avoid stale closures in event handlers
+  const undoStackRef = useRef(undoStack);
+  const redoStackRef = useRef(redoStack);
+  const rootRef = useRef(root);
+
+  // Keep refs in sync with state
+  useEffect(() => { undoStackRef.current = undoStack; }, [undoStack]);
+  useEffect(() => { redoStackRef.current = redoStack; }, [redoStack]);
+  useEffect(() => { rootRef.current = root; }, [root]);
+
   // Undo/Redo functionality
   const pushToUndoStack = (state) => {
+    console.log('pushToUndoStack called, current stack length:', undoStackRef.current.length);
     setUndoStack(prev => [...prev, state]);
     setRedoStack([]); // Clear redo stack on new action
   };
 
   const undo = () => {
-    console.log('Undo clicked, stack length:', undoStack.length);
-    if (undoStack.length === 0) return;
-    const prevState = undoStack[undoStack.length - 1];
-    setRedoStack(prev => [...prev, structuredClone(root)]);
+    console.log('Undo called, stack length:', undoStackRef.current.length);
+    if (undoStackRef.current.length === 0) {
+      console.log('Undo stack empty, nothing to undo');
+      return;
+    }
+    const prevState = undoStackRef.current[undoStackRef.current.length - 1];
+    const currentRoot = rootRef.current;
+    console.log('Undoing to previous state, pushing current root to redo stack');
+    setRedoStack(prev => [...prev, structuredClone(currentRoot)]);
     setUndoStack(prev => prev.slice(0, -1));
     setRoot(prevState);
   };
 
   const redo = () => {
-    console.log('Redo clicked, stack length:', redoStack.length);
-    if (redoStack.length === 0) return;
-    const nextState = redoStack[redoStack.length - 1];
-    setUndoStack(prev => [...prev, structuredClone(root)]);
+    console.log('Redo called, stack length:', redoStackRef.current.length);
+    if (redoStackRef.current.length === 0) {
+      console.log('Redo stack empty, nothing to redo');
+      return;
+    }
+    const nextState = redoStackRef.current[redoStackRef.current.length - 1];
+    const currentRoot = rootRef.current;
+    console.log('Redoing to next state, pushing current root to undo stack');
+    setUndoStack(prev => [...prev, structuredClone(currentRoot)]);
     setRedoStack(prev => prev.slice(0, -1));
     setRoot(nextState);
   };
@@ -2478,38 +2499,21 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
-          // Shift+Cmd+Z = Redo
-          if (redoStack.length > 0) {
-            const nextState = redoStack[redoStack.length - 1];
-            setUndoStack(prev => [...prev, structuredClone(root)]);
-            setRedoStack(prev => prev.slice(0, -1));
-            setRoot(nextState);
-          }
+          redo();
         } else {
-          // Cmd+Z = Undo
-          if (undoStack.length > 0) {
-            const prevState = undoStack[undoStack.length - 1];
-            setRedoStack(prev => [...prev, structuredClone(root)]);
-            setUndoStack(prev => prev.slice(0, -1));
-            setRoot(prevState);
-          }
+          undo();
         }
       }
       // Also support Cmd+Y for redo (Windows convention)
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
-        if (redoStack.length > 0) {
-          const nextState = redoStack[redoStack.length - 1];
-          setUndoStack(prev => [...prev, structuredClone(root)]);
-          setRedoStack(prev => prev.slice(0, -1));
-          setRoot(nextState);
-        }
+        redo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root]);
+  }, []);
 
   const exportJson = () => {
     if (!root) return;
