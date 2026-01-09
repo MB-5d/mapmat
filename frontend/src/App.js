@@ -2456,38 +2456,63 @@ export default function App() {
 
   // Undo/Redo functionality
   const pushToUndoStack = (state) => {
-    console.log('pushToUndoStack called, current stack length:', undoStackRef.current.length);
-    setUndoStack(prev => [...prev, state]);
+    console.log('pushToUndoStack called with state:', state?.id, 'current stack length:', undoStackRef.current.length);
+    setUndoStack(prev => {
+      const newStack = [...prev, state];
+      console.log('New undo stack length:', newStack.length);
+      return newStack;
+    });
     setRedoStack([]); // Clear redo stack on new action
   };
 
-  const undo = () => {
-    console.log('Undo called, stack length:', undoStackRef.current.length);
-    if (undoStackRef.current.length === 0) {
+  // Core undo/redo logic using refs (called by both buttons and keyboard)
+  const performUndo = () => {
+    const stack = undoStackRef.current;
+    const currentRoot = rootRef.current;
+    console.log('performUndo called, stack length:', stack.length, 'currentRoot:', currentRoot?.id);
+
+    if (stack.length === 0) {
       console.log('Undo stack empty, nothing to undo');
       return;
     }
-    const prevState = undoStackRef.current[undoStackRef.current.length - 1];
-    const currentRoot = rootRef.current;
-    console.log('Undoing to previous state, pushing current root to redo stack');
+
+    const prevState = stack[stack.length - 1];
+    console.log('Restoring state:', prevState?.id, 'saving current to redo');
+
+    // Save current state to redo stack
     setRedoStack(prev => [...prev, structuredClone(currentRoot)]);
+    // Remove last item from undo stack
     setUndoStack(prev => prev.slice(0, -1));
+    // Restore previous state
     setRoot(prevState);
   };
 
-  const redo = () => {
-    console.log('Redo called, stack length:', redoStackRef.current.length);
-    if (redoStackRef.current.length === 0) {
+  const performRedo = () => {
+    const stack = redoStackRef.current;
+    const currentRoot = rootRef.current;
+    console.log('performRedo called, stack length:', stack.length, 'currentRoot:', currentRoot?.id);
+
+    if (stack.length === 0) {
       console.log('Redo stack empty, nothing to redo');
       return;
     }
-    const nextState = redoStackRef.current[redoStackRef.current.length - 1];
-    const currentRoot = rootRef.current;
-    console.log('Redoing to next state, pushing current root to undo stack');
+
+    const nextState = stack[stack.length - 1];
+    console.log('Restoring state:', nextState?.id, 'saving current to undo');
+
+    // Save current state to undo stack
     setUndoStack(prev => [...prev, structuredClone(currentRoot)]);
+    // Remove last item from redo stack
     setRedoStack(prev => prev.slice(0, -1));
+    // Restore next state
     setRoot(nextState);
   };
+
+  // Refs to the functions for stable references in useEffect
+  const performUndoRef = useRef(performUndo);
+  const performRedoRef = useRef(performRedo);
+  performUndoRef.current = performUndo;
+  performRedoRef.current = performRedo;
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
@@ -2499,15 +2524,18 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
-          redo();
+          console.log('Shift+Cmd+Z pressed - calling redo');
+          performRedoRef.current();
         } else {
-          undo();
+          console.log('Cmd+Z pressed - calling undo');
+          performUndoRef.current();
         }
       }
       // Also support Cmd+Y for redo (Windows convention)
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
-        redo();
+        console.log('Cmd+Y pressed - calling redo');
+        performRedoRef.current();
       }
     };
 
@@ -3994,7 +4022,7 @@ const findNodeById = (node, id) => {
 
               <button
                 className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-                onClick={undo}
+                onClick={performUndo}
                 disabled={!canUndo}
                 title="Undo (⌘Z)"
               >
@@ -4002,7 +4030,7 @@ const findNodeById = (node, id) => {
               </button>
               <button
                 className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-                onClick={redo}
+                onClick={performRedo}
                 disabled={!canRedo}
                 title="Redo (⇧⌘Z)"
               >
