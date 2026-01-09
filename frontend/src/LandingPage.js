@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Map, Zap, Share2, FolderOpen, Download,
+  MapIcon, Share2, FolderOpen, Download,
   ChevronDown, Menu, X, Check, ArrowRight, Mail, Send,
   Globe, Layers, Eye
 } from 'lucide-react';
@@ -245,7 +245,7 @@ Legal inquiries: legal@mapmat.com`
       <nav className={`landing-nav ${scrollY > 50 ? 'scrolled' : ''}`}>
         <div className="nav-container">
           <div className="nav-brand" onClick={() => scrollToSection('hero')}>
-            <Map size={24} />
+            <MapIcon size={24} />
             <span>Map Mat</span>
           </div>
 
@@ -537,7 +537,7 @@ Legal inquiries: legal@mapmat.com`
         <div className="footer-container">
           <div className="footer-brand">
             <div className="nav-brand">
-              <Map size={20} />
+              <MapIcon size={20} />
               <span>Map Mat</span>
             </div>
             <p>Visual sitemaps made simple.</p>
