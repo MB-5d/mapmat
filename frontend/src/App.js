@@ -1431,6 +1431,47 @@ export default function App() {
     }
   }, []);
 
+  // Safari gesture events for pinch zoom
+  const gestureScaleRef = useRef(1);
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleGestureStart = (e) => {
+      e.preventDefault();
+      gestureScaleRef.current = scale;
+    };
+
+    const handleGestureChange = (e) => {
+      e.preventDefault();
+      const next = clamp(gestureScaleRef.current * e.scale, 0.1, 3);
+      setScale(next);
+    };
+
+    const handleGestureEnd = (e) => {
+      e.preventDefault();
+    };
+
+    // Prevent browser-level pinch zoom
+    const handleWheel = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+      }
+    };
+
+    canvas.addEventListener('gesturestart', handleGestureStart);
+    canvas.addEventListener('gesturechange', handleGestureChange);
+    canvas.addEventListener('gestureend', handleGestureEnd);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('gesturestart', handleGestureStart);
+      canvas.removeEventListener('gesturechange', handleGestureChange);
+      canvas.removeEventListener('gestureend', handleGestureEnd);
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, [scale]);
+
   const toastTimeoutRef = useRef(null);
 
   const showToast = (msg, type = 'info', persistent = false) => {
