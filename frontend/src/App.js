@@ -815,7 +815,7 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
 
   // Filter out current node and its descendants from parent options
   // (can't be parent of itself or create circular reference)
-  const excludeIds = useMemo(() => {
+  const getExcludeIds = () => {
     if (!node?.id || !rootTree) return new Set();
     // Find the full node in tree to get its descendants
     const findNode = (tree, id) => {
@@ -831,8 +831,9 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
     const descendants = fullNode ? getDescendantIds(fullNode) : new Set();
     descendants.add(node.id); // Also exclude self
     return descendants;
-  }, [node?.id, rootTree]);
+  };
 
+  const excludeIds = getExcludeIds();
   const parentOptions = allNodes.filter(n => !excludeIds.has(n.id));
 
   return (

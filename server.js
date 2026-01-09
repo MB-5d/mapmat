@@ -124,12 +124,12 @@ function getParentUrl(urlStr) {
 
 function safeIdFromUrl(urlStr) {
   // Stable ID so React keys don't randomly change between scans.
+  // Use full base64 encoding (not sliced) to ensure unique IDs for each URL
   return (
     'n_' +
     Buffer.from(urlStr)
       .toString('base64')
       .replace(/[^a-zA-Z0-9]/g, '')
-      .slice(0, 24)
   );
 }
 
