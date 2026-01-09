@@ -2428,17 +2428,19 @@ export default function App() {
   };
 
   const undo = () => {
+    console.log('Undo clicked, stack length:', undoStack.length);
     if (undoStack.length === 0) return;
     const prevState = undoStack[undoStack.length - 1];
-    setRedoStack(prev => [...prev, root]);
+    setRedoStack(prev => [...prev, structuredClone(root)]);
     setUndoStack(prev => prev.slice(0, -1));
     setRoot(prevState);
   };
 
   const redo = () => {
+    console.log('Redo clicked, stack length:', redoStack.length);
     if (redoStack.length === 0) return;
     const nextState = redoStack[redoStack.length - 1];
-    setUndoStack(prev => [...prev, root]);
+    setUndoStack(prev => [...prev, structuredClone(root)]);
     setRedoStack(prev => prev.slice(0, -1));
     setRoot(nextState);
   };
