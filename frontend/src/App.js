@@ -529,8 +529,8 @@ const computeLayout = (
   const rootX = 0;
   const rootY = ROOT_Y;
 
-  // You want Home = 0.0
-  setNode(root, rootX, rootY, 0, "0.0", { isOrphan: false });
+  // Root = "1" (not 0.0)
+  setNode(root, rootX, rootY, 0, "1", { isOrphan: false });
 
   // ------------------------------------------------------------
   // 2) Level 1 row (children of root) — horizontal only
