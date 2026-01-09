@@ -438,8 +438,9 @@ const computeLayout = (
 
   if (!root) return { nodes, connectors, bounds: { w: 0, h: 0 } };
 
-  // Small UX pad so the bus line isn't kissing the root card
-  const ROOT_BUS_PAD_Y = 24;
+  // Bus line position: midpoint between root bottom and Level 1 top
+  // This gives equal visual space above and below the horizontal bus
+  const BUS_MIDPOINT_RATIO = 0.5; // bus at 50% of the gap
 
   // ------------------------------------------------------------
   // Helpers
@@ -536,7 +537,7 @@ const computeLayout = (
   // 2) Level 1 row (children of root) — horizontal only
   // ------------------------------------------------------------
   const rootBottomY = rootY + NODE_H;
-  const level1Y = rootBottomY + BUS_Y_GAP + ROOT_BUS_PAD_Y;
+  const level1Y = rootBottomY + BUS_Y_GAP;
 
   const level1Positions = [];
   let level1X = 0;
@@ -563,7 +564,7 @@ const computeLayout = (
     // Root-to-Level1 connectors (vertical drop + horizontal bus + drops)
     if (level1Positions.length > 0) {
       const rootCenterX = rootX + NODE_W / 2;
-      const busY = rootBottomY + ROOT_BUS_PAD_Y;
+      const busY = rootBottomY + BUS_Y_GAP * BUS_MIDPOINT_RATIO;
 
       connectors.push({
         type: "root-drop",
