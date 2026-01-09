@@ -188,27 +188,33 @@ const NodeCard = ({
       </div>
 
       {showThumbnails && (
-        <div
-          className="card-thumb"
-          onClick={handleViewFull}
-          title={thumbError ? 'Preview unavailable' : 'Click for full view'}
-          style={{ cursor: thumbError ? 'default' : 'zoom-in' }}
-        >
+        <div className="card-thumb">
           {thumbLoading && !thumbError && (
             <div className="thumb-loading">
               <Loader2 size={24} className="thumb-spinner" />
             </div>
           )}
           {!thumbError ? (
-            <img
-              className="thumb-img"
-              src={thumb}
-              alt={node.title}
-              loading="lazy"
-              onLoad={() => setThumbLoading(false)}
-              onError={() => { setThumbError(true); setThumbLoading(false); }}
-              style={{ opacity: thumbLoading ? 0 : 1 }}
-            />
+            <>
+              <img
+                className="thumb-img"
+                src={thumb}
+                alt={node.title}
+                loading="lazy"
+                onLoad={() => setThumbLoading(false)}
+                onError={() => { setThumbError(true); setThumbLoading(false); }}
+                style={{ opacity: thumbLoading ? 0 : 1 }}
+              />
+              {!thumbLoading && (
+                <button
+                  className="thumb-fullsize-btn"
+                  onClick={handleViewFull}
+                  title="View full size"
+                >
+                  <Maximize2 size={14} />
+                </button>
+              )}
+            </>
           ) : (
             <div className="thumb-placeholder">
               <Globe size={32} strokeWidth={1.5} />
@@ -3420,10 +3426,10 @@ const findNodeById = (node, id) => {
           tabIndex={0}
           ref={(el) => el?.focus()}
         >
+          <button className="image-overlay-close" onClick={() => { setFullImageUrl(null); setImageLoading(false); }}>
+            <X size={18} />
+          </button>
           <div className="image-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => { setFullImageUrl(null); setImageLoading(false); }}>
-              <X size={18} />
-            </button>
             {imageLoading && (
               <div className="image-loading-overlay">
                 <Loader2 size={48} className="image-spinner" />

@@ -542,6 +542,32 @@ body {
   background: #fff;
 }
 
+.thumb-fullsize-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.card-thumb:hover .thumb-fullsize-btn {
+  opacity: 1;
+}
+
+.thumb-fullsize-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
 .thumb-placeholder {
   width: 100%;
   height: 100%;
@@ -2057,10 +2083,10 @@ body {
   flex: 1;
 }
 
-.image-modal .modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
+.image-overlay-close {
+  position: fixed;
+  top: 20px;
+  right: 20px;
   width: 36px;
   height: 36px;
   display: flex;
@@ -2072,11 +2098,11 @@ body {
   cursor: pointer;
   color: #475569;
   transition: all 0.2s;
-  z-index: 20;
+  z-index: 10001;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.image-modal .modal-close:hover {
+.image-overlay-close:hover {
   background: white;
   color: #1e293b;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -2613,6 +2639,14 @@ body {
 
   .thumb-placeholder-domain {
     color: #d4c8e0;
+  }
+
+  .thumb-fullsize-btn {
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  .thumb-fullsize-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
   }
 
   .color-key {
@@ -3230,13 +3264,13 @@ body {
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
   }
 
-  .image-modal .modal-close {
+  .image-overlay-close {
     background: rgba(26, 16, 34, 0.95);
     border-color: #2d1f3d;
     color: #d4c8e0;
   }
 
-  .image-modal .modal-close:hover {
+  .image-overlay-close:hover {
     background: #2d1f3d;
     color: #f3f0f7;
   }
