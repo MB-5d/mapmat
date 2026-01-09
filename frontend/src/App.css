@@ -461,6 +461,49 @@ body {
 
 .node-card:hover {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+  border: 2px solid #6366f1;
+}
+
+/* Click + hold state - slightly larger */
+.node-card.pressing {
+  transform: scale(1.05);
+  border: 2px solid #6366f1;
+}
+
+/* Dragging state - original card becomes ghost */
+.node-card.dragging {
+  opacity: 0.4;
+  border: 2px dashed #94a3b8;
+}
+
+/* Drop zone ghost indicator */
+.drop-zone-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9998;
+  border: 2px dashed #10b981;
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+/* Floating drag card overlay */
+.drag-overlay-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  border: 2px solid #6366f1;
+  padding: 12px;
+  max-width: 200px;
+  cursor: grabbing;
+}
+
+.drag-overlay-card .drag-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .card-header { 
@@ -506,49 +549,25 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-  color: #94a3b8;
+  gap: 6px;
+  background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+  color: #64748b;
+  padding: 16px;
+}
+
+.thumb-placeholder-domain {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thumb-placeholder-text {
   font-size: 11px;
   color: #64748b;
-  max-width: 90%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-}
-
-/* View full image button */
-.thumb-view-btn {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #64748b;
-  opacity: 0;
-  transition: all 0.15s ease;
-  z-index: 10;
-}
-
-.card-thumb:hover .thumb-view-btn {
-  opacity: 1;
-}
-
-.thumb-view-btn:hover {
-  background: white;
-  color: #334155;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .card-content {
@@ -805,178 +824,6 @@ body {
   color: #64748b;
   min-width: 50px;
   text-align: center;
-}
-
-/* Canvas Toolbar - Light mode (default) */
-.canvas-toolbar {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  z-index: 50;
-}
-
-.canvas-tool-btn {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  color: #64748b;
-  transition: all 0.15s ease;
-}
-
-.canvas-tool-btn:hover:not(.disabled) {
-  background: #f1f5f9;
-  color: #334155;
-}
-
-.canvas-tool-btn.active {
-  background: #6366f1;
-  color: white;
-}
-
-.canvas-tool-btn.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.canvas-toolbar-divider {
-  width: 1px;
-  height: 24px;
-  background: #e2e8f0;
-  margin: 0 4px;
-}
-
-/* View Menu Dropdown */
-.view-menu-container {
-  position: relative;
-}
-
-.view-menu-dropdown {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 8px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  padding: 8px;
-  min-width: 150px;
-  z-index: 100;
-}
-
-.view-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #334155;
-  transition: background 0.15s;
-}
-
-.view-menu-item:hover {
-  background: #f1f5f9;
-}
-
-.view-menu-item input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: #6366f1;
-}
-
-.view-menu-item svg {
-  color: #64748b;
-}
-
-/* Canvas Toolbar - Dark mode */
-@media (prefers-color-scheme: dark) {
-  .canvas-toolbar {
-    background: #1a1022;
-    border-color: #2d1f3d;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  }
-
-  .canvas-tool-btn {
-    color: #9f8fb8;
-  }
-
-  .canvas-tool-btn:hover:not(.disabled) {
-    background: #2d1f3d;
-    color: #e2e0e8;
-  }
-
-  .canvas-toolbar-divider {
-    background: #2d1f3d;
-  }
-
-  .view-menu-dropdown {
-    background: #1a1022;
-    border-color: #2d1f3d;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  }
-
-  .view-menu-item {
-    color: #e2e0e8;
-  }
-
-  .view-menu-item:hover {
-    background: #2d1f3d;
-  }
-
-  .view-menu-item svg {
-    color: #9f8fb8;
-  }
-}
-
-/* Connections SVG Overlay */
-.connections-svg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 100;
-}
-
-.connection-line {
-  pointer-events: stroke;
-  cursor: pointer;
-}
-
-.connection-line:hover {
-  filter: brightness(1.2);
-}
-
-.connection-line.draft {
-  pointer-events: none;
-}
-
-/* Connection mode cursor for node cards */
-.node-card.connection-mode {
-  cursor: crosshair;
-}
-
-.node-card.connection-mode:hover {
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5);
 }
 
 .toast {
@@ -2764,19 +2611,8 @@ body {
     color: #9f8fb8;
   }
 
-  .thumb-placeholder-text {
-    color: #9f8fb8;
-  }
-
-  .thumb-view-btn {
-    background: rgba(26, 16, 34, 0.9);
-    border-color: #2d1f3d;
-    color: #9f8fb8;
-  }
-
-  .thumb-view-btn:hover {
-    background: #1a1022;
-    color: #e2e0e8;
+  .thumb-placeholder-domain {
+    color: #d4c8e0;
   }
 
   .color-key {
@@ -3552,56 +3388,28 @@ body {
   }
 }
 
-/* Drop zone indicators - show all valid positions during drag */
-/* Drop zone indicator - slim overlay line/marker */
+/* Drop zone indicators - fixed position overlays during drag */
 .drop-zone-indicator {
   position: fixed;
   pointer-events: none;
-  z-index: 9999;
-  background: #6366f1;
-  border-radius: 2px;
-  transition: all 0.1s ease;
+  z-index: 9998;
+  border: 2px dashed rgba(99, 102, 241, 0.5);
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.05);
+  transition: all 0.15s ease;
 }
 
-/* Sibling drop zone - thin line marker */
+/* Sibling drop zones - thin insertion lines */
 .drop-zone-indicator.sibling {
-  /* Will be positioned as thin line between nodes */
-}
-
-/* Child drop zone - small marker at insertion point */
-.drop-zone-indicator.child {
   border-radius: 4px;
-  background: rgba(99, 102, 241, 0.3);
-  border: 2px dashed #6366f1;
 }
 
-/* Active/nearest drop zone - always highlighted since only shown when near */
-.drop-zone-indicator.active {
-  background: #6366f1;
-  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
-}
-
-.drop-zone-indicator.child.active {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: #6366f1;
+/* Nearest/active drop zone - highlighted green */
+.drop-zone-indicator.nearest {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
   border-style: solid;
-}
-
-/* Dark mode drop zones */
-@media (prefers-color-scheme: dark) {
-  .drop-zone-indicator {
-    background: #818cf8;
-  }
-
-  .drop-zone-indicator.active {
-    background: #818cf8;
-    box-shadow: 0 0 8px rgba(129, 140, 248, 0.5);
-  }
-
-  .drop-zone-indicator.child {
-    background: rgba(129, 140, 248, 0.2);
-    border-color: #818cf8;
-  }
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
 }
 
 /* Dark mode drag styles */

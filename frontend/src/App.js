@@ -1,4 +1,12 @@
-import React, { useLayoutEffect, useMemo, useRef, useState, useCallback, useEffect } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+} from '@dnd-kit/core';
 import {
   Download,
   Share2,
@@ -44,12 +52,6 @@ import {
   EyeOff,
   Upload,
   FileUp,
-  Undo2,
-  Redo2,
-  MousePointer2,
-  Link,
-  Workflow,
-  Eye as EyeIcon,
 } from 'lucide-react';
 import './App.css';
 import * as api from './api';
@@ -134,10 +136,9 @@ const NodeCard = ({
   onEdit,
   onViewImage,
   isRoot,
-  onDragStart,
   isDragging,
-  onClick,
-  isConnectionMode,
+  isPressing,
+  dragHandleProps,
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
@@ -171,47 +172,34 @@ const NodeCard = ({
     onViewImage(node.url);
   };
 
-  const handleCardPointerDown = (e) => {
-    // Don't start drag from buttons or in connection mode
-    if (isRoot) return;
-    if (isConnectionMode) return;
-    if (e.target.closest('.card-actions') || e.target.closest('.thumb-view-btn')) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-    onDragStart?.(node, e);
-  };
-
-  const handleCardClick = (e) => {
-    if (!isConnectionMode || !onClick) return;
-    e.stopPropagation();
-    onClick(node.id);
-  };
+  const classNames = ['node-card'];
+  if (isDragging) classNames.push('dragging');
+  if (isPressing) classNames.push('pressing');
 
   return (
-    <div
-      className={`node-card ${isDragging ? 'dragging' : ''} ${isConnectionMode ? 'connection-mode' : ''}`}
-      data-node-card="1"
-      data-node-id={node.id}
-      onClick={handleCardClick}
-      onPointerDown={handleCardPointerDown}
-      style={{ cursor: isRoot || isConnectionMode ? 'default' : 'grab' }}
-    >
+    <div className={classNames.join(' ')} data-node-card="1" data-node-id={node.id}>
       <div
         className="card-header"
-        style={{ backgroundColor: color }}
+        style={{ backgroundColor: color, cursor: isRoot ? 'default' : 'grab' }}
+        title={isRoot ? undefined : 'Drag to reorder'}
+        {...(isRoot ? {} : dragHandleProps)}
       >
-        {/* Color bar only - no drag handle needed since entire card is draggable */}
+        {!isRoot && <GripVertical size={14} className="drag-handle" />}
       </div>
 
       {showThumbnails && (
-        <div className="card-thumb">
+        <div
+          className="card-thumb"
+          onClick={handleViewFull}
+          title={thumbError ? 'Preview unavailable' : 'Click for full view'}
+          style={{ cursor: thumbError ? 'default' : 'zoom-in' }}
+        >
           {thumbLoading && !thumbError && (
-            <div className="thumb-placeholder">
+            <div className="thumb-loading">
               <Loader2 size={24} className="thumb-spinner" />
             </div>
           )}
-          {!thumbLoading && !thumbError ? (
+          {!thumbError ? (
             <img
               className="thumb-img"
               src={thumb}
@@ -219,22 +207,14 @@ const NodeCard = ({
               loading="lazy"
               onLoad={() => setThumbLoading(false)}
               onError={() => { setThumbError(true); setThumbLoading(false); }}
+              style={{ opacity: thumbLoading ? 0 : 1 }}
             />
-          ) : thumbError ? (
+          ) : (
             <div className="thumb-placeholder">
-              <Globe size={24} strokeWidth={1.5} />
-              <span className="thumb-placeholder-text">{getHostname(node.url)}</span>
+              <Globe size={32} strokeWidth={1.5} />
+              <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
+              <span className="thumb-placeholder-text">Preview unavailable</span>
             </div>
-          ) : null}
-          {/* View full image button */}
-          {!thumbError && !thumbLoading && (
-            <button
-              className="thumb-view-btn"
-              onClick={(e) => { e.stopPropagation(); handleViewFull(); }}
-              title="View full screenshot"
-            >
-              <Maximize2 size={14} />
-            </button>
           )}
         </div>
       )}
@@ -276,6 +256,44 @@ const NodeCard = ({
   );
 };
 
+// Wrapper component that makes NodeCard draggable using dnd-kit
+const DraggableNodeCard = ({
+  node,
+  number,
+  color,
+  showThumbnails,
+  onAdd,
+  onDelete,
+  onEdit,
+  onViewImage,
+  isRoot,
+  activeId,
+}) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: node.id,
+    data: { node, number, color },
+    disabled: isRoot,
+  });
+
+  return (
+    <div ref={setNodeRef}>
+      <NodeCard
+        node={node}
+        number={number}
+        color={color}
+        showThumbnails={showThumbnails}
+        onAdd={onAdd}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        onViewImage={onViewImage}
+        isRoot={isRoot}
+        isDragging={isDragging || activeId === node.id}
+        dragHandleProps={{ ...listeners, ...attributes }}
+      />
+    </div>
+  );
+};
+
 // Minimum number of similar children to trigger stacking
 const STACK_THRESHOLD = 5;
 
@@ -291,11 +309,7 @@ const SitemapTree = ({
   onEdit,
   onViewImage,
   onNodeDoubleClick,
-  onNodeClick,
-  onDragStart,
-  draggedNodeId,
-  dropIndicator,
-  isConnectionMode,
+  activeId,
 }) => {
   const myColor = colors[Math.min(depth, colors.length - 1)];
 
@@ -410,7 +424,7 @@ const SitemapTree = ({
         data-depth={depth}
         onDoubleClick={() => onNodeDoubleClick?.(data.id)}
       >
-        <NodeCard
+        <DraggableNodeCard
           key={data.id}
           node={data}
           number={numberPrefix}
@@ -421,15 +435,8 @@ const SitemapTree = ({
           onDelete={onDelete}
           onEdit={onEdit}
           onViewImage={onViewImage}
-          onDragStart={onDragStart}
-          isDragging={draggedNodeId === data.id}
-          onClick={onNodeClick}
-          isConnectionMode={isConnectionMode}
+          activeId={activeId}
         />
-        {/* Child drop zone indicator - card-sized ghost */}
-        {dropIndicator?.type === 'child' && dropIndicator?.parentId === data.id && !data.children?.length && (
-          <div className="drop-indicator-child" />
-        )}
       </div>
 
       {!!data.children?.length && (
@@ -464,11 +471,7 @@ const SitemapTree = ({
                     onEdit={onEdit}
                     onViewImage={onViewImage}
                     onNodeDoubleClick={onNodeDoubleClick}
-                    onNodeClick={onNodeClick}
-                    onDragStart={onDragStart}
-                    draggedNodeId={draggedNodeId}
-                    dropIndicator={dropIndicator}
-                    isConnectionMode={isConnectionMode}
+                    activeId={activeId}
                   />
                 </div>
                 <div className="stacked-count">
@@ -484,10 +487,6 @@ const SitemapTree = ({
                 className="child-wrap"
                 ref={(el) => (childRefs.current[idx] = el)}
               >
-                {/* Sibling drop zone indicator - slim line BEFORE this child */}
-                {dropIndicator?.type === 'sibling' && dropIndicator?.parentId === data.id && dropIndicator?.index === idx && (
-                  <div className={`drop-indicator-sibling ${depth === 0 ? 'horizontal' : 'vertical'}`} />
-                )}
                 <SitemapTree
                   data={child}
                   depth={depth + 1}
@@ -500,22 +499,10 @@ const SitemapTree = ({
                   onEdit={onEdit}
                   onViewImage={onViewImage}
                   onNodeDoubleClick={onNodeDoubleClick}
-                  onNodeClick={onNodeClick}
-                  onDragStart={onDragStart}
-                  draggedNodeId={draggedNodeId}
-                  dropIndicator={dropIndicator}
-                  isConnectionMode={isConnectionMode}
+                  activeId={activeId}
                 />
-                {/* Sibling drop zone indicator - slim line AFTER last child */}
-                {idx === data.children.length - 1 && dropIndicator?.type === 'sibling' && dropIndicator?.parentId === data.id && dropIndicator?.index === data.children.length && (
-                  <div className={`drop-indicator-sibling after ${depth === 0 ? 'horizontal' : 'vertical'}`} />
-                )}
               </div>
             ))
-          )}
-          {/* Child drop zone indicator - card ghost at end of children */}
-          {dropIndicator?.type === 'child' && dropIndicator?.parentId === data.id && data.children?.length > 0 && (
-            <div className="drop-indicator-child" />
           )}
 
           {shouldStack && isStackExpanded && (
@@ -996,35 +983,9 @@ export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
 
-  // Undo/Redo history state
-  const [history, setHistory] = useState([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const isUndoRedoAction = useRef(false);
-
-  // Canvas tool state
-  const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'scissors', 'link', 'userflow'
-  const [showViewMenu, setShowViewMenu] = useState(false);
-  const [viewSettings, setViewSettings] = useState({ userFlows: true, crosslinks: true });
-
-  // User Flow & Crosslink connections
-  const [userFlows, setUserFlows] = useState([]); // { id, from: nodeId, to: nodeId, color }
-  const [crosslinks, setCrosslinks] = useState([]); // { id, from: nodeId, to: nodeId, color }
-  const [connectionDraft, setConnectionDraft] = useState(null); // { from: nodeId, currentX, currentY, type: 'userflow' | 'crosslink' }
-
-  // Drag & Drop state
-  const [dragState, setDragState] = useState({
-    isDragging: false,
-    draggedNode: null,
-    draggedNodeId: null,
-    startX: 0,
-    startY: 0,
-    currentX: 0,
-    currentY: 0,
-  });
-  const [dropIndicator, setDropIndicator] = useState(null);
-  const [visibleDropZones, setVisibleDropZones] = useState([]); // All valid drop zones shown during drag
-  const activeDropZoneRef = useRef(null);
-  const dropZonesRef = useRef([]);
+  // Drag & Drop state (dnd-kit)
+  const [activeId, setActiveId] = useState(null);
+  const [activeNode, setActiveNode] = useState(null);
 
   const canvasRef = useRef(null);
   const scanAbortRef = useRef(null);
@@ -1037,6 +998,15 @@ export default function App() {
   const hasMap = !!root;
   const maxDepth = useMemo(() => getMaxDepth(root), [root]);
   const totalNodes = useMemo(() => countNodes(root), [root]);
+
+  // dnd-kit sensors - require 5px movement before activating drag
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    })
+  );
 
   // Calculate map bounds and clamp pan to limit scrolling
   const clampPan = (newPan) => {
@@ -1623,14 +1593,8 @@ export default function App() {
     if (!hasMap) return;
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle');
     if (isInsideCard || isUIControl) return;
-
-    // Cancel connection draft if clicking on empty canvas
-    if (connectionDraft) {
-      cancelConnection();
-      return;
-    }
 
     dragRef.current.dragging = true;
     dragRef.current.startX = e.clientX;
@@ -1641,16 +1605,6 @@ export default function App() {
   };
 
   const onPointerMove = (e) => {
-    // Handle connection draft
-    if (connectionDraft) {
-      updateConnectionDraft(e.clientX, e.clientY);
-      return;
-    }
-    // Handle node dragging
-    if (dragState.isDragging) {
-      handleDragMove(e);
-      return;
-    }
     // Handle canvas panning
     if (!dragRef.current.dragging) return;
     const dx = e.clientX - dragRef.current.startX;
@@ -1660,11 +1614,6 @@ export default function App() {
   };
 
   const onPointerUp = (e) => {
-    // Handle node drag end
-    if (dragState.isDragging) {
-      handleDragEnd();
-      return;
-    }
     // Handle canvas pan end
     dragRef.current.dragging = false;
     try {
@@ -2262,165 +2211,7 @@ export default function App() {
       setPan(savedPan);
     }
   };
-
-  // ========== UNDO/REDO SYSTEM ==========
-
-  const pushToHistory = useCallback((newRoot) => {
-    if (isUndoRedoAction.current) {
-      isUndoRedoAction.current = false;
-      return;
-    }
-    if (!newRoot) return;
-
-    setHistory(prev => {
-      // Remove any future states if we're not at the end
-      const newHistory = prev.slice(0, historyIndex + 1);
-      // Add the new state
-      newHistory.push(structuredClone(newRoot));
-      // Limit history to 50 entries
-      if (newHistory.length > 50) {
-        newHistory.shift();
-        return newHistory;
-      }
-      return newHistory;
-    });
-    setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [historyIndex]);
-
-  const undo = useCallback(() => {
-    if (historyIndex <= 0) return;
-    isUndoRedoAction.current = true;
-    const newIndex = historyIndex - 1;
-    setHistoryIndex(newIndex);
-    setRoot(structuredClone(history[newIndex]));
-  }, [history, historyIndex]);
-
-  const redo = useCallback(() => {
-    if (historyIndex >= history.length - 1) return;
-    isUndoRedoAction.current = true;
-    const newIndex = historyIndex + 1;
-    setHistoryIndex(newIndex);
-    setRoot(structuredClone(history[newIndex]));
-  }, [history, historyIndex]);
-
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex < history.length - 1;
-
-  // Track root changes for undo history
-  useEffect(() => {
-    if (root && !isUndoRedoAction.current) {
-      pushToHistory(root);
-    }
-  }, [root, pushToHistory]);
-
-  // Keyboard shortcuts for undo/redo
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Check for Cmd+Z (Mac) or Ctrl+Z (Windows)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          redo();
-        } else {
-          undo();
-        }
-      }
-      // Also support Cmd+Y / Ctrl+Y for redo
-      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
-        e.preventDefault();
-        redo();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
-
-  // ========== USER FLOW & CROSSLINK CONNECTIONS ==========
-
-  const generateConnectionId = () => `conn_${Math.random().toString(36).slice(2, 10)}`;
-
-  const getNodeCenter = useCallback((nodeId) => {
-    if (!contentRef.current) return null;
-    const card = contentRef.current.querySelector(`[data-node-id="${nodeId}"]`);
-    if (!card) return null;
-    const rect = card.getBoundingClientRect();
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    };
-  }, []);
-
-  const startConnection = useCallback((nodeId, type) => {
-    const center = getNodeCenter(nodeId);
-    if (!center) return;
-    setConnectionDraft({
-      from: nodeId,
-      currentX: center.x,
-      currentY: center.y,
-      type, // 'userflow' or 'crosslink'
-    });
-  }, [getNodeCenter]);
-
-  const updateConnectionDraft = useCallback((clientX, clientY) => {
-    if (!connectionDraft) return;
-    setConnectionDraft(prev => ({
-      ...prev,
-      currentX: clientX,
-      currentY: clientY,
-    }));
-  }, [connectionDraft]);
-
-  const completeConnection = useCallback((toNodeId) => {
-    if (!connectionDraft || connectionDraft.from === toNodeId) {
-      setConnectionDraft(null);
-      return;
-    }
-
-    const newConnection = {
-      id: generateConnectionId(),
-      from: connectionDraft.from,
-      to: toNodeId,
-      color: connectionDraft.type === 'userflow' ? '#f59e0b' : '#06b6d4', // amber for userflow, cyan for crosslink
-    };
-
-    if (connectionDraft.type === 'userflow') {
-      setUserFlows(prev => [...prev, newConnection]);
-    } else {
-      setCrosslinks(prev => [...prev, newConnection]);
-    }
-
-    setConnectionDraft(null);
-    setActiveTool('select');
-  }, [connectionDraft]);
-
-  const cancelConnection = useCallback(() => {
-    setConnectionDraft(null);
-  }, []);
-
-  const deleteConnection = useCallback((connectionId, type) => {
-    if (type === 'userflow') {
-      setUserFlows(prev => prev.filter(c => c.id !== connectionId));
-    } else {
-      setCrosslinks(prev => prev.filter(c => c.id !== connectionId));
-    }
-  }, []);
-
-  // Handle node click for connection tools
-  const handleNodeClickForConnection = useCallback((nodeId) => {
-    if (activeTool !== 'userflow' && activeTool !== 'link') return false;
-
-    if (!connectionDraft) {
-      // Start new connection
-      startConnection(nodeId, activeTool === 'userflow' ? 'userflow' : 'crosslink');
-    } else {
-      // Complete connection
-      completeConnection(nodeId);
-    }
-    return true; // Handled
-  }, [activeTool, connectionDraft, startConnection, completeConnection]);
-
-  const findNodeById = (node, id) => {
+const findNodeById = (node, id) => {
     if (!node) return null;
     if (node.id === id) return node;
     for (const c of node.children || []) {
@@ -2528,7 +2319,8 @@ export default function App() {
     });
   };
 
-  const calculateDropZones = () => {
+  // Calculate all valid drop zones based on current DOM positions
+  const calculateDropZones = (draggedNodeId) => {
     if (!contentRef.current || !root) return [];
     const zones = [];
     const cards = contentRef.current.querySelectorAll('[data-node-card="1"]');
@@ -2536,6 +2328,12 @@ export default function App() {
     cards.forEach((card) => {
       const nodeId = card.getAttribute('data-node-id');
       if (!nodeId) return;
+
+      // Skip the dragged node itself
+      if (nodeId === draggedNodeId) return;
+
+      // Skip descendants of the dragged node
+      if (isDescendantOf(root, nodeId, draggedNodeId)) return;
 
       const rect = card.getBoundingClientRect();
       const node = findNodeById(root, nodeId);
@@ -2548,44 +2346,55 @@ export default function App() {
       const parentWrap = card.closest('.parent-wrap');
       const depth = parseInt(parentWrap?.getAttribute('data-depth') || '0', 10);
 
+      // Add sibling drop zones (before this node)
       if (depth === 0) {
+        // Horizontal layout - drop zones to left/right
         zones.push({
           type: 'sibling',
           parentId: parent.id,
           index: siblingIndex,
-          rect: { left: rect.left - 40, top: rect.top, width: 40, height: rect.height },
+          x: rect.left - 20,
+          y: rect.top + rect.height / 2,
         });
+        // Also add zone after last sibling
         if (siblingIndex === parent.children.length - 1) {
           zones.push({
             type: 'sibling',
             parentId: parent.id,
             index: siblingIndex + 1,
-            rect: { left: rect.right, top: rect.top, width: 40, height: rect.height },
+            x: rect.right + 20,
+            y: rect.top + rect.height / 2,
           });
         }
       } else {
+        // Vertical layout - drop zones above/below
         zones.push({
           type: 'sibling',
           parentId: parent.id,
           index: siblingIndex,
-          rect: { left: rect.left, top: rect.top - 40, width: rect.width, height: 40 },
+          x: rect.left + rect.width / 2,
+          y: rect.top - 20,
         });
+        // Also add zone after last sibling
         if (siblingIndex === parent.children.length - 1) {
           zones.push({
             type: 'sibling',
             parentId: parent.id,
             index: siblingIndex + 1,
-            rect: { left: rect.left, top: rect.bottom, width: rect.width, height: 40 },
+            x: rect.left + rect.width / 2,
+            y: rect.bottom + 20,
           });
         }
       }
 
+      // Add child drop zone if node has no children
       if (!node.children?.length) {
         zones.push({
           type: 'child',
           parentId: nodeId,
           index: 0,
-          rect: { left: rect.left, top: rect.bottom + 40, width: rect.width, height: rect.height },
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 60,
         });
       }
     });
@@ -2593,28 +2402,23 @@ export default function App() {
     return zones;
   };
 
-  const findNearestDropZone = (x, y, threshold = 60) => {
-    const zones = dropZonesRef.current;
+  // Find nearest drop zone within threshold
+  const findNearestDropZone = (x, y, draggedNodeId, threshold = 60) => {
+    const zones = calculateDropZones(draggedNodeId);
     let nearest = null;
     let nearestDist = Infinity;
 
     for (const zone of zones) {
-      if (dragState.draggedNodeId === zone.parentId) continue;
+      // Skip invalid zones
       if (zone.type === 'sibling') {
         const parent = findNodeById(root, zone.parentId);
-        if (parent?.children?.[zone.index]?.id === dragState.draggedNodeId) continue;
-        if (zone.index > 0 && parent?.children?.[zone.index - 1]?.id === dragState.draggedNodeId) continue;
+        // Skip if dropping before/after self
+        if (parent?.children?.[zone.index]?.id === draggedNodeId) continue;
+        if (zone.index > 0 && parent?.children?.[zone.index - 1]?.id === draggedNodeId) continue;
       }
-      if (isDescendantOf(root, zone.parentId, dragState.draggedNodeId)) continue;
 
-      const r = zone.rect;
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
-      const inZone = x >= r.left - threshold && x <= r.left + r.width + threshold &&
-                     y >= r.top - threshold && y <= r.top + r.height + threshold;
-
-      if (inZone && dist < nearestDist) {
+      const dist = Math.sqrt((x - zone.x) ** 2 + (y - zone.y) ** 2);
+      if (dist < threshold && dist < nearestDist) {
         nearestDist = dist;
         nearest = zone;
       }
@@ -2623,89 +2427,36 @@ export default function App() {
     return nearest;
   };
 
-  const handleNodeDragStart = (node, e) => {
-    if (!node || node.id === root?.id) return;
-    const allZones = calculateDropZones();
-
-    // Filter out invalid drop zones for this node
-    const validZones = allZones.filter(zone => {
-      // Can't drop on self
-      if (zone.parentId === node.id) return false;
-      // Can't drop on descendants
-      if (isDescendantOf(root, zone.parentId, node.id)) return false;
-      // Filter out positions that would result in no change
-      if (zone.type === 'sibling') {
-        const parent = findNodeById(root, zone.parentId);
-        if (parent?.children?.[zone.index]?.id === node.id) return false;
-        if (zone.index > 0 && parent?.children?.[zone.index - 1]?.id === node.id) return false;
-      }
-      return true;
-    });
-
-    dropZonesRef.current = validZones;
-    // Don't show all zones - only show nearest when in proximity
-    setVisibleDropZones([]);
-
-    setDragState({
-      isDragging: true,
-      draggedNode: node,
-      draggedNodeId: node.id,
-      startX: e.clientX,
-      startY: e.clientY,
-      currentX: e.clientX,
-      currentY: e.clientY,
-    });
+  // dnd-kit drag handlers
+  const handleDndDragStart = (event) => {
+    const { active } = event;
+    setActiveId(active.id);
+    setActiveNode(active.data.current?.node || null);
   };
 
-  const handleDragMove = (e) => {
-    if (!dragState.isDragging) return;
+  const handleDndDragEnd = (event) => {
+    const { active } = event;
+    const draggedNodeId = active.id;
 
-    setDragState(prev => ({
-      ...prev,
-      currentX: e.clientX,
-      currentY: e.clientY,
-    }));
+    // Get final pointer position from the event
+    // dnd-kit provides activatorEvent which has the original pointer position
+    // We need to calculate final position from delta
+    const delta = event.delta || { x: 0, y: 0 };
+    const activatorRect = active.rect.current.initial;
+    if (activatorRect) {
+      const finalX = activatorRect.left + activatorRect.width / 2 + delta.x;
+      const finalY = activatorRect.top + activatorRect.height / 2 + delta.y;
 
-    const nearest = findNearestDropZone(e.clientX, e.clientY);
+      // Find nearest drop zone
+      const dropZone = findNearestDropZone(finalX, finalY, draggedNodeId, 80);
 
-    if (activeDropZoneRef.current && !nearest) {
-      const current = activeDropZoneRef.current;
-      const stillNear = findNearestDropZone(e.clientX, e.clientY, 80);
-      if (stillNear?.parentId === current.parentId && stillNear?.index === current.index && stillNear?.type === current.type) {
-        return;
+      if (dropZone) {
+        moveNode(draggedNodeId, dropZone.parentId, dropZone.index);
       }
     }
 
-    activeDropZoneRef.current = nearest;
-    setDropIndicator(nearest ? { type: nearest.type, parentId: nearest.parentId, index: nearest.index } : null);
-    // Only show the nearest zone as a visual indicator (proximity-based)
-    setVisibleDropZones(nearest ? [nearest] : []);
-  };
-
-  const handleDragEnd = () => {
-    if (!dragState.isDragging) return;
-
-    if (dropIndicator && dragState.draggedNodeId) {
-      if (dropIndicator.type === 'sibling') {
-        moveNode(dragState.draggedNodeId, dropIndicator.parentId, dropIndicator.index);
-      } else if (dropIndicator.type === 'child') {
-        moveNode(dragState.draggedNodeId, dropIndicator.parentId, 0);
-      }
-    }
-
-    setDragState({
-      isDragging: false,
-      draggedNode: null,
-      draggedNodeId: null,
-      startX: 0,
-      startY: 0,
-      currentX: 0,
-      currentY: 0,
-    });
-    setDropIndicator(null);
-    setVisibleDropZones([]);
-    activeDropZoneRef.current = null;
-    dropZonesRef.current = [];
+    setActiveId(null);
+    setActiveNode(null);
   };
 
   const updateLevelColor = (depth, color) => {
@@ -3203,7 +2954,11 @@ export default function App() {
         )}
 
         {hasMap && (
-          <>
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDndDragStart}
+            onDragEnd={handleDndDragEnd}
+          >
             <div
               className="content"
               ref={contentRef}
@@ -3220,11 +2975,7 @@ export default function App() {
                 onDelete={deleteNode}
                 onEdit={editNode}
                 onViewImage={viewFullScreenshot}
-                onDragStart={handleNodeDragStart}
-                draggedNodeId={dragState.draggedNodeId}
-                dropIndicator={dropIndicator}
-                onNodeClick={handleNodeClickForConnection}
-                isConnectionMode={activeTool === 'userflow' || activeTool === 'link'}
+                activeId={activeId}
                 onNodeDoubleClick={(id) => {
                   if (scale < 0.95) {
                     const el = contentRef.current?.querySelector(`[data-node-id="${id}"]`);
@@ -3241,86 +2992,14 @@ export default function App() {
               />
             </div>
 
-            {/* Connection Lines SVG Overlay */}
-            <svg className="connections-svg">
-              <defs>
-                {/* Arrow marker for user flow lines */}
-                <marker
-                  id="userflow-arrow"
-                  markerWidth="10"
-                  markerHeight="10"
-                  refX="9"
-                  refY="3"
-                  orient="auto"
-                  markerUnits="strokeWidth"
-                >
-                  <path d="M0,0 L0,6 L9,3 z" fill="#f59e0b" />
-                </marker>
-              </defs>
-
-              {/* User Flow lines (solid with arrow) */}
-              {viewSettings.userFlows && userFlows.map(flow => {
-                const fromCenter = getNodeCenter(flow.from);
-                const toCenter = getNodeCenter(flow.to);
-                if (!fromCenter || !toCenter) return null;
-
-                return (
-                  <line
-                    key={flow.id}
-                    x1={fromCenter.x}
-                    y1={fromCenter.y}
-                    x2={toCenter.x}
-                    y2={toCenter.y}
-                    stroke={flow.color}
-                    strokeWidth="3"
-                    markerEnd="url(#userflow-arrow)"
-                    className="connection-line userflow"
-                  />
-                );
-              })}
-
-              {/* Crosslink lines (dashed, no arrow) */}
-              {viewSettings.crosslinks && crosslinks.map(link => {
-                const fromCenter = getNodeCenter(link.from);
-                const toCenter = getNodeCenter(link.to);
-                if (!fromCenter || !toCenter) return null;
-
-                return (
-                  <line
-                    key={link.id}
-                    x1={fromCenter.x}
-                    y1={fromCenter.y}
-                    x2={toCenter.x}
-                    y2={toCenter.y}
-                    stroke={link.color}
-                    strokeWidth="2"
-                    strokeDasharray="8,4"
-                    className="connection-line crosslink"
-                  />
-                );
-              })}
-
-              {/* Draft connection line while drawing */}
-              {connectionDraft && (() => {
-                const fromCenter = getNodeCenter(connectionDraft.from);
-                if (!fromCenter) return null;
-
-                return (
-                  <line
-                    x1={fromCenter.x}
-                    y1={fromCenter.y}
-                    x2={connectionDraft.currentX}
-                    y2={connectionDraft.currentY}
-                    stroke={connectionDraft.type === 'userflow' ? '#f59e0b' : '#06b6d4'}
-                    strokeWidth={connectionDraft.type === 'userflow' ? 3 : 2}
-                    strokeDasharray={connectionDraft.type === 'userflow' ? 'none' : '8,4'}
-                    markerEnd={connectionDraft.type === 'userflow' ? 'url(#userflow-arrow)' : 'none'}
-                    className="connection-line draft"
-                    opacity="0.7"
-                  />
-                );
-              })()}
-            </svg>
+            {/* DragOverlay - floating card that follows cursor */}
+            <DragOverlay>
+              {activeNode ? (
+                <div className="drag-overlay-card">
+                  <div className="drag-card-title">{activeNode.title || 'Untitled'}</div>
+                </div>
+              ) : null}
+            </DragOverlay>
 
             <div className="color-key">
               <div className="color-key-header" onClick={() => setShowColorKey(v => !v)}>
@@ -3360,168 +3039,8 @@ export default function App() {
                 <Maximize2 size={18} />
               </button>
             </div>
-
-            {/* Canvas Toolbar */}
-            <div className="canvas-toolbar">
-              {/* Select & Add */}
-              <button
-                className={`canvas-tool-btn ${activeTool === 'select' ? 'active' : ''}`}
-                onClick={() => setActiveTool('select')}
-                title="Select (V)"
-              >
-                <MousePointer2 size={20} />
-              </button>
-              <button
-                className={`canvas-tool-btn ${activeTool === 'addNode' ? 'active' : ''}`}
-                onClick={() => setActiveTool('addNode')}
-                title="Add Page"
-              >
-                <Plus size={20} />
-              </button>
-
-              <div className="canvas-toolbar-divider" />
-
-              {/* Connection Tools */}
-              <button
-                className={`canvas-tool-btn ${activeTool === 'userflow' ? 'active' : ''}`}
-                onClick={() => setActiveTool('userflow')}
-                title="Create User Flow"
-              >
-                <Workflow size={20} />
-              </button>
-              <button
-                className={`canvas-tool-btn ${activeTool === 'link' ? 'active' : ''}`}
-                onClick={() => setActiveTool('link')}
-                title="Create Crosslink"
-              >
-                <Link size={20} />
-              </button>
-
-              <div className="canvas-toolbar-divider" />
-
-              {/* Undo/Redo */}
-              <button
-                className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-                onClick={undo}
-                disabled={!canUndo}
-                title="Undo (⌘Z)"
-              >
-                <Undo2 size={20} />
-              </button>
-              <button
-                className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-                onClick={redo}
-                disabled={!canRedo}
-                title="Redo (⇧⌘Z)"
-              >
-                <Redo2 size={20} />
-              </button>
-
-              <div className="canvas-toolbar-divider" />
-
-              {/* View Menu */}
-              <div className="view-menu-container">
-                <button
-                  className={`canvas-tool-btn ${showViewMenu ? 'active' : ''}`}
-                  onClick={() => setShowViewMenu(!showViewMenu)}
-                  title="View Options"
-                >
-                  <EyeIcon size={20} />
-                </button>
-                {showViewMenu && (
-                  <div className="view-menu-dropdown">
-                    <label className="view-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={viewSettings.userFlows}
-                        onChange={(e) => setViewSettings(prev => ({ ...prev, userFlows: e.target.checked }))}
-                      />
-                      <Workflow size={16} />
-                      <span>User Flows</span>
-                    </label>
-                    <label className="view-menu-item">
-                      <input
-                        type="checkbox"
-                        checked={viewSettings.crosslinks}
-                        onChange={(e) => setViewSettings(prev => ({ ...prev, crosslinks: e.target.checked }))}
-                      />
-                      <Link size={16} />
-                      <span>Crosslinks</span>
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
+          </DndContext>
         )}
-
-        {/* Floating drag card */}
-        {dragState.isDragging && dragState.draggedNode && (
-          <div
-            className="floating-drag-card"
-            style={{
-              left: dragState.currentX,
-              top: dragState.currentY,
-            }}
-          >
-            <div className="floating-card-inner">
-              <GripVertical size={14} className="drag-handle" />
-              <span className="floating-card-title">{dragState.draggedNode.title || 'Untitled'}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Drop zone indicators - proximity-based, only shows nearest valid position */}
-        {dragState.isDragging && visibleDropZones.map((zone, idx) => {
-          const isActive = dropIndicator &&
-            dropIndicator.parentId === zone.parentId &&
-            dropIndicator.index === zone.index &&
-            dropIndicator.type === zone.type;
-
-          // For sibling zones, render as thin line
-          // For child zones, render as small card-shaped placeholder
-          const isSibling = zone.type === 'sibling';
-          const isHorizontal = zone.rect.width > zone.rect.height;
-
-          let style;
-          if (isSibling) {
-            // Thin line indicator - 4px thick
-            if (isHorizontal) {
-              // Horizontal sibling (vertical line)
-              style = {
-                left: zone.rect.left + zone.rect.width / 2 - 2,
-                top: zone.rect.top,
-                width: 4,
-                height: zone.rect.height,
-              };
-            } else {
-              // Vertical sibling (horizontal line)
-              style = {
-                left: zone.rect.left,
-                top: zone.rect.top + zone.rect.height / 2 - 2,
-                width: zone.rect.width,
-                height: 4,
-              };
-            }
-          } else {
-            // Child zone - show as dashed rectangle
-            style = {
-              left: zone.rect.left,
-              top: zone.rect.top,
-              width: zone.rect.width,
-              height: Math.min(zone.rect.height, 80), // Cap height for child indicator
-            };
-          }
-
-          return (
-            <div
-              key={`dropzone-${idx}`}
-              className={`drop-zone-indicator ${zone.type} ${isActive ? 'active' : ''}`}
-              style={style}
-            />
-          );
-        })}
-
       </div>
 
       {editingColorDepth !== null && (
