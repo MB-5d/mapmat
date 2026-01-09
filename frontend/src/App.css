@@ -867,7 +867,7 @@ body {
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: 1px solid #e2e8f0;
+  border: none;
   border-radius: 6px;
   cursor: pointer;
   color: #64748b;
@@ -875,8 +875,7 @@ body {
 }
 
 .zoom-btn:hover {
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  background: #f1f5f9;
   color: #475569;
 }
 
@@ -887,6 +886,13 @@ body {
   color: #64748b;
   min-width: 50px;
   text-align: center;
+}
+
+.zoom-divider {
+  width: 1px;
+  height: 20px;
+  background: #e2e8f0;
+  margin: 0 4px;
 }
 
 .toast {
@@ -3019,18 +3025,20 @@ body {
   }
 
   .zoom-btn {
-    border-color: #2d1f3d;
     color: #9f8fb8;
   }
 
   .zoom-btn:hover {
     background: #2d1f3d;
-    border-color: #3d2a52;
     color: #e2e0e8;
   }
 
   .zoom-level {
     color: #9f8fb8;
+  }
+
+  .zoom-divider {
+    background: #2d1f3d;
   }
 
   .modal-overlay {

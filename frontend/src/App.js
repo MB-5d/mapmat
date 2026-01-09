@@ -1225,7 +1225,7 @@ export default function App() {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [colors, setColors] = useState(DEFAULT_COLORS);
-  const [showColorKey, setShowColorKey] = useState(true);
+  const [showColorKey, setShowColorKey] = useState(false);
   const [editingColorDepth, setEditingColorDepth] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -3442,7 +3442,7 @@ const findNodeById = (node, id) => {
               <div className="color-key-header" onClick={() => setShowColorKey(v => !v)}>
                 <div className="color-key-title">
                   <Palette size={16} />
-                  <span>Colors</span>
+                  <span>Legend</span>
                 </div>
                 <button className="key-toggle">
                   {showColorKey ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -3469,6 +3469,7 @@ const findNodeById = (node, id) => {
               <button className="zoom-btn" onClick={zoomIn} title="Zoom In">
                 <ZoomIn size={18} />
               </button>
+              <div className="zoom-divider" />
               <button className="zoom-btn" onClick={fitToScreen} title="Fit to Screen">
                 <Minimize2 size={18} />
               </button>
