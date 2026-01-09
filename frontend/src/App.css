@@ -248,6 +248,11 @@ body {
   overflow: hidden;
   touch-action: none;
   background-color: #f8fafc;
+  cursor: grab;
+}
+
+.canvas.panning {
+  cursor: grabbing;
 }
 
 .blank {

@@ -1256,6 +1256,7 @@ export default function App() {
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
+  const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -1875,6 +1876,7 @@ export default function App() {
     dragRef.current.startY = e.clientY;
     dragRef.current.startPanX = pan.x;
     dragRef.current.startPanY = pan.y;
+    setIsPanning(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -1890,6 +1892,7 @@ export default function App() {
   const onPointerUp = (e) => {
     // Handle canvas pan end
     dragRef.current.dragging = false;
+    setIsPanning(false);
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {}
@@ -3326,7 +3329,7 @@ const findNodeById = (node, id) => {
       </div>
 
       <div
-        className="canvas"
+        className={`canvas ${isPanning ? 'panning' : ''}`}
         ref={canvasRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
