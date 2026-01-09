@@ -760,8 +760,20 @@ const collectAllNodes = (node, result = []) => {
   return result;
 };
 
+// Helper to get all descendant IDs of a node
+const getDescendantIds = (node, ids = new Set()) => {
+  if (!node) return ids;
+  if (node.children) {
+    node.children.forEach(child => {
+      ids.add(child.id);
+      getDescendantIds(child, ids);
+    });
+  }
+  return ids;
+};
+
 // Edit Node Modal
-const EditNodeModal = ({ node, allNodes, onClose, onSave, mode = 'edit' }) => {
+const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit' }) => {
   const [title, setTitle] = useState(node?.title || '');
   const [url, setUrl] = useState(node?.url || '');
   const [pageType, setPageType] = useState(node?.pageType || '');
@@ -801,8 +813,27 @@ const EditNodeModal = ({ node, allNodes, onClose, onSave, mode = 'edit' }) => {
 
   const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
 
-  // Filter out current node from parent options (can't be parent of itself)
-  const parentOptions = allNodes.filter(n => n.id !== node?.id);
+  // Filter out current node and its descendants from parent options
+  // (can't be parent of itself or create circular reference)
+  const excludeIds = useMemo(() => {
+    if (!node?.id || !rootTree) return new Set();
+    // Find the full node in tree to get its descendants
+    const findNode = (tree, id) => {
+      if (!tree) return null;
+      if (tree.id === id) return tree;
+      for (const child of tree.children || []) {
+        const found = findNode(child, id);
+        if (found) return found;
+      }
+      return null;
+    };
+    const fullNode = findNode(rootTree, node.id);
+    const descendants = fullNode ? getDescendantIds(fullNode) : new Set();
+    descendants.add(node.id); // Also exclude self
+    return descendants;
+  }, [node?.id, rootTree]);
+
+  const parentOptions = allNodes.filter(n => !excludeIds.has(n.id));
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -2465,27 +2496,72 @@ const findNodeById = (node, id) => {
     });
   };
 
+  // Find parent of a node in the tree
+  const findParentOf = (tree, nodeId, parent = null) => {
+    if (!tree) return null;
+    if (tree.id === nodeId) return parent;
+    for (const child of tree.children || []) {
+      const found = findParentOf(child, nodeId, tree);
+      if (found) return found;
+    }
+    return null;
+  };
+
   const openEditModal = (node) => {
-    setEditModalNode(node);
+    // Find the current parent of this node
+    const parent = findParentOf(root, node.id);
+    setEditModalNode({
+      ...node,
+      parentId: parent?.id || '',
+    });
     setEditModalMode('edit');
   };
 
   const duplicateNode = (node) => {
+    // Find the current parent of this node
+    const parent = findParentOf(root, node.id);
     setEditModalNode({
       ...node,
       id: undefined, // Will get a new ID
       title: `${node.title} (Copy)`,
+      parentId: parent?.id || '',
     });
     setEditModalMode('duplicate');
   };
 
   const saveNodeChanges = (updatedNode) => {
+    // Helper to find parent in a tree
+    const findParentInTree = (tree, nodeId, parent = null) => {
+      if (!tree) return null;
+      if (tree.id === nodeId) return parent;
+      for (const child of tree.children || []) {
+        const found = findParentInTree(child, nodeId, tree);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    // Helper to remove node from its current parent
+    const removeFromParent = (tree, nodeId) => {
+      if (!tree.children) return;
+      const idx = tree.children.findIndex(c => c.id === nodeId);
+      if (idx !== -1) {
+        tree.children.splice(idx, 1);
+        return;
+      }
+      for (const child of tree.children) {
+        removeFromParent(child, nodeId);
+      }
+    };
+
     if (editModalMode === 'edit') {
       // Update existing node
       setRoot((prev) => {
         const copy = structuredClone(prev);
         const target = findNodeById(copy, updatedNode.id);
         if (!target) return prev;
+
+        // Update node properties
         Object.assign(target, {
           title: updatedNode.title,
           url: updatedNode.url,
@@ -2494,10 +2570,38 @@ const findNodeById = (node, id) => {
           description: updatedNode.description,
           metaTags: updatedNode.metaTags,
         });
+
+        // Check if parent changed
+        const currentParent = findParentInTree(copy, updatedNode.id);
+        const currentParentId = currentParent?.id || '';
+        const newParentId = updatedNode.parentId || '';
+
+        if (currentParentId !== newParentId) {
+          // Parent changed - need to move the node
+          // Don't allow moving root node or making a node its own descendant
+          if (copy.id === updatedNode.id) return copy; // Can't move root
+
+          // Remove from current parent
+          removeFromParent(copy, updatedNode.id);
+
+          // Add to new parent
+          if (newParentId === '') {
+            // Moving to root level - add as child of root
+            copy.children = copy.children || [];
+            copy.children.push(target);
+          } else {
+            const newParent = findNodeById(copy, newParentId);
+            if (newParent) {
+              newParent.children = newParent.children || [];
+              newParent.children.push(target);
+            }
+          }
+        }
+
         return copy;
       });
     } else if (editModalMode === 'duplicate') {
-      // Create a copy of the node as a sibling
+      // Create a copy of the node
       const newNode = {
         ...updatedNode,
         id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -2506,25 +2610,22 @@ const findNodeById = (node, id) => {
 
       setRoot((prev) => {
         const copy = structuredClone(prev);
-        // Find parent of the original node
-        const findParentNode = (tree, nodeId, parent = null) => {
-          if (!tree) return null;
-          if (tree.id === nodeId) return parent;
-          for (const child of tree.children || []) {
-            const found = findParentNode(child, nodeId, tree);
-            if (found) return found;
-          }
-          return null;
-        };
+        const targetParentId = updatedNode.parentId || '';
 
-        const parent = findParentNode(copy, editModalNode.id);
-        if (parent) {
-          parent.children = parent.children || [];
-          parent.children.push(newNode);
-        } else {
-          // It's a root node, add as sibling (or just add to root's children)
+        if (targetParentId === '') {
+          // Add to root's children
           copy.children = copy.children || [];
           copy.children.push(newNode);
+        } else {
+          const parent = findNodeById(copy, targetParentId);
+          if (parent) {
+            parent.children = parent.children || [];
+            parent.children.push(newNode);
+          } else {
+            // Fallback: add to root
+            copy.children = copy.children || [];
+            copy.children.push(newNode);
+          }
         }
         return copy;
       });
@@ -3732,6 +3833,7 @@ const findNodeById = (node, id) => {
         <EditNodeModal
           node={editModalNode}
           allNodes={root ? collectAllNodes(root) : []}
+          rootTree={root}
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
           mode={editModalMode}
