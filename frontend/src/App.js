@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -2470,6 +2470,46 @@ export default function App() {
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Check for Cmd+Z (Mac) or Ctrl+Z (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          // Shift+Cmd+Z = Redo
+          if (redoStack.length > 0) {
+            const nextState = redoStack[redoStack.length - 1];
+            setUndoStack(prev => [...prev, structuredClone(root)]);
+            setRedoStack(prev => prev.slice(0, -1));
+            setRoot(nextState);
+          }
+        } else {
+          // Cmd+Z = Undo
+          if (undoStack.length > 0) {
+            const prevState = undoStack[undoStack.length - 1];
+            setRedoStack(prev => [...prev, structuredClone(root)]);
+            setUndoStack(prev => prev.slice(0, -1));
+            setRoot(prevState);
+          }
+        }
+      }
+      // Also support Cmd+Y for redo (Windows convention)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+        e.preventDefault();
+        if (redoStack.length > 0) {
+          const nextState = redoStack[redoStack.length - 1];
+          setUndoStack(prev => [...prev, structuredClone(root)]);
+          setRedoStack(prev => prev.slice(0, -1));
+          setRoot(nextState);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undoStack, redoStack, root]);
 
   const exportJson = () => {
     if (!root) return;
