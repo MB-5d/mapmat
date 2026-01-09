@@ -37,6 +37,7 @@ import {
   Check,
   FolderPlus,
   Map as MapIcon,
+  Zap,
   Info,
   CheckCircle,
   XCircle,
