@@ -311,92 +311,47 @@ body {
   display: none;
 }
 
-/* New Sitemap Layout */
-.sitemap-tree {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
+/* ============================================================================
+   SITEMAP LAYOUT (Deterministic Absolute Positioning)
+   ============================================================================ */
 
-/* Level 0 row: Root + Orphans horizontally */
-.level0-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 624px; /* 2 node widths (288px * 2) + gap (48px) between root and orphans */
-}
-
-.root-node {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 0;
-}
-
-.orphan-node {
-  position: relative;
-  display: inline-block;
-}
-
-.level1-container {
-  position: relative;
-  margin-top: 80px;
-}
-
-.level1-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 48px;
-}
-
-.level1-wrap {
+/* Main container with computed dimensions */
+.sitemap-tree-absolute {
   position: relative;
 }
 
-.level1-branch {
-  position: relative;
-  display: flex;
-  flex-direction: column;
+/* Each node is absolutely positioned */
+.sitemap-node-positioned {
+  position: absolute;
+  z-index: 1;
 }
 
-.level1-node {
-  position: relative;
+/* Stacked cards positioning */
+.stacked-cards-positioned {
+  position: absolute;
+  z-index: 2;
+  cursor: pointer;
 }
 
-.level1-children {
-  position: relative;
-  margin-top: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+.stacked-preview {
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  min-height: 60px;
 }
 
-.vertical-branch {
-  position: relative;
-  display: flex;
-  flex-direction: column;
+.stacked-preview-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.branch-node {
-  position: relative;
-}
-
-.branch-children {
-  position: relative;
-  margin-top: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.child-wrap {
-  position: relative;
-}
-
-
-/* Connector SVG positioning */
-.connector-svg {
+/* Connector SVG overlay */
+.connector-overlay {
   position: absolute;
   top: 0;
   left: 0;
@@ -404,10 +359,7 @@ body {
   height: 100%;
   pointer-events: none;
   overflow: visible;
-}
-
-.root-connector {
-  z-index: 1;
+  z-index: 0;
 }
 
 .vertical-connector {

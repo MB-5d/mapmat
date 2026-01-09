@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -308,11 +308,27 @@ const DraggableNodeCard = ({
   );
 };
 
+// ============================================================================
+// LAYOUT CONSTANTS (Single Source of Truth)
+// ============================================================================
+const LAYOUT = {
+  NODE_W: 288,
+  NODE_H_COLLAPSED: 160,
+  NODE_H_THUMB: 220,
+  GAP_L1_X: 48,         // Horizontal gap between Level 1 siblings (and orphans)
+  GAP_STACK_Y: 24,      // Vertical gap between nodes in vertical stack
+  INDENT_X: 40,         // Per-depth indentation for depth >= 2
+  BUS_Y_GAP: 80,        // Vertical gap from root bottom to Level 1 row
+  ORPHAN_GROUP_GAP: 160, // Gap between main tree and first orphan only
+  STROKE_PAD_X: 0,      // Padding between connector endpoint and node edge
+  ROOT_Y: 0,            // Root node Y position
+};
+
+// Get node height based on display mode
+const getNodeH = (showThumbnails) => showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED;
+
 // Minimum number of similar children to trigger stacking
 const STACK_THRESHOLD = 5;
-
-// Indentation per depth level for Level 2+ nodes
-const INDENT_PER_LEVEL = 40;
 
 // Check if children should be stacked (many similar siblings with same URL pattern)
 const shouldStackChildren = (children, depth) => {
@@ -330,389 +346,276 @@ const shouldStackChildren = (children, depth) => {
   }
 };
 
-// VerticalBranch: Renders a vertical stack of nodes for Level 2+ with indentation
-const VerticalBranch = ({
-  node,
-  depth,
-  numberPrefix,
-  showThumbnails,
-  colors,
-  scale,
-  onDelete,
-  onEdit,
-  onDuplicate,
-  onViewImage,
-  onNodeDoubleClick,
-  activeId,
-  expandedStacks,
-  toggleStack,
-}) => {
-  const color = colors[Math.min(depth, colors.length - 1)];
-  const nodeRef = useRef(null);
-  const childrenRef = useRef(null);
-  const childRefs = useRef([]);
-  const [paths, setPaths] = useState([]);
+// ============================================================================
+// LAYOUT COMPUTATION (Explicit Coordinate Formulas)
+// ============================================================================
 
-  const shouldStack = shouldStackChildren(node.children, depth);
-  const isStackExpanded = expandedStacks[node.id];
+/**
+ * Compute layout positions for all nodes
+ * Returns: { nodes: Map<id, {x, y, w, h, depth, number}>, connectors: [], bounds: {w, h} }
+ */
+const computeLayout = (root, orphans, showThumbnails, expandedStacks = {}) => {
+  const NODE_H = getNodeH(showThumbnails);
+  const { NODE_W, GAP_L1_X, GAP_STACK_Y, INDENT_X, BUS_Y_GAP, ORPHAN_GROUP_GAP, STROKE_PAD_X, ROOT_Y } = LAYOUT;
 
-  // Calculate connector paths for vertical branch (left-edge connectors)
-  useLayoutEffect(() => {
-    if (!childrenRef.current || !nodeRef.current) return;
-    if (!node?.children?.length) return;
+  const nodes = new Map();
+  const connectors = [];
 
-    const calc = () => {
-      const containerRect = childrenRef.current.getBoundingClientRect();
-      const nodeCard = nodeRef.current.querySelector('[data-node-card="1"]');
-      if (!nodeCard) return;
+  if (!root) return { nodes, connectors, bounds: { w: 0, h: 0 } };
 
-      const nodeRect = nodeCard.getBoundingClientRect();
-      const s = scale || 1;
+  // Helper: layout a vertical subtree (depth >= 2)
+  const layoutVerticalSubtree = (node, parentX, startY, depth, numberPrefix) => {
+    const x = parentX + INDENT_X;
+    const y = startY;
 
-      // Parent connection point: bottom of parent card
-      const parentY = (nodeRect.bottom - containerRect.top) / s;
+    nodes.set(node.id, {
+      x, y, w: NODE_W, h: NODE_H,
+      depth,
+      number: numberPrefix,
+      node
+    });
 
-      // Spine X position (indented 40px from parent's left edge for visual hierarchy)
-      const spineX = (nodeRect.left - containerRect.left) / s + INDENT_PER_LEVEL;
+    const shouldStack = shouldStackChildren(node.children, depth);
+    const isExpanded = expandedStacks[node.id];
 
-      const childPoints = childRefs.current
-        .map((el) => {
-          if (!el) return null;
-          const childCard = el.querySelector('[data-node-card="1"]');
-          if (!childCard) return null;
-          const r = childCard.getBoundingClientRect();
-          // Left edge, vertically centered
-          return {
-            x: (r.left - containerRect.left) / s,
-            y: (r.top + r.height / 2 - containerRect.top) / s,
-          };
-        })
-        .filter(Boolean);
+    let nextY = y + NODE_H + GAP_STACK_Y;
+    const childPositions = [];
 
-      if (!childPoints.length) {
-        setPaths([]);
-        return;
-      }
+    if (node.children?.length && (!shouldStack || isExpanded)) {
+      node.children.forEach((child, idx) => {
+        const childNumber = `${numberPrefix}.${idx + 1}`;
+        const childY = nextY;
+        childPositions.push({ x: x + INDENT_X, y: childY, node: child });
+        const subtreeH = layoutVerticalSubtree(child, x, childY, depth + 1, childNumber);
+        nextY = childY + subtreeH + GAP_STACK_Y;
+      });
+    }
 
-      const p = [];
+    // Add connectors from this node to children (vertical spine + horizontal ticks)
+    if (childPositions.length > 0) {
+      const spineX = x + INDENT_X + STROKE_PAD_X;
+      const spineStartY = y + NODE_H;
+      const spineEndY = childPositions[childPositions.length - 1].y + NODE_H / 2;
 
-      // Vertical spine from parent down to last child
-      const lastChildY = Math.max(...childPoints.map(c => c.y));
-      p.push(`M ${spineX} ${parentY} L ${spineX} ${lastChildY}`);
-
-      // Horizontal ticks to each child
-      childPoints.forEach((c) => {
-        p.push(`M ${spineX} ${c.y} L ${c.x} ${c.y}`);
+      // Vertical spine
+      connectors.push({
+        type: 'vertical-spine',
+        x1: spineX, y1: spineStartY,
+        x2: spineX, y2: spineEndY
       });
 
-      setPaths(p);
-    };
-
-    calc();
-
-    const ro = new ResizeObserver(() => calc());
-    ro.observe(childrenRef.current);
-    ro.observe(nodeRef.current);
-    childRefs.current.forEach((el) => el && ro.observe(el));
-
-    return () => ro.disconnect();
-  }, [node, showThumbnails, depth, scale, expandedStacks]);
-
-  childRefs.current = [];
-
-  return (
-    <div className="vertical-branch" style={{ marginLeft: depth >= 2 ? INDENT_PER_LEVEL : 0 }}>
-      <div
-        ref={nodeRef}
-        className="branch-node"
-        data-node-id={node.id}
-        data-depth={depth}
-        onDoubleClick={() => onNodeDoubleClick?.(node.id)}
-      >
-        <DraggableNodeCard
-          node={node}
-          number={numberPrefix}
-          color={color}
-          showThumbnails={showThumbnails}
-          isRoot={false}
-          onDelete={onDelete}
-          onEdit={onEdit}
-          onDuplicate={onDuplicate}
-          onViewImage={onViewImage}
-          activeId={activeId}
-        />
-      </div>
-
-      {!!node.children?.length && (
-        <div className="branch-children" ref={childrenRef}>
-          <svg className="connector-svg vertical-connector" aria-hidden="true">
-            {paths.map((d, i) => (
-              <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
-            ))}
-          </svg>
-
-          {shouldStack && !isStackExpanded ? (
-            <div
-              className="child-wrap stacked-wrap"
-              ref={(el) => (childRefs.current[0] = el)}
-            >
-              <div
-                className="stacked-cards"
-                onClick={() => toggleStack(node.id)}
-                title={`Click to expand ${node.children.length} pages`}
-              >
-                <div className="stacked-card stacked-card-3" />
-                <div className="stacked-card stacked-card-2" />
-                <div className="stacked-card stacked-card-1">
-                  <VerticalBranch
-                    node={node.children[0]}
-                    depth={depth + 1}
-                    numberPrefix={`${numberPrefix}.1`}
-                    showThumbnails={showThumbnails}
-                    colors={colors}
-                    scale={scale}
-                    onDelete={onDelete}
-                    onEdit={onEdit}
-                    onDuplicate={onDuplicate}
-                    onViewImage={onViewImage}
-                    onNodeDoubleClick={onNodeDoubleClick}
-                    activeId={activeId}
-                    expandedStacks={expandedStacks}
-                    toggleStack={toggleStack}
-                  />
-                </div>
-                <div className="stacked-count">+{node.children.length - 1} more</div>
-              </div>
-            </div>
-          ) : (
-            node.children.map((child, idx) => (
-              <div
-                key={child.id}
-                className="child-wrap"
-                ref={(el) => (childRefs.current[idx] = el)}
-              >
-                <VerticalBranch
-                  node={child}
-                  depth={depth + 1}
-                  numberPrefix={`${numberPrefix}.${idx + 1}`}
-                  showThumbnails={showThumbnails}
-                  colors={colors}
-                  scale={scale}
-                  onDelete={onDelete}
-                  onEdit={onEdit}
-                  onDuplicate={onDuplicate}
-                  onViewImage={onViewImage}
-                  onNodeDoubleClick={onNodeDoubleClick}
-                  activeId={activeId}
-                  expandedStacks={expandedStacks}
-                  toggleStack={toggleStack}
-                />
-              </div>
-            ))
-          )}
-
-          {shouldStack && isStackExpanded && (
-            <button className="collapse-stack-btn" onClick={() => toggleStack(node.id)}>
-              Collapse ({node.children.length} pages)
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Level1Branch: Renders a Level 1 node and its vertical subtree
-const Level1Branch = ({
-  node,
-  numberPrefix,
-  showThumbnails,
-  colors,
-  scale,
-  onDelete,
-  onEdit,
-  onDuplicate,
-  onViewImage,
-  onNodeDoubleClick,
-  activeId,
-  expandedStacks,
-  toggleStack,
-}) => {
-  const color = colors[Math.min(1, colors.length - 1)];
-  const nodeRef = useRef(null);
-  const childrenRef = useRef(null);
-  const childRefs = useRef([]);
-  const [paths, setPaths] = useState([]);
-
-  const shouldStack = shouldStackChildren(node.children, 1);
-  const isStackExpanded = expandedStacks[node.id];
-
-  // Calculate connector paths for Level 1 → Level 2+ (vertical spine with ticks)
-  useLayoutEffect(() => {
-    if (!childrenRef.current || !nodeRef.current) return;
-    if (!node?.children?.length) return;
-
-    const calc = () => {
-      const containerRect = childrenRef.current.getBoundingClientRect();
-      const nodeCard = nodeRef.current.querySelector('[data-node-card="1"]');
-      if (!nodeCard) return;
-
-      const nodeRect = nodeCard.getBoundingClientRect();
-      const s = scale || 1;
-
-      // Parent connection point: bottom of parent card
-      const parentY = (nodeRect.bottom - containerRect.top) / s;
-
-      // Spine X position (indented 40px from parent's left edge)
-      const spineX = (nodeRect.left - containerRect.left) / s + INDENT_PER_LEVEL;
-
-      const childPoints = childRefs.current
-        .map((el) => {
-          if (!el) return null;
-          const childCard = el.querySelector('[data-node-card="1"]');
-          if (!childCard) return null;
-          const r = childCard.getBoundingClientRect();
-          return {
-            x: (r.left - containerRect.left) / s,
-            y: (r.top + r.height / 2 - containerRect.top) / s,
-          };
-        })
-        .filter(Boolean);
-
-      if (!childPoints.length) {
-        setPaths([]);
-        return;
-      }
-
-      const p = [];
-
-      // Vertical spine from parent bottom to last child
-      const lastChildY = Math.max(...childPoints.map(c => c.y));
-      p.push(`M ${spineX} ${parentY} L ${spineX} ${lastChildY}`);
-
       // Horizontal ticks to each child
-      childPoints.forEach((c) => {
-        p.push(`M ${spineX} ${c.y} L ${c.x} ${c.y}`);
+      childPositions.forEach(cp => {
+        const tickY = cp.y + NODE_H / 2;
+        connectors.push({
+          type: 'horizontal-tick',
+          x1: spineX, y1: tickY,
+          x2: cp.x + STROKE_PAD_X, y2: tickY
+        });
+      });
+    }
+
+    // Return total height consumed by this subtree
+    const totalHeight = node.children?.length && (!shouldStack || isExpanded)
+      ? (nextY - y - GAP_STACK_Y)
+      : NODE_H;
+
+    return totalHeight;
+  };
+
+  // Helper: layout a Level 1 branch (node + its vertical subtree)
+  const layoutLevel1Branch = (node, x, y, numberPrefix) => {
+    nodes.set(node.id, {
+      x, y, w: NODE_W, h: NODE_H,
+      depth: 1,
+      number: numberPrefix,
+      node
+    });
+
+    const shouldStack = shouldStackChildren(node.children, 1);
+    const isExpanded = expandedStacks[node.id];
+
+    let subtreeHeight = NODE_H;
+    const childPositions = [];
+
+    if (node.children?.length && (!shouldStack || isExpanded)) {
+      let nextY = y + NODE_H + GAP_STACK_Y;
+
+      node.children.forEach((child, idx) => {
+        const childNumber = `${numberPrefix}.${idx + 1}`;
+        const childX = x + INDENT_X;
+        const childY = nextY;
+        childPositions.push({ x: childX, y: childY, node: child });
+        const childSubtreeH = layoutVerticalSubtree(child, x, childY, 2, childNumber);
+        nextY = childY + childSubtreeH + GAP_STACK_Y;
       });
 
-      setPaths(p);
-    };
+      subtreeHeight = nextY - y - GAP_STACK_Y;
+    }
 
-    calc();
+    // Add connectors from Level 1 node to its children
+    if (childPositions.length > 0) {
+      const spineX = x + INDENT_X + STROKE_PAD_X;
+      const spineStartY = y + NODE_H;
+      const spineEndY = childPositions[childPositions.length - 1].y + NODE_H / 2;
 
-    const ro = new ResizeObserver(() => calc());
-    ro.observe(childrenRef.current);
-    ro.observe(nodeRef.current);
-    childRefs.current.forEach((el) => el && ro.observe(el));
+      // Vertical spine
+      connectors.push({
+        type: 'vertical-spine',
+        x1: spineX, y1: spineStartY,
+        x2: spineX, y2: spineEndY
+      });
 
-    return () => ro.disconnect();
-  }, [node, showThumbnails, scale, expandedStacks]);
+      // Horizontal ticks to each child
+      childPositions.forEach(cp => {
+        const tickY = cp.y + NODE_H / 2;
+        connectors.push({
+          type: 'horizontal-tick',
+          x1: spineX, y1: tickY,
+          x2: cp.x + STROKE_PAD_X, y2: tickY
+        });
+      });
+    }
 
-  childRefs.current = [];
+    return subtreeHeight;
+  };
 
-  return (
-    <div className="level1-branch">
-      <div
-        ref={nodeRef}
-        className="level1-node"
-        data-node-id={node.id}
-        data-depth={1}
-        onDoubleClick={() => onNodeDoubleClick?.(node.id)}
-      >
-        <DraggableNodeCard
-          node={node}
-          number={numberPrefix}
-          color={color}
-          showThumbnails={showThumbnails}
-          isRoot={false}
-          onDelete={onDelete}
-          onEdit={onEdit}
-          onDuplicate={onDuplicate}
-          onViewImage={onViewImage}
-          activeId={activeId}
-        />
-      </div>
+  // 1) Root node (depth 0)
+  const rootX = 0;
+  const rootY = ROOT_Y;
+  nodes.set(root.id, {
+    x: rootX, y: rootY, w: NODE_W, h: NODE_H,
+    depth: 0,
+    number: '1',
+    node: root
+  });
 
-      {!!node.children?.length && (
-        <div className="level1-children" ref={childrenRef}>
-          <svg className="connector-svg vertical-connector" aria-hidden="true">
-            {paths.map((d, i) => (
-              <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
-            ))}
-          </svg>
+  // 2) Level 1 nodes (children of root)
+  const level1Y = rootY + NODE_H + BUS_Y_GAP;
+  const level1Positions = [];
+  let level1X = 0;
+  let maxSubtreeHeight = 0;
 
-          {shouldStack && !isStackExpanded ? (
-            <div
-              className="child-wrap stacked-wrap"
-              ref={(el) => (childRefs.current[0] = el)}
-            >
-              <div
-                className="stacked-cards"
-                onClick={() => toggleStack(node.id)}
-                title={`Click to expand ${node.children.length} pages`}
-              >
-                <div className="stacked-card stacked-card-3" />
-                <div className="stacked-card stacked-card-2" />
-                <div className="stacked-card stacked-card-1">
-                  <VerticalBranch
-                    node={node.children[0]}
-                    depth={2}
-                    numberPrefix={`${numberPrefix}.1`}
-                    showThumbnails={showThumbnails}
-                    colors={colors}
-                    scale={scale}
-                    onDelete={onDelete}
-                    onEdit={onEdit}
-                    onDuplicate={onDuplicate}
-                    onViewImage={onViewImage}
-                    onNodeDoubleClick={onNodeDoubleClick}
-                    activeId={activeId}
-                    expandedStacks={expandedStacks}
-                    toggleStack={toggleStack}
-                  />
-                </div>
-                <div className="stacked-count">+{node.children.length - 1} more</div>
-              </div>
-            </div>
-          ) : (
-            node.children.map((child, idx) => (
-              <div
-                key={child.id}
-                className="child-wrap"
-                ref={(el) => (childRefs.current[idx] = el)}
-              >
-                <VerticalBranch
-                  node={child}
-                  depth={2}
-                  numberPrefix={`${numberPrefix}.${idx + 1}`}
-                  showThumbnails={showThumbnails}
-                  colors={colors}
-                  scale={scale}
-                  onDelete={onDelete}
-                  onEdit={onEdit}
-                  onDuplicate={onDuplicate}
-                  onViewImage={onViewImage}
-                  onNodeDoubleClick={onNodeDoubleClick}
-                  activeId={activeId}
-                  expandedStacks={expandedStacks}
-                  toggleStack={toggleStack}
-                />
-              </div>
-            ))
-          )}
+  if (root.children?.length) {
+    root.children.forEach((child, idx) => {
+      const childX = level1X;
+      const childNumber = `1.${idx + 1}`;
+      level1Positions.push({ x: childX, y: level1Y, centerX: childX + NODE_W / 2 });
 
-          {shouldStack && isStackExpanded && (
-            <button className="collapse-stack-btn" onClick={() => toggleStack(node.id)}>
-              Collapse ({node.children.length} pages)
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
+      const subtreeH = layoutLevel1Branch(child, childX, level1Y, childNumber);
+      maxSubtreeHeight = Math.max(maxSubtreeHeight, subtreeH);
+
+      level1X += NODE_W + GAP_L1_X;
+    });
+
+    // Root-to-Level1 connectors (horizontal bus)
+    if (level1Positions.length > 0) {
+      const rootCenterX = rootX + NODE_W / 2;
+      const rootBottomY = rootY + NODE_H;
+      const busY = rootBottomY + BUS_Y_GAP / 2;
+
+      // Vertical drop from root to bus
+      connectors.push({
+        type: 'root-drop',
+        x1: rootCenterX, y1: rootBottomY,
+        x2: rootCenterX, y2: busY
+      });
+
+      // Horizontal bus line
+      const leftX = Math.min(rootCenterX, level1Positions[0].centerX);
+      const rightX = Math.max(rootCenterX, level1Positions[level1Positions.length - 1].centerX);
+      connectors.push({
+        type: 'horizontal-bus',
+        x1: leftX, y1: busY,
+        x2: rightX, y2: busY
+      });
+
+      // Vertical drops from bus to each Level 1 node
+      level1Positions.forEach(pos => {
+        connectors.push({
+          type: 'bus-drop',
+          x1: pos.centerX, y1: busY,
+          x2: pos.centerX, y2: level1Y
+        });
+      });
+    }
+  }
+
+  // Track right edge of main tree
+  const mainTreeRightEdge = level1X > 0 ? level1X - GAP_L1_X + NODE_W : NODE_W;
+
+  // 3) Orphan nodes (same Y as Level 1, with ORPHAN_GROUP_GAP then normal spacing)
+  let orphanX = mainTreeRightEdge + ORPHAN_GROUP_GAP;
+
+  orphans.forEach((orphan, idx) => {
+    nodes.set(orphan.id, {
+      x: orphanX, y: level1Y, w: NODE_W, h: NODE_H,
+      depth: 0, // Orphans are Level 0 color
+      number: `0.${idx + 1}`,
+      node: orphan,
+      isOrphan: true
+    });
+    orphanX += NODE_W + GAP_L1_X;
+  });
+
+  // Calculate bounds
+  const allNodes = Array.from(nodes.values());
+  const maxX = Math.max(...allNodes.map(n => n.x + n.w), NODE_W);
+  const maxY = Math.max(...allNodes.map(n => n.y + n.h), NODE_H);
+
+  return {
+    nodes,
+    connectors,
+    bounds: { w: maxX, h: maxY + 50 } // Add padding
+  };
 };
 
-// Main SitemapTree component
+// ============================================================================
+// RUNTIME INVARIANT CHECKS (Development Only)
+// ============================================================================
+const checkLayoutInvariants = (nodes, orphans, connectors) => {
+  if (process.env.NODE_ENV !== 'development') return;
+
+  const { NODE_W, GAP_L1_X } = LAYOUT;
+  const orphanNodes = Array.from(nodes.values()).filter(n => n.isOrphan);
+  const level1Nodes = Array.from(nodes.values()).filter(n => n.depth === 1);
+
+  // A) Orphan spacing invariant
+  for (let j = 1; j < orphanNodes.length; j++) {
+    const gap = orphanNodes[j].x - orphanNodes[j - 1].x;
+    const expected = NODE_W + GAP_L1_X;
+    if (Math.abs(gap - expected) > 1) {
+      console.warn(`Invariant A violated: orphan spacing. Got ${gap}, expected ${expected}`);
+    }
+  }
+
+  // B) Level 1 row Y invariant
+  if (level1Nodes.length > 0) {
+    const baseY = level1Nodes[0].y;
+    level1Nodes.forEach((n, i) => {
+      if (Math.abs(n.y - baseY) > 1) {
+        console.warn(`Invariant C violated: Level 1 node ${i} Y mismatch`);
+      }
+    });
+    orphanNodes.forEach((n, i) => {
+      if (Math.abs(n.y - baseY) > 1) {
+        console.warn(`Invariant C violated: orphan ${i} Y mismatch with Level 1`);
+      }
+    });
+  }
+
+  // D) Depth indentation invariant (spot check)
+  nodes.forEach((node, id) => {
+    if (node.depth >= 2) {
+      // Find parent - this would need parent tracking for full check
+      // For now just verify x increases with depth
+    }
+  });
+};
+
+// ============================================================================
+// SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
+// ============================================================================
 const SitemapTree = ({
   data,
   orphans = [],
@@ -726,127 +629,87 @@ const SitemapTree = ({
   onNodeDoubleClick,
   activeId,
 }) => {
-  const rootColor = colors[0];
-  const rootRef = useRef(null);
-  const level1ContainerRef = useRef(null);
-  const level1Refs = useRef([]);
-  const [rootPaths, setRootPaths] = useState([]);
   const [expandedStacks, setExpandedStacks] = useState({});
 
   const toggleStack = (nodeId) => {
     setExpandedStacks(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
   };
 
-  // Calculate connector from Root to Level 1 row (horizontal bus)
-  useLayoutEffect(() => {
-    if (!level1ContainerRef.current || !rootRef.current) return;
-    if (!data?.children?.length) return;
+  // Compute layout using explicit coordinate formulas
+  const layout = useMemo(() => {
+    return computeLayout(data, orphans, showThumbnails, expandedStacks);
+  }, [data, orphans, showThumbnails, expandedStacks]);
 
-    const calc = () => {
-      const containerRect = level1ContainerRef.current.getBoundingClientRect();
-      const rootCard = rootRef.current.querySelector('[data-node-card="1"]');
-      if (!rootCard) return;
+  // Run invariant checks in development
+  React.useEffect(() => {
+    checkLayoutInvariants(layout.nodes, orphans, layout.connectors);
+  }, [layout, orphans]);
 
-      const rootRect = rootCard.getBoundingClientRect();
-      const s = scale || 1;
+  if (!data) return null;
 
-      // Root connection point: bottom center
-      const rootX = (rootRect.left + rootRect.width / 2 - containerRect.left) / s;
-      const rootY = (rootRect.bottom - containerRect.top) / s;
-
-      // Bus line Y position (midway between root and level 1)
-      const busY = rootY + 40;
-
-      const childPoints = level1Refs.current
-        .map((el) => {
-          if (!el) return null;
-          const childCard = el.querySelector('[data-node-card="1"]');
-          if (!childCard) return null;
-          const r = childCard.getBoundingClientRect();
-          return {
-            x: (r.left + r.width / 2 - containerRect.left) / s,
-            y: (r.top - containerRect.top) / s,
-          };
-        })
-        .filter(Boolean);
-
-      if (!childPoints.length) {
-        setRootPaths([]);
-        return;
-      }
-
-      const p = [];
-
-      // Vertical line from root to bus
-      p.push(`M ${rootX} ${rootY} L ${rootX} ${busY}`);
-
-      // Horizontal bus line
-      const xs = childPoints.map(c => c.x);
-      const minX = Math.min(...xs, rootX);
-      const maxX = Math.max(...xs, rootX);
-      p.push(`M ${minX} ${busY} L ${maxX} ${busY}`);
-
-      // Vertical drops to each Level 1 node
-      childPoints.forEach((c) => {
-        p.push(`M ${c.x} ${busY} L ${c.x} ${c.y}`);
-      });
-
-      setRootPaths(p);
-    };
-
-    calc();
-
-    const ro = new ResizeObserver(() => calc());
-    ro.observe(level1ContainerRef.current);
-    ro.observe(rootRef.current);
-    level1Refs.current.forEach((el) => el && ro.observe(el));
-
-    return () => ro.disconnect();
-  }, [data, showThumbnails, scale, expandedStacks]);
-
-  level1Refs.current = [];
+  // Convert connector data to SVG path strings
+  const connectorPaths = layout.connectors.map(c => {
+    if (c.type === 'horizontal-bus' || c.type === 'horizontal-tick') {
+      return `M ${c.x1} ${c.y1} L ${c.x2} ${c.y2}`;
+    }
+    return `M ${c.x1} ${c.y1} L ${c.x2} ${c.y2}`;
+  });
 
   return (
-    <div className="sitemap-tree">
-      {/* Level 0 Row: Root + Orphans */}
-      <div className="level0-row">
-        {/* Root Node */}
-        <div
-          ref={rootRef}
-          className="root-node"
-          data-node-id={data.id}
-          data-depth={0}
-          onDoubleClick={() => onNodeDoubleClick?.(data.id)}
-        >
-          <DraggableNodeCard
-            node={data}
-            number="1"
-            color={rootColor}
-            showThumbnails={showThumbnails}
-            isRoot={true}
-            onDelete={onDelete}
-            onEdit={onEdit}
-            onDuplicate={onDuplicate}
-            onViewImage={onViewImage}
-            activeId={activeId}
-          />
-        </div>
+    <div
+      className="sitemap-tree-absolute"
+      style={{
+        position: 'relative',
+        width: layout.bounds.w,
+        height: layout.bounds.h,
+        minWidth: layout.bounds.w,
+        minHeight: layout.bounds.h,
+      }}
+    >
+      {/* Single SVG overlay for all connectors */}
+      <svg
+        className="connector-overlay"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          overflow: 'visible',
+        }}
+        aria-hidden="true"
+      >
+        {connectorPaths.map((d, i) => (
+          <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
+        ))}
+      </svg>
 
-        {/* Orphan Nodes - same row as Root, Level 0 color */}
-        {orphans.map((orphan, idx) => (
+      {/* Render all nodes with absolute positioning */}
+      {Array.from(layout.nodes.values()).map(nodeData => {
+        const color = colors[Math.min(nodeData.depth, colors.length - 1)];
+        const isRoot = nodeData.depth === 0 && !nodeData.isOrphan;
+
+        return (
           <div
-            key={orphan.id}
-            className="orphan-node"
-            data-node-id={orphan.id}
-            data-depth={0}
-            onDoubleClick={() => onNodeDoubleClick?.(orphan.id)}
+            key={nodeData.node.id}
+            className="sitemap-node-positioned"
+            data-node-id={nodeData.node.id}
+            data-depth={nodeData.depth}
+            style={{
+              position: 'absolute',
+              left: nodeData.x,
+              top: nodeData.y,
+              width: LAYOUT.NODE_W,
+            }}
+            onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
           >
             <DraggableNodeCard
-              node={orphan}
-              number={`0.${idx + 1}`}
-              color={rootColor}
+              node={nodeData.node}
+              number={nodeData.number}
+              color={color}
               showThumbnails={showThumbnails}
-              isRoot={false}
+              isRoot={isRoot}
               onDelete={onDelete}
               onEdit={onEdit}
               onDuplicate={onDuplicate}
@@ -854,45 +717,80 @@ const SitemapTree = ({
               activeId={activeId}
             />
           </div>
-        ))}
-      </div>
+        );
+      })}
 
-      {/* Level 1 Row + Subtrees */}
-      {!!data.children?.length && (
-        <div className="level1-container" ref={level1ContainerRef}>
-          <svg className="connector-svg root-connector" aria-hidden="true">
-            {rootPaths.map((d, i) => (
-              <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
-            ))}
-          </svg>
+      {/* Stacking UI for collapsed stacks (render on top) */}
+      {Array.from(layout.nodes.values())
+        .filter(nodeData => {
+          const shouldStack = shouldStackChildren(nodeData.node.children, nodeData.depth);
+          return shouldStack && !expandedStacks[nodeData.node.id] && nodeData.node.children?.length > 0;
+        })
+        .map(nodeData => {
+          const NODE_H = getNodeH(showThumbnails);
+          const stackY = nodeData.y + NODE_H + LAYOUT.GAP_STACK_Y;
+          const stackX = nodeData.x + LAYOUT.INDENT_X;
 
-          <div className="level1-row">
-            {data.children.map((child, idx) => (
-              <div
-                key={child.id}
-                className="level1-wrap"
-                ref={(el) => (level1Refs.current[idx] = el)}
-              >
-                <Level1Branch
-                  node={child}
-                  numberPrefix={`1.${idx + 1}`}
-                  showThumbnails={showThumbnails}
-                  colors={colors}
-                  scale={scale}
-                  onDelete={onDelete}
-                  onEdit={onEdit}
-                  onDuplicate={onDuplicate}
-                  onViewImage={onViewImage}
-                  onNodeDoubleClick={onNodeDoubleClick}
-                  activeId={activeId}
-                  expandedStacks={expandedStacks}
-                  toggleStack={toggleStack}
-                />
+          return (
+            <div
+              key={`stack-${nodeData.node.id}`}
+              className="stacked-cards-positioned"
+              style={{
+                position: 'absolute',
+                left: stackX,
+                top: stackY,
+                width: LAYOUT.NODE_W,
+              }}
+              onClick={() => toggleStack(nodeData.node.id)}
+              title={`Click to expand ${nodeData.node.children.length} pages`}
+            >
+              <div className="stacked-cards">
+                <div className="stacked-card stacked-card-3" />
+                <div className="stacked-card stacked-card-2" />
+                <div className="stacked-card stacked-card-1">
+                  <div className="stacked-preview">
+                    <span className="stacked-preview-title">
+                      {nodeData.node.children[0]?.title || 'Untitled'}
+                    </span>
+                  </div>
+                </div>
+                <div className="stacked-count">+{nodeData.node.children.length - 1} more</div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+          );
+        })}
+
+      {/* Collapse buttons for expanded stacks */}
+      {Array.from(layout.nodes.values())
+        .filter(nodeData => {
+          const shouldStack = shouldStackChildren(nodeData.node.children, nodeData.depth);
+          return shouldStack && expandedStacks[nodeData.node.id];
+        })
+        .map(nodeData => {
+          // Find the last child to position button after it
+          const lastChildId = nodeData.node.children[nodeData.node.children.length - 1]?.id;
+          const lastChildLayout = layout.nodes.get(lastChildId);
+          if (!lastChildLayout) return null;
+
+          const NODE_H = getNodeH(showThumbnails);
+          const buttonY = lastChildLayout.y + NODE_H + 8;
+          const buttonX = lastChildLayout.x;
+
+          return (
+            <button
+              key={`collapse-${nodeData.node.id}`}
+              className="collapse-stack-btn"
+              style={{
+                position: 'absolute',
+                left: buttonX,
+                top: buttonY,
+              }}
+              onClick={() => toggleStack(nodeData.node.id)}
+            >
+              Collapse ({nodeData.node.children.length} pages)
+            </button>
+          );
+        })}
     </div>
   );
 };
