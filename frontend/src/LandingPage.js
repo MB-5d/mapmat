@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  MapIcon, Share2, FolderOpen, Download,
+  MapIcon, Zap, Share2, FolderOpen, Download,
   ChevronDown, Menu, X, Check, ArrowRight, Mail, Send,
   Globe, Layers, Eye
 } from 'lucide-react';
