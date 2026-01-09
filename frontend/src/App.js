@@ -369,12 +369,11 @@ const VerticalBranch = ({
       const nodeRect = nodeCard.getBoundingClientRect();
       const s = scale || 1;
 
-      // Parent connection point: left edge, vertically centered
-      const parentX = (nodeRect.left - containerRect.left) / s;
-      const parentY = (nodeRect.top + nodeRect.height / 2 - containerRect.top) / s;
+      // Parent connection point: bottom of parent card
+      const parentY = (nodeRect.bottom - containerRect.top) / s;
 
-      // Spine X position (aligned with parent's left edge)
-      const spineX = parentX;
+      // Spine X position (indented 40px from parent's left edge for visual hierarchy)
+      const spineX = (nodeRect.left - containerRect.left) / s + INDENT_PER_LEVEL;
 
       const childPoints = childRefs.current
         .map((el) => {
@@ -561,12 +560,11 @@ const Level1Branch = ({
       const nodeRect = nodeCard.getBoundingClientRect();
       const s = scale || 1;
 
-      // Parent connection point: left edge, vertically centered
-      const parentX = (nodeRect.left - containerRect.left) / s;
+      // Parent connection point: bottom of parent card
       const parentY = (nodeRect.bottom - containerRect.top) / s;
 
-      // Spine X position
-      const spineX = parentX;
+      // Spine X position (indented 40px from parent's left edge)
+      const spineX = (nodeRect.left - containerRect.left) / s + INDENT_PER_LEVEL;
 
       const childPoints = childRefs.current
         .map((el) => {
@@ -809,9 +807,9 @@ const SitemapTree = ({
   level1Refs.current = [];
 
   return (
-    <div className="sitemap-tree-wrapper">
-      {/* Main Tree */}
-      <div className="sitemap-tree">
+    <div className="sitemap-tree">
+      {/* Level 0 Row: Root + Orphans */}
+      <div className="level0-row">
         {/* Root Node */}
         <div
           ref={rootRef}
@@ -834,54 +832,50 @@ const SitemapTree = ({
           />
         </div>
 
-        {/* Level 1 Row + Subtrees */}
-        {!!data.children?.length && (
-          <div className="level1-container" ref={level1ContainerRef}>
-            <svg className="connector-svg root-connector" aria-hidden="true">
-              {rootPaths.map((d, i) => (
-                <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
-              ))}
-            </svg>
-
-            <div className="level1-row">
-              {data.children.map((child, idx) => (
-                <div
-                  key={child.id}
-                  className="level1-wrap"
-                  ref={(el) => (level1Refs.current[idx] = el)}
-                >
-                  <Level1Branch
-                    node={child}
-                    numberPrefix={`1.${idx + 1}`}
-                    showThumbnails={showThumbnails}
-                    colors={colors}
-                    scale={scale}
-                    onDelete={onDelete}
-                    onEdit={onEdit}
-                    onDuplicate={onDuplicate}
-                    onViewImage={onViewImage}
-                    onNodeDoubleClick={onNodeDoubleClick}
-                    activeId={activeId}
-                    expandedStacks={expandedStacks}
-                    toggleStack={toggleStack}
-                  />
-                </div>
-              ))}
-            </div>
+        {/* Orphan Nodes - same row as Root, Level 0 color */}
+        {orphans.map((orphan, idx) => (
+          <div
+            key={orphan.id}
+            className="orphan-node"
+            data-node-id={orphan.id}
+            data-depth={0}
+            onDoubleClick={() => onNodeDoubleClick?.(orphan.id)}
+          >
+            <DraggableNodeCard
+              node={orphan}
+              number={`0.${idx + 1}`}
+              color={rootColor}
+              showThumbnails={showThumbnails}
+              isRoot={false}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              onDuplicate={onDuplicate}
+              onViewImage={onViewImage}
+              activeId={activeId}
+            />
           </div>
-        )}
+        ))}
       </div>
 
-      {/* Orphan Nodes - to the right of main tree */}
-      {orphans.length > 0 && (
-        <div className="orphans-container">
-          <div className="orphans-label">Orphan Pages</div>
-          <div className="orphans-column">
-            {orphans.map((orphan, idx) => (
-              <div key={orphan.id} className="orphan-wrap">
+      {/* Level 1 Row + Subtrees */}
+      {!!data.children?.length && (
+        <div className="level1-container" ref={level1ContainerRef}>
+          <svg className="connector-svg root-connector" aria-hidden="true">
+            {rootPaths.map((d, i) => (
+              <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
+            ))}
+          </svg>
+
+          <div className="level1-row">
+            {data.children.map((child, idx) => (
+              <div
+                key={child.id}
+                className="level1-wrap"
+                ref={(el) => (level1Refs.current[idx] = el)}
+              >
                 <Level1Branch
-                  node={orphan}
-                  numberPrefix={`0.${idx + 1}`}
+                  node={child}
+                  numberPrefix={`1.${idx + 1}`}
                   showThumbnails={showThumbnails}
                   colors={colors}
                   scale={scale}

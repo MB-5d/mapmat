@@ -312,13 +312,6 @@ body {
 }
 
 /* New Sitemap Layout */
-.sitemap-tree-wrapper {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 120px;
-}
-
 .sitemap-tree {
   position: relative;
   display: flex;
@@ -326,10 +319,23 @@ body {
   align-items: flex-start;
 }
 
+/* Level 0 row: Root + Orphans horizontally */
+.level0-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 624px; /* 2 node widths (288px * 2) + gap (48px) between root and orphans */
+}
+
 .root-node {
   position: relative;
   display: inline-block;
   margin-bottom: 0;
+}
+
+.orphan-node {
+  position: relative;
+  display: inline-block;
 }
 
 .level1-container {
@@ -388,32 +394,6 @@ body {
   position: relative;
 }
 
-/* Orphan pages section */
-.orphans-container {
-  position: relative;
-  margin-top: 0;
-}
-
-.orphans-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 16px;
-  padding-left: 4px;
-}
-
-.orphans-column {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 24px;
-}
-
-.orphan-wrap {
-  position: relative;
-}
 
 /* Connector SVG positioning */
 .connector-svg {
