@@ -891,6 +891,59 @@ body {
   margin: 0 4px;
 }
 
+/* Canvas Toolbar */
+.canvas-toolbar {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+}
+
+.canvas-tool-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s ease;
+}
+
+.canvas-tool-btn:hover:not(.disabled) {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.canvas-tool-btn.active {
+  background: #6366f1;
+  color: white;
+}
+
+.canvas-tool-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.canvas-toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: #e2e8f0;
+  margin: 0 4px;
+}
+
 .toast {
   position: fixed;
   top: 80px;
@@ -3012,6 +3065,30 @@ body {
 
   .color-key-item span {
     color: #9f8fb8;
+  }
+
+  .canvas-toolbar {
+    background: #1a1022;
+    border-color: #2d1f3d;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .canvas-tool-btn {
+    color: #9f8fb8;
+  }
+
+  .canvas-tool-btn:hover:not(.disabled) {
+    background: #2d1f3d;
+    color: #e2e0e8;
+  }
+
+  .canvas-tool-btn.active {
+    background: #6366f1;
+    color: white;
+  }
+
+  .canvas-toolbar-divider {
+    background: #2d1f3d;
   }
 
   .zoom-controls {

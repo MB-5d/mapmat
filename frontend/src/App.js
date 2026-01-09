@@ -51,6 +51,11 @@ import {
   EyeOff,
   Upload,
   FileUp,
+  Undo2,
+  Redo2,
+  MousePointer2,
+  Link,
+  Plus,
 } from 'lucide-react';
 import './App.css';
 import * as api from './api';
@@ -1257,6 +1262,9 @@ export default function App() {
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
+  const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link'
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -2093,6 +2101,31 @@ export default function App() {
     }, 50);
   };
 
+  // Undo/Redo functionality
+  const pushToUndoStack = (state) => {
+    setUndoStack(prev => [...prev, state]);
+    setRedoStack([]); // Clear redo stack on new action
+  };
+
+  const undo = () => {
+    if (undoStack.length === 0) return;
+    const prevState = undoStack[undoStack.length - 1];
+    setRedoStack(prev => [...prev, root]);
+    setUndoStack(prev => prev.slice(0, -1));
+    setRoot(prevState);
+  };
+
+  const redo = () => {
+    if (redoStack.length === 0) return;
+    const nextState = redoStack[redoStack.length - 1];
+    setUndoStack(prev => [...prev, root]);
+    setRedoStack(prev => prev.slice(0, -1));
+    setRoot(nextState);
+  };
+
+  const canUndo = undoStack.length > 0;
+  const canRedo = redoStack.length > 0;
+
   const exportJson = () => {
     if (!root) return;
     downloadText('sitemap.json', JSON.stringify({ root, colors }, null, 2));
@@ -2560,6 +2593,7 @@ const findNodeById = (node, id) => {
       node.children.forEach(remove);
     };
 
+    pushToUndoStack(structuredClone(root));
     setRoot((prev) => {
       const copy = structuredClone(prev);
       remove(copy);
@@ -2628,6 +2662,7 @@ const findNodeById = (node, id) => {
 
     if (editModalMode === 'edit') {
       // Update existing node
+      pushToUndoStack(structuredClone(root));
       setRoot((prev) => {
         const copy = structuredClone(prev);
         const target = findNodeById(copy, updatedNode.id);
@@ -2680,6 +2715,7 @@ const findNodeById = (node, id) => {
         children: [], // Don't copy children for duplicates
       };
 
+      pushToUndoStack(structuredClone(root));
       setRoot((prev) => {
         const copy = structuredClone(prev);
         const targetParentId = updatedNode.parentId || '';
@@ -2728,6 +2764,7 @@ const findNodeById = (node, id) => {
     if (nodeId === newParentId) return;
     if (isDescendantOf(root, newParentId, nodeId)) return;
 
+    pushToUndoStack(structuredClone(root));
     setRoot((prev) => {
       const copy = structuredClone(prev);
       const nodeToMove = findNodeById(copy, nodeId);
@@ -3459,6 +3496,63 @@ const findNodeById = (node, id) => {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Canvas Toolbar */}
+            <div className="canvas-toolbar">
+              <button
+                className={`canvas-tool-btn ${activeTool === 'select' ? 'active' : ''}`}
+                onClick={() => setActiveTool('select')}
+                title="Select (V)"
+              >
+                <MousePointer2 size={20} />
+              </button>
+              <button
+                className="canvas-tool-btn disabled"
+                disabled
+                title="Add Page (coming soon)"
+              >
+                <Plus size={20} />
+              </button>
+
+              <div className="canvas-toolbar-divider" />
+
+              <button
+                className="canvas-tool-btn disabled"
+                disabled
+                title="Create Link (coming soon)"
+              >
+                <Link size={20} />
+              </button>
+
+              <div className="canvas-toolbar-divider" />
+
+              <button
+                className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
+                onClick={undo}
+                disabled={!canUndo}
+                title="Undo (⌘Z)"
+              >
+                <Undo2 size={20} />
+              </button>
+              <button
+                className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
+                onClick={redo}
+                disabled={!canRedo}
+                title="Redo (⇧⌘Z)"
+              >
+                <Redo2 size={20} />
+              </button>
+
+              <div className="canvas-toolbar-divider" />
+
+              <button
+                className="canvas-tool-btn disabled"
+                disabled
+                title="View Options (coming soon)"
+              >
+                <Eye size={20} />
+              </button>
             </div>
 
             <div className="zoom-controls">
