@@ -403,20 +403,17 @@ const checkLayoutInvariants = (nodes, orphans, connectors) => {
  * Compute layout positions for all nodes
  * Returns: { nodes: Map<id, {x, y, w, h, depth, number}>, connectors: [], bounds: {w, h} }
  *
- * Orphan modes:
- * - mode: 'after-root' => orphans live on the ROOT ROW, to the right of Home, spaced like Level 1
- * - mode: 'after-tree' => orphans live on the LEVEL 1 ROW, after the main tree
- *
- * Orphan types (optional, future-proof):
- * - orphan.type === 'root' => treated as depth 0, numbered 0.x, styled like root
- * - orphan.type === 'level1' => treated as depth 1, numbered 1.x, styled like level 1 (e.g., error pages)
+ * Orphan behavior is controlled via options:
+ * - orphanMode: 'after-root' | 'after-tree'
+ * - orphanStyle: 'root' | 'level1'
+ * - renderOrphanChildren: boolean (kept false by default; see note inside)
  */
 const computeLayout = (
   root,
   orphans,
   showThumbnails,
   expandedStacks = {},
-  opts = {}
+  options = {}
 ) => {
   const NODE_H = getNodeH(showThumbnails);
   const {
@@ -430,65 +427,75 @@ const computeLayout = (
     ROOT_Y,
   } = LAYOUT;
 
-  const options = {
-    mode: opts.mode || "after-root", // 'after-root' | 'after-tree'
-    // If true, orphan "root" pages can render children vertically (future)
-    renderOrphanChildren: !!opts.renderOrphanChildren,
-  };
+  const {
+    orphanMode = "after-root",     // 'after-root' or 'after-tree'
+    orphanStyle = "root",          // 'root' or 'level1'
+    renderOrphanChildren = false,  // leave false until you explicitly want mini-trees
+  } = options;
 
   const nodes = new Map();
   const connectors = [];
 
   if (!root) return { nodes, connectors, bounds: { w: 0, h: 0 } };
 
-  // -----------------------------
-  // Helpers
-  // -----------------------------
-  const layoutVerticalSubtree = (node, parentX, startY, depth, numberPrefix) => {
-    // Each depth >= 2 indents from its parent
-    const x = parentX + INDENT_X;
-    const y = startY;
+  // Small UX pad so the bus line isn't kissing the root card
+  const ROOT_BUS_PAD_Y = 24;
 
+  // ------------------------------------------------------------
+  // Helpers
+  // ------------------------------------------------------------
+
+  const setNode = (node, x, y, depth, number, extra = {}) => {
     nodes.set(node.id, {
       x,
       y,
       w: NODE_W,
       h: NODE_H,
       depth,
-      number: numberPrefix,
+      number,
       node,
+      ...extra,
     });
+  };
 
-    const shouldStack = shouldStackChildren(node.children, depth);
-    const isExpanded = expandedStacks[node.id];
+  // Layout children vertically under a parent node
+  // Returns total height consumed by this subtree.
+  const layoutVertical = (parentNode, parentDepth, numberPrefix) => {
+    const parentLayout = nodes.get(parentNode.id);
+    if (!parentLayout) return NODE_H;
 
-    let nextY = y + NODE_H + GAP_STACK_Y;
-    const childPositions = [];
+    const shouldStack = shouldStackChildren(parentNode.children, parentDepth);
+    const isExpanded = !!expandedStacks[parentNode.id];
 
-    if (node.children?.length && (!shouldStack || isExpanded)) {
-      node.children.forEach((child, idx) => {
-        const childNumber = `${numberPrefix}.${idx + 1}`;
-        const childY = nextY;
-
-        // Child x will be computed by recursive call (x + INDENT_X)
-        const subtreeH = layoutVerticalSubtree(child, x, childY, depth + 1, childNumber);
-
-        // We need the child's actual x for connector ticks:
-        const childLayout = nodes.get(child.id);
-        if (childLayout) {
-          childPositions.push({ x: childLayout.x, y: childLayout.y, node: child });
-        }
-
-        nextY = childY + subtreeH + GAP_STACK_Y;
-      });
+    // If stacked and not expanded: no child layout; subtree is just the parent card
+    if (!parentNode.children?.length || (shouldStack && !isExpanded)) {
+      return NODE_H;
     }
 
-    // Connectors from this node to its visible children
-    if (childPositions.length > 0) {
-      // Spine should align to the LEFT EDGE of children (so ticks hit the node edge)
-      const spineX = childPositions[0].x + STROKE_PAD_X;
-      const spineStartY = y + NODE_H;
-      const spineEndY = childPositions[childPositions.length - 1].y + NODE_H / 2;
+    const parentX = parentLayout.x;
+    const parentY = parentLayout.y;
+
+    const childX = parentX + INDENT_X;
+    let cursorY = parentY + NODE_H + GAP_STACK_Y;
+
+    const childIdsInOrder = [];
+
+    parentNode.children.forEach((child, idx) => {
+      const childNumber = `${numberPrefix}.${idx + 1}`;
+      setNode(child, childX, cursorY, parentDepth + 1, childNumber);
+
+      childIdsInOrder.push(child.id);
+
+      const childSubtreeH = layoutVertical(child, parentDepth + 1, childNumber);
+      cursorY += childSubtreeH + GAP_STACK_Y;
+    });
+
+    // Connectors: vertical spine + horizontal ticks
+    if (childIdsInOrder.length) {
+      const spineX = parentX + INDENT_X + STROKE_PAD_X;
+      const spineStartY = parentY + NODE_H;
+      const lastChild = nodes.get(childIdsInOrder[childIdsInOrder.length - 1]);
+      const spineEndY = lastChild.y + NODE_H / 2;
 
       connectors.push({
         type: "vertical-spine",
@@ -498,144 +505,66 @@ const computeLayout = (
         y2: spineEndY,
       });
 
-      childPositions.forEach((cp) => {
-        const tickY = cp.y + NODE_H / 2;
+      childIdsInOrder.forEach((cid) => {
+        const c = nodes.get(cid);
+        const tickY = c.y + NODE_H / 2;
         connectors.push({
           type: "horizontal-tick",
           x1: spineX,
           y1: tickY,
-          x2: cp.x + STROKE_PAD_X, // end exactly at node edge (touch)
+          x2: c.x + STROKE_PAD_X, // end at child left edge (touch)
           y2: tickY,
         });
       });
     }
 
-    // Total height consumed
-    const totalHeight =
-      node.children?.length && (!shouldStack || isExpanded)
-        ? nextY - y - GAP_STACK_Y
-        : NODE_H;
-
-    return totalHeight;
+    // total height is from parentY to end of last child subtree (minus last GAP_STACK_Y)
+    const total = cursorY - parentY - GAP_STACK_Y;
+    return Math.max(NODE_H, total);
   };
 
-  const layoutLevel1Branch = (node, x, y, numberPrefix) => {
-    nodes.set(node.id, {
-      x,
-      y,
-      w: NODE_W,
-      h: NODE_H,
-      depth: 1,
-      number: numberPrefix,
-      node,
-    });
-
-    const shouldStack = shouldStackChildren(node.children, 1);
-    const isExpanded = expandedStacks[node.id];
-
-    let subtreeHeight = NODE_H;
-    const childPositions = [];
-
-    if (node.children?.length && (!shouldStack || isExpanded)) {
-      let nextY = y + NODE_H + GAP_STACK_Y;
-
-      node.children.forEach((child, idx) => {
-        const childNumber = `${numberPrefix}.${idx + 1}`;
-        const childY = nextY;
-
-        const childSubtreeH = layoutVerticalSubtree(child, x, childY, 2, childNumber);
-
-        const childLayout = nodes.get(child.id);
-        if (childLayout) {
-          childPositions.push({ x: childLayout.x, y: childLayout.y, node: child });
-        }
-
-        nextY = childY + childSubtreeH + GAP_STACK_Y;
-      });
-
-      subtreeHeight = nextY - y - GAP_STACK_Y;
-    }
-
-    // Connectors from Level 1 node to children
-    if (childPositions.length > 0) {
-      const spineX = childPositions[0].x + STROKE_PAD_X;
-      const spineStartY = y + NODE_H;
-      const spineEndY = childPositions[childPositions.length - 1].y + NODE_H / 2;
-
-      connectors.push({
-        type: "vertical-spine",
-        x1: spineX,
-        y1: spineStartY,
-        x2: spineX,
-        y2: spineEndY,
-      });
-
-      childPositions.forEach((cp) => {
-        const tickY = cp.y + NODE_H / 2;
-        connectors.push({
-          type: "horizontal-tick",
-          x1: spineX,
-          y1: tickY,
-          x2: cp.x + STROKE_PAD_X,
-          y2: tickY,
-        });
-      });
-    }
-
-    return subtreeHeight;
-  };
-
-  // -----------------------------
+  // ------------------------------------------------------------
   // 1) Root (Home)
-  // -----------------------------
+  // ------------------------------------------------------------
   const rootX = 0;
   const rootY = ROOT_Y;
 
-  nodes.set(root.id, {
-    x: rootX,
-    y: rootY,
-    w: NODE_W,
-    h: NODE_H,
-    depth: 0,
-    number: "0.0", // FIX: Home is 0.0
-    node: root,
-  });
+  // You want Home = 0.0
+  setNode(root, rootX, rootY, 0, "0.0", { isOrphan: false });
 
-  // Add breathing room between Home and the horizontal bus line
+  // ------------------------------------------------------------
+  // 2) Level 1 row (children of root) — horizontal only
+  // ------------------------------------------------------------
   const rootBottomY = rootY + NODE_H;
+  const level1Y = rootBottomY + BUS_Y_GAP + ROOT_BUS_PAD_Y;
 
-  // -----------------------------
-  // 2) Level 1 row (main tree)
-  // -----------------------------
-  const level1Y = rootBottomY + BUS_Y_GAP;
   const level1Positions = [];
   let level1X = 0;
+  let maxTreeHeight = NODE_H;
 
   if (root.children?.length) {
     root.children.forEach((child, idx) => {
-      const childX = level1X;
-      const childNumber = `1.${idx + 1}`;
+      const childNumber = `1.${idx + 1}`; // keep your existing numbering style
+      setNode(child, level1X, level1Y, 1, childNumber);
 
       level1Positions.push({
-        x: childX,
+        centerX: level1X + NODE_W / 2,
         y: level1Y,
-        centerX: childX + NODE_W / 2,
+        id: child.id,
       });
 
-      layoutLevel1Branch(child, childX, level1Y, childNumber);
+      // Vertical subtree under each Level 1 node
+      const branchH = layoutVertical(child, 1, childNumber);
+      maxTreeHeight = Math.max(maxTreeHeight, (level1Y - rootY) + branchH);
 
       level1X += NODE_W + GAP_L1_X;
     });
 
-    // Root-to-Level1 connectors (horizontal bus)
+    // Root-to-Level1 connectors (vertical drop + horizontal bus + drops)
     if (level1Positions.length > 0) {
       const rootCenterX = rootX + NODE_W / 2;
+      const busY = rootBottomY + ROOT_BUS_PAD_Y;
 
-      // FIX: bus line should NOT hug the bottom of Home
-      // Put it ~40% down the gap, clamped to feel nice.
-      const busY = rootBottomY + Math.max(24, Math.min(48, BUS_Y_GAP * 0.4));
-
-      // Vertical drop from root to bus
       connectors.push({
         type: "root-drop",
         x1: rootCenterX,
@@ -644,12 +573,8 @@ const computeLayout = (
         y2: busY,
       });
 
-      // Horizontal bus
       const leftX = Math.min(rootCenterX, level1Positions[0].centerX);
-      const rightX = Math.max(
-        rootCenterX,
-        level1Positions[level1Positions.length - 1].centerX
-      );
+      const rightX = Math.max(rootCenterX, level1Positions[level1Positions.length - 1].centerX);
 
       connectors.push({
         type: "horizontal-bus",
@@ -659,7 +584,6 @@ const computeLayout = (
         y2: busY,
       });
 
-      // Drops from bus to each Level 1 node
       level1Positions.forEach((pos) => {
         connectors.push({
           type: "bus-drop",
@@ -672,79 +596,69 @@ const computeLayout = (
     }
   }
 
-  // FIX: correct mainTreeRightEdge
-  // level1X ends at (lastX + NODE_W + GAP). The true right edge is (level1X - GAP)
-  const mainTreeRightEdge =
-    root.children?.length ? level1X - GAP_L1_X : rootX + NODE_W;
-
-  // -----------------------------
+  // ------------------------------------------------------------
   // 3) Orphans
-  // -----------------------------
-  const orphanList = Array.isArray(orphans) ? orphans : [];
+  // ------------------------------------------------------------
 
-  // Decide orphan starting x/y
+  // Main tree right edge (based on actual L1 width; if no children, it’s just root)
+  const mainTreeRightEdge =
+    root.children?.length
+      ? (level1X - GAP_L1_X + NODE_W)  // last L1 node right edge
+      : (rootX + NODE_W);
+
+  // Where do orphans start?
+  // - after-root: start on root row, *one full node-slot* to the right of root
+  //              (so 0.1 doesn’t feel glued to 0.0)
+  // - after-tree: start after the main tree right edge with ORPHAN_GROUP_GAP
   let orphanStartX;
   let orphanY;
 
-  if (options.mode === "after-root") {
-    // FIX: one full node+gap between Home and first orphan
-    orphanStartX = rootX + NODE_W + GAP_L1_X;
+  if (orphanMode === "after-root") {
+    // Root right edge is rootX + NODE_W
+    // "one full node+spacing gap" => leave one empty slot the width of (NODE_W + GAP_L1_X)
+    orphanStartX = rootX + NODE_W + (NODE_W + GAP_L1_X);
     orphanY = rootY;
   } else {
-    // after-tree
     orphanStartX = mainTreeRightEdge + ORPHAN_GROUP_GAP;
     orphanY = level1Y;
   }
 
   let orphanX = orphanStartX;
 
-  orphanList.forEach((orphan, idx) => {
-    const orphanType = orphan?.type || "root"; // 'root' | 'level1'
+  orphans.forEach((orphan, idx) => {
+    const depth = orphanStyle === "level1" ? 1 : 0;
+    const num = orphanStyle === "level1" ? `1.o${idx + 1}` : `0.${idx + 1}`;
 
-    const depth = orphanType === "level1" ? 1 : 0;
-    const number = orphanType === "level1" ? `1.${idx + 1}` : `0.${idx + 1}`;
-
-    nodes.set(orphan.id, {
-      x: orphanX,
-      y: orphanY,
-      w: NODE_W,
-      h: NODE_H,
-      depth,
-      number,
-      node: orphan,
+    setNode(orphan, orphanX, orphanY, depth, num, {
       isOrphan: true,
-      orphanType,
+      orphanStyle,
     });
 
-    // Optional: orphan children rendering (future, off by default)
-    if (options.renderOrphanChildren && orphan.children?.length && depth === 0) {
-      // render orphan's children as their own vertical subtree under the orphan
-      let nextY = orphanY + NODE_H + GAP_STACK_Y;
-      orphan.children.forEach((child, cIdx) => {
-        const childNumber = `${number}.${cIdx + 1}`;
-        const childSubtreeH = layoutVerticalSubtree(child, orphanX, nextY, 1, childNumber);
-        nextY += childSubtreeH + GAP_STACK_Y;
-      });
+    // Optional: render orphan children (off by default)
+    // When you’re ready for “subdomain root” orphans, we should implement
+    // a mini root->L1 bus for each orphan root. This flag is just a placeholder.
+    if (renderOrphanChildren && orphan.children?.length) {
+      // Simple vertical for now (not a mini horizontal L1 bus yet):
+      // children behave like depth+1 under the orphan
+      layoutVertical(orphan, depth, num);
     }
 
     orphanX += NODE_W + GAP_L1_X;
   });
 
-  // -----------------------------
+  // ------------------------------------------------------------
   // Bounds
-  // -----------------------------
-  const allNodes = Array.from(nodes.values());
-  const maxX = Math.max(...allNodes.map((n) => n.x + n.w), NODE_W);
-  const maxY = Math.max(...allNodes.map((n) => n.y + n.h), NODE_H);
+  // ------------------------------------------------------------
+  const all = Array.from(nodes.values());
+  const maxX = Math.max(...all.map((n) => n.x + n.w), NODE_W);
+  const maxY = Math.max(...all.map((n) => n.y + n.h), NODE_H);
 
   return {
     nodes,
     connectors,
-    bounds: { w: maxX, h: maxY + 80 }, // give a bit more padding for comfort
+    bounds: { w: maxX + 50, h: maxY + 50 }, // light padding
   };
 };
-
-
 
 const SitemapTree = ({
   data,
