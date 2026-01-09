@@ -318,11 +318,11 @@ const LAYOUT = {
   NODE_H_COLLAPSED: 200, // Must match CSS .node-card min-height
   NODE_H_THUMB: 262,     // header 8 + thumb 152 + content ~60 + actions ~42
   GAP_L1_X: 48,         // Horizontal gap between Level 1 siblings (and orphans)
-  GAP_STACK_Y: 24,      // Vertical gap between nodes in vertical stack
+  GAP_STACK_Y: 40,      // Vertical gap between nodes in vertical stack (half of BUS_Y_GAP)
   INDENT_X: 40,         // Per-depth indentation for depth >= 2
   BUS_Y_GAP: 80,        // Vertical gap from root bottom to Level 1 row
   ORPHAN_GROUP_GAP: 160, // Gap between main tree and first orphan only
-  STROKE_PAD_X: 0,      // Padding between connector endpoint and node edge
+  STROKE_PAD_X: 20,     // Padding between connector line and card edge
   ROOT_Y: 0,            // Root node Y position
 };
 
@@ -459,6 +459,27 @@ const computeLayout = (
     });
   };
 
+  // Calculate subtree width (how far right the deepest child extends from parent's x)
+  // This is used to prevent horizontal overlap between Level 1 siblings
+  const getSubtreeWidth = (node, depth) => {
+    const shouldStack = shouldStackChildren(node.children, depth);
+    const isExpanded = !!expandedStacks[node.id];
+
+    if (!node.children?.length || (shouldStack && !isExpanded)) {
+      return NODE_W; // Just the node itself
+    }
+
+    // Find the maximum width among all children's subtrees
+    let maxChildWidth = 0;
+    node.children.forEach(child => {
+      const childSubtreeWidth = getSubtreeWidth(child, depth + 1);
+      maxChildWidth = Math.max(maxChildWidth, childSubtreeWidth);
+    });
+
+    // Total width = parent width OR (indent + max child subtree width)
+    return Math.max(NODE_W, INDENT_X + maxChildWidth);
+  };
+
   // Layout children vertically under a parent node
   // Returns total height consumed by this subtree.
   const layoutVertical = (parentNode, parentDepth, numberPrefix) => {
@@ -493,7 +514,7 @@ const computeLayout = (
 
     // Connectors: vertical spine + horizontal ticks
     if (childIdsInOrder.length) {
-      const spineX = parentX + INDENT_X + STROKE_PAD_X;
+      const spineX = parentX + STROKE_PAD_X;
       const spineStartY = parentY + NODE_H;
       const lastChild = nodes.get(childIdsInOrder[childIdsInOrder.length - 1]);
       const spineEndY = lastChild.y + NODE_H / 2;
@@ -513,7 +534,7 @@ const computeLayout = (
           type: "horizontal-tick",
           x1: spineX,
           y1: tickY,
-          x2: c.x + STROKE_PAD_X, // end at child left edge (touch)
+          x2: c.x, // end at child left edge
           y2: tickY,
         });
       });
@@ -530,8 +551,8 @@ const computeLayout = (
   const rootX = 0;
   const rootY = ROOT_Y;
 
-  // Root = "1" (not 0.0)
-  setNode(root, rootX, rootY, 0, "1", { isOrphan: false });
+  // Root = "0" (Home)
+  setNode(root, rootX, rootY, 0, "0", { isOrphan: false });
 
   // ------------------------------------------------------------
   // 2) Level 1 row (children of root) — horizontal only
@@ -545,7 +566,7 @@ const computeLayout = (
 
   if (root.children?.length) {
     root.children.forEach((child, idx) => {
-      const childNumber = `1.${idx + 1}`; // keep your existing numbering style
+      const childNumber = `${idx + 1}`; // Level 1 = 1, 2, 3, etc.
       setNode(child, level1X, level1Y, 1, childNumber);
 
       level1Positions.push({
@@ -558,7 +579,9 @@ const computeLayout = (
       const branchH = layoutVertical(child, 1, childNumber);
       maxTreeHeight = Math.max(maxTreeHeight, (level1Y - rootY) + branchH);
 
-      level1X += NODE_W + GAP_L1_X;
+      // Use subtree width to prevent horizontal overlap
+      const subtreeWidth = getSubtreeWidth(child, 1);
+      level1X += subtreeWidth + GAP_L1_X;
     });
 
     // Root-to-Level1 connectors (vertical drop + horizontal bus + drops)
