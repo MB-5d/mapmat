@@ -1255,6 +1255,7 @@ export default function App() {
   const [importLoading, setImportLoading] = useState(false);
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
+  const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -2494,9 +2495,20 @@ const findNodeById = (node, id) => {
     return null;
   };
 
-  const deleteNode = (id) => {
+  // Opens delete confirmation modal
+  const requestDeleteNode = (id) => {
     if (!root) return;
-    if (root.id === id) return;
+    if (root.id === id) return; // Can't delete root
+    const nodeToDelete = findNodeById(root, id);
+    if (nodeToDelete) {
+      setDeleteConfirmNode(nodeToDelete);
+    }
+  };
+
+  // Actually deletes the node (called after confirmation)
+  const confirmDeleteNode = () => {
+    if (!deleteConfirmNode || !root) return;
+    const id = deleteConfirmNode.id;
 
     const remove = (node) => {
       if (!node.children) return;
@@ -2509,6 +2521,7 @@ const findNodeById = (node, id) => {
       remove(copy);
       return copy;
     });
+    setDeleteConfirmNode(null);
   };
 
   // Find parent of a node in the tree
@@ -3351,7 +3364,7 @@ const findNodeById = (node, id) => {
                 showThumbnails={showThumbnails}
                 colors={colors}
                 scale={scale}
-                onDelete={deleteNode}
+                onDelete={requestDeleteNode}
                 onEdit={openEditModal}
                 onDuplicate={duplicateNode}
                 onViewImage={viewFullScreenshot}
@@ -3853,6 +3866,19 @@ const findNodeById = (node, id) => {
           onSave={saveNodeChanges}
           mode={editModalMode}
         />
+      )}
+
+      {deleteConfirmNode && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirmNode(null)}>
+          <div className="modal delete-confirm-modal" onClick={e => e.stopPropagation()}>
+            <h3>Delete Page</h3>
+            <p>Are you sure you want to delete "{deleteConfirmNode.title || deleteConfirmNode.url || 'this page'}"?</p>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
+              <button className="btn-danger" onClick={confirmDeleteNode}>Delete</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showImportModal && (
