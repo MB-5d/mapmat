@@ -399,12 +399,24 @@ const checkLayoutInvariants = (nodes, orphans, connectors) => {
 // DETERMINISTIC LAYOUT ENGINE (Absolute x/y coordinates + connectors)
 // NOTE: Must be declared ABOVE SitemapTree (arrow functions are not hoisted).
 // ============================================================================
+/**
+ * Compute layout positions for all nodes
+ * Returns: { nodes: Map<id, {x, y, w, h, depth, number}>, connectors: [], bounds: {w, h} }
+ *
+ * Orphan modes:
+ * - mode: 'after-root' => orphans live on the ROOT ROW, to the right of Home, spaced like Level 1
+ * - mode: 'after-tree' => orphans live on the LEVEL 1 ROW, after the main tree
+ *
+ * Orphan types (optional, future-proof):
+ * - orphan.type === 'root' => treated as depth 0, numbered 0.x, styled like root
+ * - orphan.type === 'level1' => treated as depth 1, numbered 1.x, styled like level 1 (e.g., error pages)
+ */
 const computeLayout = (
   root,
-  orphans = [],
+  orphans,
   showThumbnails,
   expandedStacks = {},
-  orphanOptions = { mode: 'after-root' } // 'after-root' | 'after-tree'
+  opts = {}
 ) => {
   const NODE_H = getNodeH(showThumbnails);
   const {
@@ -418,22 +430,37 @@ const computeLayout = (
     ROOT_Y,
   } = LAYOUT;
 
+  const options = {
+    mode: opts.mode || "after-root", // 'after-root' | 'after-tree'
+    // If true, orphan "root" pages can render children vertically (future)
+    renderOrphanChildren: !!opts.renderOrphanChildren,
+  };
+
   const nodes = new Map();
   const connectors = [];
 
   if (!root) return { nodes, connectors, bounds: { w: 0, h: 0 } };
 
-  // -------------------------
+  // -----------------------------
   // Helpers
-  // -------------------------
+  // -----------------------------
   const layoutVerticalSubtree = (node, parentX, startY, depth, numberPrefix) => {
+    // Each depth >= 2 indents from its parent
     const x = parentX + INDENT_X;
     const y = startY;
 
-    nodes.set(node.id, { x, y, w: NODE_W, h: NODE_H, depth, number: numberPrefix, node });
+    nodes.set(node.id, {
+      x,
+      y,
+      w: NODE_W,
+      h: NODE_H,
+      depth,
+      number: numberPrefix,
+      node,
+    });
 
     const shouldStack = shouldStackChildren(node.children, depth);
-    const isExpanded = !!expandedStacks[node.id];
+    const isExpanded = expandedStacks[node.id];
 
     let nextY = y + NODE_H + GAP_STACK_Y;
     const childPositions = [];
@@ -442,38 +469,69 @@ const computeLayout = (
       node.children.forEach((child, idx) => {
         const childNumber = `${numberPrefix}.${idx + 1}`;
         const childY = nextY;
-        childPositions.push({ x: x + INDENT_X, y: childY, node: child });
 
+        // Child x will be computed by recursive call (x + INDENT_X)
         const subtreeH = layoutVerticalSubtree(child, x, childY, depth + 1, childNumber);
+
+        // We need the child's actual x for connector ticks:
+        const childLayout = nodes.get(child.id);
+        if (childLayout) {
+          childPositions.push({ x: childLayout.x, y: childLayout.y, node: child });
+        }
+
         nextY = childY + subtreeH + GAP_STACK_Y;
       });
     }
 
-    // Connectors: vertical spine + horizontal ticks
+    // Connectors from this node to its visible children
     if (childPositions.length > 0) {
-      const spineX = x + INDENT_X + STROKE_PAD_X;
+      // Spine should align to the LEFT EDGE of children (so ticks hit the node edge)
+      const spineX = childPositions[0].x + STROKE_PAD_X;
       const spineStartY = y + NODE_H;
       const spineEndY = childPositions[childPositions.length - 1].y + NODE_H / 2;
 
-      connectors.push({ type: 'vertical-spine', x1: spineX, y1: spineStartY, x2: spineX, y2: spineEndY });
+      connectors.push({
+        type: "vertical-spine",
+        x1: spineX,
+        y1: spineStartY,
+        x2: spineX,
+        y2: spineEndY,
+      });
 
-      childPositions.forEach(cp => {
+      childPositions.forEach((cp) => {
         const tickY = cp.y + NODE_H / 2;
-        connectors.push({ type: 'horizontal-tick', x1: spineX, y1: tickY, x2: cp.x + STROKE_PAD_X, y2: tickY });
+        connectors.push({
+          type: "horizontal-tick",
+          x1: spineX,
+          y1: tickY,
+          x2: cp.x + STROKE_PAD_X, // end exactly at node edge (touch)
+          y2: tickY,
+        });
       });
     }
 
+    // Total height consumed
     const totalHeight =
-      node.children?.length && (!shouldStack || isExpanded) ? (nextY - y - GAP_STACK_Y) : NODE_H;
+      node.children?.length && (!shouldStack || isExpanded)
+        ? nextY - y - GAP_STACK_Y
+        : NODE_H;
 
     return totalHeight;
   };
 
   const layoutLevel1Branch = (node, x, y, numberPrefix) => {
-    nodes.set(node.id, { x, y, w: NODE_W, h: NODE_H, depth: 1, number: numberPrefix, node });
+    nodes.set(node.id, {
+      x,
+      y,
+      w: NODE_W,
+      h: NODE_H,
+      depth: 1,
+      number: numberPrefix,
+      node,
+    });
 
     const shouldStack = shouldStackChildren(node.children, 1);
-    const isExpanded = !!expandedStacks[node.id];
+    const isExpanded = expandedStacks[node.id];
 
     let subtreeHeight = NODE_H;
     const childPositions = [];
@@ -483,46 +541,73 @@ const computeLayout = (
 
       node.children.forEach((child, idx) => {
         const childNumber = `${numberPrefix}.${idx + 1}`;
-        const childX = x + INDENT_X;
         const childY = nextY;
-        childPositions.push({ x: childX, y: childY, node: child });
 
         const childSubtreeH = layoutVerticalSubtree(child, x, childY, 2, childNumber);
+
+        const childLayout = nodes.get(child.id);
+        if (childLayout) {
+          childPositions.push({ x: childLayout.x, y: childLayout.y, node: child });
+        }
+
         nextY = childY + childSubtreeH + GAP_STACK_Y;
       });
 
       subtreeHeight = nextY - y - GAP_STACK_Y;
     }
 
-    // Connectors from level1 node to its children
+    // Connectors from Level 1 node to children
     if (childPositions.length > 0) {
-      const spineX = x + INDENT_X + STROKE_PAD_X;
+      const spineX = childPositions[0].x + STROKE_PAD_X;
       const spineStartY = y + NODE_H;
       const spineEndY = childPositions[childPositions.length - 1].y + NODE_H / 2;
 
-      connectors.push({ type: 'vertical-spine', x1: spineX, y1: spineStartY, x2: spineX, y2: spineEndY });
+      connectors.push({
+        type: "vertical-spine",
+        x1: spineX,
+        y1: spineStartY,
+        x2: spineX,
+        y2: spineEndY,
+      });
 
-      childPositions.forEach(cp => {
+      childPositions.forEach((cp) => {
         const tickY = cp.y + NODE_H / 2;
-        connectors.push({ type: 'horizontal-tick', x1: spineX, y1: tickY, x2: cp.x + STROKE_PAD_X, y2: tickY });
+        connectors.push({
+          type: "horizontal-tick",
+          x1: spineX,
+          y1: tickY,
+          x2: cp.x + STROKE_PAD_X,
+          y2: tickY,
+        });
       });
     }
 
     return subtreeHeight;
   };
 
-  // -------------------------
-  // 1) Root
-  // -------------------------
+  // -----------------------------
+  // 1) Root (Home)
+  // -----------------------------
   const rootX = 0;
   const rootY = ROOT_Y;
 
-  nodes.set(root.id, { x: rootX, y: rootY, w: NODE_W, h: NODE_H, depth: 0, number: '1', node: root });
+  nodes.set(root.id, {
+    x: rootX,
+    y: rootY,
+    w: NODE_W,
+    h: NODE_H,
+    depth: 0,
+    number: "0.0", // FIX: Home is 0.0
+    node: root,
+  });
 
-  // -------------------------
-  // 2) Level 1 row
-  // -------------------------
-  const level1Y = rootY + NODE_H + BUS_Y_GAP;
+  // Add breathing room between Home and the horizontal bus line
+  const rootBottomY = rootY + NODE_H;
+
+  // -----------------------------
+  // 2) Level 1 row (main tree)
+  // -----------------------------
+  const level1Y = rootBottomY + BUS_Y_GAP;
   const level1Positions = [];
   let level1X = 0;
 
@@ -531,72 +616,134 @@ const computeLayout = (
       const childX = level1X;
       const childNumber = `1.${idx + 1}`;
 
-      level1Positions.push({ x: childX, y: level1Y, centerX: childX + NODE_W / 2 });
+      level1Positions.push({
+        x: childX,
+        y: level1Y,
+        centerX: childX + NODE_W / 2,
+      });
 
       layoutLevel1Branch(child, childX, level1Y, childNumber);
 
       level1X += NODE_W + GAP_L1_X;
     });
 
-    // Root → Level1 connectors (bus)
+    // Root-to-Level1 connectors (horizontal bus)
     if (level1Positions.length > 0) {
       const rootCenterX = rootX + NODE_W / 2;
-      const rootBottomY = rootY + NODE_H;
-      const busY = rootBottomY + BUS_Y_GAP / 2;
 
-      connectors.push({ type: 'root-drop', x1: rootCenterX, y1: rootBottomY, x2: rootCenterX, y2: busY });
+      // FIX: bus line should NOT hug the bottom of Home
+      // Put it ~40% down the gap, clamped to feel nice.
+      const busY = rootBottomY + Math.max(24, Math.min(48, BUS_Y_GAP * 0.4));
 
+      // Vertical drop from root to bus
+      connectors.push({
+        type: "root-drop",
+        x1: rootCenterX,
+        y1: rootBottomY,
+        x2: rootCenterX,
+        y2: busY,
+      });
+
+      // Horizontal bus
       const leftX = Math.min(rootCenterX, level1Positions[0].centerX);
-      const rightX = Math.max(rootCenterX, level1Positions[level1Positions.length - 1].centerX);
+      const rightX = Math.max(
+        rootCenterX,
+        level1Positions[level1Positions.length - 1].centerX
+      );
 
-      connectors.push({ type: 'horizontal-bus', x1: leftX, y1: busY, x2: rightX, y2: busY });
+      connectors.push({
+        type: "horizontal-bus",
+        x1: leftX,
+        y1: busY,
+        x2: rightX,
+        y2: busY,
+      });
 
-      level1Positions.forEach(pos => {
-        connectors.push({ type: 'bus-drop', x1: pos.centerX, y1: busY, x2: pos.centerX, y2: level1Y });
+      // Drops from bus to each Level 1 node
+      level1Positions.forEach((pos) => {
+        connectors.push({
+          type: "bus-drop",
+          x1: pos.centerX,
+          y1: busY,
+          x2: pos.centerX,
+          y2: level1Y,
+        });
       });
     }
   }
 
-  // Right edge of main tree (correct)
-  const mainTreeRightEdge = level1X > 0 ? (level1X - GAP_L1_X) : NODE_W;
+  // FIX: correct mainTreeRightEdge
+  // level1X ends at (lastX + NODE_W + GAP). The true right edge is (level1X - GAP)
+  const mainTreeRightEdge =
+    root.children?.length ? level1X - GAP_L1_X : rootX + NODE_W;
 
-  // -------------------------
+  // -----------------------------
   // 3) Orphans
-  // -------------------------
-  const mode = orphanOptions?.mode || 'after-root';
+  // -----------------------------
+  const orphanList = Array.isArray(orphans) ? orphans : [];
 
-  let orphanY = level1Y;
-  let orphanX = mainTreeRightEdge + ORPHAN_GROUP_GAP;
+  // Decide orphan starting x/y
+  let orphanStartX;
+  let orphanY;
 
-  if (mode === 'after-root') {
-    // Orphans start one full node+gap to the right of root, same row as root
+  if (options.mode === "after-root") {
+    // FIX: one full node+gap between Home and first orphan
+    orphanStartX = rootX + NODE_W + GAP_L1_X;
     orphanY = rootY;
-    orphanX = rootX + NODE_W + GAP_L1_X;
+  } else {
+    // after-tree
+    orphanStartX = mainTreeRightEdge + ORPHAN_GROUP_GAP;
+    orphanY = level1Y;
   }
 
-  (orphans || []).forEach((orphan, idx) => {
+  let orphanX = orphanStartX;
+
+  orphanList.forEach((orphan, idx) => {
+    const orphanType = orphan?.type || "root"; // 'root' | 'level1'
+
+    const depth = orphanType === "level1" ? 1 : 0;
+    const number = orphanType === "level1" ? `1.${idx + 1}` : `0.${idx + 1}`;
+
     nodes.set(orphan.id, {
       x: orphanX,
       y: orphanY,
       w: NODE_W,
       h: NODE_H,
-      depth: 0,           // styled like root
-      number: `0.${idx + 1}`,
+      depth,
+      number,
       node: orphan,
       isOrphan: true,
+      orphanType,
     });
+
+    // Optional: orphan children rendering (future, off by default)
+    if (options.renderOrphanChildren && orphan.children?.length && depth === 0) {
+      // render orphan's children as their own vertical subtree under the orphan
+      let nextY = orphanY + NODE_H + GAP_STACK_Y;
+      orphan.children.forEach((child, cIdx) => {
+        const childNumber = `${number}.${cIdx + 1}`;
+        const childSubtreeH = layoutVerticalSubtree(child, orphanX, nextY, 1, childNumber);
+        nextY += childSubtreeH + GAP_STACK_Y;
+      });
+    }
+
     orphanX += NODE_W + GAP_L1_X;
   });
 
-  // -------------------------
+  // -----------------------------
   // Bounds
-  // -------------------------
+  // -----------------------------
   const allNodes = Array.from(nodes.values());
-  const maxX = Math.max(...allNodes.map(n => n.x + n.w), NODE_W);
-  const maxY = Math.max(...allNodes.map(n => n.y + n.h), NODE_H);
+  const maxX = Math.max(...allNodes.map((n) => n.x + n.w), NODE_W);
+  const maxY = Math.max(...allNodes.map((n) => n.y + n.h), NODE_H);
 
-  return { nodes, connectors, bounds: { w: maxX, h: maxY + 50 } };
+  return {
+    nodes,
+    connectors,
+    bounds: { w: maxX, h: maxY + 80 }, // give a bit more padding for comfort
+  };
 };
+
 
 
 const SitemapTree = ({
@@ -674,7 +821,7 @@ const SitemapTree = ({
       {/* Render all nodes with absolute positioning */}
       {Array.from(layout.nodes.values()).map(nodeData => {
         const color = colors[Math.min(nodeData.depth, colors.length - 1)];
-        const isRoot = nodeData.depth === 0 && !nodeData.isOrphan;
+        const isRoot = nodeData.depth === 0;
 
         return (
           <div
