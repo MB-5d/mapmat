@@ -750,12 +750,20 @@ const PAGE_TYPES = [
   'Portfolio',
 ];
 
-// Helper to collect all nodes from tree
-const collectAllNodes = (node, result = []) => {
+// Helper to collect all nodes from tree with page numbers and depth
+const collectAllNodes = (node, result = [], pageNumber = '1', depth = 0) => {
   if (!node) return result;
-  result.push({ id: node.id, title: node.title, url: node.url });
+  result.push({
+    id: node.id,
+    title: node.title,
+    url: node.url,
+    pageNumber,
+    depth
+  });
   if (node.children) {
-    node.children.forEach(child => collectAllNodes(child, result));
+    node.children.forEach((child, idx) => {
+      collectAllNodes(child, result, `${pageNumber}.${idx + 1}`, depth + 1);
+    });
   }
   return result;
 };
@@ -904,9 +912,15 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
                 onChange={(e) => setParentId(e.target.value)}
               >
                 <option value="">None (Root level)</option>
-                {parentOptions.map(n => (
-                  <option key={n.id} value={n.id}>{n.title || n.url}</option>
-                ))}
+                {parentOptions.map(n => {
+                  const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(n.depth);
+                  const displayTitle = n.title || n.url || 'Untitled';
+                  return (
+                    <option key={n.id} value={n.id}>
+                      {indent}{n.pageNumber} - {displayTitle}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
