@@ -315,8 +315,8 @@ const DraggableNodeCard = ({
 // ============================================================================
 const LAYOUT = {
   NODE_W: 288,
-  NODE_H_COLLAPSED: 160,
-  NODE_H_THUMB: 220,
+  NODE_H_COLLAPSED: 200, // Must match CSS .node-card min-height
+  NODE_H_THUMB: 262,     // header 8 + thumb 152 + content ~60 + actions ~42
   GAP_L1_X: 48,         // Horizontal gap between Level 1 siblings (and orphans)
   GAP_STACK_Y: 24,      // Vertical gap between nodes in vertical stack
   INDENT_X: 40,         // Per-depth indentation for depth >= 2
