@@ -1313,6 +1313,77 @@ body {
   background: rgba(0, 0, 0, 0.8);
 }
 
+.image-upload-zone {
+  height: 120px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.image-upload-zone:hover {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.image-upload-zone.drag-over {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.image-upload-zone .upload-icon {
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.image-upload-zone .upload-text {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.image-upload-zone .upload-text-small {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.image-upload-zone .btn-browse {
+  padding: 4px 12px;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.image-upload-zone .btn-browse:hover {
+  background: #4f46e5;
+}
+
+.image-upload-zone .url-input-small {
+  width: 80%;
+  max-width: 200px;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.image-upload-zone .url-input-small:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
 .modal-actions {
   display: flex;
   gap: 12px;
@@ -3253,6 +3324,38 @@ body {
 
   .thumbnail-preview {
     border-color: #2d1f3d;
+  }
+
+  .image-upload-zone {
+    border-color: #3d2a52;
+    background: rgba(45, 31, 61, 0.3);
+  }
+
+  .image-upload-zone:hover {
+    border-color: #6366f1;
+    background: rgba(99, 102, 241, 0.1);
+  }
+
+  .image-upload-zone .upload-icon {
+    color: #9f8fb8;
+  }
+
+  .image-upload-zone .upload-text {
+    color: #d4c8e0;
+  }
+
+  .image-upload-zone .upload-text-small {
+    color: #9f8fb8;
+  }
+
+  .image-upload-zone .url-input-small {
+    background: #2d1f3d;
+    border-color: #3d2a52;
+    color: #f3f0f7;
+  }
+
+  .image-upload-zone .url-input-small:focus {
+    border-color: #6366f1;
   }
 
   .modal-actions {

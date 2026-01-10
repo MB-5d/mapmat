@@ -1268,30 +1268,7 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
 
             <div className="form-group">
               <label>Thumbnail / Image</label>
-              <div className="thumbnail-input-group">
-                <input
-                  type="text"
-                  value={thumbnailUrl}
-                  onChange={(e) => setThumbnailUrl(e.target.value)}
-                  placeholder="Paste image URL"
-                />
-                <button
-                  type="button"
-                  className="btn-upload"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload size={16} />
-                  Upload
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                  style={{ display: 'none' }}
-                />
-              </div>
-              {thumbnailUrl && (
+              {thumbnailUrl ? (
                 <div className="thumbnail-preview">
                   <img src={thumbnailUrl} alt="Thumbnail preview" />
                   <button
@@ -1301,6 +1278,61 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
                   >
                     <X size={14} />
                   </button>
+                </div>
+              ) : (
+                <div
+                  className="image-upload-zone"
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('drag-over');
+                  }}
+                  onDragLeave={(e) => {
+                    e.currentTarget.classList.remove('drag-over');
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('drag-over');
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => setThumbnailUrl(event.target.result);
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                >
+                  <Upload size={24} className="upload-icon" />
+                  <span className="upload-text">Drag image here or</span>
+                  <button
+                    type="button"
+                    className="btn-browse"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Browse files
+                  </button>
+                  <span className="upload-text-small">or enter URL</span>
+                  <input
+                    type="text"
+                    className="url-input-small"
+                    placeholder="https://example.com/image.jpg"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const url = e.target.value.trim();
+                        if (url) setThumbnailUrl(url);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const url = e.target.value.trim();
+                      if (url) setThumbnailUrl(url);
+                    }}
+                  />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.gif,.webp"
+                    onChange={handleFileUpload}
+                    style={{ display: 'none' }}
+                  />
                 </div>
               )}
             </div>
