@@ -4145,7 +4145,7 @@ body {
 .drop-zone-indicator {
   position: fixed;
   pointer-events: none;
-  z-index: 9998;
+  z-index: 9000; /* Below DragOverlay (10000) */
   border: 2px dashed #6366f1;
   border-radius: 12px;
   background: rgba(99, 102, 241, 0.08);
