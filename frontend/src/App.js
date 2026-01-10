@@ -2461,6 +2461,7 @@ export default function App() {
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
+  console.log('RENDER: undoStack.length =', undoStack.length, 'canUndo =', canUndo);
 
   // Undo handler - works for both button and keyboard
   const handleUndo = () => {
