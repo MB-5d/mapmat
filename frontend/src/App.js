@@ -292,7 +292,7 @@ const DraggableNodeCard = ({
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
     data: { node, number, color },
-    disabled: isRoot,
+    disabled: node.id === 'root', // Only disable dragging for the actual root node
   });
 
   return (

@@ -666,8 +666,12 @@ body {
   border-top: 1px solid #f1f5f9;
   opacity: 0;
   transition: opacity 0.2s;
-  margin-top: auto;
   background: #fafbfc;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 0 0 12px 12px;
 }
 
 .card-actions-left {
