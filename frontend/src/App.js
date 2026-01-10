@@ -2444,98 +2444,79 @@ export default function App() {
     }, 50);
   };
 
-  // Refs to avoid stale closures in event handlers
-  const undoStackRef = useRef(undoStack);
-  const redoStackRef = useRef(redoStack);
-  const rootRef = useRef(root);
+  // Single ref to hold current state for undo/redo (avoids stale closure issues)
+  const historyRef = useRef({ undoStack: [], redoStack: [], root: null });
 
-  // Keep refs in sync with state
-  useEffect(() => { undoStackRef.current = undoStack; }, [undoStack]);
-  useEffect(() => { redoStackRef.current = redoStack; }, [redoStack]);
-  useEffect(() => { rootRef.current = root; }, [root]);
+  // Sync ref with state on every render
+  historyRef.current.undoStack = undoStack;
+  historyRef.current.redoStack = redoStack;
+  historyRef.current.root = root;
 
-  // Undo/Redo functionality
+  // Push state to undo stack before making changes
   const pushToUndoStack = (state) => {
-    console.log('pushToUndoStack called with state:', state?.id, 'current stack length:', undoStackRef.current.length);
-    setUndoStack(prev => {
-      const newStack = [...prev, state];
-      console.log('New undo stack length:', newStack.length);
-      return newStack;
-    });
-    setRedoStack([]); // Clear redo stack on new action
+    setUndoStack(prev => [...prev, state]);
+    setRedoStack([]);
   };
-
-  // Core undo/redo logic using refs (called by both buttons and keyboard)
-  const performUndo = () => {
-    const stack = undoStackRef.current;
-    const currentRoot = rootRef.current;
-    console.log('performUndo called, stack length:', stack.length, 'currentRoot:', currentRoot?.id);
-
-    if (stack.length === 0) {
-      console.log('Undo stack empty, nothing to undo');
-      return;
-    }
-
-    const prevState = stack[stack.length - 1];
-    console.log('Restoring state:', prevState?.id, 'saving current to redo');
-
-    // Save current state to redo stack
-    setRedoStack(prev => [...prev, structuredClone(currentRoot)]);
-    // Remove last item from undo stack
-    setUndoStack(prev => prev.slice(0, -1));
-    // Restore previous state
-    setRoot(prevState);
-  };
-
-  const performRedo = () => {
-    const stack = redoStackRef.current;
-    const currentRoot = rootRef.current;
-    console.log('performRedo called, stack length:', stack.length, 'currentRoot:', currentRoot?.id);
-
-    if (stack.length === 0) {
-      console.log('Redo stack empty, nothing to redo');
-      return;
-    }
-
-    const nextState = stack[stack.length - 1];
-    console.log('Restoring state:', nextState?.id, 'saving current to undo');
-
-    // Save current state to undo stack
-    setUndoStack(prev => [...prev, structuredClone(currentRoot)]);
-    // Remove last item from redo stack
-    setRedoStack(prev => prev.slice(0, -1));
-    // Restore next state
-    setRoot(nextState);
-  };
-
-  // Refs to the functions for stable references in useEffect
-  const performUndoRef = useRef(performUndo);
-  const performRedoRef = useRef(performRedo);
-  performUndoRef.current = performUndo;
-  performRedoRef.current = performRedo;
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
 
+  // Undo handler - works for both button and keyboard
+  const handleUndo = () => {
+    const h = historyRef.current;
+    if (h.undoStack.length === 0) return;
+
+    const prevState = h.undoStack[h.undoStack.length - 1];
+    const currentRoot = h.root;
+
+    setUndoStack(h.undoStack.slice(0, -1));
+    setRedoStack(prev => [...prev, structuredClone(currentRoot)]);
+    setRoot(prevState);
+  };
+
+  // Redo handler - works for both button and keyboard
+  const handleRedo = () => {
+    const h = historyRef.current;
+    if (h.redoStack.length === 0) return;
+
+    const nextState = h.redoStack[h.redoStack.length - 1];
+    const currentRoot = h.root;
+
+    setRedoStack(h.redoStack.slice(0, -1));
+    setUndoStack(prev => [...prev, structuredClone(currentRoot)]);
+    setRoot(nextState);
+  };
+
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Check for Cmd+Z (Mac) or Ctrl+Z (Windows/Linux)
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault();
+        const h = historyRef.current;
         if (e.shiftKey) {
-          console.log('Shift+Cmd+Z pressed - calling redo');
-          performRedoRef.current();
+          // Redo
+          if (h.redoStack.length === 0) return;
+          const nextState = h.redoStack[h.redoStack.length - 1];
+          setRedoStack(h.redoStack.slice(0, -1));
+          setUndoStack(prev => [...prev, structuredClone(h.root)]);
+          setRoot(nextState);
         } else {
-          console.log('Cmd+Z pressed - calling undo');
-          performUndoRef.current();
+          // Undo
+          if (h.undoStack.length === 0) return;
+          const prevState = h.undoStack[h.undoStack.length - 1];
+          setUndoStack(h.undoStack.slice(0, -1));
+          setRedoStack(prev => [...prev, structuredClone(h.root)]);
+          setRoot(prevState);
         }
       }
-      // Also support Cmd+Y for redo (Windows convention)
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
-        console.log('Cmd+Y pressed - calling redo');
-        performRedoRef.current();
+        const h = historyRef.current;
+        if (h.redoStack.length === 0) return;
+        const nextState = h.redoStack[h.redoStack.length - 1];
+        setRedoStack(h.redoStack.slice(0, -1));
+        setUndoStack(prev => [...prev, structuredClone(h.root)]);
+        setRoot(nextState);
       }
     };
 
@@ -4022,7 +4003,7 @@ const findNodeById = (node, id) => {
 
               <button
                 className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-                onClick={() => performUndoRef.current()}
+                onClick={handleUndo}
                 disabled={!canUndo}
                 title="Undo (⌘Z)"
               >
@@ -4030,7 +4011,7 @@ const findNodeById = (node, id) => {
               </button>
               <button
                 className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-                onClick={() => performRedoRef.current()}
+                onClick={handleRedo}
                 disabled={!canRedo}
                 title="Redo (⇧⌘Z)"
               >
