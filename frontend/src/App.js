@@ -58,6 +58,7 @@ import {
   FilePlus,
   PlusSquare,
   LayoutTemplate,
+  MessageSquare,
 } from 'lucide-react';
 
 import './App.css';
@@ -3344,6 +3345,7 @@ const findNodeById = (node, id) => {
         ...updatedNode,
         id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
         children: [], // Don't copy children for duplicates
+        comments: [], // Fresh comments for duplicates
       };
 
       saveStateForUndo();
@@ -3373,6 +3375,7 @@ const findNodeById = (node, id) => {
         description: updatedNode.description || '',
         metaTags: updatedNode.metaTags || {},
         children: [],
+        comments: [],
       };
 
       saveStateForUndo();
@@ -4854,7 +4857,7 @@ const findNodeById = (node, id) => {
                       }
                     }
                     saveStateForUndo();
-                    setRoot({ id: 'root', title: 'Home', url: '', children: [] });
+                    setRoot({ id: 'root', title: 'Home', url: '', children: [], comments: [] });
                     setOrphans([]);
                     setCurrentMap(null);
                     setShowCreateMapModal(false);
