@@ -1717,7 +1717,10 @@ export default function App() {
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
-  const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link'
+  const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link', 'comments'
+  const [showCommentsPanel, setShowCommentsPanel] = useState(false);
+  const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
+  const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
@@ -2658,9 +2661,12 @@ export default function App() {
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
 
-  // Keyboard shortcuts for undo/redo
+  // Keyboard shortcuts for undo/redo and tools
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Skip if user is typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
@@ -2673,11 +2679,26 @@ export default function App() {
         e.preventDefault();
         handleRedo();
       }
+      // Toggle comments mode with "C"
+      if (e.key === 'c' || e.key === 'C') {
+        setActiveTool(prev => prev === 'comments' ? 'select' : 'comments');
+      }
+      // Select tool with "V"
+      if (e.key === 'v' || e.key === 'V') {
+        setActiveTool('select');
+      }
+      // Exit comments mode with Escape
+      if (e.key === 'Escape') {
+        if (activeTool === 'comments') {
+          setActiveTool('select');
+          setCommentingNodeId(null);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root]);
+  }, [undoStack, redoStack, root, activeTool]);
 
   const exportJson = () => {
     if (!root) return;
@@ -4112,7 +4133,7 @@ const findNodeById = (node, id) => {
       </div>
 
       <div
-        className={`canvas ${isPanning ? 'panning' : ''}`}
+        className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''}`}
         ref={canvasRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -4289,6 +4310,13 @@ const findNodeById = (node, id) => {
                 title="Create Link (coming soon)"
               >
                 <Link size={20} />
+              </button>
+              <button
+                className={`canvas-tool-btn ${activeTool === 'comments' ? 'active' : ''}`}
+                onClick={() => setActiveTool(activeTool === 'comments' ? 'select' : 'comments')}
+                title="Comments (C)"
+              >
+                <MessageSquare size={20} />
               </button>
 
               <div className="canvas-toolbar-divider" />

@@ -254,6 +254,19 @@ body {
   cursor: grabbing;
 }
 
+.canvas.comments-mode {
+  cursor: crosshair;
+}
+
+.canvas.comments-mode .node-card {
+  cursor: pointer;
+}
+
+.canvas.comments-mode .node-card:hover {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
 .blank {
   position: absolute;
   inset: 0;
