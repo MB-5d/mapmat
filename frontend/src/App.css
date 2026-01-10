@@ -629,10 +629,10 @@ body {
   align-items: center; 
 }
 
-.page-number { 
-  color: #94a3b8; 
-  font-weight: 600; 
-  font-size: 12px; 
+.page-number {
+  color: #475569;
+  font-weight: 700;
+  font-size: 16px;
 }
 
 .card-title {
@@ -3067,7 +3067,7 @@ body {
   }
 
   .page-number {
-    color: #6b5a80;
+    color: #d4c8e0;
   }
 
   .card-title {
