@@ -4022,7 +4022,7 @@ const findNodeById = (node, id) => {
 
               <button
                 className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-                onClick={performUndo}
+                onClick={() => performUndoRef.current()}
                 disabled={!canUndo}
                 title="Undo (⌘Z)"
               >
@@ -4030,7 +4030,7 @@ const findNodeById = (node, id) => {
               </button>
               <button
                 className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-                onClick={performRedo}
+                onClick={() => performRedoRef.current()}
                 disabled={!canRedo}
                 title="Redo (⇧⌘Z)"
               >
