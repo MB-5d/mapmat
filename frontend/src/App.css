@@ -1189,8 +1189,8 @@ body {
   display: flex;
   gap: 12px;
   padding: 16px 24px;
-  border-top: 1px solid #e2e8f0;
-  background: #fafbfc;
+  border-top: none;
+  background: transparent;
 }
 
 .edit-node-footer .modal-btn {
@@ -3207,8 +3207,8 @@ body {
   }
 
   .edit-node-footer {
-    border-top-color: #2d1f3d;
-    background: #0d0812;
+    border-top: none;
+    background: transparent;
   }
 
   .edit-node-form .form-group label {
