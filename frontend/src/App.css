@@ -1406,6 +1406,17 @@ body {
   background: #4f46e5;
 }
 
+.modal-btn.disabled,
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-btn.disabled:hover,
+.modal-btn:disabled:hover {
+  background: #6366f1;
+}
+
 /* Delete confirmation popup */
 .delete-confirm-overlay {
   position: fixed;

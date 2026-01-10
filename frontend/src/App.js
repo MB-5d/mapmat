@@ -1162,6 +1162,10 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
 
   const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
 
+  // Form validation - check if required fields are filled
+  const finalPageType = pageType === '__custom__' ? customPageType : pageType;
+  const isFormValid = title.trim() !== '' && parentId !== '' && finalPageType !== '';
+
   // Filter out current node and its descendants from parent options
   // (can't be parent of itself or create circular reference)
   const getExcludeIds = () => {
@@ -1362,7 +1366,11 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
             <button type="button" className="modal-btn secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="modal-btn primary">
+            <button
+              type="submit"
+              className={`modal-btn primary ${!isFormValid ? 'disabled' : ''}`}
+              disabled={!isFormValid}
+            >
               {mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
             </button>
           </div>
