@@ -461,8 +461,7 @@ body {
 
 .node-card {
   width: 288px;
-  height: auto;
-  min-height: 200px;
+  height: 200px;
   background: #ffffff;
   color: #1e293b;
   border-radius: 12px;
@@ -473,6 +472,11 @@ body {
   transition: box-shadow 0.2s;
   display: flex;
   flex-direction: column;
+}
+
+/* Card height when thumbnails are shown */
+.node-card.with-thumb {
+  height: 262px;
 }
 
 .node-card:hover {

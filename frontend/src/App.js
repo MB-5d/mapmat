@@ -181,6 +181,7 @@ const NodeCard = ({
   const classNames = ['node-card'];
   if (isDragging) classNames.push('dragging');
   if (isPressing) classNames.push('pressing');
+  if (showThumbnails) classNames.push('with-thumb');
 
   return (
     <div className={classNames.join(' ')} data-node-card="1" data-node-id={node.id}>
