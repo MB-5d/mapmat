@@ -3514,14 +3514,16 @@ const findNodeById = (node, id) => {
       }
 
       // Add child drop zone if node has no children
+      // Position below the card with GAP_STACK_Y spacing, center of the zone
       if (!node.children?.length) {
+        const childZoneHeight = 200; // Use collapsed height as reference
         zones.push({
           type: 'child',
           layout: 'vertical',
           parentId: nodeId,
           index: 0,
           x: rect.left + rect.width / 2,
-          y: rect.bottom + 60,
+          y: rect.bottom + 60 + childZoneHeight / 2, // Top of zone at rect.bottom + 60
         });
       }
     });
