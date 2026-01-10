@@ -601,8 +601,8 @@ const computeLayout = (
   const rootX = 0;
   const rootY = ROOT_Y;
 
-  // Root = "0" (Home)
-  setNode(root, rootX, rootY, 0, "0", { isOrphan: false });
+  // Root = "1" (Home)
+  setNode(root, rootX, rootY, 0, "1", { isOrphan: false });
 
   // ------------------------------------------------------------
   // 2) Level 1 row (children of root) — horizontal only
@@ -4022,7 +4022,7 @@ const findNodeById = (node, id) => {
 
         <div className="topbar-right">
           <button
-            className="icon-btn primary"
+            className="icon-btn"
             title="Create New Map"
             onClick={() => setShowCreateMapModal(true)}
           >
