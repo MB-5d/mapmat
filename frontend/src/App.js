@@ -369,6 +369,135 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth })
   );
 };
 
+// Comment Popover component for viewing/adding comments on a node
+const CommentPopover = ({ node, onClose, onAddComment, collaborators }) => {
+  const [newComment, setNewComment] = useState('');
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const inputRef = useRef(null);
+
+  const formatTimeAgo = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const handleInputChange = (e) => {
+    const value = e.target.value;
+    setNewComment(value);
+
+    // Check for @ mention trigger
+    const lastAtIndex = value.lastIndexOf('@');
+    if (lastAtIndex !== -1) {
+      const textAfterAt = value.slice(lastAtIndex + 1);
+      if (!textAfterAt.includes(' ')) {
+        setShowMentions(true);
+        setMentionFilter(textAfterAt.toLowerCase());
+        return;
+      }
+    }
+    setShowMentions(false);
+  };
+
+  const insertMention = (name) => {
+    const lastAtIndex = newComment.lastIndexOf('@');
+    const newValue = newComment.slice(0, lastAtIndex) + '@' + name + ' ';
+    setNewComment(newValue);
+    setShowMentions(false);
+    inputRef.current?.focus();
+  };
+
+  const handleSubmit = () => {
+    if (newComment.trim()) {
+      onAddComment(node.id, newComment);
+      setNewComment('');
+    }
+  };
+
+  const filteredCollaborators = collaborators.filter(c =>
+    c.toLowerCase().includes(mentionFilter)
+  );
+
+  return (
+    <div className="comment-popover">
+      <div className="comment-popover-header">
+        <h3>Comments on "{node.title || 'Untitled'}"</h3>
+        <button className="comment-popover-close" onClick={onClose}>
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="comment-popover-body">
+        {node.comments?.length > 0 ? (
+          <div className="comment-list">
+            {node.comments.map(comment => (
+              <div key={comment.id} className="comment-item">
+                <div className="comment-meta">
+                  <span className="comment-author">{comment.author}</span>
+                  <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
+                </div>
+                <div className="comment-text">{comment.text}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="comment-empty">No comments yet</div>
+        )}
+      </div>
+
+      <div className="comment-popover-footer">
+        <div className="comment-input-wrapper">
+          <textarea
+            ref={inputRef}
+            className="comment-input"
+            placeholder="Add a comment... (use @ to mention)"
+            value={newComment}
+            onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit();
+              }
+              if (e.key === 'Escape') {
+                setShowMentions(false);
+              }
+            }}
+            rows={2}
+          />
+          {showMentions && filteredCollaborators.length > 0 && (
+            <div className="mention-dropdown">
+              {filteredCollaborators.map(name => (
+                <button
+                  key={name}
+                  className="mention-option"
+                  onClick={() => insertMention(name)}
+                >
+                  @{name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button
+          className="comment-submit-btn"
+          onClick={handleSubmit}
+          disabled={!newComment.trim()}
+        >
+          Post
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ============================================================================
 // LAYOUT CONSTANTS (Single Source of Truth)
 // ============================================================================
@@ -754,6 +883,7 @@ const SitemapTree = ({
   onDuplicate,
   onViewImage,
   onNodeDoubleClick,
+  onNodeClick,
   activeId,
 }) => {
   const [expandedStacks, setExpandedStacks] = useState({});
@@ -833,6 +963,7 @@ const SitemapTree = ({
               width: LAYOUT.NODE_W,
             }}
             onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
+            onClick={() => onNodeClick?.(nodeData.node)}
           >
             <DraggableNodeCard
               node={nodeData.node}
@@ -3154,6 +3285,49 @@ const findNodeById = (node, id) => {
     return null;
   };
 
+  // Add a comment to a node
+  const addCommentToNode = (nodeId, commentText) => {
+    if (!commentText.trim()) return;
+
+    const newComment = {
+      id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      text: commentText.trim(),
+      author: currentUser?.name || 'Anonymous',
+      createdAt: new Date().toISOString(),
+      mentions: (commentText.match(/@(\w+)/g) || []).map(m => m.slice(1)),
+    };
+
+    saveStateForUndo();
+
+    // Check if it's an orphan
+    const orphanIndex = orphans.findIndex(o => o.id === nodeId);
+    if (orphanIndex !== -1) {
+      setOrphans(prev => prev.map((o, i) =>
+        i === orphanIndex
+          ? { ...o, comments: [...(o.comments || []), newComment] }
+          : o
+      ));
+      return;
+    }
+
+    // Update in tree
+    setRoot(prev => {
+      const copy = structuredClone(prev);
+      const node = findNodeById(copy, nodeId);
+      if (node) {
+        node.comments = [...(node.comments || []), newComment];
+      }
+      return copy;
+    });
+  };
+
+  // Get node by ID (from tree or orphans)
+  const getNodeById = (nodeId) => {
+    const orphan = orphans.find(o => o.id === nodeId);
+    if (orphan) return orphan;
+    return findNodeById(root, nodeId);
+  };
+
   // Opens delete confirmation modal
   const requestDeleteNode = (id) => {
     if (!root) return;
@@ -4199,6 +4373,11 @@ const findNodeById = (node, id) => {
                     }
                   }
                 }}
+                onNodeClick={(node) => {
+                  if (activeTool === 'comments') {
+                    setCommentingNodeId(node.id);
+                  }
+                }}
               />
             </div>
 
@@ -4853,6 +5032,23 @@ const findNodeById = (node, id) => {
           customPageTypes={customPageTypes}
           onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
         />
+      )}
+
+      {/* Comment Popover */}
+      {commentingNodeId && getNodeById(commentingNodeId) && (
+        <div
+          className="comment-popover-overlay"
+          onClick={() => setCommentingNodeId(null)}
+        >
+          <div onClick={e => e.stopPropagation()}>
+            <CommentPopover
+              node={getNodeById(commentingNodeId)}
+              onClose={() => setCommentingNodeId(null)}
+              onAddComment={addCommentToNode}
+              collaborators={collaborators}
+            />
+          </div>
+        </div>
       )}
 
       {deleteConfirmNode && (
