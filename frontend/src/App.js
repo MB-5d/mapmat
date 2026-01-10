@@ -313,6 +313,52 @@ const DraggableNodeCard = ({
   );
 };
 
+// Component for rendering a node and its children in the DragOverlay
+const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth }) => {
+  const childColor = colors[Math.min(depth + 1, colors.length - 1)];
+  const INDENT = 40;
+  const GAP = 60;
+
+  return (
+    <div className="drag-overlay-tree">
+      <NodeCard
+        node={node}
+        number={number}
+        color={color}
+        showThumbnails={showThumbnails}
+        isRoot={false}
+        isDragging={true}
+        onDelete={() => {}}
+        onEdit={() => {}}
+        onDuplicate={() => {}}
+        onViewImage={() => {}}
+      />
+      {node.children?.length > 0 && (
+        <div
+          className="drag-overlay-children"
+          style={{
+            marginTop: GAP,
+            marginLeft: INDENT,
+          }}
+        >
+          {node.children.map((child, idx) => (
+            <div key={child.id} style={{ marginTop: idx > 0 ? GAP : 0 }}>
+              <DragOverlayTree
+                node={child}
+                number={`${number}.${idx + 1}`}
+                color={childColor}
+                colors={colors}
+                showThumbnails={showThumbnails}
+                depth={depth + 1}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============================================================================
 // LAYOUT CONSTANTS (Single Source of Truth)
 // ============================================================================
@@ -4103,21 +4149,17 @@ const findNodeById = (node, id) => {
               />
             </div>
 
-            {/* DragOverlay - full-size floating card that follows cursor */}
+            {/* DragOverlay - full-size floating card with children */}
             <DragOverlay>
               {activeNode && activeDragData ? (
                 <div className="drag-overlay-wrapper">
-                  <NodeCard
+                  <DragOverlayTree
                     node={activeNode}
                     number={activeDragData.number}
                     color={activeDragData.color}
+                    colors={colors}
                     showThumbnails={showThumbnails}
-                    isRoot={false}
-                    isDragging={true}
-                    onDelete={() => {}}
-                    onEdit={() => {}}
-                    onDuplicate={() => {}}
-                    onViewImage={() => {}}
+                    depth={0}
                   />
                 </div>
               ) : null}

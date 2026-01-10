@@ -505,9 +505,9 @@ body {
   background: rgba(16, 185, 129, 0.1);
 }
 
-/* Drag overlay wrapper - contains full-size card copy */
+/* Drag overlay wrapper - contains full-size card copy with children */
 .drag-overlay-wrapper {
-  transform: scale(1.05);
+  transform: scale(1.02);
   cursor: grabbing;
   filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.3));
 }
@@ -520,6 +520,15 @@ body {
 .drag-overlay-wrapper .node-card.dragging {
   opacity: 0.95;
   pointer-events: auto;
+}
+
+/* Drag overlay tree structure */
+.drag-overlay-tree {
+  position: relative;
+}
+
+.drag-overlay-children {
+  position: relative;
 }
 
 @media (prefers-color-scheme: dark) {
