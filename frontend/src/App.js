@@ -235,13 +235,11 @@ const NodeCard = ({
       )}
 
       <div className="card-content">
-        <div className="card-toprow">
-          <span className="page-number">{number}</span>
-        </div>
-
         <div className="card-title" title={node.title}>
           {node.title}
         </div>
+
+        <span className="page-number">{number}</span>
       </div>
 
       <div className="card-actions">
