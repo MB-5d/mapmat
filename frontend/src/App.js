@@ -1655,29 +1655,25 @@ export default function App() {
     const newMaxX = maxX + dx;
     const newMaxY = maxY + dy;
 
-    const padding = 600; // Content must stay within this distance of viewport
+    const maxOffscreen = 600; // Content can go at most this far off-screen
     let clampedX = newPan.x;
     let clampedY = newPan.y;
 
-    // Don't allow panning so far RIGHT that left edge of content goes past (viewport width - padding)
-    // i.e., content's left edge must stay within 600px of left edge of viewport
-    if (newMinX > canvasRect.width - padding) {
-      clampedX = newPan.x - (newMinX - (canvasRect.width - padding));
+    // LEFT constraint: content's right edge must be at least maxOffscreen from left edge
+    if (newMaxX < maxOffscreen) {
+      clampedX = newPan.x + (maxOffscreen - newMaxX);
     }
-    // Don't allow panning so far LEFT that right edge of content goes past padding
-    // i.e., content's right edge must stay within 600px of right edge of viewport
-    if (newMaxX < padding) {
-      clampedX = newPan.x + (padding - newMaxX);
+    // RIGHT constraint: content's left edge must be at least maxOffscreen from right edge
+    if (newMinX > canvasRect.width - maxOffscreen) {
+      clampedX = newPan.x - (newMinX - (canvasRect.width - maxOffscreen));
     }
-    // Don't allow panning so far DOWN that top edge of content goes past (viewport height - padding)
-    // i.e., content's top edge must stay within 600px of top edge of viewport
-    if (newMinY > canvasRect.height - padding) {
-      clampedY = newPan.y - (newMinY - (canvasRect.height - padding));
+    // TOP constraint: content's bottom edge must be at least maxOffscreen from top edge
+    if (newMaxY < maxOffscreen) {
+      clampedY = newPan.y + (maxOffscreen - newMaxY);
     }
-    // Don't allow panning so far UP that bottom edge of content goes past padding
-    // i.e., content's bottom edge must stay within 600px of bottom edge of viewport
-    if (newMaxY < padding) {
-      clampedY = newPan.y + (padding - newMaxY);
+    // BOTTOM constraint: content's top edge must be at least maxOffscreen from bottom edge
+    if (newMinY > canvasRect.height - maxOffscreen) {
+      clampedY = newPan.y - (newMinY - (canvasRect.height - maxOffscreen));
     }
 
     return { x: clampedX, y: clampedY };
