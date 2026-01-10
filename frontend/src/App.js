@@ -56,6 +56,8 @@ import {
   MousePointer2,
   Link,
   FilePlus,
+  PlusSquare,
+  LayoutTemplate,
 } from 'lucide-react';
 
 import './App.css';
@@ -1709,6 +1711,7 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [showCreateMapModal, setShowCreateMapModal] = useState(false);
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
@@ -4019,6 +4022,14 @@ const findNodeById = (node, id) => {
 
         <div className="topbar-right">
           <button
+            className="icon-btn primary"
+            title="Create New Map"
+            onClick={() => setShowCreateMapModal(true)}
+          >
+            <PlusSquare size={18} />
+          </button>
+
+          <button
             className="icon-btn"
             title="Import File"
             onClick={() => setShowImportModal(true)}
@@ -4818,6 +4829,73 @@ const findNodeById = (node, id) => {
             <div className="delete-confirm-actions">
               <button className="btn-secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
               <button className="btn-danger" onClick={confirmDeleteNode}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateMapModal && (
+        <div className="modal-overlay" onClick={() => setShowCreateMapModal(false)}>
+          <div className="modal create-map-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Create New Map</h2>
+              <button className="modal-close" onClick={() => setShowCreateMapModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="create-map-options">
+                <button
+                  className="create-map-option"
+                  onClick={() => {
+                    if (hasMap) {
+                      if (!window.confirm('This will replace your current map. Continue?')) {
+                        return;
+                      }
+                    }
+                    saveStateForUndo();
+                    setRoot({ id: 'root', title: 'Home', url: '', children: [] });
+                    setOrphans([]);
+                    setCurrentMap(null);
+                    setShowCreateMapModal(false);
+                    showToast('New map created', 'success');
+                  }}
+                >
+                  <FileText size={24} />
+                  <div className="create-map-option-text">
+                    <span className="create-map-option-title">Start from Scratch</span>
+                    <span className="create-map-option-desc">Begin with a blank canvas</span>
+                  </div>
+                </button>
+
+                <button
+                  className="create-map-option disabled"
+                  onClick={() => {
+                    showToast('Templates coming soon!', 'info');
+                  }}
+                >
+                  <LayoutTemplate size={24} />
+                  <div className="create-map-option-text">
+                    <span className="create-map-option-title">Start from Template</span>
+                    <span className="create-map-option-desc">Product, Ecommerce, Blog...</span>
+                  </div>
+                  <span className="coming-soon-badge">Coming Soon</span>
+                </button>
+
+                <button
+                  className="create-map-option"
+                  onClick={() => {
+                    setShowCreateMapModal(false);
+                    setShowImportModal(true);
+                  }}
+                >
+                  <Upload size={24} />
+                  <div className="create-map-option-text">
+                    <span className="create-map-option-title">Import from File</span>
+                    <span className="create-map-option-desc">XML sitemap, CSV, JSON</span>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </div>

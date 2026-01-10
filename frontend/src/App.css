@@ -2528,6 +2528,131 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Create Map Modal */
+.create-map-modal {
+  max-width: 420px;
+  padding: 0;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.create-map-modal .modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.create-map-modal .modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.create-map-modal .modal-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+}
+
+.create-map-modal .modal-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.create-map-modal .modal-body {
+  padding: 24px;
+}
+
+.create-map-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.create-map-option {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  position: relative;
+}
+
+.create-map-option:hover {
+  background: #f1f5f9;
+  border-color: #6366f1;
+}
+
+.create-map-option:hover svg {
+  color: #6366f1;
+}
+
+.create-map-option svg {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.create-map-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.create-map-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.create-map-option-desc {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.create-map-option.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.create-map-option.disabled:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.create-map-option.disabled:hover svg {
+  color: #64748b;
+}
+
+.coming-soon-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6366f1;
+  background: #e0e7ff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .save-map-form {
   padding: 20px 24px;
 }
@@ -3954,6 +4079,72 @@ body {
 
   .import-loading {
     color: #a78bfa;
+  }
+
+  /* Create Map Modal - Dark Mode */
+  .create-map-modal {
+    background: #1a1022;
+  }
+
+  .create-map-modal .modal-header {
+    border-bottom-color: #2d1f3d;
+  }
+
+  .create-map-modal .modal-header h2 {
+    color: #f3f0f7;
+  }
+
+  .create-map-modal .modal-close {
+    color: #9f8fb8;
+  }
+
+  .create-map-modal .modal-close:hover {
+    background: #2d1f3d;
+    color: #f3f0f7;
+  }
+
+  .create-map-option {
+    background: #0d0812;
+    border-color: #2d1f3d;
+  }
+
+  .create-map-option:hover {
+    background: #1a1022;
+    border-color: #7c3aed;
+  }
+
+  .create-map-option svg {
+    color: #9f8fb8;
+  }
+
+  .create-map-option:hover svg {
+    color: #c4b5fd;
+  }
+
+  .create-map-option-title {
+    color: #f3f0f7;
+  }
+
+  .create-map-option-desc {
+    color: #9f8fb8;
+  }
+
+  .create-map-option.disabled {
+    opacity: 0.5;
+  }
+
+  .create-map-option.disabled:hover {
+    background: #0d0812;
+    border-color: #2d1f3d;
+  }
+
+  .create-map-option.disabled:hover svg {
+    color: #9f8fb8;
+  }
+
+  .coming-soon-badge {
+    background: #2d1f3d;
+    color: #c4b5fd;
   }
 
   .share-section {
