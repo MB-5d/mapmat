@@ -1655,25 +1655,29 @@ export default function App() {
     const newMaxX = maxX + dx;
     const newMaxY = maxY + dy;
 
-    const padding = 600; // Max distance content can go beyond viewport edge
+    const padding = 600; // Content must stay within this distance of viewport
     let clampedX = newPan.x;
     let clampedY = newPan.y;
 
-    // Right edge of map should not go more than padding pixels left of canvas left
-    if (newMaxX < padding) {
-      clampedX = newPan.x + (padding - newMaxX);
-    }
-    // Left edge of map should not go more than padding pixels right of canvas right
+    // Don't allow panning so far RIGHT that left edge of content goes past (viewport width - padding)
+    // i.e., content's left edge must stay within 600px of left edge of viewport
     if (newMinX > canvasRect.width - padding) {
       clampedX = newPan.x - (newMinX - (canvasRect.width - padding));
     }
-    // Bottom edge of map should not go more than padding pixels above canvas top
-    if (newMaxY < padding) {
-      clampedY = newPan.y + (padding - newMaxY);
+    // Don't allow panning so far LEFT that right edge of content goes past padding
+    // i.e., content's right edge must stay within 600px of right edge of viewport
+    if (newMaxX < padding) {
+      clampedX = newPan.x + (padding - newMaxX);
     }
-    // Top edge of map should not go more than padding pixels below canvas bottom
+    // Don't allow panning so far DOWN that top edge of content goes past (viewport height - padding)
+    // i.e., content's top edge must stay within 600px of top edge of viewport
     if (newMinY > canvasRect.height - padding) {
       clampedY = newPan.y - (newMinY - (canvasRect.height - padding));
+    }
+    // Don't allow panning so far UP that bottom edge of content goes past padding
+    // i.e., content's bottom edge must stay within 600px of bottom edge of viewport
+    if (newMaxY < padding) {
+      clampedY = newPan.y + (padding - newMaxY);
     }
 
     return { x: clampedX, y: clampedY };
