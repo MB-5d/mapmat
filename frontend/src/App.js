@@ -11,7 +11,6 @@ import {
   Download,
   Share2,
   Bookmark,
-  GripVertical,
   Trash2,
   Edit2,
   X,
@@ -184,14 +183,17 @@ const NodeCard = ({
   if (showThumbnails) classNames.push('with-thumb');
 
   return (
-    <div className={classNames.join(' ')} data-node-card="1" data-node-id={node.id}>
+    <div
+      className={classNames.join(' ')}
+      data-node-card="1"
+      data-node-id={node.id}
+      style={{ cursor: isRoot ? 'default' : 'grab' }}
+      {...(isRoot ? {} : dragHandleProps)}
+    >
       <div
         className="card-header"
-        style={{ backgroundColor: color, cursor: isRoot ? 'default' : 'grab' }}
-        title={isRoot ? undefined : 'Drag to reorder'}
-        {...(isRoot ? {} : dragHandleProps)}
+        style={{ backgroundColor: color }}
       >
-        {!isRoot && <GripVertical size={14} className="drag-handle" />}
       </div>
 
       {showThumbnails && (

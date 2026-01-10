@@ -531,21 +531,6 @@ body {
 .card-header {
   height: 8px;
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: visible;
-}
-
-.card-header .drag-handle {
-  position: absolute;
-  top: -3px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-
-.node-card:hover .card-header .drag-handle {
-  opacity: 0.6;
 }
 
 .card-thumb {
@@ -4087,39 +4072,10 @@ body {
    DRAG & DROP STYLES
    =========================================== */
 
-.card-header:active .drag-handle {
-  cursor: grabbing;
-}
-
 /* Dragging state - the original card being dragged */
 .node-card.dragging {
   opacity: 0.4;
   pointer-events: none;
-}
-
-/* Floating drag card that follows the cursor */
-.floating-drag-card {
-  position: fixed;
-  z-index: 10000;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.floating-card-inner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.1);
-  border: 2px solid #6366f1;
-  max-width: 200px;
-}
-
-.floating-card-inner .drag-handle {
-  opacity: 1;
-  color: #6366f1;
 }
 
 .floating-card-title {
