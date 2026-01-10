@@ -1680,6 +1680,8 @@ export default function App() {
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
   const [activeNode, setActiveNode] = useState(null);
+  const [activeDropZone, setActiveDropZone] = useState(null);
+  const [dropZones, setDropZones] = useState([]);
 
   const canvasRef = useRef(null);
   const scanAbortRef = useRef(null);
@@ -3502,6 +3504,24 @@ const findNodeById = (node, id) => {
     const { active } = event;
     setActiveId(active.id);
     setActiveNode(active.data.current?.node || null);
+    // Calculate and store drop zones for visual feedback
+    const zones = calculateDropZones(active.id);
+    setDropZones(zones);
+  };
+
+  const handleDndDragMove = (event) => {
+    const { active, delta } = event;
+    if (!active) return;
+
+    const activatorRect = active.rect.current.initial;
+    if (!activatorRect) return;
+
+    const currentX = activatorRect.left + activatorRect.width / 2 + delta.x;
+    const currentY = activatorRect.top + activatorRect.height / 2 + delta.y;
+
+    // Find nearest drop zone
+    const nearest = findNearestDropZone(currentX, currentY, active.id, 80);
+    setActiveDropZone(nearest);
   };
 
   const handleDndDragEnd = (event) => {
@@ -3527,6 +3547,8 @@ const findNodeById = (node, id) => {
 
     setActiveId(null);
     setActiveNode(null);
+    setActiveDropZone(null);
+    setDropZones([]);
   };
 
   const updateLevelColor = (depth, color) => {
@@ -4029,6 +4051,7 @@ const findNodeById = (node, id) => {
           <DndContext
             sensors={sensors}
             onDragStart={handleDndDragStart}
+            onDragMove={handleDndDragMove}
             onDragEnd={handleDndDragEnd}
           >
             <div
@@ -4073,6 +4096,29 @@ const findNodeById = (node, id) => {
                 </div>
               ) : null}
             </DragOverlay>
+
+            {/* Drop zone indicators - card-sized dashed outlines during drag */}
+            {activeId && dropZones.map((zone, idx) => {
+              const isNearest = activeDropZone &&
+                zone.parentId === activeDropZone.parentId &&
+                zone.index === activeDropZone.index &&
+                zone.type === activeDropZone.type;
+              // Match actual card dimensions: 192px wide, 200px or 262px tall
+              const cardWidth = 192;
+              const cardHeight = showThumbnails ? 262 : 200;
+              return (
+                <div
+                  key={`${zone.type}-${zone.parentId}-${zone.index}-${idx}`}
+                  className={`drop-zone-indicator ${zone.type} ${isNearest ? 'nearest' : ''}`}
+                  style={{
+                    left: zone.x - cardWidth / 2,
+                    top: zone.y - cardHeight / 2,
+                    width: cardWidth,
+                    height: cardHeight,
+                  }}
+                />
+              );
+            })}
 
             <div className="color-key">
               <div className="color-key-header" onClick={() => setShowColorKey(v => !v)}>
