@@ -1062,7 +1062,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 200;
+  z-index: 9999;
   padding: 20px;
 }
 
@@ -1073,6 +1073,7 @@ body {
   max-width: 400px;
   width: 100%;
   box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
 }
 
 .modal-card h3 {
