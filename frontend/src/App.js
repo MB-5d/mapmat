@@ -3465,11 +3465,13 @@ const findNodeById = (node, id) => {
       if (!parent) return;
 
       const siblingIndex = parent.children.findIndex(c => c.id === nodeId);
-      const parentWrap = card.closest('.parent-wrap');
-      const depth = parseInt(parentWrap?.getAttribute('data-depth') || '0', 10);
+      // Get depth from the positioned wrapper element
+      const positionedWrapper = card.closest('[data-depth]');
+      const depth = parseInt(positionedWrapper?.getAttribute('data-depth') || '0', 10);
 
       // Add sibling drop zones (before this node)
-      if (depth === 0) {
+      // Level 1 (depth=1) uses horizontal layout, Level 2+ (depth>1) uses vertical
+      if (depth === 1) {
         // Horizontal layout (Level 1) - drop zones to left/right
         zones.push({
           type: 'sibling',
@@ -3490,15 +3492,15 @@ const findNodeById = (node, id) => {
             y: rect.top + rect.height / 2,
           });
         }
-      } else {
-        // Vertical layout (Level 2+) - drop zones above/below
+      } else if (depth > 1) {
+        // Vertical layout (Level 2+) - drop zones above/below ONLY
         zones.push({
           type: 'sibling',
           layout: 'vertical',
           parentId: parent.id,
           index: siblingIndex,
           x: rect.left + rect.width / 2,
-          y: rect.top - 30,
+          y: rect.top - 28, // In the gap above
         });
         // Also add zone after last sibling
         if (siblingIndex === parent.children.length - 1) {
@@ -3508,10 +3510,11 @@ const findNodeById = (node, id) => {
             parentId: parent.id,
             index: siblingIndex + 1,
             x: rect.left + rect.width / 2,
-            y: rect.bottom + 30,
+            y: rect.bottom + 28, // In the gap below
           });
         }
       }
+      // depth === 0 is the root node - no sibling zones for root
 
       // Add child drop zone if node has no children
       // Position below the card with GAP_STACK_Y spacing, center of the zone
