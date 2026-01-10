@@ -174,7 +174,8 @@ const NodeCard = ({
   }, [showThumbnails, thumbLoading, thumbKey]);
 
   const handleViewFull = () => {
-    onViewImage(node.url);
+    // Use uploaded thumbnail if available, otherwise use URL for mshots
+    onViewImage(node.thumbnailUrl || node.url, !!node.thumbnailUrl);
   };
 
   const classNames = ['node-card'];
@@ -2063,15 +2064,21 @@ export default function App() {
     showToast('Logged out', 'info');
   };
 
-  // Fetch full page screenshot from backend
-  const viewFullScreenshot = async (pageUrl) => {
+  // Fetch full page screenshot from backend (or display direct image URL)
+  const viewFullScreenshot = async (urlOrImage, isDirectImage = false) => {
+    // If it's a direct image URL (uploaded thumbnail), just display it
+    if (isDirectImage) {
+      setFullImageUrl(urlOrImage);
+      return;
+    }
+
     setImageLoading(true);
     setFullImageUrl(null);
     showToast('Loading full page screenshot...', 'loading', true);
 
     try {
       const res = await fetch(
-        `${API_BASE}/screenshot?url=${encodeURIComponent(pageUrl)}&type=full`
+        `${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=full`
       );
       const data = await res.json();
 
