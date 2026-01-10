@@ -496,6 +496,28 @@ body {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 1);
 }
 
+/* Comment badge on nodes */
+.comment-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #6366f1;
+  color: white;
+  border-radius: 12px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.comment-badge svg {
+  flex-shrink: 0;
+}
+
 /* Click + hold state - slightly larger */
 .node-card.pressing {
   transform: scale(1.05);
@@ -3289,6 +3311,10 @@ body {
 
   .node-card:hover {
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 1);
+  }
+
+  .comment-badge {
+    background: #7c3aed;
   }
 
   .card-content {

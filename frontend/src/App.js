@@ -200,6 +200,14 @@ const NodeCard = ({
       >
       </div>
 
+      {/* Comment badge - show if node has comments */}
+      {node.comments?.length > 0 && (
+        <div className="comment-badge">
+          <MessageSquare size={12} />
+          {node.comments.length > 1 && <span>{node.comments.length}</span>}
+        </div>
+      )}
+
       {showThumbnails && (
         <div className="card-thumb">
           {thumbLoading && !thumbError && (
