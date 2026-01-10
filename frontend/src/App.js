@@ -1635,46 +1635,34 @@ export default function App() {
     const cards = contentRef.current.querySelectorAll('[data-node-card="1"]');
     if (!cards.length) return newPan;
 
-    const canvasRect = canvasRef.current.getBoundingClientRect();
+    // 1. Get viewport size
+    const viewportWidth = canvasRef.current.clientWidth;
+    const viewportHeight = canvasRef.current.clientHeight;
 
-    // Get the current bounds of all cards in screen coordinates
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    // 2. Get content bounds (in content coordinates, before pan)
+    // Cards report screen positions, so subtract current pan to get content coords
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    let contentLeft = Infinity, contentTop = Infinity, contentRight = -Infinity, contentBottom = -Infinity;
     cards.forEach(card => {
       const rect = card.getBoundingClientRect();
-      minX = Math.min(minX, rect.left - canvasRect.left);
-      minY = Math.min(minY, rect.top - canvasRect.top);
-      maxX = Math.max(maxX, rect.right - canvasRect.left);
-      maxY = Math.max(maxY, rect.bottom - canvasRect.top);
+      const x = rect.left - canvasRect.left - pan.x;
+      const y = rect.top - canvasRect.top - pan.y;
+      contentLeft = Math.min(contentLeft, x);
+      contentTop = Math.min(contentTop, y);
+      contentRight = Math.max(contentRight, x + rect.width);
+      contentBottom = Math.max(contentBottom, y + rect.height);
     });
 
-    // Calculate where the bounds would be with the new pan
-    const dx = newPan.x - pan.x;
-    const dy = newPan.y - pan.y;
-    const newMinX = minX + dx;
-    const newMinY = minY + dy;
-    const newMaxX = maxX + dx;
-    const newMaxY = maxY + dy;
+    // 3. Set pan limits with 400px padding
+    const padding = 400;
+    const minPanX = -(contentRight + padding - viewportWidth);
+    const maxPanX = -contentLeft + padding;
+    const minPanY = -(contentBottom + padding - viewportHeight);
+    const maxPanY = -contentTop + padding;
 
-    const maxOffscreen = 600; // Content can go at most this far off-screen
-    let clampedX = newPan.x;
-    let clampedY = newPan.y;
-
-    // LEFT constraint: content's right edge must be at least maxOffscreen from left edge
-    if (newMaxX < maxOffscreen) {
-      clampedX = newPan.x + (maxOffscreen - newMaxX);
-    }
-    // RIGHT constraint: content's left edge must be at least maxOffscreen from right edge
-    if (newMinX > canvasRect.width - maxOffscreen) {
-      clampedX = newPan.x - (newMinX - (canvasRect.width - maxOffscreen));
-    }
-    // TOP constraint: content's bottom edge must be at least maxOffscreen from top edge
-    if (newMaxY < maxOffscreen) {
-      clampedY = newPan.y + (maxOffscreen - newMaxY);
-    }
-    // BOTTOM constraint: content's top edge must be at least maxOffscreen from bottom edge
-    if (newMinY > canvasRect.height - maxOffscreen) {
-      clampedY = newPan.y - (newMinY - (canvasRect.height - maxOffscreen));
-    }
+    // 4. Clamp
+    const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
+    const clampedY = Math.max(minPanY, Math.min(maxPanY, newPan.y));
 
     return { x: clampedX, y: clampedY };
   };
