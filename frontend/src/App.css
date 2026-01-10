@@ -540,9 +540,24 @@ body {
   }
 }
 
-.card-header { 
-  height: 8px; 
+.card-header {
+  height: 8px;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.card-header .drag-handle {
+  position: absolute;
+  top: -3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.node-card:hover .card-header .drag-handle {
+  opacity: 0.6;
 }
 
 .card-thumb {
@@ -4083,18 +4098,6 @@ body {
 /* ===========================================
    DRAG & DROP STYLES
    =========================================== */
-
-/* Drag handle in card header */
-.drag-handle {
-  opacity: 0.5;
-  cursor: grab;
-  flex-shrink: 0;
-  margin-right: 4px;
-}
-
-.node-card:hover .drag-handle {
-  opacity: 0.8;
-}
 
 .card-header:active .drag-handle {
   cursor: grabbing;

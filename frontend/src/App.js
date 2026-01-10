@@ -3502,10 +3502,12 @@ const findNodeById = (node, id) => {
   // dnd-kit drag handlers
   const handleDndDragStart = (event) => {
     const { active } = event;
+    console.log('DRAG START:', active.id, active.data.current?.node?.title);
     setActiveId(active.id);
     setActiveNode(active.data.current?.node || null);
     // Calculate and store drop zones for visual feedback
     const zones = calculateDropZones(active.id);
+    console.log('DROP ZONES:', zones.length, zones);
     setDropZones(zones);
   };
 
