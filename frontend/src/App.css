@@ -1210,6 +1210,11 @@ body {
   color: #475569;
 }
 
+.required-asterisk {
+  color: #ef4444;
+  margin-left: 4px;
+}
+
 .edit-node-form .form-group input,
 .edit-node-form .form-group select,
 .edit-node-form .form-group textarea {

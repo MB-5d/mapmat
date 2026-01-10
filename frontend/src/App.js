@@ -1125,7 +1125,7 @@ const getDescendantIds = (node, ids = new Set()) => {
 const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit' }) => {
   const [title, setTitle] = useState(node?.title || '');
   const [url, setUrl] = useState(node?.url || '');
-  const [pageType, setPageType] = useState(node?.pageType || '');
+  const [pageType, setPageType] = useState(node?.pageType || 'page');
   const [customPageType, setCustomPageType] = useState('');
   const [parentId, setParentId] = useState(node?.parentId || '');
   const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
@@ -1198,7 +1198,7 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
         <form onSubmit={handleSubmit} className="edit-node-form">
           <div className="edit-node-form-content">
             <div className="form-group">
-              <label>Page Title</label>
+              <label>Page Title<span className="required-asterisk">*</span></label>
               <input
                 type="text"
                 value={title}
@@ -1220,12 +1220,12 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
 
             <div className="form-row">
               <div className="form-group">
-                <label>Page Type</label>
+                <label>Page Type<span className="required-asterisk">*</span></label>
                 <select
                   value={pageType}
                   onChange={(e) => setPageType(e.target.value)}
+                  required
                 >
-                  <option value="">Select type...</option>
                   {PAGE_TYPES.map(type => (
                     <option key={type} value={type}>{type}</option>
                   ))}
@@ -1235,12 +1235,13 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
 
               {pageType === '__custom__' && (
                 <div className="form-group">
-                  <label>Custom Type</label>
+                  <label>Custom Type<span className="required-asterisk">*</span></label>
                   <input
                     type="text"
                     value={customPageType}
                     onChange={(e) => setCustomPageType(e.target.value)}
                     placeholder="Enter custom type"
+                    required
                   />
                 </div>
               )}
