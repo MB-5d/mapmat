@@ -601,8 +601,8 @@ const computeLayout = (
   const rootX = 0;
   const rootY = ROOT_Y;
 
-  // Root = "1" (Home)
-  setNode(root, rootX, rootY, 0, "1", { isOrphan: false });
+  // Root = "0.0" (Home)
+  setNode(root, rootX, rootY, 0, "0.0", { isOrphan: false });
 
   // ------------------------------------------------------------
   // 2) Level 1 row (children of root) — horizontal only
