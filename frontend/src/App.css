@@ -505,38 +505,26 @@ body {
   background: rgba(16, 185, 129, 0.1);
 }
 
-/* Floating drag card overlay - matches node-card styling */
-.drag-overlay-card {
-  width: 192px;
-  background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25), 0 0 0 3px rgba(99, 102, 241, 0.5);
-  border: 1px solid #e2e8f0;
-  padding: 12px;
+/* Drag overlay wrapper - contains full-size card copy */
+.drag-overlay-wrapper {
+  transform: scale(1.05);
   cursor: grabbing;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.3));
+}
+
+.drag-overlay-wrapper .node-card {
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.6);
   opacity: 0.95;
 }
 
-.drag-overlay-card .drag-card-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1f2937;
-  line-height: 1.3;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+.drag-overlay-wrapper .node-card.dragging {
+  opacity: 0.95;
+  pointer-events: auto;
 }
 
 @media (prefers-color-scheme: dark) {
-  .drag-overlay-card {
-    background: #1e293b;
-    border-color: #334155;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(129, 140, 248, 0.5);
-  }
-
-  .drag-overlay-card .drag-card-title {
-    color: #f1f5f9;
+  .drag-overlay-wrapper .node-card {
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.6);
   }
 }
 

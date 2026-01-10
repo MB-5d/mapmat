@@ -1680,6 +1680,7 @@ export default function App() {
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
   const [activeNode, setActiveNode] = useState(null);
+  const [activeDragData, setActiveDragData] = useState(null); // {number, color}
   const [activeDropZone, setActiveDropZone] = useState(null);
   const [dropZones, setDropZones] = useState([]);
 
@@ -3502,12 +3503,12 @@ const findNodeById = (node, id) => {
   // dnd-kit drag handlers
   const handleDndDragStart = (event) => {
     const { active } = event;
-    console.log('DRAG START:', active.id, active.data.current?.node?.title);
+    const data = active.data.current;
     setActiveId(active.id);
-    setActiveNode(active.data.current?.node || null);
+    setActiveNode(data?.node || null);
+    setActiveDragData({ number: data?.number, color: data?.color });
     // Calculate and store drop zones for visual feedback
     const zones = calculateDropZones(active.id);
-    console.log('DROP ZONES:', zones.length, zones);
     setDropZones(zones);
   };
 
@@ -3549,6 +3550,7 @@ const findNodeById = (node, id) => {
 
     setActiveId(null);
     setActiveNode(null);
+    setActiveDragData(null);
     setActiveDropZone(null);
     setDropZones([]);
   };
@@ -4090,11 +4092,22 @@ const findNodeById = (node, id) => {
               />
             </div>
 
-            {/* DragOverlay - floating card that follows cursor */}
+            {/* DragOverlay - full-size floating card that follows cursor */}
             <DragOverlay>
-              {activeNode ? (
-                <div className="drag-overlay-card">
-                  <div className="drag-card-title">{activeNode.title || 'Untitled'}</div>
+              {activeNode && activeDragData ? (
+                <div className="drag-overlay-wrapper">
+                  <NodeCard
+                    node={activeNode}
+                    number={activeDragData.number}
+                    color={activeDragData.color}
+                    showThumbnails={showThumbnails}
+                    isRoot={false}
+                    isDragging={true}
+                    onDelete={() => {}}
+                    onEdit={() => {}}
+                    onDuplicate={() => {}}
+                    onViewImage={() => {}}
+                  />
                 </div>
               ) : null}
             </DragOverlay>
