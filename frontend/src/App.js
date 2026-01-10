@@ -4154,10 +4154,13 @@ const findNodeById = (node, id) => {
               />
             </div>
 
-            {/* DragOverlay - full-size floating card with children */}
+            {/* DragOverlay - full-size floating card with children, scaled 5% larger than current zoom */}
             <DragOverlay>
               {activeNode && activeDragData ? (
-                <div className="drag-overlay-wrapper">
+                <div
+                  className="drag-overlay-wrapper"
+                  style={{ transform: `scale(${scale * 1.05})`, transformOrigin: 'top left' }}
+                >
                   <DragOverlayTree
                     node={activeNode}
                     number={activeDragData.number}
@@ -4173,7 +4176,7 @@ const findNodeById = (node, id) => {
             {/* Drop zone indicators - only show zones near cursor */}
             {activeId && dropZones
               .filter(zone => {
-                // Only show zones within 250px of cursor
+                // Only show zones within 250px of cursor (screen space)
                 const dist = Math.sqrt((dragCursor.x - zone.x) ** 2 + (dragCursor.y - zone.y) ** 2);
                 return dist < 250;
               })
@@ -4183,21 +4186,23 @@ const findNodeById = (node, id) => {
                   zone.index === activeDropZone.index &&
                   zone.type === activeDropZone.type;
 
-                // Size based on zone type and layout
-                const cardHeight = showThumbnails ? 262 : 200;
+                // Size based on zone type and layout, scaled to match current zoom
+                const baseCardHeight = showThumbnails ? 262 : 200;
+                const scaledCardWidth = 288 * scale;
+                const scaledCardHeight = baseCardHeight * scale;
                 let width, height;
                 if (zone.type === 'child') {
                   // Full card size for "new child" positions
-                  width = 288;
-                  height = cardHeight;
+                  width = scaledCardWidth;
+                  height = scaledCardHeight;
                 } else if (zone.layout === 'horizontal') {
                   // Vertical bar for horizontal sibling insertion (between Level 1)
-                  width = 32;
-                  height = cardHeight;
+                  width = Math.max(24, 40 * scale);
+                  height = scaledCardHeight;
                 } else {
                   // Horizontal bar for vertical sibling insertion (between stacked)
-                  width = 288;
-                  height = 32;
+                  width = scaledCardWidth;
+                  height = Math.max(24, 40 * scale);
                 }
 
                 return (
