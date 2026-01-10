@@ -235,10 +235,6 @@ const NodeCard = ({
       )}
 
       <div className="card-content">
-        <div className="card-toprow">
-          <span className="page-number">{number}</span>
-        </div>
-
         <div className="card-title" title={node.title}>
           {node.title}
         </div>
@@ -246,6 +242,7 @@ const NodeCard = ({
 
       <div className="card-actions">
         <div className="card-actions-left">
+          <span className="page-number">{number}</span>
           <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
             <Edit2 size={16} />
           </button>
