@@ -1655,7 +1655,7 @@ export default function App() {
     const newMaxX = maxX + dx;
     const newMaxY = maxY + dy;
 
-    const padding = 240; // Max distance beyond map bounds
+    const padding = 600; // Max distance content can go beyond viewport edge
     let clampedX = newPan.x;
     let clampedY = newPan.y;
 
@@ -3922,7 +3922,7 @@ const findNodeById = (node, id) => {
                       const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
                       const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
                       setScale(1);
-                      setPan(p => ({ x: p.x + dx, y: p.y + dy }));
+                      setPan(p => clampPan({ x: p.x + dx, y: p.y + dy }));
                     }
                   }
                 }}
