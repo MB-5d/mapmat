@@ -2260,7 +2260,7 @@ export default function App() {
     if (!hasMap) return;
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar');
     if (isInsideCard || isUIControl) return;
 
     dragRef.current.dragging = true;
