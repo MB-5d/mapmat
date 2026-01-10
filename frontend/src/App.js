@@ -2444,89 +2444,74 @@ export default function App() {
     }, 50);
   };
 
-  // Single ref to hold current state for undo/redo (avoids stale closure issues)
-  const historyRef = useRef({ undoStack: [], redoStack: [], root: null });
+  // Undo/Redo implementation
+  const saveStateForUndo = () => {
+    console.log('SAVING STATE FOR UNDO');
+    setUndoStack(prev => [...prev, JSON.stringify(root)]);
+    setRedoStack([]); // Clear redo on new action
+  };
 
-  // Sync ref with state on every render
-  historyRef.current.undoStack = undoStack;
-  historyRef.current.redoStack = redoStack;
-  historyRef.current.root = root;
+  const handleUndo = () => {
+    console.log('UNDO CLICKED, stack:', undoStack.length);
+    if (undoStack.length === 0) {
+      console.log('Nothing to undo');
+      return;
+    }
 
-  // Push state to undo stack before making changes
-  const pushToUndoStack = (state) => {
-    console.log('Pushing to undo stack, new length will be:', undoStack.length + 1);
-    setUndoStack(prev => [...prev, state]);
-    setRedoStack([]);
+    // Save current state to redo stack
+    setRedoStack(prev => [...prev, JSON.stringify(root)]);
+
+    // Get last state from undo stack
+    const lastState = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+
+    // Restore it
+    setRoot(JSON.parse(lastState));
+    console.log('UNDO COMPLETE');
+  };
+
+  const handleRedo = () => {
+    console.log('REDO CLICKED, stack:', redoStack.length);
+    if (redoStack.length === 0) {
+      console.log('Nothing to redo');
+      return;
+    }
+
+    // Save current state to undo stack
+    setUndoStack(prev => [...prev, JSON.stringify(root)]);
+
+    // Get last state from redo stack
+    const lastState = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+
+    // Restore it
+    setRoot(JSON.parse(lastState));
+    console.log('REDO COMPLETE');
   };
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
-  console.log('RENDER: undoStack.length =', undoStack.length, 'canUndo =', canUndo);
-
-  // Undo handler - works for both button and keyboard
-  const handleUndo = () => {
-    console.log('handleUndo called, stack length:', undoStack.length);
-    const h = historyRef.current;
-    if (h.undoStack.length === 0) return;
-
-    const prevState = h.undoStack[h.undoStack.length - 1];
-    const currentRoot = h.root;
-
-    setUndoStack(h.undoStack.slice(0, -1));
-    setRedoStack(prev => [...prev, structuredClone(currentRoot)]);
-    setRoot(prevState);
-  };
-
-  // Redo handler - works for both button and keyboard
-  const handleRedo = () => {
-    console.log('handleRedo called, stack length:', redoStack.length);
-    const h = historyRef.current;
-    if (h.redoStack.length === 0) return;
-
-    const nextState = h.redoStack[h.redoStack.length - 1];
-    const currentRoot = h.root;
-
-    setRedoStack(h.redoStack.slice(0, -1));
-    setUndoStack(prev => [...prev, structuredClone(currentRoot)]);
-    setRoot(nextState);
-  };
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
         e.preventDefault();
-        const h = historyRef.current;
         if (e.shiftKey) {
-          // Redo
-          if (h.redoStack.length === 0) return;
-          const nextState = h.redoStack[h.redoStack.length - 1];
-          setRedoStack(h.redoStack.slice(0, -1));
-          setUndoStack(prev => [...prev, structuredClone(h.root)]);
-          setRoot(nextState);
+          handleRedo();
         } else {
-          // Undo
-          if (h.undoStack.length === 0) return;
-          const prevState = h.undoStack[h.undoStack.length - 1];
-          setUndoStack(h.undoStack.slice(0, -1));
-          setRedoStack(prev => [...prev, structuredClone(h.root)]);
-          setRoot(prevState);
+          handleUndo();
         }
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
         e.preventDefault();
-        const h = historyRef.current;
-        if (h.redoStack.length === 0) return;
-        const nextState = h.redoStack[h.redoStack.length - 1];
-        setRedoStack(h.redoStack.slice(0, -1));
-        setUndoStack(prev => [...prev, structuredClone(h.root)]);
-        setRoot(nextState);
+        handleRedo();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [undoStack, redoStack, root]);
 
   const exportJson = () => {
     if (!root) return;
@@ -3011,7 +2996,7 @@ const findNodeById = (node, id) => {
       node.children.forEach(remove);
     };
 
-    pushToUndoStack(structuredClone(root));
+    saveStateForUndo();
     setRoot((prev) => {
       const copy = structuredClone(prev);
       remove(copy);
@@ -3104,7 +3089,7 @@ const findNodeById = (node, id) => {
 
     if (editModalMode === 'edit') {
       // Update existing node
-      pushToUndoStack(structuredClone(root));
+      saveStateForUndo();
 
       if (isCurrentlyOrphan) {
         // Node is currently an orphan
@@ -3196,7 +3181,7 @@ const findNodeById = (node, id) => {
         children: [], // Don't copy children for duplicates
       };
 
-      pushToUndoStack(structuredClone(root));
+      saveStateForUndo();
 
       if (newParentId === '') {
         // Add to orphans
@@ -3239,7 +3224,7 @@ const findNodeById = (node, id) => {
     if (nodeId === newParentId) return;
     if (isDescendantOf(root, newParentId, nodeId)) return;
 
-    pushToUndoStack(structuredClone(root));
+    saveStateForUndo();
     setRoot((prev) => {
       const copy = structuredClone(prev);
       const nodeToMove = findNodeById(copy, nodeId);
