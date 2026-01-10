@@ -56,7 +56,7 @@ import {
   Redo2,
   MousePointer2,
   Link,
-  Plus,
+  FilePlus,
 } from 'lucide-react';
 
 import './App.css';
@@ -3185,6 +3185,37 @@ const findNodeById = (node, id) => {
           return copy;
         });
       }
+    } else if (editModalMode === 'add') {
+      // Create a new blank node
+      const newNode = {
+        id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        url: updatedNode.url || '',
+        title: updatedNode.title || 'New Page',
+        pageType: updatedNode.pageType || 'page',
+        thumbnailUrl: updatedNode.thumbnailUrl || '',
+        description: updatedNode.description || '',
+        metaTags: updatedNode.metaTags || {},
+        children: [],
+      };
+
+      saveStateForUndo();
+
+      if (newParentId === '') {
+        // Add to orphans
+        setOrphans(prev => [...prev, newNode]);
+      } else {
+        setRoot((prev) => {
+          const copy = structuredClone(prev);
+          const parent = findNodeById(copy, newParentId);
+          if (parent) {
+            parent.children = parent.children || [];
+            parent.children.push(newNode);
+          }
+          return copy;
+        });
+      }
+
+      setToast({ message: 'Page added successfully', type: 'success' });
     }
     setEditModalNode(null);
   };
@@ -3959,11 +3990,14 @@ const findNodeById = (node, id) => {
                 <MousePointer2 size={20} />
               </button>
               <button
-                className="canvas-tool-btn disabled"
-                disabled
-                title="Add Page (coming soon)"
+                className="canvas-tool-btn"
+                title="Add Page"
+                onClick={() => {
+                  setEditModalNode({ id: '', url: '', title: '', parentId: '', children: [] });
+                  setEditModalMode('add');
+                }}
               >
-                <Plus size={20} />
+                <FilePlus size={20} />
               </button>
 
               <div className="canvas-toolbar-divider" />
