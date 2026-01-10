@@ -150,8 +150,8 @@ const NodeCard = ({
   const [thumbLoading, setThumbLoading] = useState(true);
   const [thumbKey, setThumbKey] = useState(0);
 
-  // Use mshots for thumbnails - add cache buster to force refresh
-  const thumb = `https://s0.wp.com/mshots/v1/${encodeURIComponent(node.url)}?w=576&h=400&_=${thumbKey}`;
+  // Use custom thumbnail if available, otherwise use mshots service
+  const thumb = node.thumbnailUrl || `https://s0.wp.com/mshots/v1/${encodeURIComponent(node.url)}?w=576&h=400&_=${thumbKey}`;
 
   // Reset thumbnail state when showThumbnails is toggled on
   React.useEffect(() => {
