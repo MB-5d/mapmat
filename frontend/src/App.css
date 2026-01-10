@@ -631,7 +631,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 10px;
+  flex: 1;
 }
 
 .card-toprow { 
