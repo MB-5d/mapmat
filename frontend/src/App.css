@@ -4132,7 +4132,7 @@ body {
   }
 }
 
-/* Drop zone indicators - card-sized dashed outlines during drag */
+/* Drop zone indicators during drag */
 .drop-zone-indicator {
   position: fixed;
   pointer-events: none;
@@ -4140,15 +4140,44 @@ body {
   border: 2px dashed #6366f1;
   border-radius: 12px;
   background: rgba(99, 102, 241, 0.08);
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: all 0.15s ease;
+}
+
+/* Sibling zones - thin insertion bars */
+.drop-zone-indicator.sibling {
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.3);
+}
+
+/* Sibling horizontal (vertical bar between Level 1 cards) */
+.drop-zone-indicator.sibling.horizontal {
+  border: none;
+  background: #6366f1;
+  border-radius: 4px;
+}
+
+/* Sibling vertical (horizontal bar between stacked cards) */
+.drop-zone-indicator.sibling.vertical {
+  border: none;
+  background: #6366f1;
+  border-radius: 4px;
+}
+
+/* Child zones - full card-sized dashed outline */
+.drop-zone-indicator.child {
+  border-radius: 12px;
 }
 
 /* Nearest/active drop zone - highlighted */
 .drop-zone-indicator.nearest {
   border-color: #10b981;
-  border-width: 3px;
-  background: rgba(16, 185, 129, 0.15);
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.5);
+}
+
+.drop-zone-indicator.sibling.nearest {
+  background: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -4157,10 +4186,19 @@ body {
     background: rgba(129, 140, 248, 0.1);
   }
 
+  .drop-zone-indicator.sibling.horizontal,
+  .drop-zone-indicator.sibling.vertical {
+    background: #818cf8;
+  }
+
   .drop-zone-indicator.nearest {
     border-color: #34d399;
     background: rgba(52, 211, 153, 0.2);
     box-shadow: 0 0 16px rgba(52, 211, 153, 0.4);
+  }
+
+  .drop-zone-indicator.sibling.nearest {
+    background: #34d399;
   }
 }
 

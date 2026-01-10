@@ -3424,41 +3424,45 @@ const findNodeById = (node, id) => {
 
       // Add sibling drop zones (before this node)
       if (depth === 0) {
-        // Horizontal layout - drop zones to left/right
+        // Horizontal layout (Level 1) - drop zones to left/right
         zones.push({
           type: 'sibling',
+          layout: 'horizontal',
           parentId: parent.id,
           index: siblingIndex,
-          x: rect.left - 20,
+          x: rect.left - 24,
           y: rect.top + rect.height / 2,
         });
         // Also add zone after last sibling
         if (siblingIndex === parent.children.length - 1) {
           zones.push({
             type: 'sibling',
+            layout: 'horizontal',
             parentId: parent.id,
             index: siblingIndex + 1,
-            x: rect.right + 20,
+            x: rect.right + 24,
             y: rect.top + rect.height / 2,
           });
         }
       } else {
-        // Vertical layout - drop zones above/below
+        // Vertical layout (Level 2+) - drop zones above/below
         zones.push({
           type: 'sibling',
+          layout: 'vertical',
           parentId: parent.id,
           index: siblingIndex,
           x: rect.left + rect.width / 2,
-          y: rect.top - 20,
+          y: rect.top - 30,
         });
         // Also add zone after last sibling
         if (siblingIndex === parent.children.length - 1) {
           zones.push({
             type: 'sibling',
+            layout: 'vertical',
             parentId: parent.id,
             index: siblingIndex + 1,
             x: rect.left + rect.width / 2,
-            y: rect.bottom + 20,
+            y: rect.bottom + 30,
           });
         }
       }
@@ -3467,6 +3471,7 @@ const findNodeById = (node, id) => {
       if (!node.children?.length) {
         zones.push({
           type: 'child',
+          layout: 'vertical',
           parentId: nodeId,
           index: 0,
           x: rect.left + rect.width / 2,
@@ -4121,27 +4126,41 @@ const findNodeById = (node, id) => {
             {/* Drop zone indicators - only show zones near cursor */}
             {activeId && dropZones
               .filter(zone => {
-                // Only show zones within 200px of cursor
+                // Only show zones within 250px of cursor
                 const dist = Math.sqrt((dragCursor.x - zone.x) ** 2 + (dragCursor.y - zone.y) ** 2);
-                return dist < 200;
+                return dist < 250;
               })
               .map((zone, idx) => {
                 const isNearest = activeDropZone &&
                   zone.parentId === activeDropZone.parentId &&
                   zone.index === activeDropZone.index &&
                   zone.type === activeDropZone.type;
-                // Match actual card dimensions: 288px wide, 200px or 262px tall
-                const cardWidth = 288;
-                const cardHeight = showThumbnails ? 262 : 200;
+
+                // Size based on zone type and layout
+                let width, height;
+                if (zone.type === 'child') {
+                  // Full card size for "new child" positions
+                  width = 288;
+                  height = showThumbnails ? 262 : 200;
+                } else if (zone.layout === 'horizontal') {
+                  // Thin vertical bar for horizontal sibling insertion
+                  width = 8;
+                  height = showThumbnails ? 262 : 200;
+                } else {
+                  // Thin horizontal bar for vertical sibling insertion
+                  width = 288;
+                  height = 8;
+                }
+
                 return (
                   <div
                     key={`${zone.type}-${zone.parentId}-${zone.index}-${idx}`}
-                    className={`drop-zone-indicator ${zone.type} ${isNearest ? 'nearest' : ''}`}
+                    className={`drop-zone-indicator ${zone.type} ${zone.layout || ''} ${isNearest ? 'nearest' : ''}`}
                     style={{
-                      left: zone.x - cardWidth / 2,
-                      top: zone.y - cardHeight / 2,
-                      width: cardWidth,
-                      height: cardHeight,
+                      left: zone.x - width / 2,
+                      top: zone.y - height / 2,
+                      width,
+                      height,
                     }}
                   />
                 );
