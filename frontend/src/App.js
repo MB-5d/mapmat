@@ -3279,7 +3279,7 @@ const findNodeById = (node, id) => {
         });
       }
 
-      setToast({ message: 'Page added successfully', type: 'success' });
+      showToast('Page added successfully', 'success');
     }
     setEditModalNode(null);
   };
