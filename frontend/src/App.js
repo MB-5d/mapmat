@@ -318,7 +318,7 @@ const LAYOUT = {
   NODE_H_COLLAPSED: 200, // Must match CSS .node-card min-height
   NODE_H_THUMB: 262,     // header 8 + thumb 152 + content ~60 + actions ~42
   GAP_L1_X: 48,         // Horizontal gap between Level 1 siblings (and orphans)
-  GAP_STACK_Y: 40,      // Vertical gap between nodes in vertical stack (half of BUS_Y_GAP)
+  GAP_STACK_Y: 60,      // FIXED vertical gap between bottom of parent and top of child (same for all modes)
   INDENT_X: 40,         // Per-depth indentation for depth >= 2
   BUS_Y_GAP: 80,        // Vertical gap from root bottom to Level 1 row
   ORPHAN_GROUP_GAP: 160, // Gap between main tree and first orphan only
