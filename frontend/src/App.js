@@ -4179,19 +4179,20 @@ const findNodeById = (node, id) => {
                   zone.type === activeDropZone.type;
 
                 // Size based on zone type and layout
+                const cardHeight = showThumbnails ? 262 : 200;
                 let width, height;
                 if (zone.type === 'child') {
                   // Full card size for "new child" positions
                   width = 288;
-                  height = showThumbnails ? 262 : 200;
+                  height = cardHeight;
                 } else if (zone.layout === 'horizontal') {
-                  // Thin vertical bar for horizontal sibling insertion
-                  width = 8;
-                  height = showThumbnails ? 262 : 200;
+                  // Vertical bar for horizontal sibling insertion (between Level 1)
+                  width = 32;
+                  height = cardHeight;
                 } else {
-                  // Thin horizontal bar for vertical sibling insertion
+                  // Horizontal bar for vertical sibling insertion (between stacked)
                   width = 288;
-                  height = 8;
+                  height = 32;
                 }
 
                 return (
