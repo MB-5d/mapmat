@@ -1685,6 +1685,7 @@ export default function App() {
   const [activeDragData, setActiveDragData] = useState(null); // {number, color}
   const [activeDropZone, setActiveDropZone] = useState(null);
   const [dropZones, setDropZones] = useState([]);
+  const [dragCursor, setDragCursor] = useState({ x: 0, y: 0 }); // Track cursor for proximity filtering
 
   const canvasRef = useRef(null);
   const scanAbortRef = useRef(null);
@@ -3524,6 +3525,9 @@ const findNodeById = (node, id) => {
     const currentX = activatorRect.left + activatorRect.width / 2 + delta.x;
     const currentY = activatorRect.top + activatorRect.height / 2 + delta.y;
 
+    // Store cursor position for proximity filtering
+    setDragCursor({ x: currentX, y: currentY });
+
     // Find nearest drop zone
     const nearest = findNearestDropZone(currentX, currentY, active.id, 80);
     setActiveDropZone(nearest);
@@ -4114,28 +4118,34 @@ const findNodeById = (node, id) => {
               ) : null}
             </DragOverlay>
 
-            {/* Drop zone indicators - card-sized dashed outlines during drag */}
-            {activeId && dropZones.map((zone, idx) => {
-              const isNearest = activeDropZone &&
-                zone.parentId === activeDropZone.parentId &&
-                zone.index === activeDropZone.index &&
-                zone.type === activeDropZone.type;
-              // Match actual card dimensions: 192px wide, 200px or 262px tall
-              const cardWidth = 192;
-              const cardHeight = showThumbnails ? 262 : 200;
-              return (
-                <div
-                  key={`${zone.type}-${zone.parentId}-${zone.index}-${idx}`}
-                  className={`drop-zone-indicator ${zone.type} ${isNearest ? 'nearest' : ''}`}
-                  style={{
-                    left: zone.x - cardWidth / 2,
-                    top: zone.y - cardHeight / 2,
-                    width: cardWidth,
-                    height: cardHeight,
-                  }}
-                />
-              );
-            })}
+            {/* Drop zone indicators - only show zones near cursor */}
+            {activeId && dropZones
+              .filter(zone => {
+                // Only show zones within 200px of cursor
+                const dist = Math.sqrt((dragCursor.x - zone.x) ** 2 + (dragCursor.y - zone.y) ** 2);
+                return dist < 200;
+              })
+              .map((zone, idx) => {
+                const isNearest = activeDropZone &&
+                  zone.parentId === activeDropZone.parentId &&
+                  zone.index === activeDropZone.index &&
+                  zone.type === activeDropZone.type;
+                // Match actual card dimensions: 288px wide, 200px or 262px tall
+                const cardWidth = 288;
+                const cardHeight = showThumbnails ? 262 : 200;
+                return (
+                  <div
+                    key={`${zone.type}-${zone.parentId}-${zone.index}-${idx}`}
+                    className={`drop-zone-indicator ${zone.type} ${isNearest ? 'nearest' : ''}`}
+                    style={{
+                      left: zone.x - cardWidth / 2,
+                      top: zone.y - cardHeight / 2,
+                      width: cardWidth,
+                      height: cardHeight,
+                    }}
+                  />
+                );
+              })}
 
             <div className="color-key">
               <div className="color-key-header" onClick={() => setShowColorKey(v => !v)}>
