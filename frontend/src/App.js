@@ -2454,6 +2454,7 @@ export default function App() {
 
   // Push state to undo stack before making changes
   const pushToUndoStack = (state) => {
+    console.log('Pushing to undo stack, new length will be:', undoStack.length + 1);
     setUndoStack(prev => [...prev, state]);
     setRedoStack([]);
   };
@@ -2463,6 +2464,7 @@ export default function App() {
 
   // Undo handler - works for both button and keyboard
   const handleUndo = () => {
+    console.log('handleUndo called, stack length:', undoStack.length);
     const h = historyRef.current;
     if (h.undoStack.length === 0) return;
 
@@ -2476,6 +2478,7 @@ export default function App() {
 
   // Redo handler - works for both button and keyboard
   const handleRedo = () => {
+    console.log('handleRedo called, stack length:', redoStack.length);
     const h = historyRef.current;
     if (h.redoStack.length === 0) return;
 
