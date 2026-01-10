@@ -1215,6 +1215,10 @@ body {
   margin-left: 4px;
 }
 
+.new-type-input {
+  margin-top: 8px;
+}
+
 .edit-node-form .form-group input,
 .edit-node-form .form-group select,
 .edit-node-form .form-group textarea {

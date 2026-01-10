@@ -1122,11 +1122,15 @@ const getDescendantIds = (node, ids = new Set()) => {
 };
 
 // Edit Node Modal
-const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit' }) => {
+const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit', customPageTypes = [], onAddCustomType }) => {
   const [title, setTitle] = useState(node?.title || '');
   const [url, setUrl] = useState(node?.url || '');
-  const [pageType, setPageType] = useState(node?.pageType || 'page');
-  const [customPageType, setCustomPageType] = useState('');
+  const [pageType, setPageType] = useState(node?.pageType || 'Page');
+  const [newTypeName, setNewTypeName] = useState('');
+  const [showNewTypeInput, setShowNewTypeInput] = useState(false);
+
+  // Combined list of all page types
+  const allPageTypes = [...PAGE_TYPES, ...customPageTypes];
   const [parentId, setParentId] = useState(node?.parentId || '');
   const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
   const [description, setDescription] = useState(node?.description || '');
@@ -1135,18 +1139,27 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const finalPageType = pageType === '__custom__' ? customPageType : pageType;
     onSave({
       ...node,
       title,
       url,
-      pageType: finalPageType,
+      pageType,
       parentId: parentId || null,
       thumbnailUrl,
       description,
       metaTags,
     });
     onClose();
+  };
+
+  const handleAddNewType = () => {
+    const trimmed = newTypeName.trim();
+    if (trimmed && !allPageTypes.includes(trimmed)) {
+      onAddCustomType(trimmed);
+      setPageType(trimmed);
+    }
+    setNewTypeName('');
+    setShowNewTypeInput(false);
   };
 
   const handleFileUpload = (e) => {
@@ -1163,8 +1176,7 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
   const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
 
   // Form validation - check if required fields are filled
-  const finalPageType = pageType === '__custom__' ? customPageType : pageType;
-  const isFormValid = title.trim() !== '' && parentId !== '' && finalPageType !== '';
+  const isFormValid = title.trim() !== '' && parentId !== '' && pageType !== '' && pageType !== '__addnew__';
 
   // Filter out current node and its descendants from parent options
   // (can't be parent of itself or create circular reference)
@@ -1222,32 +1234,42 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
               />
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Page Type<span className="required-asterisk">*</span></label>
-                <select
-                  value={pageType}
-                  onChange={(e) => setPageType(e.target.value)}
-                  required
-                >
-                  {PAGE_TYPES.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                  <option value="__custom__">Custom...</option>
-                </select>
-              </div>
-
-              {pageType === '__custom__' && (
-                <div className="form-group">
-                  <label>Custom Type<span className="required-asterisk">*</span></label>
-                  <input
-                    type="text"
-                    value={customPageType}
-                    onChange={(e) => setCustomPageType(e.target.value)}
-                    placeholder="Enter custom type"
-                    required
-                  />
-                </div>
+            <div className="form-group">
+              <label>Page Type<span className="required-asterisk">*</span></label>
+              <select
+                value={pageType}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '__addnew__') {
+                    setShowNewTypeInput(true);
+                  } else {
+                    setPageType(val);
+                    setShowNewTypeInput(false);
+                  }
+                }}
+                required
+              >
+                {allPageTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+                <option value="__addnew__">➕ Add New Type...</option>
+              </select>
+              {showNewTypeInput && (
+                <input
+                  type="text"
+                  className="new-type-input"
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                  onBlur={handleAddNewType}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddNewType();
+                    }
+                  }}
+                  placeholder="Enter new type name"
+                  autoFocus
+                />
               )}
             </div>
 
@@ -1601,6 +1623,7 @@ export default function App() {
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [root, setRoot] = useState(null);
   const [orphans, setOrphans] = useState([]); // Pages with no parent (numbered 0.x)
+  const [customPageTypes, setCustomPageTypes] = useState([]); // User-added page types
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const [fullImageUrl, setFullImageUrl] = useState(null);
@@ -4530,6 +4553,8 @@ const findNodeById = (node, id) => {
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
           mode={editModalMode}
+          customPageTypes={customPageTypes}
+          onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
         />
       )}
 
