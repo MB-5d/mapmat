@@ -1177,7 +1177,9 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
   const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
 
   // Form validation - check if required fields are filled
-  const isFormValid = title.trim() !== '' && parentId !== '' && pageType !== '' && pageType !== '__addnew__';
+  // For edit/duplicate: parentId can be empty (orphan pages are valid)
+  // For add: parentId is optional (user can create orphans)
+  const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
 
   // Filter out current node and its descendants from parent options
   // (can't be parent of itself or create circular reference)
@@ -1667,6 +1669,13 @@ export default function App() {
   const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link'
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
+  const [showViewDropdown, setShowViewDropdown] = useState(false);
+  const [layers, setLayers] = useState({
+    main: true,        // Main sitemap nodes (always visible)
+    xmlComparison: true, // XML comparison highlights
+    userFlows: false,   // User journey connections (coming soon)
+    crossLinks: false,  // Non-hierarchical links (coming soon)
+  });
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -1679,6 +1688,20 @@ export default function App() {
   const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
+  const viewDropdownRef = useRef(null);
+
+  // Close view dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (viewDropdownRef.current && !viewDropdownRef.current.contains(e.target)) {
+        setShowViewDropdown(false);
+      }
+    };
+    if (showViewDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showViewDropdown]);
 
   const hasMap = !!root;
   const maxDepth = useMemo(() => getMaxDepth(root), [root]);
@@ -1718,12 +1741,41 @@ export default function App() {
       contentBottom = Math.max(contentBottom, y + rect.height);
     });
 
-    // 3. Set pan limits with 400px padding
+    // 3. Set pan limits with 400px padding on ALL sides
     const padding = 400;
-    const minPanX = -(contentRight + padding - viewportWidth);
-    const maxPanX = -contentLeft + padding;
-    const minPanY = -(contentBottom + padding - viewportHeight);
-    const maxPanY = -contentTop + padding;
+
+    // Pan LEFT limit: content's RIGHT edge should stay at least 400px from viewport LEFT edge
+    // When panning left (negative pan.x), content moves right visually
+    // contentRight + pan.x = position of content's right edge on screen
+    // We want: contentRight + pan.x >= padding
+    // So: pan.x >= padding - contentRight
+    const minPanX = padding - contentRight;
+
+    // Pan RIGHT limit: content's LEFT edge should stay at least 400px from viewport RIGHT edge
+    // contentLeft + pan.x = position of content's left edge on screen
+    // We want: contentLeft + pan.x <= viewportWidth - padding
+    // So: pan.x <= viewportWidth - padding - contentLeft
+    const maxPanX = viewportWidth - padding - contentLeft;
+
+    // Pan UP limit: content's BOTTOM edge should stay at least 400px from viewport TOP edge
+    // contentBottom + pan.y = position of content's bottom edge on screen
+    // We want: contentBottom + pan.y >= padding
+    // So: pan.y >= padding - contentBottom
+    const minPanY = padding - contentBottom;
+
+    // Pan DOWN limit: content's TOP edge should stay at least 400px from viewport BOTTOM edge
+    // contentTop + pan.y = position of content's top edge on screen
+    // We want: contentTop + pan.y <= viewportHeight - padding
+    // So: pan.y <= viewportHeight - padding - contentTop
+    const maxPanY = viewportHeight - padding - contentTop;
+
+    console.log('CLAMP DEBUG:', {
+      padding,
+      viewport: { w: viewportWidth, h: viewportHeight },
+      content: { left: contentLeft, right: contentRight, top: contentTop, bottom: contentBottom },
+      limits: { minPanX, maxPanX, minPanY, maxPanY },
+      newPan,
+    });
 
     // 4. Clamp
     const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
@@ -4096,13 +4148,57 @@ const findNodeById = (node, id) => {
 
               <div className="canvas-toolbar-divider" />
 
-              <button
-                className="canvas-tool-btn disabled"
-                disabled
-                title="View Options (coming soon)"
-              >
-                <Eye size={20} />
-              </button>
+              <div className="view-dropdown-container" ref={viewDropdownRef}>
+                <button
+                  className={`canvas-tool-btn ${showViewDropdown ? 'active' : ''}`}
+                  onClick={() => setShowViewDropdown(!showViewDropdown)}
+                  title="View Layers"
+                >
+                  <Eye size={20} />
+                </button>
+                {showViewDropdown && (
+                  <div className="view-dropdown" onClick={(e) => e.stopPropagation()}>
+                    <div className="view-dropdown-header">Layers</div>
+                    <label className="view-layer-item">
+                      <input
+                        type="checkbox"
+                        checked={layers.main}
+                        disabled
+                        onChange={() => {}}
+                      />
+                      <span>Main / URL</span>
+                    </label>
+                    <label className="view-layer-item">
+                      <input
+                        type="checkbox"
+                        checked={layers.xmlComparison}
+                        onChange={() => setLayers(l => ({ ...l, xmlComparison: !l.xmlComparison }))}
+                      />
+                      <span>XML Comparison</span>
+                    </label>
+                    <label className="view-layer-item disabled">
+                      <input
+                        type="checkbox"
+                        checked={layers.userFlows}
+                        disabled
+                        onChange={() => {}}
+                      />
+                      <span>User Flows</span>
+                      <span className="coming-soon-badge">Soon</span>
+                    </label>
+                    <label className="view-layer-item disabled">
+                      <input
+                        type="checkbox"
+                        checked={layers.crossLinks}
+                        disabled
+                        onChange={() => {}}
+                      />
+                      <span>Cross-links</span>
+                      <span className="coming-soon-badge">Soon</span>
+                    </label>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="zoom-controls">

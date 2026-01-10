@@ -965,6 +965,82 @@ body {
   margin: 0 4px;
 }
 
+.view-dropdown-container {
+  position: relative;
+}
+
+.view-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  padding: 8px 0;
+  z-index: 100;
+}
+
+.view-dropdown-header {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.view-layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #1e293b;
+  transition: background 0.15s;
+}
+
+.view-layer-item:hover {
+  background: #f1f5f9;
+}
+
+.view-layer-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.view-layer-item.disabled:hover {
+  background: transparent;
+}
+
+.view-layer-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #6366f1;
+  cursor: pointer;
+}
+
+.view-layer-item input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.view-layer-item span {
+  flex: 1;
+}
+
+.coming-soon-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
 .toast {
   position: fixed;
   top: 80px;
@@ -3059,7 +3135,7 @@ body {
   }
 
   .node-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 1);
   }
 
   .card-content {
@@ -3202,6 +3278,33 @@ body {
 
   .canvas-toolbar-divider {
     background: #2d1f3d;
+  }
+
+  .view-dropdown {
+    background: #1a1022;
+    border-color: #2d1f3d;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .view-dropdown-header {
+    color: #9f8fb8;
+  }
+
+  .view-layer-item {
+    color: #e2e0e8;
+  }
+
+  .view-layer-item:hover {
+    background: #2d1f3d;
+  }
+
+  .view-layer-item.disabled:hover {
+    background: transparent;
+  }
+
+  .coming-soon-badge {
+    background: #2d1f3d;
+    color: #9f8fb8;
   }
 
   .zoom-controls {
