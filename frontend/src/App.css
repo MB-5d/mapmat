@@ -507,13 +507,12 @@ body {
 
 /* Drag overlay wrapper - contains full-size card copy with children */
 .drag-overlay-wrapper {
-  transform: scale(1.02);
   cursor: grabbing;
-  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.3));
+  /* No scale - use shadow/glow to indicate lifted state instead */
 }
 
 .drag-overlay-wrapper .node-card {
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.6);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), 0 0 0 3px rgba(99, 102, 241, 0.7);
   opacity: 0.95;
 }
 
