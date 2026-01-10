@@ -498,6 +498,130 @@ const CommentPopover = ({ node, onClose, onAddComment, collaborators }) => {
   );
 };
 
+// Comments Panel component (right rail showing all comments)
+const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNode }) => {
+  const [filter, setFilter] = useState('');
+  const [filterType, setFilterType] = useState('all'); // 'all', 'author', 'mention'
+
+  // Collect all comments from tree and orphans
+  const getAllComments = () => {
+    const comments = [];
+
+    const collectFromNode = (node) => {
+      if (node.comments?.length > 0) {
+        node.comments.forEach(comment => {
+          comments.push({
+            ...comment,
+            nodeId: node.id,
+            nodeTitle: node.title || 'Untitled',
+          });
+        });
+      }
+      (node.children || []).forEach(child => collectFromNode(child));
+    };
+
+    if (root) collectFromNode(root);
+    orphans.forEach(orphan => collectFromNode(orphan));
+
+    // Sort by most recent first
+    return comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  };
+
+  const formatTimeAgo = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now - date) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const allComments = getAllComments();
+
+  const filteredComments = allComments.filter(comment => {
+    if (!filter) return true;
+    const searchLower = filter.toLowerCase();
+
+    if (filterType === 'author') {
+      return comment.author.toLowerCase().includes(searchLower);
+    }
+    if (filterType === 'mention') {
+      return comment.mentions?.some(m => m.toLowerCase().includes(searchLower));
+    }
+    // 'all' - search text, author, and node title
+    return (
+      comment.text.toLowerCase().includes(searchLower) ||
+      comment.author.toLowerCase().includes(searchLower) ||
+      comment.nodeTitle.toLowerCase().includes(searchLower)
+    );
+  });
+
+  return (
+    <div className="comments-panel">
+      <div className="comments-panel-header">
+        <h3>All Comments</h3>
+        <button className="comments-panel-close" onClick={onClose}>
+          <X size={18} />
+        </button>
+      </div>
+
+      <div className="comments-panel-filter">
+        <input
+          type="text"
+          placeholder="Filter comments..."
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="comments-filter-input"
+        />
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="comments-filter-select"
+        >
+          <option value="all">All</option>
+          <option value="author">By Author</option>
+          <option value="mention">By Mention</option>
+        </select>
+      </div>
+
+      <div className="comments-panel-body">
+        {filteredComments.length > 0 ? (
+          <div className="comments-panel-list">
+            {filteredComments.map(comment => (
+              <div
+                key={comment.id}
+                className="comments-panel-item"
+                onClick={() => {
+                  onNavigateToNode(comment.nodeId);
+                  onCommentClick(comment.nodeId);
+                }}
+              >
+                <div className="comments-panel-item-header">
+                  <span className="comments-panel-node-title">{comment.nodeTitle}</span>
+                </div>
+                <div className="comments-panel-item-meta">
+                  <span className="comments-panel-author">{comment.author}</span>
+                  <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
+                </div>
+                <div className="comments-panel-text">{comment.text}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="comments-panel-empty">
+            {filter ? 'No matching comments' : 'No comments yet'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ============================================================================
 // LAYOUT CONSTANTS (Single Source of Truth)
 // ============================================================================
@@ -3328,6 +3452,35 @@ const findNodeById = (node, id) => {
     return findNodeById(root, nodeId);
   };
 
+  // Navigate to a node - pan canvas to center the node and optionally zoom
+  const navigateToNode = (nodeId) => {
+    const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!nodeElement || !canvasRef.current) return;
+
+    const nodeRect = nodeElement.getBoundingClientRect();
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+
+    // Calculate center of canvas
+    const canvasCenterX = canvasRect.width / 2;
+    const canvasCenterY = canvasRect.height / 2;
+
+    // Calculate where node currently is relative to canvas
+    const nodeCurrentX = nodeRect.left - canvasRect.left + nodeRect.width / 2;
+    const nodeCurrentY = nodeRect.top - canvasRect.top + nodeRect.height / 2;
+
+    // Calculate pan adjustment needed to center the node
+    const dx = canvasCenterX - nodeCurrentX;
+    const dy = canvasCenterY - nodeCurrentY;
+
+    // Apply the pan
+    setPan(p => clampPan({ x: p.x + dx, y: p.y + dy }));
+
+    // Optionally zoom to 100% if zoomed out
+    if (scale < 0.8) {
+      setScale(1);
+    }
+  };
+
   // Opens delete confirmation modal
   const requestDeleteNode = (id) => {
     if (!root) return;
@@ -4501,9 +4654,16 @@ const findNodeById = (node, id) => {
               <button
                 className={`canvas-tool-btn ${activeTool === 'comments' ? 'active' : ''}`}
                 onClick={() => setActiveTool(activeTool === 'comments' ? 'select' : 'comments')}
-                title="Comments (C)"
+                title="Add Comment (C)"
               >
                 <MessageSquare size={20} />
+              </button>
+              <button
+                className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''}`}
+                onClick={() => setShowCommentsPanel(!showCommentsPanel)}
+                title="Comments Panel"
+              >
+                <List size={20} />
               </button>
 
               <div className="canvas-toolbar-divider" />
@@ -4599,6 +4759,17 @@ const findNodeById = (node, id) => {
           </DndContext>
         )}
       </div>
+
+      {/* Comments Panel - Right Rail */}
+      {showCommentsPanel && (
+        <CommentsPanel
+          root={root}
+          orphans={orphans}
+          onClose={() => setShowCommentsPanel(false)}
+          onCommentClick={(nodeId) => setCommentingNodeId(nodeId)}
+          onNavigateToNode={navigateToNode}
+        />
+      )}
 
       {editingColorDepth !== null && (
         <div className="modal-overlay" onClick={() => setEditingColorDepth(null)}>
