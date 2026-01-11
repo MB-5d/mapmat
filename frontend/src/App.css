@@ -532,6 +532,11 @@ body {
 }
 
 /* Connection mode styling */
+.node-card.connection-mode-userflow,
+.node-card.connection-mode-crosslink {
+  overflow: visible;
+}
+
 .node-card.connection-mode-userflow:hover {
   box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.8);
 }

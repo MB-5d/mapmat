@@ -5713,8 +5713,11 @@ const findNodeById = (node, id) => {
             {/* Canvas Toolbar */}
             <div className="canvas-toolbar">
               <button
-                className={`canvas-tool-btn ${activeTool === 'select' ? 'active' : ''}`}
-                onClick={() => setActiveTool('select')}
+                className={`canvas-tool-btn ${activeTool === 'select' && !connectionTool ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTool('select');
+                  setConnectionTool(null);
+                }}
                 title="Select (V)"
               >
                 <MousePointer2 size={20} />
@@ -5815,14 +5818,6 @@ const findNodeById = (node, id) => {
                     <label className="view-layer-item">
                       <input
                         type="checkbox"
-                        checked={layers.xmlComparison}
-                        onChange={() => setLayers(l => ({ ...l, xmlComparison: !l.xmlComparison }))}
-                      />
-                      <span>XML Comparison</span>
-                    </label>
-                    <label className="view-layer-item">
-                      <input
-                        type="checkbox"
                         checked={layers.userFlows}
                         onChange={() => {
                           setLayers(l => ({ ...l, userFlows: !l.userFlows }));
@@ -5845,6 +5840,15 @@ const findNodeById = (node, id) => {
                         }}
                       />
                       <span>Cross-links</span>
+                    </label>
+                    <label className="view-layer-item disabled">
+                      <input
+                        type="checkbox"
+                        checked={layers.xmlComparison}
+                        disabled
+                        onChange={() => {}}
+                      />
+                      <span>XML Comparison</span>
                     </label>
                   </div>
                 )}
