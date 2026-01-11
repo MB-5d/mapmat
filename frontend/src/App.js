@@ -4004,6 +4004,9 @@ const findNodeById = (node, id) => {
     const pos = getAnchorPosition(nodeId, anchor);
     if (!pos) return;
 
+    // Prevent text selection during drag
+    document.body.style.userSelect = 'none';
+
     setDrawingConnection({
       type: connectionTool,
       sourceNodeId: nodeId,
@@ -4087,6 +4090,8 @@ const findNodeById = (node, id) => {
       showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} created`, 'success');
     }
 
+    // Re-enable text selection
+    document.body.style.userSelect = '';
     setDrawingConnection(null);
   };
 
@@ -4119,6 +4124,9 @@ const findNodeById = (node, id) => {
   const handleEndpointDragStart = (e, conn, endpoint) => {
     e.stopPropagation();
     if (!contentRef.current) return;
+
+    // Prevent text selection during drag
+    document.body.style.userSelect = 'none';
 
     const contentRect = contentRef.current.getBoundingClientRect();
     const mouseX = (e.clientX - contentRect.left) / scale;
@@ -4203,6 +4211,8 @@ const findNodeById = (node, id) => {
       showToast('Connection deleted', 'success');
     }
 
+    // Re-enable text selection
+    document.body.style.userSelect = '';
     setDraggingEndpoint(null);
   };
 
