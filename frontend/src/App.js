@@ -214,7 +214,7 @@ const NodeCard = ({
       className={classNames.join(' ')}
       data-node-card="1"
       data-node-id={node.id}
-      style={{ cursor: isRoot ? 'default' : (connectionTool ? 'crosshair' : 'grab') }}
+      style={{ cursor: isRoot ? 'default' : (connectionTool ? 'default' : 'grab') }}
       {...(isRoot ? {} : dragHandleProps)}
     >
       {/* Connection anchor points - show when connection tool is active */}
