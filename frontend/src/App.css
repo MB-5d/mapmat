@@ -576,7 +576,7 @@ body {
 /* 8px + 1px border each side = 10px total, so offset -5px to center on edge */
 .anchor-top {
   left: 50%;
-  top: -5px;
+  top: 0px;
   transform: translateX(-50%);
 }
 
@@ -585,7 +585,7 @@ body {
 }
 
 .anchor-right {
-  right: -5px;
+  right: 0%;
   top: 50%;
   transform: translateY(-50%);
 }
@@ -596,7 +596,7 @@ body {
 
 .anchor-bottom {
   left: 50%;
-  bottom: -5px;
+  bottom: 0px;
   transform: translateX(-50%);
 }
 
@@ -605,7 +605,7 @@ body {
 }
 
 .anchor-left {
-  left: -5px;
+  left: 0px;
   top: 50%;
   transform: translateY(-50%);
 }
