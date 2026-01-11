@@ -222,25 +222,25 @@ const NodeCard = ({
         <>
           <div
             className={`anchor-point anchor-top ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'top' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: 8, height: 8 }}
+            style={{ backgroundColor: anchorColor, width: '8px', height: '8px', minWidth: '8px', minHeight: '8px' }}
             onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'top', e); }}
             data-anchor="top"
           />
           <div
             className={`anchor-point anchor-right ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'right' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: 8, height: 8 }}
+            style={{ backgroundColor: anchorColor, width: '8px', height: '8px', minWidth: '8px', minHeight: '8px' }}
             onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'right', e); }}
             data-anchor="right"
           />
           <div
             className={`anchor-point anchor-bottom ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'bottom' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: 8, height: 8 }}
+            style={{ backgroundColor: anchorColor, width: '8px', height: '8px', minWidth: '8px', minHeight: '8px' }}
             onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'bottom', e); }}
             data-anchor="bottom"
           />
           <div
             className={`anchor-point anchor-left ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'left' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: 8, height: 8 }}
+            style={{ backgroundColor: anchorColor, width: '8px', height: '8px', minWidth: '8px', minHeight: '8px' }}
             onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'left', e); }}
             data-anchor="left"
           />
