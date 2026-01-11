@@ -532,12 +532,12 @@ body {
 }
 
 /* Connection mode styling */
-.node-card.connection-mode {
-  cursor: crosshair;
+.node-card.connection-mode-userflow:hover {
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.8);
 }
 
-.node-card.connection-mode:hover {
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.8);
+.node-card.connection-mode-crosslink:hover {
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.8);
 }
 
 /* Anchor points for connections */
@@ -555,7 +555,8 @@ body {
 }
 
 /* Only show anchors on hover when connection tool is active */
-.node-card.connection-mode:hover .anchor-point {
+.node-card.connection-mode-userflow:hover .anchor-point,
+.node-card.connection-mode-crosslink:hover .anchor-point {
   opacity: 1;
 }
 

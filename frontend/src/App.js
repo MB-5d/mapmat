@@ -203,7 +203,8 @@ const NodeCard = ({
   if (isDragging) classNames.push('dragging');
   if (isPressing) classNames.push('pressing');
   if (showThumbnails) classNames.push('with-thumb');
-  if (connectionTool) classNames.push('connection-mode');
+  if (connectionTool === 'userflow') classNames.push('connection-mode-userflow');
+  if (connectionTool === 'crosslink') classNames.push('connection-mode-crosslink');
 
   // Anchor color based on connection tool type
   const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
