@@ -5450,31 +5450,49 @@ const findNodeById = (node, id) => {
                           onMouseLeave={() => setHoveredConnection(null)}
                           onClick={(e) => handleConnectionClick(e, conn)}
                         />
-                        {/* Draggable endpoint circles - show on hover */}
-                        {isHovered && sourcePos && (
-                          <circle
-                            cx={sourcePos.x}
-                            cy={sourcePos.y}
-                            r={6}
-                            fill={color}
-                            stroke="white"
-                            strokeWidth={2}
-                            style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                            onMouseDown={(e) => handleEndpointDragStart(e, conn, 'source')}
-                          />
-                        )}
-                        {isHovered && targetPos && (
-                          <circle
-                            cx={targetPos.x}
-                            cy={targetPos.y}
-                            r={6}
-                            fill={color}
-                            stroke="white"
-                            strokeWidth={2}
-                            style={{ cursor: 'pointer', pointerEvents: 'all' }}
-                            onMouseDown={(e) => handleEndpointDragStart(e, conn, 'target')}
-                          />
-                        )}
+                        {/* Draggable endpoint circles - positioned 16px along line from endpoint */}
+                        {isHovered && sourcePos && targetPos && (() => {
+                          // Calculate offset 16px from source toward target
+                          const dx = targetPos.x - sourcePos.x;
+                          const dy = targetPos.y - sourcePos.y;
+                          const len = Math.sqrt(dx * dx + dy * dy);
+                          const offset = Math.min(16, len / 3); // Cap at 1/3 of line length
+                          const nx = len > 0 ? dx / len : 0;
+                          const ny = len > 0 ? dy / len : 0;
+                          return (
+                            <circle
+                              cx={sourcePos.x + nx * offset}
+                              cy={sourcePos.y + ny * offset}
+                              r={6}
+                              fill={color}
+                              stroke="white"
+                              strokeWidth={2}
+                              style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                              onMouseDown={(e) => handleEndpointDragStart(e, conn, 'source')}
+                            />
+                          );
+                        })()}
+                        {isHovered && sourcePos && targetPos && (() => {
+                          // Calculate offset 16px from target toward source
+                          const dx = sourcePos.x - targetPos.x;
+                          const dy = sourcePos.y - targetPos.y;
+                          const len = Math.sqrt(dx * dx + dy * dy);
+                          const offset = Math.min(16, len / 3); // Cap at 1/3 of line length
+                          const nx = len > 0 ? dx / len : 0;
+                          const ny = len > 0 ? dy / len : 0;
+                          return (
+                            <circle
+                              cx={targetPos.x + nx * offset}
+                              cy={targetPos.y + ny * offset}
+                              r={6}
+                              fill={color}
+                              stroke="white"
+                              strokeWidth={2}
+                              style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                              onMouseDown={(e) => handleEndpointDragStart(e, conn, 'target')}
+                            />
+                          );
+                        })()}
                       </g>
                     );
                   })}
