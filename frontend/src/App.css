@@ -555,7 +555,7 @@ body {
   position: absolute;
   cursor: pointer;
   z-index: 100;
-  opacity: 1;  /* CHANGE THIS - was 0 */
+  opacity: 0;  /* Hidden by default */
   transition: transform 0.15s ease, opacity 0.15s ease;
   border: 1px solid white;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
