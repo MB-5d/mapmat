@@ -2926,6 +2926,7 @@ export default function App() {
     const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
+    const isOnConnection = e.target.closest('.connections-layer');
 
     // Close connection menu when clicking outside of it
     if (connectionMenu && !isInsideConnectionMenu) {
@@ -2937,7 +2938,7 @@ export default function App() {
       setCommentingNodeId(null);
     }
 
-    if (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu) return;
+    if (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isOnConnection) return;
 
     dragRef.current.dragging = true;
     dragRef.current.startX = e.clientX;
