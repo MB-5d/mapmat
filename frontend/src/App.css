@@ -547,8 +547,10 @@ body {
 
 /* Anchor points for connections */
 .anchor-point {
-  width: 8px;
-  height: 8px;
+  width: 8px !important;
+  height: 8px !important;
+  min-width: 8px;
+  min-height: 8px;
   border-radius: 50%;
   position: absolute;
   cursor: pointer;
@@ -557,6 +559,7 @@ body {
   transition: transform 0.15s ease, opacity 0.15s ease;
   border: 1px solid white;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
 }
 
 /* Only show anchors on hover when connection tool is active */
