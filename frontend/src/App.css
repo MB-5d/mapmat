@@ -573,45 +573,45 @@ body {
   transform: scale(1.3);
 }
 
-/* 8px + 1px border each side = 10px total, so offset -5px to center on edge */
+/* 16px + 1px border each side = 10px total, so offset -5px to center on edge */
 .anchor-top {
   left: 50%;
-  top: 0px;
-  transform: translateX(-50%);
+  top: 0;
+  transform: translate(-50%, -50%);
 }
 
 .anchor-top:hover {
-  transform: translateX(-50%) scale(1.3);
+  transform: translate(-50%, -50%) scale(1.3);
 }
 
 .anchor-right {
-  right: 0%;
+  right: 0;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(50%, -50%);
 }
 
 .anchor-right:hover {
-  transform: translateY(-50%) scale(1.3);
+  transform: translate(50%, -50%) scale(1.3);
 }
 
 .anchor-bottom {
   left: 50%;
-  bottom: 0px;
-  transform: translateX(-50%);
+  bottom: 0;
+  transform: translate(-50%, 50%);
 }
 
 .anchor-bottom:hover {
-  transform: translateX(-50%) scale(1.3);
+  transform: translate(-50%, 50%) scale(1.3);
 }
 
 .anchor-left {
-  left: 0px;
+  left: 0;
   top: 50%;
-  transform: translateY(-50%);
+  transform: translate(-50%, -50%);
 }
 
 .anchor-left:hover {
-  transform: translateY(-50%) scale(1.3);
+  transform: translate(-50%, -50%) scale(1.3);
 }
 
 /* Magnetic snap highlight on anchor (drop target) */
