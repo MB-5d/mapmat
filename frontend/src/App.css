@@ -554,8 +554,8 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-.node-card:hover .anchor-point,
-.node-card.connection-mode .anchor-point {
+/* Only show anchors on hover when connection tool is active */
+.node-card.connection-mode:hover .anchor-point {
   opacity: 1;
 }
 
