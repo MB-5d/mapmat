@@ -5346,16 +5346,43 @@ const findNodeById = (node, id) => {
                   })}
 
                 {/* Temporary line while drawing */}
-                {drawingConnection && (
-                  <path
-                    d={`M ${drawingConnection.startX} ${drawingConnection.startY} L ${drawingConnection.currentX} ${drawingConnection.currentY}`}
-                    fill="none"
-                    stroke={drawingConnection.type === 'userflow' ? '#14b8a6' : '#f97316'}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    strokeOpacity={0.7}
-                  />
-                )}
+                {drawingConnection && (() => {
+                  const { startX, startY, currentX, currentY, sourceAnchor, type } = drawingConnection;
+                  const isUserFlow = type === 'userflow';
+                  const color = isUserFlow ? '#14b8a6' : '#f97316';
+
+                  // Calculate curved path based on source anchor direction
+                  const dx = Math.abs(currentX - startX);
+                  const dy = Math.abs(currentY - startY);
+                  const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
+
+                  let ctrl1 = { x: startX, y: startY };
+                  switch (sourceAnchor) {
+                    case 'top': ctrl1.y -= offset; break;
+                    case 'right': ctrl1.x += offset; break;
+                    case 'bottom': ctrl1.y += offset; break;
+                    case 'left': ctrl1.x -= offset; break;
+                    default: break;
+                  }
+
+                  // Control point for target curves toward cursor
+                  const ctrl2 = { x: currentX, y: currentY };
+
+                  const pathD = `M ${startX} ${startY} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${currentX} ${currentY}`;
+
+                  return (
+                    <path
+                      d={pathD}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={2}
+                      strokeDasharray={isUserFlow ? 'none' : '8 6'}
+                      strokeOpacity={0.8}
+                      strokeLinecap="round"
+                      markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+                    />
+                  );
+                })()}
               </svg>
 
               {/* Connection context menu */}
