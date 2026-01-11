@@ -5326,7 +5326,7 @@ const findNodeById = (node, id) => {
             onDragEnd={handleDndDragEnd}
           >
             <div
-              className={`content ${drawingConnection ? 'drawing-connection' : ''}`}
+              className={`content ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
               ref={contentRef}
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale}) translate(-50%, 0px)`,
@@ -5458,7 +5458,7 @@ const findNodeById = (node, id) => {
                             fill={color}
                             stroke="white"
                             strokeWidth={2}
-                            style={{ cursor: 'grab', pointerEvents: 'all' }}
+                            style={{ cursor: 'pointer', pointerEvents: 'all' }}
                             onMouseDown={(e) => handleEndpointDragStart(e, conn, 'source')}
                           />
                         )}
@@ -5470,7 +5470,7 @@ const findNodeById = (node, id) => {
                             fill={color}
                             stroke="white"
                             strokeWidth={2}
-                            style={{ cursor: 'grab', pointerEvents: 'all' }}
+                            style={{ cursor: 'pointer', pointerEvents: 'all' }}
                             onMouseDown={(e) => handleEndpointDragStart(e, conn, 'target')}
                           />
                         )}

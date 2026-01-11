@@ -636,7 +636,12 @@ body {
 
 /* Drawing connection state */
 .content.drawing-connection {
-  cursor: crosshair;
+  cursor: grabbing;
+}
+
+/* Dragging endpoint state */
+.content.dragging-endpoint {
+  cursor: grabbing;
 }
 
 /* Connections layer */
