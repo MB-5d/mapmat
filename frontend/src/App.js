@@ -55,11 +55,13 @@ import {
   Redo2,
   MousePointer2,
   Link,
+  Link2,
   FilePlus,
   PlusSquare,
   LayoutTemplate,
   MessageSquare,
   CornerDownRight,
+  Workflow,
 } from 'lucide-react';
 
 import './App.css';
@@ -68,6 +70,13 @@ import LandingPage from './LandingPage';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4000';
 const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+
+// Permission levels for sharing
+const ACCESS_LEVELS = {
+  VIEW: 'view',       // Can only look at map
+  COMMENT: 'comment', // Can view + add comments
+  EDIT: 'edit'        // Full access (owner)
+};
 
 const SCAN_MESSAGES = [
   "Discovering pages...",
@@ -141,6 +150,11 @@ const NodeCard = ({
   color,
   showThumbnails,
   showCommentBadges,
+  canEdit,
+  canComment,
+  connectionTool,
+  snapTarget,
+  onAnchorMouseDown,
   onDelete,
   onEdit,
   onDuplicate,
@@ -189,15 +203,49 @@ const NodeCard = ({
   if (isDragging) classNames.push('dragging');
   if (isPressing) classNames.push('pressing');
   if (showThumbnails) classNames.push('with-thumb');
+  if (connectionTool) classNames.push('connection-mode');
+
+  // Anchor color based on connection tool type
+  const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
 
   return (
     <div
       className={classNames.join(' ')}
       data-node-card="1"
       data-node-id={node.id}
-      style={{ cursor: isRoot ? 'default' : 'grab' }}
+      style={{ cursor: isRoot ? 'default' : (connectionTool ? 'crosshair' : 'grab') }}
       {...(isRoot ? {} : dragHandleProps)}
     >
+      {/* Connection anchor points - show when connection tool is active */}
+      {connectionTool && (
+        <>
+          <div
+            className={`anchor-point anchor-top ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'top' ? 'snapped' : ''}`}
+            style={{ backgroundColor: anchorColor }}
+            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'top', e); }}
+            data-anchor="top"
+          />
+          <div
+            className={`anchor-point anchor-right ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'right' ? 'snapped' : ''}`}
+            style={{ backgroundColor: anchorColor }}
+            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'right', e); }}
+            data-anchor="right"
+          />
+          <div
+            className={`anchor-point anchor-bottom ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'bottom' ? 'snapped' : ''}`}
+            style={{ backgroundColor: anchorColor }}
+            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'bottom', e); }}
+            data-anchor="bottom"
+          />
+          <div
+            className={`anchor-point anchor-left ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'left' ? 'snapped' : ''}`}
+            style={{ backgroundColor: anchorColor }}
+            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'left', e); }}
+            data-anchor="left"
+          />
+        </>
+      )}
+
       <div
         className="card-header"
         style={{ backgroundColor: color }}
@@ -264,20 +312,26 @@ const NodeCard = ({
 
       <div className="card-actions">
         <div className="card-actions-left">
-          <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
-            <Edit2 size={16} />
-          </button>
-          {!isRoot && (
+          {canEdit && (
+            <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
+              <Edit2 size={16} />
+            </button>
+          )}
+          {canEdit && !isRoot && (
             <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
               <Trash2 size={16} />
             </button>
           )}
-          <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
-            <Copy size={16} />
-          </button>
-          <button className="btn-icon-flat" title="Add Note" onClick={() => onAddNote?.(node)}>
-            <MessageSquare size={16} />
-          </button>
+          {canEdit && (
+            <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
+              <Copy size={16} />
+            </button>
+          )}
+          {canComment && (
+            <button className="btn-icon-flat" title="Add Note" onClick={() => onAddNote?.(node)}>
+              <MessageSquare size={16} />
+            </button>
+          )}
         </div>
         {node.url && (
           <a
@@ -303,6 +357,11 @@ const DraggableNodeCard = ({
   color,
   showThumbnails,
   showCommentBadges,
+  canEdit,
+  canComment,
+  connectionTool,
+  snapTarget,
+  onAnchorMouseDown,
   onDelete,
   onEdit,
   onDuplicate,
@@ -315,7 +374,7 @@ const DraggableNodeCard = ({
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
     data: { node, number, color },
-    disabled: node.id === 'root', // Only disable dragging for the actual root node
+    disabled: node.id === 'root' || !canEdit || connectionTool, // Disable dragging when connection tool active
   });
 
   return (
@@ -326,6 +385,11 @@ const DraggableNodeCard = ({
         color={color}
         showThumbnails={showThumbnails}
         showCommentBadges={showCommentBadges}
+        canEdit={canEdit}
+        canComment={canComment}
+        connectionTool={connectionTool}
+        snapTarget={snapTarget}
+        onAnchorMouseDown={onAnchorMouseDown}
         onDelete={onDelete}
         onEdit={onEdit}
         onDuplicate={onDuplicate}
@@ -334,7 +398,7 @@ const DraggableNodeCard = ({
         onViewNotes={onViewNotes}
         isRoot={isRoot}
         isDragging={isDragging || activeId === node.id}
-        dragHandleProps={{ ...listeners, ...attributes }}
+        dragHandleProps={canEdit && !connectionTool ? { ...listeners, ...attributes } : {}}
       />
     </div>
   );
@@ -387,7 +451,7 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth })
 };
 
 // Comment Popover component for viewing/adding comments on a node
-const CommentPopover = ({ node, onClose, onAddComment, onToggleCompleted, onDeleteComment, collaborators }) => {
+const CommentPopover = ({ node, onClose, onAddComment, onToggleCompleted, onDeleteComment, collaborators, canComment }) => {
   const [newComment, setNewComment] = useState('');
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
@@ -463,25 +527,27 @@ const CommentPopover = ({ node, onClose, onAddComment, onToggleCompleted, onDele
           <span className="comment-author">{comment.author}</span>
           <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
         </div>
-        <div className="comment-actions">
-          <button
-            className="comment-action-btn"
-            onClick={() => {
-              setReplyingTo(comment.id);
-              inputRef.current?.focus();
-            }}
-            title="Reply"
-          >
-            <CornerDownRight size={14} />
-          </button>
-          <button
-            className="comment-action-btn delete"
-            onClick={() => onDeleteComment(node.id, comment.id)}
-            title="Delete"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
+        {canComment && (
+          <div className="comment-actions">
+            <button
+              className="comment-action-btn"
+              onClick={() => {
+                setReplyingTo(comment.id);
+                inputRef.current?.focus();
+              }}
+              title="Reply"
+            >
+              <CornerDownRight size={14} />
+            </button>
+            <button
+              className="comment-action-btn delete"
+              onClick={() => onDeleteComment(node.id, comment.id)}
+              title="Delete"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
       <div className="comment-body">
         <div className="comment-text">{comment.text}</div>
@@ -525,67 +591,71 @@ const CommentPopover = ({ node, onClose, onAddComment, onToggleCompleted, onDele
           </div>
         )}
 
-        {/* Main textarea area */}
-        <div className="comment-input-section">
-          {replyingTo && (
-            <div className="replying-to-banner">
-              <span>Replying to comment</span>
-              <button onClick={() => setReplyingTo(null)}>
-                <X size={14} />
-              </button>
-            </div>
-          )}
-          <div className="comment-input-wrapper">
-            <textarea
-              ref={inputRef}
-              className="comment-input"
-              placeholder={replyingTo ? "Write a reply..." : "Add a comment...\n(use @ to mention)"}
-              value={newComment}
-              onChange={handleInputChange}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey && e.metaKey) {
-                  e.preventDefault();
-                  handleSubmit();
-                }
-                if (e.key === 'Escape') {
-                  if (replyingTo) {
-                    setReplyingTo(null);
-                  } else if (showMentions) {
-                    setShowMentions(false);
-                  } else {
-                    handleCancel();
-                  }
-                }
-              }}
-            />
-            {showMentions && filteredCollaborators.length > 0 && (
-              <div className="mention-dropdown">
-                {filteredCollaborators.map(name => (
-                  <button
-                    key={name}
-                    className="mention-option"
-                    onClick={() => insertMention(name)}
-                  >
-                    @{name}
-                  </button>
-                ))}
+        {/* Main textarea area - only show if user can comment */}
+        {canComment && (
+          <div className="comment-input-section">
+            {replyingTo && (
+              <div className="replying-to-banner">
+                <span>Replying to comment</span>
+                <button onClick={() => setReplyingTo(null)}>
+                  <X size={14} />
+                </button>
               </div>
             )}
+            <div className="comment-input-wrapper">
+              <textarea
+                ref={inputRef}
+                className="comment-input"
+                placeholder={replyingTo ? "Write a reply..." : "Add a comment...\n(use @ to mention)"}
+                value={newComment}
+                onChange={handleInputChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && e.metaKey) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
+                  if (e.key === 'Escape') {
+                    if (replyingTo) {
+                      setReplyingTo(null);
+                    } else if (showMentions) {
+                      setShowMentions(false);
+                    } else {
+                      handleCancel();
+                    }
+                  }
+                }}
+              />
+              {showMentions && filteredCollaborators.length > 0 && (
+                <div className="mention-dropdown">
+                  {filteredCollaborators.map(name => (
+                    <button
+                      key={name}
+                      className="mention-option"
+                      onClick={() => insertMention(name)}
+                    >
+                      @{name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="comment-popover-footer">
         <button className="comment-cancel-btn" onClick={handleCancel}>
-          Cancel
+          {canComment ? 'Cancel' : 'Close'}
         </button>
-        <button
-          className="comment-submit-btn"
-          onClick={handleSubmit}
-          disabled={!newComment.trim()}
-        >
-          Save
-        </button>
+        {canComment && (
+          <button
+            className="comment-submit-btn"
+            onClick={handleSubmit}
+            disabled={!newComment.trim()}
+          >
+            Save
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1108,6 +1178,11 @@ const SitemapTree = ({
   orphans = [],
   showThumbnails,
   showCommentBadges,
+  canEdit,
+  canComment,
+  connectionTool,
+  snapTarget,
+  onAnchorMouseDown,
   colors,
   scale = 1,
   onDelete,
@@ -1205,6 +1280,11 @@ const SitemapTree = ({
               color={color}
               showThumbnails={showThumbnails}
               showCommentBadges={showCommentBadges}
+              canEdit={canEdit}
+              canComment={canComment}
+              connectionTool={connectionTool}
+              snapTarget={snapTarget}
+              onAnchorMouseDown={onAnchorMouseDown}
               isRoot={isRoot}
               onDelete={onDelete}
               onEdit={onEdit}
@@ -2066,6 +2146,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [projects, setProjects] = useState([]); // Project folders
   const [currentMap, setCurrentMap] = useState(null); // Currently loaded map
+  const [accessLevel, setAccessLevel] = useState(ACCESS_LEVELS.EDIT); // Permission level
   const [showShareModal, setShowShareModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
@@ -2075,6 +2156,7 @@ export default function App() {
   const [editingProjectName, setEditingProjectName] = useState('');
   const [shareEmails, setShareEmails] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [sharePermission, setSharePermission] = useState(ACCESS_LEVELS.VIEW); // Permission for shared link
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
   const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
@@ -2104,9 +2186,16 @@ export default function App() {
   const [layers, setLayers] = useState({
     main: true,        // Main sitemap nodes (always visible)
     xmlComparison: true, // XML comparison highlights
-    userFlows: false,   // User journey connections (coming soon)
-    crossLinks: false,  // Non-hierarchical links (coming soon)
+    userFlows: true,    // User journey connections
+    crossLinks: true,   // Non-hierarchical links
   });
+
+  // Connection lines state
+  const [connectionTool, setConnectionTool] = useState(null); // 'userflow' | 'crosslink' | null
+  const [connections, setConnections] = useState([]); // Array of connection objects
+  const [drawingConnection, setDrawingConnection] = useState(null); // { type, sourceNodeId, sourceAnchor, currentX, currentY }
+  const [hoveredConnection, setHoveredConnection] = useState(null); // ID of hovered connection
+  const [connectionMenu, setConnectionMenu] = useState(null); // { connectionId, x, y }
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -2153,6 +2242,20 @@ export default function App() {
     const orphansHaveComments = orphans.some(o => o.comments?.length > 0);
     return rootHasComments || orphansHaveComments;
   }, [root, orphans]);
+
+  // Read access level from URL on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const access = params.get('access');
+
+    if (access && Object.values(ACCESS_LEVELS).includes(access)) {
+      setAccessLevel(access);
+    }
+  }, []);
+
+  // Permission helper functions
+  const canEdit = () => accessLevel === ACCESS_LEVELS.EDIT;
+  const canComment = () => accessLevel === ACCESS_LEVELS.COMMENT || accessLevel === ACCESS_LEVELS.EDIT;
 
   // dnd-kit sensors - require 5px movement before activating drag
   const sensors = useSensors(
@@ -2820,13 +2923,19 @@ export default function App() {
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar');
     const isInsidePopover = e.target.closest('.comment-popover-container');
+    const isInsideConnectionMenu = e.target.closest('.connection-menu');
+
+    // Close connection menu when clicking outside of it
+    if (connectionMenu && !isInsideConnectionMenu) {
+      setConnectionMenu(null);
+    }
 
     // Close comment popover when clicking outside of it (but not on cards or UI)
     if (commentingNodeId && !isInsidePopover && !isInsideCard) {
       setCommentingNodeId(null);
     }
 
-    if (isInsideCard || isUIControl || isInsidePopover) return;
+    if (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu) return;
 
     dragRef.current.dragging = true;
     dragRef.current.startX = e.clientX;
@@ -3082,9 +3191,31 @@ export default function App() {
       // Select tool with "V"
       if (e.key === 'v' || e.key === 'V') {
         setActiveTool('select');
+        setConnectionTool(null);
       }
-      // Close comments panel with Escape
+      // User Flow tool with "F"
+      if (e.key === 'f' || e.key === 'F') {
+        if (canEdit()) {
+          setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
+          setActiveTool('select');
+        }
+      }
+      // Crosslink tool with "L"
+      if (e.key === 'l' || e.key === 'L') {
+        if (canEdit()) {
+          setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
+          setActiveTool('select');
+        }
+      }
+      // Escape cancels connection tool and closes menus
       if (e.key === 'Escape') {
+        if (connectionTool) {
+          setConnectionTool(null);
+          setDrawingConnection(null);
+        }
+        if (connectionMenu) {
+          setConnectionMenu(null);
+        }
         if (showCommentsPanel) {
           setActiveTool('select');
           setCommentingNodeId(null); // Close popover when switching tools
@@ -3094,7 +3225,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu]);
 
   const exportJson = () => {
     if (!root) return;
@@ -3372,7 +3503,7 @@ export default function App() {
     showToast('Site Index exported', 'success');
   };
 
-  const copyShareLink = async () => {
+  const copyShareLink = async (permission = sharePermission) => {
     try {
       // Create share via API
       const { share } = await api.createShare({
@@ -3382,24 +3513,30 @@ export default function App() {
         expires_in_days: 30, // Share links expire in 30 days
       });
 
-      // Create shareable URL
-      const shareUrl = `${window.location.origin}?share=${share.id}`;
+      // Create shareable URL with access level
+      const shareUrl = `${window.location.origin}?share=${share.id}&access=${permission}`;
 
       await navigator.clipboard.writeText(shareUrl);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
-      showToast('Link copied to clipboard', 'success');
+
+      const permLabel = permission === ACCESS_LEVELS.VIEW ? 'view-only' :
+                        permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
+      showToast(`Link copied (${permLabel})`, 'success');
     } catch (e) {
       // If not logged in, fall back to localStorage
       if (e.message?.includes('Authentication')) {
         const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const shareData = { root, colors, createdAt: Date.now() };
         localStorage.setItem(shareId, JSON.stringify(shareData));
-        const shareUrl = `${window.location.origin}?share=${shareId}`;
+        const shareUrl = `${window.location.origin}?share=${shareId}&access=${permission}`;
         await navigator.clipboard.writeText(shareUrl);
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2000);
-        showToast('Link copied (temporary - log in for persistent links)', 'success');
+
+        const permLabel = permission === ACCESS_LEVELS.VIEW ? 'view-only' :
+                          permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
+        showToast(`Link copied (${permLabel}, temporary)`, 'success');
       } else {
         showToast(e.message || 'Failed to create share link', 'error');
       }
@@ -3413,8 +3550,11 @@ export default function App() {
     }
     const subject = encodeURIComponent('Check out this sitemap');
     const body = encodeURIComponent(`I wanted to share this sitemap with you.\n\nView it here: ${window.location.origin}`);
-    window.open(`mailto:${shareEmails}?subject=${subject}&body=${body}`);
-    showToast('Email client opened');
+
+    // Open mailto in NEW window - don't navigate away from app
+    window.open(`mailto:${shareEmails}?subject=${subject}&body=${body}`, '_blank');
+
+    showToast('Email client opened!');
     setShowShareModal(false);
     setShareEmails('');
   };
@@ -3771,6 +3911,243 @@ const findNodeById = (node, id) => {
     setCommentPopoverPos({ x: popoverX, y: nodeY, side });
     setCommentingNodeId(nodeId);
   };
+
+  // ========== CONNECTION LINE FUNCTIONS ==========
+
+  const SNAP_RADIUS = 30; // Magnetic snap radius in canvas pixels
+
+  // Get anchor position in canvas coordinates
+  const getAnchorPosition = (nodeId, anchor) => {
+    const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!nodeElement) return null;
+
+    const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
+    if (!nodeWrapper) return null;
+
+    const nodeX = parseFloat(nodeWrapper.style.left) || 0;
+    const nodeY = parseFloat(nodeWrapper.style.top) || 0;
+    const nodeW = LAYOUT.NODE_W;
+    const nodeH = getNodeH(showThumbnails);
+
+    switch (anchor) {
+      case 'top': return { x: nodeX + nodeW / 2, y: nodeY };
+      case 'right': return { x: nodeX + nodeW, y: nodeY + nodeH / 2 };
+      case 'bottom': return { x: nodeX + nodeW / 2, y: nodeY + nodeH };
+      case 'left': return { x: nodeX, y: nodeY + nodeH / 2 };
+      default: return { x: nodeX + nodeW / 2, y: nodeY + nodeH / 2 };
+    }
+  };
+
+  // Find nearest anchor point within snap radius (for magnetic snapping)
+  const findNearestAnchor = (cursorX, cursorY, excludeNodeId, connectionType) => {
+    let nearest = null;
+    let nearestDist = Infinity;
+
+    // Get all node elements
+    const nodeElements = contentRef.current?.querySelectorAll('[data-node-id]') || [];
+
+    nodeElements.forEach(nodeEl => {
+      const nodeId = nodeEl.getAttribute('data-node-id');
+      if (nodeId === excludeNodeId) return;
+
+      // Check if connection would be valid
+      if (!canCreateConnection(connectionType, excludeNodeId, nodeId)) return;
+
+      ['top', 'right', 'bottom', 'left'].forEach(anchor => {
+        const pos = getAnchorPosition(nodeId, anchor);
+        if (!pos) return;
+
+        const dist = Math.sqrt((cursorX - pos.x) ** 2 + (cursorY - pos.y) ** 2);
+
+        if (dist < SNAP_RADIUS && dist < nearestDist) {
+          nearestDist = dist;
+          nearest = { nodeId, anchor, x: pos.x, y: pos.y };
+        }
+      });
+    });
+
+    return nearest;
+  };
+
+  // Validate if a connection can be created
+  const canCreateConnection = (type, sourceNodeId, targetNodeId) => {
+    // No self-connections
+    if (sourceNodeId === targetNodeId) return false;
+
+    if (type === 'userflow') {
+      // Only one line per direction between two nodes
+      return !connections.some(c =>
+        c.type === 'userflow' &&
+        c.sourceNodeId === sourceNodeId &&
+        c.targetNodeId === targetNodeId
+      );
+    }
+
+    if (type === 'crosslink') {
+      // Only one crosslink between any two nodes (either direction)
+      return !connections.some(c =>
+        c.type === 'crosslink' &&
+        ((c.sourceNodeId === sourceNodeId && c.targetNodeId === targetNodeId) ||
+          (c.sourceNodeId === targetNodeId && c.targetNodeId === sourceNodeId))
+      );
+    }
+
+    return true;
+  };
+
+  // Handle mousedown on an anchor point - start drawing connection
+  const handleAnchorMouseDown = (nodeId, anchor, e) => {
+    if (!connectionTool) return;
+
+    const pos = getAnchorPosition(nodeId, anchor);
+    if (!pos) return;
+
+    setDrawingConnection({
+      type: connectionTool,
+      sourceNodeId: nodeId,
+      sourceAnchor: anchor,
+      startX: pos.x,
+      startY: pos.y,
+      currentX: pos.x,
+      currentY: pos.y,
+    });
+  };
+
+  // Handle mousemove while drawing a connection
+  const handleConnectionMouseMove = (e) => {
+    if (!drawingConnection || !contentRef.current) return;
+
+    // Convert screen coordinates to canvas coordinates
+    const contentRect = contentRef.current.getBoundingClientRect();
+
+    // Calculate position in canvas coordinate space
+    const mouseX = (e.clientX - contentRect.left) / scale;
+    const mouseY = (e.clientY - contentRect.top) / scale;
+
+    // Check for magnetic snap to nearby anchors
+    const snapTarget = findNearestAnchor(
+      mouseX,
+      mouseY,
+      drawingConnection.sourceNodeId,
+      drawingConnection.type
+    );
+
+    setDrawingConnection(prev => ({
+      ...prev,
+      currentX: snapTarget ? snapTarget.x : mouseX,
+      currentY: snapTarget ? snapTarget.y : mouseY,
+      snapTarget, // { nodeId, anchor, x, y } or null
+    }));
+  };
+
+  // Handle mouseup - finish or cancel drawing
+  const handleConnectionMouseUp = (e) => {
+    if (!drawingConnection) return;
+
+    // Use snapTarget if available (magnetic snap), otherwise check DOM element
+    let targetNodeId = null;
+    let targetAnchorType = null;
+
+    if (drawingConnection.snapTarget) {
+      // Use the magnetically snapped target
+      targetNodeId = drawingConnection.snapTarget.nodeId;
+      targetAnchorType = drawingConnection.snapTarget.anchor;
+    } else {
+      // Fallback: check if mouse is directly over an anchor element
+      const targetAnchor = e.target.closest('.anchor-point');
+      const targetNodeCard = e.target.closest('[data-node-id]');
+
+      if (targetAnchor && targetNodeCard) {
+        targetNodeId = targetNodeCard.getAttribute('data-node-id');
+        targetAnchorType = targetAnchor.getAttribute('data-anchor');
+      }
+    }
+
+    if (targetNodeId && targetAnchorType && canCreateConnection(
+      drawingConnection.type,
+      drawingConnection.sourceNodeId,
+      targetNodeId
+    )) {
+      // Create the connection
+      const newConnection = {
+        id: 'conn_' + Math.random().toString(36).slice(2, 9),
+        type: drawingConnection.type,
+        sourceNodeId: drawingConnection.sourceNodeId,
+        sourceAnchor: drawingConnection.sourceAnchor,
+        targetNodeId: targetNodeId,
+        targetAnchor: targetAnchorType,
+        comments: [],
+        label: '',
+      };
+
+      saveStateForUndo();
+      setConnections(prev => [...prev, newConnection]);
+      showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} created`, 'success');
+    }
+
+    setDrawingConnection(null);
+  };
+
+  // Delete a connection
+  const deleteConnection = (connectionId) => {
+    saveStateForUndo();
+    setConnections(prev => prev.filter(c => c.id !== connectionId));
+    setConnectionMenu(null);
+    showToast('Connection deleted', 'success');
+  };
+
+  // Handle click on a connection line
+  const handleConnectionClick = (e, conn) => {
+    e.stopPropagation();
+    if (!contentRef.current) return;
+
+    // Convert screen coordinates to canvas coordinates
+    const contentRect = contentRef.current.getBoundingClientRect();
+    const menuX = (e.clientX - contentRect.left) / scale;
+    const menuY = (e.clientY - contentRect.top) / scale;
+
+    setConnectionMenu({
+      connectionId: conn.id,
+      x: menuX,
+      y: menuY,
+    });
+  };
+
+  // Generate curved SVG path for a connection
+  const generateConnectionPath = (conn) => {
+    const startPos = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
+    const endPos = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
+
+    if (!startPos || !endPos) return '';
+
+    // Calculate control points for smooth bezier curve
+    const dx = Math.abs(endPos.x - startPos.x);
+    const dy = Math.abs(endPos.y - startPos.y);
+    const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
+
+    let ctrl1 = { ...startPos };
+    let ctrl2 = { ...endPos };
+
+    // Offset control points based on anchor direction
+    switch (conn.sourceAnchor) {
+      case 'top': ctrl1.y -= offset; break;
+      case 'right': ctrl1.x += offset; break;
+      case 'bottom': ctrl1.y += offset; break;
+      case 'left': ctrl1.x -= offset; break;
+      default: break;
+    }
+    switch (conn.targetAnchor) {
+      case 'top': ctrl2.y -= offset; break;
+      case 'right': ctrl2.x += offset; break;
+      case 'bottom': ctrl2.y += offset; break;
+      case 'left': ctrl2.x -= offset; break;
+      default: break;
+    }
+
+    return `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`;
+  };
+
+  // ========== END CONNECTION LINE FUNCTIONS ==========
 
   // Opens delete confirmation modal
   const requestDeleteNode = (id) => {
@@ -4545,14 +4922,15 @@ const findNodeById = (node, id) => {
     return root;
   };
 
-  const handleFileImport = async (e) => {
-    const file = e.target.files?.[0];
+  // Process imported file (shared by both browse and drag-drop)
+  const processImportFile = async (file) => {
     if (!file) return;
 
     setImportLoading(true);
 
     try {
       const text = await file.text();
+      // Use file extension - don't rely on file.type which is often empty for XML
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       let urls = [];
       let parseType = '';
@@ -4588,7 +4966,6 @@ const findNodeById = (node, id) => {
       if (urls.length === 0) {
         showToast(`No URLs found in ${parseType} file`, 'error');
         setImportLoading(false);
-        e.target.value = '';
         return;
       }
 
@@ -4611,7 +4988,36 @@ const findNodeById = (node, id) => {
     }
 
     setImportLoading(false);
-    e.target.value = ''; // Reset input
+  };
+
+  // Handle file selection via browse button
+  const handleFileImport = async (e) => {
+    const file = e.target.files?.[0];
+    await processImportFile(file);
+    e.target.value = ''; // Reset input for re-selection
+  };
+
+  // Handle file drop
+  const handleImportDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
+    const file = e.dataTransfer.files?.[0];
+    await processImportFile(file);
+  };
+
+  // Handle drag over (required for drop to work)
+  const handleImportDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.add('drag-over');
+  };
+
+  // Handle drag leave
+  const handleImportDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.currentTarget.classList.remove('drag-over');
   };
 
   // Show landing page or app
@@ -4628,81 +5034,97 @@ const findNodeById = (node, id) => {
 
         <div className="topbar-center">
           <div className="search-container">
-            <Scan size={18} className="search-icon" />
-            <input
-              value={urlInput}
-              onChange={(e) => setUrlInput(e.target.value)}
-              onKeyDown={onKeyDownUrl}
-              onFocus={(e) => { if (!urlInput) e.target.placeholder = ''; }}
-              onBlur={(e) => { if (!urlInput) e.target.placeholder = 'https://example.com'; }}
-              placeholder="https://example.com"
-              spellCheck={false}
-            />
+            {canEdit() ? (
+              <>
+                <Scan size={18} className="search-icon" />
+                <input
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  onKeyDown={onKeyDownUrl}
+                  onFocus={(e) => { if (!urlInput) e.target.placeholder = ''; }}
+                  onBlur={(e) => { if (!urlInput) e.target.placeholder = 'https://example.com'; }}
+                  placeholder="https://example.com"
+                  spellCheck={false}
+                />
 
-            {hasMap && (
-              <button
-                className="clear-btn"
-                onClick={() => {
-                  if (window.confirm('Clear the canvas?')) {
-                    setRoot(null);
-                    setOrphans([]);
-                    setCurrentMap(null);
-                    setScale(1);
-                    setPan({ x: 0, y: 0 });
-                    setUrlInput('');
-                  }
-                }}
-                title="Clear canvas"
-              >
-                <X size={14} />
-                Clear
-              </button>
+                {hasMap && (
+                  <button
+                    className="clear-btn"
+                    onClick={() => {
+                      if (window.confirm('Clear the canvas?')) {
+                        setRoot(null);
+                        setOrphans([]);
+                        setCurrentMap(null);
+                        setScale(1);
+                        setPan({ x: 0, y: 0 });
+                        setUrlInput('');
+                      }
+                    }}
+                    title="Clear canvas"
+                  >
+                    <X size={14} />
+                    Clear
+                  </button>
+                )}
+
+                <button className="scan-btn" onClick={scan} disabled={loading}>
+                  Scan
+                </button>
+              </>
+            ) : (
+              <div className="shared-map-title">
+                {root?.title || 'Shared Sitemap'}
+              </div>
             )}
 
             <div className={`thumb-toggle ${showThumbnails ? 'active' : ''}`} onClick={() => setShowThumbnails(v => !v)}>
               <span>Thumbnails</span>
               <div className="toggle-switch" />
             </div>
-
-            <button className="scan-btn" onClick={scan} disabled={loading}>
-              Scan
-            </button>
           </div>
         </div>
 
         <div className="topbar-right">
-          <button
-            className="icon-btn"
-            title="Create New Map"
-            onClick={() => setShowCreateMapModal(true)}
-          >
-            <PlusSquare size={18} />
-          </button>
+          {canEdit() && (
+            <button
+              className="icon-btn"
+              title="Create New Map"
+              onClick={() => setShowCreateMapModal(true)}
+            >
+              <PlusSquare size={18} />
+            </button>
+          )}
 
-          <button
-            className="icon-btn"
-            title="Import File"
-            onClick={() => setShowImportModal(true)}
-          >
-            <Upload size={18} />
-          </button>
+          {canEdit() && (
+            <button
+              className="icon-btn"
+              title="Import File"
+              onClick={() => setShowImportModal(true)}
+            >
+              <Upload size={18} />
+            </button>
+          )}
 
-          <button
-            className="icon-btn"
-            title="Save Map"
-            onClick={() => setShowSaveMapModal(true)}
-            disabled={!hasMap}
-          >
-            <Bookmark size={18} />
-          </button>
+          {canEdit() && (
+            <button
+              className="icon-btn"
+              title="Save Map"
+              onClick={() => setShowSaveMapModal(true)}
+              disabled={!hasMap}
+            >
+              <Bookmark size={18} />
+            </button>
+          )}
 
-          <button
-            className="icon-btn"
-            title="Projects"
-            onClick={() => setShowProjectsModal(true)}
-          >
-            <Folder size={18} />
-          </button>
+          {canEdit() && (
+            <button
+              className="icon-btn"
+              title="Projects"
+              onClick={() => setShowProjectsModal(true)}
+            >
+              <Folder size={18} />
+            </button>
+          )}
 
           {isLoggedIn && (
             <button
@@ -4725,14 +5147,16 @@ const findNodeById = (node, id) => {
             <Download size={18} />
           </button>
 
-          <button
-            className="icon-btn"
-            title="Share"
-            onClick={() => setShowShareModal(true)}
-            disabled={!hasMap}
-          >
-            <Share2 size={18} />
-          </button>
+          {canEdit() && (
+            <button
+              className="icon-btn"
+              title="Share"
+              onClick={() => setShowShareModal(true)}
+              disabled={!hasMap}
+            >
+              <Share2 size={18} />
+            </button>
+          )}
 
           <div className="divider" />
 
@@ -4766,6 +5190,18 @@ const findNodeById = (node, id) => {
         onPointerUp={onPointerUp}
         onWheel={onWheel}
       >
+        {/* Permission banner for shared links with limited access */}
+        {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && (
+          <div className="permission-banner">
+            <Info size={16} />
+            <span>
+              {accessLevel === ACCESS_LEVELS.VIEW
+                ? "You're viewing this sitemap in read-only mode"
+                : "You can view and comment on this sitemap"}
+            </span>
+          </div>
+        )}
+
         {!hasMap && (
           <div className="blank">
             <div className="blank-icon">
@@ -4787,17 +5223,24 @@ const findNodeById = (node, id) => {
             onDragEnd={handleDndDragEnd}
           >
             <div
-              className="content"
+              className={`content ${drawingConnection ? 'drawing-connection' : ''}`}
               ref={contentRef}
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale}) translate(-50%, 0px)`,
               }}
+              onMouseMove={drawingConnection ? handleConnectionMouseMove : undefined}
+              onMouseUp={drawingConnection ? handleConnectionMouseUp : undefined}
             >
               <SitemapTree
                 data={root}
                 orphans={orphans}
                 showThumbnails={showThumbnails}
                 showCommentBadges={activeTool === 'comments' || showCommentsPanel}
+                canEdit={canEdit()}
+                canComment={canComment()}
+                connectionTool={connectionTool}
+                snapTarget={drawingConnection?.snapTarget}
+                onAnchorMouseDown={handleAnchorMouseDown}
                 colors={colors}
                 scale={scale}
                 onDelete={requestDeleteNode}
@@ -4827,6 +5270,117 @@ const findNodeById = (node, id) => {
                 onViewNotes={(node) => openCommentPopover(node.id)}
               />
 
+              {/* SVG Connections Layer */}
+              <svg
+                className="connections-layer"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none',
+                  overflow: 'visible',
+                  zIndex: 5,
+                }}
+              >
+                {/* Arrowhead marker definition */}
+                <defs>
+                  <marker
+                    id="arrowhead-userflow"
+                    markerWidth="10"
+                    markerHeight="7"
+                    refX="9"
+                    refY="3.5"
+                    orient="auto"
+                  >
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#14b8a6" />
+                  </marker>
+                </defs>
+
+                {/* Render completed connections */}
+                {connections
+                  .filter(conn => {
+                    if (conn.type === 'userflow' && !layers.userFlows) return false;
+                    if (conn.type === 'crosslink' && !layers.crossLinks) return false;
+                    return true;
+                  })
+                  .map(conn => {
+                    const path = generateConnectionPath(conn);
+                    if (!path) return null;
+                    const isUserFlow = conn.type === 'userflow';
+                    const color = isUserFlow ? '#14b8a6' : '#f97316';
+                    const isHovered = hoveredConnection === conn.id;
+
+                    return (
+                      <g key={conn.id}>
+                        {/* Glow effect on hover */}
+                        {isHovered && (
+                          <path
+                            d={path}
+                            fill="none"
+                            stroke={color}
+                            strokeWidth={8}
+                            strokeOpacity={0.3}
+                            strokeLinecap="round"
+                            strokeDasharray={isUserFlow ? 'none' : '8 6'}
+                          />
+                        )}
+                        {/* Main line */}
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth={isHovered ? 3 : 2}
+                          strokeLinecap="round"
+                          strokeDasharray={isUserFlow ? 'none' : '8 6'}
+                          markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+                          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                          onMouseEnter={() => setHoveredConnection(conn.id)}
+                          onMouseLeave={() => setHoveredConnection(null)}
+                          onClick={(e) => handleConnectionClick(e, conn)}
+                        />
+                      </g>
+                    );
+                  })}
+
+                {/* Temporary line while drawing */}
+                {drawingConnection && (
+                  <path
+                    d={`M ${drawingConnection.startX} ${drawingConnection.startY} L ${drawingConnection.currentX} ${drawingConnection.currentY}`}
+                    fill="none"
+                    stroke={drawingConnection.type === 'userflow' ? '#14b8a6' : '#f97316'}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    strokeOpacity={0.7}
+                  />
+                )}
+              </svg>
+
+              {/* Connection context menu */}
+              {connectionMenu && (
+                <div
+                  className="connection-menu"
+                  style={{
+                    position: 'absolute',
+                    left: connectionMenu.x,
+                    top: connectionMenu.y,
+                    zIndex: 1000,
+                  }}
+                >
+                  <button
+                    className="connection-menu-item delete"
+                    onClick={() => {
+                      deleteConnection(connectionMenu.connectionId);
+                      setConnectionMenu(null);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              )}
+
               {/* Comment Popover - positioned next to node */}
               {commentingNodeId && getNodeById(commentingNodeId) && (
                 <div
@@ -4845,6 +5399,7 @@ const findNodeById = (node, id) => {
                     onToggleCompleted={toggleCommentCompleted}
                     onDeleteComment={deleteComment}
                     collaborators={collaborators}
+                    canComment={canComment()}
                   />
                 </div>
               )}
@@ -4947,26 +5502,45 @@ const findNodeById = (node, id) => {
               >
                 <MousePointer2 size={20} />
               </button>
-              <button
-                className="canvas-tool-btn"
-                title="Add Page"
-                onClick={() => {
-                  setEditModalNode({ id: '', url: '', title: '', parentId: '', children: [] });
-                  setEditModalMode('add');
-                }}
-              >
-                <FilePlus size={20} />
-              </button>
+              {canEdit() && (
+                <button
+                  className="canvas-tool-btn"
+                  title="Add Page"
+                  onClick={() => {
+                    setEditModalNode({ id: '', url: '', title: '', parentId: '', children: [] });
+                    setEditModalMode('add');
+                  }}
+                >
+                  <FilePlus size={20} />
+                </button>
+              )}
 
-              <div className="canvas-toolbar-divider" />
+              {canEdit() && <div className="canvas-toolbar-divider" />}
 
-              <button
-                className="canvas-tool-btn disabled"
-                disabled
-                title="Create Link (coming soon)"
-              >
-                <Link size={20} />
-              </button>
+              {canEdit() && (
+                <button
+                  className={`canvas-tool-btn ${connectionTool === 'userflow' ? 'active' : ''}`}
+                  onClick={() => {
+                    setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
+                    setActiveTool('select');
+                  }}
+                  title="User Flow (F)"
+                >
+                  <Workflow size={20} />
+                </button>
+              )}
+              {canEdit() && (
+                <button
+                  className={`canvas-tool-btn ${connectionTool === 'crosslink' ? 'active' : ''}`}
+                  onClick={() => {
+                    setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
+                    setActiveTool('select');
+                  }}
+                  title="Crosslink (L)"
+                >
+                  <Link2 size={20} />
+                </button>
+              )}
               <button
                 className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''}`}
                 onClick={() => setShowCommentsPanel(!showCommentsPanel)}
@@ -4976,24 +5550,28 @@ const findNodeById = (node, id) => {
                 {hasAnyComments && <span className="notification-dot" />}
               </button>
 
-              <div className="canvas-toolbar-divider" />
+              {canEdit() && <div className="canvas-toolbar-divider" />}
 
-              <button
-                className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-                onClick={handleUndo}
-                disabled={!canUndo}
-                title="Undo (⌘Z)"
-              >
-                <Undo2 size={20} />
-              </button>
-              <button
-                className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-                onClick={handleRedo}
-                disabled={!canRedo}
-                title="Redo (⇧⌘Z)"
-              >
-                <Redo2 size={20} />
-              </button>
+              {canEdit() && (
+                <button
+                  className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  title="Undo (⌘Z)"
+                >
+                  <Undo2 size={20} />
+                </button>
+              )}
+              {canEdit() && (
+                <button
+                  className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  title="Redo (⇧⌘Z)"
+                >
+                  <Redo2 size={20} />
+                </button>
+              )}
 
               <div className="canvas-toolbar-divider" />
 
@@ -5025,25 +5603,31 @@ const findNodeById = (node, id) => {
                       />
                       <span>XML Comparison</span>
                     </label>
-                    <label className="view-layer-item disabled">
+                    <label className="view-layer-item">
                       <input
                         type="checkbox"
                         checked={layers.userFlows}
-                        disabled
-                        onChange={() => {}}
+                        onChange={() => {
+                          setLayers(l => ({ ...l, userFlows: !l.userFlows }));
+                          if (layers.userFlows && connectionTool === 'userflow') {
+                            setConnectionTool(null);
+                          }
+                        }}
                       />
                       <span>User Flows</span>
-                      <span className="coming-soon-badge">Soon</span>
                     </label>
-                    <label className="view-layer-item disabled">
+                    <label className="view-layer-item">
                       <input
                         type="checkbox"
                         checked={layers.crossLinks}
-                        disabled
-                        onChange={() => {}}
+                        onChange={() => {
+                          setLayers(l => ({ ...l, crossLinks: !l.crossLinks }));
+                          if (layers.crossLinks && connectionTool === 'crosslink') {
+                            setConnectionTool(null);
+                          }
+                        }}
                       />
                       <span>Cross-links</span>
-                      <span className="coming-soon-badge">Soon</span>
                     </label>
                   </div>
                 )}
@@ -5149,15 +5733,60 @@ const findNodeById = (node, id) => {
       )}
 
       {showShareModal && (
-        <div className="modal-overlay" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); }}>
+        <div className="modal-overlay" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}>
           <div className="modal-card share-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); }}>
+            <button className="modal-close" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}>
               <X size={18} />
             </button>
             <h3>Share Sitemap</h3>
 
             <div className="share-section">
-              <button className={`share-link-btn ${linkCopied ? 'copied' : ''}`} onClick={copyShareLink}>
+              <div className="share-section-title">Permission Level</div>
+              <div className="share-permission-options">
+                <label className={`share-permission-option ${sharePermission === ACCESS_LEVELS.VIEW ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="sharePermission"
+                    checked={sharePermission === ACCESS_LEVELS.VIEW}
+                    onChange={() => setSharePermission(ACCESS_LEVELS.VIEW)}
+                  />
+                  <Eye size={16} />
+                  <div className="share-permission-text">
+                    <span className="share-permission-label">View only</span>
+                    <span className="share-permission-desc">Can view the sitemap</span>
+                  </div>
+                </label>
+                <label className={`share-permission-option ${sharePermission === ACCESS_LEVELS.COMMENT ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="sharePermission"
+                    checked={sharePermission === ACCESS_LEVELS.COMMENT}
+                    onChange={() => setSharePermission(ACCESS_LEVELS.COMMENT)}
+                  />
+                  <MessageSquare size={16} />
+                  <div className="share-permission-text">
+                    <span className="share-permission-label">Can comment</span>
+                    <span className="share-permission-desc">View and add comments</span>
+                  </div>
+                </label>
+                <label className={`share-permission-option ${sharePermission === ACCESS_LEVELS.EDIT ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="sharePermission"
+                    checked={sharePermission === ACCESS_LEVELS.EDIT}
+                    onChange={() => setSharePermission(ACCESS_LEVELS.EDIT)}
+                  />
+                  <Edit2 size={16} />
+                  <div className="share-permission-text">
+                    <span className="share-permission-label">Can edit</span>
+                    <span className="share-permission-desc">Full editing access</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="share-section">
+              <button className={`share-link-btn ${linkCopied ? 'copied' : ''}`} onClick={() => copyShareLink(sharePermission)}>
                 {linkCopied ? <Check size={18} /> : <Copy size={18} />}
                 <span>{linkCopied ? 'Link Copied!' : 'Copy Share Link'}</span>
               </button>
@@ -5626,7 +6255,12 @@ const findNodeById = (node, id) => {
                   <li><strong>TXT</strong> - Plain text with URLs</li>
                 </ul>
               </div>
-              <label className="import-dropzone">
+              <label
+                className="import-dropzone"
+                onDrop={handleImportDrop}
+                onDragOver={handleImportDragOver}
+                onDragLeave={handleImportDragLeave}
+              >
                 <input
                   type="file"
                   accept=".xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
