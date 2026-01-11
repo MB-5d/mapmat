@@ -2197,6 +2197,7 @@ export default function App() {
   const [drawingConnection, setDrawingConnection] = useState(null); // { type, sourceNodeId, sourceAnchor, currentX, currentY }
   const [hoveredConnection, setHoveredConnection] = useState(null); // ID of hovered connection
   const [connectionMenu, setConnectionMenu] = useState(null); // { connectionId, x, y }
+  const [draggingEndpoint, setDraggingEndpoint] = useState(null); // { connectionId, endpoint: 'source'|'target', ... }
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -4114,6 +4115,97 @@ const findNodeById = (node, id) => {
     });
   };
 
+  // Start dragging a connection endpoint to reconnect
+  const handleEndpointDragStart = (e, conn, endpoint) => {
+    e.stopPropagation();
+    if (!contentRef.current) return;
+
+    const contentRect = contentRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - contentRect.left) / scale;
+    const mouseY = (e.clientY - contentRect.top) / scale;
+
+    // Get the fixed end's position (the one NOT being dragged)
+    const fixedNodeId = endpoint === 'source' ? conn.targetNodeId : conn.sourceNodeId;
+    const fixedAnchor = endpoint === 'source' ? conn.targetAnchor : conn.sourceAnchor;
+    const fixedPos = getAnchorPosition(fixedNodeId, fixedAnchor);
+
+    if (!fixedPos) return;
+
+    setDraggingEndpoint({
+      connectionId: conn.id,
+      endpoint, // 'source' or 'target'
+      type: conn.type,
+      fixedNodeId,
+      fixedAnchor,
+      fixedX: fixedPos.x,
+      fixedY: fixedPos.y,
+      currentX: mouseX,
+      currentY: mouseY,
+      snapTarget: null,
+    });
+  };
+
+  // Handle mousemove while dragging endpoint
+  const handleEndpointDragMove = (e) => {
+    if (!draggingEndpoint || !contentRef.current) return;
+
+    const contentRect = contentRef.current.getBoundingClientRect();
+    const mouseX = (e.clientX - contentRect.left) / scale;
+    const mouseY = (e.clientY - contentRect.top) / scale;
+
+    // Check for magnetic snap (exclude the fixed node)
+    const snapTarget = findNearestAnchor(
+      mouseX,
+      mouseY,
+      draggingEndpoint.fixedNodeId,
+      draggingEndpoint.type
+    );
+
+    setDraggingEndpoint(prev => ({
+      ...prev,
+      currentX: snapTarget ? snapTarget.x : mouseX,
+      currentY: snapTarget ? snapTarget.y : mouseY,
+      snapTarget,
+    }));
+  };
+
+  // Handle mouseup - finish reconnecting or delete
+  const handleEndpointDragEnd = () => {
+    if (!draggingEndpoint) return;
+
+    const { connectionId, endpoint, snapTarget } = draggingEndpoint;
+
+    if (snapTarget) {
+      // Reconnect to new anchor
+      saveStateForUndo();
+      setConnections(prev => prev.map(conn => {
+        if (conn.id !== connectionId) return conn;
+
+        if (endpoint === 'source') {
+          return {
+            ...conn,
+            sourceNodeId: snapTarget.nodeId,
+            sourceAnchor: snapTarget.anchor,
+          };
+        } else {
+          return {
+            ...conn,
+            targetNodeId: snapTarget.nodeId,
+            targetAnchor: snapTarget.anchor,
+          };
+        }
+      }));
+      showToast('Connection updated', 'success');
+    } else {
+      // Dropped on canvas - delete the connection
+      saveStateForUndo();
+      setConnections(prev => prev.filter(c => c.id !== connectionId));
+      showToast('Connection deleted', 'success');
+    }
+
+    setDraggingEndpoint(null);
+  };
+
   // Generate curved SVG path for a connection
   const generateConnectionPath = (conn) => {
     const startPos = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
@@ -5229,8 +5321,8 @@ const findNodeById = (node, id) => {
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale}) translate(-50%, 0px)`,
               }}
-              onMouseMove={drawingConnection ? handleConnectionMouseMove : undefined}
-              onMouseUp={drawingConnection ? handleConnectionMouseUp : undefined}
+              onMouseMove={drawingConnection ? handleConnectionMouseMove : (draggingEndpoint ? handleEndpointDragMove : undefined)}
+              onMouseUp={drawingConnection ? handleConnectionMouseUp : (draggingEndpoint ? handleEndpointDragEnd : undefined)}
             >
               <SitemapTree
                 data={root}
@@ -5240,7 +5332,7 @@ const findNodeById = (node, id) => {
                 canEdit={canEdit()}
                 canComment={canComment()}
                 connectionTool={connectionTool}
-                snapTarget={drawingConnection?.snapTarget}
+                snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
                 onAnchorMouseDown={handleAnchorMouseDown}
                 colors={colors}
                 scale={scale}
@@ -5304,6 +5396,8 @@ const findNodeById = (node, id) => {
                   .filter(conn => {
                     if (conn.type === 'userflow' && !layers.userFlows) return false;
                     if (conn.type === 'crosslink' && !layers.crossLinks) return false;
+                    // Hide connection being dragged
+                    if (draggingEndpoint?.connectionId === conn.id) return false;
                     return true;
                   })
                   .map(conn => {
@@ -5312,6 +5406,10 @@ const findNodeById = (node, id) => {
                     const isUserFlow = conn.type === 'userflow';
                     const color = isUserFlow ? '#14b8a6' : '#f97316';
                     const isHovered = hoveredConnection === conn.id;
+
+                    // Get endpoint positions for draggable circles
+                    const sourcePos = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
+                    const targetPos = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
 
                     return (
                       <g key={conn.id}>
@@ -5341,6 +5439,31 @@ const findNodeById = (node, id) => {
                           onMouseLeave={() => setHoveredConnection(null)}
                           onClick={(e) => handleConnectionClick(e, conn)}
                         />
+                        {/* Draggable endpoint circles - show on hover */}
+                        {isHovered && sourcePos && (
+                          <circle
+                            cx={sourcePos.x}
+                            cy={sourcePos.y}
+                            r={6}
+                            fill={color}
+                            stroke="white"
+                            strokeWidth={2}
+                            style={{ cursor: 'grab', pointerEvents: 'all' }}
+                            onMouseDown={(e) => handleEndpointDragStart(e, conn, 'source')}
+                          />
+                        )}
+                        {isHovered && targetPos && (
+                          <circle
+                            cx={targetPos.x}
+                            cy={targetPos.y}
+                            r={6}
+                            fill={color}
+                            stroke="white"
+                            strokeWidth={2}
+                            style={{ cursor: 'grab', pointerEvents: 'all' }}
+                            onMouseDown={(e) => handleEndpointDragStart(e, conn, 'target')}
+                          />
+                        )}
                       </g>
                     );
                   })}
@@ -5380,6 +5503,61 @@ const findNodeById = (node, id) => {
                       strokeOpacity={0.8}
                       strokeLinecap="round"
                       markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+                    />
+                  );
+                })()}
+
+                {/* Temporary line while dragging endpoint */}
+                {draggingEndpoint && (() => {
+                  const { fixedX, fixedY, fixedAnchor, currentX, currentY, endpoint, type } = draggingEndpoint;
+                  const isUserFlow = type === 'userflow';
+                  const color = isUserFlow ? '#14b8a6' : '#f97316';
+
+                  // Determine start/end based on which endpoint is being dragged
+                  const startX = endpoint === 'source' ? currentX : fixedX;
+                  const startY = endpoint === 'source' ? currentY : fixedY;
+                  const endX = endpoint === 'source' ? fixedX : currentX;
+                  const endY = endpoint === 'source' ? fixedY : currentY;
+
+                  // Calculate curved path
+                  const dx = Math.abs(endX - startX);
+                  const dy = Math.abs(endY - startY);
+                  const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
+
+                  let ctrl1 = { x: startX, y: startY };
+                  let ctrl2 = { x: endX, y: endY };
+
+                  // Use fixed anchor direction for the fixed end
+                  if (endpoint === 'source') {
+                    switch (fixedAnchor) {
+                      case 'top': ctrl2.y -= offset; break;
+                      case 'right': ctrl2.x += offset; break;
+                      case 'bottom': ctrl2.y += offset; break;
+                      case 'left': ctrl2.x -= offset; break;
+                      default: break;
+                    }
+                  } else {
+                    switch (fixedAnchor) {
+                      case 'top': ctrl1.y -= offset; break;
+                      case 'right': ctrl1.x += offset; break;
+                      case 'bottom': ctrl1.y += offset; break;
+                      case 'left': ctrl1.x -= offset; break;
+                      default: break;
+                    }
+                  }
+
+                  const pathD = `M ${startX} ${startY} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endX} ${endY}`;
+
+                  return (
+                    <path
+                      d={pathD}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={2}
+                      strokeDasharray={isUserFlow ? 'none' : '8 6'}
+                      strokeOpacity={0.8}
+                      strokeLinecap="round"
+                      markerEnd={isUserFlow && endpoint === 'target' ? 'url(#arrowhead-userflow)' : 'none'}
                     />
                   );
                 })()}
