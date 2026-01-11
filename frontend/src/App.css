@@ -547,15 +547,15 @@ body {
 
 /* Anchor points for connections */
 .anchor-point {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   position: absolute;
-  cursor: crosshair;
+  cursor: pointer;
   z-index: 100;
   opacity: 0;
   transition: transform 0.15s ease, opacity 0.15s ease;
-  border: 3px solid white;
+  border: 1px solid white;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -569,10 +569,10 @@ body {
   transform: scale(1.3);
 }
 
-/* 10px + 3px border each side = 16px total, so offset -8px to center on edge */
+/* 8px + 1px border each side = 10px total, so offset -5px to center on edge */
 .anchor-top {
   left: 50%;
-  top: -8px;
+  top: -5px;
   transform: translateX(-50%);
 }
 
@@ -581,7 +581,7 @@ body {
 }
 
 .anchor-right {
-  right: -8px;
+  right: -5px;
   top: 50%;
   transform: translateY(-50%);
 }
@@ -592,7 +592,7 @@ body {
 
 .anchor-bottom {
   left: 50%;
-  bottom: -8px;
+  bottom: -5px;
   transform: translateX(-50%);
 }
 
@@ -601,7 +601,7 @@ body {
 }
 
 .anchor-left {
-  left: -8px;
+  left: -5px;
   top: 50%;
   transform: translateY(-50%);
 }
