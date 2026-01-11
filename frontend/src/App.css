@@ -549,17 +549,20 @@ body {
 .anchor-point {
   width: 8px !important;
   height: 8px !important;
-  min-width: 8px;
-  min-height: 8px;
-  border-radius: 50%;
-  position: absolute;
-  cursor: pointer;
-  z-index: 100;
-  opacity: 0;  /* Hidden by default */
-  transition: transform 0.15s ease, opacity 0.15s ease;
-  border: 1px solid white;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
-  box-sizing: border-box;
+  min-width: 8px !important;
+  min-height: 8px !important;
+  max-width: 8px !important;
+  max-height: 8px !important;
+  border-radius: 50% !important;
+  position: absolute !important;
+  cursor: pointer !important;
+  z-index: 100 !important;
+  opacity: 0;
+  transition: opacity 0.15s ease !important;
+  border: 1px solid white !important;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2) !important;
+  box-sizing: content-box !important;
+  transform: translate(-50%, -50%) !important;
 }
 
 /* Only show anchors on hover when connection tool is active */
