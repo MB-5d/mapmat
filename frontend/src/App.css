@@ -560,7 +560,6 @@ body {
   border: 1px solid white !important;
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.2) !important;
   box-sizing: border-box !important;
-  transform: none !important;
 }
 
 /* Only show anchors on hover when connection tool is active */
