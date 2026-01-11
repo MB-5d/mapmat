@@ -59,6 +59,7 @@ import {
   PlusSquare,
   LayoutTemplate,
   MessageSquare,
+  CornerDownRight,
 } from 'lucide-react';
 
 import './App.css';
@@ -143,6 +144,8 @@ const NodeCard = ({
   onEdit,
   onDuplicate,
   onViewImage,
+  onAddNote,
+  onViewNotes,
   isRoot,
   isDragging,
   isPressing,
@@ -200,12 +203,16 @@ const NodeCard = ({
       >
       </div>
 
-      {/* Comment badge - show if node has comments */}
+      {/* Comment badge - show if node has comments, click to view */}
       {node.comments?.length > 0 && (
-        <div className="comment-badge">
+        <button
+          className="comment-badge"
+          onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
+          title="View notes"
+        >
           <MessageSquare size={12} />
           {node.comments.length > 1 && <span>{node.comments.length}</span>}
-        </div>
+        </button>
       )}
 
       {showThumbnails && (
@@ -267,6 +274,9 @@ const NodeCard = ({
           <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
             <Copy size={16} />
           </button>
+          <button className="btn-icon-flat" title="Add Note" onClick={() => onAddNote?.(node)}>
+            <MessageSquare size={16} />
+          </button>
         </div>
         {node.url && (
           <a
@@ -295,6 +305,8 @@ const DraggableNodeCard = ({
   onEdit,
   onDuplicate,
   onViewImage,
+  onAddNote,
+  onViewNotes,
   isRoot,
   activeId,
 }) => {
@@ -315,6 +327,8 @@ const DraggableNodeCard = ({
         onEdit={onEdit}
         onDuplicate={onDuplicate}
         onViewImage={onViewImage}
+        onAddNote={onAddNote}
+        onViewNotes={onViewNotes}
         isRoot={isRoot}
         isDragging={isDragging || activeId === node.id}
         dragHandleProps={{ ...listeners, ...attributes }}
@@ -370,10 +384,11 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth })
 };
 
 // Comment Popover component for viewing/adding comments on a node
-const CommentPopover = ({ node, onClose, onAddComment, collaborators }) => {
+const CommentPopover = ({ node, onClose, onAddComment, onToggleCompleted, onDeleteComment, collaborators }) => {
   const [newComment, setNewComment] = useState('');
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
   const inputRef = useRef(null);
 
   const formatTimeAgo = (dateString) => {
@@ -417,10 +432,72 @@ const CommentPopover = ({ node, onClose, onAddComment, collaborators }) => {
 
   const handleSubmit = () => {
     if (newComment.trim()) {
-      onAddComment(node.id, newComment);
+      onAddComment(node.id, newComment, replyingTo);
       setNewComment('');
+      setReplyingTo(null);
+      onClose();
     }
   };
+
+  const handleCancel = () => {
+    setNewComment('');
+    setReplyingTo(null);
+    onClose();
+  };
+
+  // Recursive component to render a comment and its replies
+  const CommentItem = ({ comment, depth = 0 }) => (
+    <div className={`comment-item ${comment.completed ? 'completed' : ''}`} style={{ marginLeft: depth * 16 }}>
+      <div className="comment-header">
+        <button
+          className={`comment-checkbox ${comment.completed ? 'checked' : ''}`}
+          onClick={() => onToggleCompleted(node.id, comment.id)}
+          title={comment.completed ? 'Mark as incomplete' : 'Mark as complete'}
+        >
+          {comment.completed ? <CheckSquare size={16} /> : <Square size={16} />}
+        </button>
+        <div className="comment-meta">
+          <span className="comment-author">{comment.author}</span>
+          <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
+        </div>
+        <div className="comment-actions">
+          <button
+            className="comment-action-btn"
+            onClick={() => {
+              setReplyingTo(comment.id);
+              inputRef.current?.focus();
+            }}
+            title="Reply"
+          >
+            <CornerDownRight size={14} />
+          </button>
+          <button
+            className="comment-action-btn delete"
+            onClick={() => onDeleteComment(node.id, comment.id)}
+            title="Delete"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+      <div className="comment-body">
+        <div className="comment-text">{comment.text}</div>
+        {comment.completed && comment.completedBy && (
+          <div className="comment-completed-info">
+            <Check size={12} />
+            <span>Completed by {comment.completedBy} · {formatTimeAgo(comment.completedAt)}</span>
+          </div>
+        )}
+      </div>
+      {comment.replies?.length > 0 && (
+        <div className="comment-replies">
+          {comment.replies.map(reply => (
+            <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   const filteredCollaborators = collaborators.filter(c =>
     c.toLowerCase().includes(mentionFilter)
@@ -430,68 +507,81 @@ const CommentPopover = ({ node, onClose, onAddComment, collaborators }) => {
     <div className="comment-popover">
       <div className="comment-popover-header">
         <h3>Comments on "{node.title || 'Untitled'}"</h3>
-        <button className="comment-popover-close" onClick={onClose}>
+        <button className="comment-popover-close" onClick={handleCancel}>
           <X size={18} />
         </button>
       </div>
 
       <div className="comment-popover-body">
-        {node.comments?.length > 0 ? (
+        {/* Show existing comments if any */}
+        {node.comments?.length > 0 && (
           <div className="comment-list">
             {node.comments.map(comment => (
-              <div key={comment.id} className="comment-item">
-                <div className="comment-meta">
-                  <span className="comment-author">{comment.author}</span>
-                  <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
-                </div>
-                <div className="comment-text">{comment.text}</div>
-              </div>
+              <CommentItem key={comment.id} comment={comment} />
             ))}
           </div>
-        ) : (
-          <div className="comment-empty">No comments yet</div>
         )}
+
+        {/* Main textarea area */}
+        <div className="comment-input-section">
+          {replyingTo && (
+            <div className="replying-to-banner">
+              <span>Replying to comment</span>
+              <button onClick={() => setReplyingTo(null)}>
+                <X size={14} />
+              </button>
+            </div>
+          )}
+          <div className="comment-input-wrapper">
+            <textarea
+              ref={inputRef}
+              className="comment-input"
+              placeholder={replyingTo ? "Write a reply..." : "Add a comment...\n(use @ to mention)"}
+              value={newComment}
+              onChange={handleInputChange}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && e.metaKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+                if (e.key === 'Escape') {
+                  if (replyingTo) {
+                    setReplyingTo(null);
+                  } else if (showMentions) {
+                    setShowMentions(false);
+                  } else {
+                    handleCancel();
+                  }
+                }
+              }}
+            />
+            {showMentions && filteredCollaborators.length > 0 && (
+              <div className="mention-dropdown">
+                {filteredCollaborators.map(name => (
+                  <button
+                    key={name}
+                    className="mention-option"
+                    onClick={() => insertMention(name)}
+                  >
+                    @{name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="comment-popover-footer">
-        <div className="comment-input-wrapper">
-          <textarea
-            ref={inputRef}
-            className="comment-input"
-            placeholder="Add a comment... (use @ to mention)"
-            value={newComment}
-            onChange={handleInputChange}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-              if (e.key === 'Escape') {
-                setShowMentions(false);
-              }
-            }}
-            rows={2}
-          />
-          {showMentions && filteredCollaborators.length > 0 && (
-            <div className="mention-dropdown">
-              {filteredCollaborators.map(name => (
-                <button
-                  key={name}
-                  className="mention-option"
-                  onClick={() => insertMention(name)}
-                >
-                  @{name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <button className="comment-cancel-btn" onClick={handleCancel}>
+          Cancel
+        </button>
         <button
           className="comment-submit-btn"
           onClick={handleSubmit}
           disabled={!newComment.trim()}
         >
-          Post
+          Save
         </button>
       </div>
     </div>
@@ -502,6 +592,7 @@ const CommentPopover = ({ node, onClose, onAddComment, collaborators }) => {
 const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNode }) => {
   const [filter, setFilter] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all', 'author', 'mention'
+  const [showCompleted, setShowCompleted] = useState(true);
 
   // Collect all comments from tree and orphans
   const getAllComments = () => {
@@ -544,6 +635,9 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
   const allComments = getAllComments();
 
   const filteredComments = allComments.filter(comment => {
+    // Filter by completed status
+    if (!showCompleted && comment.completed) return false;
+
     if (!filter) return true;
     const searchLower = filter.toLowerCase();
 
@@ -571,22 +665,32 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
       </div>
 
       <div className="comments-panel-filter">
-        <input
-          type="text"
-          placeholder="Filter comments..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="comments-filter-input"
-        />
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="comments-filter-select"
-        >
-          <option value="all">All</option>
-          <option value="author">By Author</option>
-          <option value="mention">By Mention</option>
-        </select>
+        <div className="comments-filter-row">
+          <input
+            type="text"
+            placeholder="Filter comments..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="comments-filter-input"
+          />
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="comments-filter-select"
+          >
+            <option value="all">All</option>
+            <option value="author">By Author</option>
+            <option value="mention">By Mention</option>
+          </select>
+        </div>
+        <label className="comments-filter-toggle">
+          <input
+            type="checkbox"
+            checked={showCompleted}
+            onChange={(e) => setShowCompleted(e.target.checked)}
+          />
+          <span>Show completed</span>
+        </label>
       </div>
 
       <div className="comments-panel-body">
@@ -1006,6 +1110,8 @@ const SitemapTree = ({
   onEdit,
   onDuplicate,
   onViewImage,
+  onAddNote,
+  onViewNotes,
   onNodeDoubleClick,
   onNodeClick,
   activeId,
@@ -1099,6 +1205,8 @@ const SitemapTree = ({
               onEdit={onEdit}
               onDuplicate={onDuplicate}
               onViewImage={onViewImage}
+              onAddNote={onAddNote}
+              onViewNotes={onViewNotes}
               activeId={activeId}
             />
           </div>
@@ -2942,17 +3050,17 @@ export default function App() {
         e.preventDefault();
         handleRedo();
       }
-      // Toggle comments mode with "C"
+      // Toggle comments panel with "C"
       if (e.key === 'c' || e.key === 'C') {
-        setActiveTool(prev => prev === 'comments' ? 'select' : 'comments');
+        setShowCommentsPanel(prev => !prev);
       }
       // Select tool with "V"
       if (e.key === 'v' || e.key === 'V') {
         setActiveTool('select');
       }
-      // Exit comments mode with Escape
+      // Close comments panel with Escape
       if (e.key === 'Escape') {
-        if (activeTool === 'comments') {
+        if (showCommentsPanel) {
           setActiveTool('select');
           setCommentingNodeId(null);
         }
@@ -3410,7 +3518,7 @@ const findNodeById = (node, id) => {
   };
 
   // Add a comment to a node
-  const addCommentToNode = (nodeId, commentText) => {
+  const addCommentToNode = (nodeId, commentText, parentCommentId = null) => {
     if (!commentText.trim()) return;
 
     const newComment = {
@@ -3419,7 +3527,50 @@ const findNodeById = (node, id) => {
       author: currentUser?.name || 'Anonymous',
       createdAt: new Date().toISOString(),
       mentions: (commentText.match(/@(\w+)/g) || []).map(m => m.slice(1)),
+      completed: false,
+      completedBy: null,
+      completedAt: null,
+      replies: [],
     };
+
+    // If this is a reply to an existing comment
+    if (parentCommentId) {
+      const addReplyToComment = (comments) => {
+        return comments.map(c => {
+          if (c.id === parentCommentId) {
+            return { ...c, replies: [...(c.replies || []), newComment] };
+          }
+          if (c.replies?.length > 0) {
+            return { ...c, replies: addReplyToComment(c.replies) };
+          }
+          return c;
+        });
+      };
+
+      saveStateForUndo();
+
+      // Check if it's an orphan
+      const orphanIndex = orphans.findIndex(o => o.id === nodeId);
+      if (orphanIndex !== -1) {
+        setOrphans(prev => prev.map((o, i) =>
+          i === orphanIndex
+            ? { ...o, comments: addReplyToComment(o.comments || []) }
+            : o
+        ));
+        return;
+      }
+
+      // Update in tree
+      setRoot(prev => {
+        const copy = structuredClone(prev);
+        const node = findNodeById(copy, nodeId);
+        if (node) {
+          node.comments = addReplyToComment(node.comments || []);
+        }
+        return copy;
+      });
+      return;
+    }
 
     saveStateForUndo();
 
@@ -3440,6 +3591,88 @@ const findNodeById = (node, id) => {
       const node = findNodeById(copy, nodeId);
       if (node) {
         node.comments = [...(node.comments || []), newComment];
+      }
+      return copy;
+    });
+  };
+
+  // Toggle completed state on a comment
+  const toggleCommentCompleted = (nodeId, commentId) => {
+    const toggleInComments = (comments) => {
+      return comments.map(c => {
+        if (c.id === commentId) {
+          const nowCompleted = !c.completed;
+          return {
+            ...c,
+            completed: nowCompleted,
+            completedBy: nowCompleted ? (currentUser?.name || 'Anonymous') : null,
+            completedAt: nowCompleted ? new Date().toISOString() : null,
+          };
+        }
+        if (c.replies?.length > 0) {
+          return { ...c, replies: toggleInComments(c.replies) };
+        }
+        return c;
+      });
+    };
+
+    saveStateForUndo();
+
+    // Check if it's an orphan
+    const orphanIndex = orphans.findIndex(o => o.id === nodeId);
+    if (orphanIndex !== -1) {
+      setOrphans(prev => prev.map((o, i) =>
+        i === orphanIndex
+          ? { ...o, comments: toggleInComments(o.comments || []) }
+          : o
+      ));
+      return;
+    }
+
+    // Update in tree
+    setRoot(prev => {
+      const copy = structuredClone(prev);
+      const node = findNodeById(copy, nodeId);
+      if (node) {
+        node.comments = toggleInComments(node.comments || []);
+      }
+      return copy;
+    });
+  };
+
+  // Delete a comment from a node
+  const deleteComment = (nodeId, commentId) => {
+    const deleteFromComments = (comments) => {
+      return comments.filter(c => {
+        if (c.id === commentId) {
+          return false; // Remove this comment and all its replies
+        }
+        if (c.replies?.length > 0) {
+          c.replies = deleteFromComments(c.replies);
+        }
+        return true;
+      });
+    };
+
+    saveStateForUndo();
+
+    // Check if it's an orphan
+    const orphanIndex = orphans.findIndex(o => o.id === nodeId);
+    if (orphanIndex !== -1) {
+      setOrphans(prev => prev.map((o, i) =>
+        i === orphanIndex
+          ? { ...o, comments: deleteFromComments(o.comments || []) }
+          : o
+      ));
+      return;
+    }
+
+    // Update in tree
+    setRoot(prev => {
+      const copy = structuredClone(prev);
+      const node = findNodeById(copy, nodeId);
+      if (node) {
+        node.comments = deleteFromComments(node.comments || []);
       }
       return copy;
     });
@@ -4531,6 +4764,8 @@ const findNodeById = (node, id) => {
                     setCommentingNodeId(node.id);
                   }
                 }}
+                onAddNote={(node) => setCommentingNodeId(node.id)}
+                onViewNotes={(node) => setCommentingNodeId(node.id)}
               />
             </div>
 
@@ -4652,18 +4887,11 @@ const findNodeById = (node, id) => {
                 <Link size={20} />
               </button>
               <button
-                className={`canvas-tool-btn ${activeTool === 'comments' ? 'active' : ''}`}
-                onClick={() => setActiveTool(activeTool === 'comments' ? 'select' : 'comments')}
-                title="Add Comment (C)"
-              >
-                <MessageSquare size={20} />
-              </button>
-              <button
                 className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''}`}
                 onClick={() => setShowCommentsPanel(!showCommentsPanel)}
-                title="Comments Panel"
+                title="Comments (C)"
               >
-                <List size={20} />
+                <MessageSquare size={20} />
               </button>
 
               <div className="canvas-toolbar-divider" />
@@ -5216,6 +5444,8 @@ const findNodeById = (node, id) => {
               node={getNodeById(commentingNodeId)}
               onClose={() => setCommentingNodeId(null)}
               onAddComment={addCommentToNode}
+              onToggleCompleted={toggleCommentCompleted}
+              onDeleteComment={deleteComment}
               collaborators={collaborators}
             />
           </div>
