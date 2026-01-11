@@ -140,6 +140,7 @@ const NodeCard = ({
   number,
   color,
   showThumbnails,
+  showCommentBadges,
   onDelete,
   onEdit,
   onDuplicate,
@@ -203,8 +204,8 @@ const NodeCard = ({
       >
       </div>
 
-      {/* Comment badge - show if node has comments, click to view */}
-      {node.comments?.length > 0 && (
+      {/* Comment badge - show if node has comments and comments mode is active */}
+      {showCommentBadges && node.comments?.length > 0 && (
         <button
           className="comment-badge"
           onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
@@ -301,6 +302,7 @@ const DraggableNodeCard = ({
   number,
   color,
   showThumbnails,
+  showCommentBadges,
   onDelete,
   onEdit,
   onDuplicate,
@@ -323,6 +325,7 @@ const DraggableNodeCard = ({
         number={number}
         color={color}
         showThumbnails={showThumbnails}
+        showCommentBadges={showCommentBadges}
         onDelete={onDelete}
         onEdit={onEdit}
         onDuplicate={onDuplicate}
@@ -1104,6 +1107,7 @@ const SitemapTree = ({
   data,
   orphans = [],
   showThumbnails,
+  showCommentBadges,
   colors,
   scale = 1,
   onDelete,
@@ -1200,6 +1204,7 @@ const SitemapTree = ({
               number={nodeData.number}
               color={color}
               showThumbnails={showThumbnails}
+              showCommentBadges={showCommentBadges}
               isRoot={isRoot}
               onDelete={onDelete}
               onEdit={onEdit}
@@ -2091,6 +2096,7 @@ export default function App() {
   const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link', 'comments'
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
+  const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -2135,6 +2141,18 @@ export default function App() {
   const hasMap = !!root;
   const maxDepth = useMemo(() => getMaxDepth(root), [root]);
   const totalNodes = useMemo(() => countNodes(root), [root]);
+
+  // Check if there are any comments in the map (for notification dot)
+  const hasAnyComments = useMemo(() => {
+    const checkComments = (node) => {
+      if (!node) return false;
+      if (node.comments?.length > 0) return true;
+      return node.children?.some(checkComments) || false;
+    };
+    const rootHasComments = root ? checkComments(root) : false;
+    const orphansHaveComments = orphans.some(o => o.comments?.length > 0);
+    return rootHasComments || orphansHaveComments;
+  }, [root, orphans]);
 
   // dnd-kit sensors - require 5px movement before activating drag
   const sensors = useSensors(
@@ -2801,7 +2819,14 @@ export default function App() {
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar');
-    if (isInsideCard || isUIControl) return;
+    const isInsidePopover = e.target.closest('.comment-popover-container');
+
+    // Close comment popover when clicking outside of it (but not on cards or UI)
+    if (commentingNodeId && !isInsidePopover && !isInsideCard) {
+      setCommentingNodeId(null);
+    }
+
+    if (isInsideCard || isUIControl || isInsidePopover) return;
 
     dragRef.current.dragging = true;
     dragRef.current.startX = e.clientX;
@@ -3062,7 +3087,7 @@ export default function App() {
       if (e.key === 'Escape') {
         if (showCommentsPanel) {
           setActiveTool('select');
-          setCommentingNodeId(null);
+          setCommentingNodeId(null); // Close popover when switching tools
         }
       }
     };
@@ -3712,6 +3737,39 @@ const findNodeById = (node, id) => {
     if (scale < 0.8) {
       setScale(1);
     }
+  };
+
+  // Open comment popover positioned next to a node
+  const openCommentPopover = (nodeId) => {
+    const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!nodeElement || !canvasRef.current) return;
+
+    // Get node position in canvas coordinates (from the positioned wrapper)
+    const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
+    if (!nodeWrapper) return;
+
+    const nodeX = parseFloat(nodeWrapper.style.left) || 0;
+    const nodeY = parseFloat(nodeWrapper.style.top) || 0;
+    const nodeW = LAYOUT.NODE_W;
+    const popoverWidth = 320;
+    const gap = 16;
+
+    // Get the node's screen position to check if popover fits on right
+    const nodeRect = nodeElement.getBoundingClientRect();
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+
+    // Check if there's enough room on the right side of the node (in screen space)
+    const rightSpaceAvailable = canvasRect.right - nodeRect.right;
+    const needsLeftPosition = rightSpaceAvailable < (popoverWidth + gap);
+
+    // Calculate popover position in canvas coordinates
+    const side = needsLeftPosition ? 'left' : 'right';
+    const popoverX = side === 'right'
+      ? nodeX + nodeW + gap
+      : nodeX - popoverWidth - gap;
+
+    setCommentPopoverPos({ x: popoverX, y: nodeY, side });
+    setCommentingNodeId(nodeId);
   };
 
   // Opens delete confirmation modal
@@ -4739,6 +4797,7 @@ const findNodeById = (node, id) => {
                 data={root}
                 orphans={orphans}
                 showThumbnails={showThumbnails}
+                showCommentBadges={activeTool === 'comments' || showCommentsPanel}
                 colors={colors}
                 scale={scale}
                 onDelete={requestDeleteNode}
@@ -4761,12 +4820,34 @@ const findNodeById = (node, id) => {
                 }}
                 onNodeClick={(node) => {
                   if (activeTool === 'comments') {
-                    setCommentingNodeId(node.id);
+                    openCommentPopover(node.id);
                   }
                 }}
-                onAddNote={(node) => setCommentingNodeId(node.id)}
-                onViewNotes={(node) => setCommentingNodeId(node.id)}
+                onAddNote={(node) => openCommentPopover(node.id)}
+                onViewNotes={(node) => openCommentPopover(node.id)}
               />
+
+              {/* Comment Popover - positioned next to node */}
+              {commentingNodeId && getNodeById(commentingNodeId) && (
+                <div
+                  className={`comment-popover-container ${commentPopoverPos.side}`}
+                  style={{
+                    position: 'absolute',
+                    left: commentPopoverPos.x,
+                    top: commentPopoverPos.y,
+                    zIndex: 100,
+                  }}
+                >
+                  <CommentPopover
+                    node={getNodeById(commentingNodeId)}
+                    onClose={() => setCommentingNodeId(null)}
+                    onAddComment={addCommentToNode}
+                    onToggleCompleted={toggleCommentCompleted}
+                    onDeleteComment={deleteComment}
+                    collaborators={collaborators}
+                  />
+                </div>
+              )}
             </div>
 
             {/* DragOverlay - full-size floating card with children, scaled 5% larger than current zoom */}
@@ -4892,6 +4973,7 @@ const findNodeById = (node, id) => {
                 title="Comments (C)"
               >
                 <MessageSquare size={20} />
+                {hasAnyComments && <span className="notification-dot" />}
               </button>
 
               <div className="canvas-toolbar-divider" />
@@ -4994,7 +5076,11 @@ const findNodeById = (node, id) => {
           root={root}
           orphans={orphans}
           onClose={() => setShowCommentsPanel(false)}
-          onCommentClick={(nodeId) => setCommentingNodeId(nodeId)}
+          onCommentClick={(nodeId) => {
+            navigateToNode(nodeId);
+            // Small delay to let pan complete before calculating popover position
+            setTimeout(() => openCommentPopover(nodeId), 100);
+          }}
           onNavigateToNode={navigateToNode}
         />
       )}
@@ -5433,24 +5519,6 @@ const findNodeById = (node, id) => {
         />
       )}
 
-      {/* Comment Popover */}
-      {commentingNodeId && getNodeById(commentingNodeId) && (
-        <div
-          className="comment-popover-overlay"
-          onClick={() => setCommentingNodeId(null)}
-        >
-          <div onClick={e => e.stopPropagation()}>
-            <CommentPopover
-              node={getNodeById(commentingNodeId)}
-              onClose={() => setCommentingNodeId(null)}
-              onAddComment={addCommentToNode}
-              onToggleCompleted={toggleCommentCompleted}
-              onDeleteComment={deleteComment}
-              collaborators={collaborators}
-            />
-          </div>
-        </div>
-      )}
 
       {deleteConfirmNode && (
         <div

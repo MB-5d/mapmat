@@ -987,6 +987,7 @@ body {
 }
 
 .canvas-tool-btn {
+  position: relative;
   width: 40px;
   height: 40px;
   display: flex;
@@ -998,6 +999,17 @@ body {
   cursor: pointer;
   color: #64748b;
   transition: all 0.15s ease;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  pointer-events: none;
 }
 
 .canvas-tool-btn:hover:not(.disabled) {
@@ -2700,22 +2712,44 @@ body {
 }
 
 /* Comment Popover */
-.comment-popover-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
+/* Comment Popover Container - positioned next to node */
+.comment-popover-container {
+  pointer-events: auto;
+}
+
+/* Arrow pointing to node */
+.comment-popover-container.right::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 20px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid white;
+  filter: drop-shadow(-2px 0 2px rgba(0, 0, 0, 0.1));
+}
+
+.comment-popover-container.left::before {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 20px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 8px solid white;
+  filter: drop-shadow(2px 0 2px rgba(0, 0, 0, 0.1));
 }
 
 .comment-popover {
-  width: 450px;
-  max-height: 600px;
+  width: 320px;
+  max-height: 400px;
   background: white;
   border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4725,6 +4759,14 @@ body {
   }
 
   /* Comment Popover - Dark Mode */
+  .comment-popover-container.right::before {
+    border-right-color: #1a1022;
+  }
+
+  .comment-popover-container.left::before {
+    border-left-color: #1a1022;
+  }
+
   .comment-popover {
     background: #1a1022;
   }
