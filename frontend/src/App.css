@@ -547,10 +547,10 @@ body {
 
 /* Anchor points for connections */
 .anchor-point {
-  width: 12px !important;
-  height: 12px !important;
-  min-width: 12px !important;
-  min-height: 12px !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
   border-radius: 50% !important;
   position: absolute !important;
   cursor: pointer !important;
