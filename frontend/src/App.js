@@ -5397,6 +5397,17 @@ const findNodeById = (node, id) => {
                   }}
                 >
                   <button
+                    className="connection-menu-item"
+                    onClick={() => {
+                      // TODO: Implement connection comments
+                      showToast('Connection comments coming soon', 'info');
+                      setConnectionMenu(null);
+                    }}
+                  >
+                    <MessageSquare size={14} />
+                    <span>Add Comment</span>
+                  </button>
+                  <button
                     className="connection-menu-item delete"
                     onClick={() => {
                       deleteConnection(connectionMenu.connectionId);
