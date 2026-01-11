@@ -610,28 +610,28 @@ body {
   transform: translateY(-50%) scale(1.3);
 }
 
-/* Magnetic snap highlight on anchor */
+/* Magnetic snap highlight on anchor (drop target) */
 .anchor-point.snapped {
   opacity: 1 !important;
-  transform: scale(1.4);
-  box-shadow: 0 0 6px 1px currentColor, 0 0 4px rgba(0, 0, 0, 0.2);
+  transform: scale(1.3);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.3);
   z-index: 101;
 }
 
 .anchor-top.snapped {
-  transform: translateX(-50%) scale(1.4);
+  transform: translateX(-50%) scale(1.3);
 }
 
 .anchor-right.snapped {
-  transform: translateY(-50%) scale(1.4);
+  transform: translateY(-50%) scale(1.3);
 }
 
 .anchor-bottom.snapped {
-  transform: translateX(-50%) scale(1.4);
+  transform: translateX(-50%) scale(1.3);
 }
 
 .anchor-left.snapped {
-  transform: translateY(-50%) scale(1.4);
+  transform: translateY(-50%) scale(1.3);
 }
 
 /* Drawing connection state */
