@@ -5446,6 +5446,18 @@ const findNodeById = (node, id) => {
 
                     return (
                       <g key={conn.id}>
+                        {/* Hit area - invisible wider path for easier interaction */}
+                        <path
+                          d={path}
+                          fill="none"
+                          stroke="transparent"
+                          strokeWidth={16}
+                          strokeLinecap="round"
+                          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                          onMouseEnter={() => setHoveredConnection(conn.id)}
+                          onMouseLeave={() => setHoveredConnection(null)}
+                          onClick={(e) => handleConnectionClick(e, conn)}
+                        />
                         {/* Glow effect on hover */}
                         {isHovered && (
                           <path
@@ -5467,10 +5479,7 @@ const findNodeById = (node, id) => {
                           strokeLinecap="round"
                           strokeDasharray={isUserFlow ? 'none' : '8 6'}
                           markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                          onMouseEnter={() => setHoveredConnection(conn.id)}
-                          onMouseLeave={() => setHoveredConnection(null)}
-                          onClick={(e) => handleConnectionClick(e, conn)}
+                          style={{ pointerEvents: 'none' }}
                         />
                         {/* Draggable endpoint circles - positioned 16px along line from endpoint */}
                         {isHovered && sourcePos && targetPos && (() => {
