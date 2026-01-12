@@ -4239,12 +4239,38 @@ const findNodeById = (node, id) => {
     setDraggingEndpoint(null);
   };
 
+  const getConnectionsAtAnchor = (nodeId, anchor, asSource) => {
+    return connections.filter(conn =>
+      asSource
+        ? (conn.sourceNodeId === nodeId && conn.sourceAnchor === anchor)
+        : (conn.targetNodeId === nodeId && conn.targetAnchor === anchor)
+    );
+  };
+
+  const getAnchorOffset = (conn, nodeId, anchor, isSource) => {
+    const shared = getConnectionsAtAnchor(nodeId, anchor, isSource);
+    if (shared.length <= 1) return { x: 0, y: 0 };
+
+    const index = shared.findIndex(c => c.id === conn.id);
+    const offset = (index - (shared.length - 1) / 2) * 8;
+
+    return (anchor === 'top' || anchor === 'bottom')
+      ? { x: offset, y: 0 }
+      : { x: 0, y: offset };
+  };
+
   // Generate curved SVG path for a connection
   const generateConnectionPath = (conn) => {
-    const startPos = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
-    const endPos = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
+    const baseStart = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
+    const baseEnd = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
 
-    if (!startPos || !endPos) return '';
+    if (!baseStart || !baseEnd) return '';
+
+    const srcOffset = getAnchorOffset(conn, conn.sourceNodeId, conn.sourceAnchor, true);
+    const tgtOffset = getAnchorOffset(conn, conn.targetNodeId, conn.targetAnchor, false);
+
+    const startPos = { x: baseStart.x + srcOffset.x, y: baseStart.y + srcOffset.y };
+    const endPos = { x: baseEnd.x + tgtOffset.x, y: baseEnd.y + tgtOffset.y };
 
     // Calculate control points for smooth bezier curve
     const dx = Math.abs(endPos.x - startPos.x);
