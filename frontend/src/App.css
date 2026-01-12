@@ -5785,11 +5785,11 @@ body {
 }
 
 [data-theme="dark"] .color-key-header {
-  color: #e2e0e8;
+  color: #D6C9E2;
 }
 
 [data-theme="dark"] .color-key-item {
-  color: #9f8fb8;
+  color: #D6C9E2
 }
 
 [data-theme="dark"] .color-key-item:hover {
