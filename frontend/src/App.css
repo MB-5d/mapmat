@@ -5819,7 +5819,7 @@ body {
 
 /* Theme toggle icon colors */
 [data-theme="dark"] .theme-icon.sun {
-  color: #9f8fb8;
+  ccolor: #A48EBB;  /* Same as other icons */
 }
 
 [data-theme="dark"] .theme-icon.moon {
@@ -5828,7 +5828,7 @@ body {
 
 [data-theme="dark"] .theme-toggle-track {
   background: #2d1f3d;
-  border-color: #3d2a52;
+  border-color: #2d1f3d;  /* Same as toolbar */
 }
 
 [data-theme="dark"] .theme-toggle-thumb {
