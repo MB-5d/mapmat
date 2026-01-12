@@ -4306,6 +4306,23 @@ const findNodeById = (node, id) => {
     setDraggingEndpoint(null);
   };
 
+  const isNearEndpoint = (clickX, clickY, conn, threshold = 32) => {
+    const sourcePos = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
+    const targetPos = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
+    if (!sourcePos || !targetPos) return null;
+
+    const distToSource = Math.sqrt(
+      Math.pow(clickX - sourcePos.x, 2) + Math.pow(clickY - sourcePos.y, 2)
+    );
+    const distToTarget = Math.sqrt(
+      Math.pow(clickX - targetPos.x, 2) + Math.pow(clickY - targetPos.y, 2)
+    );
+
+    if (distToSource <= threshold) return 'source';
+    if (distToTarget <= threshold) return 'target';
+    return null;
+  };
+
   const getConnectionsAtAnchor = (nodeId, anchor, asSource) => {
     return connections.filter(conn =>
       asSource
@@ -5402,7 +5419,7 @@ const findNodeById = (node, id) => {
       </div>
 
       <div
-        className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''}`}
+        className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''}`}
         ref={canvasRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -5539,13 +5556,9 @@ const findNodeById = (node, id) => {
                     const color = isUserFlow ? '#14b8a6' : '#f97316';
                     const isHovered = hoveredConnection === conn.id;
 
-                    // Get endpoint positions for draggable circles
-                    const sourcePos = getAnchorPosition(conn.sourceNodeId, conn.sourceAnchor);
-                    const targetPos = getAnchorPosition(conn.targetNodeId, conn.targetAnchor);
-
                     return (
                       <g key={conn.id}>
-                        {/* Hit area - invisible wider path for easier interaction */}
+                        {/* Hit area path */}
                         <path
                           d={path}
                           fill="none"
@@ -5554,8 +5567,40 @@ const findNodeById = (node, id) => {
                           strokeLinecap="round"
                           style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                           onMouseEnter={() => setHoveredConnection(conn.id)}
-                          onMouseLeave={() => setHoveredConnection(null)}
-                          onClick={(e) => handleConnectionClick(e, conn)}
+                          onMouseLeave={(e) => {
+                            setHoveredConnection(null);
+                            e.currentTarget.style.cursor = 'pointer';
+                          }}
+                          onMouseMove={(e) => {
+                            if (!contentRef.current) return;
+                            const contentRect = contentRef.current.getBoundingClientRect();
+                            const mouseX = (e.clientX - contentRect.left) / scale;
+                            const mouseY = (e.clientY - contentRect.top) / scale;
+                            const nearEndpoint = isNearEndpoint(mouseX, mouseY, conn, 32);
+                            e.currentTarget.style.cursor = nearEndpoint ? 'grab' : 'pointer';
+                          }}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!contentRef.current) return;
+                            const contentRect = contentRef.current.getBoundingClientRect();
+                            const clickX = (e.clientX - contentRect.left) / scale;
+                            const clickY = (e.clientY - contentRect.top) / scale;
+                            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
+                            if (nearEndpoint) {
+                              handleEndpointDragStart(e, conn, nearEndpoint);
+                            }
+                          }}
+                          onClick={(e) => {
+                            if (!contentRef.current) return;
+                            const contentRect = contentRef.current.getBoundingClientRect();
+                            const clickX = (e.clientX - contentRect.left) / scale;
+                            const clickY = (e.clientY - contentRect.top) / scale;
+                            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
+                            if (!nearEndpoint) {
+                              handleConnectionClick(e, conn);
+                            }
+                          }}
                         />
                         {/* Glow effect on hover */}
                         {isHovered && (
@@ -5580,44 +5625,6 @@ const findNodeById = (node, id) => {
                           markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
                           style={{ pointerEvents: 'none' }}
                         />
-                        {/* Source endpoint zone */}
-                        {isHovered && sourcePos && targetPos && (() => {
-                          const dx = targetPos.x - sourcePos.x;
-                          const dy = targetPos.y - sourcePos.y;
-                          const len = Math.sqrt(dx * dx + dy * dy);
-                          const segLen = Math.min(32, len / 2);
-                          const nx = len > 0 ? dx / len : 0;
-                          const ny = len > 0 ? dy / len : 0;
-                          return (
-                            <path
-                              d={`M ${sourcePos.x} ${sourcePos.y} L ${sourcePos.x + nx * segLen} ${sourcePos.y + ny * segLen}`}
-                              stroke="transparent"
-                              strokeWidth={16}
-                              strokeLinecap="round"
-                              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
-                              onMouseDown={(e) => handleEndpointDragStart(e, conn, 'source')}
-                            />
-                          );
-                        })()}
-                        {/* Target endpoint zone */}
-                        {isHovered && sourcePos && targetPos && (() => {
-                          const dx = sourcePos.x - targetPos.x;
-                          const dy = sourcePos.y - targetPos.y;
-                          const len = Math.sqrt(dx * dx + dy * dy);
-                          const segLen = Math.min(32, len / 2);
-                          const nx = len > 0 ? dx / len : 0;
-                          const ny = len > 0 ? dy / len : 0;
-                          return (
-                            <path
-                              d={`M ${targetPos.x} ${targetPos.y} L ${targetPos.x + nx * segLen} ${targetPos.y + ny * segLen}`}
-                              stroke="transparent"
-                              strokeWidth={16}
-                              strokeLinecap="round"
-                              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
-                              onMouseDown={(e) => handleEndpointDragStart(e, conn, 'target')}
-                            />
-                          );
-                        })()}
                       </g>
                     );
                   })}

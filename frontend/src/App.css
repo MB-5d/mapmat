@@ -278,6 +278,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Prevent ALL text selection when connection tool is active */
+.canvas.connection-mode,
+.canvas.connection-mode * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .permission-banner {
   position: absolute;
   top: 12px;
