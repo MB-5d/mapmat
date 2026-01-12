@@ -62,6 +62,8 @@ import {
   MessageSquare,
   CornerDownRight,
   Workflow,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 import './App.css';
@@ -2199,6 +2201,12 @@ export default function App() {
   const [connectionMenu, setConnectionMenu] = useState(null); // { connectionId, x, y }
   const [draggingEndpoint, setDraggingEndpoint] = useState(null); // { connectionId, endpoint: 'source'|'target', ... }
 
+  // Theme: 'light', 'dark', or 'auto'
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('mapmat-theme');
+    return saved || 'auto';
+  });
+
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
   const [activeNode, setActiveNode] = useState(null);
@@ -2229,6 +2237,19 @@ export default function App() {
     }
   }, [showViewDropdown]);
 
+  // Apply theme to document
+  useEffect(() => {
+    const root = document.documentElement;
+
+    if (theme === 'auto') {
+      root.removeAttribute('data-theme');
+    } else {
+      root.setAttribute('data-theme', theme);
+    }
+
+    localStorage.setItem('mapmat-theme', theme);
+  }, [theme]);
+
   const hasMap = !!root;
   const maxDepth = useMemo(() => getMaxDepth(root), [root]);
   const totalNodes = useMemo(() => countNodes(root), [root]);
@@ -2258,6 +2279,26 @@ export default function App() {
   // Permission helper functions
   const canEdit = () => accessLevel === ACCESS_LEVELS.EDIT;
   const canComment = () => accessLevel === ACCESS_LEVELS.COMMENT || accessLevel === ACCESS_LEVELS.EDIT;
+
+  // Theme toggle functions
+  const toggleTheme = () => {
+    setTheme(prev => {
+      if (prev === 'auto') {
+        // Check current actual appearance
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        return isDark ? 'light' : 'dark';
+      }
+      return prev === 'dark' ? 'light' : 'dark';
+    });
+  };
+
+  // Helper to get current visual theme
+  const getCurrentTheme = () => {
+    if (theme === 'auto') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return theme;
+  };
 
   // dnd-kit sensors - require 5px movement before activating drag
   const sensors = useSensors(
@@ -5450,6 +5491,19 @@ const findNodeById = (node, id) => {
             </span>
           </div>
         )}
+
+        {/* Theme toggle */}
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          title={`Switch to ${getCurrentTheme() === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          <div className={`theme-toggle-track ${getCurrentTheme()}`}>
+            <Sun size={14} className="theme-icon sun" />
+            <Moon size={14} className="theme-icon moon" />
+            <div className="theme-toggle-thumb" />
+          </div>
+        </button>
 
         {!hasMap && (
           <div className="blank">

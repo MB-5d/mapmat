@@ -5517,3 +5517,189 @@ body {
     background: rgba(129, 140, 248, 0.15);
   }
 }
+
+/* ========== FORCED DARK MODE ========== */
+/* Applied when user manually selects dark mode */
+[data-theme="dark"] body {
+  background: #0d0812;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .topbar {
+  background: #1a1022;
+  border-bottom-color: #2d1f3d;
+}
+
+[data-theme="dark"] .brand {
+  background: linear-gradient(135deg, #f0abfc 0%, #c084fc 50%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+[data-theme="dark"] .search-container {
+  background: #1a1022;
+  border-color: #2d1f3d;
+}
+
+[data-theme="dark"] .search-container input {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .canvas {
+  background-color: #0d0812;
+}
+
+[data-theme="dark"] .node-card {
+  background: #2d2438;
+  color: #e2e0e8;
+  border: 1px solid #3d3348;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .canvas-toolbar {
+  background: #1a1022;
+  border-color: #2d1f3d;
+}
+
+[data-theme="dark"] .canvas-tool-btn {
+  color: #9f8fb8;
+}
+
+[data-theme="dark"] .canvas-tool-btn:hover:not(.disabled) {
+  background: #2d1f3d;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .canvas-tool-btn.active {
+  background: #6366f1;
+  color: white;
+}
+
+[data-theme="dark"] .zoom-controls {
+  background: #1a1022;
+  border-color: #2d1f3d;
+}
+
+[data-theme="dark"] .color-key {
+  background: #1a1022;
+  border-color: #2d1f3d;
+}
+
+/* ========== FORCED LIGHT MODE ========== */
+/* Applied when user manually selects light mode (overrides OS dark preference) */
+[data-theme="light"] body {
+  background: #ffffff;
+  color: #1e293b;
+}
+
+[data-theme="light"] .topbar {
+  background: #ffffff;
+  border-bottom-color: #e2e8f0;
+}
+
+[data-theme="light"] .search-container {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .canvas {
+  background-color: #f8fafc;
+}
+
+[data-theme="light"] .node-card {
+  background: #ffffff;
+  color: #1e293b;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .canvas-toolbar {
+  background: white;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .canvas-tool-btn {
+  color: #64748b;
+}
+
+[data-theme="light"] .zoom-controls {
+  background: white;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .color-key {
+  background: white;
+  border-color: #e2e8f0;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.theme-toggle-track {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 56px;
+  height: 28px;
+  padding: 4px 6px;
+  background: #e2e8f0;
+  border-radius: 14px;
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+[data-theme="dark"] .theme-toggle-track,
+.theme-toggle-track.dark {
+  background: #2d1f3d;
+}
+
+.theme-icon {
+  z-index: 1;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.theme-icon.sun {
+  color: #f59e0b;
+  opacity: 1;
+}
+
+.theme-icon.moon {
+  color: #64748b;
+  opacity: 0.5;
+}
+
+.theme-toggle-track.dark .theme-icon.sun {
+  color: #9f8fb8;
+  opacity: 0.5;
+}
+
+.theme-toggle-track.dark .theme-icon.moon {
+  color: #fef3c7;
+  opacity: 1;
+}
+
+.theme-toggle-thumb {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+  left: 4px;
+  top: 4px;
+}
+
+.theme-toggle-track.dark .theme-toggle-thumb {
+  transform: translateX(28px);
+  background: #0d0812;
+}
