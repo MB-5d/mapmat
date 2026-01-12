@@ -3124,7 +3124,7 @@ export default function App() {
   // Undo/Redo implementation
   const saveStateForUndo = () => {
     console.log('SAVING STATE FOR UNDO');
-    setUndoStack(prev => [...prev, JSON.stringify(root)]);
+    setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections })]);
     setRedoStack([]); // Clear redo on new action
   };
 
@@ -3136,14 +3136,25 @@ export default function App() {
     }
 
     // Save current state to redo stack
-    setRedoStack(prev => [...prev, JSON.stringify(root)]);
+    setRedoStack(prev => [...prev, JSON.stringify({ root, orphans, connections })]);
 
     // Get last state from undo stack
     const lastState = undoStack[undoStack.length - 1];
     setUndoStack(prev => prev.slice(0, -1));
 
     // Restore it
-    setRoot(JSON.parse(lastState));
+    const parsed = JSON.parse(lastState);
+    if (parsed.root !== undefined) {
+      setRoot(parsed.root);
+    } else {
+      setRoot(parsed);
+    }
+    if (parsed.orphans !== undefined) {
+      setOrphans(parsed.orphans);
+    }
+    if (parsed.connections !== undefined) {
+      setConnections(parsed.connections);
+    }
     console.log('UNDO COMPLETE');
   };
 
@@ -3155,14 +3166,25 @@ export default function App() {
     }
 
     // Save current state to undo stack
-    setUndoStack(prev => [...prev, JSON.stringify(root)]);
+    setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections })]);
 
     // Get last state from redo stack
     const lastState = redoStack[redoStack.length - 1];
     setRedoStack(prev => prev.slice(0, -1));
 
     // Restore it
-    setRoot(JSON.parse(lastState));
+    const parsed = JSON.parse(lastState);
+    if (parsed.root !== undefined) {
+      setRoot(parsed.root);
+    } else {
+      setRoot(parsed);
+    }
+    if (parsed.orphans !== undefined) {
+      setOrphans(parsed.orphans);
+    }
+    if (parsed.connections !== undefined) {
+      setConnections(parsed.connections);
+    }
     console.log('REDO COMPLETE');
   };
 
