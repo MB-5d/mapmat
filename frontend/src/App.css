@@ -5907,6 +5907,19 @@ body {
   background: #2d1f3d;
 }
 
+[data-theme="dark"] .color-key-list {
+  border-top-color: #2d1f3d;
+}
+
+[data-theme="dark"] .key-toggle {
+  color: #9f8fb8;
+}
+
+[data-theme="dark"] .key-toggle:hover {
+  background: #2d1f3d;
+  color: #e2e0e8;
+}
+
 [data-theme="dark"] .connection-menu {
   background: #1a1022;
   border: 1px solid #2d1f3d;
@@ -5938,8 +5951,8 @@ body {
 }
 
 [data-theme="dark"] .theme-toggle-track {
-  background: #2d1f3d;
-  border: 1px solid #e2e8f0;  /* light mode */
+  background: #1a1022;
+  border: 1px solid #2d1f3d;
 }
 
 [data-theme="dark"] .theme-toggle-thumb {
