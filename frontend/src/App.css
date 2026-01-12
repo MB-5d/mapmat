@@ -5797,12 +5797,26 @@ body {
 }
 
 [data-theme="dark"] .icon-btn {
-  color: #9f8fb8;
+  color: #A48EBB;
 }
 
 [data-theme="dark"] .icon-btn:hover:not(:disabled) {
-  background: #2d1f3d;
+  background: #301E3F;
   color: #e2e0e8;
+}
+
+[data-theme="dark"] .icon-btn.primary {
+  background: #6366f1;
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .icon-btn.primary svg {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .icon-btn.primary:hover:not(:disabled) {
+  background: #4f46e5;
+  color: #FFFFFF;
 }
 
 [data-theme="dark"] .divider {
@@ -5875,17 +5889,52 @@ body {
 }
 
 [data-theme="dark"] .canvas-tool-btn {
-  color: #9f8fb8;
+  color: #A48EBB;
 }
 
 [data-theme="dark"] .canvas-tool-btn:hover:not(.disabled) {
-  background: #2d1f3d;
+  background: #301E3F;
   color: #e2e0e8;
 }
 
 [data-theme="dark"] .canvas-tool-btn.active {
   background: #6366f1;
-  color: white;
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .canvas-tool-btn.active svg {
+  color: #FFFFFF;
+}
+
+/* Ensure ALL button types with highlighted state have white icons in dark mode */
+
+[data-theme="dark"] .btn-icon.primary,
+[data-theme="dark"] .btn-icon.active {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .btn-icon.primary svg,
+[data-theme="dark"] .btn-icon.active svg {
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .project-action-btn:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .history-action-btn:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .btn-icon-flat {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .btn-icon-flat:hover {
+  background: #301E3F;
+  color: #e2e0e8;
 }
 
 [data-theme="dark"] .canvas-toolbar-divider {
@@ -5898,11 +5947,11 @@ body {
 }
 
 [data-theme="dark"] .zoom-btn {
-  color: #9f8fb8;
+  color: #A48EBB;
 }
 
 [data-theme="dark"] .zoom-btn:hover {
-  background: #2d1f3d;
+  background: #301E3F;
   color: #e2e0e8;
 }
 
