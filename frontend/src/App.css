@@ -1041,7 +1041,7 @@ body {
 }
 
 .color-key-header:hover {
-  background: #f8fafc;
+  background: #2d1f3d;
 }
 
 .color-key-title {
@@ -1087,7 +1087,7 @@ body {
 }
 
 .color-key-item:hover {
-  background: #f8fafc;
+  background: #2d1f3d;  
 }
 
 .color-key-item:hover .color-edit-icon {
@@ -5896,11 +5896,11 @@ body {
 }
 
 [data-theme="dark"] .color-key-header {
-  color: #D6C9E2;
+  color: #9f8fb8;
 }
 
 [data-theme="dark"] .color-key-item {
-  color: #D6C9E2
+  color: #9f8fb8;
 }
 
 [data-theme="dark"] .color-key-item:hover {
@@ -5930,7 +5930,7 @@ body {
 
 /* Theme toggle icon colors */
 [data-theme="dark"] .theme-icon.sun {
-  ccolor: #A48EBB;  /* Same as other icons */
+  color: #9f8fb8;  /* same as other icons */
 }
 
 [data-theme="dark"] .theme-icon.moon {
@@ -5939,11 +5939,12 @@ body {
 
 [data-theme="dark"] .theme-toggle-track {
   background: #2d1f3d;
-  border-color: #2d1f3d;  /* Same as toolbar */
+  border: 1px solid #e2e8f0;  /* light mode */
 }
 
 [data-theme="dark"] .theme-toggle-thumb {
   background: #0d0812;
+  border: 1px solid #2d1f3d;  /* same as toolbar */
 }
 
 /* Confirm modal dark mode */
