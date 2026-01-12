@@ -5572,6 +5572,7 @@ const findNodeById = (node, id) => {
                             e.currentTarget.style.cursor = 'pointer';
                           }}
                           onMouseMove={(e) => {
+                            if (connectionTool) return;
                             if (!contentRef.current) return;
                             const contentRect = contentRef.current.getBoundingClientRect();
                             const mouseX = (e.clientX - contentRect.left) / scale;
@@ -5580,6 +5581,7 @@ const findNodeById = (node, id) => {
                             e.currentTarget.style.cursor = nearEndpoint ? 'grab' : 'pointer';
                           }}
                           onMouseDown={(e) => {
+                            if (connectionTool) return;
                             e.preventDefault();
                             e.stopPropagation();
                             if (!contentRef.current) return;
@@ -5592,6 +5594,7 @@ const findNodeById = (node, id) => {
                             }
                           }}
                           onClick={(e) => {
+                            if (connectionTool) return;
                             if (!contentRef.current) return;
                             const contentRect = contentRef.current.getBoundingClientRect();
                             const clickX = (e.clientX - contentRect.left) / scale;
