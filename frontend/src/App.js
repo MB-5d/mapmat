@@ -5481,45 +5481,40 @@ const findNodeById = (node, id) => {
                           markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
                           style={{ pointerEvents: 'none' }}
                         />
-                        {/* Draggable endpoint circles - positioned 16px along line from endpoint */}
+                        {/* Source endpoint zone */}
                         {isHovered && sourcePos && targetPos && (() => {
-                          // Calculate offset 16px from source toward target
                           const dx = targetPos.x - sourcePos.x;
                           const dy = targetPos.y - sourcePos.y;
                           const len = Math.sqrt(dx * dx + dy * dy);
-                          const offset = Math.min(16, len / 3); // Cap at 1/3 of line length
+                          const segLen = Math.min(32, len / 2);
                           const nx = len > 0 ? dx / len : 0;
                           const ny = len > 0 ? dy / len : 0;
                           return (
-                            <circle
-                              cx={sourcePos.x + nx * offset}
-                              cy={sourcePos.y + ny * offset}
-                              r={6}
-                              fill={color}
-                              stroke="white"
-                              strokeWidth={2}
-                              style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                            <path
+                              d={`M ${sourcePos.x} ${sourcePos.y} L ${sourcePos.x + nx * segLen} ${sourcePos.y + ny * segLen}`}
+                              stroke="transparent"
+                              strokeWidth={16}
+                              strokeLinecap="round"
+                              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
                               onMouseDown={(e) => handleEndpointDragStart(e, conn, 'source')}
                             />
                           );
                         })()}
+                        {/* Target endpoint zone */}
                         {isHovered && sourcePos && targetPos && (() => {
-                          // Calculate offset 16px from target toward source
                           const dx = sourcePos.x - targetPos.x;
                           const dy = sourcePos.y - targetPos.y;
                           const len = Math.sqrt(dx * dx + dy * dy);
-                          const offset = Math.min(16, len / 3); // Cap at 1/3 of line length
+                          const segLen = Math.min(32, len / 2);
                           const nx = len > 0 ? dx / len : 0;
                           const ny = len > 0 ? dy / len : 0;
                           return (
-                            <circle
-                              cx={targetPos.x + nx * offset}
-                              cy={targetPos.y + ny * offset}
-                              r={6}
-                              fill={color}
-                              stroke="white"
-                              strokeWidth={2}
-                              style={{ cursor: 'pointer', pointerEvents: 'all' }}
+                            <path
+                              d={`M ${targetPos.x} ${targetPos.y} L ${targetPos.x + nx * segLen} ${targetPos.y + ny * segLen}`}
+                              stroke="transparent"
+                              strokeWidth={16}
+                              strokeLinecap="round"
+                              style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
                               onMouseDown={(e) => handleEndpointDragStart(e, conn, 'target')}
                             />
                           );
