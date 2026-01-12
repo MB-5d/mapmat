@@ -2579,9 +2579,16 @@ export default function App() {
       e.preventDefault();
     };
 
-    // Prevent browser-level pinch zoom
+    // Prevent browser-level pinch zoom on canvas
     const handleWheel = (e) => {
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+
+    // Also prevent at document level to stop browser zoom
+    const handleDocumentWheel = (e) => {
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
       }
     };
@@ -2590,12 +2597,14 @@ export default function App() {
     canvas.addEventListener('gesturechange', handleGestureChange);
     canvas.addEventListener('gestureend', handleGestureEnd);
     canvas.addEventListener('wheel', handleWheel, { passive: false });
+    document.addEventListener('wheel', handleDocumentWheel, { passive: false });
 
     return () => {
       canvas.removeEventListener('gesturestart', handleGestureStart);
       canvas.removeEventListener('gesturechange', handleGestureChange);
       canvas.removeEventListener('gestureend', handleGestureEnd);
       canvas.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('wheel', handleDocumentWheel);
     };
   }, [scale]);
 
