@@ -1248,6 +1248,10 @@ body {
   color: white;
 }
 
+.canvas-tool-btn.active svg {
+  color: white;
+}
+
 .canvas-tool-btn.disabled {
   opacity: 0.4;
   cursor: not-allowed;

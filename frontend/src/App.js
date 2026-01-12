@@ -2177,6 +2177,7 @@ export default function App() {
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
+  const [showClearConfirm, setShowClearConfirm] = useState(false); // Clear canvas confirmation
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
   const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link', 'comments'
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -2964,7 +2965,7 @@ export default function App() {
     if (!hasMap) return;
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar, .theme-toggle');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isOnConnection = e.target.closest('.connections-layer');
@@ -5340,16 +5341,7 @@ const findNodeById = (node, id) => {
                 {hasMap && (
                   <button
                     className="clear-btn"
-                    onClick={() => {
-                      if (window.confirm('Clear the canvas?')) {
-                        setRoot(null);
-                        setOrphans([]);
-                        setCurrentMap(null);
-                        setScale(1);
-                        setPan({ x: 0, y: 0 });
-                        setUrlInput('');
-                      }
-                    }}
+                    onClick={() => setShowClearConfirm(true)}
                     title="Clear canvas"
                   >
                     <X size={14} />
@@ -6611,6 +6603,32 @@ const findNodeById = (node, id) => {
             <div className="delete-confirm-actions">
               <button className="btn-secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
               <button className="btn-danger" onClick={confirmDeleteNode}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearConfirm && (
+        <div
+          className="delete-confirm-overlay"
+          onClick={() => setShowClearConfirm(false)}
+          onKeyDown={(e) => e.key === 'Escape' && setShowClearConfirm(false)}
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
+        >
+          <div className="delete-confirm-modal" onClick={e => e.stopPropagation()}>
+            <p>Clear the canvas?</p>
+            <div className="delete-confirm-actions">
+              <button className="btn-secondary" onClick={() => setShowClearConfirm(false)}>Cancel</button>
+              <button className="btn-danger" onClick={() => {
+                setRoot(null);
+                setOrphans([]);
+                setCurrentMap(null);
+                setScale(1);
+                setPan({ x: 0, y: 0 });
+                setUrlInput('');
+                setShowClearConfirm(false);
+              }}>Clear</button>
             </div>
           </div>
         </div>
