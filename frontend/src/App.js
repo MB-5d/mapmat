@@ -5354,8 +5354,14 @@ const findNodeById = (node, id) => {
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale}) translate(-50%, 0px)`,
               }}
-              onMouseMove={drawingConnection ? handleConnectionMouseMove : (draggingEndpoint ? handleEndpointDragMove : undefined)}
-              onMouseUp={drawingConnection ? handleConnectionMouseUp : (draggingEndpoint ? handleEndpointDragEnd : undefined)}
+              onMouseMove={(e) => {
+                if (drawingConnection) handleConnectionMouseMove(e);
+                else if (draggingEndpoint) handleEndpointDragMove(e);
+              }}
+              onMouseUp={(e) => {
+                if (drawingConnection) handleConnectionMouseUp(e);
+                else if (draggingEndpoint) handleEndpointDragEnd();
+              }}
             >
               <SitemapTree
                 data={root}
