@@ -6709,22 +6709,17 @@ const findNodeById = (node, id) => {
 
 
       {deleteConfirmNode && (
-        <div
-          className="delete-confirm-overlay"
-          onClick={() => setDeleteConfirmNode(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setDeleteConfirmNode(null)}
-          tabIndex={-1}
-          ref={(el) => el?.focus()}
-        >
-          <div className="delete-confirm-modal" onClick={e => e.stopPropagation()}>
-            <p>Delete "{deleteConfirmNode.title || deleteConfirmNode.url || 'this page'}"?</p>
-            <div className="delete-confirm-actions">
-              <button className="btn-secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
-              <button className="btn-danger" onClick={confirmDeleteNode}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
+  <div className="modal-overlay" onClick={() => setDeleteConfirmNode(null)}>
+    <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+      <h3>Delete Page</h3>
+      <p>Delete "{deleteConfirmNode.title || deleteConfirmNode.url || 'this page'}"?</p>
+      <div className="confirm-modal-actions">
+        <button className="btn-secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
+        <button className="btn-danger" onClick={confirmDeleteNode}>Delete</button>
+      </div>
+    </div>
+  </div>
+)}
 
       {showCreateMapModal && (
         <div className="modal-overlay" onClick={() => setShowCreateMapModal(false)}>
