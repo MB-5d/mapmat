@@ -647,6 +647,19 @@ body {
   cursor: grabbing;
 }
 
+/* Prevent text selection during any drag operation */
+.content.drawing-connection,
+.content.dragging-endpoint {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.content.drawing-connection *,
+.content.dragging-endpoint * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* Connections layer */
 .connections-layer {
   pointer-events: none;

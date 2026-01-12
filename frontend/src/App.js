@@ -4022,6 +4022,7 @@ const findNodeById = (node, id) => {
 
   // Handle mousedown on an anchor point - start drawing connection
   const handleAnchorMouseDown = (nodeId, anchor, e) => {
+    e.preventDefault();
     if (!connectionTool) return;
 
     const pos = getAnchorPosition(nodeId, anchor);
@@ -4029,6 +4030,7 @@ const findNodeById = (node, id) => {
 
     // Prevent text selection during drag
     document.body.style.userSelect = 'none';
+    document.body.style.webkitUserSelect = 'none';
 
     setDrawingConnection({
       type: connectionTool,
@@ -4144,12 +4146,18 @@ const findNodeById = (node, id) => {
   };
 
   // Start dragging a connection endpoint to reconnect
+  const handleEndpointDragMoveDoc = useRef(null);
+  const handleEndpointDragEndDoc = useRef(null);
+
   const handleEndpointDragStart = (e, conn, endpoint) => {
+    e.preventDefault();
     e.stopPropagation();
     if (!contentRef.current) return;
 
-    // Prevent text selection during drag
+    // Set styles immediately
     document.body.style.userSelect = 'none';
+    document.body.style.webkitUserSelect = 'none';
+    document.body.style.cursor = 'grabbing';
 
     const contentRect = contentRef.current.getBoundingClientRect();
     const mouseX = (e.clientX - contentRect.left) / scale;
@@ -4160,11 +4168,16 @@ const findNodeById = (node, id) => {
     const fixedAnchor = endpoint === 'source' ? conn.targetAnchor : conn.sourceAnchor;
     const fixedPos = getAnchorPosition(fixedNodeId, fixedAnchor);
 
-    if (!fixedPos) return;
+    if (!fixedPos) {
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
+      document.body.style.cursor = '';
+      return;
+    }
 
-    setDraggingEndpoint({
+    const newDraggingState = {
       connectionId: conn.id,
-      endpoint, // 'source' or 'target'
+      endpoint,
       type: conn.type,
       fixedNodeId,
       fixedAnchor,
@@ -4173,10 +4186,67 @@ const findNodeById = (node, id) => {
       currentX: mouseX,
       currentY: mouseY,
       snapTarget: null,
-    });
+    };
+
+    // Create handlers that close over the initial state
+    handleEndpointDragMoveDoc.current = (moveE) => {
+      if (!contentRef.current) return;
+      const rect = contentRef.current.getBoundingClientRect();
+      const mx = (moveE.clientX - rect.left) / scale;
+      const my = (moveE.clientY - rect.top) / scale;
+
+      const snap = findNearestAnchor(mx, my, fixedNodeId, conn.type);
+
+      setDraggingEndpoint(prev => prev ? {
+        ...prev,
+        currentX: snap ? snap.x : mx,
+        currentY: snap ? snap.y : my,
+        snapTarget: snap,
+      } : null);
+    };
+
+    handleEndpointDragEndDoc.current = () => {
+      document.removeEventListener('mousemove', handleEndpointDragMoveDoc.current);
+      document.removeEventListener('mouseup', handleEndpointDragEndDoc.current);
+
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
+      document.body.style.cursor = '';
+
+      setDraggingEndpoint(prev => {
+        if (!prev) return null;
+
+        const { connectionId: connId, endpoint: ep, snapTarget: snap } = prev;
+
+        if (snap) {
+          saveStateForUndo();
+          setConnections(conns => conns.map(c => {
+            if (c.id !== connId) return c;
+            if (ep === 'source') {
+              return { ...c, sourceNodeId: snap.nodeId, sourceAnchor: snap.anchor };
+            } else {
+              return { ...c, targetNodeId: snap.nodeId, targetAnchor: snap.anchor };
+            }
+          }));
+          showToast('Connection updated', 'success');
+        } else {
+          saveStateForUndo();
+          setConnections(conns => conns.filter(c => c.id !== connId));
+          showToast('Connection deleted', 'success');
+        }
+
+        return null;
+      });
+    };
+
+    // Attach listeners BEFORE setting state
+    document.addEventListener('mousemove', handleEndpointDragMoveDoc.current);
+    document.addEventListener('mouseup', handleEndpointDragEndDoc.current);
+
+    setDraggingEndpoint(newDraggingState);
   };
 
-  // Handle mousemove while dragging endpoint
+  // Keep these for the content div fallback
   const handleEndpointDragMove = (e) => {
     if (!draggingEndpoint || !contentRef.current) return;
 
@@ -4184,7 +4254,6 @@ const findNodeById = (node, id) => {
     const mouseX = (e.clientX - contentRect.left) / scale;
     const mouseY = (e.clientY - contentRect.top) / scale;
 
-    // Check for magnetic snap (exclude the fixed node)
     const snapTarget = findNearestAnchor(
       mouseX,
       mouseY,
@@ -4200,14 +4269,12 @@ const findNodeById = (node, id) => {
     }));
   };
 
-  // Handle mouseup - finish reconnecting or delete
   const handleEndpointDragEnd = () => {
     if (!draggingEndpoint) return;
 
     const { connectionId, endpoint, snapTarget } = draggingEndpoint;
 
     if (snapTarget) {
-      // Reconnect to new anchor
       saveStateForUndo();
       setConnections(prev => prev.map(conn => {
         if (conn.id !== connectionId) return conn;
@@ -4228,14 +4295,14 @@ const findNodeById = (node, id) => {
       }));
       showToast('Connection updated', 'success');
     } else {
-      // Dropped on canvas - delete the connection
       saveStateForUndo();
       setConnections(prev => prev.filter(c => c.id !== connectionId));
       showToast('Connection deleted', 'success');
     }
 
-    // Re-enable text selection
     document.body.style.userSelect = '';
+    document.body.style.webkitUserSelect = '';
+    document.body.style.cursor = '';
     setDraggingEndpoint(null);
   };
 
