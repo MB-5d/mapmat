@@ -4252,7 +4252,7 @@ const findNodeById = (node, id) => {
     if (shared.length <= 1) return { x: 0, y: 0 };
 
     const index = shared.findIndex(c => c.id === conn.id);
-    const offset = (index - (shared.length - 1) / 2) * 8;
+    const offset = (index - (shared.length - 1) / 2) * 16;
 
     return (anchor === 'top' || anchor === 'bottom')
       ? { x: offset, y: 0 }
