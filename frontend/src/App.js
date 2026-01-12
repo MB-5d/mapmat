@@ -2130,6 +2130,51 @@ const SaveMapForm = ({ projects, currentMap, rootUrl, onSave, onCreateProject, o
   );
 };
 
+// Prompt Modal Component
+const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onCancel }) => {
+  const [value, setValue] = useState(defaultValue);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (value.trim()) {
+      onConfirm(value.trim());
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+        <h3>{title}</h3>
+        {message && <p>{message}</p>}
+        <form onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={placeholder}
+            className="prompt-input"
+          />
+          <div className="confirm-modal-actions">
+            <button type="button" className="btn-secondary" onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={!value.trim()}>
+              OK
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
@@ -2177,7 +2222,14 @@ export default function App() {
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
-  const [showClearConfirm, setShowClearConfirm] = useState(false); // Clear canvas confirmation
+  // Generic confirmation modal
+  const [confirmModal, setConfirmModal] = useState(null);
+  // Shape: { title, message, onConfirm, onCancel, confirmText, cancelText, danger }
+
+  // Generic prompt modal
+  const [promptModal, setPromptModal] = useState(null);
+  // Shape: { title, message, onConfirm, onCancel, placeholder, defaultValue }
+
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
   const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link', 'comments'
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -2299,6 +2351,35 @@ export default function App() {
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
     return theme;
+  };
+
+  // Show confirmation modal and return promise
+  const showConfirm = ({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
+    return new Promise((resolve) => {
+      setConfirmModal({
+        title,
+        message,
+        confirmText,
+        cancelText,
+        danger,
+        onConfirm: () => { setConfirmModal(null); resolve(true); },
+        onCancel: () => { setConfirmModal(null); resolve(false); },
+      });
+    });
+  };
+
+  // Show prompt modal and return promise
+  const showPrompt = ({ title, message, placeholder = '', defaultValue = '' }) => {
+    return new Promise((resolve) => {
+      setPromptModal({
+        title,
+        message,
+        placeholder,
+        defaultValue,
+        onConfirm: (value) => { setPromptModal(null); resolve(value); },
+        onCancel: () => { setPromptModal(null); resolve(null); },
+      });
+    });
   };
 
   // dnd-kit sensors - require 5px movement before activating drag
@@ -2671,7 +2752,13 @@ export default function App() {
   };
 
   const deleteProject = async (projectId) => {
-    if (!window.confirm('Delete this project and all its maps?')) return;
+    const confirmed = await showConfirm({
+      title: 'Delete Project',
+      message: 'Delete this project and all its maps?',
+      confirmText: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       await api.deleteProject(projectId);
       setProjects(prev => prev.filter(p => p.id !== projectId));
@@ -2752,7 +2839,13 @@ export default function App() {
   };
 
   const deleteMap = async (projectId, mapId) => {
-    if (!window.confirm('Delete this map?')) return;
+    const confirmed = await showConfirm({
+      title: 'Delete Map',
+      message: 'Delete this map?',
+      confirmText: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
     try {
       await api.deleteMap(mapId);
       setProjects(prev => prev.map(p => {
@@ -2837,7 +2930,13 @@ export default function App() {
 
   const deleteSelectedHistory = async () => {
     if (selectedHistoryItems.size === 0) return;
-    if (!window.confirm(`Delete ${selectedHistoryItems.size} scan${selectedHistoryItems.size > 1 ? 's' : ''} from history?`)) return;
+    const confirmed = await showConfirm({
+      title: 'Delete History',
+      message: `Delete ${selectedHistoryItems.size} scan${selectedHistoryItems.size > 1 ? 's' : ''} from history?`,
+      confirmText: 'Delete',
+      danger: true
+    });
+    if (!confirmed) return;
 
     try {
       await api.deleteHistory(Array.from(selectedHistoryItems));
@@ -5341,7 +5440,22 @@ const findNodeById = (node, id) => {
                 {hasMap && (
                   <button
                     className="clear-btn"
-                    onClick={() => setShowClearConfirm(true)}
+                    onClick={async () => {
+                      const confirmed = await showConfirm({
+                        title: 'Clear Canvas',
+                        message: 'Clear the canvas? This cannot be undone.',
+                        confirmText: 'Clear',
+                        danger: true
+                      });
+                      if (confirmed) {
+                        setRoot(null);
+                        setOrphans([]);
+                        setCurrentMap(null);
+                        setScale(1);
+                        setPan({ x: 0, y: 0 });
+                        setUrlInput('');
+                      }
+                    }}
                     title="Clear canvas"
                   >
                     <X size={14} />
@@ -6369,8 +6483,12 @@ const findNodeById = (node, id) => {
                 </div>
                 <button
                   className="add-project-btn"
-                  onClick={() => {
-                    const name = window.prompt('New project name:');
+                  onClick={async () => {
+                    const name = await showPrompt({
+                      title: 'New Project',
+                      message: 'Enter a name for the new project:',
+                      placeholder: 'Project name'
+                    });
                     if (name) createProject(name);
                   }}
                 >
@@ -6608,32 +6726,6 @@ const findNodeById = (node, id) => {
         </div>
       )}
 
-      {showClearConfirm && (
-        <div
-          className="delete-confirm-overlay"
-          onClick={() => setShowClearConfirm(false)}
-          onKeyDown={(e) => e.key === 'Escape' && setShowClearConfirm(false)}
-          tabIndex={-1}
-          ref={(el) => el?.focus()}
-        >
-          <div className="delete-confirm-modal" onClick={e => e.stopPropagation()}>
-            <p>Clear the canvas?</p>
-            <div className="delete-confirm-actions">
-              <button className="btn-secondary" onClick={() => setShowClearConfirm(false)}>Cancel</button>
-              <button className="btn-danger" onClick={() => {
-                setRoot(null);
-                setOrphans([]);
-                setCurrentMap(null);
-                setScale(1);
-                setPan({ x: 0, y: 0 });
-                setUrlInput('');
-                setShowClearConfirm(false);
-              }}>Clear</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showCreateMapModal && (
         <div className="modal-overlay" onClick={() => setShowCreateMapModal(false)}>
           <div className="modal create-map-modal" onClick={e => e.stopPropagation()}>
@@ -6647,11 +6739,15 @@ const findNodeById = (node, id) => {
               <div className="create-map-options">
                 <button
                   className="create-map-option"
-                  onClick={() => {
+                  onClick={async () => {
                     if (hasMap) {
-                      if (!window.confirm('This will replace your current map. Continue?')) {
-                        return;
-                      }
+                      const confirmed = await showConfirm({
+                        title: 'Replace Map',
+                        message: 'This will replace your current map. Continue?',
+                        confirmText: 'Replace',
+                        danger: false
+                      });
+                      if (!confirmed) return;
                     }
                     saveStateForUndo();
                     setRoot({ id: 'root', title: 'Home', url: '', children: [], comments: [] });
@@ -6760,6 +6856,42 @@ const findNodeById = (node, id) => {
             <X size={16} />
           </button>
         </div>
+      )}
+
+      {/* Generic Confirmation Modal */}
+      {confirmModal && (
+        <div className="modal-overlay" onClick={confirmModal.onCancel}>
+          <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+            <h3>{confirmModal.title}</h3>
+            <p>{confirmModal.message}</p>
+            <div className="confirm-modal-actions">
+              <button
+                className="btn-secondary"
+                onClick={confirmModal.onCancel}
+              >
+                {confirmModal.cancelText}
+              </button>
+              <button
+                className={confirmModal.danger ? 'btn-danger' : 'btn-primary'}
+                onClick={confirmModal.onConfirm}
+              >
+                {confirmModal.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generic Prompt Modal */}
+      {promptModal && (
+        <PromptModal
+          title={promptModal.title}
+          message={promptModal.message}
+          placeholder={promptModal.placeholder}
+          defaultValue={promptModal.defaultValue}
+          onConfirm={promptModal.onConfirm}
+          onCancel={promptModal.onCancel}
+        />
       )}
     </div>
   );

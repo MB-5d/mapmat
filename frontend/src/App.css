@@ -1866,6 +1866,94 @@ body {
   background: #dc2626;
 }
 
+.btn-primary {
+  padding: 12px 24px;
+  border: none;
+  background: #6366f1;
+  color: white;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 100px;
+}
+
+.btn-primary:hover {
+  background: #4f46e5;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Confirmation Modal */
+.confirm-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 360px;
+  max-width: 440px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.confirm-modal h3 {
+  margin: 0 0 12px 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.confirm-modal p {
+  margin: 0 0 24px 0;
+  color: #64748b;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.confirm-modal form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.confirm-modal-actions .btn-secondary,
+.confirm-modal-actions .btn-primary,
+.confirm-modal-actions .btn-danger {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  min-width: 100px;
+}
+
+.prompt-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 1rem;
+  margin-bottom: 24px;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.prompt-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
 .projects-modal {
   max-width: 520px;
   padding: 0;
@@ -4416,6 +4504,29 @@ body {
     color: #e2e0e8;
   }
 
+  .confirm-modal {
+    background: #1a1022;
+    border: 1px solid #2d1f3d;
+  }
+
+  .confirm-modal h3 {
+    color: #e2e0e8;
+  }
+
+  .confirm-modal p {
+    color: #9f8fb8;
+  }
+
+  .prompt-input {
+    background: #2d1f3d;
+    border-color: #3d2a52;
+    color: #e2e0e8;
+  }
+
+  .prompt-input::placeholder {
+    color: #6b5a80;
+  }
+
   .btn-secondary {
     background: #2d1f3d;
     border-color: #3d2a52;
@@ -5833,6 +5944,46 @@ body {
 
 [data-theme="dark"] .theme-toggle-thumb {
   background: #0d0812;
+}
+
+/* Confirm modal dark mode */
+[data-theme="dark"] .confirm-modal {
+  background: #1a1022;
+  border: 1px solid #2d1f3d;
+}
+
+[data-theme="dark"] .confirm-modal h3 {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .confirm-modal p {
+  color: #9f8fb8;
+}
+
+[data-theme="dark"] .btn-secondary {
+  background: #2d1f3d;
+  border-color: #3d2a52;
+  color: #9f8fb8;
+}
+
+[data-theme="dark"] .btn-secondary:hover {
+  background: #3d2a52;
+  border-color: #4d3a62;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .prompt-input {
+  background: #2d1f3d;
+  border-color: #3d2a52;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .prompt-input::placeholder {
+  color: #6b5a80;
+}
+
+[data-theme="dark"] .prompt-input:focus {
+  border-color: #6366f1;
 }
 
 /* =============================================
