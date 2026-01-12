@@ -3252,6 +3252,19 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu]);
 
+  // Prevent trackpad pinch-to-zoom from zooming the whole page
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+    };
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, []);
+
   const exportJson = () => {
     if (!root) return;
     downloadText('sitemap.json', JSON.stringify({ root, colors }, null, 2));
