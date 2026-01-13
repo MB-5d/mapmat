@@ -45,6 +45,7 @@ import {
   History,
   Image,
   ImageOff,
+  Layers,
   Scan,
   CheckSquare,
   Square,
@@ -6086,6 +6087,70 @@ const findNodeById = (node, id) => {
                 );
               })}
 
+            {/* Layers Panel */}
+            <div className={`layers-panel ${showViewDropdown ? 'expanded' : ''}`} ref={viewDropdownRef}>
+              <div
+                className="layers-panel-header"
+                onClick={() => setShowViewDropdown(!showViewDropdown)}
+              >
+                <div className="layers-panel-title">
+                  <Layers size={16} />
+                  <span>Layers</span>
+                </div>
+                <button className="key-toggle">
+                  {showViewDropdown ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                </button>
+              </div>
+              {showViewDropdown && (
+                <div className="layers-panel-list">
+                  <label className="layers-panel-item">
+                    <input
+                      type="checkbox"
+                      checked={layers.main}
+                      disabled
+                      onChange={() => {}}
+                    />
+                    <span>Main / URL</span>
+                  </label>
+                  <label className="layers-panel-item">
+                    <input
+                      type="checkbox"
+                      checked={layers.userFlows}
+                      onChange={() => {
+                        setLayers(l => ({ ...l, userFlows: !l.userFlows }));
+                        if (layers.userFlows && connectionTool === 'userflow') {
+                          setConnectionTool(null);
+                        }
+                      }}
+                    />
+                    <span>User Flows</span>
+                  </label>
+                  <label className="layers-panel-item">
+                    <input
+                      type="checkbox"
+                      checked={layers.crossLinks}
+                      onChange={() => {
+                        setLayers(l => ({ ...l, crossLinks: !l.crossLinks }));
+                        if (layers.crossLinks && connectionTool === 'crosslink') {
+                          setConnectionTool(null);
+                        }
+                      }}
+                    />
+                    <span>Cross-links</span>
+                  </label>
+                  <label className="layers-panel-item disabled">
+                    <input
+                      type="checkbox"
+                      checked={layers.xmlComparison}
+                      disabled
+                      onChange={() => {}}
+                    />
+                    <span>XML Comparison</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
             <div className="color-key">
               <div className="color-key-header" onClick={() => setShowColorKey(v => !v)}>
                 <div className="color-key-title">
@@ -6192,66 +6257,6 @@ const findNodeById = (node, id) => {
                 </button>
               )}
 
-              <div className="canvas-toolbar-divider" />
-
-              <div className="view-dropdown-container" ref={viewDropdownRef}>
-                <button
-                  className={`canvas-tool-btn ${showViewDropdown ? 'active' : ''}`}
-                  onClick={() => setShowViewDropdown(!showViewDropdown)}
-                  title="View Layers"
-                >
-                  <Eye size={20} />
-                </button>
-                {showViewDropdown && (
-                  <div className="view-dropdown" onClick={(e) => e.stopPropagation()}>
-                    <div className="view-dropdown-header">Layers</div>
-                    <label className="view-layer-item">
-                      <input
-                        type="checkbox"
-                        checked={layers.main}
-                        disabled
-                        onChange={() => {}}
-                      />
-                      <span>Main / URL</span>
-                    </label>
-                    <label className="view-layer-item">
-                      <input
-                        type="checkbox"
-                        checked={layers.userFlows}
-                        onChange={() => {
-                          setLayers(l => ({ ...l, userFlows: !l.userFlows }));
-                          if (layers.userFlows && connectionTool === 'userflow') {
-                            setConnectionTool(null);
-                          }
-                        }}
-                      />
-                      <span>User Flows</span>
-                    </label>
-                    <label className="view-layer-item">
-                      <input
-                        type="checkbox"
-                        checked={layers.crossLinks}
-                        onChange={() => {
-                          setLayers(l => ({ ...l, crossLinks: !l.crossLinks }));
-                          if (layers.crossLinks && connectionTool === 'crosslink') {
-                            setConnectionTool(null);
-                          }
-                        }}
-                      />
-                      <span>Cross-links</span>
-                    </label>
-                    <label className="view-layer-item disabled">
-                      <input
-                        type="checkbox"
-                        checked={layers.xmlComparison}
-                        disabled
-                        onChange={() => {}}
-                      />
-                      <span>XML Comparison</span>
-                    </label>
-                  </div>
-                )}
-              </div>
             </div>
 
             <div className="zoom-controls">
