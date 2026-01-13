@@ -2178,6 +2178,8 @@ const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onC
 export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
+  const [mapName, setMapName] = useState('');
+  const [isEditingMapName, setIsEditingMapName] = useState(false);
   const [root, setRoot] = useState(null);
   const [orphans, setOrphans] = useState([]); // Pages with no parent (numbered 0.x)
   const [customPageTypes, setCustomPageTypes] = useState([]); // User-added page types
@@ -3029,6 +3031,18 @@ export default function App() {
         setCurrentMap(null);
         setScale(1);
         setPan({ x: 0, y: 0 });
+        // Set map name from site title
+        if (data.root?.title) {
+          setMapName(data.root.title);
+        } else {
+          // Use domain as fallback
+          try {
+            const domain = new URL(url).hostname.replace('www.', '');
+            setMapName(domain);
+          } catch {
+            setMapName('Untitled Map');
+          }
+        }
         const pageCount = countNodes(data.root);
         addToHistory(url, data.root, pageCount);
         showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
@@ -5481,12 +5495,38 @@ const findNodeById = (node, id) => {
                 {root?.title || 'Shared Sitemap'}
               </div>
             )}
-
-            <div className={`thumb-toggle ${showThumbnails ? 'active' : ''}`} onClick={() => setShowThumbnails(v => !v)}>
-              <span>Thumbnails</span>
-              <div className="toggle-switch" />
-            </div>
           </div>
+
+          {hasMap && (
+            <div className="map-name-container">
+              {isEditingMapName ? (
+                <input
+                  className="map-name-input"
+                  value={mapName}
+                  onChange={(e) => setMapName(e.target.value)}
+                  onBlur={() => setIsEditingMapName(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setIsEditingMapName(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setIsEditingMapName(false);
+                    }
+                  }}
+                  autoFocus
+                  spellCheck={false}
+                />
+              ) : (
+                <span
+                  className="map-name-display"
+                  onClick={() => canEdit() && setIsEditingMapName(true)}
+                  title={canEdit() ? "Click to rename" : mapName}
+                >
+                  {mapName || 'Untitled Map'}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="topbar-right">

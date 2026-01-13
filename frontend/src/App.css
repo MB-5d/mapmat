@@ -66,7 +66,7 @@ body {
   align-items: center;
   gap: 10px;
   width: 100%;
-  max-width: 560px;
+  max-width: 512px;
   padding: 4px 10px;
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
@@ -107,6 +107,46 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 0 8px;
+}
+
+/* Map Name Display */
+.map-name-container {
+  display: flex;
+  align-items: center;
+  margin-left: 16px;
+  max-width: 300px;
+}
+
+.map-name-display {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.map-name-display:hover {
+  background: #f1f5f9;
+}
+
+.map-name-input {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1e293b;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 4px 8px;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 300px;
+  box-shadow: 0 0 0 2px #6366f1;
 }
 
 .thumb-toggle {
@@ -5766,6 +5806,18 @@ body {
 
 [data-theme="dark"] .search-container input::placeholder {
   color: #9f8fb8;
+}
+
+[data-theme="dark"] .map-name-display {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .map-name-display:hover {
+  background: #301E3F;
+}
+
+[data-theme="dark"] .map-name-input {
+  color: #e2e0e8;
 }
 
 [data-theme="dark"] .thumb-toggle {
