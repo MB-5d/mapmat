@@ -43,6 +43,8 @@ import {
   ExternalLink,
   List,
   History,
+  Image,
+  ImageOff,
   Scan,
   CheckSquare,
   Square,
@@ -2292,12 +2294,14 @@ export default function App() {
     }
   }, [showViewDropdown]);
 
-  // Apply theme to document
+ // Apply theme to document
   useEffect(() => {
     const root = document.documentElement;
 
     if (theme === 'auto') {
-      root.removeAttribute('data-theme');
+      // Follow system preference
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.setAttribute('data-theme', systemTheme);
     } else {
       root.setAttribute('data-theme', theme);
     }
@@ -5485,6 +5489,18 @@ const findNodeById = (node, id) => {
                     Clear
                   </button>
                 )}
+
+                <button
+                  className="thumb-toggle-btn"
+                  onClick={() => setShowThumbnails(v => !v)}
+                  title={showThumbnails ? 'Hide thumbnails' : 'Show thumbnails'}
+                >
+                  <div className={`thumb-toggle-track ${showThumbnails ? 'active' : ''}`}>
+                    <ImageOff size={14} className="thumb-icon off" />
+                    <Image size={14} className="thumb-icon on" />
+                    <div className="thumb-toggle-thumb" />
+                  </div>
+                </button>
 
                 <button className="scan-btn" onClick={scan} disabled={loading}>
                   Scan
