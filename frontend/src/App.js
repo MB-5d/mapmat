@@ -2178,6 +2178,112 @@ const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onC
   );
 };
 
+// Create Map Modal Component
+const CreateMapModal = ({
+  show,
+  onClose,
+  onSubmit,
+  data,
+  setData,
+  projects,
+  onAddProject
+}) => {
+  if (!show) return null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="create-map-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Create New Map</h2>
+          <button className="modal-close-btn" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div className="form-group">
+            <label htmlFor="map-name">Map Name *</label>
+            <input
+              id="map-name"
+              type="text"
+              placeholder="My Sitemap"
+              value={data.name}
+              onChange={(e) => setData(d => ({ ...d, name: e.target.value }))}
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="map-project">Project</label>
+            <div className="select-with-add">
+              <select
+                id="map-project"
+                value={data.projectId}
+                onChange={(e) => setData(d => ({ ...d, projectId: e.target.value }))}
+              >
+                <option value="">No Project</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="add-project-btn"
+                onClick={onAddProject}
+                title="Create new project"
+              >
+                <FolderPlus size={18} />
+              </button>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="map-url">Starting URL (optional)</label>
+            <input
+              id="map-url"
+              type="url"
+              placeholder="https://example.com"
+              value={data.url}
+              onChange={(e) => setData(d => ({ ...d, url: e.target.value }))}
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="map-description">Description (optional)</label>
+            <textarea
+              id="map-description"
+              placeholder="Brief description of this sitemap..."
+              value={data.description}
+              onChange={(e) => setData(d => ({ ...d, description: e.target.value }))}
+              rows={3}
+            />
+          </div>
+
+          <div className="form-group disabled-feature">
+            <label>Collaborators</label>
+            <div className="coming-soon-field">
+              <span>Coming soon — will be available in Share</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => onSubmit(data)}
+            disabled={!data.name.trim()}
+          >
+            Create
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
@@ -2224,6 +2330,12 @@ export default function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [showCreateMapModal, setShowCreateMapModal] = useState(false);
+  const [newMapData, setNewMapData] = useState({
+    name: '',
+    projectId: '',
+    url: '',
+    description: ''
+  });
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
@@ -2702,6 +2814,35 @@ export default function App() {
     setScanHistory([]);
     setCurrentMap(null);
     showToast('Logged out', 'info');
+  };
+
+  const handleCreateMap = async (mapData) => {
+    // Clear any existing map
+    setRoot(null);
+    setOrphans([]);
+    setConnections([]);
+
+    // Set the map name
+    setMapName(mapData.name);
+
+    // Set URL input if provided
+    if (mapData.url) {
+      setUrlInput(mapData.url);
+    }
+
+    // Close create modal
+    setShowCreateMapModal(false);
+
+    // Reset the form data
+    setNewMapData({
+      name: '',
+      projectId: '',
+      url: '',
+      description: ''
+    });
+
+    // Open Add Page modal
+    setShowAddPageModal(true);
   };
 
   // Fetch full page screenshot from backend (or display direct image URL)
@@ -5551,7 +5692,14 @@ const findNodeById = (node, id) => {
             <button
               className="icon-btn"
               title="Create New Map"
-              onClick={() => setShowCreateMapModal(true)}
+              onClick={() => {
+                if (!currentUser) {
+                  showToast('Please sign in to create a new map', 'warning');
+                  setShowLoginModal(true);
+                  return;
+                }
+                setShowCreateMapModal(true);
+              }}
             >
               <PlusSquare size={18} />
             </button>
@@ -6791,76 +6939,27 @@ const findNodeById = (node, id) => {
   </div>
 )}
 
-      {showCreateMapModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateMapModal(false)}>
-          <div className="modal create-map-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Create New Map</h2>
-              <button className="modal-close" onClick={() => setShowCreateMapModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="create-map-options">
-                <button
-                  className="create-map-option"
-                  onClick={async () => {
-                    if (hasMap) {
-                      const confirmed = await showConfirm({
-                        title: 'Replace Map',
-                        message: 'This will replace your current map. Continue?',
-                        confirmText: 'Replace',
-                        danger: false
-                      });
-                      if (!confirmed) return;
-                    }
-                    saveStateForUndo();
-                    setRoot({ id: 'root', title: 'Home', url: '', children: [], comments: [] });
-                    setOrphans([]);
-                    setCurrentMap(null);
-                    setShowCreateMapModal(false);
-                    showToast('New map created', 'success');
-                  }}
-                >
-                  <FileText size={24} />
-                  <div className="create-map-option-text">
-                    <span className="create-map-option-title">Start from Scratch</span>
-                    <span className="create-map-option-desc">Begin with a blank canvas</span>
-                  </div>
-                </button>
-
-                <button
-                  className="create-map-option disabled"
-                  onClick={() => {
-                    showToast('Templates coming soon!', 'info');
-                  }}
-                >
-                  <LayoutTemplate size={24} />
-                  <div className="create-map-option-text">
-                    <span className="create-map-option-title">Start from Template</span>
-                    <span className="create-map-option-desc">Product, Ecommerce, Blog...</span>
-                  </div>
-                  <span className="coming-soon-badge">Coming Soon</span>
-                </button>
-
-                <button
-                  className="create-map-option"
-                  onClick={() => {
-                    setShowCreateMapModal(false);
-                    setShowImportModal(true);
-                  }}
-                >
-                  <Upload size={24} />
-                  <div className="create-map-option-text">
-                    <span className="create-map-option-title">Import from File</span>
-                    <span className="create-map-option-desc">XML sitemap, CSV, JSON</span>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Create Map Modal */}
+      <CreateMapModal
+        show={showCreateMapModal}
+        onClose={() => {
+          setShowCreateMapModal(false);
+          setNewMapData({
+            name: '',
+            projectId: '',
+            url: '',
+            description: ''
+          });
+        }}
+        onSubmit={handleCreateMap}
+        data={newMapData}
+        setData={setNewMapData}
+        projects={projects}
+        onAddProject={() => {
+          setShowCreateMapModal(false);
+          setShowProjectsModal(true);
+        }}
+      />
 
       {showImportModal && (
         <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
