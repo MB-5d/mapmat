@@ -2372,10 +2372,7 @@ export default function App() {
   const [draggingEndpoint, setDraggingEndpoint] = useState(null); // { connectionId, endpoint: 'source'|'target', ... }
 
   // Theme: 'light', 'dark', or 'auto'
-  const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem('mapmat-theme');
-    return saved || 'auto';
-  });
+  const [theme, setTheme] = useState('auto');
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -2407,19 +2404,39 @@ export default function App() {
     }
   }, [showViewDropdown]);
 
- // Apply theme to document
+  // Apply theme to document and listen for system changes
   useEffect(() => {
     const root = document.documentElement;
 
-    if (theme === 'auto') {
-      // Follow system preference
-      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      root.setAttribute('data-theme', systemTheme);
+    const applyTheme = () => {
+      if (theme === 'auto') {
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        root.setAttribute('data-theme', systemTheme);
+      } else {
+        root.setAttribute('data-theme', theme);
+      }
+    };
+
+    applyTheme();
+
+    // Listen for system theme changes when in auto mode
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+      if (theme === 'auto') {
+        applyTheme();
+      }
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+
+    // Only save to localStorage if user explicitly changed it
+    if (theme !== 'auto') {
+      localStorage.setItem('mapmat-theme', theme);
     } else {
-      root.setAttribute('data-theme', theme);
+      localStorage.removeItem('mapmat-theme');
     }
 
-    localStorage.setItem('mapmat-theme', theme);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
   const hasMap = !!root;
@@ -2830,6 +2847,14 @@ export default function App() {
       setUrlInput(mapData.url);
     }
 
+    // Store the selected project for when user saves
+    if (mapData.projectId) {
+      setCurrentMap(prev => ({
+        ...prev,
+        projectId: mapData.projectId
+      }));
+    }
+
     // Close create modal
     setShowCreateMapModal(false);
 
@@ -2841,8 +2866,16 @@ export default function App() {
       description: ''
     });
 
-    // Open Add Page modal
-    setShowAddPageModal(true);
+    // Show toast prompting user to add first page
+    showToast('Map created! Add your first page by scanning a URL or clicking the + button.', 'success');
+
+    // If URL was provided, auto-scan it
+    if (mapData.url) {
+      // Small delay to let state settle
+      setTimeout(() => {
+        scan();
+      }, 100);
+    }
   };
 
   // Fetch full page screenshot from backend (or display direct image URL)
@@ -4206,8 +4239,10 @@ const findNodeById = (node, id) => {
     const nodeRect = nodeElement.getBoundingClientRect();
     const canvasRect = canvasRef.current.getBoundingClientRect();
 
-    // Calculate center of canvas
-    const canvasCenterX = canvasRect.width / 2;
+    // Calculate center of canvas, offset left if comments panel is open
+    // Comments panel is 320px wide, so offset by half that (160px)
+    const panelOffset = showCommentsPanel ? 160 : 0;
+    const canvasCenterX = (canvasRect.width / 2) - panelOffset;
     const canvasCenterY = canvasRect.height / 2;
 
     // Calculate where node currently is relative to canvas
@@ -5695,7 +5730,7 @@ const findNodeById = (node, id) => {
               onClick={() => {
                 if (!currentUser) {
                   showToast('Please sign in to create a new map', 'warning');
-                  setShowLoginModal(true);
+                  setShowAuthModal(true);
                   return;
                 }
                 setShowCreateMapModal(true);
@@ -5718,17 +5753,6 @@ const findNodeById = (node, id) => {
           {canEdit() && (
             <button
               className="icon-btn"
-              title="Save Map"
-              onClick={() => setShowSaveMapModal(true)}
-              disabled={!hasMap}
-            >
-              <Bookmark size={18} />
-            </button>
-          )}
-
-          {canEdit() && (
-            <button
-              className="icon-btn"
               title="Projects"
               onClick={() => setShowProjectsModal(true)}
             >
@@ -5743,28 +5767,6 @@ const findNodeById = (node, id) => {
               onClick={() => setShowHistoryModal(true)}
             >
               <History size={18} />
-            </button>
-          )}
-
-          <div className="divider" />
-
-          <button
-            className="icon-btn"
-            title="Export"
-            onClick={() => setShowExportModal(true)}
-            disabled={!hasMap}
-          >
-            <Download size={18} />
-          </button>
-
-          {canEdit() && (
-            <button
-              className="icon-btn"
-              title="Share"
-              onClick={() => setShowShareModal(true)}
-              disabled={!hasMap}
-            >
-              <Share2 size={18} />
             </button>
           )}
 
@@ -6246,7 +6248,7 @@ const findNodeById = (node, id) => {
                   <span>Layers</span>
                 </div>
                 <button className="key-toggle">
-                  {showViewDropdown ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                  {showViewDropdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
               </div>
               {showViewDropdown && (
@@ -6306,7 +6308,7 @@ const findNodeById = (node, id) => {
                   <span>Legend</span>
                 </div>
                 <button className="key-toggle">
-                  {showColorKey ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                  {showColorKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
               </div>
               {showColorKey && (
@@ -6402,6 +6404,39 @@ const findNodeById = (node, id) => {
                   title="Redo (⇧⌘Z)"
                 >
                   <Redo2 size={20} />
+                </button>
+              )}
+
+              <div className="canvas-toolbar-divider" />
+
+              {canEdit() && (
+                <button
+                  className="canvas-tool-btn"
+                  onClick={() => setShowSaveMapModal(true)}
+                  disabled={!hasMap}
+                  title="Save Map"
+                >
+                  <Bookmark size={20} />
+                </button>
+              )}
+
+              <button
+                className="canvas-tool-btn"
+                onClick={() => setShowExportModal(true)}
+                disabled={!hasMap}
+                title="Download"
+              >
+                <Download size={20} />
+              </button>
+
+              {canEdit() && (
+                <button
+                  className="canvas-tool-btn"
+                  onClick={() => setShowShareModal(true)}
+                  disabled={!hasMap}
+                  title="Share"
+                >
+                  <Share2 size={20} />
                 </button>
               )}
 
@@ -6594,8 +6629,17 @@ const findNodeById = (node, id) => {
             </button>
             <h3>Save Map</h3>
             {!isLoggedIn ? (
-              <div className="projects-empty">
-                Please log in to save maps
+              <div className="login-prompt">
+                <p>Please sign in to save your maps</p>
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    setShowSaveMapModal(false);
+                    setShowAuthModal(true);
+                  }}
+                >
+                  Sign In
+                </button>
               </div>
             ) : (
               <SaveMapForm
