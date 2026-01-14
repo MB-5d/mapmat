@@ -1458,7 +1458,7 @@ const ProfileModal = ({ user, onClose, onUpdate, onLogout, showToast }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card profile-modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>
-          <X size={18} />
+          <X size={20} />
         </button>
 
         <div className="profile-header">
@@ -1720,9 +1720,9 @@ const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card edit-node-modal" onClick={(e) => e.stopPropagation()}>
         <div className="edit-node-header">
-          <h2 className="modal-title">{modalTitle}</h2>
+          <h3>{modalTitle}</h3>
           <button className="modal-close" onClick={onClose}>
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
@@ -1953,7 +1953,7 @@ const AuthModal = ({ onClose, onSuccess, showToast }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card auth-modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>
-          <X size={18} />
+          <X size={20} />
         </button>
 
         <div className="auth-tabs">
@@ -2043,9 +2043,10 @@ const AuthModal = ({ onClose, onSuccess, showToast }) => {
   );
 };
 
-const SaveMapForm = ({ projects, currentMap, rootUrl, defaultProjectId, onSave, onCreateProject, onCancel }) => {
+const SaveMapForm = ({ projects, currentMap, rootUrl, defaultProjectId, defaultName, onSave, onCreateProject, onCancel }) => {
   // Get default name from root domain (e.g., "example" from "https://www.example.com")
   const getDefaultName = () => {
+    if (defaultName) return defaultName;
     if (currentMap?.name) return currentMap.name;
     if (!rootUrl) return '';
     try {
@@ -2122,11 +2123,11 @@ const SaveMapForm = ({ projects, currentMap, rootUrl, defaultProjectId, onSave, 
         </div>
       )}
       <div className="form-actions">
-        <button className="modal-btn" onClick={handleSave} disabled={!mapName.trim()}>
-          Save Map
-        </button>
-        <button className="modal-btn cancel" onClick={onCancel}>
+        <button className="modal-btn secondary" onClick={onCancel}>
           Cancel
+        </button>
+        <button className="modal-btn primary" onClick={handleSave} disabled={!mapName.trim()}>
+          Save Map
         </button>
       </div>
     </div>
@@ -2165,10 +2166,10 @@ const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onC
             className="prompt-input"
           />
           <div className="confirm-modal-actions">
-            <button type="button" className="btn-secondary" onClick={onCancel}>
+            <button type="button" className="modal-btn secondary" onClick={onCancel}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary" disabled={!value.trim()}>
+            <button type="submit" className="modal-btn primary" disabled={!value.trim()}>
               OK
             </button>
           </div>
@@ -2843,23 +2844,6 @@ export default function App() {
     setCurrentMap(null);
     setIsImportedMap(false);
 
-    // Set the map name
-    setMapName(mapData.name);
-
-    // Set URL input if provided
-    if (mapData.url) {
-      setUrlInput(mapData.url);
-    } else {
-      setUrlInput('');
-    }
-
-    // Store the selected project ID for later save
-    if (mapData.projectId) {
-      setSelectedProjectForNewMap(mapData.projectId);
-    } else {
-      setSelectedProjectForNewMap(null);
-    }
-
     // Close create modal
     setShowCreateMapModal(false);
 
@@ -2873,13 +2857,70 @@ export default function App() {
 
     // Show helpful toast and auto-scan if URL provided
     if (mapData.url && mapData.url.trim()) {
+      setMapName(mapData.name);
+      setUrlInput(mapData.url);
+      if (mapData.projectId) {
+        setSelectedProjectForNewMap(mapData.projectId);
+      } else {
+        setSelectedProjectForNewMap(null);
+      }
+
       showToast('Starting scan...', 'loading');
       // Auto-scan the provided URL
       setTimeout(() => {
-        scan();
+        scan(mapData.url, true);
       }, 100);
     } else {
-      showToast('Map created! Enter a URL and click Scan to add pages.', 'success');
+      // No URL - Create blank map immediately
+      const defaultRoot = {
+        id: 'root',
+        title: mapData.name || 'Home',
+        url: '',
+        children: [],
+        type: 'page'
+      };
+
+      try {
+        // Save to backend immediately
+        const { map } = await api.saveMap({
+          name: mapData.name,
+          url: '',
+          root: defaultRoot,
+          orphans: [],
+          colors: DEFAULT_COLORS,
+          project_id: mapData.projectId || null,
+        });
+
+        // Update state
+        setRoot(defaultRoot);
+        setCurrentMap(map);
+        setMapName(map.name);
+        
+        // Update projects list
+        setProjects(prev => {
+          let updated = prev.map(p => ({
+            ...p,
+            maps: (p.maps || []).filter(m => m.id !== map.id),
+          }));
+
+          if (map.project_id) {
+            updated = updated.map(p =>
+              p.id === map.project_id
+                ? { ...p, maps: [...(p.maps || []), map] }
+                : p
+            );
+          }
+          return updated;
+        });
+
+        showToast('Map created', 'success');
+      } catch (e) {
+        console.error(e);
+        // Fallback if save fails (e.g. not logged in)
+        setRoot(defaultRoot);
+        setMapName(mapData.name);
+        showToast('Map created (unsaved)', 'warning');
+      }
     }
   };
 
@@ -3183,8 +3224,12 @@ export default function App() {
     showToast('Scan cancelled', 'info');
   };
 
-  const scan = () => {
-    const url = sanitizeUrl(urlInput);
+  const scan = (overrideUrl, preserveName = false) => {
+    let urlToScan = urlInput;
+    if (typeof overrideUrl === 'string') {
+      urlToScan = overrideUrl;
+    }
+    const url = sanitizeUrl(urlToScan);
     if (!url) {
       showToast('Please enter a valid URL', 'warning');
       return;
@@ -3216,9 +3261,9 @@ export default function App() {
         setScale(1);
         setPan({ x: 0, y: 0 });
         // Set map name from site title
-        if (data.root?.title) {
+        if (!preserveName && data.root?.title) {
           setMapName(data.root.title);
-        } else {
+        } else if (!preserveName) {
           // Use domain as fallback
           try {
             const domain = new URL(url).hostname.replace('www.', '');
@@ -6508,7 +6553,7 @@ const findNodeById = (node, id) => {
         <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
           <div className="modal-card export-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowExportModal(false)}>
-              <X size={18} />
+              <X size={20} />
             </button>
             <h3>Download</h3>
             <div className="export-options">
@@ -6556,7 +6601,7 @@ const findNodeById = (node, id) => {
         <div className="modal-overlay" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}>
           <div className="modal-card share-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}>
-              <X size={18} />
+              <X size={20} />
             </button>
             <h3>Share Sitemap</h3>
 
@@ -6637,7 +6682,7 @@ const findNodeById = (node, id) => {
         <div className="modal-overlay" onClick={() => setShowSaveMapModal(false)}>
           <div className="modal-card save-map-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => setShowSaveMapModal(false)}>
-              <X size={18} />
+              <X size={20} />
             </button>
             <h3>Save Map</h3>
             {!isLoggedIn ? (
@@ -6659,6 +6704,7 @@ const findNodeById = (node, id) => {
                 currentMap={currentMap}
                 rootUrl={root?.url}
                 defaultProjectId={selectedProjectForNewMap}
+                defaultName={mapName}
                 onSave={saveMap}
                 onCreateProject={createProject}
                 onCancel={() => setShowSaveMapModal(false)}
@@ -6672,7 +6718,7 @@ const findNodeById = (node, id) => {
         <div className="modal-overlay" onClick={() => { setShowProjectsModal(false); setEditingProjectId(null); }}>
           <div className="modal-card projects-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => { setShowProjectsModal(false); setEditingProjectId(null); }}>
-              <X size={18} />
+              <X size={20} />
             </button>
             <h3>Projects & Maps</h3>
             {!isLoggedIn ? (
@@ -6780,7 +6826,7 @@ const findNodeById = (node, id) => {
         <div className="modal-overlay" onClick={() => { setShowHistoryModal(false); setSelectedHistoryItems(new Set()); }}>
           <div className="modal-card history-modal" onClick={(e) => e.stopPropagation()}>
             <button className="modal-close" onClick={() => { setShowHistoryModal(false); setSelectedHistoryItems(new Set()); }}>
-              <X size={18} />
+              <X size={20} />
             </button>
             <h3>Scan History</h3>
             {scanHistory.length === 0 ? (
@@ -6989,8 +7035,8 @@ const findNodeById = (node, id) => {
       <h3>Delete Page</h3>
       <p>Delete "{deleteConfirmNode.title || deleteConfirmNode.url || 'this page'}"?</p>
       <div className="confirm-modal-actions">
-        <button className="btn-secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
-        <button className="btn-danger" onClick={confirmDeleteNode}>Delete</button>
+        <button className="modal-btn secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
+        <button className="modal-btn danger" onClick={confirmDeleteNode}>Delete</button>
       </div>
     </div>
   </div>
@@ -7087,13 +7133,13 @@ const findNodeById = (node, id) => {
             <p>{confirmModal.message}</p>
             <div className="confirm-modal-actions">
               <button
-                className="btn-secondary"
+                className="modal-btn secondary"
                 onClick={confirmModal.onCancel}
               >
                 {confirmModal.cancelText}
               </button>
               <button
-                className={confirmModal.danger ? 'btn-danger' : 'btn-primary'}
+                className={confirmModal.danger ? 'modal-btn danger' : 'modal-btn primary'}
                 onClick={confirmModal.onConfirm}
               >
                 {confirmModal.confirmText}
