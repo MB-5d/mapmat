@@ -200,6 +200,14 @@ const NodeCard = ({
               <span className="thumb-placeholder-text">
                 {thumbLoading ? 'Generating preview' : 'Preview unavailable'}
               </span>
+              <button
+                className="thumb-fullsize-btn thumb-fullsize-placeholder"
+                onClick={handleViewFull}
+                title="View full size"
+                type="button"
+              >
+                <Maximize2 size={14} />
+              </button>
             </div>
           )}
         </div>

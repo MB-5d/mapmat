@@ -16,6 +16,7 @@ const cheerio = require('cheerio');
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Initialize database (creates tables if needed)
 require('./db');
@@ -89,8 +90,10 @@ const enqueueScreenshot = async (fn) => {
 const isLikelyBlocked = (title, bodyText) => {
   const haystack = `${title}\n${bodyText}`.toLowerCase();
   return haystack.includes('sorry, you have been blocked')
-    || haystack.includes('cloudflare')
-    || haystack.includes('access denied');
+    || haystack.includes('attention required')
+    || haystack.includes('access denied')
+    || haystack.includes('cf-error-code')
+    || haystack.includes('cloudflare ray id');
 };
 
 async function getBrowser() {
@@ -211,6 +214,9 @@ function extractThumbnailUrl(html, baseUrl) {
     }
     if (!candidate) return null;
     if (candidate.startsWith('data:')) return null;
+
+    if (/favicon|apple-touch-icon|icon/i.test(candidate)) return null;
+    if (/\.(svg|ico)$/i.test(candidate)) return null;
 
     const abs = new URL(candidate, baseUrl).toString();
     return abs;
@@ -511,7 +517,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     const title = extractTitle(html, url);
     const parentUrl = getParentUrl(url);
-    const thumbnailUrl = scanOptions.thumbnails ? extractThumbnailUrl(html, url) : null;
+    const isAuthPage = status === 401 || status === 403;
+    const thumbnailUrl = (scanOptions.thumbnails && !isAuthPage) ? extractThumbnailUrl(html, url) : null;
 
     pageMap.set(url, {
       url,
@@ -728,7 +735,7 @@ app.get('/screenshot', async (req, res) => {
 
   try {
     // Create a unique filename based on URL hash
-    const urlHash = Buffer.from(url).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 32);
+    const urlHash = crypto.createHash('sha256').update(url).digest('hex');
     const filename = `${urlHash}_${type}.png`;
     const filepath = path.join(SCREENSHOT_DIR, filename);
 
@@ -752,7 +759,7 @@ app.get('/screenshot', async (req, res) => {
     const last = lastScreenshotByHost.get(host) || 0;
     const waitMs = Math.max(0, SCREENSHOT_MIN_GAP_MS - (now - last));
 
-    await enqueueScreenshot(async () => {
+    const shotResult = await enqueueScreenshot(async () => {
       if (waitMs > 0) await sleep(waitMs);
       lastScreenshotByHost.set(host, Date.now());
 
@@ -785,9 +792,7 @@ app.get('/screenshot', async (req, res) => {
 
           const title = await page.title();
           const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
-          if (isLikelyBlocked(title, bodyText)) {
-            throw new Error('Blocked by site protection');
-          }
+          const blocked = isLikelyBlocked(title, bodyText);
 
           if (type === 'full') {
             await page.screenshot({
@@ -804,7 +809,10 @@ app.get('/screenshot', async (req, res) => {
           }
 
           await page.close();
-          return;
+          if (blocked) {
+            return { blocked: true };
+          }
+          return { blocked: false };
         } catch (err) {
           lastError = err;
           await page.waitForTimeout(800 + Math.floor(Math.random() * 400));
@@ -820,7 +828,8 @@ app.get('/screenshot', async (req, res) => {
       : `http://localhost:${PORT}`;
     res.json({
       url: `${baseUrl}/screenshots/${filename}`,
-      cached: false
+      cached: false,
+      blocked: shotResult?.blocked || false
     });
   } catch (e) {
     console.error('Screenshot error:', e.message);

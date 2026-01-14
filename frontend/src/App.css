@@ -275,13 +275,16 @@ body {
   top: calc(100% + 6px);
   left: 0;
   z-index: 30;
-  min-width: 190px;
+  min-width: 200px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
-  padding: 6px 0;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 8px;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .scan-options-depth {
@@ -289,9 +292,9 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 8px;
   border-bottom: 1px solid #e2e8f0;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .scan-options-depth label {
@@ -317,21 +320,29 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px;
   font-size: 13px;
-  color: #1e293b;
+  color: #64748b;
   cursor: pointer;
   justify-content: flex-start;
   width: 100%;
+  text-align: left;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.scan-options-item span {
+  text-align: left;
 }
 
 .scan-options-item:hover {
-  background: #f8fafc;
+  background: #f1f5f9;
 }
 
 .scan-options-item input[type="checkbox"] {
   width: 14px;
   height: 14px;
+  margin: 0;
 }
 
 .scan-options-item.disabled {
@@ -716,9 +727,11 @@ body {
   right: 10px;
   bottom: 48px;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
-  align-items: flex-end;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: calc(100% - 80px);
   z-index: 2;
   pointer-events: none;
 }
@@ -1064,6 +1077,10 @@ body {
 
 .thumb-fullsize-btn:hover {
   background: rgba(0, 0, 0, 0.8);
+}
+
+.thumb-fullsize-placeholder {
+  opacity: 1;
 }
 
 .thumb-placeholder {
