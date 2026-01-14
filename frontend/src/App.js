@@ -2060,7 +2060,7 @@ const SaveMapForm = ({ projects, currentMap, rootUrl, defaultProjectId, onSave, 
   };
 
   const [mapName, setMapName] = useState(getDefaultName());
-  const [selectedProject, setSelectedProject] = useState('');
+  const [selectedProject, setSelectedProject] = useState(defaultProjectId || '');
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
 
@@ -6655,14 +6655,14 @@ const findNodeById = (node, id) => {
               </div>
             ) : (
               <SaveMapForm
-  projects={projects}
-  currentMap={currentMap}
-  rootUrl={root?.url}
-  defaultProjectId={selectedProjectForNewMap}
-  onSave={saveMap}
-  onCreateProject={createProject}
-  onCancel={() => setShowSaveMapModal(false)}
-/>
+                projects={projects}
+                currentMap={currentMap}
+                rootUrl={root?.url}
+                defaultProjectId={selectedProjectForNewMap}
+                onSave={saveMap}
+                onCreateProject={createProject}
+                onCancel={() => setShowSaveMapModal(false)}
+              />
             )}
           </div>
         </div>
