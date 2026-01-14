@@ -2914,12 +2914,16 @@ export default function App() {
         });
 
         showToast('Map created', 'success');
+        setEditModalNode({ id: '', url: '', title: '', parentId: 'root', children: [] });
+        setEditModalMode('add');
       } catch (e) {
         console.error(e);
         // Fallback if save fails (e.g. not logged in)
         setRoot(defaultRoot);
         setMapName(mapData.name);
         showToast('Map created (unsaved)', 'warning');
+        setEditModalNode({ id: '', url: '', title: '', parentId: 'root', children: [] });
+        setEditModalMode('add');
       }
     }
   };
