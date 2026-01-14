@@ -2043,7 +2043,7 @@ const AuthModal = ({ onClose, onSuccess, showToast }) => {
   );
 };
 
-const SaveMapForm = ({ projects, currentMap, rootUrl, onSave, onCreateProject, onCancel }) => {
+const SaveMapForm = ({ projects, currentMap, rootUrl, defaultProjectId, onSave, onCreateProject, onCancel }) => {
   // Get default name from root domain (e.g., "example" from "https://www.example.com")
   const getDefaultName = () => {
     if (currentMap?.name) return currentMap.name;
@@ -6168,7 +6168,7 @@ const findNodeById = (node, id) => {
                     position: 'absolute',
                     left: commentPopoverPos.x,
                     top: commentPopoverPos.y,
-                    zIndex: 100,
+                    zIndex: 2100,
                   }}
                 >
                   <CommentPopover
@@ -6655,13 +6655,14 @@ const findNodeById = (node, id) => {
               </div>
             ) : (
               <SaveMapForm
-                projects={projects}
-                currentMap={currentMap}
-                rootUrl={root?.url}
-                onSave={saveMap}
-                onCreateProject={createProject}
-                onCancel={() => setShowSaveMapModal(false)}
-              />
+  projects={projects}
+  currentMap={currentMap}
+  rootUrl={root?.url}
+  defaultProjectId={selectedProjectForNewMap}
+  onSave={saveMap}
+  onCreateProject={createProject}
+  onCancel={() => setShowSaveMapModal(false)}
+/>
             )}
           </div>
         </div>

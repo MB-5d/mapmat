@@ -1109,16 +1109,22 @@ body {
 }
 
 .key-toggle {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #94a3b8;
+  color: #64748b;
   border-radius: 4px;
+  pointer-events: none;
+}
+
+.key-toggle svg {
+  width: 18px;
+  height: 18px;
 }
 
 .key-toggle:hover {
