@@ -5,73 +5,44 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  useDraggable,
 } from '@dnd-kit/core';
 import {
-  Download,
-  Share2,
-  Bookmark,
-  Trash2,
-  Edit2,
-  X,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Minimize2,
-  LogIn,
-  LogOut,
-  Folder,
-  Palette,
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Globe,
   AlertTriangle,
-  FileJson,
-  FileImage,
-  FileText,
-  FileSpreadsheet,
-  Mail,
-  Copy,
-  Check,
-  FolderPlus,
-  Map as MapIcon,
-  Zap,
-  Info,
   CheckCircle,
-  XCircle,
-  ExternalLink,
-  List,
-  History,
-  Image,
-  ImageOff,
-  Layers,
-  Scan,
-  CheckSquare,
-  Square,
-  User,
-  Eye,
-  EyeOff,
-  Upload,
-  FileUp,
-  Undo2,
-  Redo2,
-  MousePointer2,
-  Link,
-  Link2,
-  FilePlus,
-  PlusSquare,
-  LayoutTemplate,
+  Info,
+  Loader2,
   MessageSquare,
-  CornerDownRight,
-  Workflow,
-  Sun,
   Moon,
+  Sun,
+  Trash2,
+  X,
+  XCircle,
 } from 'lucide-react';
 
 import './App.css';
 import * as api from './api';
 import LandingPage from './LandingPage';
+import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
+import CommentPopover from './components/comments/CommentPopover';
+import CommentsPanel from './components/comments/CommentsPanel';
+import AuthModal from './components/modals/AuthModal';
+import CreateMapModal from './components/modals/CreateMapModal';
+import DeleteConfirmModal from './components/modals/DeleteConfirmModal';
+import EditNodeModal from './components/modals/EditNodeModal';
+import EditColorModal from './components/modals/EditColorModal';
+import ExportModal from './components/modals/ExportModal';
+import HistoryModal from './components/modals/HistoryModal';
+import ImageOverlay from './components/modals/ImageOverlay';
+import ImportModal from './components/modals/ImportModal';
+import ProfileModal from './components/modals/ProfileModal';
+import ProjectsModal from './components/modals/ProjectsModal';
+import PromptModal from './components/modals/PromptModal';
+import SaveMapModal from './components/modals/SaveMapModal';
+import ShareModal from './components/modals/ShareModal';
+import ScanProgressModal from './components/scan/ScanProgressModal';
+import RightRail from './components/toolbar/RightRail';
+import Topbar from './components/toolbar/Topbar';
+import { getHostname } from './utils/url';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4000';
 const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -130,13 +101,6 @@ const downloadText = (filename, text) => {
 
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-const getHostname = (url) => {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
-};
 
 const getMaxDepth = (node, depth = 0) => {
   if (!node) return 0;
@@ -147,662 +111,6 @@ const getMaxDepth = (node, depth = 0) => {
 const countNodes = (node) => {
   if (!node) return 0;
   return 1 + (node.children || []).reduce((sum, c) => sum + countNodes(c), 0);
-};
-
-const NodeCard = ({
-  node,
-  number,
-  color,
-  showThumbnails,
-  showCommentBadges,
-  canEdit,
-  canComment,
-  connectionTool,
-  snapTarget,
-  onAnchorMouseDown,
-  onDelete,
-  onEdit,
-  onDuplicate,
-  onViewImage,
-  onAddNote,
-  onViewNotes,
-  isRoot,
-  isDragging,
-  isPressing,
-  dragHandleProps,
-}) => {
-  const [thumbError, setThumbError] = useState(false);
-  const [thumbLoading, setThumbLoading] = useState(true);
-  const [thumbKey, setThumbKey] = useState(0);
-
-  // Use custom thumbnail if available, otherwise use mshots service
-  const thumb = node.thumbnailUrl || `https://s0.wp.com/mshots/v1/${encodeURIComponent(node.url)}?w=576&h=400&_=${thumbKey}`;
-
-  // Reset thumbnail state when showThumbnails is toggled on
-  React.useEffect(() => {
-    if (showThumbnails) {
-      setThumbError(false);
-      setThumbLoading(true);
-      setThumbKey(k => k + 1); // Force new image request
-    }
-  }, [showThumbnails]);
-
-  // Timeout fallback - if thumbnail doesn't load in 15 seconds, show placeholder
-  React.useEffect(() => {
-    if (!showThumbnails) return;
-    const timeout = setTimeout(() => {
-      if (thumbLoading) {
-        setThumbError(true);
-        setThumbLoading(false);
-      }
-    }, 15000);
-    return () => clearTimeout(timeout);
-  }, [showThumbnails, thumbLoading, thumbKey]);
-
-  const handleViewFull = () => {
-    // Use uploaded thumbnail if available, otherwise use URL for mshots
-    onViewImage(node.thumbnailUrl || node.url, !!node.thumbnailUrl);
-  };
-
-  const classNames = ['node-card'];
-  if (isDragging) classNames.push('dragging');
-  if (isPressing) classNames.push('pressing');
-  if (showThumbnails) classNames.push('with-thumb');
-  if (connectionTool === 'userflow') classNames.push('connection-mode-userflow');
-  if (connectionTool === 'crosslink') classNames.push('connection-mode-crosslink');
-
-  // Anchor color based on connection tool type
-  const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
-
-  return (
-    <div
-      className={classNames.join(' ')}
-      data-node-card="1"
-      data-node-id={node.id}
-      style={{ cursor: isRoot ? 'default' : (connectionTool ? 'default' : 'grab') }}
-      {...(isRoot ? {} : dragHandleProps)}
-    >
-      {/* Connection anchor points - show when connection tool is active */}
-      {connectionTool && (
-        <>
-          <div
-            className={`anchor-point anchor-top ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'top' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: '12px', height: '12px', minWidth: '12px', minHeight: '12px' }}
-            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'top', e); }}
-            data-anchor="top"
-          />
-          <div
-            className={`anchor-point anchor-right ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'right' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: '12px', height: '12px', minWidth: '12px', minHeight: '12px' }}
-            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'right', e); }}
-            data-anchor="right"
-          />
-          <div
-            className={`anchor-point anchor-bottom ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'bottom' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: '12px', height: '12px', minWidth: '12px', minHeight: '12px' }}
-            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'bottom', e); }}
-            data-anchor="bottom"
-          />
-          <div
-            className={`anchor-point anchor-left ${snapTarget?.nodeId === node.id && snapTarget?.anchor === 'left' ? 'snapped' : ''}`}
-            style={{ backgroundColor: anchorColor, width: '12px', height: '12px', minWidth: '12px', minHeight: '12px' }}
-            onMouseDown={(e) => { e.stopPropagation(); onAnchorMouseDown?.(node.id, 'left', e); }}
-            data-anchor="left"
-          />
-        </>
-      )}
-
-      <div
-        className="card-header"
-        style={{ backgroundColor: color }}
-      >
-      </div>
-
-      {/* Comment badge - show if node has comments and comments mode is active */}
-      {showCommentBadges && node.comments?.length > 0 && (
-        <button
-          className="comment-badge"
-          onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
-          title="View notes"
-        >
-          <MessageSquare size={12} />
-          {node.comments.length > 1 && <span>{node.comments.length}</span>}
-        </button>
-      )}
-
-      {showThumbnails && (
-        <div className="card-thumb">
-          {thumbLoading && !thumbError && (
-            <div className="thumb-loading">
-              <Loader2 size={24} className="thumb-spinner" />
-            </div>
-          )}
-          {!thumbError ? (
-            <>
-              <img
-                className="thumb-img"
-                src={thumb}
-                alt={node.title}
-                loading="lazy"
-                onLoad={() => setThumbLoading(false)}
-                onError={() => { setThumbError(true); setThumbLoading(false); }}
-                style={{ opacity: thumbLoading ? 0 : 1 }}
-              />
-              {!thumbLoading && (
-                <button
-                  className="thumb-fullsize-btn"
-                  onClick={handleViewFull}
-                  title="View full size"
-                >
-                  <Maximize2 size={14} />
-                </button>
-              )}
-            </>
-          ) : (
-            <div className="thumb-placeholder">
-              <Globe size={32} strokeWidth={1.5} />
-              <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
-              <span className="thumb-placeholder-text">Preview unavailable</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="card-content">
-        <div className="card-title" title={node.title}>
-          {node.title}
-        </div>
-
-        <span className="page-number">{number}</span>
-      </div>
-
-      <div className="card-actions">
-        <div className="card-actions-left">
-          {canEdit && (
-            <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
-              <Edit2 size={16} />
-            </button>
-          )}
-          {canEdit && !isRoot && (
-            <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
-              <Trash2 size={16} />
-            </button>
-          )}
-          {canEdit && (
-            <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
-              <Copy size={16} />
-            </button>
-          )}
-          {canComment && (
-            <button className="btn-icon-flat" title="Add Note" onClick={() => onAddNote?.(node)}>
-              <MessageSquare size={16} />
-            </button>
-          )}
-        </div>
-        {node.url && (
-          <a
-            href={node.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-icon-flat external-link-btn"
-            title="Open in new tab"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink size={16} />
-          </a>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Wrapper component that makes NodeCard draggable using dnd-kit
-const DraggableNodeCard = ({
-  node,
-  number,
-  color,
-  showThumbnails,
-  showCommentBadges,
-  canEdit,
-  canComment,
-  connectionTool,
-  snapTarget,
-  onAnchorMouseDown,
-  onDelete,
-  onEdit,
-  onDuplicate,
-  onViewImage,
-  onAddNote,
-  onViewNotes,
-  isRoot,
-  activeId,
-}) => {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: node.id,
-    data: { node, number, color },
-    disabled: node.id === 'root' || !canEdit || connectionTool, // Disable dragging when connection tool active
-  });
-
-  return (
-    <div ref={setNodeRef}>
-      <NodeCard
-        node={node}
-        number={number}
-        color={color}
-        showThumbnails={showThumbnails}
-        showCommentBadges={showCommentBadges}
-        canEdit={canEdit}
-        canComment={canComment}
-        connectionTool={connectionTool}
-        snapTarget={snapTarget}
-        onAnchorMouseDown={onAnchorMouseDown}
-        onDelete={onDelete}
-        onEdit={onEdit}
-        onDuplicate={onDuplicate}
-        onViewImage={onViewImage}
-        onAddNote={onAddNote}
-        onViewNotes={onViewNotes}
-        isRoot={isRoot}
-        isDragging={isDragging || activeId === node.id}
-        dragHandleProps={canEdit && !connectionTool ? { ...listeners, ...attributes } : {}}
-      />
-    </div>
-  );
-};
-
-// Component for rendering a node and its children in the DragOverlay
-const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth }) => {
-  const childColor = colors[Math.min(depth + 1, colors.length - 1)];
-  const INDENT = 40;
-  const GAP = 60;
-
-  return (
-    <div className="drag-overlay-tree">
-      <NodeCard
-        node={node}
-        number={number}
-        color={color}
-        showThumbnails={showThumbnails}
-        isRoot={false}
-        isDragging={true}
-        onDelete={() => {}}
-        onEdit={() => {}}
-        onDuplicate={() => {}}
-        onViewImage={() => {}}
-      />
-      {node.children?.length > 0 && (
-        <div
-          className="drag-overlay-children"
-          style={{
-            marginTop: GAP,
-            marginLeft: INDENT,
-          }}
-        >
-          {node.children.map((child, idx) => (
-            <div key={child.id} style={{ marginTop: idx > 0 ? GAP : 0 }}>
-              <DragOverlayTree
-                node={child}
-                number={`${number}.${idx + 1}`}
-                color={childColor}
-                colors={colors}
-                showThumbnails={showThumbnails}
-                depth={depth + 1}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Comment Popover component for viewing/adding comments on a node
-const CommentPopover = ({ node, onClose, onAddComment, onToggleCompleted, onDeleteComment, collaborators, canComment }) => {
-  const [newComment, setNewComment] = useState('');
-  const [showMentions, setShowMentions] = useState(false);
-  const [mentionFilter, setMentionFilter] = useState('');
-  const [replyingTo, setReplyingTo] = useState(null);
-  const inputRef = useRef(null);
-
-  const formatTimeAgo = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
-  };
-
-  const handleInputChange = (e) => {
-    const value = e.target.value;
-    setNewComment(value);
-
-    // Check for @ mention trigger
-    const lastAtIndex = value.lastIndexOf('@');
-    if (lastAtIndex !== -1) {
-      const textAfterAt = value.slice(lastAtIndex + 1);
-      if (!textAfterAt.includes(' ')) {
-        setShowMentions(true);
-        setMentionFilter(textAfterAt.toLowerCase());
-        return;
-      }
-    }
-    setShowMentions(false);
-  };
-
-  const insertMention = (name) => {
-    const lastAtIndex = newComment.lastIndexOf('@');
-    const newValue = newComment.slice(0, lastAtIndex) + '@' + name + ' ';
-    setNewComment(newValue);
-    setShowMentions(false);
-    inputRef.current?.focus();
-  };
-
-  const handleSubmit = () => {
-    if (newComment.trim()) {
-      onAddComment(node.id, newComment, replyingTo);
-      setNewComment('');
-      setReplyingTo(null);
-      onClose();
-    }
-  };
-
-  const handleCancel = () => {
-    setNewComment('');
-    setReplyingTo(null);
-    onClose();
-  };
-
-  // Recursive component to render a comment and its replies
-  const CommentItem = ({ comment, depth = 0 }) => (
-    <div className={`comment-item ${comment.completed ? 'completed' : ''}`} style={{ marginLeft: depth * 16 }}>
-      <div className="comment-header">
-        <button
-          className={`comment-checkbox ${comment.completed ? 'checked' : ''}`}
-          onClick={() => onToggleCompleted(node.id, comment.id)}
-          title={comment.completed ? 'Mark as incomplete' : 'Mark as complete'}
-        >
-          {comment.completed ? <CheckSquare size={16} /> : <Square size={16} />}
-        </button>
-        <div className="comment-meta">
-          <span className="comment-author">{comment.author}</span>
-          <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
-        </div>
-        {canComment && (
-          <div className="comment-actions">
-            <button
-              className="comment-action-btn"
-              onClick={() => {
-                setReplyingTo(comment.id);
-                inputRef.current?.focus();
-              }}
-              title="Reply"
-            >
-              <CornerDownRight size={14} />
-            </button>
-            <button
-              className="comment-action-btn delete"
-              onClick={() => onDeleteComment(node.id, comment.id)}
-              title="Delete"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        )}
-      </div>
-      <div className="comment-body">
-        <div className="comment-text">{comment.text}</div>
-        {comment.completed && comment.completedBy && (
-          <div className="comment-completed-info">
-            <Check size={12} />
-            <span>Completed by {comment.completedBy} · {formatTimeAgo(comment.completedAt)}</span>
-          </div>
-        )}
-      </div>
-      {comment.replies?.length > 0 && (
-        <div className="comment-replies">
-          {comment.replies.map(reply => (
-            <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  const filteredCollaborators = collaborators.filter(c =>
-    c.toLowerCase().includes(mentionFilter)
-  );
-
-  return (
-    <div className="comment-popover">
-      <div className="comment-popover-header">
-        <h3>Comments on "{node.title || 'Untitled'}"</h3>
-        <button className="comment-popover-close" onClick={handleCancel}>
-          <X size={18} />
-        </button>
-      </div>
-
-      <div className="comment-popover-body">
-        {/* Show existing comments if any */}
-        {node.comments?.length > 0 && (
-          <div className="comment-list">
-            {node.comments.map(comment => (
-              <CommentItem key={comment.id} comment={comment} />
-            ))}
-          </div>
-        )}
-
-        {/* Main textarea area - only show if user can comment */}
-        {canComment && (
-          <div className="comment-input-section">
-            {replyingTo && (
-              <div className="replying-to-banner">
-                <span>Replying to comment</span>
-                <button onClick={() => setReplyingTo(null)}>
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-            <div className="comment-input-wrapper">
-              <textarea
-                ref={inputRef}
-                className="comment-input"
-                placeholder={replyingTo ? "Write a reply..." : "Add a comment...\n(use @ to mention)"}
-                value={newComment}
-                onChange={handleInputChange}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && e.metaKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                  if (e.key === 'Escape') {
-                    if (replyingTo) {
-                      setReplyingTo(null);
-                    } else if (showMentions) {
-                      setShowMentions(false);
-                    } else {
-                      handleCancel();
-                    }
-                  }
-                }}
-              />
-              {showMentions && filteredCollaborators.length > 0 && (
-                <div className="mention-dropdown">
-                  {filteredCollaborators.map(name => (
-                    <button
-                      key={name}
-                      className="mention-option"
-                      onClick={() => insertMention(name)}
-                    >
-                      @{name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="comment-popover-footer">
-        <button className="comment-cancel-btn" onClick={handleCancel}>
-          {canComment ? 'Cancel' : 'Close'}
-        </button>
-        {canComment && (
-          <button
-            className="comment-submit-btn"
-            onClick={handleSubmit}
-            disabled={!newComment.trim()}
-          >
-            Save
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Comments Panel component (right rail showing all comments)
-const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNode }) => {
-  const [filter, setFilter] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'author', 'mention'
-  const [showCompleted, setShowCompleted] = useState(true);
-
-  // Collect all comments from tree and orphans
-  const getAllComments = () => {
-    const comments = [];
-
-    const collectFromNode = (node) => {
-      if (node.comments?.length > 0) {
-        node.comments.forEach(comment => {
-          comments.push({
-            ...comment,
-            nodeId: node.id,
-            nodeTitle: node.title || 'Untitled',
-          });
-        });
-      }
-      (node.children || []).forEach(child => collectFromNode(child));
-    };
-
-    if (root) collectFromNode(root);
-    orphans.forEach(orphan => collectFromNode(orphan));
-
-    // Sort by most recent first
-    return comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  };
-
-  const formatTimeAgo = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const seconds = Math.floor((now - date) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
-  };
-
-  const allComments = getAllComments();
-
-  const filteredComments = allComments.filter(comment => {
-    // Filter by completed status
-    if (!showCompleted && comment.completed) return false;
-
-    if (!filter) return true;
-    const searchLower = filter.toLowerCase();
-
-    if (filterType === 'author') {
-      return comment.author.toLowerCase().includes(searchLower);
-    }
-    if (filterType === 'mention') {
-      return comment.mentions?.some(m => m.toLowerCase().includes(searchLower));
-    }
-    // 'all' - search text, author, and node title
-    return (
-      comment.text.toLowerCase().includes(searchLower) ||
-      comment.author.toLowerCase().includes(searchLower) ||
-      comment.nodeTitle.toLowerCase().includes(searchLower)
-    );
-  });
-
-  return (
-    <div className="comments-panel">
-      <div className="comments-panel-header">
-        <h3>All Comments</h3>
-        <button className="comments-panel-close" onClick={onClose}>
-          <X size={18} />
-        </button>
-      </div>
-
-      <div className="comments-panel-filter">
-        <div className="comments-filter-row">
-          <input
-            type="text"
-            placeholder="Filter comments..."
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="comments-filter-input"
-          />
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="comments-filter-select"
-          >
-            <option value="all">All</option>
-            <option value="author">By Author</option>
-            <option value="mention">By Mention</option>
-          </select>
-        </div>
-        <label className="comments-filter-toggle">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={(e) => setShowCompleted(e.target.checked)}
-          />
-          <span>Show completed</span>
-        </label>
-      </div>
-
-      <div className="comments-panel-body">
-        {filteredComments.length > 0 ? (
-          <div className="comments-panel-list">
-            {filteredComments.map(comment => (
-              <div
-                key={comment.id}
-                className="comments-panel-item"
-                onClick={() => {
-                  onNavigateToNode(comment.nodeId);
-                  onCommentClick(comment.nodeId);
-                }}
-              >
-                <div className="comments-panel-item-header">
-                  <span className="comments-panel-node-title">{comment.nodeTitle}</span>
-                </div>
-                <div className="comments-panel-item-meta">
-                  <span className="comments-panel-author">{comment.author}</span>
-                  <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
-                </div>
-                <div className="comments-panel-text">{comment.text}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="comments-panel-empty">
-            {filter ? 'No matching comments' : 'No comments yet'}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 };
 
 // ============================================================================
@@ -1379,231 +687,6 @@ const SitemapTree = ({
   );
 };
 
-// Profile Modal for account management
-const ProfileModal = ({ user, onClose, onUpdate, onLogout, showToast }) => {
-  const [name, setName] = useState(user?.name || '');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  const handleUpdateProfile = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    setLoading(true);
-
-    try {
-      const updateData = {};
-      if (name !== user.name) {
-        updateData.name = name;
-      }
-      if (newPassword) {
-        if (newPassword !== confirmPassword) {
-          setError('New passwords do not match');
-          setLoading(false);
-          return;
-        }
-        if (!currentPassword) {
-          setError('Current password is required to change password');
-          setLoading(false);
-          return;
-        }
-        updateData.currentPassword = currentPassword;
-        updateData.newPassword = newPassword;
-      }
-
-      if (Object.keys(updateData).length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      const { user: updatedUser } = await api.updateProfile(updateData);
-      onUpdate(updatedUser);
-      setSuccess('Profile updated successfully');
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (err) {
-      setError(err.message || 'Failed to update profile');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!deletePassword) {
-      setError('Password is required to delete account');
-      return;
-    }
-    setLoading(true);
-    setError('');
-
-    try {
-      await api.deleteAccount(deletePassword);
-      showToast('Account deleted', 'success');
-      onLogout();
-      onClose();
-    } catch (err) {
-      setError(err.message || 'Failed to delete account');
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card profile-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-
-        <div className="profile-header">
-          <div className="profile-avatar">
-            <User size={32} />
-          </div>
-          <div className="profile-info">
-            <h3>{user?.name}</h3>
-            <span className="profile-email">{user?.email}</span>
-          </div>
-        </div>
-
-        {!showDeleteConfirm ? (
-          <form onSubmit={handleUpdateProfile} className="profile-form">
-            {error && <div className="auth-error">{error}</div>}
-            {success && <div className="auth-success">{success}</div>}
-
-            <div className="form-section">
-              <h4>Profile</h4>
-              <div className="form-group">
-                <label>Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
-                />
-              </div>
-            </div>
-
-            <div className="form-section">
-              <h4>Change Password</h4>
-              <div className="form-group">
-                <label>Current Password</label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter current password"
-                />
-              </div>
-              <div className="form-group">
-                <label>New Password</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  minLength={6}
-                />
-              </div>
-              <div className="form-group">
-                <label>Confirm New Password</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="modal-btn primary"
-              disabled={loading}
-            >
-              {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
-              Save Changes
-            </button>
-
-            <div className="form-section danger-zone">
-              <h4>Danger Zone</h4>
-              <p>Deleting your account will permanently remove all your projects, maps, and data.</p>
-              <button
-                type="button"
-                className="modal-btn danger"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                Delete Account
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className="delete-confirm">
-            <div className="delete-warning">
-              <AlertTriangle size={48} />
-              <h4>Delete Account?</h4>
-              <p>This action cannot be undone. All your projects, maps, and scan history will be permanently deleted.</p>
-            </div>
-
-            {error && <div className="auth-error">{error}</div>}
-
-            <div className="form-group">
-              <label>Enter your password to confirm</label>
-              <input
-                type="password"
-                value={deletePassword}
-                onChange={(e) => setDeletePassword(e.target.value)}
-                placeholder="Your password"
-                autoFocus
-              />
-            </div>
-
-            <div className="delete-actions">
-              <button
-                className="modal-btn danger"
-                onClick={handleDeleteAccount}
-                disabled={loading || !deletePassword}
-              >
-                {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
-                Yes, Delete My Account
-              </button>
-              <button
-                className="modal-btn secondary"
-                onClick={() => {
-                  setShowDeleteConfirm(false);
-                  setDeletePassword('');
-                  setError('');
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// Page types for dropdown
-const PAGE_TYPES = [
-  'Page',
-  'Blog Post',
-  'Product',
-  'Category',
-  'Landing Page',
-  'Contact',
-  'About',
-  'FAQ',
-  'Service',
-  'Portfolio',
-];
-
 // Helper to collect all nodes from tree with page numbers and depth
 const collectAllNodes = (node, result = [], pageNumber = '1', depth = 0) => {
   if (!node) return result;
@@ -1620,669 +703,6 @@ const collectAllNodes = (node, result = [], pageNumber = '1', depth = 0) => {
     });
   }
   return result;
-};
-
-// Helper to get all descendant IDs of a node
-const getDescendantIds = (node, ids = new Set()) => {
-  if (!node) return ids;
-  if (node.children) {
-    node.children.forEach(child => {
-      ids.add(child.id);
-      getDescendantIds(child, ids);
-    });
-  }
-  return ids;
-};
-
-// Edit Node Modal
-const EditNodeModal = ({ node, allNodes, rootTree, onClose, onSave, mode = 'edit', customPageTypes = [], onAddCustomType }) => {
-  const [title, setTitle] = useState(node?.title || '');
-  const [url, setUrl] = useState(node?.url || '');
-  const [pageType, setPageType] = useState(node?.pageType || 'Page');
-  const [newTypeName, setNewTypeName] = useState('');
-  const [showNewTypeInput, setShowNewTypeInput] = useState(false);
-
-  // Combined list of all page types
-  const allPageTypes = [...PAGE_TYPES, ...customPageTypes];
-  const [parentId, setParentId] = useState(node?.parentId || '');
-  const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
-  const [description, setDescription] = useState(node?.description || '');
-  const [metaTags, setMetaTags] = useState(node?.metaTags || '');
-  const fileInputRef = useRef(null);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave({
-      ...node,
-      title,
-      url,
-      pageType,
-      parentId: parentId || null,
-      thumbnailUrl,
-      description,
-      metaTags,
-    });
-    onClose();
-  };
-
-  const handleAddNewType = () => {
-    const trimmed = newTypeName.trim();
-    if (trimmed && !allPageTypes.includes(trimmed)) {
-      onAddCustomType(trimmed);
-      setPageType(trimmed);
-    }
-    setNewTypeName('');
-    setShowNewTypeInput(false);
-  };
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setThumbnailUrl(event.target.result);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
-
-  // Form validation - check if required fields are filled
-  // For edit/duplicate: parentId can be empty (orphan pages are valid)
-  // For add: parentId is optional (user can create orphans)
-  const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
-
-  // Filter out current node and its descendants from parent options
-  // (can't be parent of itself or create circular reference)
-  const getExcludeIds = () => {
-    if (!node?.id || !rootTree) return new Set();
-    // Find the full node in tree to get its descendants
-    const findNode = (tree, id) => {
-      if (!tree) return null;
-      if (tree.id === id) return tree;
-      for (const child of tree.children || []) {
-        const found = findNode(child, id);
-        if (found) return found;
-      }
-      return null;
-    };
-    const fullNode = findNode(rootTree, node.id);
-    const descendants = fullNode ? getDescendantIds(fullNode) : new Set();
-    descendants.add(node.id); // Also exclude self
-    return descendants;
-  };
-
-  const excludeIds = getExcludeIds();
-  const parentOptions = allNodes.filter(n => !excludeIds.has(n.id));
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card edit-node-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="edit-node-header">
-          <h3>{modalTitle}</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="edit-node-form">
-          <div className="edit-node-form-content">
-            <div className="form-group">
-              <label>Page Title<span className="required-asterisk">*</span></label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter page title"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>URL</label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/page"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Page Type<span className="required-asterisk">*</span></label>
-              <select
-                value={pageType}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '__addnew__') {
-                    setShowNewTypeInput(true);
-                  } else {
-                    setPageType(val);
-                    setShowNewTypeInput(false);
-                  }
-                }}
-                required
-              >
-                {allPageTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-                <option value="__addnew__">➕ Add New Type...</option>
-              </select>
-              {showNewTypeInput && (
-                <input
-                  type="text"
-                  className="new-type-input"
-                  value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
-                  onBlur={handleAddNewType}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddNewType();
-                    }
-                  }}
-                  placeholder="Enter new type name"
-                  autoFocus
-                />
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Parent Page</label>
-              <select
-                value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-              >
-                <option value="">No Parent (Orphan)</option>
-                {parentOptions.map(n => {
-                  const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(n.depth);
-                  const displayTitle = n.title || n.url || 'Untitled';
-                  return (
-                    <option key={n.id} value={n.id}>
-                      {indent}{n.pageNumber} - {displayTitle}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Thumbnail / Image</label>
-              {thumbnailUrl ? (
-                <div className="thumbnail-preview">
-                  <img src={thumbnailUrl} alt="Thumbnail preview" />
-                  <button
-                    type="button"
-                    className="btn-remove-thumb"
-                    onClick={() => setThumbnailUrl('')}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="image-upload-zone"
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.add('drag-over');
-                  }}
-                  onDragLeave={(e) => {
-                    e.currentTarget.classList.remove('drag-over');
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.remove('drag-over');
-                    const file = e.dataTransfer.files[0];
-                    if (file && file.type.startsWith('image/')) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => setThumbnailUrl(event.target.result);
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                >
-                  <Upload size={24} className="upload-icon" />
-                  <span className="upload-text">Drag image here or</span>
-                  <button
-                    type="button"
-                    className="btn-browse"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Browse files
-                  </button>
-                  <span className="upload-text-small">or enter URL</span>
-                  <input
-                    type="text"
-                    className="url-input-small"
-                    placeholder="https://example.com/image.jpg"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const url = e.target.value.trim();
-                        if (url) setThumbnailUrl(url);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const url = e.target.value.trim();
-                      if (url) setThumbnailUrl(url);
-                    }}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.gif,.webp"
-                    onChange={handleFileUpload}
-                    style={{ display: 'none' }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Page description (meta description)"
-                rows={3}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Meta Tags</label>
-              <textarea
-                value={metaTags}
-                onChange={(e) => setMetaTags(e.target.value)}
-                placeholder="Comma-separated tags: seo, marketing, landing"
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <div className="edit-node-footer">
-            <button type="button" className="modal-btn secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`modal-btn primary ${!isFormValid ? 'disabled' : ''}`}
-              disabled={!isFormValid}
-            >
-              {mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-// Auth Modal for Login/Signup
-const AuthModal = ({ onClose, onSuccess, showToast }) => {
-  const [mode, setMode] = useState('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    try {
-      let result;
-      if (mode === 'login') {
-        result = await api.login(email, password);
-      } else {
-        result = await api.signup(email, password, name);
-      }
-      onSuccess(result.user);
-      onClose();
-      showToast(`Welcome, ${result.user.name}!`, 'success');
-    } catch (err) {
-      setError(err.message || 'Something went wrong');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card auth-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-
-        <div className="auth-tabs">
-          <button
-            className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
-            onClick={() => { setMode('login'); setError(''); }}
-          >
-            Log In
-          </button>
-          <button
-            className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
-            onClick={() => { setMode('signup'); setError(''); }}
-          >
-            Sign Up
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="auth-form">
-          {error && <div className="auth-error">{error}</div>}
-
-          {mode === 'signup' && (
-            <div className="form-group">
-              <label>Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-                autoComplete="name"
-              />
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Password</label>
-            <div className="password-input">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
-                required
-                minLength={mode === 'signup' ? 6 : undefined}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="modal-btn primary auth-submit"
-            disabled={loading}
-          >
-            {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
-            {mode === 'login' ? 'Log In' : 'Create Account'}
-          </button>
-        </form>
-
-        <div className="auth-footer">
-          {mode === 'login' ? (
-            <span>Don't have an account? <button onClick={() => setMode('signup')}>Sign up</button></span>
-          ) : (
-            <span>Already have an account? <button onClick={() => setMode('login')}>Log in</button></span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const SaveMapForm = ({ projects, currentMap, rootUrl, defaultProjectId, defaultName, onSave, onCreateProject, onCancel }) => {
-  // Get default name from root domain (e.g., "example" from "https://www.example.com")
-  const getDefaultName = () => {
-    if (defaultName) return defaultName;
-    if (currentMap?.name) return currentMap.name;
-    if (!rootUrl) return '';
-    try {
-      const hostname = new URL(rootUrl).hostname;
-      // Remove www. prefix and get domain without TLD
-      const parts = hostname.replace(/^www\./, '').split('.');
-      // Return the main domain part (before TLD)
-      return parts.length > 1 ? parts[parts.length - 2] : parts[0];
-    } catch {
-      return '';
-    }
-  };
-
-  const [mapName, setMapName] = useState(getDefaultName());
-  const [selectedProject, setSelectedProject] = useState(defaultProjectId || '');
-  const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-
-  const handleSave = () => {
-    if (!mapName.trim()) return;
-    onSave(selectedProject || null, mapName);
-  };
-
-  const handleCreateProject = () => {
-    if (!newProjectName.trim()) return;
-    onCreateProject(newProjectName);
-    setShowNewProject(false);
-    setNewProjectName('');
-  };
-
-  return (
-    <div className="save-map-form">
-      <div className="form-group">
-        <label>Map Name</label>
-        <input
-          type="text"
-          value={mapName}
-          onChange={(e) => setMapName(e.target.value)}
-          placeholder="Enter map name..."
-          autoFocus
-        />
-      </div>
-      <div className="form-group">
-        <label>Save to Project (optional)</label>
-        <select
-          value={selectedProject}
-          onChange={(e) => setSelectedProject(e.target.value)}
-        >
-          <option value="">No project (Uncategorized)</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-      </div>
-      {!showNewProject ? (
-        <button className="new-project-link" onClick={() => setShowNewProject(true)}>
-          <FolderPlus size={14} />
-          Create new project
-        </button>
-      ) : (
-        <div className="new-project-inline">
-          <input
-            type="text"
-            value={newProjectName}
-            onChange={(e) => setNewProjectName(e.target.value)}
-            placeholder="Project name..."
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleCreateProject();
-              if (e.key === 'Escape') setShowNewProject(false);
-            }}
-          />
-          <button onClick={handleCreateProject}>Create</button>
-          <button className="cancel" onClick={() => setShowNewProject(false)}>Cancel</button>
-        </div>
-      )}
-      <div className="form-actions">
-        <button className="modal-btn secondary" onClick={onCancel}>
-          Cancel
-        </button>
-        <button className="modal-btn primary" onClick={handleSave} disabled={!mapName.trim()}>
-          Save Map
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// Prompt Modal Component
-const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onCancel }) => {
-  const [value, setValue] = useState(defaultValue);
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, []);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (value.trim()) {
-      onConfirm(value.trim());
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="confirm-modal" onClick={e => e.stopPropagation()}>
-        <h3>{title}</h3>
-        {message && <p>{message}</p>}
-        <form onSubmit={handleSubmit}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={placeholder}
-            className="prompt-input"
-          />
-          <div className="confirm-modal-actions">
-            <button type="button" className="modal-btn secondary" onClick={onCancel}>
-              Cancel
-            </button>
-            <button type="submit" className="modal-btn primary" disabled={!value.trim()}>
-              OK
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-// Create Map Modal Component
-const CreateMapModal = ({
-  show,
-  onClose,
-  onSubmit,
-  data,
-  setData,
-  projects,
-  onAddProject
-}) => {
-  if (!show) return null;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card create-map-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Create New Map</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="form-group">
-            <label htmlFor="map-name">Map Name *</label>
-            <input
-              id="map-name"
-              type="text"
-              placeholder="My Sitemap"
-              value={data.name}
-              onChange={(e) => setData(d => ({ ...d, name: e.target.value }))}
-              autoFocus
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="map-project">Project</label>
-            <div className="select-with-add">
-              <select
-                id="map-project"
-                value={data.projectId}
-                onChange={(e) => setData(d => ({ ...d, projectId: e.target.value }))}
-              >
-                <option value="">No Project</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="add-project-btn"
-                onClick={onAddProject}
-                title="Create new project"
-              >
-                <FolderPlus size={18} />
-              </button>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="map-url">Starting URL (optional)</label>
-            <input
-              id="map-url"
-              type="url"
-              placeholder="https://example.com"
-              value={data.url}
-              onChange={(e) => setData(d => ({ ...d, url: e.target.value }))}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="map-description">Description (optional)</label>
-            <textarea
-              id="map-description"
-              placeholder="Brief description of this sitemap..."
-              value={data.description}
-              onChange={(e) => setData(d => ({ ...d, description: e.target.value }))}
-              rows={3}
-            />
-          </div>
-
-          <div className="form-group disabled-feature">
-            <label>Collaborators</label>
-            <div className="coming-soon-field">
-              <span>Coming soon — will be available in Share</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="modal-btn secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="modal-btn primary"
-            onClick={() => onSubmit(data)}
-            disabled={!data.name.trim()}
-          >
-            Create
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 };
 
 export default function App() {
@@ -5704,184 +4124,65 @@ const findNodeById = (node, id) => {
 
   return (
     <div className="app">
-      <div className="topbar">
-        <div className="topbar-left">
-          <div className="brand">Map Mat</div>
-        </div>
-
-        <div className="topbar-center">
-          <div className="search-container">
-            {canEdit() ? (
-              <>
-                <Scan size={18} className="search-icon" />
-                <input
-                  value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  onKeyDown={onKeyDownUrl}
-                  onFocus={(e) => { if (!urlInput) e.target.placeholder = ''; }}
-                  onBlur={(e) => { if (!urlInput) e.target.placeholder = 'https://example.com'; }}
-                  placeholder="https://example.com"
-                  spellCheck={false}
-                />
-
-                {hasMap && (
-                  <button
-                    className="clear-btn"
-                    onClick={async () => {
-                      const confirmed = await showConfirm({
-                        title: 'Clear Canvas',
-                        message: 'Clear the canvas? This cannot be undone.',
-                        confirmText: 'Clear',
-                        danger: true
-                      });
-                      if (confirmed) {
-                        setRoot(null);
-                        setOrphans([]);
-                        setCurrentMap(null);
-                        setIsImportedMap(false);
-                        setScale(1);
-                        setPan({ x: 0, y: 0 });
-                        setUrlInput('');
-                      }
-                    }}
-                    title="Clear canvas"
-                  >
-                    <X size={14} />
-                    Clear
-                  </button>
-                )}
-
-                <button
-                  className="thumb-toggle-btn"
-                  onClick={() => setShowThumbnails(v => !v)}
-                  title={showThumbnails ? 'Hide thumbnails' : 'Show thumbnails'}
-                >
-                  <div className={`thumb-toggle-track ${showThumbnails ? 'active' : ''}`}>
-                    <ImageOff size={14} className="thumb-icon off" />
-                    <Image size={14} className="thumb-icon on" />
-                    <div className="thumb-toggle-thumb" />
-                  </div>
-                </button>
-
-                <button
-                  className="scan-btn"
-                  onClick={scan}
-                  disabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
-                  title={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
-                >
-                  Scan
-                </button>
-              </>
-            ) : (
-              <div className="shared-map-title">
-                {root?.title || 'Shared Sitemap'}
-              </div>
-            )}
-          </div>
-
-          {hasMap && (
-            <div className="map-name-container">
-              {isEditingMapName ? (
-                <input
-                  className="map-name-input"
-                  value={mapName}
-                  onChange={(e) => setMapName(e.target.value)}
-                  onBlur={() => setIsEditingMapName(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setIsEditingMapName(false);
-                    }
-                    if (e.key === 'Escape') {
-                      setIsEditingMapName(false);
-                    }
-                  }}
-                  autoFocus
-                  spellCheck={false}
-                />
-              ) : (
-                <span
-                  className="map-name-display"
-                  onClick={() => canEdit() && setIsEditingMapName(true)}
-                  title={canEdit() ? "Click to rename" : mapName}
-                >
-                  {mapName || 'Untitled Map'}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="topbar-right">
-          {canEdit() && (
-            <button
-              className="icon-btn"
-              title="Create New Map"
-              onClick={() => {
-                if (!currentUser) {
-                  showToast('Please sign in to create a new map', 'warning');
-                  setShowAuthModal(true);
-                  return;
-                }
-                setShowCreateMapModal(true);
-              }}
-            >
-              <PlusSquare size={18} />
-            </button>
-          )}
-
-          {canEdit() && (
-            <button
-              className="icon-btn"
-              title="Import File"
-              onClick={() => setShowImportModal(true)}
-            >
-              <Upload size={18} />
-            </button>
-          )}
-
-          {canEdit() && (
-            <button
-              className="icon-btn"
-              title="Projects"
-              onClick={() => setShowProjectsModal(true)}
-            >
-              <Folder size={18} />
-            </button>
-          )}
-
-          {isLoggedIn && (
-            <button
-              className="icon-btn"
-              title="Scan History"
-              onClick={() => setShowHistoryModal(true)}
-            >
-              <History size={18} />
-            </button>
-          )}
-
-          <div className="divider" />
-
-          {isLoggedIn ? (
-            <>
-              <button
-                className="user-btn"
-                onClick={() => setShowProfileModal(true)}
-                title="Account Settings"
-              >
-                <User size={16} />
-                <span>{currentUser?.name}</span>
-              </button>
-              <button className="icon-btn" title="Logout" onClick={handleLogout}>
-                <LogOut size={18} />
-              </button>
-            </>
-          ) : (
-            <button className="icon-btn primary" title="Login" onClick={handleLogin}>
-              <LogIn size={18} />
-            </button>
-          )}
-        </div>
-      </div>
+      <Topbar
+        canEdit={canEdit()}
+        urlInput={urlInput}
+        onUrlInputChange={(e) => setUrlInput(e.target.value)}
+        onUrlKeyDown={onKeyDownUrl}
+        onClearCanvas={async () => {
+          const confirmed = await showConfirm({
+            title: 'Clear Canvas',
+            message: 'Clear the canvas? This cannot be undone.',
+            confirmText: 'Clear',
+            danger: true
+          });
+          if (confirmed) {
+            setRoot(null);
+            setOrphans([]);
+            setCurrentMap(null);
+            setIsImportedMap(false);
+            setScale(1);
+            setPan({ x: 0, y: 0 });
+            setUrlInput('');
+          }
+        }}
+        hasMap={hasMap}
+        showThumbnails={showThumbnails}
+        onToggleThumbnails={() => setShowThumbnails(v => !v)}
+        onScan={scan}
+        scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
+        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
+        mapName={mapName}
+        isEditingMapName={isEditingMapName}
+        onMapNameChange={(e) => setMapName(e.target.value)}
+        onMapNameBlur={() => setIsEditingMapName(false)}
+        onMapNameKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            setIsEditingMapName(false);
+          }
+          if (e.key === 'Escape') {
+            setIsEditingMapName(false);
+          }
+        }}
+        onMapNameClick={() => canEdit() && setIsEditingMapName(true)}
+        sharedTitle={root?.title || 'Shared Sitemap'}
+        onCreateMap={() => {
+          if (!currentUser) {
+            showToast('Please sign in to create a new map', 'warning');
+            setShowAuthModal(true);
+            return;
+          }
+          setShowCreateMapModal(true);
+        }}
+        onImportFile={() => setShowImportModal(true)}
+        onShowProjects={() => setShowProjectsModal(true)}
+        onShowHistory={() => setShowHistoryModal(true)}
+        isLoggedIn={isLoggedIn}
+        currentUser={currentUser}
+        onShowProfile={() => setShowProfileModal(true)}
+        onLogout={handleLogout}
+        onLogin={handleLogin}
+      />
 
       <div
         className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''}`}
@@ -6326,227 +4627,73 @@ const findNodeById = (node, id) => {
                 );
               })}
 
-            {/* Layers Panel */}
-            <div className={`layers-panel ${showViewDropdown ? 'expanded' : ''}`} ref={viewDropdownRef}>
-              <div
-                className="layers-panel-header"
-                onClick={() => setShowViewDropdown(!showViewDropdown)}
-              >
-                <div className="layers-panel-title">
-                  <Layers size={16} />
-                  <span>Layers</span>
-                </div>
-                <button className="key-toggle">
-                  {showViewDropdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-              </div>
-              {showViewDropdown && (
-                <div className="layers-panel-list">
-                  <label className="layers-panel-item">
-                    <input
-                      type="checkbox"
-                      checked={layers.main}
-                      disabled
-                      onChange={() => {}}
-                    />
-                    <span>Main / URL</span>
-                  </label>
-                  <label className="layers-panel-item">
-                    <input
-                      type="checkbox"
-                      checked={layers.userFlows}
-                      onChange={() => {
-                        setLayers(l => ({ ...l, userFlows: !l.userFlows }));
-                        if (layers.userFlows && connectionTool === 'userflow') {
-                          setConnectionTool(null);
-                        }
-                      }}
-                    />
-                    <span>User Flows</span>
-                  </label>
-                  <label className="layers-panel-item">
-                    <input
-                      type="checkbox"
-                      checked={layers.crossLinks}
-                      onChange={() => {
-                        setLayers(l => ({ ...l, crossLinks: !l.crossLinks }));
-                        if (layers.crossLinks && connectionTool === 'crosslink') {
-                          setConnectionTool(null);
-                        }
-                      }}
-                    />
-                    <span>Cross-links</span>
-                  </label>
-                  <label className="layers-panel-item disabled">
-                    <input
-                      type="checkbox"
-                      checked={layers.xmlComparison}
-                      disabled
-                      onChange={() => {}}
-                    />
-                    <span>XML Comparison</span>
-                  </label>
-                </div>
-              )}
-            </div>
-
-            <div className="color-key">
-              <div className="color-key-header" onClick={() => setShowColorKey(v => !v)}>
-                <div className="color-key-title">
-                  <Palette size={16} />
-                  <span>Legend</span>
-                </div>
-                <button className="key-toggle">
-                  {showColorKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-              </div>
-              {showColorKey && (
-                <div className="color-key-list">
-                  {colors.slice(0, maxDepth + 1).map((color, idx) => (
-                    <div key={idx} className="color-key-item" onClick={() => setEditingColorDepth(idx)}>
-                      <div className="color-swatch" style={{ backgroundColor: color }} />
-                      <span>Level {idx}</span>
-                      <Edit2 size={12} className="color-edit-icon" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Canvas Toolbar */}
-            <div className="canvas-toolbar">
-              <button
-                className={`canvas-tool-btn ${activeTool === 'select' && !connectionTool ? 'active' : ''}`}
-                onClick={() => {
+            <RightRail
+              layersPanelProps={{
+                layers,
+                connectionTool,
+                onToggleUserFlows: () => {
+                  setLayers(l => ({ ...l, userFlows: !l.userFlows }));
+                  if (layers.userFlows && connectionTool === 'userflow') {
+                    setConnectionTool(null);
+                  }
+                },
+                onToggleCrossLinks: () => {
+                  setLayers(l => ({ ...l, crossLinks: !l.crossLinks }));
+                  if (layers.crossLinks && connectionTool === 'crosslink') {
+                    setConnectionTool(null);
+                  }
+                },
+                showViewDropdown,
+                onToggleDropdown: () => setShowViewDropdown(!showViewDropdown),
+                viewDropdownRef,
+              }}
+              colorKeyProps={{
+                showColorKey,
+                onToggle: () => setShowColorKey(v => !v),
+                colors,
+                maxDepth,
+                onEditDepth: (depth) => setEditingColorDepth(depth),
+              }}
+              toolbarProps={{
+                canEdit: canEdit(),
+                activeTool,
+                connectionTool,
+                onSelectTool: () => {
                   setActiveTool('select');
                   setConnectionTool(null);
-                }}
-                title="Select (V)"
-              >
-                <MousePointer2 size={20} />
-              </button>
-              {canEdit() && (
-                <button
-                  className="canvas-tool-btn"
-                  title="Add Page"
-                  onClick={() => {
-                    setEditModalNode({ id: '', url: '', title: '', parentId: '', children: [] });
-                    setEditModalMode('add');
-                  }}
-                >
-                  <FilePlus size={20} />
-                </button>
-              )}
-
-              {canEdit() && <div className="canvas-toolbar-divider" />}
-
-              {canEdit() && (
-                <button
-                  className={`canvas-tool-btn ${connectionTool === 'userflow' ? 'active' : ''}`}
-                  onClick={() => {
-                    setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
-                    setActiveTool('select');
-                  }}
-                  title="User Flow (F)"
-                >
-                  <Workflow size={20} />
-                </button>
-              )}
-              {canEdit() && (
-                <button
-                  className={`canvas-tool-btn ${connectionTool === 'crosslink' ? 'active' : ''}`}
-                  onClick={() => {
-                    setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
-                    setActiveTool('select');
-                  }}
-                  title="Crosslink (L)"
-                >
-                  <Link2 size={20} />
-                </button>
-              )}
-              <button
-                className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''}`}
-                onClick={() => setShowCommentsPanel(!showCommentsPanel)}
-                title="Comments (C)"
-              >
-                <MessageSquare size={20} />
-                {hasAnyComments && <span className="notification-dot" />}
-              </button>
-
-              {canEdit() && <div className="canvas-toolbar-divider" />}
-
-              {canEdit() && (
-                <button
-                  className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-                  onClick={handleUndo}
-                  disabled={!canUndo}
-                  title="Undo (⌘Z)"
-                >
-                  <Undo2 size={20} />
-                </button>
-              )}
-              {canEdit() && (
-                <button
-                  className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-                  onClick={handleRedo}
-                  disabled={!canRedo}
-                  title="Redo (⇧⌘Z)"
-                >
-                  <Redo2 size={20} />
-                </button>
-              )}
-
-              <div className="canvas-toolbar-divider" />
-
-              {canEdit() && (
-                <button
-                  className="canvas-tool-btn"
-                  onClick={() => setShowSaveMapModal(true)}
-                  disabled={!hasMap}
-                  title="Save Map"
-                >
-                  <Bookmark size={20} />
-                </button>
-              )}
-
-              <button
-                className="canvas-tool-btn"
-                onClick={() => setShowExportModal(true)}
-                disabled={!hasMap}
-                title="Download"
-              >
-                <Download size={20} />
-              </button>
-
-              {canEdit() && (
-                <button
-                  className="canvas-tool-btn"
-                  onClick={() => setShowShareModal(true)}
-                  disabled={!hasMap}
-                  title="Share"
-                >
-                  <Share2 size={20} />
-                </button>
-              )}
-
-            </div>
-
-            <div className="zoom-controls">
-              <button className="zoom-btn" onClick={zoomOut} title="Zoom Out">
-                <ZoomOut size={18} />
-              </button>
-              <span className="zoom-level">{Math.round(scale * 100)}%</span>
-              <button className="zoom-btn" onClick={zoomIn} title="Zoom In">
-                <ZoomIn size={18} />
-              </button>
-              <div className="zoom-divider" />
-              <button className="zoom-btn" onClick={fitToScreen} title="Fit to Screen">
-                <Minimize2 size={18} />
-              </button>
-              <button className="zoom-btn" onClick={resetView} title="Reset View (100%)">
-                <Maximize2 size={18} />
-              </button>
-            </div>
+                },
+                onAddPage: () => {
+                  setEditModalNode({ id: '', url: '', title: '', parentId: '', children: [] });
+                  setEditModalMode('add');
+                },
+                onToggleUserFlow: () => {
+                  setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
+                  setActiveTool('select');
+                },
+                onToggleCrosslink: () => {
+                  setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
+                  setActiveTool('select');
+                },
+                showCommentsPanel,
+                onToggleCommentsPanel: () => setShowCommentsPanel(!showCommentsPanel),
+                hasAnyComments,
+                canUndo,
+                canRedo,
+                onUndo: handleUndo,
+                onRedo: handleRedo,
+                onSaveMap: () => setShowSaveMapModal(true),
+                onExport: () => setShowExportModal(true),
+                onShare: () => setShowShareModal(true),
+                hasMap,
+              }}
+              zoomProps={{
+                scale,
+                onZoomOut: zoomOut,
+                onZoomIn: zoomIn,
+                onFitToScreen: fitToScreen,
+                onResetView: resetView,
+              }}
+            />
           </DndContext>
         )}
       </div>
@@ -6566,468 +4713,116 @@ const findNodeById = (node, id) => {
         />
       )}
 
-      {editingColorDepth !== null && (
-        <div className="modal-overlay" onClick={() => setEditingColorDepth(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>Edit Level {editingColorDepth} Color</h3>
-            <input
-              type="color"
-              value={colors[editingColorDepth]}
-              onChange={(e) => updateLevelColor(editingColorDepth, e.target.value)}
-              style={{ width: '100%', height: 60, border: 'none', cursor: 'pointer' }}
-            />
-            <button className="modal-btn" onClick={() => setEditingColorDepth(null)}>Done</button>
-          </div>
-        </div>
-      )}
+      <EditColorModal
+        depth={editingColorDepth}
+        color={editingColorDepth !== null ? colors[editingColorDepth] : '#000000'}
+        onChange={(color) => updateLevelColor(editingColorDepth, color)}
+        onClose={() => setEditingColorDepth(null)}
+      />
 
-      {showExportModal && (
-        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
-          <div className="modal-card export-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowExportModal(false)}>
-              <X size={20} />
-            </button>
-            <h3>Download</h3>
-            <div className="export-options">
-              <button className="export-btn" onClick={() => { setShowExportModal(false); exportPng(); }}>
-                <FileImage size={24} />
-                <div className="export-btn-text">
-                  <span className="export-btn-title">PNG Image</span>
-                  <span className="export-btn-desc">Visual sitemap for presentations</span>
-                </div>
-              </button>
-              <button className="export-btn" onClick={() => { setShowExportModal(false); exportPdf(); }}>
-                <FileText size={24} />
-                <div className="export-btn-text">
-                  <span className="export-btn-title">PDF Document</span>
-                  <span className="export-btn-desc">Printable report with page list</span>
-                </div>
-              </button>
-              <button className="export-btn" onClick={() => { exportCsv(); setShowExportModal(false); }}>
-                <FileSpreadsheet size={24} />
-                <div className="export-btn-text">
-                  <span className="export-btn-title">CSV Spreadsheet</span>
-                  <span className="export-btn-desc">Page data for Excel or Google Sheets</span>
-                </div>
-              </button>
-              <button className="export-btn" onClick={() => { exportJson(); setShowExportModal(false); }}>
-                <FileJson size={24} />
-                <div className="export-btn-text">
-                  <span className="export-btn-title">JSON Data</span>
-                  <span className="export-btn-desc">Raw data for import or backup</span>
-                </div>
-              </button>
-              <button className="export-btn" onClick={() => { exportSiteIndex(); setShowExportModal(false); }}>
-                <List size={24} />
-                <div className="export-btn-text">
-                  <span className="export-btn-title">Site Index</span>
-                  <span className="export-btn-desc">Page list document for Word or Google Docs</span>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ExportModal
+        show={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        onExportPng={() => { setShowExportModal(false); exportPng(); }}
+        onExportPdf={() => { setShowExportModal(false); exportPdf(); }}
+        onExportCsv={() => { exportCsv(); setShowExportModal(false); }}
+        onExportJson={() => { exportJson(); setShowExportModal(false); }}
+        onExportSiteIndex={() => { exportSiteIndex(); setShowExportModal(false); }}
+      />
 
-      {showShareModal && (
-        <div className="modal-overlay" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}>
-          <div className="modal-card share-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}>
-              <X size={20} />
-            </button>
-            <h3>Share Sitemap</h3>
+      <ShareModal
+        show={showShareModal}
+        onClose={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}
+        accessLevels={ACCESS_LEVELS}
+        sharePermission={sharePermission}
+        onChangePermission={(permission) => setSharePermission(permission)}
+        linkCopied={linkCopied}
+        onCopyLink={() => copyShareLink(sharePermission)}
+        shareEmails={shareEmails}
+        onShareEmailsChange={setShareEmails}
+        onSendEmail={sendShareEmail}
+      />
 
-            <div className="share-section">
-              <div className="share-section-title">Permission Level</div>
-              <div className="share-permission-options">
-                <label className={`share-permission-option ${sharePermission === ACCESS_LEVELS.VIEW ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="sharePermission"
-                    checked={sharePermission === ACCESS_LEVELS.VIEW}
-                    onChange={() => setSharePermission(ACCESS_LEVELS.VIEW)}
-                  />
-                  <Eye size={16} />
-                  <div className="share-permission-text">
-                    <span className="share-permission-label">View only</span>
-                    <span className="share-permission-desc">Can view the sitemap</span>
-                  </div>
-                </label>
-                <label className={`share-permission-option ${sharePermission === ACCESS_LEVELS.COMMENT ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="sharePermission"
-                    checked={sharePermission === ACCESS_LEVELS.COMMENT}
-                    onChange={() => setSharePermission(ACCESS_LEVELS.COMMENT)}
-                  />
-                  <MessageSquare size={16} />
-                  <div className="share-permission-text">
-                    <span className="share-permission-label">Can comment</span>
-                    <span className="share-permission-desc">View and add comments</span>
-                  </div>
-                </label>
-                <label className={`share-permission-option ${sharePermission === ACCESS_LEVELS.EDIT ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="sharePermission"
-                    checked={sharePermission === ACCESS_LEVELS.EDIT}
-                    onChange={() => setSharePermission(ACCESS_LEVELS.EDIT)}
-                  />
-                  <Edit2 size={16} />
-                  <div className="share-permission-text">
-                    <span className="share-permission-label">Can edit</span>
-                    <span className="share-permission-desc">Full editing access</span>
-                  </div>
-                </label>
-              </div>
-            </div>
+      <SaveMapModal
+        show={showSaveMapModal}
+        onClose={() => setShowSaveMapModal(false)}
+        isLoggedIn={isLoggedIn}
+        onRequireLogin={() => {
+          setShowSaveMapModal(false);
+          setShowAuthModal(true);
+        }}
+        projects={projects}
+        currentMap={currentMap}
+        rootUrl={root?.url}
+        defaultProjectId={selectedProjectForNewMap}
+        defaultName={mapName}
+        onSave={saveMap}
+        onCreateProject={createProject}
+      />
 
-            <div className="share-section">
-              <button className={`share-link-btn ${linkCopied ? 'copied' : ''}`} onClick={() => copyShareLink(sharePermission)}>
-                {linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                <span>{linkCopied ? 'Link Copied!' : 'Copy Share Link'}</span>
-              </button>
-            </div>
+      <ProjectsModal
+        show={showProjectsModal}
+        onClose={() => { setShowProjectsModal(false); setEditingProjectId(null); }}
+        isLoggedIn={isLoggedIn}
+        projects={projects}
+        expandedProjects={expandedProjects}
+        editingProjectId={editingProjectId}
+        editingProjectName={editingProjectName}
+        onToggleProjectExpanded={toggleProjectExpanded}
+        onEditProjectNameChange={setEditingProjectName}
+        onEditProjectNameStart={(projectId, projectName) => {
+          setEditingProjectId(projectId);
+          setEditingProjectName(projectName);
+        }}
+        onEditProjectNameCancel={() => setEditingProjectId(null)}
+        onRenameProject={renameProject}
+        onDeleteProject={deleteProject}
+        onLoadMap={loadMap}
+        onDeleteMap={deleteMap}
+        onAddProject={async () => {
+          const name = await showPrompt({
+            title: 'New Project',
+            message: 'Enter a name for the new project:',
+            placeholder: 'Project name'
+          });
+          if (name) createProject(name);
+        }}
+      />
 
-            <div className="share-section">
-              <div className="share-section-title">Send via Email</div>
-              <div className="share-email-section">
-                <div className="share-email-input">
-                  <Mail size={18} />
-                  <input
-                    type="text"
-                    placeholder="Enter email addresses..."
-                    value={shareEmails}
-                    onChange={(e) => setShareEmails(e.target.value)}
-                  />
-                </div>
-                <button className="share-email-btn" onClick={sendShareEmail}>
-                  Send
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <HistoryModal
+        show={showHistoryModal}
+        onClose={() => { setShowHistoryModal(false); setSelectedHistoryItems(new Set()); }}
+        scanHistory={scanHistory}
+        selectedHistoryItems={selectedHistoryItems}
+        onToggleSelection={toggleHistorySelection}
+        onSelectAllToggle={selectedHistoryItems.size === scanHistory.length ? clearHistorySelection : selectAllHistory}
+        onDeleteSelected={deleteSelectedHistory}
+        onLoadFromHistory={loadFromHistory}
+      />
 
-      {showSaveMapModal && (
-        <div className="modal-overlay" onClick={() => setShowSaveMapModal(false)}>
-          <div className="modal-card save-map-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowSaveMapModal(false)}>
-              <X size={20} />
-            </button>
-            <h3>Save Map</h3>
-            {!isLoggedIn ? (
-              <div className="login-prompt">
-                <p>Please sign in to save your maps</p>
-                <button
-                  className="btn-primary"
-                  onClick={() => {
-                    setShowSaveMapModal(false);
-                    setShowAuthModal(true);
-                  }}
-                >
-                  Sign In
-                </button>
-              </div>
-            ) : (
-              <SaveMapForm
-                projects={projects}
-                currentMap={currentMap}
-                rootUrl={root?.url}
-                defaultProjectId={selectedProjectForNewMap}
-                defaultName={mapName}
-                onSave={saveMap}
-                onCreateProject={createProject}
-                onCancel={() => setShowSaveMapModal(false)}
-              />
-            )}
-          </div>
-        </div>
-      )}
+      <ScanProgressModal
+        loading={loading}
+        showCancelConfirm={showCancelConfirm}
+        scanMessage={scanMessage}
+        scanProgress={scanProgress}
+        scanElapsed={scanElapsed}
+        urlInput={urlInput}
+        onRequestCancel={() => setShowCancelConfirm(true)}
+        onCancelScan={cancelScan}
+        onContinueScan={() => setShowCancelConfirm(false)}
+      />
 
-      {showProjectsModal && (
-        <div className="modal-overlay" onClick={() => { setShowProjectsModal(false); setEditingProjectId(null); }}>
-          <div className="modal-card projects-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => { setShowProjectsModal(false); setEditingProjectId(null); }}>
-              <X size={20} />
-            </button>
-            <h3>Projects & Maps</h3>
-            {!isLoggedIn ? (
-              <div className="projects-empty">
-                Please log in to save and manage projects
-              </div>
-            ) : (
-              <>
-                <div className="projects-list">
-                  {projects.length === 0 ? (
-                    <div className="projects-empty">
-                      No projects yet. Create one to organize your maps.
-                    </div>
-                  ) : (
-                    projects.map(project => (
-                      <div key={project.id} className="project-folder">
-                        <div className="project-folder-header" onClick={() => toggleProjectExpanded(project.id)}>
-                          <div className="project-folder-icon">
-                            <Folder size={18} />
-                          </div>
-                          {editingProjectId === project.id ? (
-                            <input
-                              className="project-name-input"
-                              value={editingProjectName}
-                              onChange={(e) => setEditingProjectName(e.target.value)}
-                              onBlur={() => renameProject(project.id, editingProjectName)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') renameProject(project.id, editingProjectName);
-                                if (e.key === 'Escape') setEditingProjectId(null);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              autoFocus
-                            />
-                          ) : (
-                            <span className="project-folder-name">{project.name}</span>
-                          )}
-                          <span className="project-map-count">{project.maps?.length || 0} maps</span>
-                          <div className="project-chevron">
-                            {expandedProjects[project.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                          </div>
-                          <div className="project-folder-actions" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              className="project-action-btn"
-                              title="Rename"
-                              onClick={() => { setEditingProjectId(project.id); setEditingProjectName(project.name); }}
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              className="project-action-btn danger"
-                              title="Delete Project"
-                              onClick={() => deleteProject(project.id)}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                        {expandedProjects[project.id] && (
-                          <div className="project-maps">
-                            {project.maps?.length === 0 ? (
-                              <div className="project-maps-empty">No maps in this project</div>
-                            ) : (
-                              project.maps?.map(map => (
-                                <div key={map.id} className="map-item" onClick={() => loadMap(map)}>
-                                  <MapIcon size={16} />
-                                  <span className="map-name">{map.name}</span>
-                                  <span className="map-date">{new Date(map.updatedAt).toLocaleDateString()}</span>
-                                  <button
-                                    className="map-delete"
-                                    title="Delete Map"
-                                    onClick={(e) => { e.stopPropagation(); deleteMap(project.id, map.id); }}
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-                <button
-                  className="add-project-btn"
-                  onClick={async () => {
-                    const name = await showPrompt({
-                      title: 'New Project',
-                      message: 'Enter a name for the new project:',
-                      placeholder: 'Project name'
-                    });
-                    if (name) createProject(name);
-                  }}
-                >
-                  <FolderPlus size={18} />
-                  Add Project
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showHistoryModal && (
-        <div className="modal-overlay" onClick={() => { setShowHistoryModal(false); setSelectedHistoryItems(new Set()); }}>
-          <div className="modal-card history-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => { setShowHistoryModal(false); setSelectedHistoryItems(new Set()); }}>
-              <X size={20} />
-            </button>
-            <h3>Scan History</h3>
-            {scanHistory.length === 0 ? (
-              <div className="history-empty">
-                No scans in history yet. Your completed scans will appear here.
-              </div>
-            ) : (
-              <>
-                <div className="history-actions">
-                  <button
-                    className="history-action-btn"
-                    onClick={selectedHistoryItems.size === scanHistory.length ? clearHistorySelection : selectAllHistory}
-                  >
-                    {selectedHistoryItems.size === scanHistory.length ? (
-                      <><CheckSquare size={16} /> Deselect All</>
-                    ) : (
-                      <><Square size={16} /> Select All</>
-                    )}
-                  </button>
-                  {selectedHistoryItems.size > 0 && (
-                    <button className="history-action-btn danger" onClick={deleteSelectedHistory}>
-                      <Trash2 size={16} />
-                      Delete Selected ({selectedHistoryItems.size})
-                    </button>
-                  )}
-                </div>
-                <div className="history-list">
-                  {scanHistory.map(item => (
-                    <div
-                      key={item.id}
-                      className={`history-item ${selectedHistoryItems.has(item.id) ? 'selected' : ''}`}
-                    >
-                      <button
-                        className="history-checkbox"
-                        onClick={(e) => { e.stopPropagation(); toggleHistorySelection(item.id); }}
-                      >
-                        {selectedHistoryItems.has(item.id) ? <CheckSquare size={18} /> : <Square size={18} />}
-                      </button>
-                      <div className="history-item-content" onClick={() => loadFromHistory(item)}>
-                        <div className="history-item-header">
-                          <Globe size={16} />
-                          <span className="history-hostname">{item.hostname}</span>
-                          <span className="history-pages">{item.page_count || item.pageCount} pages</span>
-                        </div>
-                        <div className="history-item-meta">
-                          <span className="history-url">{item.url}</span>
-                          <span className="history-date">{new Date(item.scanned_at || item.scannedAt).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {loading && (
-        <div className="modal-overlay scanning-overlay">
-          <div className="modal-card scanning-modal" onClick={(e) => e.stopPropagation()}>
-            {!showCancelConfirm ? (
-              <>
-                <div className="scan-animation">
-                  <Globe size={48} className="scan-globe" />
-                  <Loader2 size={80} className="scan-spinner" />
-                </div>
-                <div className="scan-status">
-                  <div className="scan-message">{scanMessage}</div>
-                  <div className="scan-stats">
-                    <div className="scan-pages">
-                      <span className="scan-pages-count">{scanProgress.scanned}</span>
-                      <span className="scan-pages-label">pages scanned</span>
-                    </div>
-                    {scanProgress.queued > 0 && (
-                      <div className="scan-queued">
-                        <span className="scan-queued-count">{scanProgress.queued}</span>
-                        <span className="scan-queued-label">in queue</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="scan-time-info">
-                    <div className="scan-elapsed">
-                      <span className="scan-time-label">Elapsed</span>
-                      <span className="scan-time-value">
-                        {Math.floor(scanElapsed / 60)}:{String(scanElapsed % 60).padStart(2, '0')}
-                      </span>
-                    </div>
-                    {scanProgress.scanned > 2 && scanProgress.queued > 0 && (
-                      <div className="scan-estimated">
-                        <span className="scan-time-label">Est. remaining</span>
-                        <span className="scan-time-value">
-                          {(() => {
-                            const avgTimePerPage = scanElapsed / scanProgress.scanned;
-                            const estRemaining = Math.ceil(avgTimePerPage * scanProgress.queued);
-                            const mins = Math.floor(estRemaining / 60);
-                            const secs = estRemaining % 60;
-                            return `~${mins}:${String(secs).padStart(2, '0')}`;
-                          })()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="scan-url">{urlInput}</div>
-                <button
-                  className="modal-btn cancel"
-                  onClick={() => setShowCancelConfirm(true)}
-                >
-                  Cancel Scan
-                </button>
-              </>
-            ) : (
-              <>
-                <div className="cancel-confirm">
-                  <AlertTriangle size={48} className="cancel-warning-icon" />
-                  <h3>Cancel Scan?</h3>
-                  <p>Are you sure you want to cancel the current scan?</p>
-                </div>
-                <div className="cancel-actions">
-                  <button className="modal-btn danger" onClick={cancelScan}>
-                    Yes, Cancel Scan
-                  </button>
-                  <button
-                    className="modal-btn secondary"
-                    onClick={() => setShowCancelConfirm(false)}
-                  >
-                    No, Continue Scanning
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {fullImageUrl && (
-        <div
-          className="modal-overlay image-overlay"
-          onClick={() => { setFullImageUrl(null); setImageLoading(false); }}
-          onKeyDown={(e) => e.key === 'Escape' && (setFullImageUrl(null), setImageLoading(false))}
-          tabIndex={0}
-          ref={(el) => el?.focus()}
-        >
-          <button className="image-overlay-close" onClick={() => { setFullImageUrl(null); setImageLoading(false); }}>
-            <X size={18} />
-          </button>
-          <div className="image-modal" onClick={(e) => e.stopPropagation()}>
-            {imageLoading && (
-              <div className="image-loading-overlay">
-                <Loader2 size={48} className="image-spinner" />
-                <span>Loading screenshot...</span>
-              </div>
-            )}
-            <img
-              key={fullImageUrl}
-              src={fullImageUrl}
-              alt="Full page view"
-              onLoad={() => setImageLoading(false)}
-              onError={() => {
-                setImageLoading(false);
-                showToast('Failed to load screenshot', 'error');
-                setFullImageUrl(null);
-              }}
-              style={{ opacity: imageLoading ? 0 : 1 }}
-            />
-          </div>
-        </div>
-      )}
+      <ImageOverlay
+        imageUrl={fullImageUrl}
+        loading={imageLoading}
+        onClose={() => { setFullImageUrl(null); setImageLoading(false); }}
+        onLoad={() => setImageLoading(false)}
+        onError={() => {
+          setImageLoading(false);
+          showToast('Failed to load screenshot', 'error');
+          setFullImageUrl(null);
+        }}
+      />
 
       {showAuthModal && (
         <AuthModal
@@ -7061,18 +4856,11 @@ const findNodeById = (node, id) => {
       )}
 
 
-      {deleteConfirmNode && (
-  <div className="modal-overlay" onClick={() => setDeleteConfirmNode(null)}>
-    <div className="confirm-modal" onClick={e => e.stopPropagation()}>
-      <h3>Delete Page</h3>
-      <p>Delete "{deleteConfirmNode.title || deleteConfirmNode.url || 'this page'}"?</p>
-      <div className="confirm-modal-actions">
-        <button className="modal-btn secondary" onClick={() => setDeleteConfirmNode(null)}>Cancel</button>
-        <button className="modal-btn danger" onClick={confirmDeleteNode}>Delete</button>
-      </div>
-    </div>
-  </div>
-)}
+      <DeleteConfirmModal
+        node={deleteConfirmNode}
+        onCancel={() => setDeleteConfirmNode(null)}
+        onConfirm={confirmDeleteNode}
+      />
 
       {/* Create Map Modal */}
       <CreateMapModal
@@ -7096,56 +4884,15 @@ const findNodeById = (node, id) => {
         }}
       />
 
-      {showImportModal && (
-        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
-          <div className="modal-card import-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Import Sitemap</h2>
-              <button className="modal-close" onClick={() => setShowImportModal(false)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="import-info">
-                <p>Import a sitemap from a file. Supported formats:</p>
-                <ul className="import-formats">
-                  <li><strong>XML</strong> - Standard sitemap.xml files</li>
-                  <li><strong>RSS/Atom</strong> - Feed files with links</li>
-                  <li><strong>HTML</strong> - Extracts all links from the page</li>
-                  <li><strong>CSV</strong> - Comma-separated URLs</li>
-                  <li><strong>Markdown</strong> - Extracts URLs from markdown</li>
-                  <li><strong>TXT</strong> - Plain text with URLs</li>
-                </ul>
-              </div>
-              <label
-                className="import-dropzone"
-                onDrop={handleImportDrop}
-                onDragOver={handleImportDragOver}
-                onDragLeave={handleImportDragLeave}
-              >
-                <input
-                  type="file"
-                  accept=".xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
-                  onChange={handleFileImport}
-                  disabled={importLoading}
-                />
-                {importLoading ? (
-                  <div className="import-loading">
-                    <Loader2 size={32} className="spin" />
-                    <span>Processing file...</span>
-                  </div>
-                ) : (
-                  <>
-                    <FileUp size={48} />
-                    <span>Click to select file or drag and drop</span>
-                    <span className="import-hint">.xml, .rss, .atom, .html, .csv, .md, .txt</span>
-                  </>
-                )}
-              </label>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImportModal
+        show={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onDrop={handleImportDrop}
+        onDragOver={handleImportDragOver}
+        onDragLeave={handleImportDragLeave}
+        onFileChange={handleFileImport}
+        loading={importLoading}
+      />
 
       {toast && (
         <div className={`toast toast-${toast.type}`}>

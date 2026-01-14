@@ -1,0 +1,35 @@
+import React from 'react';
+import { ChevronDown, ChevronUp, Edit2, Palette } from 'lucide-react';
+
+const ColorKey = ({
+  showColorKey,
+  onToggle,
+  colors,
+  maxDepth,
+  onEditDepth,
+}) => (
+  <div className="color-key">
+    <div className="color-key-header" onClick={onToggle}>
+      <div className="color-key-title">
+        <Palette size={16} />
+        <span>Legend</span>
+      </div>
+      <button className="key-toggle">
+        {showColorKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+    </div>
+    {showColorKey && (
+      <div className="color-key-list">
+        {colors.slice(0, maxDepth + 1).map((color, idx) => (
+          <div key={idx} className="color-key-item" onClick={() => onEditDepth(idx)}>
+            <div className="color-swatch" style={{ backgroundColor: color }} />
+            <span>Level {idx}</span>
+            <Edit2 size={12} className="color-edit-icon" />
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+export default ColorKey;
