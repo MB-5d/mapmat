@@ -114,7 +114,9 @@ body {
   display: flex;
   align-items: center;
   margin-left: 16px;
+  width: 300px;
   max-width: 300px;
+  flex: 0 0 300px;
 }
 
 .map-name-display {
@@ -128,7 +130,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 300px;
+  width: 100%;
 }
 
 .map-name-display:hover {
@@ -145,7 +147,6 @@ body {
   padding: 4px 8px;
   border-radius: 4px;
   width: 100%;
-  max-width: 300px;
   box-shadow: 0 0 0 2px #6366f1;
 }
 

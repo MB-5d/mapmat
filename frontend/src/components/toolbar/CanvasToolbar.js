@@ -6,6 +6,7 @@ import {
   Link2,
   MessageSquare,
   MousePointer2,
+  RefreshCcw,
   Redo2,
   Share2,
   Undo2,
@@ -27,6 +28,7 @@ const CanvasToolbar = ({
   canRedo,
   onUndo,
   onRedo,
+  onClearCanvas,
   onSaveMap,
   onExport,
   onShare,
@@ -99,6 +101,17 @@ const CanvasToolbar = ({
         title="Redo (⇧⌘Z)"
       >
         <Redo2 size={20} />
+      </button>
+    )}
+
+    {canEdit && (
+      <button
+        className={`canvas-tool-btn ${!hasMap ? 'disabled' : ''}`}
+        onClick={onClearCanvas}
+        disabled={!hasMap}
+        title="Clear Canvas"
+      >
+        <RefreshCcw size={20} />
       </button>
     )}
 

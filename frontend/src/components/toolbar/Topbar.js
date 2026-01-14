@@ -16,7 +16,6 @@ const Topbar = ({
   urlInput,
   onUrlInputChange,
   onUrlKeyDown,
-  onClearCanvas,
   hasMap,
   showThumbnails,
   onToggleThumbnails,
@@ -52,8 +51,6 @@ const Topbar = ({
           urlInput={urlInput}
           onUrlInputChange={onUrlInputChange}
           onUrlKeyDown={onUrlKeyDown}
-          onClearCanvas={onClearCanvas}
-          hasMap={hasMap}
           showThumbnails={showThumbnails}
           onToggleThumbnails={onToggleThumbnails}
           onScan={onScan}

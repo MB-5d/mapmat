@@ -1,13 +1,11 @@
 import React from 'react';
-import { Image, ImageOff, Scan, X } from 'lucide-react';
+import { Image, ImageOff, Scan } from 'lucide-react';
 
 const ScanBar = ({
   canEdit,
   urlInput,
   onUrlInputChange,
   onUrlKeyDown,
-  onClearCanvas,
-  hasMap,
   showThumbnails,
   onToggleThumbnails,
   onScan,
@@ -35,17 +33,6 @@ const ScanBar = ({
         placeholder="https://example.com"
         spellCheck={false}
       />
-
-      {hasMap && (
-        <button
-          className="clear-btn"
-          onClick={onClearCanvas}
-          title="Clear canvas"
-        >
-          <X size={14} />
-          Clear
-        </button>
-      )}
 
       <button
         className="thumb-toggle-btn"

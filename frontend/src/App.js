@@ -927,6 +927,23 @@ export default function App() {
     });
   };
 
+  const clearCanvas = async () => {
+    const confirmed = await showConfirm({
+      title: 'Clear Canvas',
+      message: 'Clear the canvas? This cannot be undone.',
+      confirmText: 'Clear',
+      danger: true
+    });
+    if (!confirmed) return;
+    setRoot(null);
+    setOrphans([]);
+    setCurrentMap(null);
+    setIsImportedMap(false);
+    setScale(1);
+    setPan({ x: 0, y: 0 });
+    setUrlInput('');
+  };
+
   // Show prompt modal and return promise
   const showPrompt = ({ title, message, placeholder = '', defaultValue = '' }) => {
     return new Promise((resolve) => {
@@ -4129,23 +4146,6 @@ const findNodeById = (node, id) => {
         urlInput={urlInput}
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
-        onClearCanvas={async () => {
-          const confirmed = await showConfirm({
-            title: 'Clear Canvas',
-            message: 'Clear the canvas? This cannot be undone.',
-            confirmText: 'Clear',
-            danger: true
-          });
-          if (confirmed) {
-            setRoot(null);
-            setOrphans([]);
-            setCurrentMap(null);
-            setIsImportedMap(false);
-            setScale(1);
-            setPan({ x: 0, y: 0 });
-            setUrlInput('');
-          }
-        }}
         hasMap={hasMap}
         showThumbnails={showThumbnails}
         onToggleThumbnails={() => setShowThumbnails(v => !v)}
@@ -4681,6 +4681,7 @@ const findNodeById = (node, id) => {
                 canRedo,
                 onUndo: handleUndo,
                 onRedo: handleRedo,
+                onClearCanvas: clearCanvas,
                 onSaveMap: () => setShowSaveMapModal(true),
                 onExport: () => setShowExportModal(true),
                 onShare: () => setShowShareModal(true),
