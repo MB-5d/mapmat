@@ -2192,7 +2192,7 @@ const CreateMapModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="create-map-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card create-map-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Create New Map</h2>
           <button className="modal-close-btn" onClick={onClose}>
@@ -3271,7 +3271,7 @@ export default function App() {
     if (!hasMap) return;
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .canvas-toolbar, .theme-toggle');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isOnConnection = e.target.closest('.connections-layer');
@@ -5689,8 +5689,8 @@ const findNodeById = (node, id) => {
                 <button
                   className="scan-btn"
                   onClick={scan}
-                  disabled={loading || isImportedMap}
-                  title={isImportedMap ? "Cannot scan imported maps" : "Scan URL"}
+                  disabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
+                  title={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
                 >
                   Scan
                 </button>
@@ -7020,7 +7020,7 @@ const findNodeById = (node, id) => {
 
       {showImportModal && (
         <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
-          <div className="modal import-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-card import-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Import Sitemap</h2>
               <button className="modal-close" onClick={() => setShowImportModal(false)}>

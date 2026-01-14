@@ -2049,15 +2049,12 @@ body {
 
 /* Create Map Modal */
 .create-map-modal {
-  background: white;
-  border-radius: 12px;
-  width: 100%;
+  padding: 0;
   max-width: 480px;
   max-height: 90vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
 }
 
 .modal-header {
@@ -3028,10 +3025,6 @@ body {
 .import-modal {
   max-width: 480px;
   padding: 0;
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-  position: relative;
 }
 
 .import-modal .modal-header {
@@ -5103,6 +5096,12 @@ body {
   color: #6b5a80;
 }
 
+[data-theme="dark"] .form-group select option,
+[data-theme="dark"] .modal-card select option {
+  background: #1a1022;
+  color: #e2e0e8;
+}
+
 [data-theme="dark"] .add-project-btn {
   background: #301E3F;
   border-color: #301E3F;
@@ -5123,6 +5122,52 @@ body {
 [data-theme="dark"] .modal-footer {
   background: #0d0812;
   border-top-color: #301E3F;
+}
+
+/* Import Modal - Dark Mode */
+[data-theme="dark"] .import-modal .modal-header {
+  border-bottom-color: #301E3F;
+}
+
+[data-theme="dark"] .import-modal .modal-header h2 {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .import-modal .modal-close {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .import-modal .modal-close:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .import-info p {
+  color: #9f8fb8;
+}
+
+[data-theme="dark"] .import-formats {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .import-formats strong {
+  color: #a78bfa;
+}
+
+[data-theme="dark"] .import-dropzone {
+  background: #0d0812;
+  border-color: #301E3F;
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .import-dropzone:hover,
+[data-theme="dark"] .import-dropzone.drag-over {
+  border-color: #6366f1;
+  background: #1a1022;
+}
+
+[data-theme="dark"] .import-hint {
+  color: #6b5a80;
 }
 
 /* Profile Modal - Dark Mode */
