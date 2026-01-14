@@ -2871,60 +2871,31 @@ export default function App() {
         scan(mapData.url, true);
       }, 100);
     } else {
-      // No URL - Create blank map immediately
-      const defaultRoot = {
-        id: 'root',
-        title: mapData.name || 'Home',
+      // No URL - Create blank map immediately. Just prepare the state.
+      setRoot(null);
+      setOrphans([]);
+      setConnections([]);
+      setCurrentMap({
+        name: mapData.name,
+        project_id: mapData.projectId || null,
+        // No id yet, since it's not saved.
+      });
+      setMapName(mapData.name);
+      setIsImportedMap(false);
+      setShowCreateMapModal(false);
+      
+      setNewMapData({
+        name: '',
+        projectId: '',
         url: '',
-        children: [],
-        type: 'page'
-      };
+        description: ''
+      });
 
-      try {
-        // Save to backend immediately
-        const { map } = await api.saveMap({
-          name: mapData.name,
-          url: '',
-          root: defaultRoot,
-          orphans: [],
-          colors: DEFAULT_COLORS,
-          project_id: mapData.projectId || null,
-        });
+      showToast('Creating new map...', 'info');
 
-        // Update state
-        setRoot(defaultRoot);
-        setCurrentMap(map);
-        setMapName(map.name);
-        
-        // Update projects list
-        setProjects(prev => {
-          let updated = prev.map(p => ({
-            ...p,
-            maps: (p.maps || []).filter(m => m.id !== map.id),
-          }));
-
-          if (map.project_id) {
-            updated = updated.map(p =>
-              p.id === map.project_id
-                ? { ...p, maps: [...(p.maps || []), map] }
-                : p
-            );
-          }
-          return updated;
-        });
-
-        showToast('Map created', 'success');
-        setEditModalNode({ id: '', url: '', title: '', parentId: 'root', children: [] });
-        setEditModalMode('add');
-      } catch (e) {
-        console.error(e);
-        // Fallback if save fails (e.g. not logged in)
-        setRoot(defaultRoot);
-        setMapName(mapData.name);
-        showToast('Map created (unsaved)', 'warning');
-        setEditModalNode({ id: '', url: '', title: '', parentId: 'root', children: [] });
-        setEditModalMode('add');
-      }
+      // Open Add Page modal to create the first page (which will be the root)
+      setEditModalNode({ id: '', url: '', title: mapData.name, parentId: '', children: [] });
+      setEditModalMode('add');
     }
   };
 
@@ -5038,8 +5009,7 @@ const findNodeById = (node, id) => {
       }
     } else if (editModalMode === 'add') {
       // Create a new blank node
-      const newNode = {
-        id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      const newNodeData = {
         url: updatedNode.url || '',
         title: updatedNode.title || 'New Page',
         pageType: updatedNode.pageType || 'page',
@@ -5050,24 +5020,82 @@ const findNodeById = (node, id) => {
         comments: [],
       };
 
-      saveStateForUndo();
+      if (!root) { // This is the first page, so it becomes the root.
+        const newRoot = { ...newNodeData, id: 'root' };
+        
+        const mapToSave = {
+            name: currentMap.name,
+            url: newRoot.url,
+            root: newRoot,
+            orphans: [],
+            colors: DEFAULT_COLORS,
+            project_id: currentMap.project_id,
+        };
 
-      if (newParentId === '') {
-        // Add to orphans
-        setOrphans(prev => [...prev, newNode]);
+        api.saveMap(mapToSave)
+            .then(({ map }) => {
+                setRoot(newRoot);
+                setCurrentMap(map);
+                setMapName(map.name);
+                
+                setProjects(prev => {
+                  let updated = prev.map(p => ({
+                    ...p,
+                    maps: (p.maps || []).filter(m => m.id !== map.id),
+                  }));
+        
+                  if (map.project_id) {
+                    const projectExists = updated.some(p => p.id === map.project_id);
+                    if (projectExists) {
+                        updated = updated.map(p =>
+                          p.id === map.project_id
+                            ? { ...p, maps: [...(p.maps || []), map] }
+                            : p
+                        );
+                    } else {
+                        const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                        if (uncategorized) {
+                            uncategorized.maps.push(map);
+                        } else {
+                            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                        }
+                    }
+                  } else {
+                    const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                    if (uncategorized) {
+                        uncategorized.maps.push(map);
+                    } else {
+                        updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                    }
+                  }
+                  return updated;
+                });
+
+                showToast('Map created and first page added!', 'success');
+            })
+            .catch(e => {
+                console.error(e);
+                setRoot(newRoot);
+                showToast('Page added (map is unsaved)', 'warning');
+            });
       } else {
-        setRoot((prev) => {
-          const copy = structuredClone(prev);
-          const parent = findNodeById(copy, newParentId);
-          if (parent) {
-            parent.children = parent.children || [];
-            parent.children.push(newNode);
-          }
-          return copy;
-        });
+        saveStateForUndo();
+        const newNode = { ...newNodeData, id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` };
+        if (updatedNode.parentId === '') {
+          setOrphans(prev => [...prev, newNode]);
+        } else {
+          setRoot((prev) => {
+            const copy = structuredClone(prev);
+            const parent = findNodeById(copy, updatedNode.parentId);
+            if (parent) {
+              parent.children = parent.children || [];
+              parent.children.push(newNode);
+            }
+            return copy;
+          });
+        }
+        showToast('Page added successfully', 'success');
       }
-
-      showToast('Page added successfully', 'success');
     }
     setEditModalNode(null);
   };
