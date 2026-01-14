@@ -2305,6 +2305,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [projects, setProjects] = useState([]); // Project folders
   const [currentMap, setCurrentMap] = useState(null); // Currently loaded map
+  const [selectedProjectForNewMap, setSelectedProjectForNewMap] = useState(null); // Project selected in Create Map modal
+  const [isImportedMap, setIsImportedMap] = useState(false); // Whether current map is from import
   const [accessLevel, setAccessLevel] = useState(ACCESS_LEVELS.EDIT); // Permission level
   const [showShareModal, setShowShareModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -2838,6 +2840,8 @@ export default function App() {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
+    setCurrentMap(null);
+    setIsImportedMap(false);
 
     // Set the map name
     setMapName(mapData.name);
@@ -2845,14 +2849,15 @@ export default function App() {
     // Set URL input if provided
     if (mapData.url) {
       setUrlInput(mapData.url);
+    } else {
+      setUrlInput('');
     }
 
-    // Store the selected project for when user saves
+    // Store the selected project ID for later save
     if (mapData.projectId) {
-      setCurrentMap(prev => ({
-        ...prev,
-        projectId: mapData.projectId
-      }));
+      setSelectedProjectForNewMap(mapData.projectId);
+    } else {
+      setSelectedProjectForNewMap(null);
     }
 
     // Close create modal
@@ -2866,15 +2871,15 @@ export default function App() {
       description: ''
     });
 
-    // Show toast prompting user to add first page
-    showToast('Map created! Add your first page by scanning a URL or clicking the + button.', 'success');
-
-    // If URL was provided, auto-scan it
-    if (mapData.url) {
-      // Small delay to let state settle
+    // Show helpful toast and auto-scan if URL provided
+    if (mapData.url && mapData.url.trim()) {
+      showToast('Starting scan...', 'loading');
+      // Auto-scan the provided URL
       setTimeout(() => {
         scan();
       }, 100);
+    } else {
+      showToast('Map created! Enter a URL and click Scan to add pages.', 'success');
     }
   };
 
@@ -5568,6 +5573,7 @@ const findNodeById = (node, id) => {
         setRoot(tree);
         setOrphans([]); // Clear orphans when importing new URLs
         setCurrentMap(null);
+        setIsImportedMap(true); // Mark as imported - scanning won't work
         setScale(1);
         setPan({ x: 0, y: 0 });
         setUrlInput(tree.url || '');
@@ -5655,6 +5661,7 @@ const findNodeById = (node, id) => {
                         setRoot(null);
                         setOrphans([]);
                         setCurrentMap(null);
+                        setIsImportedMap(false);
                         setScale(1);
                         setPan({ x: 0, y: 0 });
                         setUrlInput('');
@@ -5679,7 +5686,12 @@ const findNodeById = (node, id) => {
                   </div>
                 </button>
 
-                <button className="scan-btn" onClick={scan} disabled={loading}>
+                <button
+                  className="scan-btn"
+                  onClick={scan}
+                  disabled={loading || isImportedMap}
+                  title={isImportedMap ? "Cannot scan imported maps" : "Scan URL"}
+                >
                   Scan
                 </button>
               </>

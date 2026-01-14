@@ -1514,6 +1514,7 @@ body {
 }
 
 .modal-card {
+  position: relative;
   background: white;
   border-radius: 12px;
   padding: 24px;
@@ -1564,6 +1565,30 @@ body {
 
 .modal-btn.cancel:hover {
   background: #f8fafc;
+}
+
+/* Base modal close button */
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.15s;
+  z-index: 10;
+}
+
+.modal-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
 }
 
 /* Edit Node Modal */
@@ -6273,6 +6298,44 @@ body {
 
 [data-theme="dark"] .color-key-list {
   border-top: 1px solid #301E3F;
+}
+
+/* Dark mode - Base modal styles */
+[data-theme="dark"] .modal-card {
+  background: #1a1022;
+  border: 1px solid #301E3F;
+}
+
+[data-theme="dark"] .modal-card h3 {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .modal-card input,
+[data-theme="dark"] .modal-card select,
+[data-theme="dark"] .modal-card textarea {
+  background: #0d0812;
+  border-color: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .modal-card input:focus,
+[data-theme="dark"] .modal-card select:focus,
+[data-theme="dark"] .modal-card textarea:focus {
+  border-color: #6366f1;
+}
+
+[data-theme="dark"] .modal-card input::placeholder,
+[data-theme="dark"] .modal-card textarea::placeholder {
+  color: #6b5a80;
+}
+
+[data-theme="dark"] .modal-close {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .modal-close:hover {
+  background: #301E3F;
+  color: #e2e0e8;
 }
 
 [data-theme="dark"] .key-toggle {
