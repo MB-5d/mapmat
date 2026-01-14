@@ -13,6 +13,8 @@ const ScanBar = ({
   optionsRef,
   onToggleOptions,
   onOptionChange,
+  scanDepth,
+  onScanDepthChange,
   onScan,
   scanDisabled,
   scanTitle,
@@ -51,6 +53,30 @@ const ScanBar = ({
         </button>
         {showOptions && (
           <div className="scan-options-menu">
+            <div className="scan-options-depth">
+              <label htmlFor="scan-depth-input">Scan depth</label>
+              <input
+                id="scan-depth-input"
+                className="scan-options-depth-input"
+                type="text"
+                inputMode="numeric"
+                value={scanDepth}
+                onChange={(e) => onScanDepthChange(e.target.value)}
+                list="scan-depth-options"
+              />
+              <datalist id="scan-depth-options">
+                <option value="1" />
+                <option value="2" />
+                <option value="3" />
+                <option value="4" />
+                <option value="5" />
+                <option value="6" />
+                <option value="7" />
+                <option value="8" />
+                <option value="9" />
+                <option value="10" />
+              </datalist>
+            </div>
             <label className="scan-options-item">
               <input
                 type="checkbox"

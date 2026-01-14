@@ -494,7 +494,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   // Link children using parentUrl chain, falling back to root when parent missing
   const rootUrl = seed;
+  const rootHost = new URL(rootUrl).hostname;
   const orphanNodes = [];
+  const subdomainNodes = [];
   for (const node of nodes.values()) {
     if (node.url === rootUrl) continue;
 
@@ -503,7 +505,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (parentUrl && nodes.has(parentUrl)) {
       nodes.get(parentUrl).children.push(node);
     } else {
-      if (scanOptions.orphanPages) {
+      const nodeHost = new URL(node.url).hostname;
+      const isSubdomainRoot = scanOptions.subdomains && nodeHost !== rootHost;
+      if (isSubdomainRoot) {
+        subdomainNodes.push(node);
+      } else if (scanOptions.orphanPages) {
         orphanNodes.push(node);
       } else {
         // If parent missing, attach to root
@@ -544,6 +550,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   return {
     root,
     orphans: scanOptions.orphanPages ? orphanNodes : [],
+    subdomains: scanOptions.subdomains ? subdomainNodes : [],
     errors: scanOptions.errorPages ? errors : [],
     brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],
     files: scanOptions.files ? files : [],

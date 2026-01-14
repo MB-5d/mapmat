@@ -160,7 +160,8 @@ const checkLayoutInvariants = (nodes, orphans, connectors) => {
   if (process.env.NODE_ENV !== 'development') return;
 
   const { NODE_W, GAP_L1_X } = LAYOUT;
-  const orphanNodes = Array.from(nodes.values()).filter(n => n.isOrphan);
+  const orphanNodes = Array.from(nodes.values()).filter(n => n.isOrphan && n.orphanStyle !== 'subdomain');
+  const subdomainNodes = Array.from(nodes.values()).filter(n => n.isOrphan && n.orphanStyle === 'subdomain');
   const level1Nodes = Array.from(nodes.values()).filter(n => n.depth === 1);
 
   // A) Orphan spacing invariant
@@ -169,6 +170,15 @@ const checkLayoutInvariants = (nodes, orphans, connectors) => {
     const expected = NODE_W + GAP_L1_X;
     if (Math.abs(gap - expected) > 1) {
       console.warn(`Invariant A violated: orphan spacing. Got ${gap}, expected ${expected}`);
+    }
+  }
+
+  // A2) Subdomain spacing invariant
+  for (let j = 1; j < subdomainNodes.length; j++) {
+    const gap = subdomainNodes[j].x - subdomainNodes[j - 1].x;
+    const expected = NODE_W + GAP_L1_X;
+    if (Math.abs(gap - expected) > 1) {
+      console.warn(`Invariant A2 violated: subdomain spacing. Got ${gap}, expected ${expected}`);
     }
   }
 
@@ -348,10 +358,17 @@ const computeLayout = (
     return Math.max(NODE_H, total);
   };
 
+  const allOrphans = Array.isArray(orphans) ? orphans : [];
+  const subdomainOrphans = allOrphans.filter((o) => o.subdomainRoot);
+  const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
+
   // ------------------------------------------------------------
   // 1) Root (Home)
   // ------------------------------------------------------------
-  const rootX = 0;
+  const subdomainSlot = NODE_W + GAP_L1_X;
+  const rootX = subdomainOrphans.length > 0
+    ? subdomainOrphans.length * subdomainSlot
+    : 0;
   const rootY = ROOT_Y;
 
   // Root = "0.0" (Home)
@@ -364,7 +381,7 @@ const computeLayout = (
   const level1Y = rootBottomY + BUS_Y_GAP;
 
   const level1Positions = [];
-  let level1X = 0;
+  let level1X = rootX;
   let maxTreeHeight = NODE_H;
 
   if (root.children?.length) {
@@ -424,6 +441,26 @@ const computeLayout = (
   }
 
   // ------------------------------------------------------------
+  // 3) Subdomains (left of root)
+  // ------------------------------------------------------------
+  if (subdomainOrphans.length > 0) {
+    let subdomainX = 0;
+    subdomainOrphans.forEach((orphan, idx) => {
+      const num = `s${idx + 1}`;
+      setNode(orphan, subdomainX, rootY, 0, num, {
+        isOrphan: true,
+        orphanStyle: 'subdomain',
+      });
+
+      if (renderOrphanChildren && orphan.children?.length) {
+        layoutVertical(orphan, 0, num);
+      }
+
+      subdomainX += subdomainSlot;
+    });
+  }
+
+  // ------------------------------------------------------------
   // 3) Orphans
   // ------------------------------------------------------------
 
@@ -452,7 +489,7 @@ const computeLayout = (
 
   let orphanX = orphanStartX;
 
-  orphans.forEach((orphan, idx) => {
+  regularOrphans.forEach((orphan, idx) => {
     const depth = orphanStyle === "level1" ? 1 : 0;
     const num = orphanStyle === "level1" ? `1.o${idx + 1}` : `0.${idx + 1}`;
 
@@ -508,6 +545,7 @@ const SitemapTree = ({
   onNodeDoubleClick,
   onNodeClick,
   activeId,
+  badgeVisibility,
 }) => {
   const [expandedStacks, setExpandedStacks] = useState({});
 
@@ -519,6 +557,7 @@ const SitemapTree = ({
  const layout = useMemo(() => {
   return computeLayout(data, orphans, showThumbnails, expandedStacks, {
     mode: 'after-root', // or 'after-tree'
+    renderOrphanChildren: true,
   });
 }, [data, orphans, showThumbnails, expandedStacks]);
 
@@ -529,6 +568,19 @@ const SitemapTree = ({
   }, [layout, orphans]);
 
   if (!data) return null;
+
+  const getBadgesForNode = (node) => {
+    const badges = [];
+    if (node.subdomainRoot && badgeVisibility?.subdomains) badges.push('Subdomain');
+    if (node.orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
+    if (node.orphanType === 'file' && badgeVisibility?.files) badges.push('File');
+    if (node.orphanType === 'broken' && badgeVisibility?.brokenLinks) badges.push('Broken');
+    if (node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
+    if (node.isBroken && badgeVisibility?.brokenLinks && !badges.includes('Broken')) badges.push('Broken');
+    if (node.authRequired && badgeVisibility?.authenticatedPages) badges.push('Auth');
+    if (node.isError && badgeVisibility?.errorPages) badges.push('Error');
+    return badges;
+  };
 
   // Convert connector data to SVG path strings
   const connectorPaths = layout.connectors.map(c => {
@@ -572,6 +624,7 @@ const SitemapTree = ({
       {Array.from(layout.nodes.values()).map(nodeData => {
         const color = colors[Math.min(nodeData.depth, colors.length - 1)];
         const isRoot = nodeData.depth === 0;
+        const badges = getBadgesForNode(nodeData.node);
 
         return (
           <div
@@ -607,6 +660,7 @@ const SitemapTree = ({
               onAddNote={onAddNote}
               onViewNotes={onViewNotes}
               activeId={activeId}
+              badges={badges}
             />
           </div>
         );
@@ -705,6 +759,131 @@ const collectAllNodes = (node, result = [], pageNumber = '1', depth = 0) => {
   return result;
 };
 
+const makeNodeIdFromUrl = (url) => `url_${url.replace(/[^a-z0-9]/gi, '_')}`;
+
+const getUrlLabel = (url) => {
+  try {
+    const { hostname, pathname } = new URL(url);
+    const slug = pathname.split('/').filter(Boolean).pop();
+    return decodeURIComponent(slug || hostname);
+  } catch {
+    return url;
+  }
+};
+
+const buildUrlNodeMap = (rootNode, orphanNodes = []) => {
+  const map = new Map();
+  const walk = (node) => {
+    if (!node?.url) return;
+    if (!map.has(node.url)) map.set(node.url, node);
+    node.children?.forEach(walk);
+  };
+  walk(rootNode);
+  orphanNodes.forEach((orphan) => {
+    if (orphan?.url && !map.has(orphan.url)) map.set(orphan.url, orphan);
+  });
+  return map;
+};
+
+const filterTreeByFiles = (node, showFiles) => {
+  if (!node) return null;
+  if (!showFiles && node.isFile) return null;
+  const children = (node.children || [])
+    .map((child) => filterTreeByFiles(child, showFiles))
+    .filter(Boolean);
+  return { ...node, children };
+};
+
+const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
+  const mergedOrphans = (orphanNodes || []).map((orphan) => ({
+    ...orphan,
+    orphanType: orphan.orphanType || 'orphan',
+  }));
+  const urlNodeMap = buildUrlNodeMap(rootNode, mergedOrphans);
+
+  const addOrphanNode = (node, orphanType) => {
+    if (!node?.url) return null;
+    if (urlNodeMap.has(node.url)) {
+      const existing = urlNodeMap.get(node.url);
+      if (orphanType === 'subdomain') existing.subdomainRoot = true;
+      if (orphanType && !existing.orphanType) existing.orphanType = orphanType;
+      return existing;
+    }
+
+    const normalized = {
+      ...node,
+      children: node.children || [],
+      orphanType,
+    };
+    if (orphanType === 'subdomain') normalized.subdomainRoot = true;
+    mergedOrphans.push(normalized);
+    urlNodeMap.set(normalized.url, normalized);
+    return normalized;
+  };
+
+  (scanResult.subdomains || []).forEach((node) => {
+    addOrphanNode({ ...node, subdomainRoot: true }, 'subdomain');
+  });
+
+  (scanResult.files || []).forEach((file) => {
+    if (!file?.url) return;
+    const existing = urlNodeMap.get(file.url);
+    if (existing) {
+      existing.isFile = true;
+      return;
+    }
+
+    const newNode = {
+      id: makeNodeIdFromUrl(file.url),
+      url: file.url,
+      title: getUrlLabel(file.url),
+      children: [],
+      isFile: true,
+      parentUrl: file.sourceUrl || null,
+    };
+    if (file.sourceUrl && urlNodeMap.has(file.sourceUrl)) {
+      const parent = urlNodeMap.get(file.sourceUrl);
+      parent.children = parent.children || [];
+      parent.children.push(newNode);
+    } else {
+      addOrphanNode(newNode, 'file');
+    }
+    urlNodeMap.set(newNode.url, newNode);
+  });
+
+  (scanResult.errors || []).forEach((error) => {
+    if (!error?.url) return;
+    const node = urlNodeMap.get(error.url);
+    if (!node) return;
+    node.isError = true;
+    node.errorStatus = error.status;
+    if (error.authRequired) node.authRequired = true;
+  });
+
+  (scanResult.brokenLinks || []).forEach((link) => {
+    if (!link?.url) return;
+    const existing = urlNodeMap.get(link.url);
+    if (existing) {
+      existing.isBroken = true;
+      return;
+    }
+    addOrphanNode({
+      id: makeNodeIdFromUrl(link.url),
+      url: link.url,
+      title: getUrlLabel(link.url),
+      children: [],
+      isBroken: true,
+    }, 'broken');
+  });
+
+  return { root: rootNode, orphans: mergedOrphans };
+};
+
+const normalizeOrphans = (list) => (list || []).map((orphan) => ({
+  ...orphan,
+  orphanType: orphan.orphanType || 'orphan',
+}));
+
 export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
@@ -718,6 +897,26 @@ export default function App() {
     crosslinks: false,
   });
   const [showScanOptions, setShowScanOptions] = useState(false);
+  const [scanDepth, setScanDepth] = useState('4');
+  const [scanMeta, setScanMeta] = useState({
+    brokenLinks: [],
+  });
+  const [scanLayerAvailability, setScanLayerAvailability] = useState({
+    subdomains: false,
+    authenticatedPages: false,
+    orphanPages: false,
+    errorPages: false,
+    brokenLinks: false,
+    files: false,
+  });
+  const [scanLayerVisibility, setScanLayerVisibility] = useState({
+    subdomains: true,
+    authenticatedPages: true,
+    orphanPages: true,
+    errorPages: true,
+    brokenLinks: true,
+    files: true,
+  });
   const [mapName, setMapName] = useState('');
   const [isEditingMapName, setIsEditingMapName] = useState(false);
   const [root, setRoot] = useState(null);
@@ -888,6 +1087,53 @@ export default function App() {
   const hasMap = !!root;
   const maxDepth = useMemo(() => getMaxDepth(root), [root]);
   const totalNodes = useMemo(() => countNodes(root), [root]);
+  const effectiveScanLayers = useMemo(() => ({
+    subdomains: scanLayerAvailability.subdomains ? scanLayerVisibility.subdomains : true,
+    authenticatedPages: scanLayerAvailability.authenticatedPages ? scanLayerVisibility.authenticatedPages : true,
+    orphanPages: scanLayerAvailability.orphanPages ? scanLayerVisibility.orphanPages : true,
+    errorPages: scanLayerAvailability.errorPages ? scanLayerVisibility.errorPages : true,
+    brokenLinks: scanLayerAvailability.brokenLinks ? scanLayerVisibility.brokenLinks : true,
+    files: scanLayerAvailability.files ? scanLayerVisibility.files : true,
+  }), [scanLayerAvailability, scanLayerVisibility]);
+
+  const visibleOrphans = useMemo(() => {
+    return orphans.filter((orphan) => {
+      if (orphan.subdomainRoot) return effectiveScanLayers.subdomains;
+      if (orphan.orphanType === 'file') return effectiveScanLayers.files;
+      if (orphan.orphanType === 'broken') return effectiveScanLayers.brokenLinks;
+      return effectiveScanLayers.orphanPages;
+    });
+  }, [orphans, effectiveScanLayers]);
+
+  const renderRoot = useMemo(() => {
+    if (!root) return null;
+    if (effectiveScanLayers.files) return root;
+    return filterTreeByFiles(root, false);
+  }, [root, effectiveScanLayers.files]);
+
+  const brokenConnections = useMemo(() => {
+    if (!effectiveScanLayers.brokenLinks || scanMeta.brokenLinks.length === 0) return [];
+    const urlToId = new Map();
+    const walk = (node) => {
+      if (!node?.url) return;
+      urlToId.set(node.url, node.id);
+      node.children?.forEach(walk);
+    };
+    walk(renderRoot);
+    visibleOrphans.forEach((orphan) => {
+      if (orphan?.url) urlToId.set(orphan.url, orphan.id);
+    });
+
+    return scanMeta.brokenLinks
+      .map((link, index) => {
+        if (!link?.sourceUrl || !link?.url) return null;
+        const sourceId = urlToId.get(link.sourceUrl);
+        const targetId = urlToId.get(link.url);
+        if (!sourceId || !targetId) return null;
+        return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId };
+      })
+      .filter(Boolean);
+  }, [effectiveScanLayers.brokenLinks, scanMeta.brokenLinks, renderRoot, visibleOrphans]);
 
   // Check if there are any comments in the map (for notification dot)
   const hasAnyComments = useMemo(() => {
@@ -950,6 +1196,26 @@ export default function App() {
     });
   };
 
+  const resetScanLayers = () => {
+    setScanMeta({ brokenLinks: [] });
+    setScanLayerAvailability({
+      subdomains: false,
+      authenticatedPages: false,
+      orphanPages: false,
+      errorPages: false,
+      brokenLinks: false,
+      files: false,
+    });
+    setScanLayerVisibility({
+      subdomains: true,
+      authenticatedPages: true,
+      orphanPages: true,
+      errorPages: true,
+      brokenLinks: true,
+      files: true,
+    });
+  };
+
   const clearCanvas = async () => {
     const confirmed = await showConfirm({
       title: 'Clear Canvas',
@@ -965,6 +1231,7 @@ export default function App() {
     setScale(1);
     setPan({ x: 0, y: 0 });
     setUrlInput('');
+    resetScanLayers();
   };
 
   // Show prompt modal and return promise
@@ -1122,8 +1389,9 @@ export default function App() {
       api.getShare(shareId)
         .then(({ share }) => {
           if (share?.root) {
+            resetScanLayers();
             setRoot(share.root);
-            setOrphans(share.orphans || []);
+            setOrphans(normalizeOrphans(share.orphans));
             if (share.colors) setColors(share.colors);
             setUrlInput(share.root.url || '');
             showToast('Shared map loaded!', 'success');
@@ -1138,8 +1406,9 @@ export default function App() {
             try {
               const { root: sharedRoot, colors: sharedColors, orphans: sharedOrphans } = JSON.parse(sharedData);
               if (sharedRoot) {
+                resetScanLayers();
                 setRoot(sharedRoot);
-                setOrphans(sharedOrphans || []);
+                setOrphans(normalizeOrphans(sharedOrphans));
                 if (sharedColors) setColors(sharedColors);
                 setUrlInput(sharedRoot.url || '');
                 showToast('Shared map loaded!', 'success');
@@ -1497,8 +1766,9 @@ export default function App() {
   };
 
   const loadMap = (map) => {
+    resetScanLayers();
     setRoot(map.root);
-    setOrphans(map.orphans || []);
+    setOrphans(normalizeOrphans(map.orphans));
     setColors(map.colors || DEFAULT_COLORS);
     setCurrentMap(map);
     setShowProjectsModal(false);
@@ -1567,6 +1837,7 @@ export default function App() {
   };
 
   const loadFromHistory = (historyItem) => {
+    resetScanLayers();
     setRoot(historyItem.root);
     setColors(historyItem.colors || DEFAULT_COLORS);
     setCurrentMap(null);
@@ -1670,6 +1941,9 @@ export default function App() {
       return;
     }
 
+    const parsedDepth = Number.parseInt(scanDepth, 10);
+    const depthValue = Number.isFinite(parsedDepth) ? Math.min(Math.max(parsedDepth, 1), 10) : 4;
+
     setLoading(true);
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
@@ -1680,6 +1954,7 @@ export default function App() {
     };
     const params = new URLSearchParams({
       url,
+      maxDepth: String(depthValue),
       options: JSON.stringify(scanConfig),
     });
 
@@ -1699,8 +1974,26 @@ export default function App() {
     eventSource.addEventListener('complete', (e) => {
       try {
         const data = JSON.parse(e.data);
-        setRoot(data.root);
-        setOrphans(data.orphans || []);
+        const merged = applyScanArtifacts(data.root, data.orphans || [], data);
+        setRoot(merged.root);
+        setOrphans(merged.orphans);
+        setScanMeta({ brokenLinks: data.brokenLinks || [] });
+        setScanLayerAvailability({
+          subdomains: !!scanOptions.subdomains,
+          authenticatedPages: !!scanOptions.authenticatedPages,
+          orphanPages: !!scanOptions.orphanPages,
+          errorPages: !!scanOptions.errorPages,
+          brokenLinks: !!scanOptions.brokenLinks,
+          files: !!scanOptions.files,
+        });
+        setScanLayerVisibility({
+          subdomains: !!scanOptions.subdomains,
+          authenticatedPages: !!scanOptions.authenticatedPages,
+          orphanPages: !!scanOptions.orphanPages,
+          errorPages: !!scanOptions.errorPages,
+          brokenLinks: !!scanOptions.brokenLinks,
+          files: !!scanOptions.files,
+        });
         setCurrentMap(null);
         setScale(1);
         setPan({ x: 0, y: 0 });
@@ -1716,8 +2009,8 @@ export default function App() {
             setMapName('Untitled Map');
           }
         }
-        const pageCount = countNodes(data.root);
-        addToHistory(url, data.root, pageCount);
+        const pageCount = countNodes(merged.root);
+        addToHistory(url, merged.root, pageCount);
         showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
         setTimeout(resetView, 100);
       } catch {}
@@ -3437,7 +3730,7 @@ const findNodeById = (node, id) => {
 
             if (newParentId === '') {
               // Moving to orphans
-              setOrphans(prev => [...prev, { ...target }]);
+              setOrphans(prev => [...prev, { ...target, orphanType: 'orphan', subdomainRoot: false }]);
             } else {
               // Moving to different parent in tree
               const newParent = findNodeById(copy, newParentId);
@@ -3464,7 +3757,7 @@ const findNodeById = (node, id) => {
 
       if (newParentId === '') {
         // Add to orphans
-        setOrphans(prev => [...prev, newNode]);
+        setOrphans(prev => [...prev, { ...newNode, orphanType: 'orphan', subdomainRoot: false }]);
       } else {
         setRoot((prev) => {
           const copy = structuredClone(prev);
@@ -3551,7 +3844,7 @@ const findNodeById = (node, id) => {
         saveStateForUndo();
         const newNode = { ...newNodeData, id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` };
         if (updatedNode.parentId === '') {
-          setOrphans(prev => [...prev, newNode]);
+          setOrphans(prev => [...prev, { ...newNode, orphanType: 'orphan', subdomainRoot: false }]);
         } else {
           setRoot((prev) => {
             const copy = structuredClone(prev);
@@ -4186,6 +4479,11 @@ const findNodeById = (node, id) => {
         scanOptionsRef={scanOptionsRef}
         onToggleScanOptions={() => setShowScanOptions(v => !v)}
         onScanOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
+        scanDepth={scanDepth}
+        onScanDepthChange={(value) => {
+          const cleaned = value.replace(/[^\d]/g, '');
+          setScanDepth(cleaned);
+        }}
         onScan={scan}
         scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
         scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
@@ -4290,8 +4588,8 @@ const findNodeById = (node, id) => {
               }}
             >
               <SitemapTree
-                data={root}
-                orphans={orphans}
+                data={renderRoot}
+                orphans={visibleOrphans}
                 showThumbnails={showThumbnails}
                 showCommentBadges={activeTool === 'comments' || showCommentsPanel}
                 canEdit={canEdit()}
@@ -4326,6 +4624,7 @@ const findNodeById = (node, id) => {
                 }}
                 onAddNote={(node) => openCommentPopover(node.id)}
                 onViewNotes={(node) => openCommentPopover(node.id)}
+                badgeVisibility={effectiveScanLayers}
               />
 
               {/* SVG Connections Layer */}
@@ -4355,6 +4654,23 @@ const findNodeById = (node, id) => {
                     <polygon points="0 0, 10 3.5, 0 7" fill="#14b8a6" />
                   </marker>
                 </defs>
+
+                {brokenConnections.map((conn) => {
+                  const start = getAnchorPosition(conn.sourceId);
+                  const end = getAnchorPosition(conn.targetId);
+                  if (!start || !end) return null;
+                  return (
+                    <path
+                      key={conn.id}
+                      d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`}
+                      fill="none"
+                      stroke="#fca5a5"
+                      strokeWidth="2"
+                      strokeDasharray="6 6"
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
 
                 {/* Render completed connections */}
                 {connections
@@ -4679,6 +4995,14 @@ const findNodeById = (node, id) => {
                   if (layers.crossLinks && connectionTool === 'crosslink') {
                     setConnectionTool(null);
                   }
+                },
+                scanLayerAvailability,
+                scanLayerVisibility,
+                onToggleScanLayer: (layerKey) => {
+                  setScanLayerVisibility(prev => ({
+                    ...prev,
+                    [layerKey]: !prev[layerKey],
+                  }));
                 },
                 showViewDropdown,
                 onToggleDropdown: () => setShowViewDropdown(!showViewDropdown),

@@ -34,6 +34,7 @@ const NodeCard = ({
   isDragging,
   isPressing,
   dragHandleProps,
+  badges = [],
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
@@ -216,6 +217,16 @@ const NodeCard = ({
           </a>
         )}
       </div>
+
+      {badges.length > 0 && (
+        <div className="node-badges" aria-hidden="true">
+          {badges.map((badge) => (
+            <span key={badge} className="node-badge">
+              {badge}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -240,6 +251,7 @@ const DraggableNodeCard = ({
   onViewNotes,
   isRoot,
   activeId,
+  badges,
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
@@ -269,13 +281,14 @@ const DraggableNodeCard = ({
         isRoot={isRoot}
         isDragging={isDragging || activeId === node.id}
         dragHandleProps={canEdit && !connectionTool ? { ...listeners, ...attributes } : {}}
+        badges={badges}
       />
     </div>
   );
 };
 
 // Component for rendering a node and its children in the DragOverlay
-const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth }) => {
+const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, badges }) => {
   const childColor = colors[Math.min(depth + 1, colors.length - 1)];
   const INDENT = 40;
   const GAP = 60;
@@ -293,6 +306,7 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth })
         onEdit={() => {}}
         onDuplicate={() => {}}
         onViewImage={() => {}}
+        badges={badges}
       />
       {node.children?.length > 0 && (
         <div
@@ -311,6 +325,7 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth })
                 colors={colors}
                 showThumbnails={showThumbnails}
                 depth={depth + 1}
+                badges={badges}
               />
             </div>
           ))}

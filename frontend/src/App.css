@@ -284,6 +284,32 @@ body {
   text-align: left;
 }
 
+.scan-options-depth {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.scan-options-depth label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.scan-options-depth-input {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
 .scan-options-item {
   display: flex;
   align-items: center;
@@ -649,6 +675,29 @@ body {
   transition: box-shadow 0.2s;
   display: flex;
   flex-direction: column;
+}
+
+.node-badges {
+  position: absolute;
+  right: 10px;
+  bottom: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.node-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 2px 8px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* Card height when thumbnails are shown */
@@ -1306,6 +1355,15 @@ body {
 .layers-panel-list {
   border-top: 1px solid #e2e8f0;
   padding: 8px;
+}
+
+.layers-panel-section {
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .layers-panel-item {
@@ -4723,6 +4781,20 @@ body {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
+[data-theme="dark"] .scan-options-depth {
+  border-bottom-color: #1f2a44;
+}
+
+[data-theme="dark"] .scan-options-depth label {
+  color: #94a3b8;
+}
+
+[data-theme="dark"] .scan-options-depth-input {
+  border-color: #1f2a44;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
 [data-theme="dark"] .scan-options-item {
   color: #e2e8f0;
 }
@@ -4848,6 +4920,12 @@ body {
 
 [data-theme="dark"] .node-card:hover {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 1);
+}
+
+[data-theme="dark"] .node-badge {
+  background: #111827;
+  border-color: #334155;
+  color: #e2e8f0;
 }
 
 [data-theme="dark"] .card-content {
@@ -5363,6 +5441,10 @@ body {
 
 [data-theme="dark"] .layers-panel-list {
   border-top: 1px solid #301E3F;
+}
+
+[data-theme="dark"] .layers-panel-section {
+  color: #6b5a80;
 }
 
 [data-theme="dark"] .layers-panel-item {
