@@ -273,7 +273,7 @@ body {
 .scan-options-menu {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  left: 0;
   z-index: 30;
   min-width: 190px;
   background: #ffffff;
@@ -286,8 +286,9 @@ body {
 
 .scan-options-depth {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   padding: 8px 12px;
   border-bottom: 1px solid #e2e8f0;
   margin-bottom: 4px;
@@ -308,6 +309,8 @@ body {
   font-size: 13px;
   color: #0f172a;
   background: #f8fafc;
+  width: 60px;
+  text-align: center;
 }
 
 .scan-options-item {
@@ -329,6 +332,37 @@ body {
 .scan-options-item input[type="checkbox"] {
   width: 14px;
   height: 14px;
+}
+
+.scan-options-item.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scan-options-depth-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.scan-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scan-clear-btn:hover {
+  background: #eef2ff;
+  color: #4338ca;
+  border-color: #c7d2fe;
 }
 
 .clear-btn {
@@ -685,6 +719,7 @@ body {
   flex-direction: column;
   gap: 6px;
   align-items: flex-end;
+  z-index: 2;
   pointer-events: none;
 }
 
@@ -4793,6 +4828,18 @@ body {
   border-color: #1f2a44;
   background: #0f172a;
   color: #e2e8f0;
+}
+
+[data-theme="dark"] .scan-clear-btn {
+  background: #1a1022;
+  border-color: #2d1f3d;
+  color: #9f8fb8;
+}
+
+[data-theme="dark"] .scan-clear-btn:hover {
+  background: #251531;
+  border-color: #3a2750;
+  color: #e2e0e8;
 }
 
 [data-theme="dark"] .scan-options-item {

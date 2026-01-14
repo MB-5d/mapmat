@@ -52,6 +52,46 @@ const PORT = process.env.PORT || 4000;
 
 // Browser instance for screenshots
 let browser = null;
+const SCREENSHOT_MIN_GAP_MS = 2000;
+const screenshotQueue = [];
+let screenshotRunning = false;
+const lastScreenshotByHost = new Map();
+
+const SCREENSHOT_USER_AGENTS = [
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+];
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const enqueueScreenshot = async (fn) => {
+  return new Promise((resolve, reject) => {
+    screenshotQueue.push({ fn, resolve, reject });
+    if (!screenshotRunning) {
+      screenshotRunning = true;
+      (async () => {
+        while (screenshotQueue.length) {
+          const next = screenshotQueue.shift();
+          try {
+            const result = await next.fn();
+            next.resolve(result);
+          } catch (e) {
+            next.reject(e);
+          }
+        }
+        screenshotRunning = false;
+      })();
+    }
+  });
+};
+
+const isLikelyBlocked = (title, bodyText) => {
+  const haystack = `${title}\n${bodyText}`.toLowerCase();
+  return haystack.includes('sorry, you have been blocked')
+    || haystack.includes('cloudflare')
+    || haystack.includes('access denied');
+};
 
 async function getBrowser() {
   if (!browser) {
@@ -147,6 +187,35 @@ function extractTitle(html, fallbackUrl) {
     return decodeURIComponent(u.pathname.split('/').filter(Boolean).slice(-1)[0]).replace(/[-_]/g, ' ');
   } catch {
     return fallbackUrl;
+  }
+}
+
+function extractThumbnailUrl(html, baseUrl) {
+  try {
+    const $ = cheerio.load(html);
+    const candidates = [
+      $('meta[property="og:image"]').attr('content'),
+      $('meta[name="og:image"]').attr('content'),
+      $('meta[property="twitter:image"]').attr('content'),
+      $('meta[name="twitter:image"]').attr('content'),
+      $('meta[property="twitter:image:src"]').attr('content'),
+      $('meta[name="twitter:image:src"]').attr('content'),
+      $('meta[itemprop="image"]').attr('content'),
+      $('link[rel="image_src"]').attr('href'),
+    ].filter(Boolean);
+
+    let candidate = candidates.find(Boolean);
+    if (!candidate) {
+      candidate = $('img[src]').first().attr('src')
+        || $('img[data-src]').first().attr('data-src');
+    }
+    if (!candidate) return null;
+    if (candidate.startsWith('data:')) return null;
+
+    const abs = new URL(candidate, baseUrl).toString();
+    return abs;
+  } catch {
+    return null;
   }
 }
 
@@ -260,6 +329,8 @@ function extractLinks(html, baseUrl) {
 
 function normalizeScanOptions(options = {}) {
   return {
+    thumbnails: Boolean(options.thumbnails),
+    inactivePages: Boolean(options.inactivePages),
     subdomains: Boolean(options.subdomains),
     authenticatedPages: Boolean(options.authenticatedPages),
     orphanPages: Boolean(options.orphanPages),
@@ -366,6 +437,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   // url -> { url, title, parentUrl }
   const pageMap = new Map();
   const errors = [];
+  const inactivePages = [];
   const brokenLinks = [];
   const files = [];
   const linksByUrl = new Map();
@@ -397,8 +469,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       status = res.status;
       contentType = res.contentType;
     } catch (e) {
-      // Still store node with fallback title so tree doesn't break
-      if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
+    // Still store node with fallback title so tree doesn't break
+    if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
+    if (scanOptions.inactivePages) inactivePages.push({ url, status: 0, reason: 'fetch_failed' });
       if (!pageMap.has(url)) {
         pageMap.set(url, {
           url,
@@ -411,9 +484,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     if (status >= 400) {
       const isAuthStatus = status === 401 || status === 403;
-      const shouldKeep = scanOptions.errorPages || (scanOptions.authenticatedPages && isAuthStatus);
+      const isInactiveStatus = status >= 400;
+      const shouldKeep = scanOptions.errorPages
+        || (scanOptions.authenticatedPages && isAuthStatus)
+        || (scanOptions.inactivePages && isInactiveStatus);
       if (scanOptions.errorPages || (scanOptions.authenticatedPages && isAuthStatus)) {
         errors.push({ url, status, authRequired: isAuthStatus });
+      }
+      if (scanOptions.inactivePages && isInactiveStatus) {
+        inactivePages.push({ url, status });
       }
       if (scanOptions.brokenLinks) {
         brokenLinks.push({ url, status });
@@ -432,12 +511,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     const title = extractTitle(html, url);
     const parentUrl = getParentUrl(url);
+    const thumbnailUrl = scanOptions.thumbnails ? extractThumbnailUrl(html, url) : null;
 
     pageMap.set(url, {
       url,
       title,
       parentUrl,
       authRequired: status === 401 || status === 403,
+      thumbnailUrl: thumbnailUrl || undefined,
     });
 
     const links = extractLinks(html, url);
@@ -488,6 +569,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       title: meta.title || url,
       parentUrl: meta.parentUrl,
       authRequired: meta.authRequired || false,
+      thumbnailUrl: meta.thumbnailUrl || undefined,
       children: [],
     });
   }
@@ -552,6 +634,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     orphans: scanOptions.orphanPages ? orphanNodes : [],
     subdomains: scanOptions.subdomains ? subdomainNodes : [],
     errors: scanOptions.errorPages ? errors : [],
+    inactivePages: scanOptions.inactivePages ? inactivePages : [],
     brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],
     files: scanOptions.files ? files : [],
     crosslinks,
@@ -664,33 +747,73 @@ app.get('/screenshot', async (req, res) => {
       }
     }
 
-    const b = await getBrowser();
-    const page = await b.newPage();
+    const host = new URL(url).hostname;
+    const now = Date.now();
+    const last = lastScreenshotByHost.get(host) || 0;
+    const waitMs = Math.max(0, SCREENSHOT_MIN_GAP_MS - (now - last));
 
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto(url, {
-      waitUntil: 'networkidle',
-      timeout: 30000
+    await enqueueScreenshot(async () => {
+      if (waitMs > 0) await sleep(waitMs);
+      lastScreenshotByHost.set(host, Date.now());
+
+      const b = await getBrowser();
+      const page = await b.newPage();
+      const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];
+
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
+
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'en-US,en;q=0.9',
+        DNT: '1',
+      });
+      await page.setUserAgent(ua);
+      await page.setViewportSize({
+        width: 1240 + Math.floor(Math.random() * 120),
+        height: 720 + Math.floor(Math.random() * 120),
+      });
+
+      let lastError = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await page.goto(url, {
+            waitUntil: 'domcontentloaded',
+            timeout: 30000
+          });
+          await page.waitForTimeout(1200);
+
+          const title = await page.title();
+          const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
+          if (isLikelyBlocked(title, bodyText)) {
+            throw new Error('Blocked by site protection');
+          }
+
+          if (type === 'full') {
+            await page.screenshot({
+              path: filepath,
+              fullPage: true,
+              type: 'png'
+            });
+          } else {
+            await page.screenshot({
+              path: filepath,
+              fullPage: false,
+              type: 'png'
+            });
+          }
+
+          await page.close();
+          return;
+        } catch (err) {
+          lastError = err;
+          await page.waitForTimeout(800 + Math.floor(Math.random() * 400));
+        }
+      }
+
+      await page.close();
+      throw lastError || new Error('Screenshot failed');
     });
-
-    // Wait a bit for any lazy-loaded content
-    await page.waitForTimeout(1000);
-
-    if (type === 'full') {
-      await page.screenshot({
-        path: filepath,
-        fullPage: true,
-        type: 'png'
-      });
-    } else {
-      await page.screenshot({
-        path: filepath,
-        fullPage: false,
-        type: 'png'
-      });
-    }
-
-    await page.close();
 
     const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
       ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`

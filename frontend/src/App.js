@@ -371,8 +371,8 @@ const computeLayout = (
     : 0;
   const rootY = ROOT_Y;
 
-  // Root = "0.0" (Home)
-  setNode(root, rootX, rootY, 0, "0.0", { isOrphan: false });
+  // Root = "0" (Home)
+  setNode(root, rootX, rootY, 0, "0", { isOrphan: false });
 
   // ------------------------------------------------------------
   // 2) Level 1 row (children of root) — horizontal only
@@ -546,6 +546,8 @@ const SitemapTree = ({
   onNodeClick,
   activeId,
   badgeVisibility,
+  showPageNumbers,
+  onRequestThumbnail,
 }) => {
   const [expandedStacks, setExpandedStacks] = useState({});
 
@@ -575,8 +577,10 @@ const SitemapTree = ({
     if (node.orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
     if (node.orphanType === 'file' && badgeVisibility?.files) badges.push('File');
     if (node.orphanType === 'broken' && badgeVisibility?.brokenLinks) badges.push('Broken');
+    if (node.orphanType === 'inactive' && badgeVisibility?.inactivePages) badges.push('Inactive');
     if (node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
     if (node.isBroken && badgeVisibility?.brokenLinks && !badges.includes('Broken')) badges.push('Broken');
+    if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) badges.push('Inactive');
     if (node.authRequired && badgeVisibility?.authenticatedPages) badges.push('Auth');
     if (node.isError && badgeVisibility?.errorPages) badges.push('Error');
     return badges;
@@ -661,6 +665,8 @@ const SitemapTree = ({
               onViewNotes={onViewNotes}
               activeId={activeId}
               badges={badges}
+              showPageNumbers={showPageNumbers}
+              onRequestThumbnail={onRequestThumbnail}
             />
           </div>
         );
@@ -833,14 +839,14 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       return;
     }
 
-    const newNode = {
-      id: makeNodeIdFromUrl(file.url),
-      url: file.url,
-      title: getUrlLabel(file.url),
-      children: [],
-      isFile: true,
-      parentUrl: file.sourceUrl || null,
-    };
+          const newNode = {
+            id: makeNodeIdFromUrl(file.url),
+            url: file.url,
+            title: getUrlLabel(file.url),
+            children: [],
+            isFile: true,
+            parentUrl: file.sourceUrl || null,
+          };
     if (file.sourceUrl && urlNodeMap.has(file.sourceUrl)) {
       const parent = urlNodeMap.get(file.sourceUrl);
       parent.children = parent.children || [];
@@ -876,6 +882,22 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     }, 'broken');
   });
 
+  (scanResult.inactivePages || []).forEach((inactive) => {
+    if (!inactive?.url) return;
+    const existing = urlNodeMap.get(inactive.url);
+    if (existing) {
+      existing.isInactive = true;
+      return;
+    }
+    addOrphanNode({
+      id: makeNodeIdFromUrl(inactive.url),
+      url: inactive.url,
+      title: getUrlLabel(inactive.url),
+      children: [],
+      isInactive: true,
+    }, 'inactive');
+  });
+
   return { root: rootNode, orphans: mergedOrphans };
 };
 
@@ -888,6 +910,7 @@ export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [scanOptions, setScanOptions] = useState({
+    inactivePages: false,
     subdomains: false,
     authenticatedPages: false,
     orphanPages: false,
@@ -902,6 +925,7 @@ export default function App() {
     brokenLinks: [],
   });
   const [scanLayerAvailability, setScanLayerAvailability] = useState({
+    inactivePages: false,
     subdomains: false,
     authenticatedPages: false,
     orphanPages: false,
@@ -910,6 +934,7 @@ export default function App() {
     files: false,
   });
   const [scanLayerVisibility, setScanLayerVisibility] = useState({
+    inactivePages: true,
     subdomains: true,
     authenticatedPages: true,
     orphanPages: true,
@@ -993,6 +1018,7 @@ export default function App() {
     xmlComparison: true, // XML comparison highlights
     userFlows: true,    // User journey connections
     crossLinks: true,   // Non-hierarchical links
+    pageNumbers: true,
   });
 
   // Connection lines state
@@ -1023,6 +1049,7 @@ export default function App() {
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const viewDropdownRef = useRef(null);
   const scanOptionsRef = useRef(null);
+  const thumbnailRequestRef = useRef(new Set());
 
   // Close view dropdown when clicking outside
   useEffect(() => {
@@ -1088,6 +1115,7 @@ export default function App() {
   const maxDepth = useMemo(() => getMaxDepth(root), [root]);
   const totalNodes = useMemo(() => countNodes(root), [root]);
   const effectiveScanLayers = useMemo(() => ({
+    inactivePages: scanLayerAvailability.inactivePages ? scanLayerVisibility.inactivePages : true,
     subdomains: scanLayerAvailability.subdomains ? scanLayerVisibility.subdomains : true,
     authenticatedPages: scanLayerAvailability.authenticatedPages ? scanLayerVisibility.authenticatedPages : true,
     orphanPages: scanLayerAvailability.orphanPages ? scanLayerVisibility.orphanPages : true,
@@ -1101,6 +1129,7 @@ export default function App() {
       if (orphan.subdomainRoot) return effectiveScanLayers.subdomains;
       if (orphan.orphanType === 'file') return effectiveScanLayers.files;
       if (orphan.orphanType === 'broken') return effectiveScanLayers.brokenLinks;
+      if (orphan.orphanType === 'inactive') return effectiveScanLayers.inactivePages;
       return effectiveScanLayers.orphanPages;
     });
   }, [orphans, effectiveScanLayers]);
@@ -1199,6 +1228,7 @@ export default function App() {
   const resetScanLayers = () => {
     setScanMeta({ brokenLinks: [] });
     setScanLayerAvailability({
+      inactivePages: false,
       subdomains: false,
       authenticatedPages: false,
       orphanPages: false,
@@ -1207,6 +1237,7 @@ export default function App() {
       files: false,
     });
     setScanLayerVisibility({
+      inactivePages: true,
       subdomains: true,
       authenticatedPages: true,
       orphanPages: true,
@@ -1628,8 +1659,43 @@ export default function App() {
     }
   };
 
+  const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
+    if (!nodeId || !thumbnailUrl) return;
+    setRoot((prev) => {
+      if (!prev) return prev;
+      const copy = structuredClone(prev);
+      const target = findNodeById(copy, nodeId);
+      if (target) {
+        target.thumbnailUrl = thumbnailUrl;
+      }
+      return copy;
+    });
+    setOrphans((prev) => prev.map((orphan) => (
+      orphan.id === nodeId ? { ...orphan, thumbnailUrl } : orphan
+    )));
+  };
+
+  const requestThumbnail = async (node) => {
+    if (!node?.id || !node?.url) return;
+    if (thumbnailRequestRef.current.has(node.id)) return;
+    thumbnailRequestRef.current.add(node.id);
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/screenshot?url=${encodeURIComponent(node.url)}&type=thumb`
+      );
+      const data = await res.json();
+      if (data?.url) {
+        updateNodeThumbnail(node.id, data.url);
+      }
+    } catch (e) {
+      // Allow future retries if needed
+      thumbnailRequestRef.current.delete(node.id);
+    }
+  };
+
   // Fetch full page screenshot from backend (or display direct image URL)
-  const viewFullScreenshot = async (urlOrImage, isDirectImage = false) => {
+  const viewFullScreenshot = async (urlOrImage, isDirectImage = false, nodeId = null) => {
     // If it's a direct image URL (uploaded thumbnail), just display it
     if (isDirectImage) {
       setFullImageUrl(urlOrImage);
@@ -1653,6 +1719,9 @@ export default function App() {
       if (data.url) {
         setFullImageUrl(data.url);
         setToast(null); // Clear the loading toast
+        if (nodeId) {
+          updateNodeThumbnail(nodeId, data.url);
+        }
       } else {
         throw new Error('No screenshot URL returned');
       }
@@ -1942,7 +2011,7 @@ export default function App() {
     }
 
     const parsedDepth = Number.parseInt(scanDepth, 10);
-    const depthValue = Number.isFinite(parsedDepth) ? Math.min(Math.max(parsedDepth, 1), 10) : 4;
+    const depthValue = Number.isFinite(parsedDepth) ? Math.min(Math.max(parsedDepth, 0), 8) : 4;
 
     setLoading(true);
     setScanProgress({ scanned: 0, queued: 0 });
@@ -1979,6 +2048,7 @@ export default function App() {
         setOrphans(merged.orphans);
         setScanMeta({ brokenLinks: data.brokenLinks || [] });
         setScanLayerAvailability({
+          inactivePages: !!scanOptions.inactivePages,
           subdomains: !!scanOptions.subdomains,
           authenticatedPages: !!scanOptions.authenticatedPages,
           orphanPages: !!scanOptions.orphanPages,
@@ -1987,6 +2057,7 @@ export default function App() {
           files: !!scanOptions.files,
         });
         setScanLayerVisibility({
+          inactivePages: !!scanOptions.inactivePages,
           subdomains: !!scanOptions.subdomains,
           authenticatedPages: !!scanOptions.authenticatedPages,
           orphanPages: !!scanOptions.orphanPages,
@@ -4482,11 +4553,19 @@ const findNodeById = (node, id) => {
         scanDepth={scanDepth}
         onScanDepthChange={(value) => {
           const cleaned = value.replace(/[^\d]/g, '');
-          setScanDepth(cleaned);
+          if (!cleaned) {
+            setScanDepth('');
+            return;
+          }
+          const nextValue = Math.min(Number(cleaned), 8);
+          setScanDepth(String(nextValue));
         }}
         onScan={scan}
         scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
         scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
+        optionsDisabled={!urlInput.trim()}
+        onClearUrl={() => setUrlInput('')}
+        showClearUrl={!hasMap && !!urlInput.trim()}
         mapName={mapName}
         isEditingMapName={isEditingMapName}
         onMapNameChange={(e) => setMapName(e.target.value)}
@@ -4625,6 +4704,8 @@ const findNodeById = (node, id) => {
                 onAddNote={(node) => openCommentPopover(node.id)}
                 onViewNotes={(node) => openCommentPopover(node.id)}
                 badgeVisibility={effectiveScanLayers}
+                showPageNumbers={layers.pageNumbers}
+                onRequestThumbnail={requestThumbnail}
               />
 
               {/* SVG Connections Layer */}
@@ -4929,6 +5010,7 @@ const findNodeById = (node, id) => {
                     colors={colors}
                     showThumbnails={showThumbnails}
                     depth={0}
+                    showPageNumbers={layers.pageNumbers}
                   />
                 </div>
               ) : null}
@@ -4996,6 +5078,10 @@ const findNodeById = (node, id) => {
                     setConnectionTool(null);
                   }
                 },
+                showThumbnails,
+                onToggleThumbnails: setShowThumbnails,
+                showPageNumbers: layers.pageNumbers,
+                onTogglePageNumbers: () => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers })),
                 scanLayerAvailability,
                 scanLayerVisibility,
                 onToggleScanLayer: (layerKey) => {

@@ -6,6 +6,10 @@ const LayersPanel = ({
   connectionTool,
   onToggleUserFlows,
   onToggleCrossLinks,
+  showThumbnails,
+  onToggleThumbnails,
+  showPageNumbers,
+  onTogglePageNumbers,
   scanLayerAvailability,
   scanLayerVisibility,
   onToggleScanLayer,
@@ -44,6 +48,22 @@ const LayersPanel = ({
           <label className="layers-panel-item">
             <input
               type="checkbox"
+              checked={showThumbnails}
+              onChange={() => onToggleThumbnails(!showThumbnails)}
+            />
+            <span>Thumbnails</span>
+          </label>
+          <label className="layers-panel-item">
+            <input
+              type="checkbox"
+              checked={showPageNumbers}
+              onChange={onTogglePageNumbers}
+            />
+            <span>Page Numbers</span>
+          </label>
+          <label className="layers-panel-item">
+            <input
+              type="checkbox"
               checked={layers.userFlows}
               onChange={() => onToggleUserFlows(connectionTool)}
             />
@@ -78,6 +98,16 @@ const LayersPanel = ({
                 onChange={() => onToggleScanLayer('subdomains')}
               />
               <span>Subdomains</span>
+            </label>
+          )}
+          {scanLayerAvailability?.inactivePages && (
+            <label className="layers-panel-item">
+              <input
+                type="checkbox"
+                checked={scanLayerVisibility.inactivePages}
+                onChange={() => onToggleScanLayer('inactivePages')}
+              />
+              <span>Inactive Pages</span>
             </label>
           )}
           {scanLayerAvailability?.authenticatedPages && (

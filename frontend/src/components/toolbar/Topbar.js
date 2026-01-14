@@ -29,6 +29,9 @@ const Topbar = ({
   onScan,
   scanDisabled,
   scanTitle,
+  optionsDisabled,
+  onClearUrl,
+  showClearUrl,
   mapName,
   isEditingMapName,
   onMapNameChange,
@@ -70,6 +73,9 @@ const Topbar = ({
           onScan={onScan}
           scanDisabled={scanDisabled}
           scanTitle={scanTitle}
+          optionsDisabled={optionsDisabled}
+          onClearUrl={onClearUrl}
+          showClearUrl={showClearUrl}
           sharedTitle={sharedTitle}
         />
       </div>

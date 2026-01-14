@@ -35,22 +35,28 @@ const NodeCard = ({
   isPressing,
   dragHandleProps,
   badges = [],
+  showPageNumbers = true,
+  onRequestThumbnail,
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
   const [thumbKey, setThumbKey] = useState(0);
+  const [thumbRetries, setThumbRetries] = useState(0);
 
-  // Use custom thumbnail if available, otherwise use mshots service
-  const thumb = node.thumbnailUrl || `https://s0.wp.com/mshots/v1/${encodeURIComponent(node.url)}?w=576&h=400&_=${thumbKey}`;
+  const thumb = node.thumbnailUrl
+    ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbKey}`
+    : null;
+  const hasThumb = Boolean(thumb);
 
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
     if (showThumbnails) {
       setThumbError(false);
-      setThumbLoading(true);
+      setThumbLoading(Boolean(thumb));
       setThumbKey(k => k + 1); // Force new image request
+      setThumbRetries(0);
     }
-  }, [showThumbnails]);
+  }, [showThumbnails, node.thumbnailUrl, node.url]);
 
   // Timeout fallback - if thumbnail doesn't load in 15 seconds, show placeholder
   useEffect(() => {
@@ -62,11 +68,35 @@ const NodeCard = ({
       }
     }, 15000);
     return () => clearTimeout(timeout);
-  }, [showThumbnails, thumbLoading, thumbKey]);
+  }, [showThumbnails, thumbLoading, thumbKey, thumb]);
+
+  useEffect(() => {
+    if (!showThumbnails || !thumb || !thumbError) return undefined;
+    if (thumbRetries >= 2) return undefined;
+    const retry = setTimeout(() => {
+      setThumbRetries((prev) => prev + 1);
+      setThumbError(false);
+      setThumbLoading(true);
+      setThumbKey(k => k + 1);
+    }, 4000);
+    return () => clearTimeout(retry);
+  }, [showThumbnails, node.thumbnailUrl, thumbError, thumbRetries]);
+
+  useEffect(() => {
+    if (!showThumbnails || node.thumbnailUrl || !onRequestThumbnail) return;
+    setThumbLoading(true);
+    setThumbError(false);
+    onRequestThumbnail(node);
+  }, [showThumbnails, node.thumbnailUrl, node.url, onRequestThumbnail]);
 
   const handleViewFull = () => {
     // Use uploaded thumbnail if available, otherwise use URL for mshots
-    onViewImage(node.thumbnailUrl || node.url, !!node.thumbnailUrl);
+    onViewImage(node.thumbnailUrl || node.url, !!node.thumbnailUrl, node.id);
+    if (!node.thumbnailUrl && thumbError) {
+      setThumbError(false);
+      setThumbLoading(true);
+      setThumbKey(k => k + 1);
+    }
   };
 
   const classNames = ['node-card'];
@@ -142,7 +172,7 @@ const NodeCard = ({
               <Loader2 size={24} className="thumb-spinner" />
             </div>
           )}
-          {!thumbError ? (
+          {hasThumb ? (
             <>
               <img
                 className="thumb-img"
@@ -167,7 +197,9 @@ const NodeCard = ({
             <div className="thumb-placeholder">
               <Globe size={32} strokeWidth={1.5} />
               <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
-              <span className="thumb-placeholder-text">Preview unavailable</span>
+              <span className="thumb-placeholder-text">
+                {thumbLoading ? 'Generating preview' : 'Preview unavailable'}
+              </span>
             </div>
           )}
         </div>
@@ -178,7 +210,7 @@ const NodeCard = ({
           {node.title}
         </div>
 
-        <span className="page-number">{number}</span>
+        {showPageNumbers && <span className="page-number">{number}</span>}
       </div>
 
       <div className="card-actions">
@@ -252,6 +284,8 @@ const DraggableNodeCard = ({
   isRoot,
   activeId,
   badges,
+  showPageNumbers,
+  onRequestThumbnail,
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
@@ -282,13 +316,15 @@ const DraggableNodeCard = ({
         isDragging={isDragging || activeId === node.id}
         dragHandleProps={canEdit && !connectionTool ? { ...listeners, ...attributes } : {}}
         badges={badges}
+        showPageNumbers={showPageNumbers}
+        onRequestThumbnail={onRequestThumbnail}
       />
     </div>
   );
 };
 
 // Component for rendering a node and its children in the DragOverlay
-const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, badges }) => {
+const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, badges, showPageNumbers = true }) => {
   const childColor = colors[Math.min(depth + 1, colors.length - 1)];
   const INDENT = 40;
   const GAP = 60;
@@ -307,6 +343,7 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, b
         onDuplicate={() => {}}
         onViewImage={() => {}}
         badges={badges}
+        showPageNumbers={showPageNumbers}
       />
       {node.children?.length > 0 && (
         <div
@@ -326,6 +363,7 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, b
                 showThumbnails={showThumbnails}
                 depth={depth + 1}
                 badges={badges}
+                showPageNumbers={showPageNumbers}
               />
             </div>
           ))}
