@@ -2194,8 +2194,8 @@ const CreateMapModal = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card create-map-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Create New Map</h2>
-          <button className="modal-close-btn" onClick={onClose}>
+          <h3>Create New Map</h3>
+          <button className="modal-close" onClick={onClose}>
             <X size={20} />
           </button>
         </div>
@@ -2268,11 +2268,11 @@ const CreateMapModal = ({
         </div>
 
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>
+          <button className="modal-btn secondary" onClick={onClose}>
             Cancel
           </button>
           <button
-            className="btn-primary"
+            className="modal-btn primary"
             onClick={() => onSubmit(data)}
             disabled={!data.name.trim()}
           >
