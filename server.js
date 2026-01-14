@@ -150,7 +150,7 @@ function extractTitle(html, fallbackUrl) {
   }
 }
 
-async function fetchPage(url) {
+async function fetchPage(url, extraHeaders = {}) {
   const res = await axios.get(url, {
     timeout: 20000,
     maxRedirects: 5,
@@ -158,10 +158,51 @@ async function fetchPage(url) {
       'User-Agent': 'Mozilla/5.0 (compatible; MapMatBot/1.0)',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.5',
+      ...extraHeaders,
     },
     validateStatus: () => true,
   });
-  return { html: res.data, status: res.status };
+  return { html: res.data, status: res.status, contentType: res.headers['content-type'] };
+}
+
+function isHtmlContentType(contentType) {
+  if (!contentType) return true;
+  return contentType.includes('text/html') || contentType.includes('application/xhtml+xml');
+}
+
+async function checkLinkStatus(url, extraHeaders = {}) {
+  try {
+    const headRes = await axios.head(url, {
+      timeout: 10000,
+      maxRedirects: 5,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; MapMatBot/1.0)',
+        ...extraHeaders,
+      },
+      validateStatus: () => true,
+    });
+    if (headRes.status !== 405) {
+      return { status: headRes.status };
+    }
+  } catch {
+    // fall through to GET
+  }
+
+  try {
+    const getRes = await axios.get(url, {
+      timeout: 10000,
+      maxRedirects: 5,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; MapMatBot/1.0)',
+        Accept: '*/*',
+        ...extraHeaders,
+      },
+      validateStatus: () => true,
+    });
+    return { status: getRes.status };
+  } catch (e) {
+    return { status: 0, error: e.message };
+  }
 }
 
 function extractLinks(html, baseUrl) {
@@ -328,6 +369,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const brokenLinks = [];
   const files = [];
   const linksByUrl = new Map();
+  const linkStatusCache = new Map();
+  const MAX_BROKEN_LINK_CHECKS = 500;
+  let brokenChecks = 0;
+  const extraHeaders = {};
 
   while (queue.length && visited.size < maxPages) {
     const { url, depth } = queue.shift();
@@ -345,10 +390,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     let html;
     let status = 0;
+    let contentType = '';
     try {
-      const res = await fetchPage(url);
+      const res = await fetchPage(url, extraHeaders);
       html = res.html;
       status = res.status;
+      contentType = res.contentType;
     } catch (e) {
       // Still store node with fallback title so tree doesn't break
       if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
@@ -363,27 +410,55 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     if (status >= 400) {
-      if (scanOptions.errorPages) {
-        errors.push({ url, status });
+      const isAuthStatus = status === 401 || status === 403;
+      const shouldKeep = scanOptions.errorPages || (scanOptions.authenticatedPages && isAuthStatus);
+      if (scanOptions.errorPages || (scanOptions.authenticatedPages && isAuthStatus)) {
+        errors.push({ url, status, authRequired: isAuthStatus });
       }
       if (scanOptions.brokenLinks) {
         brokenLinks.push({ url, status });
       }
-      if (!scanOptions.errorPages) {
+      if (!shouldKeep) {
         continue;
       }
+    }
+
+    if (!isHtmlContentType(contentType)) {
+      if (scanOptions.files) {
+        files.push({ url, sourceUrl: getParentUrl(url) || null, contentType });
+      }
+      continue;
     }
 
     const title = extractTitle(html, url);
     const parentUrl = getParentUrl(url);
 
-    pageMap.set(url, { url, title, parentUrl });
+    pageMap.set(url, {
+      url,
+      title,
+      parentUrl,
+      authRequired: status === 401 || status === 403,
+    });
 
     const links = extractLinks(html, url);
-    linksByUrl.set(url, links);
+    const allowedLinks = links.filter((link) => allowUrl(link));
+    linksByUrl.set(url, allowedLinks);
 
     for (const link of links) {
       if (!allowUrl(link)) continue;
+
+      if (scanOptions.brokenLinks && brokenChecks < MAX_BROKEN_LINK_CHECKS && !linkStatusCache.has(link)) {
+        brokenChecks += 1;
+        const statusResult = await checkLinkStatus(link, extraHeaders);
+        linkStatusCache.set(link, statusResult.status);
+        if (statusResult.status >= 400 || statusResult.status === 0) {
+          brokenLinks.push({
+            url: link,
+            status: statusResult.status || undefined,
+            sourceUrl: url,
+          });
+        }
+      }
 
       // Skip obvious assets
       if (/\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|mp4|mov|mp3|wav)$/i.test(link)) {
@@ -412,6 +487,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       url,
       title: meta.title || url,
       parentUrl: meta.parentUrl,
+      authRequired: meta.authRequired || false,
       children: [],
     });
   }
