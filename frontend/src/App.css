@@ -242,6 +242,74 @@ body {
   cursor: not-allowed;
 }
 
+.scan-options {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.scan-options-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.scan-options-btn:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
+.scan-options-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 190px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  padding: 6px 0;
+}
+
+.scan-options-header {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.scan-options-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #1e293b;
+  cursor: pointer;
+}
+
+.scan-options-item:hover {
+  background: #f8fafc;
+}
+
+.scan-options-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+}
+
 .clear-btn {
   display: flex;
   align-items: center;
@@ -4640,6 +4708,37 @@ body {
 
 [data-theme="dark"] .search-icon {
   color: #A48EBB;
+}
+
+[data-theme="dark"] .scan-options-btn {
+  background: #1a1022;
+  border-color: #2d1f3d;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .scan-options-btn:hover {
+  background: #251531;
+  border-color: #3a2750;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .scan-options-menu {
+  background: #0f172a;
+  border-color: #1f2a44;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .scan-options-header {
+  color: #cbd5f5;
+  border-bottom-color: #1f2a44;
+}
+
+[data-theme="dark"] .scan-options-item {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .scan-options-item:hover {
+  background: #1f2a44;
 }
 
 [data-theme="dark"] .map-name-display {

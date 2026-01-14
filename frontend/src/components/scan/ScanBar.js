@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, ImageOff, Scan } from 'lucide-react';
+import { Scan, SlidersHorizontal } from 'lucide-react';
 
 const ScanBar = ({
   canEdit,
@@ -8,6 +8,11 @@ const ScanBar = ({
   onUrlKeyDown,
   showThumbnails,
   onToggleThumbnails,
+  options,
+  showOptions,
+  optionsRef,
+  onToggleOptions,
+  onOptionChange,
   onScan,
   scanDisabled,
   scanTitle,
@@ -34,17 +39,72 @@ const ScanBar = ({
         spellCheck={false}
       />
 
-      <button
-        className="thumb-toggle-btn"
-        onClick={onToggleThumbnails}
-        title={showThumbnails ? 'Hide thumbnails' : 'Show thumbnails'}
-      >
-        <div className={`thumb-toggle-track ${showThumbnails ? 'active' : ''}`}>
-          <ImageOff size={14} className="thumb-icon off" />
-          <Image size={14} className="thumb-icon on" />
-          <div className="thumb-toggle-thumb" />
-        </div>
-      </button>
+      <div className="scan-options" ref={optionsRef}>
+        <button
+          className="scan-options-btn"
+          onClick={onToggleOptions}
+          title="Scan options"
+          type="button"
+        >
+          <SlidersHorizontal size={16} />
+          Options
+        </button>
+        {showOptions && (
+          <div className="scan-options-menu">
+            <div className="scan-options-header">
+              <span>Options</span>
+            </div>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={showThumbnails}
+                onChange={() => onToggleThumbnails(!showThumbnails)}
+              />
+              <span>Thumbnails</span>
+            </label>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={options.subdomains}
+                onChange={() => onOptionChange('subdomains')}
+              />
+              <span>Subdomains</span>
+            </label>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={options.errorPages}
+                onChange={() => onOptionChange('errorPages')}
+              />
+              <span>Error pages</span>
+            </label>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={options.brokenLinks}
+                onChange={() => onOptionChange('brokenLinks')}
+              />
+              <span>Broken links</span>
+            </label>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={options.files}
+                onChange={() => onOptionChange('files')}
+              />
+              <span>Files / Downloads</span>
+            </label>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={options.crosslinks}
+                onChange={() => onOptionChange('crosslinks')}
+              />
+              <span>Crosslinks</span>
+            </label>
+          </div>
+        )}
+      </div>
 
       <button
         className="scan-btn"

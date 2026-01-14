@@ -708,6 +708,14 @@ const collectAllNodes = (node, result = [], pageNumber = '1', depth = 0) => {
 export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
+  const [scanOptions, setScanOptions] = useState({
+    subdomains: false,
+    errorPages: false,
+    brokenLinks: false,
+    files: false,
+    crosslinks: false,
+  });
+  const [showScanOptions, setShowScanOptions] = useState(false);
   const [mapName, setMapName] = useState('');
   const [isEditingMapName, setIsEditingMapName] = useState(false);
   const [root, setRoot] = useState(null);
@@ -813,6 +821,7 @@ export default function App() {
   const contentRef = useRef(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const viewDropdownRef = useRef(null);
+  const scanOptionsRef = useRef(null);
 
   // Close view dropdown when clicking outside
   useEffect(() => {
@@ -826,6 +835,18 @@ export default function App() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showViewDropdown]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (scanOptionsRef.current && !scanOptionsRef.current.contains(e.target)) {
+        setShowScanOptions(false);
+      }
+    };
+    if (showScanOptions) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showScanOptions]);
 
   // Apply theme to document and listen for system changes
   useEffect(() => {
@@ -1651,9 +1672,18 @@ export default function App() {
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
 
+    const scanConfig = {
+      thumbnails: showThumbnails,
+      ...scanOptions,
+    };
+    const params = new URLSearchParams({
+      url,
+      options: JSON.stringify(scanConfig),
+    });
+
     // Use SSE for progress updates
     const eventSource = new EventSource(
-      `${API_BASE}/scan-stream?url=${encodeURIComponent(url)}`
+      `${API_BASE}/scan-stream?${params.toString()}`
     );
     eventSourceRef.current = eventSource;
 
@@ -4148,7 +4178,12 @@ const findNodeById = (node, id) => {
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
         showThumbnails={showThumbnails}
-        onToggleThumbnails={() => setShowThumbnails(v => !v)}
+        onToggleThumbnails={(nextValue) => setShowThumbnails(nextValue)}
+        scanOptions={scanOptions}
+        showScanOptions={showScanOptions}
+        scanOptionsRef={scanOptionsRef}
+        onToggleScanOptions={() => setShowScanOptions(v => !v)}
+        onScanOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
         onScan={scan}
         scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
         scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}

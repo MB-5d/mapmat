@@ -19,6 +19,11 @@ const Topbar = ({
   hasMap,
   showThumbnails,
   onToggleThumbnails,
+  scanOptions,
+  showScanOptions,
+  scanOptionsRef,
+  onToggleScanOptions,
+  onScanOptionChange,
   onScan,
   scanDisabled,
   scanTitle,
@@ -53,6 +58,11 @@ const Topbar = ({
           onUrlKeyDown={onUrlKeyDown}
           showThumbnails={showThumbnails}
           onToggleThumbnails={onToggleThumbnails}
+          options={scanOptions}
+          showOptions={showScanOptions}
+          optionsRef={scanOptionsRef}
+          onToggleOptions={onToggleScanOptions}
+          onOptionChange={onScanOptionChange}
           onScan={onScan}
           scanDisabled={scanDisabled}
           scanTitle={scanTitle}
