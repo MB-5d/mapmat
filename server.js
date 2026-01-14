@@ -159,9 +159,9 @@ async function fetchPage(url) {
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.5',
     },
-    validateStatus: (s) => s >= 200 && s < 400,
+    validateStatus: () => true,
   });
-  return res.data;
+  return { html: res.data, status: res.status };
 }
 
 function extractLinks(html, baseUrl) {
@@ -217,11 +217,28 @@ function extractLinks(html, baseUrl) {
   return Array.from(links);
 }
 
-async function crawlSite(startUrl, maxPages, maxDepth, onProgress = null) {
+function normalizeScanOptions(options = {}) {
+  return {
+    subdomains: Boolean(options.subdomains),
+    authenticatedPages: Boolean(options.authenticatedPages),
+    orphanPages: Boolean(options.orphanPages),
+    errorPages: Boolean(options.errorPages),
+    brokenLinks: Boolean(options.brokenLinks),
+    files: Boolean(options.files),
+    crosslinks: Boolean(options.crosslinks),
+  };
+}
+
+async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null) {
+  const scanOptions = normalizeScanOptions(options);
   const seed = normalizeUrl(startUrl);
   if (!seed) throw new Error('Invalid URL');
 
   const origin = new URL(seed).origin;
+  const allowSubdomains = scanOptions.subdomains;
+  const allowUrl = (candidate) => (
+    allowSubdomains ? sameDomain(candidate, origin) : sameOrigin(candidate, origin)
+  );
 
   const visited = new Set();
   const queue = [{ url: seed, depth: 0 }];
@@ -307,6 +324,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, onProgress = null) {
 
   // url -> { url, title, parentUrl }
   const pageMap = new Map();
+  const errors = [];
+  const brokenLinks = [];
+  const files = [];
+  const linksByUrl = new Map();
 
   while (queue.length && visited.size < maxPages) {
     const { url, depth } = queue.shift();
@@ -320,13 +341,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, onProgress = null) {
     }
 
     if (depth > maxDepth) continue;
-    if (!sameOrigin(url, origin)) continue;
+    if (!allowUrl(url)) continue;
 
     let html;
+    let status = 0;
     try {
-      html = await fetchPage(url);
+      const res = await fetchPage(url);
+      html = res.html;
+      status = res.status;
     } catch (e) {
       // Still store node with fallback title so tree doesn't break
+      if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
       if (!pageMap.has(url)) {
         pageMap.set(url, {
           url,
@@ -337,18 +362,34 @@ async function crawlSite(startUrl, maxPages, maxDepth, onProgress = null) {
       continue;
     }
 
+    if (status >= 400) {
+      if (scanOptions.errorPages) {
+        errors.push({ url, status });
+      }
+      if (scanOptions.brokenLinks) {
+        brokenLinks.push({ url, status });
+      }
+      if (!scanOptions.errorPages) {
+        continue;
+      }
+    }
+
     const title = extractTitle(html, url);
     const parentUrl = getParentUrl(url);
 
     pageMap.set(url, { url, title, parentUrl });
 
     const links = extractLinks(html, url);
+    linksByUrl.set(url, links);
 
     for (const link of links) {
-      if (!sameOrigin(link, origin)) continue;
+      if (!allowUrl(link)) continue;
 
       // Skip obvious assets
-      if (/\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|mp4|mov|mp3|wav)$/i.test(link)) continue;
+      if (/\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|mp4|mov|mp3|wav)$/i.test(link)) {
+        if (scanOptions.files) files.push({ url: link, sourceUrl: url });
+        continue;
+      }
 
       const d = depth + 1;
       if (d > maxDepth) continue;
@@ -377,6 +418,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, onProgress = null) {
 
   // Link children using parentUrl chain, falling back to root when parent missing
   const rootUrl = seed;
+  const orphanNodes = [];
   for (const node of nodes.values()) {
     if (node.url === rootUrl) continue;
 
@@ -385,8 +427,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, onProgress = null) {
     if (parentUrl && nodes.has(parentUrl)) {
       nodes.get(parentUrl).children.push(node);
     } else {
-      // If parent missing, attach to root
-      nodes.get(rootUrl).children.push(node);
+      if (scanOptions.orphanPages) {
+        orphanNodes.push(node);
+      } else {
+        // If parent missing, attach to root
+        nodes.get(rootUrl).children.push(node);
+      }
     }
   }
 
@@ -399,23 +445,51 @@ async function crawlSite(startUrl, maxPages, maxDepth, onProgress = null) {
   const root = nodes.get(rootUrl);
   sortTree(root);
 
-  return root;
+  let crosslinks = [];
+  if (scanOptions.crosslinks) {
+    const edgeSet = new Set();
+    for (const [sourceUrl, targets] of linksByUrl.entries()) {
+      if (!nodes.has(sourceUrl)) continue;
+      targets.forEach((targetUrl) => {
+        if (!nodes.has(targetUrl)) return;
+        const sourceNode = nodes.get(sourceUrl);
+        const targetNode = nodes.get(targetUrl);
+        if (sourceNode.parentUrl === targetUrl || targetNode.parentUrl === sourceUrl) return;
+        const key = `${sourceNode.id}->${targetNode.id}`;
+        if (!edgeSet.has(key)) edgeSet.add(key);
+      });
+    }
+    crosslinks = Array.from(edgeSet).map((key) => {
+      const [sourceId, targetId] = key.split('->');
+      return { sourceId, targetId };
+    });
+  }
+
+  return {
+    root,
+    orphans: scanOptions.orphanPages ? orphanNodes : [],
+    errors: scanOptions.errorPages ? errors : [],
+    brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],
+    files: scanOptions.files ? files : [],
+    crosslinks,
+  };
 }
 
 app.get('/', (_, res) => res.status(200).send('Loxo backend OK'));
 app.get('/health', (_, res) => res.json({ ok: true }));
 
 app.post('/scan', async (req, res) => {
-  const { url, maxPages, maxDepth } = req.body || {};
+  const { url, maxPages, maxDepth, options } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
-    const tree = await crawlSite(
+    const result = await crawlSite(
       url,
       Number.isFinite(maxPages) ? maxPages : DEFAULT_MAX_PAGES,
-      Number.isFinite(maxDepth) ? maxDepth : DEFAULT_MAX_DEPTH
+      Number.isFinite(maxDepth) ? maxDepth : DEFAULT_MAX_DEPTH,
+      options || {}
     );
-    res.json({ root: tree });
+    res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message || 'Scan failed' });
   }
@@ -423,7 +497,7 @@ app.post('/scan', async (req, res) => {
 
 // SSE endpoint for scan with progress updates
 app.get('/scan-stream', async (req, res) => {
-  const { url, maxPages, maxDepth } = req.query;
+  const { url, maxPages, maxDepth, options } = req.query;
   if (!url) {
     return res.status(400).json({ error: 'Missing url parameter' });
   }
@@ -449,14 +523,22 @@ app.get('/scan-stream', async (req, res) => {
   };
 
   try {
-    const tree = await crawlSite(
+    let parsedOptions = {};
+    try {
+      parsedOptions = options ? JSON.parse(options) : {};
+    } catch {
+      parsedOptions = {};
+    }
+
+    const result = await crawlSite(
       url,
       Number.isFinite(Number(maxPages)) ? Number(maxPages) : DEFAULT_MAX_PAGES,
       Number.isFinite(Number(maxDepth)) ? Number(maxDepth) : DEFAULT_MAX_DEPTH,
+      parsedOptions,
       (progress) => sendEvent('progress', progress)
     );
 
-    sendEvent('complete', { root: tree });
+    sendEvent('complete', result);
     res.end();
   } catch (e) {
     sendEvent('error', { error: e.message || 'Scan failed' });

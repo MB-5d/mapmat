@@ -281,14 +281,7 @@ body {
   border-radius: 8px;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
   padding: 6px 0;
-}
-
-.scan-options-header {
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #475569;
-  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
 }
 
 .scan-options-item {
@@ -299,6 +292,8 @@ body {
   font-size: 13px;
   color: #1e293b;
   cursor: pointer;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .scan-options-item:hover {
@@ -4726,11 +4721,6 @@ body {
   background: #0f172a;
   border-color: #1f2a44;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-}
-
-[data-theme="dark"] .scan-options-header {
-  color: #cbd5f5;
-  border-bottom-color: #1f2a44;
 }
 
 [data-theme="dark"] .scan-options-item {

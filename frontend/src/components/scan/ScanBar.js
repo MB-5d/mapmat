@@ -51,9 +51,6 @@ const ScanBar = ({
         </button>
         {showOptions && (
           <div className="scan-options-menu">
-            <div className="scan-options-header">
-              <span>Options</span>
-            </div>
             <label className="scan-options-item">
               <input
                 type="checkbox"
@@ -69,6 +66,22 @@ const ScanBar = ({
                 onChange={() => onOptionChange('subdomains')}
               />
               <span>Subdomains</span>
+            </label>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={options.authenticatedPages}
+                onChange={() => onOptionChange('authenticatedPages')}
+              />
+              <span>Authenticated Pages</span>
+            </label>
+            <label className="scan-options-item">
+              <input
+                type="checkbox"
+                checked={options.orphanPages}
+                onChange={() => onOptionChange('orphanPages')}
+              />
+              <span>Orphan Pages</span>
             </label>
             <label className="scan-options-item">
               <input

@@ -710,6 +710,8 @@ export default function App() {
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [scanOptions, setScanOptions] = useState({
     subdomains: false,
+    authenticatedPages: false,
+    orphanPages: false,
     errorPages: false,
     brokenLinks: false,
     files: false,
@@ -1698,7 +1700,7 @@ export default function App() {
       try {
         const data = JSON.parse(e.data);
         setRoot(data.root);
-        setOrphans([]); // Clear orphans when starting new scan
+        setOrphans(data.orphans || []);
         setCurrentMap(null);
         setScale(1);
         setPan({ x: 0, y: 0 });
