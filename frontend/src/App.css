@@ -855,12 +855,6 @@ body {
   position: relative;
 }
 
-@media (prefers-color-scheme: dark) {
-  .drag-overlay-wrapper .node-card {
-    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.6);
-  }
-}
-
 .card-header {
   height: 8px;
   position: relative;
@@ -4404,12 +4398,6 @@ body {
 }
 
 /* Dark Mode - follows system preference */
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #0d0812;
-    color: #e2e0e8;
-  }
-
   .topbar {
     background: #1a1022;
     border-bottom-color: #2d1f3d;
@@ -5846,12 +5834,6 @@ body {
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  .drop-zone-indicator {
-    border-color: #818cf8;
-    background: rgba(129, 140, 248, 0.1);
-  }
-
   .drop-zone-indicator.nearest {
     border-color: #34d399;
     background: rgba(52, 211, 153, 0.15);
@@ -5860,12 +5842,6 @@ body {
 }
 
 /* Dark mode drag styles */
-@media (prefers-color-scheme: dark) {
-  .floating-card-inner {
-    background: #1f2937;
-    border-color: #818cf8;
-  }
-
   .floating-card-inner .drag-handle {
     color: #818cf8;
   }
@@ -6498,6 +6474,32 @@ body {
   border-top-color: #301E3F;
 }
 
+/* Profile Modal - Dark Mode */
+[data-theme="dark"] .profile-modal {
+  background: #1a1022;
+  border: 1px solid #301E3F;
+}
+
+[data-theme="dark"] .profile-header {
+  border-bottom-color: #301E3F;
+}
+
+[data-theme="dark"] .profile-info h3 {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .profile-email {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .form-section h4 {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .form-section.danger-zone {
+  border-top-color: #301E3F;
+}
+
 /* =============================================
    FORCED LIGHT MODE STYLES
    Overrides OS dark preference when user selects light
@@ -6616,4 +6618,68 @@ body {
 
 [data-theme="light"] .theme-toggle-thumb {
   background: #ffffff;
+}
+
+/* Light mode form inputs - ensure white backgrounds */
+[data-theme="light"] .form-group input,
+[data-theme="light"] .form-group select,
+[data-theme="light"] .form-group textarea,
+[data-theme="light"] .modal-card input,
+[data-theme="light"] .modal-card select,
+[data-theme="light"] .modal-card textarea {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #1e293b;
+}
+
+[data-theme="light"] .form-group input:focus,
+[data-theme="light"] .form-group select:focus,
+[data-theme="light"] .form-group textarea:focus,
+[data-theme="light"] .modal-card input:focus,
+[data-theme="light"] .modal-card select:focus,
+[data-theme="light"] .modal-card textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="light"] .form-group input::placeholder,
+[data-theme="light"] .form-group textarea::placeholder,
+[data-theme="light"] .modal-card input::placeholder,
+[data-theme="light"] .modal-card textarea::placeholder {
+  color: #94a3b8;
+}
+
+/* Light mode add project button */
+[data-theme="light"] .add-project-btn {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+
+[data-theme="light"] .add-project-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+/* Light mode modals */
+[data-theme="light"] .modal-card,
+[data-theme="light"] .create-map-modal,
+[data-theme="light"] .import-modal,
+[data-theme="light"] .projects-modal,
+[data-theme="light"] .profile-modal {
+  background: #ffffff;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .modal-header {
+  border-bottom-color: #e2e8f0;
+}
+
+[data-theme="light"] .modal-header h2,
+[data-theme="light"] .modal-card h3 {
+  color: #1e293b;
+}
+
+[data-theme="light"] .form-group label {
+  color: #475569;
 }
