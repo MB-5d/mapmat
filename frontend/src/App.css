@@ -1991,6 +1991,7 @@ body {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
+  z-index: 10001;
 }
 
 .confirm-modal h3 {
@@ -4636,6 +4637,10 @@ body {
   color: #9f8fb8;
 }
 
+[data-theme="dark"] .search-icon {
+  color: #A48EBB;
+}
+
 [data-theme="dark"] .map-name-display {
   color: #e2e0e8;
 }
@@ -4694,6 +4699,10 @@ body {
 }
 
 [data-theme="dark"] .icon-btn {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .icon-btn svg {
   color: #A48EBB;
 }
 
@@ -5114,6 +5123,99 @@ body {
 
 [data-theme="dark"] .share-permission-label {
   color: #e2e0e8;
+}
+
+/* Comments Panel - Dark Mode */
+[data-theme="dark"] .comments-panel {
+  background: #1a1022;
+  border-left-color: #301E3F;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .comments-panel-header {
+  border-bottom-color: #301E3F;
+}
+
+[data-theme="dark"] .comments-panel-header h3 {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .comments-panel-close {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .comments-panel-close:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .comments-panel-filter {
+  border-bottom-color: #301E3F;
+}
+
+[data-theme="dark"] .comments-filter-input {
+  background: #0d0812;
+  border-color: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .comments-filter-input::placeholder {
+  color: #6b5a80;
+}
+
+[data-theme="dark"] .comments-filter-toggle {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .comments-filter-select {
+  background: #0d0812;
+  border-color: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .comments-panel-item {
+  background: #0d0812;
+}
+
+[data-theme="dark"] .comments-panel-item:hover {
+  background: #1a1022;
+}
+
+[data-theme="dark"] .comments-panel-node-title {
+  color: #a78bfa;
+}
+
+[data-theme="dark"] .comments-panel-author {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .comments-panel-time {
+  color: #6b5a80;
+}
+
+[data-theme="dark"] .comments-panel-text {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .comments-panel-empty {
+  color: #6b5a80;
+}
+
+/* User Button - Dark Mode */
+[data-theme="dark"] .user-btn {
+  background: #1a1022;
+  border-color: #301E3F;
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .user-btn:hover {
+  background: #251530;
+  border-color: #3d2a52;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .user-btn svg {
+  color: #a78bfa;
 }
 
 [data-theme="dark"] .share-permission-desc {
