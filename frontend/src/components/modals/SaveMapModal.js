@@ -89,7 +89,7 @@ const SaveMapForm = ({
           <button className="cancel" onClick={() => setShowNewProject(false)}>Cancel</button>
         </div>
       )}
-      <div className="form-actions">
+      <div className="modal-footer">
         <button className="modal-btn secondary" onClick={onCancel}>
           Cancel
         </button>
@@ -127,7 +127,7 @@ const SaveMapModal = ({
           <div className="login-prompt">
             <p>Please sign in to save your maps</p>
             <button
-              className="btn-primary"
+              className="modal-btn primary"
               onClick={onRequireLogin}
             >
               Sign In

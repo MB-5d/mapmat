@@ -6094,3 +6094,349 @@ body {
   border-color: #3d2a52;
   color: #A48EBB;
 }
+
+/* ============================================
+   MODAL CONSISTENCY FIXES - Phase 1
+   Dark Mode Foundations
+   ============================================ */
+
+/* --- Close Button Standard --- */
+[data-theme="dark"] .modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px;
+  color: #A48EBB;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+
+[data-theme="dark"] .modal-close:hover {
+  background: #301E3F !important;
+  color: #e2e0e8;
+}
+
+/* --- Input Standard --- */
+[data-theme="dark"] .modal input[type="text"],
+[data-theme="dark"] .modal input[type="email"],
+[data-theme="dark"] .modal input[type="password"],
+[data-theme="dark"] .modal input[type="url"],
+[data-theme="dark"] .modal textarea,
+[data-theme="dark"] .modal select {
+  width: 100%;
+  padding: 12px 14px;
+  background: #0d0812;
+  border: 1px solid #301E3F;
+  border-radius: 8px;
+  color: #e2e0e8;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+[data-theme="dark"] .modal input:focus,
+[data-theme="dark"] .modal textarea:focus,
+[data-theme="dark"] .modal select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+[data-theme="dark"] .modal input::placeholder,
+[data-theme="dark"] .modal textarea::placeholder {
+  color: #6b5a80;
+}
+
+[data-theme="dark"] .modal select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A48EBB' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 40px;
+}
+
+/* --- Button Standard --- */
+[data-theme="dark"] .modal-btn {
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  min-width: 100px;
+}
+
+[data-theme="dark"] .modal-btn.primary {
+  background: #6366f1;
+  color: white;
+}
+
+[data-theme="dark"] .modal-btn.primary:hover {
+  background: #5558e3;
+}
+
+[data-theme="dark"] .modal-btn.secondary {
+  background: transparent;
+  border: 1px solid #301E3F;
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .modal-btn.secondary:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .modal-btn.danger {
+  background: #ef4444;
+  color: white;
+}
+
+[data-theme="dark"] .modal-btn.danger:hover {
+  background: #dc2626;
+}
+
+/* --- Button Container (side-by-side) --- */
+[data-theme="dark"] .modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+[data-theme="dark"] .modal-footer .modal-btn {
+  flex: 1;
+  max-width: 180px;
+}
+
+/* ============================================
+   MODAL CONSISTENCY FIXES - Phase 2
+   Specific Modal Fixes
+   ============================================ */
+
+/* --- Comments Popover: Force Dark Theme ---
+   This popover was showing light mode on dark canvas */
+[data-theme="dark"] .comment-popover {
+  background: #1a1022 !important;
+  border: 1px solid #301E3F !important;
+  color: #e2e0e8 !important;
+}
+
+[data-theme="dark"] .comment-popover-header {
+  border-bottom: 1px solid #301E3F;
+  color: #e2e0e8;
+  background: transparent;
+}
+
+[data-theme="dark"] .comment-popover-header h3,
+[data-theme="dark"] .comment-popover-header span {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .comment-popover textarea {
+  background: #0d0812 !important;
+  border: 1px solid #301E3F !important;
+  color: #e2e0e8 !important;
+}
+
+[data-theme="dark"] .comment-popover textarea::placeholder {
+  color: #6b5a80 !important;
+}
+
+[data-theme="dark"] .comment-popover .modal-close {
+  color: #A48EBB;
+  background: transparent !important;
+}
+
+[data-theme="dark"] .comment-popover button:not(.modal-close) {
+  background: #6366f1;
+  color: white;
+  border: none;
+}
+
+[data-theme="dark"] .comment-popover button.secondary,
+[data-theme="dark"] .comment-popover button:not(.modal-close):first-of-type {
+  background: transparent;
+  border: 1px solid #301E3F;
+  color: #A48EBB;
+}
+
+/* --- Scan History: Remove White Header --- */
+[data-theme="dark"] .history-modal .modal-header,
+[data-theme="dark"] .history-modal-header {
+  background: transparent !important;
+  border-bottom: 1px solid #301E3F;
+}
+
+[data-theme="dark"] .history-modal .select-all-container,
+[data-theme="dark"] .history-select-all,
+[data-theme="dark"] .history-modal [class*="select-all"] {
+  background: transparent !important;
+  border-bottom: 1px solid #301E3F;
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .history-modal .select-all-container label,
+[data-theme="dark"] .history-modal [class*="select-all"] label {
+  color: #A48EBB;
+}
+
+/* --- Confirm Modal (Clear Canvas, Delete, etc.) --- */
+[data-theme="dark"] .confirm-modal {
+  background: #1a1022;
+  border: 1px solid #301E3F;
+}
+
+[data-theme="dark"] .confirm-modal h3,
+[data-theme="dark"] .confirm-modal h2 {
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .confirm-modal p {
+  color: #9f8fb8;
+}
+
+/* ============================================
+   MODAL CONSISTENCY FIXES - Phase 4
+   Light Mode Foundations
+   ============================================ */
+
+/* --- Close Button Standard (Light) --- */
+[data-theme="light"] .modal-close,
+:root:not([data-theme="dark"]) .modal-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+
+[data-theme="light"] .modal-close:hover,
+:root:not([data-theme="dark"]) .modal-close:hover {
+  background: #f1f5f9 !important;
+  color: #1e293b;
+}
+
+/* --- Input Standard (Light) --- */
+[data-theme="light"] .modal input[type="text"],
+[data-theme="light"] .modal input[type="email"],
+[data-theme="light"] .modal input[type="password"],
+[data-theme="light"] .modal input[type="url"],
+[data-theme="light"] .modal textarea,
+[data-theme="light"] .modal select {
+  width: 100%;
+  padding: 12px 14px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #1e293b;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+[data-theme="light"] .modal input:focus,
+[data-theme="light"] .modal textarea:focus,
+[data-theme="light"] .modal select:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="light"] .modal input::placeholder,
+[data-theme="light"] .modal textarea::placeholder {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .modal select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 40px;
+}
+
+/* --- Button Standard (Light) --- */
+[data-theme="light"] .modal-btn {
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  min-width: 100px;
+}
+
+[data-theme="light"] .modal-btn.primary {
+  background: #6366f1;
+  color: white;
+}
+
+[data-theme="light"] .modal-btn.primary:hover {
+  background: #5558e3;
+}
+
+[data-theme="light"] .modal-btn.secondary {
+  background: white;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+
+[data-theme="light"] .modal-btn.secondary:hover {
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+[data-theme="light"] .modal-btn.danger {
+  background: #ef4444;
+  color: white;
+}
+
+[data-theme="light"] .modal-btn.danger:hover {
+  background: #dc2626;
+}
+
+/* --- Button Container (Light) --- */
+[data-theme="light"] .modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+[data-theme="light"] .modal-footer .modal-btn {
+  flex: 1;
+  max-width: 180px;
+}
+
+/* --- Confirm Modal (Light) --- */
+[data-theme="light"] .confirm-modal {
+  background: white;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .confirm-modal h3,
+[data-theme="light"] .confirm-modal h2 {
+  color: #1e293b;
+}
+
+[data-theme="light"] .confirm-modal p {
+  color: #64748b;
+}

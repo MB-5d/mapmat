@@ -1,4 +1,5 @@
 import React from 'react';
+import { X } from 'lucide-react';
 
 const DeleteConfirmModal = ({ node, onCancel, onConfirm }) => {
   if (!node) return null;
@@ -6,7 +7,12 @@ const DeleteConfirmModal = ({ node, onCancel, onConfirm }) => {
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Delete Page</h3>
+        <div className="modal-header">
+          <h3>Delete Page</h3>
+          <button className="modal-close" onClick={onCancel}>
+            <X size={20} />
+          </button>
+        </div>
         <p>Delete "{node.title || node.url || 'this page'}"?</p>
         <div className="confirm-modal-actions">
           <button className="modal-btn secondary" onClick={onCancel}>Cancel</button>

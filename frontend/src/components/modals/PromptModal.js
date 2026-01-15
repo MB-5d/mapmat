@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 
 const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onCancel }) => {
   const [value, setValue] = useState(defaultValue);
@@ -19,7 +20,12 @@ const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onC
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="confirm-modal" onClick={e => e.stopPropagation()}>
-        <h3>{title}</h3>
+        <div className="modal-header">
+          <h3>{title}</h3>
+          <button className="modal-close" onClick={onCancel}>
+            <X size={20} />
+          </button>
+        </div>
         {message && <p>{message}</p>}
         <form onSubmit={handleSubmit}>
           <input
