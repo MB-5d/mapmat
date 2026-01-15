@@ -296,6 +296,7 @@ body {
 }
 
 .scan-options-list {
+  border-top: 1px solid #e2e8f0;
   padding: 8px;
 }
 
@@ -332,19 +333,11 @@ body {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  font-size: 13px;
-  color: #64748b;
   cursor: pointer;
-  justify-content: flex-start;
-  width: 100%;
-  text-align: left;
   border-radius: 6px;
   transition: background 0.2s;
-}
-
-.scan-options-item span {
-  text-align: left;
-  flex: 1;
+  font-size: 13px;
+  color: #64748b;
 }
 
 .scan-options-item:hover {
@@ -355,6 +348,7 @@ body {
   width: 16px;
   height: 16px;
   margin: 0;
+  flex-shrink: 0;
   accent-color: #6366f1;
 }
 
@@ -4844,6 +4838,10 @@ body {
   background: #1a1022;
   border-color: #301E3F;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .scan-options-list {
+  border-top: 1px solid #301E3F;
 }
 
 [data-theme="dark"] .scan-options-depth label {
