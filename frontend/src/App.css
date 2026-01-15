@@ -6446,9 +6446,21 @@ body {
    Add this to App.css
    ============================================ */
 
-/* Overlay - lighter than normal modals */
-.color-picker-overlay {
-  background: rgba(0, 0, 0, 0.3);
+/* Invisible backdrop for anchored color picker */
+.color-picker-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  z-index: 1000;
+}
+
+/* Anchored color picker - positioned next to legend item */
+.color-picker-modal.anchored {
+  position: fixed;
+  z-index: 1001;
 }
 
 /* Floating picker container */
@@ -6514,7 +6526,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 8px;
+  margin-top: 16px;
 }
 
 /* Gradient picker area */
@@ -6683,4 +6695,15 @@ body {
 
 [data-theme="light"] .rgb-input-group label {
   color: #94a3b8;
+}
+
+/* Legend item editing state */
+.color-key-item.editing {
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 6px;
+}
+
+.color-swatch.editing {
+  box-shadow: 0 0 0 2px #6366f1;
+  transform: scale(1.1);
 }

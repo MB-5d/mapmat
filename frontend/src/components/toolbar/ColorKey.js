@@ -7,6 +7,7 @@ const ColorKey = ({
   colors,
   maxDepth,
   onEditDepth,
+  editingDepth,
 }) => (
   <div className="color-key">
     <div className="color-key-header" onClick={onToggle}>
@@ -21,8 +22,15 @@ const ColorKey = ({
     {showColorKey && (
       <div className="color-key-list">
         {colors.slice(0, maxDepth + 1).map((color, idx) => (
-          <div key={idx} className="color-key-item" onClick={() => onEditDepth(idx)}>
-            <div className="color-swatch" style={{ backgroundColor: color }} />
+          <div
+              key={idx}
+              className={`color-key-item ${editingDepth === idx ? 'editing' : ''}`}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                onEditDepth(idx, { top: rect.top, right: rect.right });
+              }}
+            >
+            <div className={`color-swatch ${editingDepth === idx ? 'editing' : ''}`} style={{ backgroundColor: color }} />
             <span>Level {idx}</span>
             <Edit2 size={12} className="color-edit-icon" />
           </div>

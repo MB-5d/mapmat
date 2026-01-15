@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
-const EditColorModal = ({ depth, color, onChange, onClose }) => {
+const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
   const [currentColor, setCurrentColor] = useState(color || '#6366f1');
   
   // Parse hex to RGB
@@ -39,9 +39,19 @@ const EditColorModal = ({ depth, color, onChange, onClose }) => {
 
   if (depth === null || depth === undefined) return null;
 
+  const modalStyle = position ? {
+    position: 'fixed',
+    top: Math.min(position.top - 6, window.innerHeight - 350),
+    left: position.right + 8,
+  } : {};
+
   return (
-    <div className="modal-overlay color-picker-overlay" onClick={onClose}>
-      <div className="color-picker-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="color-picker-backdrop" onClick={onClose}>
+      <div
+        className="color-picker-modal anchored"
+        style={modalStyle}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button className="modal-close" onClick={onClose}>
           <X size={16} />
         </button>

@@ -990,6 +990,7 @@ export default function App() {
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [showColorKey, setShowColorKey] = useState(false);
   const [editingColorDepth, setEditingColorDepth] = useState(null);
+  const [colorPickerPosition, setColorPickerPosition] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [projects, setProjects] = useState([]); // Project folders
@@ -5092,7 +5093,11 @@ const findNodeById = (node, id) => {
                 onToggle: () => setShowColorKey(v => !v),
                 colors,
                 maxDepth,
-                onEditDepth: (depth) => setEditingColorDepth(depth),
+                editingDepth: editingColorDepth,
+                onEditDepth: (depth, position) => {
+                  setEditingColorDepth(depth);
+                  setColorPickerPosition(position);
+                },
               }}
               toolbarProps={{
                 canEdit: canEdit(),
@@ -5158,7 +5163,11 @@ const findNodeById = (node, id) => {
         depth={editingColorDepth}
         color={editingColorDepth !== null ? colors[editingColorDepth] : '#000000'}
         onChange={(color) => updateLevelColor(editingColorDepth, color)}
-        onClose={() => setEditingColorDepth(null)}
+        onClose={() => {
+          setEditingColorDepth(null);
+          setColorPickerPosition(null);
+        }}
+        position={colorPickerPosition}
       />
 
       <ExportModal
