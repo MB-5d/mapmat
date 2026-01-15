@@ -6440,3 +6440,247 @@ body {
 [data-theme="light"] .confirm-modal p {
   color: #64748b;
 }
+
+/* ============================================
+   COLOR PICKER MODAL - Floating Style
+   Add this to App.css
+   ============================================ */
+
+/* Overlay - lighter than normal modals */
+.color-picker-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Floating picker container */
+.color-picker-modal {
+  position: relative;
+  width: 240px;
+  padding: 16px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Dark mode */
+[data-theme="dark"] .color-picker-modal {
+  background: #1a1022;
+  border: 1px solid #301E3F;
+}
+
+/* Light mode */
+[data-theme="light"] .color-picker-modal,
+:root:not([data-theme="dark"]) .color-picker-modal {
+  background: white;
+  border: 1px solid #e2e8f0;
+}
+
+/* Close button - smaller for compact modal */
+.color-picker-modal .modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+[data-theme="dark"] .color-picker-modal .modal-close {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .color-picker-modal .modal-close:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="light"] .color-picker-modal .modal-close {
+  color: #64748b;
+}
+
+[data-theme="light"] .color-picker-modal .modal-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+/* Content layout */
+.color-picker-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* Gradient picker area */
+.color-picker-gradient {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.color-input-native {
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  cursor: crosshair;
+  background: transparent;
+}
+
+/* Remove default color input styling */
+.color-input-native::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-input-native::-webkit-color-swatch {
+  border: none;
+  border-radius: 8px;
+}
+
+.color-input-native::-moz-color-swatch {
+  border: none;
+  border-radius: 8px;
+}
+
+/* Hue slider */
+.color-picker-hue {
+  width: 100%;
+}
+
+.hue-slider {
+  width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, 
+    #ff0000 0%, 
+    #ffff00 17%, 
+    #00ff00 33%, 
+    #00ffff 50%, 
+    #0000ff 67%, 
+    #ff00ff 83%, 
+    #ff0000 100%
+  );
+  cursor: pointer;
+}
+
+.hue-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #333;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.hue-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #333;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* RGB section */
+.color-picker-rgb {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Color swatch preview */
+.color-picker-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .color-picker-swatch {
+  border: 1px solid #301E3F;
+}
+
+[data-theme="light"] .color-picker-swatch {
+  border: 1px solid #e2e8f0;
+}
+
+/* RGB inputs row */
+.rgb-inputs {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.rgb-input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+
+.rgb-input-group input {
+  width: 100%;
+  padding: 8px 4px;
+  text-align: center;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  -moz-appearance: textfield;
+}
+
+.rgb-input-group input::-webkit-outer-spin-button,
+.rgb-input-group input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+[data-theme="dark"] .rgb-input-group input {
+  background: #0d0812;
+  border: 1px solid #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .rgb-input-group input:focus {
+  border-color: #6366f1;
+  outline: none;
+}
+
+[data-theme="light"] .rgb-input-group input {
+  background: white;
+  border: 1px solid #e2e8f0;
+  color: #1e293b;
+}
+
+[data-theme="light"] .rgb-input-group input:focus {
+  border-color: #6366f1;
+  outline: none;
+}
+
+.rgb-input-group label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+[data-theme="dark"] .rgb-input-group label {
+  color: #6b5a80;
+}
+
+[data-theme="light"] .rgb-input-group label {
+  color: #94a3b8;
+}
