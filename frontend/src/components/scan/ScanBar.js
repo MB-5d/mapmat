@@ -65,14 +65,12 @@ const ScanBar = ({
           Options
         </button>
         {showOptions && (
-          <div className="scan-options-menu">
-            <div className="scan-options-list">
-              <label
-                className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}
-                style={{ justifyContent: 'space-between' }}
-              >
+          <div className="layers-panel">
+            <div className="layers-panel-list">
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <span>Scan depth</span>
                 <select
+                  className="layers-panel-select-input"
                   value={scanDepth}
                   onChange={(e) => onScanDepthChange(e.target.value)}
                   disabled={optionsDisabled}
