@@ -240,22 +240,22 @@ const NodeCard = ({
         <div className="card-actions-left">
           {canEdit && (
             <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
-              <Edit2 size={16} />
+              <Edit2 size={18} />
             </button>
           )}
           {canEdit && !isRoot && (
             <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
-              <Trash2 size={16} />
+              <Trash2 size={18} />
             </button>
           )}
           {canEdit && (
             <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
-              <Copy size={16} />
+              <Copy size={18} />
             </button>
           )}
           {canComment && (
             <button className="btn-icon-flat" title="Add Note" onClick={() => onAddNote?.(node)}>
-              <MessageSquare size={16} />
+              <MessageSquare size={18} />
             </button>
           )}
         </div>
@@ -268,7 +268,7 @@ const NodeCard = ({
             title="Open in new tab"
             onClick={(e) => e.stopPropagation()}
           >
-            <ExternalLink size={16} />
+            <ExternalLink size={18} />
           </a>
         )}
       </div>

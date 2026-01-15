@@ -4,7 +4,7 @@ import {
   History,
   LogIn,
   LogOut,
-  PlusSquare,
+  Plus,
   Upload,
   User,
 } from 'lucide-react';
@@ -112,7 +112,7 @@ const Topbar = ({
           title="Create New Map"
           onClick={onCreateMap}
         >
-          <PlusSquare size={18} />
+          <Plus size={22} />
         </button>
       )}
 
@@ -122,7 +122,7 @@ const Topbar = ({
           title="Import File"
           onClick={onImportFile}
         >
-          <Upload size={18} />
+          <Upload size={22} />
         </button>
       )}
 
@@ -132,7 +132,7 @@ const Topbar = ({
           title="Projects"
           onClick={onShowProjects}
         >
-          <Folder size={18} />
+          <Folder size={22} />
         </button>
       )}
 
@@ -142,7 +142,7 @@ const Topbar = ({
           title="Scan History"
           onClick={onShowHistory}
         >
-          <History size={18} />
+          <History size={22} />
         </button>
       )}
 
@@ -155,16 +155,16 @@ const Topbar = ({
             onClick={onShowProfile}
             title="Account Settings"
           >
-            <User size={16} />
+            <User size={18} />
             <span>{currentUser?.name}</span>
           </button>
           <button className="icon-btn" title="Logout" onClick={onLogout}>
-            <LogOut size={18} />
+            <LogOut size={22} />
           </button>
         </>
       ) : (
         <button className="icon-btn primary" title="Login" onClick={onLogin}>
-          <LogIn size={18} />
+          <LogIn size={22} />
         </button>
       )}
     </div>

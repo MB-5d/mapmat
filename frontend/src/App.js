@@ -1000,6 +1000,7 @@ export default function App() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
+  const [showCreateMapModal, setShowCreateMapModal] = useState(false);
   const [showSaveMapModal, setShowSaveMapModal] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState({});
   const [editingProjectId, setEditingProjectId] = useState(null);
@@ -1020,13 +1021,6 @@ export default function App() {
   const [showLanding, setShowLanding] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
-  const [showCreateMapModal, setShowCreateMapModal] = useState(false);
-  const [newMapData, setNewMapData] = useState({
-    name: '',
-    projectId: '',
-    url: '',
-    description: ''
-  });
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
   const [deleteConfirmNode, setDeleteConfirmNode] = useState(null); // Node pending deletion
@@ -1639,69 +1633,6 @@ export default function App() {
     showToast('Logged out', 'info');
   };
 
-  const handleCreateMap = async (mapData) => {
-    // Clear any existing map
-    setRoot(null);
-    setOrphans([]);
-    setConnections([]);
-    setCurrentMap(null);
-    setIsImportedMap(false);
-
-    // Close create modal
-    setShowCreateMapModal(false);
-
-    // Reset the form data
-    setNewMapData({
-      name: '',
-      projectId: '',
-      url: '',
-      description: ''
-    });
-
-    // Show helpful toast and auto-scan if URL provided
-    if (mapData.url && mapData.url.trim()) {
-      setMapName(mapData.name);
-      setUrlInput(mapData.url);
-      if (mapData.projectId) {
-        setSelectedProjectForNewMap(mapData.projectId);
-      } else {
-        setSelectedProjectForNewMap(null);
-      }
-
-      showToast('Starting scan...', 'loading');
-      // Auto-scan the provided URL
-      setTimeout(() => {
-        scan(mapData.url, true);
-      }, 100);
-    } else {
-      // No URL - Create blank map immediately. Just prepare the state.
-      setRoot(null);
-      setOrphans([]);
-      setConnections([]);
-      setCurrentMap({
-        name: mapData.name,
-        project_id: mapData.projectId || null,
-        // No id yet, since it's not saved.
-      });
-      setMapName(mapData.name);
-      setIsImportedMap(false);
-      setShowCreateMapModal(false);
-      
-      setNewMapData({
-        name: '',
-        projectId: '',
-        url: '',
-        description: ''
-      });
-
-      showToast('Creating new map...', 'info');
-
-      // Open Add Page modal to create the first page (which will be the root)
-      setEditModalNode({ id: '', url: '', title: mapData.name, parentId: '', children: [] });
-      setEditModalMode('add');
-    }
-  };
-
   const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
     if (!nodeId || !thumbnailUrl) return;
     setRoot((prev) => {
@@ -2231,42 +2162,6 @@ export default function App() {
     } catch {}
   };
 
-  const onWheel = (e) => {
-    if (!hasMap) return;
-
-    // Pinch zoom (Ctrl/Cmd + scroll)
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-
-      const delta = -e.deltaY;
-      const zoomIntensity = 0.002;
-      const next = clamp(scale * (1 + delta * zoomIntensity), 0.1, 3);
-
-      const rect = canvasRef.current.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
-
-      const ox = (cx - pan.x) / scale;
-      const oy = (cy - pan.y) / scale;
-
-      const nx = cx - ox * next;
-      const ny = cy - oy * next;
-
-      setScale(next);
-      // Note: clampPan is called on next frame after scale updates
-      requestAnimationFrame(() => setPan(p => clampPan(p)));
-      setPan({ x: nx, y: ny });
-      return;
-    }
-
-    // Two-finger scroll pans (trackpad)
-    e.preventDefault();
-    setPan((p) => clampPan({
-      x: p.x - e.deltaX,
-      y: p.y - e.deltaY,
-    }));
-  };
-
   const zoomIn = () => setScale((s) => clamp(s * 1.2, 0.1, 3));
   const zoomOut = () => setScale((s) => clamp(s / 1.2, 0.1, 3));
 
@@ -2518,16 +2413,45 @@ export default function App() {
 
   // Prevent trackpad pinch-to-zoom from zooming the whole page
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const canvas = canvasRef.current;
+  if (!canvas) return;
 
-    const handleWheel = (e) => {
-      e.preventDefault();
-    };
+  const handleWheel = (e) => {
+    e.preventDefault();  // This actually works because non-passive
+    
+    if (!root) return;  // No map loaded
+    
+    // Pinch zoom (Ctrl/Cmd + scroll)
+    if (e.ctrlKey || e.metaKey) {
+      const delta = -e.deltaY;
+      const zoomIntensity = 0.002;
+      const next = Math.min(Math.max(scale * (1 + delta * zoomIntensity), 0.1), 3);
 
-    canvas.addEventListener('wheel', handleWheel, { passive: false });
-    return () => canvas.removeEventListener('wheel', handleWheel);
-  }, []);
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+
+      const ox = (cx - pan.x) / scale;
+      const oy = (cy - pan.y) / scale;
+
+      const nx = cx - ox * next;
+      const ny = cy - oy * next;
+
+      setScale(next);
+      setPan({ x: nx, y: ny });
+      return;
+    }
+
+    // Two-finger scroll pans (trackpad)
+    setPan((p) => clampPan({
+      x: p.x - e.deltaX,
+      y: p.y - e.deltaY,
+    }));
+  };
+
+  canvas.addEventListener('wheel', handleWheel, { passive: false });
+  return () => canvas.removeEventListener('wheel', handleWheel);
+}, [root, scale, pan, clampPan]);
 
   const exportJson = () => {
     if (!root) return;
@@ -4667,7 +4591,7 @@ const findNodeById = (node, id) => {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onWheel={onWheel}
+       
       >
         {/* Permission banner for shared links with limited access */}
         {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && (
@@ -5382,23 +5306,9 @@ const findNodeById = (node, id) => {
       {/* Create Map Modal */}
       <CreateMapModal
         show={showCreateMapModal}
-        onClose={() => {
-          setShowCreateMapModal(false);
-          setNewMapData({
-            name: '',
-            projectId: '',
-            url: '',
-            description: ''
-          });
-        }}
-        onSubmit={handleCreateMap}
-        data={newMapData}
-        setData={setNewMapData}
-        projects={projects}
-        onAddProject={() => {
-          setShowCreateMapModal(false);
-          setShowProjectsModal(true);
-        }}
+        onClose={() => setShowCreateMapModal(false)}
+        onStartFromScratch={() => setShowSaveMapModal(true)}
+        onImportFromFile={() => setShowImportModal(true)}
       />
 
       <ImportModal

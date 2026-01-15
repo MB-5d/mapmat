@@ -741,11 +741,11 @@ body {
 
 .node-badge {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: #475569;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 999px;
+  border-radius: 6px;
   padding: 2px 6px;
   line-height: 1.1;
   white-space: nowrap;
@@ -4725,8 +4725,8 @@ body {
 }
 
 .theme-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4735,8 +4735,8 @@ body {
 }
 
 .theme-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 .theme-icon.sun {
@@ -4998,9 +4998,9 @@ body {
 }
 
 [data-theme="dark"] .node-badge {
-  background: #111827;
-  border-color: #334155;
-  color: #e2e8f0;
+  background: #1C0F23;
+  border-color: #A48EBB;
+  color: #A48EBB;
 }
 
 [data-theme="dark"] .card-content {
@@ -5854,6 +5854,18 @@ body {
 
 [data-theme="dark"] .form-section.danger-zone {
   border-top-color: #301E3F;
+}
+
+/* Dark mode: Increase disabled opacity for better contrast */
+[data-theme="dark"] .scan-btn:disabled,
+[data-theme="dark"] .scan-options-item.disabled,
+[data-theme="dark"] .scan-options-depth-input:disabled,
+[data-theme="dark"] .layers-panel-item.disabled,
+[data-theme="dark"] .canvas-tool-btn.disabled,
+[data-theme="dark"] .modal-btn.disabled,
+[data-theme="dark"] .modal-btn:disabled,
+[data-theme="dark"] .icon-btn:disabled {
+  opacity: 0.6;
 }
 
 /* =============================================
