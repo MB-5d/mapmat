@@ -767,10 +767,13 @@ const collectAllNodes = (node, result = [], pageNumber = '1', depth = 0) => {
 
 const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
   const result = [];
-  if (rootNode) collectAllNodes(rootNode, result);
-  orphanNodes.forEach((orphan) => {
-    collectAllNodes(orphan, result);
-  });
+  const walk = (node) => {
+    if (!node) return;
+    result.push(node);
+    node.children?.forEach(walk);
+  };
+  if (rootNode) walk(rootNode);
+  orphanNodes.forEach(walk);
   return result;
 };
 
@@ -1196,7 +1199,8 @@ export default function App() {
         const targetId = urlToId.get(link.url);
         if (!sourceId || !targetId) return null;
         const offsetY = (index % 2 === 0 ? 1 : -1) * 4;
-        return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId, offsetY };
+        const offsetX = 4;
+        return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId, offsetY, offsetX };
       })
       .filter(Boolean);
   }, [effectiveScanLayers.brokenLinks, scanMeta.brokenLinks, renderRoot, visibleOrphans]);
@@ -1712,6 +1716,14 @@ export default function App() {
     setOrphans((prev) => prev.map((orphan) => (
       orphan.id === nodeId ? { ...orphan, thumbnailUrl } : orphan
     )));
+    if (showThumbnails) {
+      setScanLayerAvailability((prev) => (
+        prev.thumbnails ? prev : { ...prev, thumbnails: true }
+      ));
+      setScanLayerVisibility((prev) => (
+        prev.thumbnails ? prev : { ...prev, thumbnails: true }
+      ));
+    }
   };
 
   const requestThumbnail = async (node) => {
@@ -1725,14 +1737,14 @@ export default function App() {
       );
       const data = await res.json();
       if (!res.ok || data?.error) {
-        thumbnailRequestRef.current.delete(node.id);
         return;
       }
       if (data?.url) {
         updateNodeThumbnail(node.id, data.url);
       }
     } catch (e) {
-      // Allow future retries if needed
+      // Swallow errors; retries handled in the card.
+    } finally {
       thumbnailRequestRef.current.delete(node.id);
     }
   };
@@ -2113,7 +2125,7 @@ export default function App() {
           brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
           files: scanOptions.files && (data.files || []).length > 0,
         });
-        if (scanOptions.thumbnails && countThumbnails > 0) {
+        if (scanOptions.thumbnails) {
           setShowThumbnails(true);
         }
         setCurrentMap(null);
@@ -4791,11 +4803,10 @@ const findNodeById = (node, id) => {
                   const start = getAnchorPosition(conn.sourceId, 'right');
                   const end = getAnchorPosition(conn.targetId, 'left');
                   if (!start || !end) return null;
-                  const offset = 4;
                   return (
                     <path
                       key={conn.id}
-                      d={`M ${start.x + offset} ${start.y + conn.offsetY} L ${end.x - offset} ${end.y + conn.offsetY}`}
+                      d={`M ${start.x} ${start.y} L ${start.x + conn.offsetX} ${start.y + conn.offsetY} L ${end.x - conn.offsetX} ${start.y + conn.offsetY} L ${end.x - conn.offsetX} ${end.y + conn.offsetY} L ${end.x} ${end.y}`}
                       fill="none"
                       stroke="#fca5a5"
                       strokeWidth="2"
