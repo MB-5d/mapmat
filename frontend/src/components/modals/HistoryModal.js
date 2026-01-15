@@ -16,10 +16,12 @@ const HistoryModal = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card history-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-        <h3>Scan History</h3>
+        <div className="modal-header">
+          <h3>Scan History</h3>
+          <button className="modal-close" onClick={onClose}>
+            <X size={24} />
+          </button>
+        </div>
         {scanHistory.length === 0 ? (
           <div className="history-empty">
             No scans in history yet. Your completed scans will appear here.

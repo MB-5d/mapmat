@@ -123,7 +123,7 @@ const EditNodeModal = ({
         <div className="edit-node-header">
           <h3>{modalTitle}</h3>
           <button className="modal-close" onClick={onClose}>
-            <X size={20} />
+            <X size={24} />
           </button>
         </div>
 

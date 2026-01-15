@@ -53,7 +53,7 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
         onClick={(e) => e.stopPropagation()}
       >
         <button className="modal-close" onClick={onClose}>
-          <X size={16} />
+          <X size={24} />
         </button>
         
         <div className="color-picker-content">

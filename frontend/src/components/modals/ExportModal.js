@@ -15,10 +15,12 @@ const ExportModal = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card export-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-        <h3>Download</h3>
+        <div className="modal-header">
+          <h3>Download</h3>
+          <button className="modal-close" onClick={onClose}>
+            <X size={24} />
+          </button>
+        </div>
         <div className="export-options">
           <button className="export-btn" onClick={onExportPng}>
             <FileImage size={24} />

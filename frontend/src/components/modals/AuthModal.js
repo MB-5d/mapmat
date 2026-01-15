@@ -38,7 +38,7 @@ const AuthModal = ({ onClose, onSuccess, showToast }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card auth-modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>
-          <X size={20} />
+          <X size={24} />
         </button>
 
         <div className="auth-tabs">

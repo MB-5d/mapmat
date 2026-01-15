@@ -81,7 +81,7 @@ const ProfileModal = ({ user, onClose, onUpdate, onLogout, showToast }) => {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card profile-modal" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>
-          <X size={20} />
+          <X size={24} />
         </button>
 
         <div className="profile-header">

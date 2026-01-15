@@ -33,10 +33,13 @@ const ProjectsModal = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card projects-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-        <h3>Projects & Maps</h3>
+        <div className="modal-header">
+          <h3>Projects & Maps</h3>
+          <button className="modal-close" onClick={onClose}>
+            <X size={24} />
+          </button>
+        </div>
+
         {!isLoggedIn ? (
           <div className="projects-empty">
             Please log in to save and manage projects

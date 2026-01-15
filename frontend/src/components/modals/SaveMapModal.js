@@ -119,10 +119,13 @@ const SaveMapModal = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card save-map-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-        <h3>Save Map</h3>
+        <div className="modal-header">
+          <h3>Save Map</h3>
+          <button className="modal-close" onClick={onClose}>
+            <X size={24} />
+          </button>
+        </div>
+
         {!isLoggedIn ? (
           <div className="login-prompt">
             <p>Please sign in to save your maps</p>

@@ -18,10 +18,12 @@ const ShareModal = ({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card share-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={20} />
-        </button>
-        <h3>Share Sitemap</h3>
+        <div className="modal-header">
+          <h3>Share Sitemap</h3>
+          <button className="modal-close" onClick={onClose}>
+            <X size={24} />
+          </button>
+        </div>
 
         <div className="share-section">
           <div className="share-section-title">Permission Level</div>

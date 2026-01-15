@@ -18,7 +18,7 @@ const ImportModal = ({
         <div className="modal-header">
           <h2>Import Sitemap</h2>
           <button className="modal-close" onClick={onClose}>
-            <X size={20} />
+            <X size={24} />
           </button>
         </div>
         <div className="modal-body">

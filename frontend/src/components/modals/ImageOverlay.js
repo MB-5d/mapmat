@@ -19,7 +19,7 @@ const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
       ref={containerRef}
     >
       <button className="image-overlay-close" onClick={onClose}>
-        <X size={18} />
+        <X size={24} />
       </button>
       <div className="image-modal" onClick={(e) => e.stopPropagation()}>
         {loading && (

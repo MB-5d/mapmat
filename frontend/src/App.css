@@ -6707,3 +6707,194 @@ body {
   box-shadow: 0 0 0 2px #6366f1;
   transform: scale(1.1);
 }
+
+/* ============================================
+   MODAL CONSISTENCY FIXES - CSS ONLY
+   Add to END of App.css
+   ============================================ */
+
+/* ----------------------------------------
+   1. CLOSE BUTTON - 24px everywhere
+   ---------------------------------------- */
+.modal-close {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.modal-close svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+/* ----------------------------------------
+   2. SCAN PROGRESS MODAL - Fix overlay color
+   Match standard overlay instead of dark blue
+   ---------------------------------------- */
+.scanning-overlay {
+  background: rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="dark"] .scanning-overlay {
+  background: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* ----------------------------------------
+   3. MODAL HEADER - Consistent styling
+   For modals that have modal-header wrapper
+   ---------------------------------------- */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-header h2,
+.modal-header h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+.modal-header .modal-close {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+}
+
+[data-theme="dark"] .modal-header {
+  border-bottom-color: #301E3F;
+}
+
+[data-theme="dark"] .modal-header h2,
+[data-theme="dark"] .modal-header h3 {
+  color: #e2e0e8;
+}
+
+/* ----------------------------------------
+   4. MODALS WITHOUT HEADER WRAPPER
+   Ensure h3 + absolute close button align
+   ---------------------------------------- */
+.modal-card > h3:first-child {
+  padding-right: 40px;
+  margin-bottom: 20px;
+}
+
+/* ----------------------------------------
+   5. CONFIRM MODAL (PromptModal, DeleteConfirm)
+   Fix header alignment
+   ---------------------------------------- */
+.confirm-modal .modal-header {
+  margin: -24px -24px 16px -24px;
+}
+
+.confirm-modal .modal-header h3 {
+  font-size: 1.125rem;
+}
+
+/* ----------------------------------------
+   6. MODAL FOOTER - Consistent buttons
+   ---------------------------------------- */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.modal-footer .modal-btn {
+  width: auto;
+  min-width: 100px;
+  margin-top: 0;
+}
+
+[data-theme="dark"] .modal-footer {
+  border-top-color: #301E3F;
+}
+
+/* ----------------------------------------
+   7. FORM GROUP SPACING
+   ---------------------------------------- */
+.modal-card .form-group {
+  margin-bottom: 16px;
+}
+
+.modal-card .form-group:last-child {
+  margin-bottom: 0;
+}
+
+.modal-card .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+[data-theme="dark"] .modal-card .form-group label {
+  color: #e2e0e8;
+}
+
+/* ----------------------------------------
+   8. INPUT FIELD CONSISTENCY
+   ---------------------------------------- */
+.modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not(.project-name-input),
+.modal-card select,
+.modal-card textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: white;
+  color: #1e293b;
+}
+
+.modal-card input:focus,
+.modal-card select:focus,
+.modal-card textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="dark"] .modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not(.project-name-input),
+[data-theme="dark"] .modal-card select,
+[data-theme="dark"] .modal-card textarea {
+  background: #1a1022;
+  border-color: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .modal-card input::placeholder,
+[data-theme="dark"] .modal-card textarea::placeholder {
+  color: #6b5a80;
+}
+
+/* ----------------------------------------
+   9. PROJECTS MODAL ADD BUTTON
+   Already has dashed style - keep it
+   ---------------------------------------- */
+.projects-modal .add-project-btn {
+  margin-top: 16px;
+}
+
+/* ----------------------------------------
+   10. EXPORT/HISTORY/SHARE - Remove old padding
+   These have h3 without wrapper, need space for close
+   ---------------------------------------- */
+.export-modal,
+.history-modal,
+.share-modal {
+  padding-top: 24px;
+}
+
+.export-modal > h3,
+.history-modal > h3,
+.share-modal > h3 {
+  padding-right: 40px;
+}

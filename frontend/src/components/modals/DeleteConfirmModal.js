@@ -10,7 +10,7 @@ const DeleteConfirmModal = ({ node, onCancel, onConfirm }) => {
         <div className="modal-header">
           <h3>Delete Page</h3>
           <button className="modal-close" onClick={onCancel}>
-            <X size={20} />
+            <X size={24} />
           </button>
         </div>
         <p>Delete "{node.title || node.url || 'this page'}"?</p>

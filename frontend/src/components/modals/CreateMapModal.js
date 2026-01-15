@@ -15,7 +15,7 @@ const CreateMapModal = ({
         <div className="modal-header">
           <h2>Create New Map</h2>
           <button className="modal-close" onClick={onClose}>
-            <X size={20} />
+            <X size={24} />
           </button>
         </div>
         <div className="modal-body">
