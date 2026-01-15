@@ -6045,3 +6045,34 @@ body {
 [data-theme="light"] .form-group label {
   color: #475569;
 }
+
+/* Scan Options dropdown using layers-panel - positioning override */
+.scan-options .layers-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 200px;
+}
+
+/* Also need select input styling for the depth dropdown */
+.layers-panel-select-input {
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 13px;
+  color: #64748b;
+  background: white;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .scan-options .layers-panel {
+  background: #1a1022;
+  border: 1px solid #301E3F;
+}
+
+[data-theme="dark"] .layers-panel-select-input {
+  background: #2d1f3d;
+  border-color: #3d2a52;
+  color: #A48EBB;
+}
