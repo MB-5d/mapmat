@@ -41,7 +41,7 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
 
   const modalStyle = position ? {
     position: 'fixed',
-    top: Math.min(position.top - 6, window.innerHeight - 350),
+    top: Math.max(20, position.top - 245),
     left: position.right + 8,
   } : {};
 

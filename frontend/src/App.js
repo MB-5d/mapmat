@@ -5096,7 +5096,7 @@ const findNodeById = (node, id) => {
                 editingDepth: editingColorDepth,
                 onEditDepth: (depth, position) => {
                   setEditingColorDepth(depth);
-                  setColorPickerPosition(position);
+                   setColorPickerPosition(position);
                 },
               }}
               toolbarProps={{
