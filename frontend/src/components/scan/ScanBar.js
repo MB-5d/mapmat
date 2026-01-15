@@ -67,31 +67,23 @@ const ScanBar = ({
         {showOptions && (
           <div className="scan-options-menu">
             <div className="scan-options-list">
-              <div className="scan-options-depth">
-                <label htmlFor="scan-depth-input">Scan depth</label>
-                <input
-                  id="scan-depth-input"
-                  className="scan-options-depth-input"
-                  type="text"
-                  inputMode="numeric"
+              <label
+                className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}
+                style={{ justifyContent: 'space-between' }}
+              >
+                <span>Scan depth</span>
+                <select
                   value={scanDepth}
                   onChange={(e) => onScanDepthChange(e.target.value)}
-                  list="scan-depth-options"
                   disabled={optionsDisabled}
-                />
-                <datalist id="scan-depth-options">
-                  <option value="0" />
-                  <option value="1" />
-                  <option value="2" />
-                  <option value="3" />
-                  <option value="4" />
-                  <option value="5" />
-                  <option value="6" />
-                  <option value="7" />
-                  <option value="8" />
-                </datalist>
-              </div>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {[...Array(8).keys()].map(i => (
+                    <option key={i} value={i}>{i}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={showThumbnails}
@@ -100,7 +92,7 @@ const ScanBar = ({
                 />
                 <span>Thumbnails</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.inactivePages}
@@ -109,7 +101,7 @@ const ScanBar = ({
                 />
                 <span>Inactive pages</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.subdomains}
@@ -118,7 +110,7 @@ const ScanBar = ({
                 />
                 <span>Subdomains</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.authenticatedPages}
@@ -127,7 +119,7 @@ const ScanBar = ({
                 />
                 <span>Authenticated Pages</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.orphanPages}
@@ -136,7 +128,7 @@ const ScanBar = ({
                 />
                 <span>Orphan Pages</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.errorPages}
@@ -145,7 +137,7 @@ const ScanBar = ({
                 />
                 <span>Error pages</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.brokenLinks}
@@ -154,7 +146,7 @@ const ScanBar = ({
                 />
                 <span>Broken links</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.files}
@@ -163,7 +155,7 @@ const ScanBar = ({
                 />
                 <span>Files / Downloads</span>
               </label>
-              <label className={`scan-options-item${optionsDisabled ? ' disabled' : ''}`}>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
                   checked={options.crosslinks}
