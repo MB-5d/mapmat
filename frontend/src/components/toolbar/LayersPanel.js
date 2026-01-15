@@ -45,16 +45,7 @@ const LayersPanel = ({
             />
             <span>Main / URL</span>
           </label>
-          {!scanLayerAvailability?.thumbnails && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={showThumbnails}
-                onChange={() => onToggleThumbnails(!showThumbnails)}
-              />
-              <span>Thumbnails</span>
-            </label>
-          )}
+         
           <label className="layers-panel-item">
             <input
               type="checkbox"

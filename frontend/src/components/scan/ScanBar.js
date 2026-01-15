@@ -68,7 +68,7 @@ const ScanBar = ({
           <div className="layers-panel">
             <div className="layers-panel-list">
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <span>Scan depth</span>
+                <span>Scan depth level</span>
                 <select
                   className="layers-panel-select-input"
                   value={scanDepth}
