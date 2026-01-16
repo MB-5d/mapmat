@@ -800,6 +800,8 @@ body {
 
 [data-theme="dark"] .node-card {
   box-shadow: 0 0 40px 15px rgba(255, 255, 255, 0.6) !important;
+  border: 5px solid red !important;
+  outline: 10px solid lime !important;
 }
 
 .node-badges {
