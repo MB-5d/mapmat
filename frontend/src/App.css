@@ -796,6 +796,7 @@ body {
   transition: box-shadow 0.2s;
   display: flex;
   flex-direction: column;
+  border: 5px solid blue !important;
 }
 
 [data-theme="dark"] .node-card {
