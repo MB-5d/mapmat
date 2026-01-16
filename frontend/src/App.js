@@ -5343,8 +5343,13 @@ const findNodeById = (node, id) => {
       {/* Generic Confirmation Modal */}
       {confirmModal && (
         <div className="modal-overlay" onClick={confirmModal.onCancel}>
-          <div className="confirm-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-card confirm-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
             <h3>{confirmModal.title}</h3>
+            <button className="modal-close" onClick={confirmModal.onCancel}>
+            <X size={24} />
+            </button>
+          </div>
             <p>{confirmModal.message}</p>
             <div className="confirm-modal-actions">
               <button
