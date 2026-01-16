@@ -6785,3 +6785,176 @@ body {
 .share-modal > h3 {
   padding-right: 40px;
 }
+
+/* ============================================
+   MODAL CONSISTENCY OVERRIDES
+   Add this at the VERY END of App.css
+   ============================================ */
+
+/* --- All modals: consistent close button --- */
+.modal-card .modal-close,
+.modal-header .modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #64748b;
+}
+
+.modal-card .modal-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.modal-card .modal-close svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* When close is inside modal-header, make it static (flows with flexbox) */
+.modal-header .modal-close {
+  position: static;
+}
+
+[data-theme="dark"] .modal-card .modal-close {
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .modal-card .modal-close:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+/* --- All modals: consistent header --- */
+.modal-card .modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-card .modal-header h2,
+.modal-card .modal-header h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0;
+}
+
+[data-theme="dark"] .modal-card .modal-header {
+  border-bottom-color: #301E3F;
+}
+
+[data-theme="dark"] .modal-card .modal-header h2,
+[data-theme="dark"] .modal-card .modal-header h3 {
+  color: #e2e0e8;
+}
+
+/* --- All modals: consistent inputs --- */
+.modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
+.modal-card select,
+.modal-card textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  color: #1e293b;
+}
+
+.modal-card input:focus,
+.modal-card select:focus,
+.modal-card textarea:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="dark"] .modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
+[data-theme="dark"] .modal-card select,
+[data-theme="dark"] .modal-card textarea {
+  background: #0d0812;
+  border-color: #301E3F;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .modal-card input::placeholder,
+[data-theme="dark"] .modal-card textarea::placeholder {
+  color: #6b5a80;
+}
+
+/* --- All modals: consistent buttons --- */
+.modal-card .modal-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 80px;
+}
+
+.modal-card .modal-btn.primary {
+  background: #6366f1;
+  color: white;
+  border: none;
+}
+
+.modal-card .modal-btn.primary:hover {
+  background: #4f46e5;
+}
+
+.modal-card .modal-btn.secondary {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.modal-card .modal-btn.secondary:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+[data-theme="dark"] .modal-card .modal-btn.secondary {
+  background: transparent;
+  border-color: #301E3F;
+  color: #A48EBB;
+}
+
+[data-theme="dark"] .modal-card .modal-btn.secondary:hover {
+  background: #301E3F;
+  color: #e2e0e8;
+}
+
+.modal-card .modal-btn.danger {
+  background: #ef4444;
+  color: white;
+  border: none;
+}
+
+.modal-card .modal-btn.danger:hover {
+  background: #dc2626;
+}
+
+/* --- Form labels --- */
+.modal-card .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+[data-theme="dark"] .modal-card .form-group label {
+  color: #e2e0e8;
+}
