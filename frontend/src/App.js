@@ -1379,14 +1379,6 @@ export default function App() {
     // So: pan.y <= viewportHeight - padding - contentTop
     const maxPanY = viewportHeight - padding - contentTop;
 
-    console.log('CLAMP DEBUG:', {
-      padding,
-      viewport: { w: viewportWidth, h: viewportHeight },
-      content: { left: contentLeft, right: contentRight, top: contentTop, bottom: contentBottom },
-      limits: { minPanX, maxPanX, minPanY, maxPanY },
-      newPan,
-    });
-
     // 4. Clamp
     const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
     const clampedY = Math.max(minPanY, Math.min(maxPanY, newPan.y));
@@ -1442,7 +1434,6 @@ export default function App() {
         }
       } catch (e) {
         // Not logged in or error - that's fine
-        console.log('Not authenticated');
       } finally {
         setAuthLoading(false);
       }
@@ -2283,15 +2274,12 @@ export default function App() {
 
   // Undo/Redo implementation
   const saveStateForUndo = () => {
-    console.log('SAVING STATE FOR UNDO');
     setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections })]);
     setRedoStack([]); // Clear redo on new action
   };
 
   const handleUndo = () => {
-    console.log('UNDO CLICKED, stack:', undoStack.length);
     if (undoStack.length === 0) {
-      console.log('Nothing to undo');
       return;
     }
 
@@ -2315,13 +2303,10 @@ export default function App() {
     if (parsed.connections !== undefined) {
       setConnections(parsed.connections);
     }
-    console.log('UNDO COMPLETE');
   };
 
   const handleRedo = () => {
-    console.log('REDO CLICKED, stack:', redoStack.length);
     if (redoStack.length === 0) {
-      console.log('Nothing to redo');
       return;
     }
 
@@ -2345,7 +2330,6 @@ export default function App() {
     if (parsed.connections !== undefined) {
       setConnections(parsed.connections);
     }
-    console.log('REDO COMPLETE');
   };
 
   const canUndo = undoStack.length > 0;
@@ -4457,8 +4441,6 @@ const findNodeById = (node, id) => {
         urls = parsePlainText(text);
         parseType = 'Text';
       }
-
-      console.log(`Parsed ${parseType}: found ${urls.length} URLs`);
 
       if (urls.length === 0) {
         showToast(`No URLs found in ${parseType} file`, 'error');

@@ -62,7 +62,6 @@ const LandingPage = ({ onLaunchApp }) => {
   const handleContactSubmit = (e) => {
     e.preventDefault();
     // In production, this would send to a backend
-    console.log('Contact form:', contactForm);
     setContactSubmitted(true);
     setTimeout(() => {
       setContactSubmitted(false);
