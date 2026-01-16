@@ -799,7 +799,7 @@ body {
 }
 
 [data-theme="dark"] .node-card {
-  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+  box-shadow: 0 0 40px 15px rgba(255, 255, 255, 0.6) !important;
 }
 
 .node-badges {
@@ -1815,7 +1815,7 @@ body {
 [data-theme="dark"] .modal-card {
   background: #1a1022;
   border: 1px solid #301E3F;
-  box-shadow: 0 20px 50px rgba(255, 255, 255, 0.15), 0 8px 20px rgba(0, 0, 0, 0.6) !important;
+  box-shadow: 0 0 40px 15px rgba(255, 255, 255, 0.6) !important;
 }
 
 /* Header */
