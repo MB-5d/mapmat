@@ -983,7 +983,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [projects, setProjects] = useState([]); // Project folders
   const [currentMap, setCurrentMap] = useState(null); // Currently loaded map
-  const [selectedProjectForNewMap, setSelectedProjectForNewMap] = useState(null); // Project selected in Create Map modal
   const [isImportedMap, setIsImportedMap] = useState(false); // Whether current map is from import
   const [accessLevel, setAccessLevel] = useState(ACCESS_LEVELS.EDIT); // Permission level
   const [showShareModal, setShowShareModal] = useState(false);
