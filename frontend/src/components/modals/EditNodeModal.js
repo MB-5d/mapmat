@@ -119,8 +119,8 @@ const EditNodeModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card edit-node-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="edit-node-header">
+      <div className="modal-card modal-lg modal-scrollable" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
           <h3>{modalTitle}</h3>
           <button className="modal-close" onClick={onClose}>
             <X size={24} />

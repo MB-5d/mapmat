@@ -32,7 +32,7 @@ const ProjectsModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card projects-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card modal-lg projects-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Projects & Maps</h3>
           <button className="modal-close" onClick={onClose}>

@@ -17,7 +17,7 @@ const ShareModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card share-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card modal-sm share-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Share Sitemap</h3>
           <button className="modal-close" onClick={onClose}>
@@ -26,45 +26,48 @@ const ShareModal = ({
         </div>
 
         <div className="share-section">
-          <div className="share-section-title">Permission Level</div>
-          <div className="share-permission-options">
-            <label className={`share-permission-option ${sharePermission === accessLevels.VIEW ? 'selected' : ''}`}>
+          <div className="modal-section-label">Permission Level</div>
+          <div className="modal-options">
+            <label className={`modal-option-card ${sharePermission === accessLevels.VIEW ? 'selected' : ''}`}>
               <input
                 type="radio"
                 name="sharePermission"
                 checked={sharePermission === accessLevels.VIEW}
                 onChange={() => onChangePermission(accessLevels.VIEW)}
+                style={{ display: 'none' }}
               />
-              <Eye size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">View only</span>
-                <span className="share-permission-desc">Can view the sitemap</span>
+              <Eye size={20} className="modal-option-icon" />
+              <div className="modal-option-content">
+                <span className="modal-option-title">View only</span>
+                <span className="modal-option-desc">Can view the sitemap</span>
               </div>
             </label>
-            <label className={`share-permission-option ${sharePermission === accessLevels.COMMENT ? 'selected' : ''}`}>
+            <label className={`modal-option-card ${sharePermission === accessLevels.COMMENT ? 'selected' : ''}`}>
               <input
                 type="radio"
                 name="sharePermission"
                 checked={sharePermission === accessLevels.COMMENT}
                 onChange={() => onChangePermission(accessLevels.COMMENT)}
+                style={{ display: 'none' }}
               />
-              <MessageSquare size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">Can comment</span>
-                <span className="share-permission-desc">View and add comments</span>
+              <MessageSquare size={20} className="modal-option-icon" />
+              <div className="modal-option-content">
+                <span className="modal-option-title">Can comment</span>
+                <span className="modal-option-desc">View and add comments</span>
               </div>
             </label>
-            <label className={`share-permission-option ${sharePermission === accessLevels.EDIT ? 'selected' : ''}`}>
+            <label className={`modal-option-card ${sharePermission === accessLevels.EDIT ? 'selected' : ''}`}>
               <input
                 type="radio"
                 name="sharePermission"
                 checked={sharePermission === accessLevels.EDIT}
                 onChange={() => onChangePermission(accessLevels.EDIT)}
+                style={{ display: 'none' }}
               />
-              <Edit2 size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">Can edit</span>
-                <span className="share-permission-desc">Full editing access</span>
+              <Edit2 size={20} className="modal-option-icon" />
+              <div className="modal-option-content">
+                <span className="modal-option-title">Can edit</span>
+                <span className="modal-option-desc">Full editing access</span>
               </div>
             </label>
           </div>
@@ -78,7 +81,7 @@ const ShareModal = ({
         </div>
 
         <div className="share-section">
-          <div className="share-section-title">Send via Email</div>
+          <div className="modal-section-label">Send via Email</div>
           <div className="share-email-section">
             <div className="share-email-input">
               <Mail size={18} />

@@ -79,18 +79,18 @@ const ProfileModal = ({ user, onClose, onUpdate, onLogout, showToast }) => {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card profile-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card modal-sm modal-scrollable" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose}>
           <X size={24} />
         </button>
 
-        <div className="profile-header">
-          <div className="profile-avatar">
+        <div className="modal-header-media">
+          <div className="modal-header-media-icon">
             <User size={32} />
           </div>
-          <div className="profile-info">
-            <h3>{user?.name}</h3>
-            <span className="profile-email">{user?.email}</span>
+          <div className="modal-header-media-content">
+            <h3 className="modal-header-media-title">{user?.name}</h3>
+            <span className="modal-header-media-subtitle">{user?.email}</span>
           </div>
         </div>
 

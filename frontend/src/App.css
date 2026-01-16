@@ -6,37 +6,95 @@
   /* Colors - Primary */
   --color-primary: #6366f1;
   --color-primary-hover: #4f46e5;
-  
+
   /* Colors - Text */
   --color-text-primary: #1e293b;
   --color-text-secondary: #64748b;
-  
+  --color-text-muted: #94a3b8;
+
   /* Colors - Background */
   --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f8fafc;
   --color-bg-hover: #f1f5f9;
-  
+  --color-bg-input: #ffffff;
+
   /* Colors - Border */
   --color-border: #e2e8f0;
-  
+  --color-border-light: #f1f5f9;
+
+  /* Colors - Status */
+  --color-success: #10b981;
+  --color-danger: #ef4444;
+  --color-danger-hover: #dc2626;
+
   /* Spacing */
+  --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 12px;
   --space-lg: 16px;
   --space-xl: 20px;
   --space-2xl: 24px;
-  
+
   /* Border Radius */
+  --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
+
+  /* ============================================
+     MODAL DESIGN TOKENS
+     ============================================ */
+
+  /* Modal Sizing */
+  --modal-width-sm: 400px;
+  --modal-width-md: 480px;
+  --modal-width-lg: 520px;
+
+  /* Modal Colors */
+  --modal-bg: #ffffff;
+  --modal-overlay-bg: rgba(0, 0, 0, 0.5);
+  --modal-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+
+  /* Modal Spacing */
+  --modal-padding: 24px;
+  --modal-header-padding: 20px 24px;
+  --modal-footer-padding: 16px 24px;
+  --modal-gap: 12px;
+
+  /* Modal Header */
+  --modal-title-size: 1.125rem;
+  --modal-title-weight: 600;
+  --modal-subtitle-size: 0.875rem;
+
+  /* Modal Option Cards */
+  --modal-card-bg: var(--color-bg-primary);
+  --modal-card-bg-hover: var(--color-bg-hover);
+  --modal-card-border: var(--color-border);
+  --modal-card-radius: 10px;
+  --modal-card-padding: 16px;
 }
 
 [data-theme="dark"] {
+  /* Colors - Text */
   --color-text-primary: #e2e0e8;
   --color-text-secondary: #A48EBB;
+  --color-text-muted: #6b5a80;
+
+  /* Colors - Background */
   --color-bg-primary: #1a1025;
+  --color-bg-secondary: #0d0812;
   --color-bg-hover: #301E3F;
+  --color-bg-input: #0d0812;
+
+  /* Colors - Border */
   --color-border: #301E3F;
+  --color-border-light: #301E3F;
+
+  /* Modal Colors (dark) */
+  --modal-bg: #1a1022;
+  --modal-card-bg: #0d0812;
+  --modal-card-bg-hover: #1a1025;
+  --modal-card-border: #301E3F;
 }
 
 /* ============================================
@@ -1750,27 +1808,57 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--modal-overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  padding: 20px;
+  padding: var(--space-xl);
 }
 
 /* Base Card */
 .modal-card {
   position: relative;
-  background: white;
-  border-radius: 12px;
-  max-width: 400px;
+  background: var(--modal-bg);
+  border-radius: var(--radius-xl);
+  max-width: var(--modal-width-sm);
   width: 100%;
-  box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--modal-shadow);
+  animation: modalFadeIn 0.15s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 [data-theme="dark"] .modal-card {
-  background: #1a1022;
-  border: 1px solid #301E3F;
+  background: var(--modal-bg);
+  border: 1px solid var(--color-border);
+}
+
+/* Modal Size Modifiers */
+.modal-sm { max-width: var(--modal-width-sm); }
+.modal-md { max-width: var(--modal-width-md); }
+.modal-lg { max-width: var(--modal-width-lg); }
+
+/* Scrollable Modal Modifier */
+.modal-scrollable {
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-scrollable .modal-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 /* Header */
@@ -1778,25 +1866,17 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-[data-theme="dark"] .modal-header {
-  border-bottom-color: #301E3F;
+  padding: var(--modal-header-padding);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
 .modal-header h2,
 .modal-header h3 {
   margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-[data-theme="dark"] .modal-header h2,
-[data-theme="dark"] .modal-header h3 {
-  color: #e2e0e8;
+  font-size: var(--modal-title-size);
+  font-weight: var(--modal-title-weight);
+  color: var(--color-text-primary);
 }
 
 /* Header close button is static (flexbox positions it) */
@@ -1807,27 +1887,24 @@ body {
 
 /* Body */
 .modal-body {
-  padding: 24px;
+  padding: var(--modal-padding);
 }
 
 /* Footer */
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #e2e8f0;
-}
-
-[data-theme="dark"] .modal-footer {
-  border-top-color: #301E3F;
+  gap: var(--modal-gap);
+  padding: var(--modal-footer-padding);
+  border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
 /* Close Button */
 .modal-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: var(--space-lg);
+  right: var(--space-lg);
   width: 32px;
   height: 32px;
   display: flex;
@@ -1835,29 +1912,20 @@ body {
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  color: #64748b;
+  color: var(--color-text-secondary);
   transition: all 0.15s;
 }
 
 .modal-close:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
 }
 
 .modal-close svg {
   width: 24px;
   height: 24px;
-}
-
-[data-theme="dark"] .modal-close {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .modal-close:hover {
-  background: #301E3F;
-  color: #e2e0e8;
 }
 
 /* ============================================
@@ -1867,41 +1935,45 @@ body {
 .modal-btn {
   padding: 10px 20px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.15s;
   min-width: 80px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
 }
 
 .modal-btn.primary {
-  background: #6366f1;
+  background: var(--color-primary);
   color: white;
 }
 
 .modal-btn.primary:hover {
-  background: #4f46e5;
+  background: var(--color-primary-hover);
 }
 
 .modal-btn.secondary {
-  background: #f1f5f9;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
 }
 
 .modal-btn.secondary:hover {
-  background: #e2e8f0;
-  color: #1e293b;
+  background: var(--color-border);
+  color: var(--color-text-primary);
 }
 
 .modal-btn.danger {
-  background: #ef4444;
+  background: var(--color-danger);
   color: white;
 }
 
 .modal-btn.danger:hover {
-  background: #dc2626;
+  background: var(--color-danger-hover);
 }
 
 .modal-btn:disabled,
@@ -1912,13 +1984,18 @@ body {
 
 [data-theme="dark"] .modal-btn.secondary {
   background: transparent;
-  border-color: #301E3F;
-  color: #A48EBB;
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 [data-theme="dark"] .modal-btn.secondary:hover {
-  background: #301E3F;
-  color: #e2e0e8;
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+/* Full-width button modifier */
+.modal-btn.full-width {
+  width: 100%;
 }
 
 /* ============================================
@@ -1926,7 +2003,7 @@ body {
    ============================================ */
 
 .modal-card .form-group {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-lg);
 }
 
 .modal-card .form-group:last-child {
@@ -1935,14 +2012,10 @@ body {
 
 .modal-card .form-group label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-sm);
   font-size: 14px;
   font-weight: 500;
-  color: #374151;
-}
-
-[data-theme="dark"] .modal-card .form-group label {
-  color: #e2e0e8;
+  color: var(--color-text-secondary);
 }
 
 .modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
@@ -1950,11 +2023,11 @@ body {
 .modal-card textarea {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   font-size: 14px;
-  background: white;
-  color: #1e293b;
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -1962,13 +2035,13 @@ body {
 .modal-card input:focus,
 .modal-card select:focus,
 .modal-card textarea:focus {
-  border-color: #6366f1;
+  border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .modal-card input::placeholder,
 .modal-card textarea::placeholder {
-  color: #94a3b8;
+  color: var(--color-text-muted);
 }
 
 .modal-card textarea {
@@ -1984,98 +2057,170 @@ body {
   padding-right: 40px;
 }
 
-[data-theme="dark"] .modal-card input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not([type="range"]),
-[data-theme="dark"] .modal-card select,
-[data-theme="dark"] .modal-card textarea {
-  background: #0d0812;
-  border-color: #301E3F;
-  color: #e2e0e8;
-}
-
-[data-theme="dark"] .modal-card input::placeholder,
-[data-theme="dark"] .modal-card textarea::placeholder {
-  color: #6b5a80;
-}
-
 [data-theme="dark"] .modal-card select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A48EBB' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 
 [data-theme="dark"] .modal-card select option {
-  background: #1a1022;
-  color: #e2e0e8;
+  background: var(--modal-bg);
+  color: var(--color-text-primary);
+}
+
+/* Section Labels (for grouped content) */
+.modal-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-md);
 }
 
 /* ============================================
-   4. CONFIRM MODAL
+   3a. HEADER WITH MEDIA (Avatar/Icon/Image)
    ============================================ */
 
-.confirm-modal {
-  max-width: 440px;
-}
-
-.confirm-modal .modal-header + p {
-  padding: 20px 24px 0;
-  margin: 0;
-  color: #64748b;
-  font-size: 15px;
-  line-height: 1.5;
-}
-
-[data-theme="dark"] .confirm-modal .modal-header + p {
-  color: #A48EBB;
-}
-
-.confirm-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 20px 24px;
-}
-
-.prompt-input {
-  margin: 16px 24px;
-  width: calc(100% - 48px);
-}
-
-/* ============================================
-   5. EDIT NODE MODAL (Add Page)
-   ============================================ */
-
-.edit-node-modal {
-  max-width: 500px;
-  max-height: calc(100vh - 96px);
-  display: flex;
-  flex-direction: column;
-}
-
-.edit-node-header {
+.modal-header-media {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid #e2e8f0;
+  gap: var(--space-lg);
+  padding: var(--modal-padding);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header-media-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e879f9 0%, #a855f7 50%, #7c3aed 100%);
+  border-radius: 50%;
+  color: white;
   flex-shrink: 0;
 }
 
-[data-theme="dark"] .edit-node-header {
-  border-bottom-color: #301E3F;
+.modal-header-media-icon.square {
+  border-radius: var(--radius-lg);
 }
 
-.edit-node-header h3 {
+.modal-header-media-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.modal-header-media-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-header-media-title {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--modal-title-size);
+  font-weight: var(--modal-title-weight);
+  color: var(--color-text-primary);
+}
+
+.modal-header-media-subtitle {
+  margin: 2px 0 0;
+  font-size: var(--modal-subtitle-size);
+  color: var(--color-text-secondary);
+}
+
+/* ============================================
+   3b. OPTION CARDS (Selectable items with icon + text)
+   ============================================ */
+
+.modal-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--modal-gap);
+}
+
+.modal-option-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--modal-card-padding);
+  background: var(--modal-card-bg);
+  border: 1px solid var(--modal-card-border);
+  border-radius: var(--modal-card-radius);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.modal-option-card:hover:not(.disabled) {
+  background: var(--modal-card-bg-hover);
+  border-color: var(--color-primary);
+}
+
+.modal-option-card:hover:not(.disabled) .modal-option-icon {
+  color: var(--color-primary);
+}
+
+.modal-option-icon {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.modal-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-option-title {
+  font-size: 14px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-text-primary);
 }
 
-[data-theme="dark"] .edit-node-header h3 {
-  color: #e2e0e8;
+.modal-option-desc {
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
-.edit-node-modal .modal-close {
-  position: static;
+/* Selected state for radio-style options */
+.modal-option-card.selected {
+  border-color: var(--color-primary);
+  background: rgba(99, 102, 241, 0.05);
 }
+
+[data-theme="dark"] .modal-option-card.selected {
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.modal-option-card.selected .modal-option-icon {
+  color: var(--color-primary);
+}
+
+/* Disabled state */
+.modal-option-card.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Badge for option cards */
+.modal-option-badge {
+  padding: 4px 8px;
+  background: var(--color-bg-hover);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-left: auto;
+}
+
+/* ============================================
+   4. EDIT NODE MODAL (Add/Edit Page)
+   ============================================ */
 
 .edit-node-form {
   display: flex;
@@ -2087,23 +2232,19 @@ body {
 .edit-node-form-content {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: var(--modal-padding);
 }
 
 .edit-node-form-content .form-group {
-  margin-bottom: 12px;
+  margin-bottom: var(--space-md);
 }
 
 .edit-node-footer {
   display: flex;
-  gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #e2e8f0;
+  gap: var(--modal-gap);
+  padding: var(--modal-footer-padding);
+  border-top: 1px solid var(--color-border);
   flex-shrink: 0;
-}
-
-[data-theme="dark"] .edit-node-footer {
-  border-top-color: #301E3F;
 }
 
 .edit-node-footer .modal-btn {
@@ -2201,12 +2342,8 @@ body {
 }
 
 /* ============================================
-   6. AUTH MODAL
+   5. AUTH MODAL
    ============================================ */
-
-.auth-modal {
-  max-width: 400px;
-}
 
 .auth-tabs {
   display: flex;
@@ -2338,56 +2475,8 @@ body {
 }
 
 /* ============================================
-   7. PROFILE MODAL
+   6. PROFILE MODAL
    ============================================ */
-
-.profile-modal {
-  max-width: 440px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.profile-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-[data-theme="dark"] .profile-header {
-  border-bottom-color: #301E3F;
-}
-
-.profile-avatar {
-  width: 56px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #e879f9 0%, #a855f7 50%, #7c3aed 100%);
-  border-radius: 50%;
-  color: white;
-}
-
-.profile-info h3 {
-  margin: 0;
-  font-size: 18px;
-  color: #1e293b;
-}
-
-[data-theme="dark"] .profile-info h3 {
-  color: #e2e0e8;
-}
-
-.profile-email {
-  font-size: 14px;
-  color: #64748b;
-}
-
-[data-theme="dark"] .profile-email {
-  color: #A48EBB;
-}
 
 .profile-form {
   padding: 20px 24px 24px;
@@ -2471,12 +2560,8 @@ body {
 }
 
 /* ============================================
-   8. PROJECTS MODAL
+   7. PROJECTS MODAL
    ============================================ */
-
-.projects-modal {
-  max-width: 520px;
-}
 
 .projects-list {
   max-height: 400px;
@@ -2721,12 +2806,8 @@ body {
 }
 
 /* ============================================
-   9. SAVE MAP MODAL
+   8. SAVE MAP MODAL
    ============================================ */
-
-.save-map-modal {
-  max-width: 400px;
-}
 
 .save-map-form {
   padding: 20px 24px;
@@ -2805,12 +2886,8 @@ body {
 }
 
 /* ============================================
-   10. HISTORY MODAL
+   9. HISTORY MODAL
    ============================================ */
-
-.history-modal {
-  max-width: 520px;
-}
 
 .history-modal .modal-header {
   border-bottom: none;
@@ -2971,91 +3048,8 @@ body {
 }
 
 /* ============================================
-   11. EXPORT MODAL
+   10. IMPORT MODAL
    ============================================ */
-
-.export-modal {
-  max-width: 400px;
-}
-
-.export-options {
-  padding: 0 24px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.export-btn {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  cursor: pointer;
-  text-align: left;
-}
-
-.export-btn:hover {
-  background: #f1f5f9;
-  border-color: #6366f1;
-}
-
-.export-btn:hover svg {
-  color: #6366f1;
-}
-
-.export-btn svg {
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.export-btn-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.export-btn-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.export-btn-desc {
-  font-size: 12px;
-  color: #64748b;
-}
-
-[data-theme="dark"] .export-btn {
-  background: #0d0812;
-  border-color: #301E3F;
-}
-
-[data-theme="dark"] .export-btn:hover {
-  background: #1a1025;
-}
-
-[data-theme="dark"] .export-btn svg {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .export-btn-title {
-  color: #e2e0e8;
-}
-
-[data-theme="dark"] .export-btn-desc {
-  color: #6b5a80;
-}
-
-/* ============================================
-   12. IMPORT MODAL
-   ============================================ */
-
-.import-modal {
-  max-width: 480px;
-}
 
 .import-info {
   margin-bottom: 20px;
@@ -3150,112 +3144,8 @@ body {
 }
 
 /* ============================================
-   13. CREATE MAP MODAL
+   11. SHARE MODAL
    ============================================ */
-
-.create-map-modal {
-  max-width: 480px;
-}
-
-.create-map-options {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.create-map-option {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  cursor: pointer;
-  text-align: left;
-  position: relative;
-}
-
-.create-map-option:hover:not(.disabled) {
-  background: #f1f5f9;
-  border-color: #6366f1;
-}
-
-.create-map-option:hover:not(.disabled) svg {
-  color: #6366f1;
-}
-
-.create-map-option svg {
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.create-map-option-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.create-map-option-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.create-map-option-desc {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.create-map-option.disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.coming-soon-badge {
-  position: absolute;
-  right: 16px;
-  padding: 4px 8px;
-  background: #e2e8f0;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-}
-
-[data-theme="dark"] .create-map-option {
-  background: #0d0812;
-  border-color: #301E3F;
-}
-
-[data-theme="dark"] .create-map-option:hover:not(.disabled) {
-  background: #1a1025;
-}
-
-[data-theme="dark"] .create-map-option svg {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .create-map-option-title {
-  color: #e2e0e8;
-}
-
-[data-theme="dark"] .create-map-option-desc {
-  color: #6b5a80;
-}
-
-[data-theme="dark"] .coming-soon-badge {
-  background: #301E3F;
-  color: #A48EBB;
-}
-
-/* ============================================
-   14. SHARE MODAL
-   ============================================ */
-
-.share-modal {
-  max-width: 400px;
-}
 
 .share-section {
   padding: 0 24px 20px;
@@ -3263,98 +3153,6 @@ body {
 
 .share-section:last-child {
   padding-bottom: 24px;
-}
-
-.share-section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 12px;
-}
-
-[data-theme="dark"] .share-section-title {
-  color: #A48EBB;
-}
-
-.share-permission-options {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.share-permission-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.share-permission-option:hover {
-  background: #f8fafc;
-}
-
-.share-permission-option.selected {
-  border-color: #6366f1;
-  background: #eef2ff;
-}
-
-.share-permission-option input {
-  display: none;
-}
-
-.share-permission-option svg {
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.share-permission-option.selected svg {
-  color: #6366f1;
-}
-
-.share-permission-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.share-permission-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.share-permission-desc {
-  font-size: 12px;
-  color: #64748b;
-}
-
-[data-theme="dark"] .share-permission-option {
-  border-color: #301E3F;
-}
-
-[data-theme="dark"] .share-permission-option:hover {
-  background: #0d0812;
-}
-
-[data-theme="dark"] .share-permission-option.selected {
-  background: rgba(99, 102, 241, 0.1);
-}
-
-[data-theme="dark"] .share-permission-option svg {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .share-permission-label {
-  color: #e2e0e8;
-}
-
-[data-theme="dark"] .share-permission-desc {
-  color: #6b5a80;
 }
 
 .share-link-btn {

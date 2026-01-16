@@ -118,7 +118,7 @@ const SaveMapModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card save-map-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Save Map</h3>
           <button className="modal-close" onClick={onClose}>

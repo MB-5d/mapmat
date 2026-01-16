@@ -19,24 +19,25 @@ const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onC
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card confirm-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-card modal-sm" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h3>{title}</h3>
           <button className="modal-close" onClick={onCancel}>
             <X size={24} />
           </button>
         </div>
-        {message && <p>{message}</p>}
         <form onSubmit={handleSubmit}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={placeholder}
-            className="prompt-input"
-          />
-          <div className="confirm-modal-actions">
+          <div className="modal-body">
+            {message && <p style={{ color: 'var(--color-text-secondary)', margin: '0 0 16px' }}>{message}</p>}
+            <input
+              ref={inputRef}
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={placeholder}
+            />
+          </div>
+          <div className="modal-footer">
             <button type="button" className="modal-btn secondary" onClick={onCancel}>
               Cancel
             </button>

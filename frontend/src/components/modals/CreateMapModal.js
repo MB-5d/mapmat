@@ -11,7 +11,7 @@ const CreateMapModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card create-map-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-card modal-md" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Create New Map</h2>
           <button className="modal-close" onClick={onClose}>
@@ -19,41 +19,41 @@ const CreateMapModal = ({
           </button>
         </div>
         <div className="modal-body">
-          <div className="create-map-options">
+          <div className="modal-options">
             <button
-              className="create-map-option"
+              className="modal-option-card"
               onClick={() => {
                 onClose();
                 onStartFromScratch();
               }}
             >
-              <FileText size={24} />
-              <div className="create-map-option-text">
-                <span className="create-map-option-title">Start from Scratch</span>
-                <span className="create-map-option-desc">Begin with a blank canvas</span>
+              <FileText size={24} className="modal-option-icon" />
+              <div className="modal-option-content">
+                <span className="modal-option-title">Start from Scratch</span>
+                <span className="modal-option-desc">Begin with a blank canvas</span>
               </div>
             </button>
 
-            <button className="create-map-option disabled" disabled>
-              <LayoutTemplate size={24} />
-              <div className="create-map-option-text">
-                <span className="create-map-option-title">Start from Template</span>
-                <span className="create-map-option-desc">Product, Ecommerce, Blog...</span>
+            <button className="modal-option-card disabled" disabled>
+              <LayoutTemplate size={24} className="modal-option-icon" />
+              <div className="modal-option-content">
+                <span className="modal-option-title">Start from Template</span>
+                <span className="modal-option-desc">Product, Ecommerce, Blog...</span>
               </div>
-              <span className="coming-soon-badge">Coming Soon</span>
+              <span className="modal-option-badge">Coming Soon</span>
             </button>
 
             <button
-              className="create-map-option"
+              className="modal-option-card"
               onClick={() => {
                 onClose();
                 onImportFromFile();
               }}
             >
-              <Upload size={24} />
-              <div className="create-map-option-text">
-                <span className="create-map-option-title">Import from File</span>
-                <span className="create-map-option-desc">XML sitemap, CSV, JSON</span>
+              <Upload size={24} className="modal-option-icon" />
+              <div className="modal-option-content">
+                <span className="modal-option-title">Import from File</span>
+                <span className="modal-option-desc">XML sitemap, CSV, JSON</span>
               </div>
             </button>
           </div>

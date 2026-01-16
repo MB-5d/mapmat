@@ -15,7 +15,7 @@ const HistoryModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card history-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card modal-lg history-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Scan History</h3>
           <button className="modal-close" onClick={onClose}>
