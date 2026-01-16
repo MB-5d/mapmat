@@ -847,6 +847,17 @@ process.on('SIGINT', async () => {
   process.exit();
 });
 
-app.listen(PORT, () => {
-  console.log(`Map Mat Backend running on http://localhost:${PORT}`);
-});
+function startServer(port) {
+  app.listen(port, () => {
+    console.log(`Map Mat Backend running on http://localhost:${port}`);
+  }).on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Port ${port} is in use, trying port ${port + 1}...`);
+      startServer(port + 1);
+    } else {
+      console.error(err);
+    }
+  });
+}
+
+startServer(PORT);
