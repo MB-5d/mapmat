@@ -608,15 +608,6 @@ const SitemapTree = ({
       {/* Single SVG overlay for all connectors */}
       <svg
         className="connector-overlay"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-          overflow: 'visible',
-        }}
         aria-hidden="true"
       >
         {connectorPaths.map((d, i) => (
@@ -640,7 +631,6 @@ const SitemapTree = ({
               position: 'absolute',
               left: nodeData.x,
               top: nodeData.y,
-              width: LAYOUT.NODE_W,
             }}
             onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
             onClick={() => onNodeClick?.(nodeData.node)}
@@ -691,7 +681,6 @@ const SitemapTree = ({
                 position: 'absolute',
                 left: stackX,
                 top: stackY,
-                width: LAYOUT.NODE_W,
               }}
               onClick={() => toggleStack(nodeData.node.id)}
               title={`Click to expand ${nodeData.node.children.length} pages`}
@@ -733,7 +722,6 @@ const SitemapTree = ({
               key={`collapse-${nodeData.node.id}`}
               className="collapse-stack-btn"
               style={{
-                position: 'absolute',
                 left: buttonX,
                 top: buttonY,
               }}

@@ -1,3 +1,16 @@
+:root {
+  --node-w: 288px;
+  --node-h-collapsed: 200px;
+  --node-h-thumb: 262px;
+  --gap-l1-x: 80px;
+  --gap-stack-y: 56px;
+  --indent-x: 40px;
+  --bus-y-gap: 80px;
+  --orphan-group-gap: 160px;
+  --stroke-pad-x: 20px;
+  --root-y: 0px;
+}
+
 /* Prevent browser pinch-to-zoom on the entire app */
 html {
   touch-action: pan-x pan-y;
@@ -575,6 +588,7 @@ body {
 .sitemap-node-positioned {
   position: absolute;
   z-index: 1;
+  width: var(--node-w);
 }
 
 /* Stacked cards positioning */
@@ -582,6 +596,7 @@ body {
   position: absolute;
   z-index: 2;
   cursor: pointer;
+  width: var(--node-w);
 }
 
 .stacked-preview {
@@ -693,6 +708,7 @@ body {
   color: #64748b;
   cursor: pointer;
   transition: all 0.2s;
+  position: absolute;
 }
 
 .collapse-stack-btn:hover {
