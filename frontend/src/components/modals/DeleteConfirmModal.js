@@ -6,7 +6,7 @@ const DeleteConfirmModal = ({ node, onCancel, onConfirm }) => {
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card confirm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Delete Page</h3>
           <button className="modal-close" onClick={onCancel}>

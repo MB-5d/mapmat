@@ -1,3 +1,48 @@
+/* ============================================
+   DESIGN SYSTEM TOKENS
+   ============================================ */
+
+:root {
+  /* Colors - Primary */
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  
+  /* Colors - Text */
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #64748b;
+  
+  /* Colors - Background */
+  --color-bg-primary: #ffffff;
+  --color-bg-hover: #f1f5f9;
+  
+  /* Colors - Border */
+  --color-border: #e2e8f0;
+  
+  /* Spacing */
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  
+  /* Border Radius */
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+[data-theme="dark"] {
+  --color-text-primary: #e2e0e8;
+  --color-text-secondary: #A48EBB;
+  --color-bg-primary: #1a1025;
+  --color-bg-hover: #301E3F;
+  --color-border: #301E3F;
+}
+
+/* ============================================
+   END DESIGN SYSTEM TOKENS
+   ============================================ */
+
 /* Prevent browser pinch-to-zoom on the entire app */
 html {
   touch-action: pan-x pan-y;
@@ -2381,34 +2426,6 @@ body {
   padding: 0;
 }
 
-.projects-modal h3 {
-  padding: 20px 24px;
-  margin: 0;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.projects-modal .modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #64748b;
-  transition: all 0.2s;
-}
-
-.projects-modal .modal-close:hover {
-  background: #f1f5f9;
-  color: #1e293b;
-}
-
 .projects-list {
   max-height: 400px;
   overflow-y: auto;
@@ -2635,28 +2652,6 @@ body {
 .save-map-modal {
   max-width: 400px;
   padding: 0;
-}
-
-.save-map-modal h3 {
-  padding: 20px 24px;
-  margin: 0;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.save-map-modal .modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #64748b;
 }
 
 /* History Modal */
@@ -3120,28 +3115,6 @@ body {
 .export-modal {
   max-width: 400px;
   padding: 0;
-}
-
-.export-modal h3 {
-  padding: 20px 24px;
-  margin: 0;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.export-modal .modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #64748b;
 }
 
 .export-options {
@@ -4206,36 +4179,6 @@ body {
   overflow: hidden;
 }
 
-.share-modal h3 {
-  padding: 20px 24px;
-  margin: 0;
-  border-bottom: 1px solid #e2e8f0;
-  font-size: 18px;
-  color: #1e293b;
-}
-
-.share-modal .modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #64748b;
-  transition: all 0.2s;
-}
-
-.share-modal .modal-close:hover {
-  background: #f1f5f9;
-  color: #1e293b;
-}
-
 .share-section {
   padding: 20px 24px;
 }
@@ -4418,7 +4361,7 @@ body {
 
 /* Scanning Modal */
 .scanning-overlay {
-  background: rgba(15, 23, 42, 0.8);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
 }
 
@@ -5073,20 +5016,6 @@ body {
   border: 1px solid #301E3F;
 }
 
-[data-theme="dark"] .projects-modal h3 {
-  color: #e2e0e8;
-  border-bottom-color: #301E3F;
-}
-
-[data-theme="dark"] .projects-modal .modal-close {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .projects-modal .modal-close:hover {
-  background: #301E3F;
-  color: #e2e0e8;
-}
-
 [data-theme="dark"] .project-folder {
   border-color: #301E3F;
   background: #0d0812;
@@ -5241,38 +5170,10 @@ body {
   border: 1px solid #301E3F;
 }
 
-[data-theme="dark"] .save-map-modal h3 {
-  color: #e2e0e8;
-  border-bottom-color: #301E3F;
-}
-
-[data-theme="dark"] .save-map-modal .modal-close {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .save-map-modal .modal-close:hover {
-  background: #301E3F;
-  color: #e2e0e8;
-}
-
 /* Export Modal - Dark Mode */
 [data-theme="dark"] .export-modal {
   background: #1a1022;
   border: 1px solid #301E3F;
-}
-
-[data-theme="dark"] .export-modal h3 {
-  color: #e2e0e8;
-  border-bottom-color: #301E3F;
-}
-
-[data-theme="dark"] .export-modal .modal-close {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .export-modal .modal-close:hover {
-  background: #301E3F;
-  color: #e2e0e8;
 }
 
 [data-theme="dark"] .export-options {
@@ -5310,20 +5211,6 @@ body {
 [data-theme="dark"] .share-modal {
   background: #1a1022;
   border: 1px solid #301E3F;
-}
-
-[data-theme="dark"] .share-modal h3 {
-  color: #e2e0e8;
-  border-bottom-color: #301E3F;
-}
-
-[data-theme="dark"] .share-modal .modal-close {
-  color: #A48EBB;
-}
-
-[data-theme="dark"] .share-modal .modal-close:hover {
-  background: #301E3F;
-  color: #e2e0e8;
 }
 
 [data-theme="dark"] .share-section {
@@ -6734,7 +6621,7 @@ body {
 }
 
 [data-theme="dark"] .scanning-overlay {
-  background: rgba(0, 0, 0, 0.7) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
 }
 
 /* ----------------------------------------
