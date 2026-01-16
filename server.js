@@ -49,7 +49,7 @@ app.use('/screenshots', express.static(SCREENSHOT_DIR));
 app.use('/auth', authRouter);
 app.use('/api', apiRouter);
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4001;
 
 // Browser instance for screenshots
 let browser = null;
@@ -847,17 +847,6 @@ process.on('SIGINT', async () => {
   process.exit();
 });
 
-function startServer(port) {
-  app.listen(port, () => {
-    console.log(`Map Mat Backend running on http://localhost:${port}`);
-  }).on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.log(`Port ${port} is in use, trying port ${port + 1}...`);
-      startServer(port + 1);
-    } else {
-      console.error(err);
-    }
-  });
-}
-
-startServer(PORT);
+app.listen(PORT, () => {
+  console.log(`Map Mat Backend running on http://localhost:${PORT}`);
+});
