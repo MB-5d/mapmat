@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -1314,7 +1314,10 @@ export default function App() {
   );
 
   // Calculate map bounds and clamp pan to limit scrolling
-  const clampPan = (newPan) => {
+  const panRef = useRef(pan);
+  panRef.current = pan;
+
+  const clampPan = useCallback((newPan) => {
     if (!contentRef.current || !canvasRef.current) return newPan;
 
     const cards = contentRef.current.querySelectorAll('[data-node-card="1"]');
@@ -1330,8 +1333,8 @@ export default function App() {
     let contentLeft = Infinity, contentTop = Infinity, contentRight = -Infinity, contentBottom = -Infinity;
     cards.forEach(card => {
       const rect = card.getBoundingClientRect();
-      const x = rect.left - canvasRect.left - pan.x;
-      const y = rect.top - canvasRect.top - pan.y;
+      const x = rect.left - canvasRect.left - panRef.current.x;
+      const y = rect.top - canvasRect.top - panRef.current.y;
       contentLeft = Math.min(contentLeft, x);
       contentTop = Math.min(contentTop, y);
       contentRight = Math.max(contentRight, x + rect.width);
@@ -1366,20 +1369,12 @@ export default function App() {
     // So: pan.y <= viewportHeight - padding - contentTop
     const maxPanY = viewportHeight - padding - contentTop;
 
-    console.log('CLAMP DEBUG:', {
-      padding,
-      viewport: { w: viewportWidth, h: viewportHeight },
-      content: { left: contentLeft, right: contentRight, top: contentTop, bottom: contentBottom },
-      limits: { minPanX, maxPanX, minPanY, maxPanY },
-      newPan,
-    });
-
     // 4. Clamp
     const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
     const clampedY = Math.max(minPanY, Math.min(maxPanY, newPan.y));
 
     return { x: clampedX, y: clampedY };
-  };
+  }, []);
 
   // Check auth and load data on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5191,7 +5186,7 @@ const findNodeById = (node, id) => {
         projects={projects}
         currentMap={currentMap}
         rootUrl={root?.url}
-        defaultProjectId={selectedProjectForNewMap}
+        defaultProjectId={null}
         defaultName={mapName}
         onSave={saveMap}
         onCreateProject={createProject}

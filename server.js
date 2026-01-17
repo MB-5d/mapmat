@@ -49,7 +49,7 @@ app.use('/screenshots', express.static(SCREENSHOT_DIR));
 app.use('/auth', authRouter);
 app.use('/api', apiRouter);
 
-const PORT = process.env.PORT || 4001;
+const PORT = process.env.PORT || 4002;
 
 // Browser instance for screenshots
 let browser = null;
