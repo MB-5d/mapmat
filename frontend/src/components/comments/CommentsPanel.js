@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
+
 const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNode }) => {
   const [filter, setFilter] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all', 'author', 'mention'
@@ -71,21 +75,21 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
     <div className="comments-panel">
       <div className="comments-panel-header">
         <h3>All Comments</h3>
-        <button className="comments-panel-close" onClick={onClose}>
+        <IconButton className="comments-panel-close" onClick={onClose} aria-label="Close comments panel">
           <X size={18} />
-        </button>
+        </IconButton>
       </div>
 
       <div className="comments-panel-filter">
         <div className="comments-filter-row">
-          <input
+          <TextInput
             type="text"
             placeholder="Filter comments..."
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="comments-filter-input"
           />
-          <select
+          <SelectInput
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
             className="comments-filter-select"
@@ -93,7 +97,7 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
             <option value="all">All</option>
             <option value="author">By Author</option>
             <option value="mention">By Mention</option>
-          </select>
+          </SelectInput>
         </div>
         <label className="comments-filter-toggle">
           <input

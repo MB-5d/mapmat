@@ -1,6 +1,8 @@
 import React from 'react';
 import { Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
+
 const ZoomControls = ({
   scale,
   onZoomOut,
@@ -9,20 +11,20 @@ const ZoomControls = ({
   onResetView,
 }) => (
   <div className="zoom-controls">
-    <button className="zoom-btn" onClick={onZoomOut} title="Zoom Out">
+    <IconButton size="sm" onClick={onZoomOut} title="Zoom Out" aria-label="Zoom Out">
       <ZoomOut size={18} />
-    </button>
+    </IconButton>
     <span className="zoom-level">{Math.round(scale * 100)}%</span>
-    <button className="zoom-btn" onClick={onZoomIn} title="Zoom In">
+    <IconButton size="sm" onClick={onZoomIn} title="Zoom In" aria-label="Zoom In">
       <ZoomIn size={18} />
-    </button>
+    </IconButton>
     <div className="zoom-divider" />
-    <button className="zoom-btn" onClick={onFitToScreen} title="Fit to Screen">
+    <IconButton size="sm" onClick={onFitToScreen} title="Fit to Screen" aria-label="Fit to Screen">
       <Minimize2 size={18} />
-    </button>
-    <button className="zoom-btn" onClick={onResetView} title="Reset View (100%)">
+    </IconButton>
+    <IconButton size="sm" onClick={onResetView} title="Reset View (100%)" aria-label="Reset View">
       <Maximize2 size={18} />
-    </button>
+    </IconButton>
   </div>
 );
 

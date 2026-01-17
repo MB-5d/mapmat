@@ -8,6 +8,10 @@ import {
   X,
 } from 'lucide-react';
 
+import Button from '../ui/Button';
+import IconButton from '../ui/IconButton';
+import TextareaInput from '../ui/TextareaInput';
+
 const CommentPopover = ({
   node,
   onClose,
@@ -141,9 +145,9 @@ const CommentPopover = ({
     <div className="comment-popover">
       <div className="comment-popover-header">
         <h3>Comments on "{node.title || 'Untitled'}"</h3>
-        <button className="comment-popover-close" onClick={handleCancel}>
+        <IconButton className="comment-popover-close" onClick={handleCancel} aria-label="Close comments">
           <X size={18} />
-        </button>
+        </IconButton>
       </div>
 
       <div className="comment-popover-body">
@@ -168,7 +172,7 @@ const CommentPopover = ({
               </div>
             )}
             <div className="comment-input-wrapper">
-              <textarea
+              <TextareaInput
                 ref={inputRef}
                 className="comment-input"
                 placeholder={replyingTo ? "Write a reply..." : "Add a comment...\n(use @ to mention)"}
@@ -209,17 +213,18 @@ const CommentPopover = ({
       </div>
 
       <div className="comment-popover-footer">
-        <button className="comment-cancel-btn" onClick={handleCancel}>
+        <Button variant="secondary" size="md" onClick={handleCancel}>
           {canComment ? 'Cancel' : 'Close'}
-        </button>
+        </Button>
         {canComment && (
-          <button
-            className="comment-submit-btn"
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleSubmit}
             disabled={!newComment.trim()}
           >
             Save
-          </button>
+          </Button>
         )}
       </div>
     </div>
