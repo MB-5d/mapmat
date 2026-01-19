@@ -98,7 +98,7 @@ const LandingPage = ({ onLaunchApp }) => {
     },
     {
       icon: <Download size={28} />,
-      title: 'Export Anywhere',
+      title: 'Download Anywhere',
       description: 'Download as PNG, PDF, or SVG. Perfect for presentations, documentation, and audits.'
     }
   ];
@@ -106,7 +106,7 @@ const LandingPage = ({ onLaunchApp }) => {
   const howItWorks = [
     { step: '1', title: 'Enter URL', description: 'Paste any website URL into the scan bar' },
     { step: '2', title: 'Watch it Map', description: 'Our crawler discovers pages and builds your tree' },
-    { step: '3', title: 'Explore & Export', description: 'Navigate the map, customize colors, and export' }
+    { step: '3', title: 'Explore & Download', description: 'Navigate the map, customize colors, and download' }
   ];
 
   const faqs = [
@@ -197,7 +197,7 @@ You have the right to:
 - Access your personal data
 - Correct inaccurate data
 - Delete your account and data
-- Export your data
+- Download your data
 
 6. Cookies
 We use essential cookies for authentication and preferences. No third-party tracking cookies are used.
@@ -373,7 +373,7 @@ Legal inquiries: legal@mapmat.com`
               <li><Check size={20} /> No more manual documentation</li>
               <li><Check size={20} /> Instant visual understanding</li>
               <li><Check size={20} /> Share with one click</li>
-              <li><Check size={20} /> Export for any use case</li>
+              <li><Check size={20} /> Download for any use case</li>
             </ul>
           </div>
         </div>

@@ -118,7 +118,7 @@ const SaveMapModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card save-map-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-card modal-md save-map-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Save Map</h3>
           <button className="modal-close" onClick={onClose}>
@@ -126,28 +126,30 @@ const SaveMapModal = ({
           </button>
         </div>
 
-        {!isLoggedIn ? (
-          <div className="login-prompt">
-            <p>Please sign in to save your maps</p>
-            <button
-              className="modal-btn primary"
-              onClick={onRequireLogin}
-            >
-              Sign In
-            </button>
-          </div>
-        ) : (
-          <SaveMapForm
-            projects={projects}
-            currentMap={currentMap}
-            rootUrl={rootUrl}
-            defaultProjectId={defaultProjectId}
-            defaultName={defaultName}
-            onSave={onSave}
-            onCreateProject={onCreateProject}
-            onCancel={onClose}
-          />
-        )}
+        <div className="modal-body">
+          {!isLoggedIn ? (
+            <div className="login-prompt">
+              <p>Please sign in to save your maps</p>
+              <button
+                className="modal-btn primary"
+                onClick={onRequireLogin}
+              >
+                Sign In
+              </button>
+            </div>
+          ) : (
+            <SaveMapForm
+              projects={projects}
+              currentMap={currentMap}
+              rootUrl={rootUrl}
+              defaultProjectId={defaultProjectId}
+              defaultName={defaultName}
+              onSave={onSave}
+              onCreateProject={onCreateProject}
+              onCancel={onClose}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

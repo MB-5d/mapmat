@@ -36,92 +36,97 @@ const AuthModal = ({ onClose, onSuccess, showToast }) => {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card auth-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose}>
-          <X size={24} />
-        </button>
-
-        <div className="auth-tabs">
-          <button
-            className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
-            onClick={() => { setMode('login'); setError(''); }}
-          >
-            Log In
-          </button>
-          <button
-            className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
-            onClick={() => { setMode('signup'); setError(''); }}
-          >
-            Sign Up
+      <div className="modal-card modal-md modal-scrollable auth-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Account</h3>
+          <button className="modal-close" onClick={onClose}>
+            <X size={24} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="auth-form">
-          {error && <div className="auth-error">{error}</div>}
+        <div className="modal-body">
+          <div className="auth-tabs">
+            <button
+              className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
+              onClick={() => { setMode('login'); setError(''); }}
+            >
+              Log In
+            </button>
+            <button
+              className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
+              onClick={() => { setMode('signup'); setError(''); }}
+            >
+              Sign Up
+            </button>
+          </div>
 
-          {mode === 'signup' && (
+          <form onSubmit={handleSubmit} className="auth-form">
+            {error && <div className="auth-error">{error}</div>}
+
+            {mode === 'signup' && (
+              <div className="form-group">
+                <label>Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name"
+                  autoComplete="name"
+                />
+              </div>
+            )}
+
             <div className="form-group">
-              <label>Name</label>
+              <label>Email</label>
               <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-                autoComplete="name"
-              />
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              required
-              autoComplete="email"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Password</label>
-            <div className="password-input">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
                 required
-                minLength={mode === 'signup' ? 6 : undefined}
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                autoComplete="email"
               />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
             </div>
+
+            <div className="form-group">
+              <label>Password</label>
+              <div className="password-input">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
+                  required
+                  minLength={mode === 'signup' ? 6 : undefined}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="modal-btn primary auth-submit"
+              disabled={loading}
+            >
+              {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
+              {mode === 'login' ? 'Log In' : 'Create Account'}
+            </button>
+          </form>
+
+          <div className="auth-footer">
+            {mode === 'login' ? (
+              <span>Don't have an account? <button onClick={() => setMode('signup')}>Sign up</button></span>
+            ) : (
+              <span>Already have an account? <button onClick={() => setMode('login')}>Log in</button></span>
+            )}
           </div>
-
-          <button
-            type="submit"
-            className="modal-btn primary auth-submit"
-            disabled={loading}
-          >
-            {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
-            {mode === 'login' ? 'Log In' : 'Create Account'}
-          </button>
-        </form>
-
-        <div className="auth-footer">
-          {mode === 'login' ? (
-            <span>Don't have an account? <button onClick={() => setMode('signup')}>Sign up</button></span>
-          ) : (
-            <span>Already have an account? <button onClick={() => setMode('login')}>Log in</button></span>
-          )}
         </div>
       </div>
     </div>

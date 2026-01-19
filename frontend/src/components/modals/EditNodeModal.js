@@ -119,8 +119,8 @@ const EditNodeModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card edit-node-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="edit-node-header">
+      <div className="modal-card modal-lg modal-scrollable edit-node-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
           <h3>{modalTitle}</h3>
           <button className="modal-close" onClick={onClose}>
             <X size={24} />
@@ -128,7 +128,7 @@ const EditNodeModal = ({
         </div>
 
         <form onSubmit={handleSubmit} className="edit-node-form">
-          <div className="edit-node-form-content">
+          <div className="modal-body edit-node-form-content">
             <div className="form-group">
               <label>Page Title<span className="required-asterisk">*</span></label>
               <input
@@ -300,7 +300,7 @@ const EditNodeModal = ({
             </div>
           </div>
 
-          <div className="edit-node-footer">
+          <div className="modal-footer">
             <button type="button" className="modal-btn secondary" onClick={onClose}>
               Cancel
             </button>

@@ -2439,7 +2439,7 @@ export default function App() {
   const exportJson = () => {
     if (!root) return;
     downloadText('sitemap.json', JSON.stringify({ root, colors }, null, 2));
-    showToast('Exported JSON');
+    showToast('Downloaded JSON');
   };
 
   const exportCsv = () => {
@@ -2478,7 +2478,7 @@ export default function App() {
     ];
 
     downloadText('sitemap.csv', csvRows.join('\n'));
-    showToast('Exported CSV');
+    showToast('Downloaded CSV');
   };
 
   const exportPdf = async () => {
@@ -2511,7 +2511,7 @@ export default function App() {
       if (!cards.length) {
         setScale(savedScale);
         setPan(savedPan);
-        showToast('No content to export', 'warning');
+        showToast('No content to download', 'warning');
         return;
       }
 
@@ -2610,13 +2610,13 @@ export default function App() {
       // Add SVG as image (jsPDF supports SVG data URLs)
       pdf.addImage(svgDataUrl, 'SVG', xOffset, yOffset, finalWidth, finalHeight);
 
-      const hostname = getHostname(root.url) || 'export';
+      const hostname = getHostname(root.url) || 'download';
       pdf.save(`sitemap-${hostname}.pdf`);
-      showToast('PDF exported successfully', 'success');
+      showToast('PDF downloaded successfully', 'success');
     } catch (e) {
       console.error('PDF export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
-      showToast(`PDF export failed: ${errorMsg}`, 'error');
+      showToast(`PDF download failed: ${errorMsg}`, 'error');
       // Restore grid and transform state on error
       if (contentRef.current) contentRef.current.classList.remove('export-mode');
       setScale(savedScale);
@@ -2709,7 +2709,7 @@ export default function App() {
     document.body.removeChild(link);
     // Delay URL revocation to allow download to start
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    showToast('Site Index exported', 'success');
+    showToast('Site Index downloaded', 'success');
   };
 
   const copyShareLink = async (permission = sharePermission) => {
@@ -2796,7 +2796,7 @@ export default function App() {
       if (!cards.length) {
         setScale(savedScale);
         setPan(savedPan);
-        showToast('No content to export', 'warning');
+        showToast('No content to download', 'warning');
         return;
       }
 
@@ -2864,15 +2864,15 @@ export default function App() {
 
       // Download
       const link = document.createElement('a');
-      link.download = `sitemap-${getHostname(root.url) || 'export'}-${Date.now()}.png`;
+      link.download = `sitemap-${getHostname(root.url) || 'download'}-${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
 
-      showToast('PNG exported successfully', 'success');
+      showToast('PNG downloaded successfully', 'success');
     } catch (e) {
       console.error('PNG export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
-      showToast(`PNG export failed: ${errorMsg}`, 'error');
+      showToast(`PNG download failed: ${errorMsg}`, 'error');
       // Restore grid dots on error
       if (contentRef.current) contentRef.current.classList.remove('export-mode');
     } finally {
@@ -5325,15 +5325,17 @@ const findNodeById = (node, id) => {
       {/* Generic Confirmation Modal */}
       {confirmModal && (
         <div className="modal-overlay" onClick={confirmModal.onCancel}>
-          <div className="modal-card confirm-modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-card modal-sm confirm-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-            <h3>{confirmModal.title}</h3>
-            <button className="modal-close" onClick={confirmModal.onCancel}>
-            <X size={24} />
-            </button>
-          </div>
-            <p>{confirmModal.message}</p>
-            <div className="confirm-modal-actions">
+              <h3>{confirmModal.title}</h3>
+              <button className="modal-close" onClick={confirmModal.onCancel}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>{confirmModal.message}</p>
+            </div>
+            <div className="modal-footer">
               <button
                 className="modal-btn secondary"
                 onClick={confirmModal.onCancel}

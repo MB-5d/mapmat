@@ -14,7 +14,7 @@ const ImportModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card import-modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-card modal-md modal-scrollable import-modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Import Sitemap</h2>
           <button className="modal-close" onClick={onClose}>
