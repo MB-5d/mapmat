@@ -10,6 +10,7 @@ const SaveMapForm = ({
   onSave,
   onCreateProject,
   onCancel,
+  submitLabel,
 }) => {
   // Get default name from root domain (e.g., "example" from "https://www.example.com")
   const getDefaultName = () => {
@@ -94,7 +95,7 @@ const SaveMapForm = ({
           Cancel
         </button>
         <button className="modal-btn primary" onClick={handleSave} disabled={!mapName.trim()}>
-          Save Map
+          {submitLabel}
         </button>
       </div>
     </div>
@@ -113,6 +114,8 @@ const SaveMapModal = ({
   defaultName,
   onSave,
   onCreateProject,
+  title = 'Save Map',
+  submitLabel = 'Save Map',
 }) => {
   if (!show) return null;
 
@@ -120,7 +123,7 @@ const SaveMapModal = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-card modal-md save-map-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Save Map</h3>
+          <h3>{title}</h3>
           <button className="modal-close" onClick={onClose}>
             <X size={24} />
           </button>
@@ -147,6 +150,7 @@ const SaveMapModal = ({
               onSave={onSave}
               onCreateProject={onCreateProject}
               onCancel={onClose}
+              submitLabel={submitLabel}
             />
           )}
         </div>

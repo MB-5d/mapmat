@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Folder,
   History,
   LogIn,
   LogOut,
   Plus,
+  Receipt,
+  Settings2,
   Upload,
+  UserCircle,
   User,
 } from 'lucide-react';
 
@@ -48,11 +51,30 @@ const Topbar = ({
   onShowProfile,
   onLogout,
   onLogin,
-}) => (
-  <div className="topbar">
-    <div className="topbar-left">
-      <div className="brand">Map Mat</div>
-    </div>
+}) => {
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const accountMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showAccountMenu) return;
+    const handleClickOutside = (event) => {
+      if (!accountMenuRef.current) return;
+      if (!accountMenuRef.current.contains(event.target)) {
+        setShowAccountMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showAccountMenu]);
+
+  const handleAccountToggle = () => setShowAccountMenu((prev) => !prev);
+  const closeMenu = () => setShowAccountMenu(false);
+
+  return (
+    <div className="topbar">
+      <div className="topbar-left">
+        <div className="brand">Map Mat</div>
+      </div>
 
     <div className="topbar-center">
       <div className="search-container">
@@ -105,7 +127,7 @@ const Topbar = ({
       )}
     </div>
 
-    <div className="topbar-right">
+      <div className="topbar-right">
       {canEdit && (
         <button
           className="icon-btn"
@@ -126,49 +148,88 @@ const Topbar = ({
         </button>
       )}
 
-      {canEdit && (
-        <button
-          className="icon-btn"
-          title="Projects"
-          onClick={onShowProjects}
-        >
-          <Folder size={22} />
-        </button>
-      )}
-
-      {isLoggedIn && (
-        <button
-          className="icon-btn"
-          title="Scan History"
-          onClick={onShowHistory}
-        >
-          <History size={22} />
-        </button>
-      )}
-
       <div className="divider" />
 
       {isLoggedIn ? (
-        <>
+        <div className="account-menu-wrapper" ref={accountMenuRef}>
           <button
             className="user-btn"
-            onClick={onShowProfile}
-            title="Account Settings"
+            onClick={handleAccountToggle}
+            title="Account Menu"
+            aria-expanded={showAccountMenu}
+            aria-haspopup="menu"
           >
             <User size={18} />
             <span>{currentUser?.name}</span>
           </button>
-          <button className="icon-btn" title="Logout" onClick={onLogout}>
-            <LogOut size={22} />
-          </button>
-        </>
+          {showAccountMenu && (
+            <div className="account-menu" role="menu">
+              <button
+                className="account-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  onShowProjects();
+                }}
+              >
+                <Folder size={16} />
+                <span>Projects</span>
+              </button>
+              <button
+                className="account-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  onShowHistory();
+                }}
+              >
+                <History size={16} />
+                <span>History</span>
+              </button>
+              <div className="account-menu-divider" />
+              <button
+                className="account-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  onShowProfile();
+                }}
+              >
+                <UserCircle size={16} />
+                <span>Profile</span>
+              </button>
+              <button className="account-menu-item" role="menuitem" type="button">
+                <Receipt size={16} />
+                <span>Billing</span>
+              </button>
+              <button className="account-menu-item" role="menuitem" type="button">
+                <Settings2 size={16} />
+                <span>Settings</span>
+              </button>
+              <div className="account-menu-divider" />
+              <button
+                className="account-menu-item account-menu-logout"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  onLogout();
+                }}
+              >
+                <LogOut size={16} />
+                <span>Log out</span>
+              </button>
+            </div>
+          )}
+        </div>
       ) : (
-        <button className="icon-btn primary" title="Login" onClick={onLogin}>
-          <LogIn size={22} />
+        <button className="topbar-login-btn" title="Log In" onClick={onLogin}>
+          <LogIn size={18} />
+          <span>Log In</span>
         </button>
       )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default Topbar;

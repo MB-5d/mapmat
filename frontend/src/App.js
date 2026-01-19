@@ -44,7 +44,7 @@ import RightRail from './components/toolbar/RightRail';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname } from './utils/url';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4001';
+const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
 const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 // Permission levels for sharing
@@ -990,6 +990,9 @@ export default function App() {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showCreateMapModal, setShowCreateMapModal] = useState(false);
   const [showSaveMapModal, setShowSaveMapModal] = useState(false);
+  const [createMapMode, setCreateMapMode] = useState(false);
+  const [pendingMapCreation, setPendingMapCreation] = useState(null);
+  const [pendingCreateAfterSave, setPendingCreateAfterSave] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState({});
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editingProjectName, setEditingProjectName] = useState('');
@@ -1279,7 +1282,7 @@ export default function App() {
       confirmText: 'Clear',
       danger: true
     });
-    if (!confirmed) return;
+    if (!confirmed) return false;
     setRoot(null);
     setOrphans([]);
     setCurrentMap(null);
@@ -1288,6 +1291,7 @@ export default function App() {
     setPan({ x: 0, y: 0 });
     setUrlInput('');
     resetScanLayers();
+    return true;
   };
 
   // Show prompt modal and return promise
@@ -1798,9 +1802,33 @@ export default function App() {
       setCurrentMap(savedMap);
       setShowSaveMapModal(false);
       showToast(`Map "${mapName}" saved`, 'success');
+      if (pendingCreateAfterSave) {
+        setPendingCreateAfterSave(false);
+        setShowCreateMapModal(true);
+      }
     } catch (e) {
       showToast(e.message || 'Failed to save map', 'error');
     }
+  };
+
+  const startBlankMapCreation = (projectId, mapName) => {
+    if (!mapName?.trim()) return;
+    const trimmedName = mapName.trim();
+    setCreateMapMode(false);
+    setPendingMapCreation({ name: trimmedName, projectId: projectId || null });
+    setMapName(trimmedName);
+    setRoot(null);
+    setOrphans([]);
+    setConnections([]);
+    setIsImportedMap(false);
+    setCurrentMap({ name: trimmedName, project_id: projectId || null });
+    setScale(1);
+    setPan({ x: 0, y: 0 });
+    setUrlInput('');
+    resetScanLayers();
+    setShowSaveMapModal(false);
+    setEditModalNode({ id: '', url: '', title: '', parentId: '', children: [] });
+    setEditModalMode('add');
   };
 
   const loadMap = (map) => {
@@ -3825,62 +3853,66 @@ const findNodeById = (node, id) => {
 
       if (!root) { // This is the first page, so it becomes the root.
         const newRoot = { ...newNodeData, id: 'root' };
-        
+        const mapNameToUse = pendingMapCreation?.name || currentMap?.name || mapName || 'Untitled Map';
+        const projectIdToUse = pendingMapCreation?.projectId || currentMap?.project_id || null;
+
         const mapToSave = {
-            name: currentMap.name,
-            url: newRoot.url,
-            root: newRoot,
-            orphans: [],
-            colors: DEFAULT_COLORS,
-            project_id: currentMap.project_id,
+          name: mapNameToUse,
+          url: newRoot.url,
+          root: newRoot,
+          orphans: [],
+          colors: DEFAULT_COLORS,
+          project_id: projectIdToUse,
         };
 
         api.saveMap(mapToSave)
-            .then(({ map }) => {
-                setRoot(newRoot);
-                setCurrentMap(map);
-                setMapName(map.name);
-                
-                setProjects(prev => {
-                  let updated = prev.map(p => ({
-                    ...p,
-                    maps: (p.maps || []).filter(m => m.id !== map.id),
-                  }));
-        
-                  if (map.project_id) {
-                    const projectExists = updated.some(p => p.id === map.project_id);
-                    if (projectExists) {
-                        updated = updated.map(p =>
-                          p.id === map.project_id
-                            ? { ...p, maps: [...(p.maps || []), map] }
-                            : p
-                        );
-                    } else {
-                        const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
-                        if (uncategorized) {
-                            uncategorized.maps.push(map);
-                        } else {
-                            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
-                        }
-                    }
-                  } else {
-                    const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
-                    if (uncategorized) {
-                        uncategorized.maps.push(map);
-                    } else {
-                        updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
-                    }
-                  }
-                  return updated;
-                });
+          .then(({ map }) => {
+            setRoot(newRoot);
+            setCurrentMap(map);
+            setMapName(map.name);
+            setPendingMapCreation(null);
 
-                showToast('Map created and first page added!', 'success');
-            })
-            .catch(e => {
-                console.error(e);
-                setRoot(newRoot);
-                showToast('Page added (map is unsaved)', 'warning');
+            setProjects(prev => {
+              let updated = prev.map(p => ({
+                ...p,
+                maps: (p.maps || []).filter(m => m.id !== map.id),
+              }));
+
+              if (map.project_id) {
+                const projectExists = updated.some(p => p.id === map.project_id);
+                if (projectExists) {
+                  updated = updated.map(p =>
+                    p.id === map.project_id
+                      ? { ...p, maps: [...(p.maps || []), map] }
+                      : p
+                  );
+                } else {
+                  const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                  if (uncategorized) {
+                    uncategorized.maps.push(map);
+                  } else {
+                    updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                  }
+                }
+              } else {
+                const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+                if (uncategorized) {
+                  uncategorized.maps.push(map);
+                } else {
+                  updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+                }
+              }
+              return updated;
             });
+
+            showToast('Map created and first page added!', 'success');
+          })
+          .catch(e => {
+            console.error(e);
+            setRoot(newRoot);
+            setPendingMapCreation(null);
+            showToast('Page added (map is unsaved)', 'warning');
+          });
       } else {
         saveStateForUndo();
         const newNode = { ...newNodeData, id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` };
@@ -4550,10 +4582,28 @@ const findNodeById = (node, id) => {
         }}
         onMapNameClick={() => canEdit() && setIsEditingMapName(true)}
         sharedTitle={root?.title || 'Shared Sitemap'}
-        onCreateMap={() => {
+        onCreateMap={async () => {
           if (!currentUser) {
             showToast('Please sign in to create a new map', 'warning');
             setShowAuthModal(true);
+            return;
+          }
+          const hasUnsavedMap = hasMap && !currentMap?.id;
+          if (hasUnsavedMap) {
+            const wantsSave = await showConfirm({
+              title: 'Save current map?',
+              message: 'You have an unsaved map. Save it before creating a new one?',
+              confirmText: 'Save',
+              cancelText: "Don't Save",
+            });
+            if (wantsSave) {
+              setPendingCreateAfterSave(true);
+              setCreateMapMode(false);
+              setShowSaveMapModal(true);
+              return;
+            }
+            const cleared = await clearCanvas();
+            if (cleared) setShowCreateMapModal(true);
             return;
           }
           setShowCreateMapModal(true);
@@ -4697,12 +4747,20 @@ const findNodeById = (node, id) => {
                   <marker
                     id="arrowhead-userflow"
                     markerWidth="10"
-                    markerHeight="7"
+                    markerHeight="12.5"
                     refX="9"
-                    refY="3.5"
+                    refY="6.25"
                     orient="auto"
+                    markerUnits="strokeWidth"
                   >
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#14b8a6" />
+                    <path
+                      d="M 1 0 L 9 6.25 L 1 12.5"
+                      fill="none"
+                      stroke="context-stroke"
+                      strokeWidth="1"
+                      strokeLinecap="square"
+                      strokeLinejoin="miter"
+                    />
                   </marker>
                 </defs>
 
@@ -5109,7 +5167,10 @@ const findNodeById = (node, id) => {
                 onUndo: handleUndo,
                 onRedo: handleRedo,
                 onClearCanvas: clearCanvas,
-                onSaveMap: () => setShowSaveMapModal(true),
+                onSaveMap: () => {
+                  setCreateMapMode(false);
+                  setShowSaveMapModal(true);
+                },
                 onExport: () => setShowExportModal(true),
                 onShare: () => setShowShareModal(true),
                 hasMap,
@@ -5177,10 +5238,16 @@ const findNodeById = (node, id) => {
 
       <SaveMapModal
         show={showSaveMapModal}
-        onClose={() => setShowSaveMapModal(false)}
+        onClose={() => {
+          setShowSaveMapModal(false);
+          setCreateMapMode(false);
+          setPendingCreateAfterSave(false);
+        }}
         isLoggedIn={isLoggedIn}
         onRequireLogin={() => {
           setShowSaveMapModal(false);
+          setCreateMapMode(false);
+          setPendingCreateAfterSave(false);
           setShowAuthModal(true);
         }}
         projects={projects}
@@ -5188,8 +5255,10 @@ const findNodeById = (node, id) => {
         rootUrl={root?.url}
         defaultProjectId={null}
         defaultName={mapName}
-        onSave={saveMap}
+        onSave={createMapMode ? startBlankMapCreation : saveMap}
         onCreateProject={createProject}
+        title={createMapMode ? 'Create Map' : 'Save Map'}
+        submitLabel={createMapMode ? 'Create' : 'Save Map'}
       />
 
       <ProjectsModal
@@ -5298,7 +5367,10 @@ const findNodeById = (node, id) => {
       <CreateMapModal
         show={showCreateMapModal}
         onClose={() => setShowCreateMapModal(false)}
-        onStartFromScratch={() => setShowSaveMapModal(true)}
+        onStartFromScratch={() => {
+          setCreateMapMode(true);
+          setShowSaveMapModal(true);
+        }}
         onImportFromFile={() => setShowImportModal(true)}
       />
 
