@@ -531,8 +531,10 @@ const computeLayout = (
   // ------------------------------------------------------------
   if (subdomainOrphans.length > 0) {
     let subdomainX = 0;
-    subdomainOrphans.forEach((orphan, idx) => {
-      const num = `s${idx + 1}`;
+    const orderedSubdomains = [...subdomainOrphans].reverse();
+    const subdomainCount = orderedSubdomains.length;
+    orderedSubdomains.forEach((orphan, idx) => {
+      const num = `s${subdomainCount - idx}`;
       const treeWidth = layoutRootTree(orphan, subdomainX, rootY, num, {
         isOrphan: true,
         orphanStyle: 'subdomain',
@@ -559,9 +561,12 @@ const computeLayout = (
   const orphanGroupStartX = subdomainTotalWidth > 0 ? subdomainTotalWidth + GAP_L1_X : 0;
   let orphanX = orphanGroupStartX;
 
-  regularOrphans.forEach((orphan, idx) => {
+  const orderedOrphans = [...regularOrphans].reverse();
+  const orphanCount = orderedOrphans.length;
+  orderedOrphans.forEach((orphan, idx) => {
     const depth = orphanStyle === "level1" ? 1 : 0;
-    const num = orphanStyle === "level1" ? `1.o${idx + 1}` : `0.${idx + 1}`;
+    const count = orphanCount - idx;
+    const num = orphanStyle === "level1" ? `1.o${count}` : `0.${count}`;
     const treeWidth = layoutRootTree(orphan, orphanX, orphanY, num, {
       isOrphan: true,
       orphanStyle,
@@ -1096,6 +1101,10 @@ export default function App() {
   const [imageLoading, setImageLoading] = useState(false);
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const scaleRef = useRef(scale);
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [showColorKey, setShowColorKey] = useState(false);
   const [editingColorDepth, setEditingColorDepth] = useState(null);
@@ -2632,47 +2641,73 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu]);
 
-  // Prevent trackpad pinch-to-zoom from zooming the whole page
-  useEffect(() => {
-  const canvas = canvasRef.current;
-  if (!canvas) return;
+  // Smooth wheel handling for pan/zoom
+  const wheelStateRef = useRef({
+    dx: 0,
+    dy: 0,
+    isZoom: false,
+    cx: 0,
+    cy: 0,
+    raf: null,
+  });
 
-  const handleWheel = (e) => {
-    e.preventDefault();  // This actually works because non-passive
-    
-    if (!root) return;  // No map loaded
-    
-    // Pinch zoom (Ctrl/Cmd + scroll)
-    if (e.ctrlKey || e.metaKey) {
-      const delta = -e.deltaY;
-      const zoomIntensity = 0.002;
-      const next = Math.min(Math.max(scale * (1 + delta * zoomIntensity), 0.1), 3);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const flushWheel = () => {
+      wheelStateRef.current.raf = null;
+      if (!root) return;
+
+      const { dx, dy, isZoom, cx, cy } = wheelStateRef.current;
+      wheelStateRef.current.dx = 0;
+      wheelStateRef.current.dy = 0;
+
+      if (isZoom) {
+        const delta = -dy;
+        const zoomIntensity = 0.002;
+        const currentScale = scaleRef.current;
+        const next = Math.min(Math.max(currentScale * (1 + delta * zoomIntensity), 0.1), 3);
+
+        const rect = canvas.getBoundingClientRect();
+        const ox = (cx - panRef.current.x) / currentScale;
+        const oy = (cy - panRef.current.y) / currentScale;
+
+        const nx = cx - ox * next;
+        const ny = cy - oy * next;
+
+        setScale(next);
+        setPan({ x: nx, y: ny });
+        return;
+      }
+
+      if (dx === 0 && dy === 0) return;
+      setPan((p) => clampPan({
+        x: p.x - dx,
+        y: p.y - dy,
+      }));
+    };
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      if (!root) return;
+
+      wheelStateRef.current.dx += e.deltaX;
+      wheelStateRef.current.dy += e.deltaY;
+      wheelStateRef.current.isZoom = e.ctrlKey || e.metaKey;
 
       const rect = canvas.getBoundingClientRect();
-      const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
+      wheelStateRef.current.cx = e.clientX - rect.left;
+      wheelStateRef.current.cy = e.clientY - rect.top;
 
-      const ox = (cx - pan.x) / scale;
-      const oy = (cy - pan.y) / scale;
+      if (!wheelStateRef.current.raf) {
+        wheelStateRef.current.raf = requestAnimationFrame(flushWheel);
+      }
+    };
 
-      const nx = cx - ox * next;
-      const ny = cy - oy * next;
-
-      setScale(next);
-      setPan({ x: nx, y: ny });
-      return;
-    }
-
-    // Two-finger scroll pans (trackpad)
-    setPan((p) => clampPan({
-      x: p.x - e.deltaX,
-      y: p.y - e.deltaY,
-    }));
-  };
-
-  canvas.addEventListener('wheel', handleWheel, { passive: false });
-  return () => canvas.removeEventListener('wheel', handleWheel);
-}, [root, scale, pan, clampPan]);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, [root, clampPan]);
 
   const exportJson = () => {
     if (!root) return;

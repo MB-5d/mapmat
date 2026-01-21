@@ -433,6 +433,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const visited = new Set();
   const referrerMap = new Map();
   const queue = [{ url: seed, depth: 0 }];
+  const sitemapOrder = new Map();
+  let discoveryCounter = 0;
 
   // Common page paths to try (often not linked from main pages)
   const commonPaths = [
@@ -468,6 +470,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       const loc = $(el).text().trim();
       const norm = normalizeUrl(loc);
       if (norm && sameOrigin(norm, origin)) {
+        if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
         queue.push({ url: norm, depth: 1 });
       }
     });
@@ -495,6 +498,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         for (const u of urls) {
           const norm = normalizeUrl(u);
           if (norm && sameOrigin(norm, origin)) {
+            if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
             queue.push({ url: norm, depth: 1 });
           }
         }
@@ -504,6 +508,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           const loc = $(el).text().trim();
           const norm = normalizeUrl(loc);
           if (norm && sameOrigin(norm, origin)) {
+            if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
             queue.push({ url: norm, depth: 1 });
           }
         });
@@ -530,6 +535,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     if (visited.has(url)) continue;
     visited.add(url);
+    const discoveryIndex = discoveryCounter++;
 
     // Send progress update
     if (onProgress) {
@@ -558,6 +564,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           url,
           title: new URL(url).pathname === '/' ? new URL(url).hostname : url,
           parentUrl: getParentUrl(url),
+          discoveryIndex,
         });
       }
       continue;
@@ -603,6 +610,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       parentUrl,
       authRequired: status === 401 || status === 403,
       thumbnailUrl: undefined,
+      discoveryIndex,
     });
 
     const links = extractLinks(html, finalUrl || url);
@@ -645,7 +653,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   // Ensure the root exists
   if (!pageMap.has(seed)) {
-    pageMap.set(seed, { url: seed, title: new URL(seed).hostname, parentUrl: null });
+    pageMap.set(seed, { url: seed, title: new URL(seed).hostname, parentUrl: null, discoveryIndex: -1 });
   }
 
   // Build nodes
@@ -658,6 +666,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       canonicalUrl: meta.canonicalUrl || null,
       title: meta.title || url,
       parentUrl: meta.parentUrl,
+      discoveryIndex: Number.isFinite(meta.discoveryIndex) ? meta.discoveryIndex : null,
       referrerUrl: referrerMap.get(url) || null,
       authRequired: meta.authRequired || false,
       thumbnailUrl: meta.thumbnailUrl || undefined,
@@ -886,16 +895,61 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   });
 
-  // Sort children by URL path so output is stable
-  function sortTree(n) {
-    n.children.sort((a, b) => a.url.localeCompare(b.url));
-    n.children.forEach(sortTree);
-  }
+  const getSitemapIndex = (node) => {
+    const direct = sitemapOrder.get(node.finalUrl || node.url);
+    if (direct !== undefined) return direct;
+    return sitemapOrder.get(node.url);
+  };
+
+  const alphaKey = (node) => (node.title || node.url || '');
+
+  const compareAlpha = (a, b) => alphaKey(a).localeCompare(alphaKey(b));
+
+  const compareByStats = (a, b) => {
+    if (a._treeDepth !== b._treeDepth) return b._treeDepth - a._treeDepth;
+    if (a._treeSize !== b._treeSize) return b._treeSize - a._treeSize;
+    return compareAlpha(a, b);
+  };
+
+  const computeStats = (node) => {
+    if (!node) return { depth: 0, size: 0 };
+    if (!node.children?.length) {
+      node._treeDepth = 1;
+      node._treeSize = 1;
+      return { depth: 1, size: 1 };
+    }
+    let maxDepth = 1;
+    let totalSize = 1;
+    node.children.forEach((child) => {
+      const stats = computeStats(child);
+      maxDepth = Math.max(maxDepth, stats.depth + 1);
+      totalSize += stats.size;
+    });
+    node._treeDepth = maxDepth;
+    node._treeSize = totalSize;
+    return { depth: maxDepth, size: totalSize };
+  };
+
+  const sortTree = (node, depth = 0) => {
+    if (!node?.children?.length) return;
+    node.children.sort((a, b) => {
+      const sa = getSitemapIndex(a);
+      const sb = getSitemapIndex(b);
+      if (sa !== undefined && sb !== undefined && sa !== sb) return sa - sb;
+      if (sa !== undefined && sb === undefined) return -1;
+      if (sa === undefined && sb !== undefined) return 1;
+      return compareByStats(a, b);
+    });
+    node.children.forEach((child) => sortTree(child, depth + 1));
+  };
 
   const root = nodes.get(rootUrl);
+  computeStats(root);
+  subdomainNodes.forEach(computeStats);
+  orphanNodes.forEach(computeStats);
   sortTree(root);
-  subdomainNodes.forEach(sortTree);
-  orphanNodes.forEach(sortTree);
+  subdomainNodes.forEach((node) => sortTree(node, 0));
+  orphanNodes.forEach((node) => sortTree(node, 0));
 
   const pruneMissing = (node) => {
     if (node.children?.length) {
@@ -910,6 +964,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const stripInternalFields = (node) => {
     if (!node) return;
     delete node._childUrls;
+    delete node._treeDepth;
+    delete node._treeSize;
     if (node.children?.length) {
       node.children.forEach(stripInternalFields);
     }
@@ -936,6 +992,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     node.children?.forEach(markDuplicateTree);
   };
   orphanNodes.forEach(markDuplicateTree);
+  subdomainNodes.forEach(markDuplicateTree);
 
   let crosslinks = [];
   if (scanOptions.crosslinks) {
