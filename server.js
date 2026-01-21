@@ -665,7 +665,55 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
 
+  // Link children using referrer graph for main tree and path graph for subdomain/orphan trees
+  const rootUrl = seed;
+  const rootHost = new URL(rootUrl).hostname;
+  const rootHostNormalized = normalizeHost(rootHost);
+
   const canonicalKeyFor = (node) => getCanonicalKey(node.canonicalUrl || node.finalUrl || node.url);
+  const canonicalToUrl = new Map();
+  nodes.forEach((node) => {
+    const key = canonicalKeyFor(node);
+    if (!key) return;
+    if (!canonicalToUrl.has(key)) canonicalToUrl.set(key, node.url);
+  });
+
+  const ensureParentChain = (url) => {
+    let parentUrl = getParentUrl(url);
+    while (parentUrl && !nodes.has(parentUrl)) {
+      const canonicalMatch = canonicalToUrl.get(getCanonicalKey(parentUrl));
+      if (canonicalMatch) return;
+      nodes.set(parentUrl, {
+        id: safeIdFromUrl(parentUrl),
+        url: parentUrl,
+        title: getTitleFromUrl(parentUrl),
+        parentUrl: getParentUrl(parentUrl),
+        referrerUrl: null,
+        authRequired: false,
+        thumbnailUrl: undefined,
+        isMissing: true,
+        children: [],
+      });
+      const key = getCanonicalKey(parentUrl);
+      if (key && !canonicalToUrl.has(key)) canonicalToUrl.set(key, parentUrl);
+      parentUrl = getParentUrl(parentUrl);
+    }
+  };
+
+  for (const node of nodes.values()) {
+    if (node.url === rootUrl) continue;
+    ensureParentChain(node.url);
+  }
+
+  nodes.forEach((node) => {
+    if (!node.parentUrl) return;
+    if (nodes.has(node.parentUrl)) return;
+    const canonicalMatch = canonicalToUrl.get(getCanonicalKey(node.parentUrl));
+    if (canonicalMatch && nodes.has(canonicalMatch)) {
+      node.parentUrl = canonicalMatch;
+    }
+  });
+
   const canonicalIndex = new Map();
   const rootNode = nodes.get(rootUrl);
   if (rootNode) {
@@ -687,34 +735,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       node.duplicateOf = canonicalIndex.get(key);
     }
   });
-
-  // Link children using referrer graph for main tree and path graph for subdomain/orphan trees
-  const rootUrl = seed;
-  const rootHost = new URL(rootUrl).hostname;
-  const rootHostNormalized = normalizeHost(rootHost);
-
-  const ensureParentChain = (url) => {
-    let parentUrl = getParentUrl(url);
-    while (parentUrl && !nodes.has(parentUrl)) {
-      nodes.set(parentUrl, {
-        id: safeIdFromUrl(parentUrl),
-        url: parentUrl,
-        title: getTitleFromUrl(parentUrl),
-        parentUrl: getParentUrl(parentUrl),
-        referrerUrl: null,
-        authRequired: false,
-        thumbnailUrl: undefined,
-        isMissing: true,
-        children: [],
-      });
-      parentUrl = getParentUrl(parentUrl);
-    }
-  };
-
-  for (const node of nodes.values()) {
-    if (node.url === rootUrl) continue;
-    ensureParentChain(node.url);
-  }
 
   // Reset children before regrouping
   nodes.forEach((node) => {
@@ -866,6 +886,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   });
 
+  // Sort children by URL path so output is stable
+  function sortTree(n) {
+    n.children.sort((a, b) => a.url.localeCompare(b.url));
+    n.children.forEach(sortTree);
+  }
+
+  const root = nodes.get(rootUrl);
+  sortTree(root);
+  subdomainNodes.forEach(sortTree);
+  orphanNodes.forEach(sortTree);
+
   const pruneMissing = (node) => {
     if (node.children?.length) {
       node.children = node.children.filter(pruneMissing);
@@ -887,17 +918,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   stripInternalFields(root);
   prunedOrphanNodes.forEach(stripInternalFields);
   subdomainNodes.forEach(stripInternalFields);
-
-  // Sort children by URL path so output is stable
-  function sortTree(n) {
-    n.children.sort((a, b) => a.url.localeCompare(b.url));
-    n.children.forEach(sortTree);
-  }
-
-  const root = nodes.get(rootUrl);
-  sortTree(root);
-  subdomainNodes.forEach(sortTree);
-  orphanNodes.forEach(sortTree);
 
   const canonicalToRootUrl = new Map();
   const collectCanonical = (node) => {
@@ -1016,9 +1036,17 @@ app.get('/scan-stream', async (req, res) => {
       (progress) => sendEvent('progress', progress)
     );
 
-    sendEvent('complete', result);
+    try {
+      const payload = JSON.stringify(result);
+      res.write(`event: complete\n`);
+      res.write(`data: ${payload}\n\n`);
+    } catch (err) {
+      console.error('Scan serialization failed:', err);
+      sendEvent('error', { error: err.message || 'Scan serialization failed' });
+    }
     res.end();
   } catch (e) {
+    console.error('Scan failed:', e);
     sendEvent('error', { error: e.message || 'Scan failed' });
     res.end();
   }

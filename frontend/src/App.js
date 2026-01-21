@@ -622,9 +622,8 @@ const SitemapTree = ({
   });
 }, [data, orphans, showThumbnails, expandedStacks]);
 
-
   // Run invariant checks in development
-  React.useEffect(() => {
+  useEffect(() => {
     checkLayoutInvariants(layout.nodes, orphans, layout.connectors);
   }, [layout, orphans]);
 
@@ -899,6 +898,12 @@ const filterTreeByScanLayers = (node, visibility, isRoot = true) => {
     || (!visibility.inactivePages && node.isInactive)
     || (!visibility.authenticatedPages && node.authRequired)
     || (!visibility.brokenLinks && node.isBroken)
+    || (!visibility.duplicates && node.isDuplicate)
+    || (!visibility.subdomains && node.subdomainRoot)
+    || (!visibility.orphanPages && node.orphanType === 'orphan')
+    || (!visibility.files && node.orphanType === 'file')
+    || (!visibility.brokenLinks && node.orphanType === 'broken')
+    || (!visibility.inactivePages && node.orphanType === 'inactive')
   );
 
   if (shouldHide) return null;
@@ -928,11 +933,13 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (!node?.url) return null;
     if (urlNodeMap.has(node.url)) {
       const existing = urlNodeMap.get(node.url);
-      if (orphanType === 'subdomain') existing.subdomainRoot = true;
-      if (orphanType && !existing.orphanType) existing.orphanType = orphanType;
-      if (node.children?.length) {
-        existing.children = node.children;
-        indexNodeUrls(existing);
+      if (!rootUrlSet.has(node.url)) {
+        if (orphanType === 'subdomain') existing.subdomainRoot = true;
+        if (orphanType && !existing.orphanType) existing.orphanType = orphanType;
+        if (node.children?.length) {
+          existing.children = node.children;
+          indexNodeUrls(existing);
+        }
       }
       return existing;
     }
@@ -1047,7 +1054,7 @@ export default function App() {
     orphanPages: false,
     errorPages: false,
     brokenLinks: false,
-    duplicates: true,
+    duplicates: false,
     files: false,
     crosslinks: false,
   });
@@ -1268,21 +1275,27 @@ export default function App() {
     orphanPages: scanLayerAvailability.orphanPages ? scanLayerVisibility.orphanPages : true,
     errorPages: scanLayerAvailability.errorPages ? scanLayerVisibility.errorPages : true,
     brokenLinks: scanLayerAvailability.brokenLinks ? scanLayerVisibility.brokenLinks : true,
-    duplicates: scanLayerAvailability.duplicates ? scanLayerVisibility.duplicates : true,
+    duplicates: scanLayerVisibility.duplicates,
     files: scanLayerAvailability.files ? scanLayerVisibility.files : true,
   }), [scanLayerAvailability, scanLayerVisibility, showThumbnails]);
 
+
   const visibleOrphans = useMemo(() => {
-    return orphans.filter((orphan) => {
-      if (orphan.isDuplicate && !effectiveScanLayers.duplicates) return false;
-      if (orphan.subdomainRoot) return effectiveScanLayers.subdomains;
-      if (orphan.authRequired && !effectiveScanLayers.authenticatedPages) return false;
-      if (orphan.isError && !effectiveScanLayers.errorPages) return false;
-      if (orphan.orphanType === 'file') return effectiveScanLayers.files;
-      if (orphan.orphanType === 'broken') return effectiveScanLayers.brokenLinks;
-      if (orphan.orphanType === 'inactive') return effectiveScanLayers.inactivePages;
-      return effectiveScanLayers.orphanPages;
-    });
+    return orphans
+      .map((orphan) => {
+        if (orphan.isDuplicate && !effectiveScanLayers.duplicates) return null;
+        if (orphan.subdomainRoot && !effectiveScanLayers.subdomains) return null;
+        if (orphan.authRequired && !effectiveScanLayers.authenticatedPages) return null;
+        if (orphan.isError && !effectiveScanLayers.errorPages) return null;
+        if (orphan.isInactive && !effectiveScanLayers.inactivePages) return null;
+        if (orphan.isBroken && !effectiveScanLayers.brokenLinks) return null;
+        if (orphan.orphanType === 'file' && !effectiveScanLayers.files) return null;
+        if (orphan.orphanType === 'broken' && !effectiveScanLayers.brokenLinks) return null;
+        if (orphan.orphanType === 'inactive' && !effectiveScanLayers.inactivePages) return null;
+        if (orphan.orphanType === 'orphan' && !effectiveScanLayers.orphanPages) return null;
+        return filterTreeByScanLayers(orphan, effectiveScanLayers, true);
+      })
+      .filter(Boolean);
   }, [orphans, effectiveScanLayers]);
 
   const renderRoot = useMemo(() => {
@@ -1510,6 +1523,11 @@ export default function App() {
 
     return { x: clampedX, y: clampedY };
   }, []);
+
+  useEffect(() => {
+    if (!root) return;
+    setPan((prev) => clampPan(prev));
+  }, [effectiveScanLayers, root, orphans, clampPan]);
 
   // Check auth and load data on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
