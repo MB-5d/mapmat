@@ -27,6 +27,9 @@ const Topbar = ({
   scanOptionsRef,
   onToggleScanOptions,
   onScanOptionChange,
+  scanLayerAvailability,
+  scanLayerVisibility,
+  onToggleScanLayer,
   scanDepth,
   onScanDepthChange,
   onScan,
@@ -90,6 +93,9 @@ const Topbar = ({
           optionsRef={scanOptionsRef}
           onToggleOptions={onToggleScanOptions}
           onOptionChange={onScanOptionChange}
+          scanLayerAvailability={scanLayerAvailability}
+          scanLayerVisibility={scanLayerVisibility}
+          onToggleScanLayer={onToggleScanLayer}
           scanDepth={scanDepth}
           onScanDepthChange={onScanDepthChange}
           onScan={onScan}

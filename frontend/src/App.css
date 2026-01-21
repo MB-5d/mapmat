@@ -4070,6 +4070,24 @@ body {
   padding: 40px 20px;
 }
 
+.thumbnail-progress-toast {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.85);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
+  z-index: 1200;
+  backdrop-filter: blur(6px);
+}
+
 .save-map-form {
   padding: var(--modal-padding);
 }

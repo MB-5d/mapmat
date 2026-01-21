@@ -153,6 +153,16 @@ const LayersPanel = ({
               <span>Broken Links</span>
             </label>
           )}
+          {scanLayerAvailability?.duplicates && (
+            <label className="layers-panel-item">
+              <input
+                type="checkbox"
+                checked={scanLayerVisibility.duplicates}
+                onChange={() => onToggleScanLayer('duplicates')}
+              />
+              <span>Duplicates</span>
+            </label>
+          )}
           {scanLayerAvailability?.files && (
             <label className="layers-panel-item">
               <input

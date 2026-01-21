@@ -41,9 +41,8 @@ const NodeCard = ({
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
   const [thumbKey, setThumbKey] = useState(0);
-  const [thumbRetries, setThumbRetries] = useState(0);
-  const [requestRetries, setRequestRetries] = useState(0);
 
+  const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
   const thumb = node.thumbnailUrl
     ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbKey}`
     : null;
@@ -55,12 +54,10 @@ const NodeCard = ({
       setThumbError(false);
       setThumbLoading(Boolean(thumb));
       setThumbKey(k => k + 1); // Force new image request
-      setThumbRetries(0);
-      setRequestRetries(0);
     }
   }, [showThumbnails, node.thumbnailUrl, node.url]);
 
-  // Timeout fallback - if thumbnail doesn't load in 15 seconds, show placeholder
+  // Timeout fallback - screenshots can be slow on large scans
   useEffect(() => {
     if (!showThumbnails) return undefined;
     const timeout = setTimeout(() => {
@@ -68,41 +65,28 @@ const NodeCard = ({
         setThumbError(true);
         setThumbLoading(false);
       }
-    }, 15000);
+    }, 120000);
     return () => clearTimeout(timeout);
   }, [showThumbnails, thumbLoading, thumbKey, thumb]);
 
   useEffect(() => {
-    if (!showThumbnails || !thumb || !thumbError) return undefined;
-    if (thumbRetries >= 2) return undefined;
-    const retry = setTimeout(() => {
-      setThumbRetries((prev) => prev + 1);
-      setThumbError(false);
-      setThumbLoading(true);
-      setThumbKey(k => k + 1);
-    }, 4000);
-    return () => clearTimeout(retry);
-  }, [showThumbnails, node.thumbnailUrl, thumbError, thumbRetries]);
-
-  useEffect(() => {
-    if (!showThumbnails || node.thumbnailUrl || !onRequestThumbnail) return undefined;
-    if (!thumbError) return undefined;
-    if (requestRetries >= 2) return undefined;
-    const retry = setTimeout(() => {
-      setRequestRetries(prev => prev + 1);
-      setThumbError(false);
-      setThumbLoading(true);
-      onRequestThumbnail(node);
-    }, 3000);
-    return () => clearTimeout(retry);
-  }, [showThumbnails, node.thumbnailUrl, thumbError, requestRetries, onRequestThumbnail, node]);
-
-  useEffect(() => {
-    if (!showThumbnails || node.thumbnailUrl || node.authRequired || !onRequestThumbnail) return;
-    setThumbLoading(true);
+    if (!showThumbnails || !onRequestThumbnail) return;
+    if (node.thumbnailUrl && isScreenshotThumb) return;
+    if (thumbError) return;
+    let isActive = true;
+    setThumbLoading(!node.thumbnailUrl);
     setThumbError(false);
-    onRequestThumbnail(node);
-  }, [showThumbnails, node.thumbnailUrl, node.url, node.authRequired, onRequestThumbnail]);
+    onRequestThumbnail(node).then((success) => {
+      if (!isActive) return;
+      if (!success && !node.thumbnailUrl) {
+        setThumbError(true);
+        setThumbLoading(false);
+      }
+    });
+    return () => {
+      isActive = false;
+    };
+  }, [showThumbnails, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError]);
 
   const handleViewFull = () => {
     // Use uploaded thumbnail if available, otherwise use URL for mshots

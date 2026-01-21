@@ -160,8 +160,12 @@ const checkLayoutInvariants = (nodes, orphans, connectors) => {
   if (process.env.NODE_ENV !== 'development') return;
 
   const { NODE_W, GAP_L1_X } = LAYOUT;
-  const orphanNodes = Array.from(nodes.values()).filter(n => n.isOrphan && n.orphanStyle !== 'subdomain');
-  const subdomainNodes = Array.from(nodes.values()).filter(n => n.isOrphan && n.orphanStyle === 'subdomain');
+  const orphanNodes = Array.from(nodes.values())
+    .filter(n => n.isOrphan && n.orphanStyle !== 'subdomain')
+    .sort((a, b) => a.x - b.x);
+  const subdomainNodes = Array.from(nodes.values())
+    .filter(n => n.isOrphan && n.orphanStyle === 'subdomain')
+    .sort((a, b) => a.x - b.x);
   const level1Nodes = Array.from(nodes.values()).filter(n => n.depth === 1);
 
   // A) Orphan spacing invariant
@@ -293,6 +297,15 @@ const computeLayout = (
     return Math.max(NODE_W, INDENT_X + maxChildWidth);
   };
 
+  const getRootTreeWidth = (node) => {
+    if (!node?.children?.length) return NODE_W;
+    const totalChildWidth = node.children.reduce((sum, child) => (
+      sum + getSubtreeWidth(child, 1)
+    ), 0);
+    const gaps = GAP_L1_X * Math.max(node.children.length - 1, 0);
+    return Math.max(NODE_W, totalChildWidth + gaps);
+  };
+
   // Layout children vertically under a parent node
   // Returns total height consumed by this subtree.
   const layoutVertical = (parentNode, parentDepth, numberPrefix) => {
@@ -362,13 +375,86 @@ const computeLayout = (
   const subdomainOrphans = allOrphans.filter((o) => o.subdomainRoot);
   const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
 
+  const layoutRootTree = (rootNode, startX, startY, rootNumber, extra = {}) => {
+    setNode(rootNode, startX, startY, 0, rootNumber, extra);
+
+    const rootBottomY = startY + NODE_H;
+    const level1Y = rootBottomY + BUS_Y_GAP;
+    const level1Positions = [];
+    let level1X = startX;
+
+    if (rootNode.children?.length) {
+      rootNode.children.forEach((child, idx) => {
+        const childNumber = `${rootNumber}.${idx + 1}`;
+        setNode(child, level1X, level1Y, 1, childNumber);
+
+        level1Positions.push({
+          centerX: level1X + NODE_W / 2,
+          y: level1Y,
+          id: child.id,
+        });
+
+        layoutVertical(child, 1, childNumber);
+
+        const subtreeWidth = getSubtreeWidth(child, 1);
+        level1X += subtreeWidth + GAP_L1_X;
+      });
+
+      if (level1Positions.length > 0) {
+        const rootCenterX = startX + NODE_W / 2;
+        const busY = rootBottomY + BUS_Y_GAP * BUS_MIDPOINT_RATIO;
+
+        connectors.push({
+          type: "root-drop",
+          x1: rootCenterX,
+          y1: rootBottomY,
+          x2: rootCenterX,
+          y2: busY,
+        });
+
+        const leftX = Math.min(rootCenterX, level1Positions[0].centerX);
+        const rightX = Math.max(rootCenterX, level1Positions[level1Positions.length - 1].centerX);
+
+        connectors.push({
+          type: "horizontal-bus",
+          x1: leftX,
+          y1: busY,
+          x2: rightX,
+          y2: busY,
+        });
+
+        level1Positions.forEach((pos) => {
+          connectors.push({
+            type: "bus-drop",
+            x1: pos.centerX,
+            y1: busY,
+            x2: pos.centerX,
+            y2: level1Y,
+          });
+        });
+      }
+    }
+
+    return getRootTreeWidth(rootNode);
+  };
+
   // ------------------------------------------------------------
   // 1) Root (Home)
   // ------------------------------------------------------------
-  const subdomainSlot = NODE_W + GAP_L1_X;
-  const rootX = subdomainOrphans.length > 0
-    ? subdomainOrphans.length * subdomainSlot
+  const subdomainWidths = subdomainOrphans.map((orphan) => getRootTreeWidth(orphan));
+  const subdomainTotalWidth = subdomainWidths.length
+    ? subdomainWidths.reduce((sum, width) => sum + width, 0)
+      + GAP_L1_X * Math.max(subdomainWidths.length - 1, 0)
     : 0;
+  const orphanWidths = regularOrphans.map((orphan) => getRootTreeWidth(orphan));
+  const orphanTotalWidth = orphanWidths.length
+    ? orphanWidths.reduce((sum, width) => sum + width, 0)
+      + GAP_L1_X * Math.max(orphanWidths.length - 1, 0)
+    : 0;
+  const leftGroupCount = (subdomainTotalWidth > 0 ? 1 : 0) + (orphanTotalWidth > 0 ? 1 : 0);
+  const gapsBetweenLeftGroups = GAP_L1_X * Math.max(leftGroupCount - 1, 0);
+  const rootGap = (subdomainTotalWidth > 0 || orphanTotalWidth > 0) ? GAP_L1_X : 0;
+  const rootX = subdomainTotalWidth + orphanTotalWidth + gapsBetweenLeftGroups + rootGap;
   const rootY = ROOT_Y;
 
   // Root = "0" (Home)
@@ -447,21 +533,16 @@ const computeLayout = (
     let subdomainX = 0;
     subdomainOrphans.forEach((orphan, idx) => {
       const num = `s${idx + 1}`;
-      setNode(orphan, subdomainX, rootY, 0, num, {
+      const treeWidth = layoutRootTree(orphan, subdomainX, rootY, num, {
         isOrphan: true,
         orphanStyle: 'subdomain',
       });
-
-      if (renderOrphanChildren && orphan.children?.length) {
-        layoutVertical(orphan, 0, num);
-      }
-
-      subdomainX += subdomainSlot;
+      subdomainX += treeWidth + GAP_L1_X;
     });
   }
 
   // ------------------------------------------------------------
-  // 3) Orphans
+  // 4) Orphans (left of root)
   // ------------------------------------------------------------
 
   // Main tree right edge (based on actual L1 width; if no children, it’s just root)
@@ -474,40 +555,18 @@ const computeLayout = (
   // - after-root: start on root row, *one full node-slot* to the right of root
   //              (so 0.1 doesn’t feel glued to 0.0)
   // - after-tree: start after the main tree right edge with ORPHAN_GROUP_GAP
-  let orphanStartX;
-  let orphanY;
-
-  if (orphanMode === "after-root") {
-    // Root right edge is rootX + NODE_W
-    // "one full node+spacing gap" => leave one empty slot the width of (NODE_W + GAP_L1_X)
-    orphanStartX = rootX + NODE_W + (NODE_W + GAP_L1_X);
-    orphanY = rootY;
-  } else {
-    orphanStartX = mainTreeRightEdge + ORPHAN_GROUP_GAP;
-    orphanY = level1Y;
-  }
-
-  let orphanX = orphanStartX;
+  let orphanY = rootY;
+  const orphanGroupStartX = subdomainTotalWidth > 0 ? subdomainTotalWidth + GAP_L1_X : 0;
+  let orphanX = orphanGroupStartX;
 
   regularOrphans.forEach((orphan, idx) => {
     const depth = orphanStyle === "level1" ? 1 : 0;
     const num = orphanStyle === "level1" ? `1.o${idx + 1}` : `0.${idx + 1}`;
-
-    setNode(orphan, orphanX, orphanY, depth, num, {
+    const treeWidth = layoutRootTree(orphan, orphanX, orphanY, num, {
       isOrphan: true,
       orphanStyle,
     });
-
-    // Optional: render orphan children (off by default)
-    // When you’re ready for “subdomain root” orphans, we should implement
-    // a mini root->L1 bus for each orphan root. This flag is just a placeholder.
-    if (renderOrphanChildren && orphan.children?.length) {
-      // Simple vertical for now (not a mini horizontal L1 bus yet):
-      // children behave like depth+1 under the orphan
-      layoutVertical(orphan, depth, num);
-    }
-
-    orphanX += NODE_W + GAP_L1_X;
+    orphanX += treeWidth + GAP_L1_X;
   });
 
   // ------------------------------------------------------------
@@ -573,6 +632,8 @@ const SitemapTree = ({
 
   const getBadgesForNode = (node) => {
     const badges = [];
+    if (node.isDuplicate) badges.push('Duplicate');
+    if (node.isMissing) badges.push('Missing');
     if (node.subdomainRoot && badgeVisibility?.subdomains) badges.push('Subdomain');
     if (node.orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
     if (node.orphanType === 'file' && badgeVisibility?.files) badges.push('File');
@@ -791,6 +852,35 @@ const buildUrlNodeMap = (rootNode, orphanNodes = []) => {
   return map;
 };
 
+const normalizeUrlForCompare = (raw) => {
+  try {
+    const u = new URL(raw);
+    u.hash = '';
+    if (/\/index\.(html?|php|aspx)$/i.test(u.pathname)) {
+      u.pathname = u.pathname.replace(/\/index\.(html?|php|aspx)$/i, '/');
+    }
+    if (u.pathname !== '/' && u.pathname.endsWith('/')) {
+      u.pathname = u.pathname.replace(/\/+$/, '');
+    }
+    u.hostname = u.hostname.replace(/^www\./i, '');
+    const port = u.port ? `:${u.port}` : '';
+    return `${u.hostname}${port}${u.pathname}${u.search}`;
+  } catch {
+    return raw;
+  }
+};
+
+const buildRootUrlSet = (rootNode) => {
+  const set = new Set();
+  const walk = (node) => {
+    if (!node?.url) return;
+    set.add(normalizeUrlForCompare(node.url));
+    node.children?.forEach(walk);
+  };
+  walk(rootNode);
+  return set;
+};
+
 const filterTreeByFiles = (node, showFiles) => {
   if (!node) return null;
   if (!showFiles && node.isFile) return null;
@@ -825,7 +915,14 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     ...orphan,
     orphanType: orphan.orphanType || 'orphan',
   }));
+  const rootUrlSet = buildRootUrlSet(rootNode);
   const urlNodeMap = buildUrlNodeMap(rootNode, mergedOrphans);
+
+  const indexNodeUrls = (node) => {
+    if (!node?.url) return;
+    if (!urlNodeMap.has(node.url)) urlNodeMap.set(node.url, node);
+    node.children?.forEach(indexNodeUrls);
+  };
 
   const addOrphanNode = (node, orphanType) => {
     if (!node?.url) return null;
@@ -833,6 +930,10 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       const existing = urlNodeMap.get(node.url);
       if (orphanType === 'subdomain') existing.subdomainRoot = true;
       if (orphanType && !existing.orphanType) existing.orphanType = orphanType;
+      if (node.children?.length) {
+        existing.children = node.children;
+        indexNodeUrls(existing);
+      }
       return existing;
     }
 
@@ -843,7 +944,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     };
     if (orphanType === 'subdomain') normalized.subdomainRoot = true;
     mergedOrphans.push(normalized);
-    urlNodeMap.set(normalized.url, normalized);
+    indexNodeUrls(normalized);
     return normalized;
   };
 
@@ -918,7 +1019,17 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     }, 'inactive');
   });
 
-  return { root: rootNode, orphans: mergedOrphans };
+  const seenOrphanUrls = new Set();
+  const dedupedOrphans = mergedOrphans.filter((orphan) => {
+    if (!orphan?.url) return true;
+    const normalized = normalizeUrlForCompare(orphan.url);
+    if (rootUrlSet.has(normalized)) return false;
+    if (seenOrphanUrls.has(normalized)) return false;
+    seenOrphanUrls.add(normalized);
+    return true;
+  });
+
+  return { root: rootNode, orphans: dedupedOrphans };
 };
 
 const normalizeOrphans = (list) => (list || []).map((orphan) => ({
@@ -936,6 +1047,7 @@ export default function App() {
     orphanPages: false,
     errorPages: false,
     brokenLinks: false,
+    duplicates: true,
     files: false,
     crosslinks: false,
   });
@@ -952,6 +1064,7 @@ export default function App() {
     orphanPages: false,
     errorPages: false,
     brokenLinks: false,
+    duplicates: false,
     files: false,
   });
   const [scanLayerVisibility, setScanLayerVisibility] = useState({
@@ -962,6 +1075,7 @@ export default function App() {
     orphanPages: true,
     errorPages: true,
     brokenLinks: true,
+    duplicates: true,
     files: true,
   });
   const [mapName, setMapName] = useState('');
@@ -1069,6 +1183,19 @@ export default function App() {
   const viewDropdownRef = useRef(null);
   const scanOptionsRef = useRef(null);
   const thumbnailRequestRef = useRef(new Set());
+  const thumbnailQueueRef = useRef([]);
+  const thumbnailActiveRef = useRef(0);
+  const thumbnailStartRef = useRef(new Map());
+  const thumbnailTotalTimeRef = useRef(0);
+  const MAX_THUMBNAIL_CONCURRENCY = 2;
+  const [thumbnailQueueSize, setThumbnailQueueSize] = useState(0);
+  const [thumbnailActiveCount, setThumbnailActiveCount] = useState(0);
+  const [thumbnailStats, setThumbnailStats] = useState({
+    total: 0,
+    completed: 0,
+    failed: 0,
+    avgMs: 0,
+  });
 
   // Close view dropdown when clicking outside
   useEffect(() => {
@@ -1141,11 +1268,13 @@ export default function App() {
     orphanPages: scanLayerAvailability.orphanPages ? scanLayerVisibility.orphanPages : true,
     errorPages: scanLayerAvailability.errorPages ? scanLayerVisibility.errorPages : true,
     brokenLinks: scanLayerAvailability.brokenLinks ? scanLayerVisibility.brokenLinks : true,
+    duplicates: scanLayerAvailability.duplicates ? scanLayerVisibility.duplicates : true,
     files: scanLayerAvailability.files ? scanLayerVisibility.files : true,
   }), [scanLayerAvailability, scanLayerVisibility, showThumbnails]);
 
   const visibleOrphans = useMemo(() => {
     return orphans.filter((orphan) => {
+      if (orphan.isDuplicate && !effectiveScanLayers.duplicates) return false;
       if (orphan.subdomainRoot) return effectiveScanLayers.subdomains;
       if (orphan.authRequired && !effectiveScanLayers.authenticatedPages) return false;
       if (orphan.isError && !effectiveScanLayers.errorPages) return false;
@@ -1261,6 +1390,7 @@ export default function App() {
       orphanPages: false,
       errorPages: false,
       brokenLinks: false,
+      duplicates: false,
       files: false,
     });
     setScanLayerVisibility({
@@ -1271,6 +1401,7 @@ export default function App() {
       orphanPages: true,
       errorPages: true,
       brokenLinks: true,
+      duplicates: true,
       files: true,
     });
   };
@@ -1644,27 +1775,61 @@ export default function App() {
     }
   };
 
-  const requestThumbnail = async (node) => {
-    if (!node?.id || !node?.url) return;
-    if (thumbnailRequestRef.current.has(node.id)) return;
-    thumbnailRequestRef.current.add(node.id);
+  const processThumbnailQueue = () => {
+    if (thumbnailActiveRef.current >= MAX_THUMBNAIL_CONCURRENCY) return;
+    const next = thumbnailQueueRef.current.shift();
+    if (!next) return;
+    thumbnailActiveRef.current += 1;
+    setThumbnailQueueSize(thumbnailQueueRef.current.length);
+    setThumbnailActiveCount(thumbnailActiveRef.current);
+    thumbnailStartRef.current.set(next.id, Date.now());
+    let success = false;
 
-    try {
-      const res = await fetch(
-        `${API_BASE}/screenshot?url=${encodeURIComponent(node.url)}&type=thumb`
-      );
-      const data = await res.json();
-      if (!res.ok || data?.error) {
-        return;
-      }
-      if (data?.url) {
-        updateNodeThumbnail(node.id, data.url);
-      }
-    } catch (e) {
-      // Swallow errors; retries handled in the card.
-    } finally {
-      thumbnailRequestRef.current.delete(node.id);
-    }
+    fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(next.url)}&type=thumb`)
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (ok && data?.url) {
+          updateNodeThumbnail(next.id, data.url);
+          success = true;
+          next.resolve(true);
+          return;
+        }
+        next.resolve(false);
+      })
+      .catch(() => {
+        // Swallow errors; retries handled in the card.
+        next.resolve(false);
+      })
+      .finally(() => {
+        thumbnailRequestRef.current.delete(next.id);
+        thumbnailActiveRef.current -= 1;
+        setThumbnailActiveCount(thumbnailActiveRef.current);
+        setThumbnailQueueSize(thumbnailQueueRef.current.length);
+        const start = thumbnailStartRef.current.get(next.id);
+        if (start) {
+          thumbnailTotalTimeRef.current += Date.now() - start;
+          thumbnailStartRef.current.delete(next.id);
+        }
+        setThumbnailStats((prev) => {
+          const completed = prev.completed + (success ? 1 : 0);
+          const failed = prev.failed + (success ? 0 : 1);
+          const done = completed + failed;
+          const avgMs = done ? Math.round(thumbnailTotalTimeRef.current / done) : 0;
+          return { ...prev, completed, failed, avgMs };
+        });
+        processThumbnailQueue();
+      });
+  };
+
+  const requestThumbnail = (node) => {
+    if (!node?.id || !node?.url) return Promise.resolve(false);
+    if (thumbnailRequestRef.current.has(node.id)) return Promise.resolve(false);
+    thumbnailRequestRef.current.add(node.id);
+    return new Promise((resolve) => {
+      thumbnailQueueRef.current.push({ id: node.id, url: node.url, resolve });
+      setThumbnailQueueSize(thumbnailQueueRef.current.length);
+      processThumbnailQueue();
+    });
   };
 
   // Fetch full page screenshot from backend (or display direct image URL)
@@ -2044,31 +2209,51 @@ export default function App() {
         const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
         const countThumbnails = nodesForCounts.filter((node) => !!node.thumbnailUrl).length;
         const authCount = nodesForCounts.filter((node) => !!node.authRequired).length;
+        const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
         setRoot(merged.root);
         setOrphans(merged.orphans);
         setScanMeta({ brokenLinks: data.brokenLinks || [] });
         setScanLayerAvailability({
-          thumbnails: scanOptions.thumbnails && countThumbnails > 0,
+          thumbnails: scanOptions.thumbnails,
           inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
           subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
           authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
           orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
           errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
           brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
+          duplicates: scanOptions.duplicates && duplicateCount > 0,
           files: scanOptions.files && (data.files || []).length > 0,
         });
         setScanLayerVisibility({
-          thumbnails: scanOptions.thumbnails && countThumbnails > 0,
+          thumbnails: scanOptions.thumbnails,
           inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
           subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
           authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
           orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
           errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
           brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
+          duplicates: scanOptions.duplicates && duplicateCount > 0,
           files: scanOptions.files && (data.files || []).length > 0,
         });
         if (scanOptions.thumbnails) {
           setShowThumbnails(true);
+        }
+        if (scanOptions.thumbnails) {
+          thumbnailQueueRef.current = [];
+          thumbnailRequestRef.current = new Set();
+          thumbnailActiveRef.current = 0;
+          thumbnailStartRef.current = new Map();
+          thumbnailTotalTimeRef.current = 0;
+          setThumbnailQueueSize(0);
+          setThumbnailActiveCount(0);
+          setThumbnailStats({
+            total: nodesForCounts.length,
+            completed: 0,
+            failed: 0,
+            avgMs: 0,
+          });
+        } else {
+          setThumbnailStats({ total: 0, completed: 0, failed: 0, avgMs: 0 });
         }
         setCurrentMap(null);
         setScale(1);
@@ -2153,6 +2338,13 @@ export default function App() {
     dragRef.current.startPanY = pan.y;
     setIsPanning(true);
     e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const formatDuration = (ms) => {
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
   };
 
   const onPointerMove = (e) => {
@@ -3959,6 +4151,68 @@ const findNodeById = (node, id) => {
     if (isDescendantOf(root, newParentId, nodeId)) return;
 
     saveStateForUndo();
+    const orphanIndex = orphans.findIndex(o => o.id === nodeId);
+    if (orphanIndex !== -1) {
+      const orphanNode = orphans[orphanIndex];
+      setOrphans(prev => prev.filter(o => o.id !== nodeId));
+      setRoot((prev) => {
+        const copy = structuredClone(prev);
+        const newParent = findNodeById(copy, newParentId);
+        if (!newParent) return prev;
+        newParent.children = newParent.children || [];
+        newParent.children.splice(insertIndex, 0, {
+          ...orphanNode,
+          orphanType: 'orphan',
+          subdomainRoot: false,
+        });
+        return copy;
+      });
+      return;
+    }
+    const findNodeInTree = (tree, targetId) => {
+      if (!tree) return null;
+      if (tree.id === targetId) return tree;
+      for (const child of tree.children || []) {
+        const found = findNodeInTree(child, targetId);
+        if (found) return found;
+      }
+      return null;
+    };
+    const removeFromTree = (tree, targetId) => {
+      if (!tree?.children?.length) return null;
+      const idx = tree.children.findIndex(c => c.id === targetId);
+      if (idx !== -1) {
+        return tree.children.splice(idx, 1)[0];
+      }
+      for (const child of tree.children) {
+        const removed = removeFromTree(child, targetId);
+        if (removed) return removed;
+      }
+      return null;
+    };
+    const orphanChildIndex = orphans.findIndex(o => findNodeInTree(o, nodeId));
+    if (orphanChildIndex !== -1) {
+      const orphanRoot = orphans[orphanChildIndex];
+      const orphanCopy = structuredClone(orphanRoot);
+      const removedNode = orphanCopy.id === nodeId ? orphanCopy : removeFromTree(orphanCopy, nodeId);
+      if (!removedNode) return;
+      const nextOrphans = structuredClone(orphans);
+      nextOrphans[orphanChildIndex] = orphanCopy;
+      setOrphans(nextOrphans);
+      setRoot((prev) => {
+        const copy = structuredClone(prev);
+        const newParent = findNodeById(copy, newParentId);
+        if (!newParent) return prev;
+        newParent.children = newParent.children || [];
+        newParent.children.splice(insertIndex, 0, {
+          ...removedNode,
+          orphanType: 'orphan',
+          subdomainRoot: false,
+        });
+        return copy;
+      });
+      return;
+    }
     setRoot((prev) => {
       const copy = structuredClone(prev);
       const nodeToMove = findNodeById(copy, nodeId);
@@ -4552,6 +4806,9 @@ const findNodeById = (node, id) => {
         scanOptionsRef={scanOptionsRef}
         onToggleScanOptions={() => setShowScanOptions(v => !v)}
         onScanOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
+        scanLayerAvailability={scanLayerAvailability}
+        scanLayerVisibility={scanLayerVisibility}
+        onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
         scanDepth={scanDepth}
         onScanDepthChange={(value) => {
           const cleaned = value.replace(/[^\d]/g, '');
@@ -5185,6 +5442,20 @@ const findNodeById = (node, id) => {
             />
           </DndContext>
         )}
+        {showThumbnails && thumbnailStats.total > 0 && (() => {
+          const completed = thumbnailStats.completed + thumbnailStats.failed;
+          const remaining = thumbnailStats.total - completed;
+          if (remaining <= 0) return null;
+          const etaMs = thumbnailStats.avgMs > 0
+            ? Math.ceil((remaining * thumbnailStats.avgMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY))
+            : 0;
+          return (
+            <div className="thumbnail-progress-toast">
+              <span>Thumbnails: {completed}/{thumbnailStats.total}</span>
+              <span>{thumbnailStats.avgMs > 0 ? `ETA ~${formatDuration(etaMs)}` : 'Estimating...'}</span>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Comments Panel - Right Rail */}

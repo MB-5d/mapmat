@@ -112,6 +112,11 @@ function normalizeUrl(raw) {
   try {
     const u = new URL(raw);
     u.hash = '';
+    u.hostname = normalizeHost(u.hostname);
+
+    if (/\/index\.(html?|php|aspx)$/i.test(u.pathname)) {
+      u.pathname = u.pathname.replace(/\/index\.(html?|php|aspx)$/i, '/');
+    }
 
     // Remove trailing slash except root
     if (u.pathname !== '/' && u.pathname.endsWith('/')) {
@@ -128,7 +133,11 @@ function sameOrigin(a, b) {
   try {
     const ua = new URL(a);
     const ub = new URL(b);
-    return ua.origin === ub.origin;
+    return (
+      ua.protocol === ub.protocol
+      && ua.port === ub.port
+      && normalizeHost(ua.hostname) === normalizeHost(ub.hostname)
+    );
   } catch {
     return false;
   }
@@ -141,7 +150,7 @@ function sameDomain(a, b) {
     const ub = new URL(b);
     // Get root domain (last 2 parts for most TLDs)
     const getRootDomain = (hostname) => {
-      const parts = hostname.split('.');
+      const parts = normalizeHost(hostname).split('.');
       // Handle common TLDs like .co.uk, .com.au etc
       if (parts.length > 2 && parts[parts.length - 2].length <= 3) {
         return parts.slice(-3).join('.');
@@ -154,6 +163,43 @@ function sameDomain(a, b) {
   }
 }
 
+function normalizeHost(hostname) {
+  return hostname.replace(/^www\./i, '');
+}
+
+function getCanonicalKey(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    u.hash = '';
+    u.hostname = normalizeHost(u.hostname);
+    if (/\/index\.(html?|php|aspx)$/i.test(u.pathname)) {
+      u.pathname = u.pathname.replace(/\/index\.(html?|php|aspx)$/i, '/');
+    }
+    if (u.pathname !== '/' && u.pathname.endsWith('/')) {
+      u.pathname = u.pathname.replace(/\/+$/, '');
+    }
+
+    if (u.search) {
+      const params = new URLSearchParams(u.search);
+      const trackingKeys = [
+        'gclid', 'fbclid', 'ref', 'ref_src', 'mkt_tok', 'mc_cid', 'mc_eid',
+      ];
+      Array.from(params.keys()).forEach((key) => {
+        if (key.startsWith('utm_') || trackingKeys.includes(key)) {
+          params.delete(key);
+        }
+      });
+      const next = params.toString();
+      u.search = next ? `?${next}` : '';
+    }
+
+    const port = u.port ? `:${u.port}` : '';
+    return `${u.hostname}${port}${u.pathname}${u.search}`;
+  } catch {
+    return urlStr;
+  }
+}
+
 function getParentUrl(urlStr) {
   const u = new URL(urlStr);
   if (u.pathname === '/' || u.pathname === '') return null;
@@ -162,7 +208,19 @@ function getParentUrl(urlStr) {
   if (parts.length <= 1) return u.origin + '/';
 
   const parentPath = '/' + parts.slice(0, -1).join('/');
-  return u.origin + parentPath;
+  return normalizeUrl(u.origin + parentPath);
+}
+
+function getTitleFromUrl(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    if (u.pathname === '/' || u.pathname === '') return u.hostname;
+    const parts = u.pathname.split('/').filter(Boolean);
+    const last = parts[parts.length - 1] || u.hostname;
+    return decodeURIComponent(last).replace(/[-_]/g, ' ');
+  } catch {
+    return urlStr;
+  }
 }
 
 function safeIdFromUrl(urlStr) {
@@ -190,6 +248,18 @@ function extractTitle(html, fallbackUrl) {
     return decodeURIComponent(u.pathname.split('/').filter(Boolean).slice(-1)[0]).replace(/[-_]/g, ' ');
   } catch {
     return fallbackUrl;
+  }
+}
+
+function extractCanonicalUrl(html, baseUrl) {
+  try {
+    const $ = cheerio.load(html);
+    const href = ($('link[rel="canonical"]').attr('href') || '').trim();
+    if (!href) return null;
+    const abs = new URL(href, baseUrl).toString();
+    return normalizeUrl(abs);
+  } catch {
+    return null;
   }
 }
 
@@ -237,7 +307,9 @@ async function fetchPage(url, extraHeaders = {}) {
     },
     validateStatus: () => true,
   });
-  return { html: res.data, status: res.status, contentType: res.headers['content-type'] };
+  const responseUrl = res.request?.res?.responseUrl;
+  const finalUrl = normalizeUrl(responseUrl || url);
+  return { html: res.data, status: res.status, contentType: res.headers['content-type'], finalUrl };
 }
 
 function isHtmlContentType(contentType) {
@@ -359,6 +431,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   );
 
   const visited = new Set();
+  const referrerMap = new Map();
   const queue = [{ url: seed, depth: 0 }];
 
   // Common page paths to try (often not linked from main pages)
@@ -469,11 +542,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let html;
     let status = 0;
     let contentType = '';
+    let finalUrl = url;
     try {
       const res = await fetchPage(url, extraHeaders);
       html = res.html;
       status = res.status;
       contentType = res.contentType;
+      finalUrl = res.finalUrl || url;
     } catch (e) {
     // Still store node with fallback title so tree doesn't break
     if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
@@ -515,20 +590,22 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       continue;
     }
 
-    const title = extractTitle(html, url);
-    const parentUrl = getParentUrl(url);
+    const title = extractTitle(html, finalUrl || url);
+    const parentUrl = getParentUrl(finalUrl || url);
+    const canonicalUrl = extractCanonicalUrl(html, finalUrl || url);
     const isAuthPage = status === 401 || status === 403;
-    const thumbnailUrl = (scanOptions.thumbnails && !isAuthPage) ? extractThumbnailUrl(html, url) : null;
 
     pageMap.set(url, {
       url,
+      finalUrl: finalUrl || url,
+      canonicalUrl,
       title,
       parentUrl,
       authRequired: status === 401 || status === 403,
-      thumbnailUrl: thumbnailUrl || undefined,
+      thumbnailUrl: undefined,
     });
 
-    const links = extractLinks(html, url);
+    const links = extractLinks(html, finalUrl || url);
     const allowedLinks = links.filter((link) => allowUrl(link));
     linksByUrl.set(url, allowedLinks);
 
@@ -558,6 +635,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (d > maxDepth) continue;
       if (visited.has(link)) continue;
 
+        const normalizedReferrer = normalizeUrl(url);
+        if (!referrerMap.has(link) && link !== normalizedReferrer) {
+          referrerMap.set(link, normalizedReferrer);
+        }
       queue.push({ url: link, depth: d });
     }
   }
@@ -573,39 +654,239 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     nodes.set(url, {
       id: safeIdFromUrl(url),
       url,
+      finalUrl: meta.finalUrl || url,
+      canonicalUrl: meta.canonicalUrl || null,
       title: meta.title || url,
       parentUrl: meta.parentUrl,
+      referrerUrl: referrerMap.get(url) || null,
       authRequired: meta.authRequired || false,
       thumbnailUrl: meta.thumbnailUrl || undefined,
       children: [],
     });
   }
 
-  // Link children using parentUrl chain, falling back to root when parent missing
+  const canonicalKeyFor = (node) => getCanonicalKey(node.canonicalUrl || node.finalUrl || node.url);
+  const canonicalIndex = new Map();
+  const rootNode = nodes.get(rootUrl);
+  if (rootNode) {
+    const rootKey = canonicalKeyFor(rootNode);
+    if (rootKey) canonicalIndex.set(rootKey, rootNode.url);
+    rootNode.isDuplicate = false;
+    rootNode.duplicateOf = null;
+  }
+  nodes.forEach((node) => {
+    if (node.url === rootUrl) return;
+    const key = canonicalKeyFor(node);
+    if (!key) return;
+    if (!canonicalIndex.has(key)) {
+      canonicalIndex.set(key, node.url);
+      return;
+    }
+    if (canonicalIndex.get(key) !== node.url) {
+      node.isDuplicate = true;
+      node.duplicateOf = canonicalIndex.get(key);
+    }
+  });
+
+  // Link children using referrer graph for main tree and path graph for subdomain/orphan trees
   const rootUrl = seed;
   const rootHost = new URL(rootUrl).hostname;
-  const orphanNodes = [];
-  const subdomainNodes = [];
+  const rootHostNormalized = normalizeHost(rootHost);
+
+  const ensureParentChain = (url) => {
+    let parentUrl = getParentUrl(url);
+    while (parentUrl && !nodes.has(parentUrl)) {
+      nodes.set(parentUrl, {
+        id: safeIdFromUrl(parentUrl),
+        url: parentUrl,
+        title: getTitleFromUrl(parentUrl),
+        parentUrl: getParentUrl(parentUrl),
+        referrerUrl: null,
+        authRequired: false,
+        thumbnailUrl: undefined,
+        isMissing: true,
+        children: [],
+      });
+      parentUrl = getParentUrl(parentUrl);
+    }
+  };
+
   for (const node of nodes.values()) {
     if (node.url === rootUrl) continue;
+    ensureParentChain(node.url);
+  }
 
-    const parentUrl = node.parentUrl;
+  // Reset children before regrouping
+  nodes.forEach((node) => {
+    node.children = [];
+    node._childUrls = undefined;
+  });
 
-    if (parentUrl && nodes.has(parentUrl)) {
-      nodes.get(parentUrl).children.push(node);
-    } else {
-      const nodeHost = new URL(node.url).hostname;
-      const isSubdomainRoot = scanOptions.subdomains && nodeHost !== rootHost;
-      if (isSubdomainRoot) {
-        subdomainNodes.push(node);
-      } else if (scanOptions.orphanPages) {
-        orphanNodes.push(node);
-      } else {
-        // If parent missing, attach to root
-        nodes.get(rootUrl).children.push(node);
-      }
+  // Build referrer adjacency (link graph)
+  const referrerChildren = new Map();
+  for (const [childUrl, referrerUrl] of referrerMap.entries()) {
+    if (!referrerUrl) continue;
+    if (!nodes.has(childUrl) || !nodes.has(referrerUrl)) continue;
+    if (!referrerChildren.has(referrerUrl)) referrerChildren.set(referrerUrl, []);
+    referrerChildren.get(referrerUrl).push(childUrl);
+  }
+
+  // Determine which nodes are linked to root via referrers
+  const linked = new Set([rootUrl]);
+  const linkedQueue = [rootUrl];
+  while (linkedQueue.length) {
+    const current = linkedQueue.shift();
+    const children = referrerChildren.get(current) || [];
+    for (const childUrl of children) {
+      if (!nodes.has(childUrl)) continue;
+      const childHost = new URL(childUrl).hostname;
+      if (normalizeHost(childHost) !== rootHostNormalized) continue;
+      if (linked.has(childUrl)) continue;
+      linked.add(childUrl);
+      linkedQueue.push(childUrl);
     }
   }
+
+  // Ensure path ancestors for linked nodes are also linked (for missing placeholders)
+  Array.from(linked).forEach((url) => {
+    let parentUrl = getParentUrl(url);
+    while (parentUrl) {
+      if (!nodes.has(parentUrl)) break;
+      const parentHost = new URL(parentUrl).hostname;
+      if (normalizeHost(parentHost) !== rootHostNormalized) break;
+      if (linked.has(parentUrl)) break;
+      linked.add(parentUrl);
+      parentUrl = getParentUrl(parentUrl);
+    }
+  });
+
+  const orphanCandidates = [];
+  const subdomainCandidates = [];
+
+  const pushUniqueChild = (parent, child) => {
+    if (!parent._childUrls) parent._childUrls = new Set();
+    const key = normalizeUrl(child.url);
+    if (parent._childUrls.has(key)) return;
+    parent._childUrls.add(key);
+    parent.children.push(child);
+  };
+
+  for (const node of nodes.values()) {
+    if (node.url === rootUrl) continue;
+    const nodeHost = new URL(node.url).hostname;
+    const isSubdomain = scanOptions.subdomains && normalizeHost(nodeHost) !== rootHostNormalized;
+
+    if (isSubdomain) {
+      subdomainCandidates.push(node);
+      continue;
+    }
+
+    if (node.isDuplicate) {
+      if (scanOptions.orphanPages) orphanCandidates.push(node);
+      continue;
+    }
+
+    if (linked.has(node.url)) {
+      const parentUrl = node.parentUrl;
+      if (parentUrl && nodes.has(parentUrl) && linked.has(parentUrl)) {
+        pushUniqueChild(nodes.get(parentUrl), node);
+      } else {
+        pushUniqueChild(nodes.get(rootUrl), node);
+      }
+      continue;
+    }
+
+    if (scanOptions.orphanPages) {
+      if (!node.isMissing) orphanCandidates.push(node);
+    } else {
+      pushUniqueChild(nodes.get(rootUrl), node);
+    }
+  }
+
+  // Build subdomain trees
+  const subdomainSet = new Set(subdomainCandidates.map((n) => n.url));
+  const subdomainNodes = [];
+  for (const node of subdomainCandidates) {
+    const parentUrl = node.parentUrl;
+    if (parentUrl && subdomainSet.has(parentUrl)) {
+      pushUniqueChild(nodes.get(parentUrl), node);
+    } else {
+      subdomainNodes.push(node);
+    }
+  }
+
+  // Build orphan trees with missing parent placeholders
+  const orphanMap = new Map();
+  const addOrphanNode = (node) => {
+    if (!node?.url) return null;
+    if (orphanMap.has(node.url)) return orphanMap.get(node.url);
+    const normalized = {
+      ...node,
+      orphanType: node.orphanType || 'orphan',
+      children: [],
+    };
+    orphanMap.set(normalized.url, normalized);
+    return normalized;
+  };
+
+  orphanCandidates.forEach((node) => addOrphanNode(node));
+
+  const ensureOrphanParentChain = (url) => {
+    let parentUrl = getParentUrl(url);
+    while (parentUrl && parentUrl !== rootUrl) {
+      if (!orphanMap.has(parentUrl)) {
+        orphanMap.set(parentUrl, {
+          id: safeIdFromUrl(parentUrl),
+          url: parentUrl,
+          title: getTitleFromUrl(parentUrl),
+          parentUrl: getParentUrl(parentUrl),
+          referrerUrl: null,
+          authRequired: false,
+          thumbnailUrl: undefined,
+          isMissing: true,
+          orphanType: 'orphan',
+          children: [],
+        });
+      }
+      parentUrl = getParentUrl(parentUrl);
+    }
+  };
+
+  Array.from(orphanMap.values()).forEach((node) => {
+    ensureOrphanParentChain(node.url);
+  });
+
+  const orphanNodes = [];
+  orphanMap.forEach((node) => {
+    const parentUrl = node.parentUrl;
+    if (parentUrl && orphanMap.has(parentUrl)) {
+      pushUniqueChild(orphanMap.get(parentUrl), node);
+    } else {
+      orphanNodes.push(node);
+    }
+  });
+
+  const pruneMissing = (node) => {
+    if (node.children?.length) {
+      node.children = node.children.filter(pruneMissing);
+    }
+    if (node.isMissing && (!node.children || node.children.length === 0)) return false;
+    return true;
+  };
+
+  const prunedOrphanNodes = orphanNodes.filter(pruneMissing);
+
+  const stripInternalFields = (node) => {
+    if (!node) return;
+    delete node._childUrls;
+    if (node.children?.length) {
+      node.children.forEach(stripInternalFields);
+    }
+  };
+
+  stripInternalFields(root);
+  prunedOrphanNodes.forEach(stripInternalFields);
+  subdomainNodes.forEach(stripInternalFields);
 
   // Sort children by URL path so output is stable
   function sortTree(n) {
@@ -615,6 +896,26 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const root = nodes.get(rootUrl);
   sortTree(root);
+  subdomainNodes.forEach(sortTree);
+  orphanNodes.forEach(sortTree);
+
+  const canonicalToRootUrl = new Map();
+  const collectCanonical = (node) => {
+    const key = canonicalKeyFor(node);
+    if (key && !canonicalToRootUrl.has(key)) canonicalToRootUrl.set(key, node.url);
+    node.children?.forEach(collectCanonical);
+  };
+  if (root) collectCanonical(root);
+
+  const markDuplicateTree = (node) => {
+    const key = canonicalKeyFor(node);
+    if (key && canonicalToRootUrl.has(key) && canonicalToRootUrl.get(key) !== node.url) {
+      node.isDuplicate = true;
+      node.duplicateOf = canonicalToRootUrl.get(key);
+    }
+    node.children?.forEach(markDuplicateTree);
+  };
+  orphanNodes.forEach(markDuplicateTree);
 
   let crosslinks = [];
   if (scanOptions.crosslinks) {
@@ -638,7 +939,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   return {
     root,
-    orphans: scanOptions.orphanPages ? orphanNodes : [],
+    orphans: scanOptions.orphanPages ? prunedOrphanNodes : [],
     subdomains: scanOptions.subdomains ? subdomainNodes : [],
     errors: scanOptions.errorPages ? errors : [],
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
@@ -691,8 +992,12 @@ app.get('/scan-stream', async (req, res) => {
 
   const sendEvent = (event, data) => {
     if (aborted) return;
-    res.write(`event: ${event}\n`);
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    try {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch (err) {
+      console.error('SSE serialization error:', err);
+    }
   };
 
   try {
@@ -764,22 +1069,19 @@ app.get('/screenshot', async (req, res) => {
       lastScreenshotByHost.set(host, Date.now());
 
       const b = await getBrowser();
-      const page = await b.newPage();
       const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];
-
-      await page.addInitScript(() => {
+      const context = await b.newContext({
+        userAgent: ua,
+        viewport: { width: 1280, height: 720 },
+        extraHTTPHeaders: {
+          'Accept-Language': 'en-US,en;q=0.9',
+          DNT: '1',
+        },
+      });
+      await context.addInitScript(() => {
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       });
-
-      await page.setExtraHTTPHeaders({
-        'Accept-Language': 'en-US,en;q=0.9',
-        DNT: '1',
-      });
-      await page.setUserAgent(ua);
-      await page.setViewportSize({
-        width: 1240 + Math.floor(Math.random() * 120),
-        height: 720 + Math.floor(Math.random() * 120),
-      });
+      const page = await context.newPage();
 
       let lastError = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -809,6 +1111,7 @@ app.get('/screenshot', async (req, res) => {
           }
 
           await page.close();
+          await context.close();
           if (blocked) {
             return { blocked: true };
           }
@@ -820,6 +1123,7 @@ app.get('/screenshot', async (req, res) => {
       }
 
       await page.close();
+      await context.close();
       throw lastError || new Error('Screenshot failed');
     });
 

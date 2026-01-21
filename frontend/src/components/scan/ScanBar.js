@@ -13,6 +13,9 @@ const ScanBar = ({
   optionsRef,
   onToggleOptions,
   onOptionChange,
+  scanLayerAvailability,
+  scanLayerVisibility,
+  onToggleScanLayer,
   scanDepth,
   onScanDepthChange,
   onScan,
@@ -161,6 +164,15 @@ const ScanBar = ({
                   disabled={optionsDisabled}
                 />
                 <span>Crosslinks</span>
+              </label>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={options.duplicates}
+                  onChange={() => onOptionChange('duplicates')}
+                  disabled={optionsDisabled}
+                />
+                <span>Duplicates</span>
               </label>
             </div>
           </div>
