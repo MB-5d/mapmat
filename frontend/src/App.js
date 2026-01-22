@@ -135,20 +135,99 @@ const getNodeH = (showThumbnails) => showThumbnails ? LAYOUT.NODE_H_THUMB : LAYO
 // Minimum number of similar children to trigger stacking
 const STACK_THRESHOLD = 5;
 
+const normalizePathname = (url) => {
+  try {
+    const pathname = new URL(url).pathname || '/';
+    const trimmed = pathname.replace(/\/+$/, '');
+    return trimmed === '' ? '/' : trimmed;
+  } catch {
+    return null;
+  }
+};
+
+const getPathSegments = (pathname) => pathname.split('/').filter(Boolean);
+
+const getTitlePrefix = (title) => {
+  const cleaned = (title || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).join(' ');
+};
+
+const getSlugPattern = (slug) => {
+  if (!slug) return '';
+  if (/^\d+$/.test(slug)) return '#';
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(slug)) return 'date';
+  if (/^[a-z0-9]+$/i.test(slug) && /[a-z]/i.test(slug) && /\d/.test(slug) && slug.length >= 8) {
+    return 'id';
+  }
+  if (/^[0-9a-f]{8,}$/i.test(slug)) return 'hex';
+  if (/^page[-_]?(\d+)$/.test(slug.toLowerCase())) return 'page-#';
+  return slug.replace(/\d+/g, '#');
+};
+
+const getMostCommon = (items) => {
+  const counts = new Map();
+  items.forEach((item) => {
+    if (!item) return;
+    counts.set(item, (counts.get(item) || 0) + 1);
+  });
+  let bestValue = null;
+  let bestCount = 0;
+  counts.forEach((count, value) => {
+    if (count > bestCount) {
+      bestValue = value;
+      bestCount = count;
+    }
+  });
+  return { value: bestValue, count: bestCount };
+};
+
 // Check if children should be stacked (many similar siblings with same URL pattern)
 const shouldStackChildren = (children, depth) => {
   if (!children || children.length < STACK_THRESHOLD) return false;
-  // Don't stack root level or first level children (main nav items)
-  if (depth < 2) return false;
-  // Check if children have similar URL patterns
-  try {
-    const paths = children.map(c => new URL(c.url).pathname);
-    const firstPath = paths[0].split('/').slice(0, -1).join('/');
-    const matchingPaths = paths.filter(p => p.startsWith(firstPath + '/'));
-    return matchingPaths.length >= children.length * 0.8;
-  } catch {
-    return false;
-  }
+  // Don't stack root level children (main nav items)
+  if (depth < 1) return false;
+
+  const pathInfo = children
+    .map((child) => {
+      const pathname = normalizePathname(child.url);
+      if (!pathname) return null;
+      const segments = getPathSegments(pathname);
+      const slug = segments[segments.length - 1] || '';
+      const prefix = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : pathname;
+      return { prefix, slug };
+    })
+    .filter(Boolean);
+
+  if (pathInfo.length < STACK_THRESHOLD) return false;
+
+  const prefixes = pathInfo.map((item) => item.prefix).filter(Boolean);
+  const slugPatterns = pathInfo.map((item) => getSlugPattern(item.slug)).filter(Boolean);
+  const titlePrefixes = children.map((child) => getTitlePrefix(child.title)).filter(Boolean);
+
+  const prefixCommon = getMostCommon(prefixes);
+  const slugCommon = getMostCommon(slugPatterns);
+  const titleCommon = getMostCommon(titlePrefixes);
+
+  const prefixRatio = prefixes.length ? prefixCommon.count / prefixes.length : 0;
+  const slugRatio = slugPatterns.length ? slugCommon.count / slugPatterns.length : 0;
+  const titleRatio = titlePrefixes.length ? titleCommon.count / titlePrefixes.length : 0;
+
+  const strongPrefix = prefixCommon.value && prefixRatio >= 0.75;
+  const strongSlug = slugCommon.value && slugRatio >= 0.7;
+  const strongTitle = titleCommon.value && titleRatio >= 0.7;
+  const hasNumberedSlugs = pathInfo.filter((item) => /^\d+$/.test(item.slug)).length / pathInfo.length >= 0.6;
+  const hasIdSlugs = pathInfo.filter((item) => /[a-z]/i.test(item.slug || '') && /\d/.test(item.slug || '') && (item.slug || '').length >= 8).length / pathInfo.length >= 0.6;
+
+  if (strongPrefix && (strongSlug || strongTitle || prefixRatio >= 0.9)) return true;
+  if (strongSlug && strongTitle) return true;
+  if (strongSlug && prefixRatio >= 0.6) return true;
+  if (strongTitle && prefixRatio >= 0.6) return true;
+  if (strongPrefix && hasNumberedSlugs) return true;
+  if (strongPrefix && hasIdSlugs) return true;
+  if (prefixCommon.value && prefixRatio >= 0.85) return true;
+
+  return false;
 };
 
 
@@ -279,10 +358,7 @@ const computeLayout = (
   // Calculate subtree width (how far right the deepest child extends from parent's x)
   // This is used to prevent horizontal overlap between Level 1 siblings
   const getSubtreeWidth = (node, depth) => {
-    const shouldStack = shouldStackChildren(node.children, depth);
-    const isExpanded = !!expandedStacks[node.id];
-
-    if (!node.children?.length || (shouldStack && !isExpanded)) {
+    if (!node.children?.length) {
       return NODE_W; // Just the node itself
     }
 
@@ -312,25 +388,66 @@ const computeLayout = (
     const parentLayout = nodes.get(parentNode.id);
     if (!parentLayout) return NODE_H;
 
-    const shouldStack = shouldStackChildren(parentNode.children, parentDepth);
+  const shouldStack = shouldStackChildren(parentNode.children, parentDepth);
     const isExpanded = !!expandedStacks[parentNode.id];
 
-    // If stacked and not expanded: no child layout; subtree is just the parent card
-    if (!parentNode.children?.length || (shouldStack && !isExpanded)) {
+    // If no children: subtree is just the parent card
+    if (!parentNode.children?.length) {
       return NODE_H;
     }
 
     const parentX = parentLayout.x;
     const parentY = parentLayout.y;
-
     const childX = parentX + INDENT_X;
     let cursorY = parentY + NODE_H + GAP_STACK_Y;
+
+    if (shouldStack && !isExpanded) {
+      const stackChild = parentNode.children[0];
+      if (!stackChild) return NODE_H;
+      const childNumber = `${numberPrefix}.1`;
+      setNode(stackChild, childX, cursorY, parentDepth + 1, childNumber, {
+        stackInfo: {
+          parentId: parentNode.id,
+          totalCount: parentNode.children.length,
+          collapsed: true,
+        },
+      });
+
+      const spineX = parentX + STROKE_PAD_X;
+      const tickY = cursorY + NODE_H / 2;
+      connectors.push({
+        type: "vertical-spine",
+        x1: spineX,
+        y1: parentY + NODE_H,
+        x2: spineX,
+        y2: tickY,
+      });
+      connectors.push({
+        type: "horizontal-tick",
+        x1: spineX,
+        y1: tickY,
+        x2: childX,
+        y2: tickY,
+      });
+
+      cursorY += NODE_H + GAP_STACK_Y;
+      const total = cursorY - parentY - GAP_STACK_Y;
+      return Math.max(NODE_H, total);
+    }
 
     const childIdsInOrder = [];
 
     parentNode.children.forEach((child, idx) => {
       const childNumber = `${numberPrefix}.${idx + 1}`;
-      setNode(child, childX, cursorY, parentDepth + 1, childNumber);
+      const stackInfo = shouldStack
+        ? {
+            parentId: parentNode.id,
+            totalCount: parentNode.children.length,
+            expanded: true,
+            showCollapse: idx === 0 || idx === parentNode.children.length - 1,
+          }
+        : null;
+      setNode(child, childX, cursorY, parentDepth + 1, childNumber, stackInfo ? { stackInfo } : {});
 
       childIdsInOrder.push(child.id);
 
@@ -685,6 +802,39 @@ const SitemapTree = ({
         const color = colors[Math.min(nodeData.depth, colors.length - 1)];
         const isRoot = nodeData.depth === 0;
         const badges = getBadgesForNode(nodeData.node);
+        const stackInfo = nodeData.stackInfo;
+        const stackToggleParentId = stackInfo?.parentId;
+        const shouldWrapStack = !!stackInfo?.collapsed;
+
+        const card = (
+          <DraggableNodeCard
+            node={nodeData.node}
+            number={nodeData.number}
+            color={color}
+            showThumbnails={showThumbnails}
+            showCommentBadges={showCommentBadges}
+            canEdit={canEdit}
+            canComment={canComment}
+            connectionTool={connectionTool}
+            snapTarget={snapTarget}
+            onAnchorMouseDown={onAnchorMouseDown}
+            isRoot={isRoot}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            onDuplicate={onDuplicate}
+            onViewImage={onViewImage}
+            onAddNote={onAddNote}
+            onViewNotes={onViewNotes}
+            activeId={activeId}
+            badges={badges}
+            showPageNumbers={showPageNumbers}
+            onRequestThumbnail={onRequestThumbnail}
+            stackInfo={stackInfo}
+            onToggleStack={() => {
+              if (stackToggleParentId) toggleStack(stackToggleParentId);
+            }}
+          />
+        );
 
         return (
           <div
@@ -700,102 +850,20 @@ const SitemapTree = ({
             onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
             onClick={() => onNodeClick?.(nodeData.node)}
           >
-            <DraggableNodeCard
-              node={nodeData.node}
-              number={nodeData.number}
-              color={color}
-              showThumbnails={showThumbnails}
-              showCommentBadges={showCommentBadges}
-              canEdit={canEdit}
-              canComment={canComment}
-              connectionTool={connectionTool}
-              snapTarget={snapTarget}
-              onAnchorMouseDown={onAnchorMouseDown}
-              isRoot={isRoot}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onDuplicate={onDuplicate}
-              onViewImage={onViewImage}
-              onAddNote={onAddNote}
-              onViewNotes={onViewNotes}
-              activeId={activeId}
-              badges={badges}
-              showPageNumbers={showPageNumbers}
-              onRequestThumbnail={onRequestThumbnail}
-            />
+            {shouldWrapStack ? (
+              <div className="stacked-node-wrapper">
+                <div className="stacked-node-ghost stacked-node-ghost-3" />
+                <div className="stacked-node-ghost stacked-node-ghost-2" />
+                <div className="stacked-node-ghost stacked-node-ghost-1" />
+                {card}
+              </div>
+            ) : (
+              card
+            )}
           </div>
         );
       })}
 
-      {/* Stacking UI for collapsed stacks (render on top) */}
-      {Array.from(layout.nodes.values())
-        .filter(nodeData => {
-          const shouldStack = shouldStackChildren(nodeData.node.children, nodeData.depth);
-          return shouldStack && !expandedStacks[nodeData.node.id] && nodeData.node.children?.length > 0;
-        })
-        .map(nodeData => {
-          const NODE_H = getNodeH(showThumbnails);
-          const stackY = nodeData.y + NODE_H + LAYOUT.GAP_STACK_Y;
-          const stackX = nodeData.x + LAYOUT.INDENT_X;
-
-          return (
-            <div
-              key={`stack-${nodeData.node.id}`}
-              className="stacked-cards-positioned"
-              style={{
-                position: 'absolute',
-                left: stackX,
-                top: stackY,
-              }}
-              onClick={() => toggleStack(nodeData.node.id)}
-              title={`Click to expand ${nodeData.node.children.length} pages`}
-            >
-              <div className="stacked-cards">
-                <div className="stacked-card stacked-card-3" />
-                <div className="stacked-card stacked-card-2" />
-                <div className="stacked-card stacked-card-1">
-                  <div className="stacked-preview">
-                    <span className="stacked-preview-title">
-                      {nodeData.node.children[0]?.title || 'Untitled'}
-                    </span>
-                  </div>
-                </div>
-                <div className="stacked-count">+{nodeData.node.children.length - 1} more</div>
-              </div>
-            </div>
-          );
-        })}
-
-      {/* Collapse buttons for expanded stacks */}
-      {Array.from(layout.nodes.values())
-        .filter(nodeData => {
-          const shouldStack = shouldStackChildren(nodeData.node.children, nodeData.depth);
-          return shouldStack && expandedStacks[nodeData.node.id];
-        })
-        .map(nodeData => {
-          // Find the last child to position button after it
-          const lastChildId = nodeData.node.children[nodeData.node.children.length - 1]?.id;
-          const lastChildLayout = layout.nodes.get(lastChildId);
-          if (!lastChildLayout) return null;
-
-          const NODE_H = getNodeH(showThumbnails);
-          const buttonY = lastChildLayout.y + NODE_H + 8;
-          const buttonX = lastChildLayout.x;
-
-          return (
-            <button
-              key={`collapse-${nodeData.node.id}`}
-              className="collapse-stack-btn"
-              style={{
-                left: buttonX,
-                top: buttonY,
-              }}
-              onClick={() => toggleStack(nodeData.node.id)}
-            >
-              Collapse ({nodeData.node.children.length} pages)
-            </button>
-          );
-        })}
     </div>
   );
 };
@@ -941,6 +1009,16 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       if (!rootUrlSet.has(node.url)) {
         if (orphanType === 'subdomain') existing.subdomainRoot = true;
         if (orphanType && !existing.orphanType) existing.orphanType = orphanType;
+        if (existing.isMissing && !node.isMissing) {
+          Object.assign(existing, {
+            title: node.title || existing.title,
+            parentUrl: node.parentUrl || existing.parentUrl,
+            referrerUrl: node.referrerUrl || existing.referrerUrl,
+            authRequired: node.authRequired ?? existing.authRequired,
+            thumbnailUrl: node.thumbnailUrl || existing.thumbnailUrl,
+            isMissing: false,
+          });
+        }
         if (node.children?.length) {
           existing.children = node.children;
           indexNodeUrls(existing);
@@ -2670,14 +2748,16 @@ export default function App() {
         const next = Math.min(Math.max(currentScale * (1 + delta * zoomIntensity), 0.1), 3);
 
         const rect = canvas.getBoundingClientRect();
-        const ox = (cx - panRef.current.x) / currentScale;
-        const oy = (cy - panRef.current.y) / currentScale;
+        const anchorX = cx - rect.width / 2;
+        const anchorY = cy - 200;
+        const ox = (anchorX - panRef.current.x) / currentScale;
+        const oy = (anchorY - panRef.current.y) / currentScale;
 
-        const nx = cx - ox * next;
-        const ny = cy - oy * next;
+        const nx = anchorX - ox * next;
+        const ny = anchorY - oy * next;
 
         setScale(next);
-        setPan({ x: nx, y: ny });
+        setPan(clampPan({ x: nx, y: ny }));
         return;
       }
 
@@ -4474,7 +4554,6 @@ const findNodeById = (node, id) => {
     const newColors = [...colors];
     newColors[depth] = color;
     setColors(newColors);
-    setEditingColorDepth(null);
   };
 // File import parsing functions
   const generateId = () => `import_${Math.random().toString(36).slice(2, 10)}`;

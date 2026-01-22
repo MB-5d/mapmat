@@ -13,6 +13,7 @@ const ScanProgressModal = ({
   onContinueScan,
 }) => {
   if (!loading) return null;
+  const hasQueue = scanProgress.queued > 0;
 
   return (
     <div className="modal-overlay scanning-overlay">
@@ -25,18 +26,20 @@ const ScanProgressModal = ({
             </div>
             <div className="scan-status">
               <div className="scan-message">{scanMessage}</div>
-              <div className="scan-stats">
+              <div className="scan-url">{urlInput}</div>
+              <div className={`scan-stats${hasQueue ? '' : ' single'}`}>
                 <div className="scan-pages">
                   <span className="scan-pages-count">{scanProgress.scanned}</span>
-                  <span className="scan-pages-label">pages scanned</span>
+                  <span className="scan-pages-label">Scanned</span>
                 </div>
-                {scanProgress.queued > 0 && (
+                {hasQueue && (
                   <div className="scan-queued">
                     <span className="scan-queued-count">{scanProgress.queued}</span>
-                    <span className="scan-queued-label">in queue</span>
+                    <span className="scan-queued-label">In queue</span>
                   </div>
                 )}
               </div>
+              <div className="scan-stats-divider" aria-hidden="true" />
               <div className="scan-time-info">
                 <div className="scan-elapsed">
                   <span className="scan-time-label">Elapsed</span>
@@ -44,9 +47,10 @@ const ScanProgressModal = ({
                     {Math.floor(scanElapsed / 60)}:{String(scanElapsed % 60).padStart(2, '0')}
                   </span>
                 </div>
-                {scanProgress.scanned > 2 && scanProgress.queued > 0 && (
+                <div className="scan-time-divider" aria-hidden="true" />
+                {scanProgress.scanned > 2 && hasQueue && (
                   <div className="scan-estimated">
-                    <span className="scan-time-label">Est. remaining</span>
+                    <span className="scan-time-label">Remaining</span>
                     <span className="scan-time-value">
                       {(() => {
                         const avgTimePerPage = scanElapsed / scanProgress.scanned;
@@ -60,9 +64,8 @@ const ScanProgressModal = ({
                 )}
               </div>
             </div>
-            <div className="scan-url">{urlInput}</div>
             <button
-              className="modal-btn cancel"
+              className="modal-btn secondary"
               onClick={onRequestCancel}
             >
               Cancel Scan

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { HexColorPicker } from 'react-colorful';
 import { X } from 'lucide-react';
 
 const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
@@ -15,16 +16,26 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
   };
 
   const [rgb, setRgb] = useState(hexToRgb(color));
+  const [hexInput, setHexInput] = useState(color || '#6366f1');
 
   useEffect(() => {
     setCurrentColor(color);
     setRgb(hexToRgb(color));
+    setHexInput(color);
   }, [color]);
 
-  const handleColorChange = (e) => {
-    const newColor = e.target.value;
+  const normalizeHex = (value) => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+    if (/^#[0-9a-fA-F]{6}$/.test(withHash)) return withHash.toLowerCase();
+    return null;
+  };
+
+  const handleColorChange = (newColor) => {
     setCurrentColor(newColor);
     setRgb(hexToRgb(newColor));
+    setHexInput(newColor);
     onChange(newColor);
   };
 
@@ -34,67 +45,85 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
     setRgb(newRgb);
     const newHex = `#${newRgb.r.toString(16).padStart(2, '0')}${newRgb.g.toString(16).padStart(2, '0')}${newRgb.b.toString(16).padStart(2, '0')}`;
     setCurrentColor(newHex);
+    setHexInput(newHex);
     onChange(newHex);
   };
 
+  const modalStyle = useMemo(() => {
+    if (!position) return {};
+    const modalWidth = 280;
+    const modalHeight = 360;
+    const viewportW = window.innerWidth || 1024;
+    const viewportH = window.innerHeight || 768;
+    const anchorHeight = position.height || 28;
+    const anchorTop = position.top ?? 0;
+    const swatchCenterOffset = 290;
+    const anchorCenterY = anchorTop + anchorHeight / 2;
+    const top = Math.min(
+      Math.max(20, anchorCenterY - swatchCenterOffset),
+      viewportH - modalHeight - 20
+    );
+    let left = position.right + 12;
+    if (left + modalWidth > viewportW - 20 && position.left) {
+      left = position.left - modalWidth - 12;
+    }
+    left = Math.max(20, Math.min(left, viewportW - modalWidth - 20));
+    return {
+      position: 'fixed',
+      top,
+      left,
+    };
+  }, [position]);
+
   if (depth === null || depth === undefined) return null;
 
-  const modalStyle = position ? {
-    position: 'fixed',
-    top: Math.max(20, position.top - 245),
-    left: position.right + 8,
-  } : {};
+  const handleBackdropMouseDown = (event) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
 
   return (
-    <div className="color-picker-backdrop" onClick={onClose}>
+    <div
+      className="color-picker-backdrop"
+      onMouseDown={handleBackdropMouseDown}
+    >
       <div
         className="color-picker-modal anchored"
         style={modalStyle}
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <button className="modal-close" onClick={onClose}>
           <X size={24} />
         </button>
         
         <div className="color-picker-content">
-          {/* Native color picker - renders as gradient picker */}
           <div className="color-picker-gradient">
-            <input
-              type="color"
-              value={currentColor}
-              onChange={handleColorChange}
-              className="color-input-native"
-            />
+            <HexColorPicker color={currentColor} onChange={handleColorChange} />
           </div>
-          
-          {/* Color slider bar */}
-          <div className="color-picker-hue">
+
+          <div className="color-picker-hex">
+            <label htmlFor="color-hex-input">Hex</label>
             <input
-              type="range"
-              min="0"
-              max="360"
-              className="hue-slider"
+              id="color-hex-input"
+              type="text"
+              value={hexInput}
               onChange={(e) => {
-                // Convert hue to hex (simplified - keeps saturation/lightness)
-                const hue = e.target.value;
-                const saturation = 100;
-                const lightness = 50;
-                // HSL to RGB conversion
-                const c = (1 - Math.abs(2 * lightness / 100 - 1)) * saturation / 100;
-                const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
-                const m = lightness / 100 - c / 2;
-                let r, g, b;
-                if (hue < 60) { r = c; g = x; b = 0; }
-                else if (hue < 120) { r = x; g = c; b = 0; }
-                else if (hue < 180) { r = 0; g = c; b = x; }
-                else if (hue < 240) { r = 0; g = x; b = c; }
-                else if (hue < 300) { r = x; g = 0; b = c; }
-                else { r = c; g = 0; b = x; }
-                const newHex = `#${Math.round((r + m) * 255).toString(16).padStart(2, '0')}${Math.round((g + m) * 255).toString(16).padStart(2, '0')}${Math.round((b + m) * 255).toString(16).padStart(2, '0')}`;
-                setCurrentColor(newHex);
-                setRgb(hexToRgb(newHex));
-                onChange(newHex);
+                const nextValue = e.target.value;
+                setHexInput(nextValue);
+                const normalized = normalizeHex(nextValue);
+                if (normalized) handleColorChange(normalized);
               }}
+              onBlur={() => {
+                const normalized = normalizeHex(hexInput);
+                if (normalized) {
+                  setHexInput(normalized);
+                } else {
+                  setHexInput(currentColor);
+                }
+              }}
+              placeholder="#6366f1"
+              spellCheck={false}
             />
           </div>
 

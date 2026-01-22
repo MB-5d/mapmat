@@ -656,6 +656,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     pageMap.set(seed, { url: seed, title: new URL(seed).hostname, parentUrl: null, discoveryIndex: -1 });
   }
 
+  const scannedKeys = new Set();
+  pageMap.forEach((meta) => {
+    const key = getCanonicalKey(meta.canonicalUrl || meta.finalUrl || meta.url);
+    if (key) scannedKeys.add(key);
+  });
+
   // Build nodes
   const nodes = new Map();
   for (const [url, meta] of pageMap.entries()) {
@@ -849,9 +855,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const addOrphanNode = (node) => {
     if (!node?.url) return null;
     if (orphanMap.has(node.url)) return orphanMap.get(node.url);
+    const sourceNode = nodes.get(node.url) || node;
     const normalized = {
-      ...node,
-      orphanType: node.orphanType || 'orphan',
+      ...sourceNode,
+      orphanType: node.orphanType || sourceNode.orphanType || 'orphan',
       children: [],
     };
     orphanMap.set(normalized.url, normalized);
@@ -864,15 +871,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let parentUrl = getParentUrl(url);
     while (parentUrl && parentUrl !== rootUrl) {
       if (!orphanMap.has(parentUrl)) {
+        const sourceNode = nodes.get(parentUrl);
         orphanMap.set(parentUrl, {
-          id: safeIdFromUrl(parentUrl),
+          id: sourceNode?.id || safeIdFromUrl(parentUrl),
           url: parentUrl,
-          title: getTitleFromUrl(parentUrl),
-          parentUrl: getParentUrl(parentUrl),
-          referrerUrl: null,
-          authRequired: false,
-          thumbnailUrl: undefined,
-          isMissing: true,
+          title: sourceNode?.title || getTitleFromUrl(parentUrl),
+          parentUrl: sourceNode?.parentUrl || getParentUrl(parentUrl),
+          referrerUrl: sourceNode?.referrerUrl || null,
+          authRequired: sourceNode?.authRequired || false,
+          thumbnailUrl: sourceNode?.thumbnailUrl || undefined,
+          isMissing: sourceNode ? false : true,
           orphanType: 'orphan',
           children: [],
         });
@@ -951,6 +959,20 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   subdomainNodes.forEach((node) => sortTree(node, 0));
   orphanNodes.forEach((node) => sortTree(node, 0));
 
+  const sitemapKeys = new Set(
+    Array.from(sitemapOrder.keys())
+      .map((url) => getCanonicalKey(url))
+      .filter(Boolean)
+  );
+
+  nodes.forEach((node) => {
+    if (!node.isMissing) return;
+    const key = getCanonicalKey(node.url);
+    if (key && (sitemapKeys.has(key) || scannedKeys.has(key))) {
+      node.isMissing = false;
+    }
+  });
+
   const pruneMissing = (node) => {
     if (node.children?.length) {
       node.children = node.children.filter(pruneMissing);
@@ -960,6 +982,20 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   const prunedOrphanNodes = orphanNodes.filter(pruneMissing);
+
+  const clearMissingIfKnown = (node) => {
+    if (node.isMissing) {
+      const key = getCanonicalKey(node.url);
+      if (key && (sitemapKeys.has(key) || scannedKeys.has(key))) {
+        node.isMissing = false;
+      }
+    }
+    node.children?.forEach(clearMissingIfKnown);
+  };
+
+  if (root) clearMissingIfKnown(root);
+  prunedOrphanNodes.forEach(clearMissingIfKnown);
+  subdomainNodes.forEach(clearMissingIfKnown);
 
   const stripInternalFields = (node) => {
     if (!node) return;

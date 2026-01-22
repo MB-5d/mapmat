@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import {
+  ChevronDown,
+  ChevronUp,
   Copy,
   Edit2,
   ExternalLink,
@@ -37,6 +39,8 @@ const NodeCard = ({
   badges = [],
   showPageNumbers = true,
   onRequestThumbnail,
+  stackInfo,
+  onToggleStack,
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
@@ -104,9 +108,16 @@ const NodeCard = ({
   if (showThumbnails) classNames.push('with-thumb');
   if (connectionTool === 'userflow') classNames.push('connection-mode-userflow');
   if (connectionTool === 'crosslink') classNames.push('connection-mode-crosslink');
+  if (stackInfo?.collapsed) classNames.push('stack-collapsed');
+  if (stackInfo?.showCollapse) classNames.push('stack-expanded');
+  if (stackInfo?.collapsed || stackInfo?.showCollapse) classNames.push('has-stack-toggle');
 
   // Anchor color based on connection tool type
   const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
+  const showStackToggle = stackInfo?.collapsed || stackInfo?.showCollapse;
+  const stackToggleLabel = stackInfo?.collapsed
+    ? `+${Math.max(0, (stackInfo.totalCount || 0) - 1)} more`
+    : 'Collapse';
 
   return (
     <div
@@ -257,6 +268,22 @@ const NodeCard = ({
         )}
       </div>
 
+      {showStackToggle && (
+        <button
+          className={`stack-toggle ${stackInfo?.collapsed ? 'collapsed' : 'expanded'}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleStack?.();
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+          type="button"
+          title={stackInfo?.collapsed ? 'Expand stack' : 'Collapse stack'}
+        >
+          <span>{stackToggleLabel}</span>
+          {stackInfo?.collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+        </button>
+      )}
+
       {badges.length > 0 && (
         <div className="node-badges" aria-hidden="true">
           {badges.map((badge) => (
@@ -293,6 +320,8 @@ const DraggableNodeCard = ({
   badges,
   showPageNumbers,
   onRequestThumbnail,
+  stackInfo,
+  onToggleStack,
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
@@ -325,6 +354,8 @@ const DraggableNodeCard = ({
         badges={badges}
         showPageNumbers={showPageNumbers}
         onRequestThumbnail={onRequestThumbnail}
+        stackInfo={stackInfo}
+        onToggleStack={onToggleStack}
       />
     </div>
   );

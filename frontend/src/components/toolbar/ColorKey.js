@@ -22,12 +22,17 @@ const ColorKey = ({
     {showColorKey && (
       <div className="color-key-list">
         {colors.slice(0, maxDepth + 1).map((color, idx) => (
-          <div
+            <div
               key={idx}
               className={`color-key-item ${editingDepth === idx ? 'editing' : ''}`}
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                onEditDepth(idx, { top: rect.top, right: rect.right });
+                onEditDepth(idx, {
+                  top: rect.top,
+                  right: rect.right,
+                  left: rect.left,
+                  height: rect.height,
+                });
               }}
             >
             <div className={`color-swatch ${editingDepth === idx ? 'editing' : ''}`} style={{ backgroundColor: color }} />
