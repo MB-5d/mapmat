@@ -1614,7 +1614,7 @@ export default function App() {
   useEffect(() => {
     if (!root) return;
     setPan((prev) => clampPan(prev));
-  }, [effectiveScanLayers, root, orphans, clampPan]);
+  }, [effectiveScanLayers, root, orphans, scale, clampPan]);
 
   // Check auth and load data on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2737,34 +2737,31 @@ export default function App() {
       wheelStateRef.current.raf = null;
       if (!root) return;
 
-      const { dx, dy, isZoom, cx, cy } = wheelStateRef.current;
+      const { dx, dy: wheelDy, isZoom, cx, cy } = wheelStateRef.current;
       wheelStateRef.current.dx = 0;
       wheelStateRef.current.dy = 0;
 
       if (isZoom) {
-        const delta = -dy;
+        const delta = -wheelDy;
         const zoomIntensity = 0.002;
         const currentScale = scaleRef.current;
         const next = Math.min(Math.max(currentScale * (1 + delta * zoomIntensity), 0.1), 3);
 
-        const rect = canvas.getBoundingClientRect();
-        const anchorX = cx - rect.width / 2;
-        const anchorY = cy - 200;
-        const ox = (anchorX - panRef.current.x) / currentScale;
-        const oy = (anchorY - panRef.current.y) / currentScale;
+        const ox = (cx - panRef.current.x) / currentScale;
+        const oy = (cy - panRef.current.y) / currentScale;
 
-        const nx = anchorX - ox * next;
-        const ny = anchorY - oy * next;
+        const nx = cx - ox * next;
+        const ny = cy - oy * next;
 
         setScale(next);
         setPan(clampPan({ x: nx, y: ny }));
         return;
       }
 
-      if (dx === 0 && dy === 0) return;
+      if (dx === 0 && wheelDy === 0) return;
       setPan((p) => clampPan({
         x: p.x - dx,
-        y: p.y - dy,
+        y: p.y - wheelDy,
       }));
     };
 
@@ -5066,77 +5063,77 @@ const findNodeById = (node, id) => {
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale}) translate(-50%, 0px)`,
               }}
-              onMouseMove={(e) => {
-                if (drawingConnection) handleConnectionMouseMove(e);
-                else if (draggingEndpoint) handleEndpointDragMove(e);
-              }}
-              onMouseUp={(e) => {
-                if (drawingConnection) handleConnectionMouseUp(e);
-                else if (draggingEndpoint) handleEndpointDragEnd();
-              }}
-            >
-              <SitemapTree
-                data={renderRoot}
-                orphans={visibleOrphans}
-                showThumbnails={effectiveScanLayers.thumbnails && showThumbnails}
-                showCommentBadges={activeTool === 'comments' || showCommentsPanel}
-                canEdit={canEdit()}
-                canComment={canComment()}
-                connectionTool={connectionTool}
-                snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
-                onAnchorMouseDown={handleAnchorMouseDown}
-                colors={colors}
-                scale={scale}
-                onDelete={requestDeleteNode}
-                onEdit={openEditModal}
-                onDuplicate={duplicateNode}
-                onViewImage={viewFullScreenshot}
-                activeId={activeId}
-                onNodeDoubleClick={(id) => {
-                  if (scale < 0.95) {
-                    const el = contentRef.current?.querySelector(`[data-node-id="${id}"]`);
-                    if (el) {
-                      const rect = el.getBoundingClientRect();
-                      const canvasRect = canvasRef.current.getBoundingClientRect();
-                      const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
-                      const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
-                      setScale(1);
-                      setPan(p => clampPan({ x: p.x + dx, y: p.y + dy }));
-                    }
-                  }
+                onMouseMove={(e) => {
+                  if (drawingConnection) handleConnectionMouseMove(e);
+                  else if (draggingEndpoint) handleEndpointDragMove(e);
                 }}
-                onNodeClick={(node) => {
-                  if (activeTool === 'comments') {
-                    openCommentPopover(node.id);
-                  }
-                }}
-                onAddNote={(node) => openCommentPopover(node.id)}
-                onViewNotes={(node) => openCommentPopover(node.id)}
-                badgeVisibility={effectiveScanLayers}
-                showPageNumbers={layers.pageNumbers}
-                onRequestThumbnail={requestThumbnail}
-              />
-
-              {/* SVG Connections Layer */}
-              <svg
-                className="connections-layer"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  pointerEvents: 'none',
-                  overflow: 'visible',
-                  zIndex: 5,
+                onMouseUp={(e) => {
+                  if (drawingConnection) handleConnectionMouseUp(e);
+                  else if (draggingEndpoint) handleEndpointDragEnd();
                 }}
               >
-                {/* Arrowhead marker definition */}
-                <defs>
-                  <marker
-                    id="arrowhead-userflow"
-                    markerWidth="10"
-                    markerHeight="12.5"
+                <SitemapTree
+                  data={renderRoot}
+                  orphans={visibleOrphans}
+                  showThumbnails={effectiveScanLayers.thumbnails && showThumbnails}
+                  showCommentBadges={activeTool === 'comments' || showCommentsPanel}
+                  canEdit={canEdit()}
+                  canComment={canComment()}
+                  connectionTool={connectionTool}
+                  snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
+                  onAnchorMouseDown={handleAnchorMouseDown}
+                  colors={colors}
+                  scale={scale}
+                  onDelete={requestDeleteNode}
+                  onEdit={openEditModal}
+                  onDuplicate={duplicateNode}
+                  onViewImage={viewFullScreenshot}
+                  activeId={activeId}
+                  onNodeDoubleClick={(id) => {
+                    if (scale < 0.95) {
+                      const el = contentRef.current?.querySelector(`[data-node-id="${id}"]`);
+                      if (el) {
+                        const rect = el.getBoundingClientRect();
+                        const canvasRect = canvasRef.current.getBoundingClientRect();
+                        const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
+                        const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
+                        setScale(1);
+                        setPan(p => clampPan({ x: p.x + dx, y: p.y + dy }));
+                      }
+                    }
+                  }}
+                  onNodeClick={(node) => {
+                    if (activeTool === 'comments') {
+                      openCommentPopover(node.id);
+                    }
+                  }}
+                  onAddNote={(node) => openCommentPopover(node.id)}
+                  onViewNotes={(node) => openCommentPopover(node.id)}
+                  badgeVisibility={effectiveScanLayers}
+                  showPageNumbers={layers.pageNumbers}
+                  onRequestThumbnail={requestThumbnail}
+                />
+
+                {/* SVG Connections Layer */}
+                <svg
+                  className="connections-layer"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none',
+                    overflow: 'visible',
+                    zIndex: 5,
+                  }}
+                >
+                  {/* Arrowhead marker definition */}
+                  <defs>
+                    <marker
+                      id="arrowhead-userflow"
+                      markerWidth="10"
+                      markerHeight="12.5"
                     refX="9"
                     refY="6.25"
                     orient="auto"

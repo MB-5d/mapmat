@@ -680,6 +680,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
 
+  // Clear missing flag for anything actually scanned
+  pageMap.forEach((_, url) => {
+    const node = nodes.get(url);
+    if (node) node.isMissing = false;
+  });
+
   // Link children using referrer graph for main tree and path graph for subdomain/orphan trees
   const rootUrl = seed;
   const rootHost = new URL(rootUrl).hostname;
@@ -986,7 +992,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const clearMissingIfKnown = (node) => {
     if (node.isMissing) {
       const key = getCanonicalKey(node.url);
-      if (key && (sitemapKeys.has(key) || scannedKeys.has(key))) {
+      if (node.discoveryIndex !== null && node.discoveryIndex !== undefined) {
+        node.isMissing = false;
+      } else if (key && (sitemapKeys.has(key) || scannedKeys.has(key))) {
         node.isMissing = false;
       }
     }
