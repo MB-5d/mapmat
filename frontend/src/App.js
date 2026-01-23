@@ -37,6 +37,7 @@ import ImportModal from './components/modals/ImportModal';
 import ProfileModal from './components/modals/ProfileModal';
 import ProjectsModal from './components/modals/ProjectsModal';
 import PromptModal from './components/modals/PromptModal';
+import ReportDrawer from './components/reports/ReportDrawer';
 import SaveMapModal from './components/modals/SaveMapModal';
 import ShareModal from './components/modals/ShareModal';
 import ScanProgressModal from './components/scan/ScanProgressModal';
@@ -97,6 +98,82 @@ const downloadText = (filename, text) => {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+};
+
+const REPORT_TYPE_OPTIONS = [
+  { key: 'missing', label: 'Missing' },
+  { key: 'duplicates', label: 'Duplicates' },
+  { key: 'brokenLinks', label: 'Broken Links' },
+  { key: 'inactivePages', label: 'Inactive Pages' },
+  { key: 'errorPages', label: 'Error Pages' },
+  { key: 'orphanPages', label: 'Orphan Pages' },
+  { key: 'subdomains', label: 'Subdomains' },
+  { key: 'files', label: 'Files / Downloads' },
+  { key: 'authenticatedPages', label: 'Authenticated Pages' },
+];
+
+const getReportTypesForNode = (node) => {
+  const types = new Set();
+  if (!node) return [];
+  if (node.isMissing) types.add('missing');
+  if (node.isDuplicate) types.add('duplicates');
+  if (node.isBroken || node.orphanType === 'broken') types.add('brokenLinks');
+  if (node.isInactive || node.orphanType === 'inactive') types.add('inactivePages');
+  if (node.isError) types.add('errorPages');
+  if (node.orphanType === 'orphan') types.add('orphanPages');
+  if (node.subdomainRoot) types.add('subdomains');
+  if (node.isFile || node.orphanType === 'file') types.add('files');
+  if (node.authRequired) types.add('authenticatedPages');
+  return Array.from(types);
+};
+
+const getReportPageType = (node) => {
+  if (!node) return 'Standard';
+  if (node.subdomainRoot) return 'Subdomain';
+  if (node.orphanType === 'file' || node.isFile) return 'File';
+  if (node.orphanType === 'orphan') return 'Orphan';
+  if (node.isMissing) return 'Missing';
+  if (node.isDuplicate) return 'Duplicate';
+  return 'Standard';
+};
+
+const parsePageNumber = (raw) => {
+  if (!raw) return [];
+  const value = String(raw);
+  if (value.startsWith('s')) {
+    return value
+      .slice(1)
+      .split('.')
+      .map((part) => Number.parseInt(part, 10));
+  }
+  return value.split('.').map((part) => Number.parseInt(part, 10));
+};
+
+const comparePageNumbers = (a, b) => {
+  const aParts = parsePageNumber(a);
+  const bParts = parsePageNumber(b);
+  const max = Math.max(aParts.length, bParts.length);
+  for (let i = 0; i < max; i += 1) {
+    const av = aParts[i] ?? -1;
+    const bv = bParts[i] ?? -1;
+    if (av === bv) continue;
+    return av - bv;
+  }
+  return 0;
+};
+
+const buildExpandedStackMap = (rootNode, orphanNodes = []) => {
+  const expanded = {};
+  const walk = (node) => {
+    if (!node) return;
+    if (node.children?.length) {
+      expanded[node.id] = true;
+      node.children.forEach(walk);
+    }
+  };
+  walk(rootNode);
+  orphanNodes.forEach(walk);
+  return expanded;
 };
 
 
@@ -1234,6 +1311,8 @@ export default function App() {
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
   const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link', 'comments'
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
+  const [showReportDrawer, setShowReportDrawer] = useState(false);
+  const [lastScanAt, setLastScanAt] = useState(null);
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
@@ -1365,6 +1444,84 @@ export default function App() {
     duplicates: scanLayerVisibility.duplicates,
     files: scanLayerAvailability.files ? scanLayerVisibility.files : true,
   }), [scanLayerAvailability, scanLayerVisibility, showThumbnails]);
+
+  const reportLayout = useMemo(() => {
+    if (!root) return null;
+    const expanded = buildExpandedStackMap(root, orphans);
+    return computeLayout(root, orphans, showThumbnails, expanded, {
+      mode: 'after-root',
+      renderOrphanChildren: true,
+    });
+  }, [root, orphans, showThumbnails]);
+
+  const reportNumberMap = useMemo(() => {
+    const map = new Map();
+    if (!reportLayout) return map;
+    reportLayout.nodes.forEach((value, id) => {
+      map.set(id, value.number);
+    });
+    return map;
+  }, [reportLayout]);
+
+  const reportEntries = useMemo(() => {
+    if (!root) return [];
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const entries = allNodes.map((node) => {
+      const number = reportNumberMap.get(node.id) || '';
+      const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
+      const levelColor = colors[Math.min(depth, colors.length - 1)] || colors[0];
+      return {
+        id: node.id,
+        title: node.title || '',
+        url: node.url || '',
+        number,
+        types: getReportTypesForNode(node),
+        duplicateOf: node.duplicateOf || '',
+        parentUrl: node.parentUrl || '',
+        referrerUrl: node.referrerUrl || '',
+        pageType: getReportPageType(node),
+        levelColor,
+        thumbnailUrl: node.thumbnailUrl || '',
+      };
+    });
+    return entries.sort((a, b) => {
+      const groupRank = (entry) => {
+        if (entry.number.startsWith('s')) return 1;
+        if (entry.number.startsWith('0.')) return 2;
+        return 0;
+      };
+      const groupDiff = groupRank(a) - groupRank(b);
+      if (groupDiff !== 0) return groupDiff;
+      return comparePageNumbers(a.number, b.number);
+    });
+  }, [root, orphans, reportNumberMap, reportLayout, colors]);
+
+  const reportRows = useMemo(
+    () => reportEntries.filter((entry) => entry.types.length > 0),
+    [reportEntries]
+  );
+
+  const reportStats = useMemo(() => {
+    const stats = { total: reportEntries.length };
+    REPORT_TYPE_OPTIONS.forEach((option) => {
+      stats[option.key] = 0;
+    });
+    reportEntries.forEach((entry) => {
+      entry.types.forEach((type) => {
+        stats[type] = (stats[type] || 0) + 1;
+      });
+    });
+    return stats;
+  }, [reportEntries]);
+
+  const reportTitle = useMemo(() => {
+    return root?.title || getHostname(root?.url) || 'Website';
+  }, [root]);
+
+  const reportTimestamp = useMemo(() => {
+    if (!lastScanAt) return '';
+    return new Date(lastScanAt).toLocaleString();
+  }, [lastScanAt]);
 
 
   const visibleOrphans = useMemo(() => {
@@ -2178,6 +2335,7 @@ export default function App() {
     setColors(historyItem.colors || DEFAULT_COLORS);
     setCurrentMap(null);
     setUrlInput(historyItem.url);
+    setLastScanAt(historyItem.scanned_at || null);
     setShowHistoryModal(false);
     setSelectedHistoryItems(new Set());
     setScale(1);
@@ -2363,6 +2521,7 @@ export default function App() {
         setCurrentMap(null);
         setScale(1);
         setPan({ x: 0, y: 0 });
+        setLastScanAt(new Date().toISOString());
         // Set map name from site title
         if (!preserveName && data.root?.title) {
           setMapName(data.root.title);
@@ -2680,6 +2839,13 @@ export default function App() {
       if (e.key === 'c' || e.key === 'C') {
         setShowCommentsPanel(prev => !prev);
       }
+      if (e.key === 'r' || e.key === 'R') {
+        setShowReportDrawer(prev => {
+          const next = !prev;
+          if (next) setShowCommentsPanel(false);
+          return next;
+        });
+      }
       // Select tool with "V"
       if (e.key === 'v' || e.key === 'V') {
         setActiveTool('select');
@@ -2712,12 +2878,15 @@ export default function App() {
           setActiveTool('select');
           setCommentingNodeId(null); // Close popover when switching tools
         }
+        if (showReportDrawer) {
+          setShowReportDrawer(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -2971,6 +3140,82 @@ export default function App() {
       if (contentRef.current) contentRef.current.classList.remove('export-mode');
       setScale(savedScale);
       setPan(savedPan);
+    }
+  };
+
+  const downloadReportPdf = async () => {
+    if (!reportEntries.length) {
+      showToast('No report data available', 'warning');
+      return;
+    }
+
+    showToast('Generating report...', 'info', true);
+
+    try {
+      const [{ jsPDF }] = await Promise.all([import('jspdf')]);
+      const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const marginX = 40;
+      let y = 40;
+
+      pdf.setFontSize(18);
+      pdf.text('Scan report', marginX, y);
+      y += 22;
+
+      pdf.setFontSize(11);
+      pdf.text(`Total pages: ${reportStats.total}`, marginX, y);
+      y += 16;
+
+      const statLines = [
+        `Orphans: ${reportStats.orphanPages}`,
+        `Duplicates: ${reportStats.duplicates}`,
+        `Broken links: ${reportStats.brokenLinks}`,
+        `Inactive: ${reportStats.inactivePages}`,
+        `Errors: ${reportStats.errorPages}`,
+        `Missing: ${reportStats.missing}`,
+      ];
+
+      statLines.forEach((line) => {
+        pdf.text(line, marginX, y);
+        y += 14;
+      });
+
+      y += 8;
+      pdf.setFontSize(10);
+      pdf.text('Page', marginX, y);
+      pdf.text('Title', marginX + 50, y);
+      pdf.text('Issues', marginX + 220, y);
+      pdf.text('URL', marginX + 310, y);
+      y += 14;
+
+      reportRows.forEach((row) => {
+        const issues = row.types
+          .map((type) => {
+            const option = REPORT_TYPE_OPTIONS.find((opt) => opt.key === type);
+            return option ? option.label : type;
+          })
+          .join(', ');
+        const title = row.title || row.url || '';
+        const urlLines = pdf.splitTextToSize(row.url || '', 240);
+        const rowHeight = Math.max(12, urlLines.length * 12);
+
+        if (y + rowHeight > pageHeight - 40) {
+          pdf.addPage();
+          y = 40;
+        }
+
+        pdf.text(row.number || '--', marginX, y);
+        pdf.text(title.slice(0, 28), marginX + 50, y);
+        pdf.text(issues.slice(0, 40), marginX + 220, y);
+        pdf.text(urlLines, marginX + 310, y);
+        y += rowHeight + 6;
+      });
+
+      pdf.save('scan-report.pdf');
+      showToast('Report downloaded', 'success');
+    } catch (error) {
+      console.error('Report download error:', error);
+      showToast('Report download failed', 'error');
     }
   };
 
@@ -5548,6 +5793,14 @@ const findNodeById = (node, id) => {
                 showCommentsPanel,
                 onToggleCommentsPanel: () => setShowCommentsPanel(!showCommentsPanel),
                 hasAnyComments,
+                showReportDrawer,
+                onToggleReportDrawer: () => {
+                  setShowReportDrawer((prev) => {
+                    const next = !prev;
+                    if (next) setShowCommentsPanel(false);
+                    return next;
+                  });
+                },
                 canUndo,
                 canRedo,
                 onUndo: handleUndo,
@@ -5568,6 +5821,26 @@ const findNodeById = (node, id) => {
                 onFitToScreen: fitToScreen,
                 onResetView: resetView,
               }}
+            />
+            <ReportDrawer
+              isOpen={showReportDrawer}
+              onClose={() => setShowReportDrawer(false)}
+              entries={reportRows}
+              stats={reportStats}
+              typeOptions={REPORT_TYPE_OPTIONS}
+              onDownload={downloadReportPdf}
+              onLocateNode={(nodeId) => {
+                if (!contentRef.current || !canvasRef.current) return;
+                const el = contentRef.current.querySelector(`[data-node-id="${nodeId}"]`);
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                const canvasRect = canvasRef.current.getBoundingClientRect();
+                const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
+                const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
+                setPan((prev) => clampPan({ x: prev.x + dx, y: prev.y + dy }));
+              }}
+              reportTitle={reportTitle}
+              reportTimestamp={reportTimestamp}
             />
           </DndContext>
         )}

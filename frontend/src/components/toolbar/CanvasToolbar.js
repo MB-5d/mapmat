@@ -3,6 +3,7 @@ import {
   Bookmark,
   Download,
   FilePlus,
+  GanttChartSquare,
   Link2,
   MessageSquare,
   MousePointer2,
@@ -24,6 +25,8 @@ const CanvasToolbar = ({
   showCommentsPanel,
   onToggleCommentsPanel,
   hasAnyComments,
+  showReportDrawer,
+  onToggleReportDrawer,
   canUndo,
   canRedo,
   onUndo,
@@ -79,6 +82,13 @@ const CanvasToolbar = ({
     >
       <MessageSquare size={20} />
       {hasAnyComments && <span className="notification-dot" />}
+    </button>
+    <button
+      className={`canvas-tool-btn ${showReportDrawer ? 'active' : ''}`}
+      onClick={onToggleReportDrawer}
+      title="Report (R)"
+    >
+      <GanttChartSquare size={20} />
     </button>
 
     {canEdit && <div className="canvas-toolbar-divider" />}
