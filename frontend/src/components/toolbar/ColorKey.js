@@ -21,7 +21,10 @@ const ColorKey = ({
     </div>
     {showColorKey && (
       <div className="color-key-list">
-        {colors.slice(0, maxDepth + 1).map((color, idx) => (
+        {Array.from({ length: Math.max(maxDepth + 1, colors.length) }).map((_, idx) => {
+          const color = colors[idx] || colors[colors.length - 1];
+          if (idx > maxDepth) return null;
+          return (
             <div
               key={idx}
               className={`color-key-item ${editingDepth === idx ? 'editing' : ''}`}
@@ -39,7 +42,8 @@ const ColorKey = ({
             <span>Level {idx}</span>
             <Edit2 size={12} className="color-edit-icon" />
           </div>
-        ))}
+          );
+        })}
       </div>
     )}
   </div>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -18,9 +18,13 @@ const ReportDrawer = ({
   typeOptions,
   onDownload,
   onLocateNode,
+  onLocateUrl,
   reportTitle,
   reportTimestamp,
 }) => {
+  const [showFilters, setShowFilters] = useState(false);
+  const [shouldRender, setShouldRender] = useState(isOpen);
+  const [isClosing, setIsClosing] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
   const [filters, setFilters] = useState(() => {
@@ -30,6 +34,22 @@ const ReportDrawer = ({
     });
     return initial;
   });
+
+  useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      setIsClosing(false);
+      return;
+    }
+    if (shouldRender) {
+      setIsClosing(true);
+      const timeout = setTimeout(() => {
+        setShouldRender(false);
+        setIsClosing(false);
+      }, 200);
+      return () => clearTimeout(timeout);
+    }
+  }, [isOpen, shouldRender]);
 
   const typeLookup = useMemo(() => {
     const map = new Map();
@@ -52,6 +72,11 @@ const ReportDrawer = ({
     return counts;
   }, [entries, typeOptions]);
 
+  const visibleFilterOptions = useMemo(
+    () => typeOptions.filter(option => filterCounts[option.key] > 0),
+    [typeOptions, filterCounts]
+  );
+
   const activeFilterKeys = useMemo(
     () => Object.entries(filters).filter(([, value]) => value).map(([key]) => key),
     [filters]
@@ -59,8 +84,11 @@ const ReportDrawer = ({
 
   const filteredEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const allFiltersEnabled = visibleFilterOptions.every(option => filters[option.key]);
     return entries.filter(entry => {
-      const matchesFilters = activeFilterKeys.length === 0
+      const matchesFilters = allFiltersEnabled
+        ? true
+        : activeFilterKeys.length === 0
         ? true
         : entry.types.some(type => activeFilterKeys.includes(type));
       if (!matchesFilters) return false;
@@ -71,15 +99,15 @@ const ReportDrawer = ({
         || (entry.number || '').toLowerCase().includes(query)
       );
     });
-  }, [entries, activeFilterKeys, search]);
+  }, [entries, activeFilterKeys, search, visibleFilterOptions, filters]);
 
-  if (!isOpen) return null;
+  const truncatedTitle = reportTitle.length > 56
+    ? `${reportTitle.slice(0, 56).trim()}…`
+    : reportTitle;
 
-  const totalIssues = Object.entries(stats)
-    .filter(([key]) => key !== 'total')
-    .reduce((sum, [, value]) => sum + value, 0);
+  if (!shouldRender) return null;
 
-  const barSegments = [
+  const statCards = [
     { key: 'orphanPages', label: 'Orphan pages' },
     { key: 'inactivePages', label: 'Inactive pages' },
     { key: 'errorPages', label: 'Error pages' },
@@ -87,109 +115,130 @@ const ReportDrawer = ({
     { key: 'files', label: 'Files / Downloads' },
     { key: 'subdomains', label: 'Subdomains' },
     { key: 'missing', label: 'Missing' },
-    { key: 'duplicates', label: 'Duplicates' },
+    { key: 'duplicates', label: 'Duplicate' },
   ].filter(segment => stats[segment.key] > 0);
 
   return (
     <aside
-      className="report-drawer report-drawer-open"
+      className={`report-drawer ${isClosing ? 'report-drawer-closing' : 'report-drawer-open'}`}
       role="dialog"
       aria-label="Scan report"
       onPointerDown={(e) => e.stopPropagation()}
-      onWheel={(e) => e.stopPropagation()}
+      onWheel={(e) => {
+        e.stopPropagation();
+        e.nativeEvent?.stopImmediatePropagation?.();
+      }}
+      onWheelCapture={(e) => {
+        e.stopPropagation();
+        e.nativeEvent?.stopImmediatePropagation?.();
+      }}
     >
       <header className="report-drawer-header">
         <div>
-          <div className="report-drawer-title">Scan report — {reportTitle}</div>
+          <div className="report-drawer-title">Report — {truncatedTitle}</div>
           <div className="report-drawer-subtitle">{reportTimestamp || '—'}</div>
         </div>
-        <button className="report-drawer-close" onClick={onClose} aria-label="Close report">
-          <X size={18} />
-        </button>
+        <div className="report-header-actions">
+          <button className="report-open-link" onClick={onDownload}>
+            <Download size={14} />
+            Download report
+          </button>
+          <button className="report-drawer-close" onClick={onClose} aria-label="Close report">
+            <X size={22} />
+          </button>
+        </div>
       </header>
 
-      <div className="report-drawer-actions">
-        <button className="btn-secondary report-download-btn" onClick={onDownload}>
-          <Download size={16} />
-          Download report
-        </button>
-      </div>
-
-      <section className="report-summary">
-        <div className="report-total">
-          <span>Total pages</span>
-          <strong>{stats.total}</strong>
-        </div>
-        <div className="report-bar" role="img" aria-label="Issues distribution">
-          {barSegments.length === 0 && <span className="report-bar-segment report-bar-segment-1" style={{ flex: 1 }} />}
-          {barSegments.map((segment, index) => (
-            <span
-              key={segment.key}
-              className={`report-bar-segment report-bar-segment-${index + 1}`}
-              style={{
-                flex: totalIssues ? stats[segment.key] : 0,
-              }}
-              title={`${segment.label}: ${stats[segment.key]}`}
-            />
-          ))}
-        </div>
-        <div className="report-stat-cards">
-          {barSegments.map((segment) => (
-            <div key={segment.key} className="report-stat">
-              <div className="report-stat-label">{segment.label}</div>
-              <div className="report-stat-value">{stats[segment.key]}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="report-filters">
-        <div className="report-filter-row">
-          <div className="report-filter-label">
-            <Filter size={16} />
-            Filter by
+      <div
+        className="report-drawer-body"
+        onWheel={(e) => {
+          e.stopPropagation();
+          e.nativeEvent?.stopImmediatePropagation?.();
+        }}
+        onWheelCapture={(e) => {
+          e.stopPropagation();
+          e.nativeEvent?.stopImmediatePropagation?.();
+        }}
+      >
+        <section className="report-summary">
+          <div className="report-total-card">
+            <div className="report-total-value">{stats.total}</div>
+            <div className="report-total-label">Pages on map</div>
           </div>
-          <label className="report-search">
-            <Search size={16} />
-            <input
-              type="text"
-              placeholder="Search by page name, number, or URL"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-        </div>
-        <div className="report-filter-list">
-          {typeOptions.map(option => (
-            <label
-              key={option.key}
-              className={`report-filter-item ${filterCounts[option.key] ? '' : 'disabled'}`}
-            >
-              <input
-                type="checkbox"
-                checked={filters[option.key] || false}
-                onChange={() => {
-                  setFilters(prev => ({ ...prev, [option.key]: !prev[option.key] }));
-                }}
-                disabled={!filterCounts[option.key]}
-              />
-              <span>{option.label}</span>
-              <span className="report-filter-count">{filterCounts[option.key] || 0}</span>
-            </label>
-          ))}
-        </div>
-      </section>
+          <div className="report-stat-cards">
+            {statCards.map((segment, index) => (
+              <div
+                key={segment.key}
+                className="report-stat"
+                data-bar-index={index + 1}
+              >
+                <div className="report-stat-label">{segment.label}</div>
+                <div className="report-stat-value">{stats[segment.key]}</div>
+              </div>
+            ))}
+          </div>
+        </section>
 
-      <section className="report-table">
-        <div className="report-table-header">
-          <div />
-          <div>Number</div>
-          <div>Page type</div>
-          <div>Page name</div>
-          <div>Issues</div>
-          <div>Show on map</div>
-        </div>
-        <div className="report-table-body">
+        <div className="report-divider" />
+
+        <section className="report-filters report-filters-sticky">
+          <div className="report-filter-row">
+            <button
+              type="button"
+              className="report-filter-toggle"
+              onClick={() => setShowFilters((prev) => !prev)}
+            >
+              <Filter size={16} />
+              Filter by
+              {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            <label className="report-search">
+              <Search size={16} />
+              <input
+                type="text"
+                placeholder="Search by page name, number, or URL"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+          </div>
+          {showFilters && (
+            <div className="report-filter-list">
+              {visibleFilterOptions.map(option => (
+              <label
+                key={option.key}
+                className="report-filter-item"
+              >
+                <input
+                  type="checkbox"
+                  checked={filters[option.key] || false}
+                  onChange={() => {
+                    setFilters(prev => ({ ...prev, [option.key]: !prev[option.key] }));
+                  }}
+                />
+                <span>{option.label}</span>
+                <span className="report-filter-count">{filterCounts[option.key] || 0}</span>
+              </label>
+            ))}
+            </div>
+          )}
+        </section>
+
+        <section className="report-table">
+          <div className="report-table-header">
+            <div />
+            <div>Number</div>
+            <div>Page type</div>
+            <div>Page name</div>
+            <div className="report-header-issues">Issues</div>
+            <div>Show on map</div>
+            <div />
+          </div>
+          <div
+            className="report-table-body"
+            onWheel={(e) => e.stopPropagation()}
+            onWheelCapture={(e) => e.stopPropagation()}
+          >
           {filteredEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
             return (
@@ -212,7 +261,9 @@ const ReportDrawer = ({
                   />
                   <div className="report-cell report-cell-number">{entry.number || '--'}</div>
                   <div className="report-cell report-cell-type">{entry.pageType}</div>
-                  <div className="report-cell report-cell-title">{entry.title || entry.url}</div>
+                  <div className="report-cell report-cell-title" title={entry.title || entry.url}>
+                    {entry.title || entry.url}
+                  </div>
                   <div className="report-cell report-cell-count">{entry.types.length}</div>
                   <button
                     className="report-map-link"
@@ -230,6 +281,9 @@ const ReportDrawer = ({
                 </div>
                 {isExpanded && (
                   <div className="report-row-detail">
+                    {entry.showFullTitle && (
+                      <div className="report-detail-title">{entry.title || entry.url}</div>
+                    )}
                     <div className="report-detail-main">
                       {entry.thumbnailUrl ? (
                         <div className="report-thumb">
@@ -239,12 +293,14 @@ const ReportDrawer = ({
                         <div className="report-thumb report-thumb-empty">No preview</div>
                       )}
                       <div className="report-detail-info">
-                        <div className="report-detail-link">
-                          <a href={entry.url} target="_blank" rel="noreferrer">
-                            {entry.url}
-                          </a>
+                        <button
+                          type="button"
+                          className="report-open-link"
+                          onClick={() => window.open(entry.url, '_blank', 'noopener')}
+                        >
+                          Open page
                           <ExternalLink size={14} />
-                        </div>
+                        </button>
                         <div className="report-detail-badges">
                           {entry.types.map(type => (
                             <span key={type} className="report-badge">
@@ -255,27 +311,39 @@ const ReportDrawer = ({
                       </div>
                     </div>
                     {entry.duplicateOf && (
-                      <div>
-                        <strong>Duplicate of:</strong>{' '}
-                        <a href={entry.duplicateOf} target="_blank" rel="noreferrer">
-                          {entry.duplicateOf}
-                        </a>
+                      <div className="report-detail-link-row">
+                        <strong>Duplicate of:</strong>
+                        <button
+                          type="button"
+                          className="report-internal-link"
+                          onClick={() => onLocateUrl?.(entry.duplicateOf)}
+                        >
+                          {entry.duplicateOf.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                        </button>
                       </div>
                     )}
                     {entry.parentUrl && (
-                      <div>
-                        <strong>Parent:</strong>{' '}
-                        <a href={entry.parentUrl} target="_blank" rel="noreferrer">
-                          {entry.parentUrl}
-                        </a>
+                      <div className="report-detail-link-row">
+                        <strong>Parent:</strong>
+                        <button
+                          type="button"
+                          className="report-internal-link"
+                          onClick={() => onLocateUrl?.(entry.parentUrl)}
+                        >
+                          {entry.parentUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                        </button>
                       </div>
                     )}
                     {entry.referrerUrl && (
-                      <div>
-                        <strong>Referrer:</strong>{' '}
-                        <a href={entry.referrerUrl} target="_blank" rel="noreferrer">
-                          {entry.referrerUrl}
-                        </a>
+                      <div className="report-detail-link-row">
+                        <strong>Referrer:</strong>
+                        <button
+                          type="button"
+                          className="report-internal-link"
+                          onClick={() => onLocateUrl?.(entry.referrerUrl)}
+                        >
+                          {entry.referrerUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -288,6 +356,7 @@ const ReportDrawer = ({
           )}
         </div>
       </section>
+      </div>
     </aside>
   );
 };

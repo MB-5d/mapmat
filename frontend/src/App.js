@@ -101,8 +101,9 @@ const downloadText = (filename, text) => {
 };
 
 const REPORT_TYPE_OPTIONS = [
+  { key: 'standard', label: 'Standard' },
   { key: 'missing', label: 'Missing' },
-  { key: 'duplicates', label: 'Duplicates' },
+  { key: 'duplicates', label: 'Duplicate' },
   { key: 'brokenLinks', label: 'Broken Links' },
   { key: 'inactivePages', label: 'Inactive Pages' },
   { key: 'errorPages', label: 'Error Pages' },
@@ -112,29 +113,86 @@ const REPORT_TYPE_OPTIONS = [
   { key: 'authenticatedPages', label: 'Authenticated Pages' },
 ];
 
-const getReportTypesForNode = (node) => {
+const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
   if (!node) return [];
+  const orphanType = overrides.orphanType ?? node.orphanType;
+  const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
+  if (!node.isMissing
+    && !node.isDuplicate
+    && !node.isBroken
+    && !node.isInactive
+    && !node.isError
+    && !node.isFile
+    && !node.authRequired
+    && orphanType !== 'broken'
+    && orphanType !== 'inactive'
+    && orphanType !== 'file'
+    && orphanType !== 'orphan'
+    && !isSubdomain) {
+    types.add('standard');
+  }
   if (node.isMissing) types.add('missing');
   if (node.isDuplicate) types.add('duplicates');
-  if (node.isBroken || node.orphanType === 'broken') types.add('brokenLinks');
-  if (node.isInactive || node.orphanType === 'inactive') types.add('inactivePages');
+  if (node.isBroken || orphanType === 'broken') types.add('brokenLinks');
+  if (node.isInactive || orphanType === 'inactive') types.add('inactivePages');
   if (node.isError) types.add('errorPages');
-  if (node.orphanType === 'orphan') types.add('orphanPages');
-  if (node.subdomainRoot) types.add('subdomains');
-  if (node.isFile || node.orphanType === 'file') types.add('files');
+  if (orphanType === 'orphan') types.add('orphanPages');
+  if (isSubdomain) types.add('subdomains');
+  if (node.isFile || orphanType === 'file') types.add('files');
   if (node.authRequired) types.add('authenticatedPages');
   return Array.from(types);
 };
 
-const getReportPageType = (node) => {
+const getReportPageType = (node, overrides = {}) => {
   if (!node) return 'Standard';
-  if (node.subdomainRoot) return 'Subdomain';
-  if (node.orphanType === 'file' || node.isFile) return 'File';
-  if (node.orphanType === 'orphan') return 'Orphan';
+  const orphanType = overrides.orphanType ?? node.orphanType;
+  const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
+  if (isSubdomain) return 'Subdomain';
+  if (orphanType === 'file' || node.isFile) return 'File';
+  if (orphanType === 'orphan') return 'Orphan';
   if (node.isMissing) return 'Missing';
   if (node.isDuplicate) return 'Duplicate';
   return 'Standard';
+};
+
+const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, reportLayout, colors) => {
+  const entries = [];
+  const visit = (node, context) => {
+    if (!node) return;
+    const isSubdomain = context.isSubdomain || node.subdomainRoot;
+    const orphanType = context.orphanType || node.orphanType || null;
+    const number = reportNumberMap.get(node.id) || '';
+    const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
+    const levelColor = colors[Math.min(depth, colors.length - 1)] || colors[0];
+    const titleValue = node.title || node.url || '';
+    const showFullTitle = titleValue.length > 24;
+    entries.push({
+      id: node.id,
+      title: titleValue,
+      url: node.url || '',
+      number,
+      types: getReportTypesForNode(node, { isSubdomain, orphanType }),
+      duplicateOf: node.duplicateOf || '',
+      parentUrl: node.parentUrl || '',
+      referrerUrl: node.referrerUrl || '',
+      pageType: getReportPageType(node, { isSubdomain, orphanType }),
+      levelColor,
+      thumbnailUrl: node.thumbnailUrl || '',
+      showFullTitle,
+    });
+    node.children?.forEach((child) => visit(child, { isSubdomain, orphanType }));
+  };
+
+  visit(rootNode, { isSubdomain: false, orphanType: null });
+  (orphanNodes || []).forEach((orphan) => {
+    visit(orphan, {
+      isSubdomain: !!orphan?.subdomainRoot,
+      orphanType: orphan?.orphanType || null,
+    });
+  });
+
+  return entries;
 };
 
 const parsePageNumber = (raw) => {
@@ -461,7 +519,7 @@ const computeLayout = (
 
   // Layout children vertically under a parent node
   // Returns total height consumed by this subtree.
-  const layoutVertical = (parentNode, parentDepth, numberPrefix) => {
+  const layoutVertical = (parentNode, parentDepth, numberPrefix, context = {}) => {
     const parentLayout = nodes.get(parentNode.id);
     if (!parentLayout) return NODE_H;
 
@@ -483,6 +541,7 @@ const computeLayout = (
       if (!stackChild) return NODE_H;
       const childNumber = `${numberPrefix}.1`;
       setNode(stackChild, childX, cursorY, parentDepth + 1, childNumber, {
+        ...context,
         stackInfo: {
           parentId: parentNode.id,
           totalCount: parentNode.children.length,
@@ -524,11 +583,11 @@ const computeLayout = (
             showCollapse: idx === 0 || idx === parentNode.children.length - 1,
           }
         : null;
-      setNode(child, childX, cursorY, parentDepth + 1, childNumber, stackInfo ? { stackInfo } : {});
+      setNode(child, childX, cursorY, parentDepth + 1, childNumber, stackInfo ? { ...context, stackInfo } : { ...context });
 
       childIdsInOrder.push(child.id);
 
-      const childSubtreeH = layoutVertical(child, parentDepth + 1, childNumber);
+      const childSubtreeH = layoutVertical(child, parentDepth + 1, childNumber, context);
       cursorY += childSubtreeH + GAP_STACK_Y;
     });
 
@@ -570,7 +629,11 @@ const computeLayout = (
   const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
 
   const layoutRootTree = (rootNode, startX, startY, rootNumber, extra = {}) => {
-    setNode(rootNode, startX, startY, 0, rootNumber, extra);
+    const context = {
+      isSubdomainTree: extra.orphanType === 'subdomain' || extra.isSubdomainTree || false,
+      orphanType: extra.orphanType || null,
+    };
+    setNode(rootNode, startX, startY, 0, rootNumber, { ...extra, ...context });
 
     const rootBottomY = startY + NODE_H;
     const level1Y = rootBottomY + BUS_Y_GAP;
@@ -580,7 +643,7 @@ const computeLayout = (
     if (rootNode.children?.length) {
       rootNode.children.forEach((child, idx) => {
         const childNumber = `${rootNumber}.${idx + 1}`;
-        setNode(child, level1X, level1Y, 1, childNumber);
+        setNode(child, level1X, level1Y, 1, childNumber, context);
 
         level1Positions.push({
           centerX: level1X + NODE_W / 2,
@@ -588,7 +651,7 @@ const computeLayout = (
           id: child.id,
         });
 
-        layoutVertical(child, 1, childNumber);
+        layoutVertical(child, 1, childNumber, context);
 
         const subtreeWidth = getSubtreeWidth(child, 1);
         level1X += subtreeWidth + GAP_L1_X;
@@ -721,24 +784,7 @@ const computeLayout = (
   }
 
   // ------------------------------------------------------------
-  // 3) Subdomains (left of root)
-  // ------------------------------------------------------------
-  if (subdomainOrphans.length > 0) {
-    let subdomainX = 0;
-    const orderedSubdomains = [...subdomainOrphans].reverse();
-    const subdomainCount = orderedSubdomains.length;
-    orderedSubdomains.forEach((orphan, idx) => {
-      const num = `s${subdomainCount - idx}`;
-      const treeWidth = layoutRootTree(orphan, subdomainX, rootY, num, {
-        isOrphan: true,
-        orphanStyle: 'subdomain',
-      });
-      subdomainX += treeWidth + GAP_L1_X;
-    });
-  }
-
-  // ------------------------------------------------------------
-  // 4) Orphans (left of root)
+  // 3) Orphans (left of root)
   // ------------------------------------------------------------
 
   // Main tree right edge (based on actual L1 width; if no children, it’s just root)
@@ -752,7 +798,7 @@ const computeLayout = (
   //              (so 0.1 doesn’t feel glued to 0.0)
   // - after-tree: start after the main tree right edge with ORPHAN_GROUP_GAP
   let orphanY = rootY;
-  const orphanGroupStartX = subdomainTotalWidth > 0 ? subdomainTotalWidth + GAP_L1_X : 0;
+  const orphanGroupStartX = 0;
   let orphanX = orphanGroupStartX;
 
   const orderedOrphans = [...regularOrphans].reverse();
@@ -764,9 +810,28 @@ const computeLayout = (
     const treeWidth = layoutRootTree(orphan, orphanX, orphanY, num, {
       isOrphan: true,
       orphanStyle,
+      orphanType: orphan.orphanType || 'orphan',
     });
     orphanX += treeWidth + GAP_L1_X;
   });
+
+  // ------------------------------------------------------------
+  // 4) Subdomains (left of root, closer to main tree)
+  // ------------------------------------------------------------
+  if (subdomainOrphans.length > 0) {
+    let subdomainX = orphanTotalWidth > 0 ? orphanTotalWidth + GAP_L1_X : 0;
+    const orderedSubdomains = [...subdomainOrphans].reverse();
+    const subdomainCount = orderedSubdomains.length;
+    orderedSubdomains.forEach((orphan, idx) => {
+      const num = `s${subdomainCount - idx}`;
+      const treeWidth = layoutRootTree(orphan, subdomainX, rootY, num, {
+        isOrphan: true,
+        orphanStyle: 'subdomain',
+        orphanType: 'subdomain',
+      });
+      subdomainX += treeWidth + GAP_L1_X;
+    });
+  }
 
   // ------------------------------------------------------------
   // Bounds
@@ -806,11 +871,11 @@ const SitemapTree = ({
   badgeVisibility,
   showPageNumbers,
   onRequestThumbnail,
+  expandedStacks,
+  onToggleStack,
 }) => {
-  const [expandedStacks, setExpandedStacks] = useState({});
-
   const toggleStack = (nodeId) => {
-    setExpandedStacks(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
+    onToggleStack?.(nodeId);
   };
 
   // Compute layout using explicit coordinate formulas
@@ -828,15 +893,17 @@ const SitemapTree = ({
 
   if (!data) return null;
 
-  const getBadgesForNode = (node) => {
+  const getBadgesForNode = (node, nodeMeta) => {
     const badges = [];
     if (node.isDuplicate) badges.push('Duplicate');
     if (node.isMissing) badges.push('Missing');
-    if (node.subdomainRoot && badgeVisibility?.subdomains) badges.push('Subdomain');
-    if (node.orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
-    if (node.orphanType === 'file' && badgeVisibility?.files) badges.push('File');
-    if (node.orphanType === 'broken' && badgeVisibility?.brokenLinks) badges.push('Broken');
-    if (node.orphanType === 'inactive' && badgeVisibility?.inactivePages) badges.push('Inactive');
+    const orphanType = nodeMeta?.orphanType || node.orphanType;
+    const isSubdomainTree = node.subdomainRoot || nodeMeta?.isSubdomainTree || orphanType === 'subdomain';
+    if (isSubdomainTree && badgeVisibility?.subdomains) badges.push('Subdomain');
+    if (orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
+    if (orphanType === 'file' && badgeVisibility?.files) badges.push('File');
+    if (orphanType === 'broken' && badgeVisibility?.brokenLinks) badges.push('Broken');
+    if (orphanType === 'inactive' && badgeVisibility?.inactivePages) badges.push('Inactive');
     if (node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
     if (node.isBroken && badgeVisibility?.brokenLinks && !badges.includes('Broken')) badges.push('Broken');
     if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) badges.push('Inactive');
@@ -878,7 +945,7 @@ const SitemapTree = ({
       {Array.from(layout.nodes.values()).map(nodeData => {
         const color = colors[Math.min(nodeData.depth, colors.length - 1)];
         const isRoot = nodeData.depth === 0;
-        const badges = getBadgesForNode(nodeData.node);
+        const badges = getBadgesForNode(nodeData.node, nodeData);
         const stackInfo = nodeData.stackInfo;
         const stackToggleParentId = stackInfo?.parentId;
         const shouldWrapStack = !!stackInfo?.collapsed;
@@ -1313,6 +1380,7 @@ export default function App() {
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [showReportDrawer, setShowReportDrawer] = useState(false);
   const [lastScanAt, setLastScanAt] = useState(null);
+  const [expandedStacks, setExpandedStacks] = useState({});
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
@@ -1431,7 +1499,12 @@ export default function App() {
   }, [theme]);
 
   const hasMap = !!root;
-  const maxDepth = useMemo(() => getMaxDepth(root), [root]);
+  const maxDepth = useMemo(() => {
+    const orphanDepth = (orphans || []).reduce((max, orphan) => {
+      return Math.max(max, getMaxDepth(orphan));
+    }, 0);
+    return Math.max(getMaxDepth(root), orphanDepth);
+  }, [root, orphans]);
   const totalNodes = useMemo(() => countNodes(root), [root]);
   const effectiveScanLayers = useMemo(() => ({
     thumbnails: scanLayerAvailability.thumbnails ? scanLayerVisibility.thumbnails : showThumbnails,
@@ -1465,25 +1538,7 @@ export default function App() {
 
   const reportEntries = useMemo(() => {
     if (!root) return [];
-    const allNodes = collectAllNodesWithOrphans(root, orphans);
-    const entries = allNodes.map((node) => {
-      const number = reportNumberMap.get(node.id) || '';
-      const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
-      const levelColor = colors[Math.min(depth, colors.length - 1)] || colors[0];
-      return {
-        id: node.id,
-        title: node.title || '',
-        url: node.url || '',
-        number,
-        types: getReportTypesForNode(node),
-        duplicateOf: node.duplicateOf || '',
-        parentUrl: node.parentUrl || '',
-        referrerUrl: node.referrerUrl || '',
-        pageType: getReportPageType(node),
-        levelColor,
-        thumbnailUrl: node.thumbnailUrl || '',
-      };
-    });
+    const entries = buildReportEntries(root, orphans, reportNumberMap, reportLayout, colors);
     return entries.sort((a, b) => {
       const groupRank = (entry) => {
         if (entry.number.startsWith('s')) return 1;
@@ -1497,7 +1552,7 @@ export default function App() {
   }, [root, orphans, reportNumberMap, reportLayout, colors]);
 
   const reportRows = useMemo(
-    () => reportEntries.filter((entry) => entry.types.length > 0),
+    () => reportEntries,
     [reportEntries]
   );
 
@@ -1767,6 +1822,84 @@ export default function App() {
 
     return { x: clampedX, y: clampedY };
   }, []);
+
+  const animatePanTo = useCallback((target) => {
+    const start = { ...panRef.current };
+    const startTime = performance.now();
+    const duration = 360;
+
+    const tick = (now) => {
+      const elapsed = Math.min((now - startTime) / duration, 1);
+      const ease = 1 - Math.pow(1 - elapsed, 3);
+      const next = {
+        x: start.x + (target.x - start.x) * ease,
+        y: start.y + (target.y - start.y) * ease,
+      };
+      setPan(clampPan(next));
+      if (elapsed < 1) {
+        requestAnimationFrame(tick);
+      }
+    };
+
+    requestAnimationFrame(tick);
+  }, [clampPan]);
+
+  const findStackParentsForNode = useCallback((node, targetId, depth = 0) => {
+    if (!node) return null;
+    if (node.id === targetId) return [];
+    if (!node.children?.length) return null;
+
+    const shouldStack = shouldStackChildren(node.children, depth);
+    for (const child of node.children) {
+      const path = findStackParentsForNode(child, targetId, depth + 1);
+      if (path) {
+        return shouldStack ? [node.id, ...path] : path;
+      }
+    }
+    return null;
+  }, []);
+
+  const focusNodeById = useCallback((nodeId) => {
+    if (!nodeId || !contentRef.current || !canvasRef.current) return;
+
+    let stackParents = findStackParentsForNode(root, nodeId, 0);
+    if (!stackParents) {
+      for (const orphan of orphans) {
+        stackParents = findStackParentsForNode(orphan, nodeId, 0);
+        if (stackParents) break;
+      }
+    }
+
+    if (stackParents?.length) {
+      setExpandedStacks((prev) => {
+        const next = { ...prev };
+        stackParents.forEach((id) => {
+          next[id] = true;
+        });
+        return next;
+      });
+    }
+
+    const moveToNode = (attempt = 0) => {
+      const el = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+      if (!el || !canvasRef.current) {
+        if (attempt < 3) {
+          setTimeout(() => moveToNode(attempt + 1), 120);
+        }
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
+      const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
+      const leftShift = Math.min(240, canvasRect.width * 0.25);
+      animatePanTo(clampPan({ x: panRef.current.x + dx - leftShift, y: panRef.current.y + dy }));
+    };
+
+    requestAnimationFrame(() => {
+      setTimeout(() => moveToNode(0), 80);
+    });
+  }, [animatePanTo, clampPan, findStackParentsForNode, orphans, root]);
 
   useEffect(() => {
     if (!root) return;
@@ -5357,6 +5490,10 @@ const findNodeById = (node, id) => {
                   badgeVisibility={effectiveScanLayers}
                   showPageNumbers={layers.pageNumbers}
                   onRequestThumbnail={requestThumbnail}
+                  expandedStacks={expandedStacks}
+                  onToggleStack={(nodeId) => {
+                    setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
+                  }}
                 />
 
                 {/* SVG Connections Layer */}
@@ -5830,14 +5967,23 @@ const findNodeById = (node, id) => {
               typeOptions={REPORT_TYPE_OPTIONS}
               onDownload={downloadReportPdf}
               onLocateNode={(nodeId) => {
-                if (!contentRef.current || !canvasRef.current) return;
-                const el = contentRef.current.querySelector(`[data-node-id="${nodeId}"]`);
-                if (!el) return;
-                const rect = el.getBoundingClientRect();
-                const canvasRect = canvasRef.current.getBoundingClientRect();
-                const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
-                const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
-                setPan((prev) => clampPan({ x: prev.x + dx, y: prev.y + dy }));
+                focusNodeById(nodeId);
+              }}
+              onLocateUrl={(url) => {
+                if (!url || !contentRef.current || !canvasRef.current) return;
+                const urlMap = buildUrlNodeMap(root, orphans);
+                let match = urlMap.get(url);
+                if (!match?.id) {
+                  const normalized = normalizeUrlForCompare(url);
+                  for (const [candidateUrl, node] of urlMap.entries()) {
+                    if (normalizeUrlForCompare(candidateUrl) === normalized) {
+                      match = node;
+                      break;
+                    }
+                  }
+                }
+                if (!match?.id) return;
+                focusNodeById(match.id);
               }}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
