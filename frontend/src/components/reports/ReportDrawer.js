@@ -298,60 +298,64 @@ const ReportDrawer = ({
                       ) : (
                         <div className="report-thumb report-thumb-empty">No preview</div>
                       )}
-                      <div className="report-detail-info">
-                        <button
-                          type="button"
-                          className="report-open-link"
-                          onClick={() => window.open(entry.url, '_blank', 'noopener')}
-                        >
-                          Open page
-                          <ExternalLink size={14} />
-                        </button>
-                        <div className="report-detail-badges">
-                          {entry.types.map(type => (
-                            <span key={type} className="report-badge">
-                              {typeLookup.get(type) || type}
-                            </span>
-                          ))}
+                      <div className="report-detail-right">
+                        <div className="report-detail-info">
+                          <button
+                            type="button"
+                            className="report-open-link"
+                            onClick={() => window.open(entry.url, '_blank', 'noopener')}
+                          >
+                            Open page
+                            <ExternalLink size={14} />
+                          </button>
+                          <div className="report-detail-badges">
+                            {entry.types.map(type => (
+                              <span key={type} className="report-badge">
+                                {typeLookup.get(type) || type}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="report-detail-links">
+                          {entry.duplicateOf && (
+                            <div className="report-detail-link-row">
+                              <strong>Duplicate of:</strong>
+                              <button
+                                type="button"
+                                className="report-internal-link"
+                                onClick={() => onLocateUrl?.(entry.duplicateOf)}
+                              >
+                                {entry.duplicateOf.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                              </button>
+                            </div>
+                          )}
+                          {entry.parentUrl && (
+                            <div className="report-detail-link-row">
+                              <strong>Parent:</strong>
+                              <button
+                                type="button"
+                                className="report-internal-link"
+                                onClick={() => onLocateUrl?.(entry.parentUrl)}
+                              >
+                                {entry.parentUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                              </button>
+                            </div>
+                          )}
+                          {entry.referrerUrl && (
+                            <div className="report-detail-link-row">
+                              <strong>Referrer:</strong>
+                              <button
+                                type="button"
+                                className="report-internal-link"
+                                onClick={() => onLocateUrl?.(entry.referrerUrl)}
+                              >
+                                {entry.referrerUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
-                    {entry.duplicateOf && (
-                      <div className="report-detail-link-row">
-                        <strong>Duplicate of:</strong>
-                        <button
-                          type="button"
-                          className="report-internal-link"
-                          onClick={() => onLocateUrl?.(entry.duplicateOf)}
-                        >
-                          {entry.duplicateOf.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
-                        </button>
-                      </div>
-                    )}
-                    {entry.parentUrl && (
-                      <div className="report-detail-link-row">
-                        <strong>Parent:</strong>
-                        <button
-                          type="button"
-                          className="report-internal-link"
-                          onClick={() => onLocateUrl?.(entry.parentUrl)}
-                        >
-                          {entry.parentUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
-                        </button>
-                      </div>
-                    )}
-                    {entry.referrerUrl && (
-                      <div className="report-detail-link-row">
-                        <strong>Referrer:</strong>
-                        <button
-                          type="button"
-                          className="report-internal-link"
-                          onClick={() => onLocateUrl?.(entry.referrerUrl)}
-                        >
-                          {entry.referrerUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

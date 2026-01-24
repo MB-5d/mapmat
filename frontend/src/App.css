@@ -2296,10 +2296,25 @@ body {
 
 .report-detail-main {
   display: grid;
-  grid-template-columns: 160px 1fr;
+  grid-template-columns: 160px minmax(0, 1fr);
   gap: 16px;
   align-items: start;
   margin-top: 8px;
+}
+
+.report-detail-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  gap: 10px;
+}
+
+.report-detail-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin-top: auto;
 }
 
 .report-thumb {
@@ -2323,10 +2338,11 @@ body {
 }
 
 .report-detail-info {
-  display: grid;
-  grid-template-columns: 1fr 220px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   align-items: start;
-  gap: 16px;
+  gap: 12px;
 }
 
 .report-detail-badges {
@@ -2374,6 +2390,9 @@ body {
   font-size: 12px;
   cursor: pointer;
   padding: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .report-divider {
