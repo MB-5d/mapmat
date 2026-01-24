@@ -51,6 +51,15 @@ const ReportDrawer = ({
     }
   }, [isOpen, shouldRender]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const next = {};
+    typeOptions.forEach(option => {
+      next[option.key] = true;
+    });
+    setFilters(next);
+  }, [isOpen, typeOptions]);
+
   const typeLookup = useMemo(() => {
     const map = new Map();
     typeOptions.forEach(option => {
@@ -134,7 +143,7 @@ const ReportDrawer = ({
       }}
     >
       <header className="report-drawer-header">
-        <div>
+        <div className="report-header-title">
           <div className="report-drawer-title">Report — {truncatedTitle}</div>
           <div className="report-drawer-subtitle">{reportTimestamp || '—'}</div>
         </div>
@@ -244,7 +253,7 @@ const ReportDrawer = ({
             return (
               <div key={entry.id} className="report-row">
                 <div
-                  className="report-row-main"
+                  className={`report-row-main ${isExpanded ? 'report-row-expanded' : ''}`}
                   onClick={() => setExpandedRow(isExpanded ? null : entry.id)}
                   role="button"
                   tabIndex={0}
@@ -281,9 +290,6 @@ const ReportDrawer = ({
                 </div>
                 {isExpanded && (
                   <div className="report-row-detail">
-                    {entry.showFullTitle && (
-                      <div className="report-detail-title">{entry.title || entry.url}</div>
-                    )}
                     <div className="report-detail-main">
                       {entry.thumbnailUrl ? (
                         <div className="report-thumb">
