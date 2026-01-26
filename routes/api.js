@@ -141,8 +141,12 @@ router.get('/maps', requireAuth, (req, res) => {
     const parsed = maps.map(m => ({
       ...m,
       root: JSON.parse(m.root_data),
+      orphans: m.orphans_data ? JSON.parse(m.orphans_data) : [],
+      connections: m.connections_data ? JSON.parse(m.connections_data) : [],
       colors: m.colors ? JSON.parse(m.colors) : null,
       root_data: undefined,
+      orphans_data: undefined,
+      connections_data: undefined,
     }));
 
     res.json({ maps: parsed });
@@ -172,8 +176,12 @@ router.get('/maps/:id', requireAuth, (req, res) => {
       map: {
         ...map,
         root: JSON.parse(map.root_data),
+        orphans: map.orphans_data ? JSON.parse(map.orphans_data) : [],
+        connections: map.connections_data ? JSON.parse(map.connections_data) : [],
         colors: map.colors ? JSON.parse(map.colors) : null,
         root_data: undefined,
+        orphans_data: undefined,
+        connections_data: undefined,
       },
     });
   } catch (error) {
@@ -185,7 +193,7 @@ router.get('/maps/:id', requireAuth, (req, res) => {
 // POST /api/maps - Save a new map
 router.post('/maps', requireAuth, (req, res) => {
   try {
-    const { name, url, root, colors, project_id } = req.body;
+    const { name, url, root, orphans, connections, colors, project_id } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({ error: 'Map name is required' });
@@ -206,8 +214,8 @@ router.post('/maps', requireAuth, (req, res) => {
     const mapId = uuidv4();
 
     db.prepare(`
-      INSERT INTO maps (id, user_id, project_id, name, url, root_data, colors)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO maps (id, user_id, project_id, name, url, root_data, orphans_data, connections_data, colors)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       mapId,
       req.user.id,
@@ -215,6 +223,8 @@ router.post('/maps', requireAuth, (req, res) => {
       name.trim(),
       url || root.url || '',
       JSON.stringify(root),
+      orphans ? JSON.stringify(orphans) : null,
+      connections ? JSON.stringify(connections) : null,
       colors ? JSON.stringify(colors) : null
     );
 
@@ -224,8 +234,12 @@ router.post('/maps', requireAuth, (req, res) => {
       map: {
         ...map,
         root: JSON.parse(map.root_data),
+        orphans: map.orphans_data ? JSON.parse(map.orphans_data) : [],
+        connections: map.connections_data ? JSON.parse(map.connections_data) : [],
         colors: map.colors ? JSON.parse(map.colors) : null,
         root_data: undefined,
+        orphans_data: undefined,
+        connections_data: undefined,
       },
     });
   } catch (error) {
@@ -238,7 +252,7 @@ router.post('/maps', requireAuth, (req, res) => {
 router.put('/maps/:id', requireAuth, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, root, colors, project_id } = req.body;
+    const { name, root, orphans, connections, colors, project_id } = req.body;
 
     // Verify ownership
     const map = db.prepare('SELECT * FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
@@ -257,6 +271,14 @@ router.put('/maps/:id', requireAuth, (req, res) => {
     if (root !== undefined) {
       updates.push('root_data = ?');
       params.push(JSON.stringify(root));
+    }
+    if (orphans !== undefined) {
+      updates.push('orphans_data = ?');
+      params.push(orphans ? JSON.stringify(orphans) : null);
+    }
+    if (connections !== undefined) {
+      updates.push('connections_data = ?');
+      params.push(connections ? JSON.stringify(connections) : null);
     }
     if (colors !== undefined) {
       updates.push('colors = ?');
@@ -287,8 +309,12 @@ router.put('/maps/:id', requireAuth, (req, res) => {
       map: {
         ...updated,
         root: JSON.parse(updated.root_data),
+        orphans: updated.orphans_data ? JSON.parse(updated.orphans_data) : [],
+        connections: updated.connections_data ? JSON.parse(updated.connections_data) : [],
         colors: updated.colors ? JSON.parse(updated.colors) : null,
         root_data: undefined,
+        orphans_data: undefined,
+        connections_data: undefined,
       },
     });
   } catch (error) {
@@ -420,7 +446,7 @@ router.delete('/history', requireAuth, (req, res) => {
 // POST /api/shares - Create a share link
 router.post('/shares', requireAuth, (req, res) => {
   try {
-    const { map_id, root, colors, expires_in_days } = req.body;
+    const { map_id, root, orphans, connections, colors, expires_in_days } = req.body;
 
     if (!root) {
       return res.status(400).json({ error: 'Map data is required' });
@@ -440,13 +466,15 @@ router.post('/shares', requireAuth, (req, res) => {
       : null;
 
     db.prepare(`
-      INSERT INTO shares (id, map_id, user_id, root_data, colors, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO shares (id, map_id, user_id, root_data, orphans_data, connections_data, colors, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       shareId,
       map_id || null,
       req.user.id,
       JSON.stringify(root),
+      orphans ? JSON.stringify(orphans) : null,
+      connections ? JSON.stringify(connections) : null,
       colors ? JSON.stringify(colors) : null,
       expiresAt
     );
@@ -491,6 +519,8 @@ router.get('/shares/:id', (req, res) => {
       share: {
         id: share.id,
         root: JSON.parse(share.root_data),
+        orphans: share.orphans_data ? JSON.parse(share.orphans_data) : [],
+        connections: share.connections_data ? JSON.parse(share.connections_data) : [],
         colors: share.colors ? JSON.parse(share.colors) : null,
         sharedBy: share.shared_by_name,
         createdAt: share.created_at,

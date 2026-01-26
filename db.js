@@ -18,6 +18,13 @@ const db = new Database(path.join(DATA_DIR, 'mapmat.db'));
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
 
+function ensureColumn(table, column, type) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all().map(col => col.name);
+  if (!columns.includes(column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
 // Create tables
 db.exec(`
   -- Users table
@@ -90,6 +97,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_history_user ON scan_history(user_id);
   CREATE INDEX IF NOT EXISTS idx_shares_user ON shares(user_id);
 `);
+
+// Backfill new columns without full migrations
+ensureColumn('maps', 'orphans_data', 'TEXT');
+ensureColumn('maps', 'connections_data', 'TEXT');
+ensureColumn('shares', 'orphans_data', 'TEXT');
+ensureColumn('shares', 'connections_data', 'TEXT');
 
 console.log('Database initialized successfully');
 

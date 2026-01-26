@@ -1973,6 +1973,7 @@ export default function App() {
             resetScanLayers();
             setRoot(share.root);
             setOrphans(normalizeOrphans(share.orphans));
+            setConnections(share.connections || []);
             if (share.colors) setColors(share.colors);
             setUrlInput(share.root.url || '');
             showToast('Shared map loaded!', 'success');
@@ -1985,11 +1986,17 @@ export default function App() {
           const sharedData = localStorage.getItem(shareId);
           if (sharedData) {
             try {
-              const { root: sharedRoot, colors: sharedColors, orphans: sharedOrphans } = JSON.parse(sharedData);
+              const {
+                root: sharedRoot,
+                colors: sharedColors,
+                orphans: sharedOrphans,
+                connections: sharedConnections
+              } = JSON.parse(sharedData);
               if (sharedRoot) {
                 resetScanLayers();
                 setRoot(sharedRoot);
                 setOrphans(normalizeOrphans(sharedOrphans));
+                setConnections(sharedConnections || []);
                 if (sharedColors) setColors(sharedColors);
                 setUrlInput(sharedRoot.url || '');
                 showToast('Shared map loaded!', 'success');
@@ -2323,6 +2330,7 @@ export default function App() {
           name: mapName.trim(),
           root,
           orphans,
+          connections,
           colors,
           project_id: projectId || null,
         });
@@ -2334,6 +2342,7 @@ export default function App() {
           url: root.url,
           root,
           orphans,
+          connections,
           colors,
           project_id: projectId || null,
         });
@@ -2395,6 +2404,7 @@ export default function App() {
     resetScanLayers();
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
+    setConnections(map.connections || []);
     setColors(map.colors || DEFAULT_COLORS);
     setCurrentMap(map);
     setShowProjectsModal(false);
@@ -2465,6 +2475,8 @@ export default function App() {
   const loadFromHistory = (historyItem) => {
     resetScanLayers();
     setRoot(historyItem.root);
+    setOrphans([]);
+    setConnections([]);
     setColors(historyItem.colors || DEFAULT_COLORS);
     setCurrentMap(null);
     setUrlInput(historyItem.url);
@@ -2599,79 +2611,110 @@ export default function App() {
     });
 
     eventSource.addEventListener('complete', (e) => {
+      let data;
       try {
-        const data = JSON.parse(e.data);
-        const merged = applyScanArtifacts(data.root, data.orphans || [], data);
-        const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
-        const countThumbnails = nodesForCounts.filter((node) => !!node.thumbnailUrl).length;
-        const authCount = nodesForCounts.filter((node) => !!node.authRequired).length;
-        const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
-        setRoot(merged.root);
-        setOrphans(merged.orphans);
-        setScanMeta({ brokenLinks: data.brokenLinks || [] });
-        setScanLayerAvailability({
-          thumbnails: scanOptions.thumbnails,
-          inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
-          subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
-          authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
-          orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
-          errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
-          brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
-          duplicates: scanOptions.duplicates && duplicateCount > 0,
-          files: scanOptions.files && (data.files || []).length > 0,
+        data = JSON.parse(e.data);
+      } catch (err) {
+        console.error('Scan payload parse failed:', err);
+        showToast('Scan completed but response could not be read', 'error');
+        eventSource.close();
+        eventSourceRef.current = null;
+        stopScanTimers();
+        setLoading(false);
+        setScanProgress({ scanned: 0, queued: 0 });
+        return;
+      }
+
+      if (!data?.root) {
+        console.error('Scan completed without a root node:', data);
+        showToast('Scan completed but returned no pages', 'error');
+        eventSource.close();
+        eventSourceRef.current = null;
+        stopScanTimers();
+        setLoading(false);
+        setScanProgress({ scanned: 0, queued: 0 });
+        return;
+      }
+
+      let merged = { root: data.root, orphans: data.orphans || [] };
+      try {
+        merged = applyScanArtifacts(data.root, data.orphans || [], data);
+      } catch (err) {
+        console.error('Scan artifact merge failed:', err);
+        showToast('Scan completed with partial data', 'warning');
+      }
+
+      const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
+      const countThumbnails = nodesForCounts.filter((node) => !!node.thumbnailUrl).length;
+      const authCount = nodesForCounts.filter((node) => !!node.authRequired).length;
+      const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
+      setRoot(merged.root);
+      setOrphans(merged.orphans);
+      setConnections([]);
+      setScanMeta({ brokenLinks: data.brokenLinks || [] });
+      setScanLayerAvailability({
+        thumbnails: scanOptions.thumbnails,
+        inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
+        subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
+        authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
+        orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
+        errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
+        brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
+        duplicates: scanOptions.duplicates && duplicateCount > 0,
+        files: scanOptions.files && (data.files || []).length > 0,
+      });
+      setScanLayerVisibility({
+        thumbnails: scanOptions.thumbnails,
+        inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
+        subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
+        authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
+        orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
+        errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
+        brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
+        duplicates: scanOptions.duplicates && duplicateCount > 0,
+        files: scanOptions.files && (data.files || []).length > 0,
+      });
+      if (scanOptions.thumbnails) {
+        setShowThumbnails(true);
+      }
+      if (scanOptions.thumbnails) {
+        thumbnailQueueRef.current = [];
+        thumbnailRequestRef.current = new Set();
+        thumbnailActiveRef.current = 0;
+        thumbnailStartRef.current = new Map();
+        thumbnailTotalTimeRef.current = 0;
+        setThumbnailQueueSize(0);
+        setThumbnailActiveCount(0);
+        setThumbnailStats({
+          total: nodesForCounts.length,
+          completed: 0,
+          failed: 0,
+          avgMs: 0,
         });
-        setScanLayerVisibility({
-          thumbnails: scanOptions.thumbnails,
-          inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
-          subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
-          authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
-          orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
-          errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
-          brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
-          duplicates: scanOptions.duplicates && duplicateCount > 0,
-          files: scanOptions.files && (data.files || []).length > 0,
-        });
-        if (scanOptions.thumbnails) {
-          setShowThumbnails(true);
+      } else {
+        setThumbnailStats({ total: 0, completed: 0, failed: 0, avgMs: 0 });
+      }
+      setCurrentMap(null);
+      setScale(1);
+      setPan({ x: 0, y: 0 });
+      setLastScanAt(new Date().toISOString());
+      // Set map name from site title
+      if (!preserveName && data.root?.title) {
+        setMapName(data.root.title);
+      } else if (!preserveName) {
+        // Use domain as fallback
+        try {
+          const domain = new URL(url).hostname.replace('www.', '');
+          setMapName(domain);
+        } catch {
+          setMapName('Untitled Map');
         }
-        if (scanOptions.thumbnails) {
-          thumbnailQueueRef.current = [];
-          thumbnailRequestRef.current = new Set();
-          thumbnailActiveRef.current = 0;
-          thumbnailStartRef.current = new Map();
-          thumbnailTotalTimeRef.current = 0;
-          setThumbnailQueueSize(0);
-          setThumbnailActiveCount(0);
-          setThumbnailStats({
-            total: nodesForCounts.length,
-            completed: 0,
-            failed: 0,
-            avgMs: 0,
-          });
-        } else {
-          setThumbnailStats({ total: 0, completed: 0, failed: 0, avgMs: 0 });
-        }
-        setCurrentMap(null);
-        setScale(1);
-        setPan({ x: 0, y: 0 });
-        setLastScanAt(new Date().toISOString());
-        // Set map name from site title
-        if (!preserveName && data.root?.title) {
-          setMapName(data.root.title);
-        } else if (!preserveName) {
-          // Use domain as fallback
-          try {
-            const domain = new URL(url).hostname.replace('www.', '');
-            setMapName(domain);
-          } catch {
-            setMapName('Untitled Map');
-          }
-        }
-        const pageCount = countNodes(merged.root);
-        addToHistory(url, merged.root, pageCount);
-        showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
-        setTimeout(resetView, 100);
-      } catch {}
+      }
+      const pageCount = countNodes(merged.root);
+      addToHistory(url, merged.root, pageCount);
+      showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
+      setTimeout(resetView, 100);
+
       eventSource.close();
       eventSourceRef.current = null;
       stopScanTimers();
@@ -3446,6 +3489,8 @@ export default function App() {
       const { share } = await api.createShare({
         map_id: currentMap?.id || null,
         root,
+        orphans,
+        connections,
         colors,
         expires_in_days: 30, // Share links expire in 30 days
       });
@@ -3464,7 +3509,7 @@ export default function App() {
       // If not logged in, fall back to localStorage
       if (e.message?.includes('Authentication')) {
         const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const shareData = { root, colors, createdAt: Date.now() };
+        const shareData = { root, orphans, connections, colors, createdAt: Date.now() };
         localStorage.setItem(shareId, JSON.stringify(shareData));
         const shareUrl = `${window.location.origin}?share=${shareId}&access=${permission}`;
         await navigator.clipboard.writeText(shareUrl);
