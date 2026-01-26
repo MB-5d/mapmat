@@ -136,6 +136,13 @@ export async function addToHistory(data) {
   });
 }
 
+export async function updateHistory(id, data) {
+  return fetchApi(`/api/history/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function deleteHistory(ids) {
   return fetchApi('/api/history', {
     method: 'DELETE',

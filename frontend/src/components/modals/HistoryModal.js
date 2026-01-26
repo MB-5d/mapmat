@@ -87,7 +87,11 @@ const HistoryModal = ({
                     >
                       {selectedHistoryItems.has(item.id) ? <CheckSquare size={18} /> : <Square size={18} />}
                     </button>
-                    <div className="history-item-content" onClick={() => onLoadFromHistory(item)}>
+                    <div
+                      className="history-item-content"
+                      onClick={() => onLoadFromHistory?.(item)}
+                      role={onLoadFromHistory ? 'button' : undefined}
+                    >
                       <div className="history-item-header">
                         <Globe size={16} />
                         <span className="history-hostname">{item.hostname}</span>

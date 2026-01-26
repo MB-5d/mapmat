@@ -366,9 +366,13 @@ router.get('/history', requireAuth, (req, res) => {
       orphans: h.orphans_data ? JSON.parse(h.orphans_data) : [],
       connections: h.connections_data ? JSON.parse(h.connections_data) : [],
       colors: h.colors ? JSON.parse(h.colors) : null,
+      scan_options: h.scan_options ? JSON.parse(h.scan_options) : null,
+      scan_depth: h.scan_depth ?? null,
+      map_id: h.map_id || null,
       root_data: undefined,
       orphans_data: undefined,
       connections_data: undefined,
+      scan_options_data: undefined,
     }));
 
     res.json({ history: parsed });
@@ -381,7 +385,7 @@ router.get('/history', requireAuth, (req, res) => {
 // POST /api/history - Add to scan history
 router.post('/history', requireAuth, (req, res) => {
   try {
-    const { url, hostname, title, page_count, root, orphans, connections, colors } = req.body;
+    const { url, hostname, title, page_count, root, orphans, connections, colors, scan_options, scan_depth, map_id } = req.body;
 
     if (!root) {
       return res.status(400).json({ error: 'Scan data is required' });
@@ -390,8 +394,8 @@ router.post('/history', requireAuth, (req, res) => {
     const historyId = uuidv4();
 
     db.prepare(`
-      INSERT INTO scan_history (id, user_id, url, hostname, title, page_count, root_data, orphans_data, connections_data, colors)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO scan_history (id, user_id, url, hostname, title, page_count, root_data, orphans_data, connections_data, colors, scan_options, scan_depth, map_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       historyId,
       req.user.id,
@@ -402,7 +406,10 @@ router.post('/history', requireAuth, (req, res) => {
       JSON.stringify(root),
       orphans ? JSON.stringify(orphans) : null,
       connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null
+      colors ? JSON.stringify(colors) : null,
+      scan_options ? JSON.stringify(scan_options) : null,
+      scan_depth ?? null,
+      map_id || null
     );
 
     // Keep only last 50 entries
@@ -420,6 +427,29 @@ router.post('/history', requireAuth, (req, res) => {
   } catch (error) {
     console.error('Add history error:', error);
     res.status(500).json({ error: 'Failed to add to history' });
+  }
+});
+
+// PUT /api/history/:id - Update a history item (e.g., attach saved map)
+router.put('/history/:id', requireAuth, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { map_id } = req.body || {};
+
+    const historyItem = db.prepare('SELECT * FROM scan_history WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    if (!historyItem) {
+      return res.status(404).json({ error: 'History item not found' });
+    }
+
+    db.prepare(`
+      UPDATE scan_history SET map_id = ?, scanned_at = scanned_at
+      WHERE id = ?
+    `).run(map_id || null, id);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update history error:', error);
+    res.status(500).json({ error: 'Failed to update history' });
   }
 });
 

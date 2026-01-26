@@ -105,6 +105,9 @@ ensureColumn('shares', 'orphans_data', 'TEXT');
 ensureColumn('shares', 'connections_data', 'TEXT');
 ensureColumn('scan_history', 'orphans_data', 'TEXT');
 ensureColumn('scan_history', 'connections_data', 'TEXT');
+ensureColumn('scan_history', 'scan_options', 'TEXT');
+ensureColumn('scan_history', 'scan_depth', 'INTEGER');
+ensureColumn('scan_history', 'map_id', 'TEXT');
 
 console.log('Database initialized successfully');
 

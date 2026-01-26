@@ -1099,8 +1099,9 @@ app.get('/scan-stream', async (req, res) => {
 
   // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3000');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.flushHeaders();
@@ -1120,6 +1121,10 @@ app.get('/scan-stream', async (req, res) => {
       console.error('SSE serialization error:', err);
     }
   };
+
+  const heartbeat = setInterval(() => {
+    sendEvent('ping', { t: Date.now() });
+  }, 15000);
 
   try {
     let parsedOptions = {};
@@ -1150,6 +1155,8 @@ app.get('/scan-stream', async (req, res) => {
     console.error('Scan failed:', e);
     sendEvent('error', { error: e.message || 'Scan failed' });
     res.end();
+  } finally {
+    clearInterval(heartbeat);
   }
 });
 

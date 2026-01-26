@@ -775,7 +775,7 @@ body {
   position: absolute;
   left: 50%;
   top: 200px;
-  transform-origin: 0 0;
+  transform-origin: center top;
   will-change: transform;
 }
 

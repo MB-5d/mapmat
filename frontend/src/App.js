@@ -1356,6 +1356,10 @@ export default function App() {
   const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [scanHistory, setScanHistory] = useState([]);
+  const [lastHistoryId, setLastHistoryId] = useState(null);
+  const [lastScanUrl, setLastScanUrl] = useState('');
+  const autosaveTimerRef = useRef(null);
+  const lastAutosaveSnapshotRef = useRef('');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -1568,6 +1572,48 @@ export default function App() {
     });
     return stats;
   }, [reportEntries]);
+
+  // Autosave for existing maps (debounced)
+  useEffect(() => {
+    if (!currentMap?.id || !root || isImportedMap) return;
+
+    const snapshot = JSON.stringify({
+      name: currentMap?.name || mapName,
+      root,
+      orphans,
+      connections,
+      colors,
+      project_id: currentMap?.project_id || null,
+    });
+
+    if (snapshot === lastAutosaveSnapshotRef.current) return;
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(async () => {
+      try {
+        const { map } = await api.updateMap(currentMap.id, {
+          name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
+          root,
+          orphans,
+          connections,
+          colors,
+          project_id: currentMap?.project_id || null,
+        });
+        lastAutosaveSnapshotRef.current = snapshot;
+        setCurrentMap(map);
+        setProjects(prev => prev.map(p => ({
+          ...p,
+          maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
+        })));
+      } catch (e) {
+        console.error('Autosave failed:', e);
+      }
+    }, 800);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, mapName, isImportedMap]);
 
   const reportTitle = useMemo(() => {
     return root?.title || getHostname(root?.url) || 'Website';
@@ -1974,6 +2020,8 @@ export default function App() {
             setRoot(share.root);
             setOrphans(normalizeOrphans(share.orphans));
             setConnections(share.connections || []);
+            setScale(1);
+            setPan({ x: 0, y: 0 });
             if (share.colors) setColors(share.colors);
             setUrlInput(share.root.url || '');
             showToast('Shared map loaded!', 'success');
@@ -1997,6 +2045,8 @@ export default function App() {
                 setRoot(sharedRoot);
                 setOrphans(normalizeOrphans(sharedOrphans));
                 setConnections(sharedConnections || []);
+                setScale(1);
+                setPan({ x: 0, y: 0 });
                 if (sharedColors) setColors(sharedColors);
                 setUrlInput(sharedRoot.url || '');
                 showToast('Shared map loaded!', 'success');
@@ -2371,6 +2421,17 @@ export default function App() {
       setCurrentMap(savedMap);
       setShowSaveMapModal(false);
       showToast(`Map "${mapName}" saved`, 'success');
+      if (!currentMap?.id && lastHistoryId && lastScanUrl && root?.url === lastScanUrl) {
+        api.updateHistory(lastHistoryId, { map_id: savedMap.id })
+          .then(() => {
+            setScanHistory(prev => prev.map(item =>
+              item.id === lastHistoryId ? { ...item, map_id: savedMap.id } : item
+            ));
+          })
+          .catch((err) => {
+            console.error('Failed to attach map to history:', err);
+          });
+      }
       if (pendingCreateAfterSave) {
         setPendingCreateAfterSave(false);
         setShowCreateMapModal(true);
@@ -2441,7 +2502,7 @@ export default function App() {
   };
 
   // History functions
-  const addToHistory = async (url, rootData, pageCount) => {
+  const addToHistory = async (url, rootData, pageCount, scanConfig, depthValue) => {
     if (!isLoggedIn) return; // Only save history for logged-in users
 
     try {
@@ -2454,6 +2515,9 @@ export default function App() {
         orphans,
         connections,
         colors,
+        scan_options: scanConfig || null,
+        scan_depth: Number.isFinite(depthValue) ? depthValue : null,
+        map_id: null,
       });
 
       // Add to local state
@@ -2468,29 +2532,21 @@ export default function App() {
         orphans,
         connections,
         colors,
+        scan_options: scanConfig || null,
+        scan_depth: Number.isFinite(depthValue) ? depthValue : null,
+        map_id: null,
       };
 
       setScanHistory(prev => [historyItem, ...prev].slice(0, 50));
+      setLastHistoryId(id);
+      setLastScanUrl(url);
     } catch (e) {
       console.error('Failed to save to history:', e);
     }
   };
 
-  const loadFromHistory = (historyItem) => {
-    resetScanLayers();
-    setRoot(historyItem.root);
-    setOrphans(normalizeOrphans(historyItem.orphans));
-    setConnections(historyItem.connections || []);
-    setColors(historyItem.colors || DEFAULT_COLORS);
-    setCurrentMap(null);
-    setUrlInput(historyItem.url);
-    setLastScanAt(historyItem.scanned_at || null);
-    setShowHistoryModal(false);
-    setSelectedHistoryItems(new Set());
-    setScale(1);
-    setPan({ x: 0, y: 0 });
-    showToast(`Loaded "${historyItem.hostname}"`, 'success');
-    setTimeout(resetView, 100);
+  const loadFromHistory = async () => {
+    showToast('History is view-only for now', 'info');
   };
 
   const toggleHistorySelection = (id) => {
@@ -2714,10 +2770,10 @@ export default function App() {
           setMapName('Untitled Map');
         }
       }
-      const pageCount = countNodes(merged.root);
-      addToHistory(url, merged.root, pageCount);
-      showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
-      setTimeout(resetView, 100);
+        const pageCount = countNodes(merged.root);
+        addToHistory(url, merged.root, pageCount, scanConfig, depthValue);
+        showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
+        setTimeout(resetView, 100);
 
       eventSource.close();
       eventSourceRef.current = null;
@@ -2809,8 +2865,17 @@ export default function App() {
     } catch {}
   };
 
-  const zoomIn = () => setScale((s) => clamp(s * 1.2, 0.1, 3));
-  const zoomOut = () => setScale((s) => clamp(s / 1.2, 0.1, 3));
+  const zoomIn = () => {
+  const factor = 1.2;
+  setPan(p => ({ x: p.x * factor, y: p.y * factor }));
+  setScale((s) => clamp(s * factor, 0.1, 3));
+};
+const zoomOut = () => {
+  const factor = 1 / 1.2;
+  setPan(p => ({ x: p.x * factor, y: p.y * factor }));
+  setScale((s) => clamp(s * factor, 0.1, 3));
+};
+
 
   const resetView = () => {
     // Reset to 100% scale with Home page centered at top of viewport
@@ -4665,12 +4730,12 @@ const findNodeById = (node, id) => {
       } else {
         saveStateForUndo();
         const newNode = { ...newNodeData, id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` };
-        if (updatedNode.parentId === '') {
+        if (newParentId === '') {
           setOrphans(prev => [...prev, { ...newNode, orphanType: 'orphan', subdomainRoot: false }]);
         } else {
           setRoot((prev) => {
             const copy = structuredClone(prev);
-            const parent = findNodeById(copy, updatedNode.parentId);
+            const parent = findNodeById(copy, newParentId);
             if (parent) {
               parent.children = parent.children || [];
               parent.children.push(newNode);
