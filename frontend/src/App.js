@@ -1365,7 +1365,10 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [, setAuthLoading] = useState(true);
-  const [showLanding, setShowLanding] = useState(true);
+  const [showLanding, setShowLanding] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return !params.get('share');
+  });
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [editModalNode, setEditModalNode] = useState(null);
@@ -2012,6 +2015,7 @@ export default function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const shareId = urlParams.get('share');
     if (shareId) {
+      setShowLanding(false);
       // Try to load from API first
       api.getShare(shareId)
         .then(({ share }) => {
@@ -2026,7 +2030,7 @@ export default function App() {
             setUrlInput(share.root.url || '');
             showToast('Shared map loaded!', 'success');
             window.history.replaceState({}, '', window.location.pathname);
-            setTimeout(resetView, 100);
+            scheduleResetView();
           }
         })
         .catch((e) => {
@@ -2051,7 +2055,7 @@ export default function App() {
                 setUrlInput(sharedRoot.url || '');
                 showToast('Shared map loaded!', 'success');
                 window.history.replaceState({}, '', window.location.pathname);
-                setTimeout(resetView, 100);
+                scheduleResetView();
               }
             } catch (parseError) {
               console.error('Failed to parse shared map:', parseError);
@@ -2865,17 +2869,16 @@ export default function App() {
     } catch {}
   };
 
-  const zoomIn = () => {
-  const factor = 1.2;
-  setPan(p => ({ x: p.x * factor, y: p.y * factor }));
-  setScale((s) => clamp(s * factor, 0.1, 3));
-};
-const zoomOut = () => {
-  const factor = 1 / 1.2;
-  setPan(p => ({ x: p.x * factor, y: p.y * factor }));
-  setScale((s) => clamp(s * factor, 0.1, 3));
-};
-
+    const zoomIn = () => {
+    const factor = 1.2;
+    setPan(p => ({ x: p.x * factor, y: p.y * factor }));
+    setScale(s => clamp(s * factor, 0.1, 3));
+  };
+  const zoomOut = () => {
+    const factor = 1 / 1.2;
+    setPan(p => ({ x: p.x * factor, y: p.y * factor }));
+    setScale(s => clamp(s * factor, 0.1, 3));
+  };
 
   const resetView = () => {
     // Reset to 100% scale with Home page centered at top of viewport
@@ -2893,7 +2896,8 @@ const zoomOut = () => {
     setTimeout(() => {
       if (!contentRef.current || !canvasRef.current) return;
 
-      const rootNode = contentRef.current.querySelector('[data-depth="0"]');
+      const rootSelector = root?.id ? `[data-node-id="${root.id}"]` : '[data-depth="0"]';
+      const rootNode = contentRef.current.querySelector(rootSelector);
       if (!rootNode) return;
 
       const canvasRect = canvasRef.current.getBoundingClientRect();
@@ -2914,6 +2918,23 @@ const zoomOut = () => {
 
       setPan({ x: newPanX, y: newPanY });
     }, 50);
+  };
+
+  const scheduleResetView = (attempts = 8) => {
+    if (attempts <= 0) return;
+    setTimeout(() => {
+      if (!contentRef.current || !canvasRef.current) {
+        scheduleResetView(attempts - 1);
+        return;
+      }
+      const rootSelector = root?.id ? `[data-node-id="${root.id}"]` : '[data-depth="0"]';
+      const rootNode = contentRef.current.querySelector(rootSelector);
+      if (!rootNode) {
+        scheduleResetView(attempts - 1);
+        return;
+      }
+      resetView();
+    }, 80);
   };
 
   const fitToScreen = () => {
@@ -3564,10 +3585,12 @@ const zoomOut = () => {
         expires_in_days: 30, // Share links expire in 30 days
       });
 
-      // Create shareable URL with access level
-      const shareUrl = `${window.location.origin}?share=${share.id}&access=${permission}`;
+      // Create shareable URL with access level (preserve current pathname)
+      const shareUrl = new URL(window.location.href);
+      shareUrl.searchParams.set('share', share.id);
+      shareUrl.searchParams.set('access', permission);
 
-      await navigator.clipboard.writeText(shareUrl);
+      await navigator.clipboard.writeText(shareUrl.toString());
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
 
@@ -3580,8 +3603,10 @@ const zoomOut = () => {
         const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const shareData = { root, orphans, connections, colors, createdAt: Date.now() };
         localStorage.setItem(shareId, JSON.stringify(shareData));
-        const shareUrl = `${window.location.origin}?share=${shareId}&access=${permission}`;
-        await navigator.clipboard.writeText(shareUrl);
+        const shareUrl = new URL(window.location.href);
+        shareUrl.searchParams.set('share', shareId);
+        shareUrl.searchParams.set('access', permission);
+        await navigator.clipboard.writeText(shareUrl.toString());
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2000);
 
