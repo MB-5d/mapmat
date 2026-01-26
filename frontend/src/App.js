@@ -2869,15 +2869,29 @@ export default function App() {
     } catch {}
   };
 
-    const zoomIn = () => {
-    const factor = 1.2;
-    setPan(p => ({ x: p.x * factor, y: p.y * factor }));
-    setScale(s => clamp(s * factor, 0.1, 3));
+      const zoomIn = () => {
+    if (!contentRef.current) {
+      setScale(s => clamp(s * 1.2, 0.1, 3));
+      return;
+    }
+    const contentWidth = contentRef.current.offsetWidth;
+    const oldScale = scaleRef.current;
+    const newScale = clamp(oldScale * 1.2, 0.1, 3);
+    const offsetAdjust = (contentWidth / 2) * (newScale - oldScale);
+    setPan(p => ({ x: p.x - offsetAdjust, y: p.y }));
+    setScale(newScale);
   };
   const zoomOut = () => {
-    const factor = 1 / 1.2;
-    setPan(p => ({ x: p.x * factor, y: p.y * factor }));
-    setScale(s => clamp(s * factor, 0.1, 3));
+    if (!contentRef.current) {
+      setScale(s => clamp(s / 1.2, 0.1, 3));
+      return;
+    }
+    const contentWidth = contentRef.current.offsetWidth;
+    const oldScale = scaleRef.current;
+    const newScale = clamp(oldScale / 1.2, 0.1, 3);
+    const offsetAdjust = (contentWidth / 2) * (newScale - oldScale);
+    setPan(p => ({ x: p.x - offsetAdjust, y: p.y }));
+    setScale(newScale);
   };
 
   const resetView = () => {

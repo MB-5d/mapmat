@@ -4,7 +4,8 @@
   "description": "Map Mat - Visual sitemap generator backend",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:smoke": "node scripts/smoke-test.js"
   },
   "engines": {
     "node": ">=18.0.0"
