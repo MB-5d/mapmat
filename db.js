@@ -103,6 +103,8 @@ ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
 ensureColumn('shares', 'orphans_data', 'TEXT');
 ensureColumn('shares', 'connections_data', 'TEXT');
+ensureColumn('scan_history', 'orphans_data', 'TEXT');
+ensureColumn('scan_history', 'connections_data', 'TEXT');
 
 console.log('Database initialized successfully');
 

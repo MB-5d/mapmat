@@ -363,8 +363,12 @@ router.get('/history', requireAuth, (req, res) => {
     const parsed = history.map(h => ({
       ...h,
       root: JSON.parse(h.root_data),
+      orphans: h.orphans_data ? JSON.parse(h.orphans_data) : [],
+      connections: h.connections_data ? JSON.parse(h.connections_data) : [],
       colors: h.colors ? JSON.parse(h.colors) : null,
       root_data: undefined,
+      orphans_data: undefined,
+      connections_data: undefined,
     }));
 
     res.json({ history: parsed });
@@ -377,7 +381,7 @@ router.get('/history', requireAuth, (req, res) => {
 // POST /api/history - Add to scan history
 router.post('/history', requireAuth, (req, res) => {
   try {
-    const { url, hostname, title, page_count, root, colors } = req.body;
+    const { url, hostname, title, page_count, root, orphans, connections, colors } = req.body;
 
     if (!root) {
       return res.status(400).json({ error: 'Scan data is required' });
@@ -386,8 +390,8 @@ router.post('/history', requireAuth, (req, res) => {
     const historyId = uuidv4();
 
     db.prepare(`
-      INSERT INTO scan_history (id, user_id, url, hostname, title, page_count, root_data, colors)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO scan_history (id, user_id, url, hostname, title, page_count, root_data, orphans_data, connections_data, colors)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       historyId,
       req.user.id,
@@ -396,6 +400,8 @@ router.post('/history', requireAuth, (req, res) => {
       title || '',
       page_count || 0,
       JSON.stringify(root),
+      orphans ? JSON.stringify(orphans) : null,
+      connections ? JSON.stringify(connections) : null,
       colors ? JSON.stringify(colors) : null
     );
 

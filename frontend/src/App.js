@@ -2451,6 +2451,8 @@ export default function App() {
         title: rootData?.title || getHostname(url),
         page_count: pageCount,
         root: rootData,
+        orphans,
+        connections,
         colors,
       });
 
@@ -2463,6 +2465,8 @@ export default function App() {
         page_count: pageCount,
         scanned_at: new Date().toISOString(),
         root: rootData,
+        orphans,
+        connections,
         colors,
       };
 
@@ -2475,8 +2479,8 @@ export default function App() {
   const loadFromHistory = (historyItem) => {
     resetScanLayers();
     setRoot(historyItem.root);
-    setOrphans([]);
-    setConnections([]);
+    setOrphans(normalizeOrphans(historyItem.orphans));
+    setConnections(historyItem.connections || []);
     setColors(historyItem.colors || DEFAULT_COLORS);
     setCurrentMap(null);
     setUrlInput(historyItem.url);
