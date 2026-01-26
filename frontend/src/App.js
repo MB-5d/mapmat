@@ -1322,7 +1322,10 @@ export default function App() {
   const [fullImageUrl, setFullImageUrl] = useState(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [scale, setScale] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [pan, setPan] = useState({ 
+  x: window.innerWidth / 2, 
+  y: 200 
+  });
   const scaleRef = useRef(scale);
   useEffect(() => {
     scaleRef.current = scale;
@@ -1810,7 +1813,7 @@ export default function App() {
   );
 
   // Calculate map bounds and clamp pan to limit scrolling
-  const panRef = useRef(pan);
+  const panRef = useRef({ x: window.innerWidth / 2, y: 200 });
   panRef.current = pan;
 
   const clampPan = useCallback((newPan) => {
@@ -2477,7 +2480,7 @@ export default function App() {
     setPan({ x: 0, y: 0 });
     setUrlInput(map.root?.url || '');
     showToast(`Loaded "${map.name}"`, 'success');
-    setTimeout(resetView, 100);
+    scheduleResetView();
   };
 
   const deleteMap = async (projectId, mapId) => {
@@ -2869,30 +2872,8 @@ export default function App() {
     } catch {}
   };
 
-      const zoomIn = () => {
-    if (!contentRef.current) {
-      setScale(s => clamp(s * 1.2, 0.1, 3));
-      return;
-    }
-    const contentWidth = contentRef.current.offsetWidth;
-    const oldScale = scaleRef.current;
-    const newScale = clamp(oldScale * 1.2, 0.1, 3);
-    const offsetAdjust = (contentWidth / 2) * (newScale - oldScale);
-    setPan(p => ({ x: p.x - offsetAdjust, y: p.y }));
-    setScale(newScale);
-  };
-  const zoomOut = () => {
-    if (!contentRef.current) {
-      setScale(s => clamp(s / 1.2, 0.1, 3));
-      return;
-    }
-    const contentWidth = contentRef.current.offsetWidth;
-    const oldScale = scaleRef.current;
-    const newScale = clamp(oldScale / 1.2, 0.1, 3);
-    const offsetAdjust = (contentWidth / 2) * (newScale - oldScale);
-    setPan(p => ({ x: p.x - offsetAdjust, y: p.y }));
-    setScale(newScale);
-  };
+  const zoomIn = () => setScale((s) => clamp(s * 1.2, 0.1, 3));
+  const zoomOut = () => setScale((s) => clamp(s / 1.2, 0.1, 3));
 
   const resetView = () => {
     // Reset to 100% scale with Home page centered at top of viewport
@@ -5592,7 +5573,7 @@ const findNodeById = (node, id) => {
               className={`content ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
               ref={contentRef}
               style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale}) translate(-50%, 0px)`,
+                transform: `translate(-50%, 0px) translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
               }}
                 onMouseMove={(e) => {
                   if (drawingConnection) handleConnectionMouseMove(e);
