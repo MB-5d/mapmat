@@ -2866,15 +2866,15 @@ export default function App() {
   };
 
   const zoomIn = () => {
-  const factor = 1.2;
-  setPan(p => ({ x: p.x * factor, y: p.y * factor }));
-  setScale((s) => clamp(s * factor, 0.1, 3));
-};
-const zoomOut = () => {
-  const factor = 1 / 1.2;
-  setPan(p => ({ x: p.x * factor, y: p.y * factor }));
-  setScale((s) => clamp(s * factor, 0.1, 3));
-};
+    const factor = 1.2;
+    setPan(p => ({ x: p.x * factor, y: p.y * factor }));
+    setScale(s => clamp(s * factor, 0.1, 3));
+  };
+  const zoomOut = () => {
+    const factor = 1 / 1.2;
+    setPan(p => ({ x: p.x * factor, y: p.y * factor }));
+    setScale(s => clamp(s * factor, 0.1, 3));
+  };
 
 
   const resetView = () => {
