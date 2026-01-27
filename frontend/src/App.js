@@ -44,808 +44,46 @@ import ScanProgressModal from './components/scan/ScanProgressModal';
 import RightRail from './components/toolbar/RightRail';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname } from './utils/url';
-
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
-const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
-
-// Permission levels for sharing
-const ACCESS_LEVELS = {
-  VIEW: 'view',       // Can only look at map
-  COMMENT: 'comment', // Can view + add comments
-  EDIT: 'edit'        // Full access (owner)
-};
-
-const SCAN_MESSAGES = [
-  "Discovering pages...",
-  "Mapping your site structure...",
-  "Finding all the hidden gems...",
-  "Building your sitemap...",
-  "Analyzing page hierarchy...",
-  "Almost there...",
-  "Connecting the dots...",
-  "Exploring your website...",
-  "Gathering page information...",
-  "Creating something beautiful...",
-  "Following the links...",
-  "Deep diving into your site...",
-  "Organizing your pages...",
-  "Making progress...",
-  "This is looking great!",
-];
-
-const sanitizeUrl = (raw) => {
-  if (!raw) return '';
-  let t = raw.trim();
-
-  // Add https:// if no protocol specified
-  if (t && !t.match(/^https?:\/\//i)) {
-    t = 'https://' + t;
-  }
-
-  try {
-    const u = new URL(t);
-    return u.toString();
-  } catch {
-    return '';
-  }
-};
-
-const downloadText = (filename, text) => {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-const REPORT_TYPE_OPTIONS = [
-  { key: 'standard', label: 'Standard' },
-  { key: 'missing', label: 'Missing' },
-  { key: 'duplicates', label: 'Duplicate' },
-  { key: 'brokenLinks', label: 'Broken Links' },
-  { key: 'inactivePages', label: 'Inactive Pages' },
-  { key: 'errorPages', label: 'Error Pages' },
-  { key: 'orphanPages', label: 'Orphan Pages' },
-  { key: 'subdomains', label: 'Subdomains' },
-  { key: 'files', label: 'Files / Downloads' },
-  { key: 'authenticatedPages', label: 'Authenticated Pages' },
-];
-
-const getReportTypesForNode = (node, overrides = {}) => {
-  const types = new Set();
-  if (!node) return [];
-  const orphanType = overrides.orphanType ?? node.orphanType;
-  const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
-  if (!node.isMissing
-    && !node.isDuplicate
-    && !node.isBroken
-    && !node.isInactive
-    && !node.isError
-    && !node.isFile
-    && !node.authRequired
-    && orphanType !== 'broken'
-    && orphanType !== 'inactive'
-    && orphanType !== 'file'
-    && orphanType !== 'orphan'
-    && !isSubdomain) {
-    types.add('standard');
-  }
-  if (node.isMissing) types.add('missing');
-  if (node.isDuplicate) types.add('duplicates');
-  if (node.isBroken || orphanType === 'broken') types.add('brokenLinks');
-  if (node.isInactive || orphanType === 'inactive') types.add('inactivePages');
-  if (node.isError) types.add('errorPages');
-  if (orphanType === 'orphan') types.add('orphanPages');
-  if (isSubdomain) types.add('subdomains');
-  if (node.isFile || orphanType === 'file') types.add('files');
-  if (node.authRequired) types.add('authenticatedPages');
-  return Array.from(types);
-};
-
-const getReportPageType = (node, overrides = {}) => {
-  if (!node) return 'Standard';
-  const orphanType = overrides.orphanType ?? node.orphanType;
-  const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
-  if (isSubdomain) return 'Subdomain';
-  if (orphanType === 'file' || node.isFile) return 'File';
-  if (orphanType === 'orphan') return 'Orphan';
-  if (node.isMissing) return 'Missing';
-  if (node.isDuplicate) return 'Duplicate';
-  return 'Standard';
-};
-
-const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, reportLayout, colors) => {
-  const entries = [];
-  const visit = (node, context) => {
-    if (!node) return;
-    const isSubdomain = context.isSubdomain || node.subdomainRoot;
-    const orphanType = context.orphanType || node.orphanType || null;
-    const number = reportNumberMap.get(node.id) || '';
-    const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
-    const levelColor = colors[Math.min(depth, colors.length - 1)] || colors[0];
-    const titleValue = node.title || node.url || '';
-    const showFullTitle = titleValue.length > 24;
-    entries.push({
-      id: node.id,
-      title: titleValue,
-      url: node.url || '',
-      number,
-      types: getReportTypesForNode(node, { isSubdomain, orphanType }),
-      duplicateOf: node.duplicateOf || '',
-      parentUrl: node.parentUrl || '',
-      referrerUrl: node.referrerUrl || '',
-      pageType: getReportPageType(node, { isSubdomain, orphanType }),
-      levelColor,
-      thumbnailUrl: node.thumbnailUrl || '',
-      showFullTitle,
-    });
-    node.children?.forEach((child) => visit(child, { isSubdomain, orphanType }));
-  };
-
-  visit(rootNode, { isSubdomain: false, orphanType: null });
-  (orphanNodes || []).forEach((orphan) => {
-    visit(orphan, {
-      isSubdomain: !!orphan?.subdomainRoot,
-      orphanType: orphan?.orphanType || null,
-    });
-  });
-
-  return entries;
-};
-
-const parsePageNumber = (raw) => {
-  if (!raw) return [];
-  const value = String(raw);
-  if (value.startsWith('s')) {
-    return value
-      .slice(1)
-      .split('.')
-      .map((part) => Number.parseInt(part, 10));
-  }
-  return value.split('.').map((part) => Number.parseInt(part, 10));
-};
-
-const comparePageNumbers = (a, b) => {
-  const aParts = parsePageNumber(a);
-  const bParts = parsePageNumber(b);
-  const max = Math.max(aParts.length, bParts.length);
-  for (let i = 0; i < max; i += 1) {
-    const av = aParts[i] ?? -1;
-    const bv = bParts[i] ?? -1;
-    if (av === bv) continue;
-    return av - bv;
-  }
-  return 0;
-};
-
-const buildExpandedStackMap = (rootNode, orphanNodes = []) => {
-  const expanded = {};
-  const walk = (node) => {
-    if (!node) return;
-    if (node.children?.length) {
-      expanded[node.id] = true;
-      node.children.forEach(walk);
-    }
-  };
-  walk(rootNode);
-  orphanNodes.forEach(walk);
-  return expanded;
-};
-
-
-const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-
-const getMaxDepth = (node, depth = 0) => {
-  if (!node) return 0;
-  if (!node.children?.length) return depth;
-  return Math.max(...node.children.map(c => getMaxDepth(c, depth + 1)));
-};
-
-const countNodes = (node) => {
-  if (!node) return 0;
-  return 1 + (node.children || []).reduce((sum, c) => sum + countNodes(c), 0);
-};
-
-// ============================================================================
-// LAYOUT CONSTANTS (Single Source of Truth)
-// ============================================================================
-const LAYOUT = {
-  NODE_W: 288,
-  NODE_H_COLLAPSED: 200, // Must match CSS .node-card min-height
-  NODE_H_THUMB: 262,     // header 8 + thumb 152 + content ~60 + actions ~42
-  GAP_L1_X: 80,         // Horizontal gap between Level 1 siblings (and orphans) - increased for drop zones
-  GAP_STACK_Y: 56,      // Vertical gap between bottom of parent and top of child - increased for drop zones
-  INDENT_X: 40,         // Per-depth indentation for depth >= 2
-  BUS_Y_GAP: 80,        // Vertical gap from root bottom to Level 1 row
-  ORPHAN_GROUP_GAP: 160, // Gap between main tree and first orphan only
-  STROKE_PAD_X: 20,     // Padding between connector line and card edge
-  ROOT_Y: 0,            // Root node Y position
-};
-
-// Get node height based on display mode
-const getNodeH = (showThumbnails) => showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED;
-
-// Minimum number of similar children to trigger stacking
-const STACK_THRESHOLD = 5;
-
-const normalizePathname = (url) => {
-  try {
-    const pathname = new URL(url).pathname || '/';
-    const trimmed = pathname.replace(/\/+$/, '');
-    return trimmed === '' ? '/' : trimmed;
-  } catch {
-    return null;
-  }
-};
-
-const getPathSegments = (pathname) => pathname.split('/').filter(Boolean);
-
-const getTitlePrefix = (title) => {
-  const cleaned = (title || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
-  const parts = cleaned.split(/\s+/).filter(Boolean);
-  return parts.slice(0, 2).join(' ');
-};
-
-const getSlugPattern = (slug) => {
-  if (!slug) return '';
-  if (/^\d+$/.test(slug)) return '#';
-  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(slug)) return 'date';
-  if (/^[a-z0-9]+$/i.test(slug) && /[a-z]/i.test(slug) && /\d/.test(slug) && slug.length >= 8) {
-    return 'id';
-  }
-  if (/^[0-9a-f]{8,}$/i.test(slug)) return 'hex';
-  if (/^page[-_]?(\d+)$/.test(slug.toLowerCase())) return 'page-#';
-  return slug.replace(/\d+/g, '#');
-};
-
-const getMostCommon = (items) => {
-  const counts = new Map();
-  items.forEach((item) => {
-    if (!item) return;
-    counts.set(item, (counts.get(item) || 0) + 1);
-  });
-  let bestValue = null;
-  let bestCount = 0;
-  counts.forEach((count, value) => {
-    if (count > bestCount) {
-      bestValue = value;
-      bestCount = count;
-    }
-  });
-  return { value: bestValue, count: bestCount };
-};
-
-// Check if children should be stacked (many similar siblings with same URL pattern)
-const shouldStackChildren = (children, depth) => {
-  if (!children || children.length < STACK_THRESHOLD) return false;
-  // Don't stack root level children (main nav items)
-  if (depth < 1) return false;
-
-  const pathInfo = children
-    .map((child) => {
-      const pathname = normalizePathname(child.url);
-      if (!pathname) return null;
-      const segments = getPathSegments(pathname);
-      const slug = segments[segments.length - 1] || '';
-      const prefix = segments.length > 1 ? `/${segments.slice(0, -1).join('/')}` : pathname;
-      return { prefix, slug };
-    })
-    .filter(Boolean);
-
-  if (pathInfo.length < STACK_THRESHOLD) return false;
-
-  const prefixes = pathInfo.map((item) => item.prefix).filter(Boolean);
-  const slugPatterns = pathInfo.map((item) => getSlugPattern(item.slug)).filter(Boolean);
-  const titlePrefixes = children.map((child) => getTitlePrefix(child.title)).filter(Boolean);
-
-  const prefixCommon = getMostCommon(prefixes);
-  const slugCommon = getMostCommon(slugPatterns);
-  const titleCommon = getMostCommon(titlePrefixes);
-
-  const prefixRatio = prefixes.length ? prefixCommon.count / prefixes.length : 0;
-  const slugRatio = slugPatterns.length ? slugCommon.count / slugPatterns.length : 0;
-  const titleRatio = titlePrefixes.length ? titleCommon.count / titlePrefixes.length : 0;
-
-  const strongPrefix = prefixCommon.value && prefixRatio >= 0.75;
-  const strongSlug = slugCommon.value && slugRatio >= 0.7;
-  const strongTitle = titleCommon.value && titleRatio >= 0.7;
-  const hasNumberedSlugs = pathInfo.filter((item) => /^\d+$/.test(item.slug)).length / pathInfo.length >= 0.6;
-  const hasIdSlugs = pathInfo.filter((item) => /[a-z]/i.test(item.slug || '') && /\d/.test(item.slug || '') && (item.slug || '').length >= 8).length / pathInfo.length >= 0.6;
-
-  if (strongPrefix && (strongSlug || strongTitle || prefixRatio >= 0.9)) return true;
-  if (strongSlug && strongTitle) return true;
-  if (strongSlug && prefixRatio >= 0.6) return true;
-  if (strongTitle && prefixRatio >= 0.6) return true;
-  if (strongPrefix && hasNumberedSlugs) return true;
-  if (strongPrefix && hasIdSlugs) return true;
-  if (prefixCommon.value && prefixRatio >= 0.85) return true;
-
-  return false;
-};
-
-
-
-// ============================================================================
-// RUNTIME INVARIANT CHECKS (Development Only)
-// ============================================================================
-const checkLayoutInvariants = (nodes, orphans, connectors) => {
-  if (process.env.NODE_ENV !== 'development') return;
-
-  const { NODE_W, GAP_L1_X } = LAYOUT;
-  const orphanNodes = Array.from(nodes.values())
-    .filter(n => n.isOrphan && n.orphanStyle !== 'subdomain')
-    .sort((a, b) => a.x - b.x);
-  const subdomainNodes = Array.from(nodes.values())
-    .filter(n => n.isOrphan && n.orphanStyle === 'subdomain')
-    .sort((a, b) => a.x - b.x);
-  const level1Nodes = Array.from(nodes.values()).filter(n => n.depth === 1);
-
-  // A) Orphan spacing invariant
-  for (let j = 1; j < orphanNodes.length; j++) {
-    const gap = orphanNodes[j].x - orphanNodes[j - 1].x;
-    const expected = NODE_W + GAP_L1_X;
-    if (Math.abs(gap - expected) > 1) {
-      console.warn(`Invariant A violated: orphan spacing. Got ${gap}, expected ${expected}`);
-    }
-  }
-
-  // A2) Subdomain spacing invariant
-  for (let j = 1; j < subdomainNodes.length; j++) {
-    const gap = subdomainNodes[j].x - subdomainNodes[j - 1].x;
-    const expected = NODE_W + GAP_L1_X;
-    if (Math.abs(gap - expected) > 1) {
-      console.warn(`Invariant A2 violated: subdomain spacing. Got ${gap}, expected ${expected}`);
-    }
-  }
-
-  // B) Level 1 row Y invariant
-  if (level1Nodes.length > 0) {
-    const baseY = level1Nodes[0].y;
-    level1Nodes.forEach((n, i) => {
-      if (Math.abs(n.y - baseY) > 1) {
-        console.warn(`Invariant C violated: Level 1 node ${i} Y mismatch`);
-      }
-    });
-    // NOTE: Orphans may be on root row (after-root mode) or on level1 row (after-tree mode).
-    // So we do NOT enforce orphan Y == level1 Y.
-
-  }
-
-  // D) Depth indentation invariant (spot check)
-  nodes.forEach((node, id) => {
-    if (node.depth >= 2) {
-      // Find parent - this would need parent tracking for full check
-      // For now just verify x increases with depth
-    }
-  });
-};
+import {
+  API_BASE,
+  DEFAULT_COLORS,
+  ACCESS_LEVELS,
+  SCAN_MESSAGES,
+  REPORT_TYPE_OPTIONS,
+  LAYOUT,
+} from './utils/constants';
+import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import {
+  buildExpandedStackMap,
+  getMaxDepth,
+  countNodes,
+  findNodeById,
+  findParent,
+  isDescendantOf,
+  shouldStackChildren,
+  checkLayoutInvariants,
+} from './utils/treeUtils';
+import {
+  buildReportEntries,
+  comparePageNumbers,
+} from './utils/reportUtils';
+import {
+  generateId,
+  parseXmlSitemap,
+  parseRssAtom,
+  parseHtml,
+  parseCsv,
+  parseMarkdown,
+  parsePlainText,
+  buildTreeFromUrls,
+} from './utils/importParsers';
+import { computeLayout, getNodeH } from './layout/computeLayout';
+import { AuthProvider } from './contexts/AuthContext';
 
 // ============================================================================
 // SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
 // ============================================================================
-
-// ============================================================================
-// DETERMINISTIC LAYOUT ENGINE (Absolute x/y coordinates + connectors)
-// NOTE: Must be declared ABOVE SitemapTree (arrow functions are not hoisted).
-// ============================================================================
-/**
- * Compute layout positions for all nodes
- * Returns: { nodes: Map<id, {x, y, w, h, depth, number}>, connectors: [], bounds: {w, h} }
- *
- * Orphan behavior is controlled via options:
- * - orphanMode: 'after-root' | 'after-tree'
- * - orphanStyle: 'root' | 'level1'
- * - renderOrphanChildren: boolean (kept false by default; see note inside)
- */
-const computeLayout = (
-  root,
-  orphans,
-  showThumbnails,
-  expandedStacks = {},
-  options = {}
-) => {
-  const NODE_H = getNodeH(showThumbnails);
-  const {
-    NODE_W,
-    GAP_L1_X,
-    GAP_STACK_Y,
-    INDENT_X,
-    BUS_Y_GAP,
-    ORPHAN_GROUP_GAP,
-    STROKE_PAD_X,
-    ROOT_Y,
-  } = LAYOUT;
-
-  const {
-    orphanMode = "after-root",     // 'after-root' or 'after-tree'
-    orphanStyle = "root",          // 'root' or 'level1'
-    renderOrphanChildren = false,  // leave false until you explicitly want mini-trees
-  } = options;
-
-  const nodes = new Map();
-  const connectors = [];
-
-  if (!root) return { nodes, connectors, bounds: { w: 0, h: 0 } };
-
-  // Bus line position: midpoint between root bottom and Level 1 top
-  // This gives equal visual space above and below the horizontal bus
-  const BUS_MIDPOINT_RATIO = 0.5; // bus at 50% of the gap
-
-  // ------------------------------------------------------------
-  // Helpers
-  // ------------------------------------------------------------
-
-  const setNode = (node, x, y, depth, number, extra = {}) => {
-    nodes.set(node.id, {
-      x,
-      y,
-      w: NODE_W,
-      h: NODE_H,
-      depth,
-      number,
-      node,
-      ...extra,
-    });
-  };
-
-  // Calculate subtree width (how far right the deepest child extends from parent's x)
-  // This is used to prevent horizontal overlap between Level 1 siblings
-  const getSubtreeWidth = (node, depth) => {
-    if (!node.children?.length) {
-      return NODE_W; // Just the node itself
-    }
-
-    // Find the maximum width among all children's subtrees
-    let maxChildWidth = 0;
-    node.children.forEach(child => {
-      const childSubtreeWidth = getSubtreeWidth(child, depth + 1);
-      maxChildWidth = Math.max(maxChildWidth, childSubtreeWidth);
-    });
-
-    // Total width = parent width OR (indent + max child subtree width)
-    return Math.max(NODE_W, INDENT_X + maxChildWidth);
-  };
-
-  const getRootTreeWidth = (node) => {
-    if (!node?.children?.length) return NODE_W;
-    const totalChildWidth = node.children.reduce((sum, child) => (
-      sum + getSubtreeWidth(child, 1)
-    ), 0);
-    const gaps = GAP_L1_X * Math.max(node.children.length - 1, 0);
-    return Math.max(NODE_W, totalChildWidth + gaps);
-  };
-
-  // Layout children vertically under a parent node
-  // Returns total height consumed by this subtree.
-  const layoutVertical = (parentNode, parentDepth, numberPrefix, context = {}) => {
-    const parentLayout = nodes.get(parentNode.id);
-    if (!parentLayout) return NODE_H;
-
-  const shouldStack = shouldStackChildren(parentNode.children, parentDepth);
-    const isExpanded = !!expandedStacks[parentNode.id];
-
-    // If no children: subtree is just the parent card
-    if (!parentNode.children?.length) {
-      return NODE_H;
-    }
-
-    const parentX = parentLayout.x;
-    const parentY = parentLayout.y;
-    const childX = parentX + INDENT_X;
-    let cursorY = parentY + NODE_H + GAP_STACK_Y;
-
-    if (shouldStack && !isExpanded) {
-      const stackChild = parentNode.children[0];
-      if (!stackChild) return NODE_H;
-      const childNumber = `${numberPrefix}.1`;
-      setNode(stackChild, childX, cursorY, parentDepth + 1, childNumber, {
-        ...context,
-        stackInfo: {
-          parentId: parentNode.id,
-          totalCount: parentNode.children.length,
-          collapsed: true,
-        },
-      });
-
-      const spineX = parentX + STROKE_PAD_X;
-      const tickY = cursorY + NODE_H / 2;
-      connectors.push({
-        type: "vertical-spine",
-        x1: spineX,
-        y1: parentY + NODE_H,
-        x2: spineX,
-        y2: tickY,
-      });
-      connectors.push({
-        type: "horizontal-tick",
-        x1: spineX,
-        y1: tickY,
-        x2: childX,
-        y2: tickY,
-      });
-
-      cursorY += NODE_H + GAP_STACK_Y;
-      const total = cursorY - parentY - GAP_STACK_Y;
-      return Math.max(NODE_H, total);
-    }
-
-    const childIdsInOrder = [];
-
-    parentNode.children.forEach((child, idx) => {
-      const childNumber = `${numberPrefix}.${idx + 1}`;
-      const stackInfo = shouldStack
-        ? {
-            parentId: parentNode.id,
-            totalCount: parentNode.children.length,
-            expanded: true,
-            showCollapse: idx === 0 || idx === parentNode.children.length - 1,
-          }
-        : null;
-      setNode(child, childX, cursorY, parentDepth + 1, childNumber, stackInfo ? { ...context, stackInfo } : { ...context });
-
-      childIdsInOrder.push(child.id);
-
-      const childSubtreeH = layoutVertical(child, parentDepth + 1, childNumber, context);
-      cursorY += childSubtreeH + GAP_STACK_Y;
-    });
-
-    // Connectors: vertical spine + horizontal ticks
-    if (childIdsInOrder.length) {
-      const spineX = parentX + STROKE_PAD_X;
-      const spineStartY = parentY + NODE_H;
-      const lastChild = nodes.get(childIdsInOrder[childIdsInOrder.length - 1]);
-      const spineEndY = lastChild.y + NODE_H / 2;
-
-      connectors.push({
-        type: "vertical-spine",
-        x1: spineX,
-        y1: spineStartY,
-        x2: spineX,
-        y2: spineEndY,
-      });
-
-      childIdsInOrder.forEach((cid) => {
-        const c = nodes.get(cid);
-        const tickY = c.y + NODE_H / 2;
-        connectors.push({
-          type: "horizontal-tick",
-          x1: spineX,
-          y1: tickY,
-          x2: c.x, // end at child left edge
-          y2: tickY,
-        });
-      });
-    }
-
-    // total height is from parentY to end of last child subtree (minus last GAP_STACK_Y)
-    const total = cursorY - parentY - GAP_STACK_Y;
-    return Math.max(NODE_H, total);
-  };
-
-  const allOrphans = Array.isArray(orphans) ? orphans : [];
-  const subdomainOrphans = allOrphans.filter((o) => o.subdomainRoot);
-  const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
-
-  const layoutRootTree = (rootNode, startX, startY, rootNumber, extra = {}) => {
-    const context = {
-      isSubdomainTree: extra.orphanType === 'subdomain' || extra.isSubdomainTree || false,
-      orphanType: extra.orphanType || null,
-    };
-    setNode(rootNode, startX, startY, 0, rootNumber, { ...extra, ...context });
-
-    const rootBottomY = startY + NODE_H;
-    const level1Y = rootBottomY + BUS_Y_GAP;
-    const level1Positions = [];
-    let level1X = startX;
-
-    if (rootNode.children?.length) {
-      rootNode.children.forEach((child, idx) => {
-        const childNumber = `${rootNumber}.${idx + 1}`;
-        setNode(child, level1X, level1Y, 1, childNumber, context);
-
-        level1Positions.push({
-          centerX: level1X + NODE_W / 2,
-          y: level1Y,
-          id: child.id,
-        });
-
-        layoutVertical(child, 1, childNumber, context);
-
-        const subtreeWidth = getSubtreeWidth(child, 1);
-        level1X += subtreeWidth + GAP_L1_X;
-      });
-
-      if (level1Positions.length > 0) {
-        const rootCenterX = startX + NODE_W / 2;
-        const busY = rootBottomY + BUS_Y_GAP * BUS_MIDPOINT_RATIO;
-
-        connectors.push({
-          type: "root-drop",
-          x1: rootCenterX,
-          y1: rootBottomY,
-          x2: rootCenterX,
-          y2: busY,
-        });
-
-        const leftX = Math.min(rootCenterX, level1Positions[0].centerX);
-        const rightX = Math.max(rootCenterX, level1Positions[level1Positions.length - 1].centerX);
-
-        connectors.push({
-          type: "horizontal-bus",
-          x1: leftX,
-          y1: busY,
-          x2: rightX,
-          y2: busY,
-        });
-
-        level1Positions.forEach((pos) => {
-          connectors.push({
-            type: "bus-drop",
-            x1: pos.centerX,
-            y1: busY,
-            x2: pos.centerX,
-            y2: level1Y,
-          });
-        });
-      }
-    }
-
-    return getRootTreeWidth(rootNode);
-  };
-
-  // ------------------------------------------------------------
-  // 1) Root (Home)
-  // ------------------------------------------------------------
-  const subdomainWidths = subdomainOrphans.map((orphan) => getRootTreeWidth(orphan));
-  const subdomainTotalWidth = subdomainWidths.length
-    ? subdomainWidths.reduce((sum, width) => sum + width, 0)
-      + GAP_L1_X * Math.max(subdomainWidths.length - 1, 0)
-    : 0;
-  const orphanWidths = regularOrphans.map((orphan) => getRootTreeWidth(orphan));
-  const orphanTotalWidth = orphanWidths.length
-    ? orphanWidths.reduce((sum, width) => sum + width, 0)
-      + GAP_L1_X * Math.max(orphanWidths.length - 1, 0)
-    : 0;
-  const leftGroupCount = (subdomainTotalWidth > 0 ? 1 : 0) + (orphanTotalWidth > 0 ? 1 : 0);
-  const gapsBetweenLeftGroups = GAP_L1_X * Math.max(leftGroupCount - 1, 0);
-  const rootGap = (subdomainTotalWidth > 0 || orphanTotalWidth > 0) ? GAP_L1_X : 0;
-  const rootX = subdomainTotalWidth + orphanTotalWidth + gapsBetweenLeftGroups + rootGap;
-  const rootY = ROOT_Y;
-
-  // Root = "0" (Home)
-  setNode(root, rootX, rootY, 0, "0", { isOrphan: false });
-
-  // ------------------------------------------------------------
-  // 2) Level 1 row (children of root) — horizontal only
-  // ------------------------------------------------------------
-  const rootBottomY = rootY + NODE_H;
-  const level1Y = rootBottomY + BUS_Y_GAP;
-
-  const level1Positions = [];
-  let level1X = rootX;
-  let maxTreeHeight = NODE_H;
-
-  if (root.children?.length) {
-    root.children.forEach((child, idx) => {
-      const childNumber = `${idx + 1}`; // Level 1 = 1, 2, 3, etc.
-      setNode(child, level1X, level1Y, 1, childNumber);
-
-      level1Positions.push({
-        centerX: level1X + NODE_W / 2,
-        y: level1Y,
-        id: child.id,
-      });
-
-      // Vertical subtree under each Level 1 node
-      const branchH = layoutVertical(child, 1, childNumber);
-      maxTreeHeight = Math.max(maxTreeHeight, (level1Y - rootY) + branchH);
-
-      // Use subtree width to prevent horizontal overlap
-      const subtreeWidth = getSubtreeWidth(child, 1);
-      level1X += subtreeWidth + GAP_L1_X;
-    });
-
-    // Root-to-Level1 connectors (vertical drop + horizontal bus + drops)
-    if (level1Positions.length > 0) {
-      const rootCenterX = rootX + NODE_W / 2;
-      const busY = rootBottomY + BUS_Y_GAP * BUS_MIDPOINT_RATIO;
-
-      connectors.push({
-        type: "root-drop",
-        x1: rootCenterX,
-        y1: rootBottomY,
-        x2: rootCenterX,
-        y2: busY,
-      });
-
-      const leftX = Math.min(rootCenterX, level1Positions[0].centerX);
-      const rightX = Math.max(rootCenterX, level1Positions[level1Positions.length - 1].centerX);
-
-      connectors.push({
-        type: "horizontal-bus",
-        x1: leftX,
-        y1: busY,
-        x2: rightX,
-        y2: busY,
-      });
-
-      level1Positions.forEach((pos) => {
-        connectors.push({
-          type: "bus-drop",
-          x1: pos.centerX,
-          y1: busY,
-          x2: pos.centerX,
-          y2: level1Y,
-        });
-      });
-    }
-  }
-
-  // ------------------------------------------------------------
-  // 3) Orphans (left of root)
-  // ------------------------------------------------------------
-
-  // Main tree right edge (based on actual L1 width; if no children, it’s just root)
-  const mainTreeRightEdge =
-    root.children?.length
-      ? (level1X - GAP_L1_X + NODE_W)  // last L1 node right edge
-      : (rootX + NODE_W);
-
-  // Where do orphans start?
-  // - after-root: start on root row, *one full node-slot* to the right of root
-  //              (so 0.1 doesn’t feel glued to 0.0)
-  // - after-tree: start after the main tree right edge with ORPHAN_GROUP_GAP
-  let orphanY = rootY;
-  const orphanGroupStartX = 0;
-  let orphanX = orphanGroupStartX;
-
-  const orderedOrphans = [...regularOrphans].reverse();
-  const orphanCount = orderedOrphans.length;
-  orderedOrphans.forEach((orphan, idx) => {
-    const depth = orphanStyle === "level1" ? 1 : 0;
-    const count = orphanCount - idx;
-    const num = orphanStyle === "level1" ? `1.o${count}` : `0.${count}`;
-    const treeWidth = layoutRootTree(orphan, orphanX, orphanY, num, {
-      isOrphan: true,
-      orphanStyle,
-      orphanType: orphan.orphanType || 'orphan',
-    });
-    orphanX += treeWidth + GAP_L1_X;
-  });
-
-  // ------------------------------------------------------------
-  // 4) Subdomains (left of root, closer to main tree)
-  // ------------------------------------------------------------
-  if (subdomainOrphans.length > 0) {
-    let subdomainX = orphanTotalWidth > 0 ? orphanTotalWidth + GAP_L1_X : 0;
-    const orderedSubdomains = [...subdomainOrphans].reverse();
-    const subdomainCount = orderedSubdomains.length;
-    orderedSubdomains.forEach((orphan, idx) => {
-      const num = `s${subdomainCount - idx}`;
-      const treeWidth = layoutRootTree(orphan, subdomainX, rootY, num, {
-        isOrphan: true,
-        orphanStyle: 'subdomain',
-        orphanType: 'subdomain',
-      });
-      subdomainX += treeWidth + GAP_L1_X;
-    });
-  }
-
-  // ------------------------------------------------------------
-  // Bounds
-  // ------------------------------------------------------------
-  const all = Array.from(nodes.values());
-  const maxX = Math.max(...all.map((n) => n.x + n.w), NODE_W);
-  const maxY = Math.max(...all.map((n) => n.y + n.h), NODE_H);
-
-  return {
-    nodes,
-    connectors,
-    bounds: { w: maxX + 50, h: maxY + 50 }, // light padding
-  };
-};
+// Layout engine extracted to layout/computeLayout.js
 
 const SitemapTree = ({
   data,
@@ -1631,6 +869,16 @@ export default function App() {
     };
   }, []);
 
+  // Cleanup all timers and EventSource on unmount
+  useEffect(() => {
+    return () => {
+      if (scanTimerRef.current) clearInterval(scanTimerRef.current);
+      if (messageTimerRef.current) clearInterval(messageTimerRef.current);
+      if (eventSourceRef.current) eventSourceRef.current.close();
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, []);
+
   // Autosave for existing maps (debounced)
   useEffect(() => {
     if (!currentMap?.id || !root || isImportedMap) return;
@@ -2170,9 +1418,9 @@ export default function App() {
     }
   };
 
-  const handleLogin = () => {
+  const handleLogin = useCallback(() => {
     setShowAuthModal(true);
-  };
+  }, []);
 
   const handleAuthSuccess = async (user) => {
     setCurrentUser(user);
@@ -2214,7 +1462,7 @@ export default function App() {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await api.logout();
     } catch (e) {
@@ -2226,7 +1474,17 @@ export default function App() {
     setScanHistory([]);
     setCurrentMap(null);
     showToast('Logged out', 'info');
-  };
+  }, [showToast]);
+
+  const handleShowProfile = useCallback(() => setShowProfileModal(true), []);
+
+  const authValue = useMemo(() => ({
+    isLoggedIn,
+    currentUser,
+    onLogin: handleLogin,
+    onLogout: handleLogout,
+    onShowProfile: handleShowProfile,
+  }), [isLoggedIn, currentUser, handleLogin, handleLogout, handleShowProfile]);
 
   const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
     if (!nodeId || !thumbnailUrl) return;
@@ -3821,15 +3079,6 @@ export default function App() {
       setPan(savedPan);
     }
   };
-const findNodeById = (node, id) => {
-    if (!node) return null;
-    if (node.id === id) return node;
-    for (const c of node.children || []) {
-      const f = findNodeById(c, id);
-      if (f) return f;
-    }
-    return null;
-  };
 
   // Add a comment to a node
   const addCommentToNode = (nodeId, commentText, parentCommentId = null) => {
@@ -4557,17 +3806,6 @@ const findNodeById = (node, id) => {
     setDeleteConfirmNode(null);
   };
 
-  // Find parent of a node in the tree
-  const findParentOf = (tree, nodeId, parent = null) => {
-    if (!tree) return null;
-    if (tree.id === nodeId) return parent;
-    for (const child of tree.children || []) {
-      const found = findParentOf(child, nodeId, tree);
-      if (found) return found;
-    }
-    return null;
-  };
-
   const openEditModal = (node) => {
     // Check if it's an orphan
     if (orphans.some(o => o.id === node.id)) {
@@ -4579,7 +3817,7 @@ const findNodeById = (node, id) => {
       return;
     }
     // Find the current parent of this node in tree
-    const parent = findParentOf(root, node.id);
+    const parent = findParent(root, node.id);
     setEditModalNode({
       ...node,
       parentId: parent?.id || '',
@@ -4600,7 +3838,7 @@ const findNodeById = (node, id) => {
       return;
     }
     // Find the current parent of this node in tree
-    const parent = findParentOf(root, node.id);
+    const parent = findParent(root, node.id);
     setEditModalNode({
       ...node,
       id: undefined, // Will get a new ID
@@ -4848,22 +4086,6 @@ const findNodeById = (node, id) => {
   };
 
   // ========== DRAG & DROP ==========
-
-  const findParent = (tree, nodeId, parent = null) => {
-    if (!tree) return null;
-    if (tree.id === nodeId) return parent;
-    for (const child of tree.children || []) {
-      const found = findParent(child, nodeId, tree);
-      if (found) return found;
-    }
-    return null;
-  };
-
-  const isDescendantOf = (tree, nodeId, ancestorId) => {
-    const ancestor = findNodeById(tree, ancestorId);
-    if (!ancestor) return false;
-    return !!findNodeById(ancestor, nodeId);
-  };
 
   const moveNode = (nodeId, newParentId, insertIndex) => {
     if (!root || nodeId === root.id) return;
@@ -5142,269 +4364,6 @@ const findNodeById = (node, id) => {
     newColors[depth] = color;
     setColors(newColors);
   };
-// File import parsing functions
-  const generateId = () => `import_${Math.random().toString(36).slice(2, 10)}`;
-
-  const parseXmlSitemap = (text) => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, 'text/xml');
-    const urls = [];
-
-    // Check for parse errors - if XML is invalid, fall back to regex
-    const parseError = doc.querySelector('parsererror');
-    if (parseError) {
-      console.error('XML parse error, using regex fallback');
-      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
-      let match;
-      while ((match = urlRegex.exec(text)) !== null) {
-        urls.push(match[0]);
-      }
-      return [...new Set(urls)];
-    }
-
-    // Use getElementsByTagName which ignores namespaces
-    const locElements = doc.getElementsByTagName('loc');
-
-    for (let i = 0; i < locElements.length; i++) {
-      const url = locElements[i].textContent?.trim();
-      if (url) {
-        urls.push(url);
-      }
-    }
-
-    // If no loc elements, try to find any URLs in the text
-    if (urls.length === 0) {
-      const urlRegex = /https?:\/\/[^\s<>"']+/gi;
-      let match;
-      while ((match = urlRegex.exec(text)) !== null) {
-        urls.push(match[0]);
-      }
-    }
-
-    return [...new Set(urls)];
-  };
-
-  const parseRssAtom = (text) => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, 'text/xml');
-    const urls = [];
-
-    // Check for parse errors
-    const parseError = doc.querySelector('parsererror');
-    if (parseError) {
-      console.error('XML parse error:', parseError.textContent);
-      return urls;
-    }
-
-    // RSS format - use getElementsByTagName for namespace compatibility
-    const items = doc.getElementsByTagName('item');
-    for (let i = 0; i < items.length; i++) {
-      const link = items[i].getElementsByTagName('link')[0];
-      if (link?.textContent?.trim()) {
-        urls.push(link.textContent.trim());
-      }
-    }
-
-    // Atom format
-    const entries = doc.getElementsByTagName('entry');
-    for (let i = 0; i < entries.length; i++) {
-      const links = entries[i].getElementsByTagName('link');
-      for (let j = 0; j < links.length; j++) {
-        const href = links[j].getAttribute('href');
-        if (href && href.startsWith('http')) {
-          urls.push(href);
-        }
-      }
-    }
-
-    // Also check for channel link in RSS
-    const channelLinks = doc.getElementsByTagName('link');
-    for (let i = 0; i < channelLinks.length; i++) {
-      const url = channelLinks[i].textContent?.trim();
-      if (url && url.startsWith('http') && !urls.includes(url)) {
-        urls.push(url);
-      }
-    }
-
-    return [...new Set(urls)];
-  };
-
-  const parseHtml = (text, baseUrl = '') => {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, 'text/html');
-    const urls = [];
-
-    doc.querySelectorAll('a[href]').forEach(a => {
-      let href = a.getAttribute('href');
-      if (href && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:')) {
-        try {
-          // Try to resolve relative URLs
-          if (baseUrl && !href.startsWith('http')) {
-            href = new URL(href, baseUrl).href;
-          }
-          if (href.startsWith('http')) {
-            urls.push(href);
-          }
-        } catch {
-          // Skip invalid URLs
-        }
-      }
-    });
-
-    return [...new Set(urls)];
-  };
-
-  const parseCsv = (text) => {
-    const urls = [];
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-    for (const line of lines) {
-      // Split by common delimiters
-      const parts = line.split(/[,;\t]+/);
-      for (const part of parts) {
-        const trimmed = part.trim().replace(/^["']|["']$/g, '');
-        if (trimmed.match(/^https?:\/\//i)) {
-          urls.push(trimmed);
-        }
-      }
-    }
-
-    return urls;
-  };
-
-  const parseMarkdown = (text) => {
-    const urls = [];
-
-    // Markdown links: [text](url)
-    const mdLinkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
-    let match;
-    while ((match = mdLinkRegex.exec(text)) !== null) {
-      if (match[2].match(/^https?:\/\//i)) {
-        urls.push(match[2]);
-      }
-    }
-
-    // Plain URLs
-    const urlRegex = /https?:\/\/[^\s<>"')\]]+/gi;
-    while ((match = urlRegex.exec(text)) !== null) {
-      urls.push(match[0]);
-    }
-
-    return [...new Set(urls)];
-  };
-
-  const parsePlainText = (text) => {
-    const urls = [];
-    const urlRegex = /https?:\/\/[^\s<>"']+/gi;
-    let match;
-    while ((match = urlRegex.exec(text)) !== null) {
-      urls.push(match[0]);
-    }
-    return [...new Set(urls)];
-  };
-
-  const buildTreeFromUrls = (urls) => {
-    if (!urls.length) return null;
-
-    // Group URLs by domain
-    const byDomain = {};
-    for (const url of urls) {
-      try {
-        const u = new URL(url);
-        const domain = u.hostname;
-        if (!byDomain[domain]) byDomain[domain] = [];
-        byDomain[domain].push(url);
-      } catch {
-        // Skip invalid URLs
-      }
-    }
-
-    const domains = Object.keys(byDomain);
-
-    // If only one domain, build hierarchical tree
-    if (domains.length === 1) {
-      const domain = domains[0];
-      const domainUrls = byDomain[domain];
-
-      // Find the root URL (shortest path or homepage)
-      const sorted = [...domainUrls].sort((a, b) => {
-        const pathA = new URL(a).pathname;
-        const pathB = new URL(b).pathname;
-        return pathA.length - pathB.length;
-      });
-
-      const rootUrl = sorted[0];
-      const root = {
-        id: generateId(),
-        title: domain,
-        url: rootUrl,
-        children: []
-      };
-
-      // Build tree based on URL paths
-      const urlMap = new Map();
-      urlMap.set(rootUrl, root);
-
-      for (const url of sorted.slice(1)) {
-        try {
-          const u = new URL(url);
-          const pathParts = u.pathname.split('/').filter(Boolean);
-          const title = pathParts[pathParts.length - 1] || u.pathname || 'Page';
-
-          const node = {
-            id: generateId(),
-            title: decodeURIComponent(title).replace(/[-_]/g, ' '),
-            url: url,
-            children: []
-          };
-
-          // Find parent by matching path
-          let parent = root;
-          let parentPath = '';
-          for (let i = 0; i < pathParts.length - 1; i++) {
-            parentPath += '/' + pathParts[i];
-            const parentUrl = `${u.origin}${parentPath}`;
-            if (urlMap.has(parentUrl)) {
-              parent = urlMap.get(parentUrl);
-            }
-          }
-
-          parent.children.push(node);
-          urlMap.set(url, node);
-        } catch {
-          // Skip invalid URLs
-        }
-      }
-
-      return root;
-    }
-
-    // Multiple domains: create a root with domain children
-    const root = {
-      id: generateId(),
-      title: 'Imported Sites',
-      url: urls[0],
-      children: []
-    };
-
-    for (const domain of domains) {
-      const domainUrls = byDomain[domain];
-      const domainNode = {
-        id: generateId(),
-        title: domain,
-        url: domainUrls[0],
-        children: domainUrls.slice(1).map(url => ({
-          id: generateId(),
-          title: new URL(url).pathname || 'Page',
-          url: url,
-          children: []
-        }))
-      };
-      root.children.push(domainNode);
-    }
-
-    return root;
-  };
 
   // Process imported file (shared by both browse and drag-drop)
   const processImportFile = async (file) => {
@@ -5511,6 +4470,7 @@ const findNodeById = (node, id) => {
   }
 
   return (
+    <AuthProvider value={authValue}>
     <div className="app">
       <Topbar
         canEdit={canEdit()}
@@ -5587,11 +4547,6 @@ const findNodeById = (node, id) => {
         onImportFile={() => setShowImportModal(true)}
         onShowProjects={() => setShowProjectsModal(true)}
         onShowHistory={() => setShowHistoryModal(true)}
-        isLoggedIn={isLoggedIn}
-        currentUser={currentUser}
-        onShowProfile={() => setShowProfileModal(true)}
-        onLogout={handleLogout}
-        onLogin={handleLogin}
       />
 
       <div
@@ -5652,6 +4607,10 @@ const findNodeById = (node, id) => {
               className={`content ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
               ref={contentRef}
               style={{
+                // PAN/ZOOM INVARIANT:
+                // This transform must ONLY be translate(px, px) scale(n).
+                // No %, no centering, no layout transforms.
+                // Do not modify without understanding world-space math.
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
                 transformOrigin: '0 0',
               }}
@@ -6473,5 +5432,6 @@ const findNodeById = (node, id) => {
         />
       )}
     </div>
+    </AuthProvider>
   );
 }

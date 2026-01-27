@@ -684,14 +684,6 @@ body {
   background: #e2e8f0;
 }
 
-.content-shell {
-  position: absolute;
-  left: 50%;
-  top: 200px;
-  transform: translateX(-50%);
-  transform-origin: 0 0;
-}
-
 .canvas {
   position: relative;
   flex: 1;

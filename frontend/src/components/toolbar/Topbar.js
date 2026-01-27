@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import ScanBar from '../scan/ScanBar';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Topbar = ({
   canEdit,
@@ -49,12 +50,8 @@ const Topbar = ({
   onImportFile,
   onShowProjects,
   onShowHistory,
-  isLoggedIn,
-  currentUser,
-  onShowProfile,
-  onLogout,
-  onLogin,
 }) => {
+  const { isLoggedIn, currentUser, onShowProfile, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
 

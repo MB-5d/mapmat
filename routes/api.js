@@ -9,6 +9,33 @@ const { authMiddleware, requireAuth } = require('./auth');
 
 const router = express.Router();
 
+// Safe JSON.parse wrapper — returns fallback for null/undefined,
+// throws descriptive error if parsing fails.
+function safeParse(raw, fieldName, fallback = undefined) {
+  if (raw === null || raw === undefined) {
+    if (fallback !== undefined) return fallback;
+    throw new Error(`Missing required field: ${fieldName}`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`Invalid JSON in ${fieldName}: ${e.message}`);
+  }
+}
+
+// Shared parser for map/history/share rows that store JSON in *_data columns.
+function parseMapFields(row) {
+  return {
+    root: safeParse(row.root_data, 'root_data'),
+    orphans: safeParse(row.orphans_data, 'orphans_data', []),
+    connections: safeParse(row.connections_data, 'connections_data', []),
+    colors: safeParse(row.colors, 'colors', null),
+    root_data: undefined,
+    orphans_data: undefined,
+    connections_data: undefined,
+  };
+}
+
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
@@ -140,13 +167,7 @@ router.get('/maps', requireAuth, (req, res) => {
     // Parse JSON fields
     const parsed = maps.map(m => ({
       ...m,
-      root: JSON.parse(m.root_data),
-      orphans: m.orphans_data ? JSON.parse(m.orphans_data) : [],
-      connections: m.connections_data ? JSON.parse(m.connections_data) : [],
-      colors: m.colors ? JSON.parse(m.colors) : null,
-      root_data: undefined,
-      orphans_data: undefined,
-      connections_data: undefined,
+      ...parseMapFields(m),
     }));
 
     res.json({ maps: parsed });
@@ -175,13 +196,7 @@ router.get('/maps/:id', requireAuth, (req, res) => {
     res.json({
       map: {
         ...map,
-        root: JSON.parse(map.root_data),
-        orphans: map.orphans_data ? JSON.parse(map.orphans_data) : [],
-        connections: map.connections_data ? JSON.parse(map.connections_data) : [],
-        colors: map.colors ? JSON.parse(map.colors) : null,
-        root_data: undefined,
-        orphans_data: undefined,
-        connections_data: undefined,
+        ...parseMapFields(map),
       },
     });
   } catch (error) {
@@ -233,13 +248,7 @@ router.post('/maps', requireAuth, (req, res) => {
     res.json({
       map: {
         ...map,
-        root: JSON.parse(map.root_data),
-        orphans: map.orphans_data ? JSON.parse(map.orphans_data) : [],
-        connections: map.connections_data ? JSON.parse(map.connections_data) : [],
-        colors: map.colors ? JSON.parse(map.colors) : null,
-        root_data: undefined,
-        orphans_data: undefined,
-        connections_data: undefined,
+        ...parseMapFields(map),
       },
     });
   } catch (error) {
@@ -308,13 +317,7 @@ router.put('/maps/:id', requireAuth, (req, res) => {
     res.json({
       map: {
         ...updated,
-        root: JSON.parse(updated.root_data),
-        orphans: updated.orphans_data ? JSON.parse(updated.orphans_data) : [],
-        connections: updated.connections_data ? JSON.parse(updated.connections_data) : [],
-        colors: updated.colors ? JSON.parse(updated.colors) : null,
-        root_data: undefined,
-        orphans_data: undefined,
-        connections_data: undefined,
+        ...parseMapFields(updated),
       },
     });
   } catch (error) {
@@ -362,17 +365,10 @@ router.get('/history', requireAuth, (req, res) => {
     // Parse JSON fields
     const parsed = history.map(h => ({
       ...h,
-      root: JSON.parse(h.root_data),
-      orphans: h.orphans_data ? JSON.parse(h.orphans_data) : [],
-      connections: h.connections_data ? JSON.parse(h.connections_data) : [],
-      colors: h.colors ? JSON.parse(h.colors) : null,
-      scan_options: h.scan_options ? JSON.parse(h.scan_options) : null,
+      ...parseMapFields(h),
+      scan_options: safeParse(h.scan_options, 'scan_options', null),
       scan_depth: h.scan_depth ?? null,
       map_id: h.map_id || null,
-      root_data: undefined,
-      orphans_data: undefined,
-      connections_data: undefined,
-      scan_options_data: undefined,
     }));
 
     res.json({ history: parsed });
@@ -554,10 +550,7 @@ router.get('/shares/:id', (req, res) => {
     res.json({
       share: {
         id: share.id,
-        root: JSON.parse(share.root_data),
-        orphans: share.orphans_data ? JSON.parse(share.orphans_data) : [],
-        connections: share.connections_data ? JSON.parse(share.connections_data) : [],
-        colors: share.colors ? JSON.parse(share.colors) : null,
+        ...parseMapFields(share),
         sharedBy: share.shared_by_name,
         createdAt: share.created_at,
         viewCount: share.view_count + 1,

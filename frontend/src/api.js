@@ -2,7 +2,7 @@
  * API service for Map Mat frontend
  */
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
+import { API_BASE } from './utils/constants';
 
 // Fetch wrapper with credentials and error handling
 async function fetchApi(endpoint, options = {}) {
@@ -15,7 +15,12 @@ async function fetchApi(endpoint, options = {}) {
     },
   });
 
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Unexpected server response');
+  }
 
   if (!response.ok) {
     throw new Error(data.error || 'Request failed');
