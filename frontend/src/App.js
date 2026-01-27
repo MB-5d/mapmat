@@ -2162,31 +2162,27 @@ export default function App() {
     const px = clientX - rect.left;
     const py = clientY - rect.top;
 
-    setPan((prevPan) => {
-      const worldX = (px - prevPan.x) / scaleRef.current;
-      const worldY = (py - prevPan.y) / scaleRef.current;
+    // Read BEFORE mutate — immune to React 18 batching.
+    // A setPan updater would read scaleRef.current during render,
+    // after it has already been overwritten to nextScale, collapsing the math.
+    const oldScale = scaleRef.current;
+    const oldPan = panRef.current;
 
-      const nextPan = {
-        x: px - worldX * nextScale,
-        y: py - worldY * nextScale,
-      };
+    const worldX = (px - oldPan.x) / oldScale;
+    const worldY = (py - oldPan.y) / oldScale;
 
-      const clamped = clampPan(nextPan, nextScale);
-      panRef.current = clamped;
-      return clamped;
-    });
+    const nextPan = {
+      x: px - worldX * nextScale,
+      y: py - worldY * nextScale,
+    };
 
-    setScale(nextScale);
+    // clampPan reads scaleRef.current internally (still oldScale here)
+    const clamped = clampPan(nextPan, nextScale);
+
+    panRef.current = clamped;
     scaleRef.current = nextScale;
-
-    if (process.env.NODE_ENV !== 'production') {
-      console.debug('[zoom]', {
-        scale: scaleRef.current,
-        nextScale,
-        pan: panRef.current,
-        anchor: { clientX, clientY },
-      });
-    }
+    setPan(clamped);
+    setScale(nextScale);
   }, [clampPan]);
 
   const zoomIn = useCallback(() => {
