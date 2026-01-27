@@ -2427,15 +2427,16 @@ export default function App() {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const r = canvas.getBoundingClientRect();
-        const anchorClientX = r.left + r.width / 2;
-        const anchorClientY = r.top + r.height / 2;
+        let anchorClientX = r.left + r.width / 2;
+        let anchorClientY = r.top + r.height / 2;
+        if (lastPointerRef.current) {
+          anchorClientX = r.left + lastPointerRef.current.x;
+          anchorClientY = r.top + lastPointerRef.current.y;
+        }
         const next = (e.key === '+' || e.key === '=')
           ? clamp(scaleRef.current * 1.2, 0.1, 3)
           : clamp(scaleRef.current / 1.2, 0.1, 3);
         e.preventDefault();
-        // KEYBOARD ZOOM RULE:
-        // Keyboard zoom uses last pointer position if available; otherwise uses viewport center.
-        // All zoom goes through zoomAtClientPoint().
         zoomAtClientPoint(next, anchorClientX, anchorClientY);
         return;
       }
@@ -2496,7 +2497,7 @@ export default function App() {
   const wheelStateRef = useRef({
     dx: 0,
     dy: 0,
-    isZoom: true,
+    isZoom: false,
     clientX: 0,
     clientY: 0,
     raf: null,
@@ -2531,17 +2532,20 @@ export default function App() {
     };
 
     const handleWheel = (e) => {
-      // IMPORTANT:
-      // Wheel listener must be { passive:false } so preventDefault() can block browser page zoom.
-      // Zoom must ONLY affect the canvas, never the window/page.
-      e.preventDefault();
+      // Wheel listener uses { passive:false } so preventDefault() can block browser zoom.
+      // Only ctrl/meta+wheel triggers zoom (trackpad pinch sends ctrlKey=true).
+      // Regular scroll/swipe pans the map without blocking default behavior.
+      const isZoom = e.ctrlKey || e.metaKey;
+      if (isZoom) e.preventDefault();
       if (!root) return;
 
       wheelStateRef.current.dx += e.deltaX;
       wheelStateRef.current.dy += e.deltaY;
-      wheelStateRef.current.isZoom = true;
-      wheelStateRef.current.clientX = e.clientX;
-      wheelStateRef.current.clientY = e.clientY;
+      wheelStateRef.current.isZoom = isZoom;
+      if (isZoom) {
+        wheelStateRef.current.clientX = e.clientX;
+        wheelStateRef.current.clientY = e.clientY;
+      }
 
       if (!wheelStateRef.current.raf) {
         wheelStateRef.current.raf = requestAnimationFrame(flushWheel);
@@ -2549,7 +2553,13 @@ export default function App() {
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
-    return () => canvas.removeEventListener('wheel', handleWheel);
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+      if (wheelStateRef.current.raf) {
+        cancelAnimationFrame(wheelStateRef.current.raf);
+        wheelStateRef.current.raf = null;
+      }
+    };
   }, [root, clampPan, zoomAtClientPoint]);
 
   const exportJson = () => {
