@@ -1870,11 +1870,13 @@ export default function App() {
   const panRef = useRef({ x: 0, y: 0 });
   panRef.current = pan;
 
-  const clampPan = useCallback((newPan) => {
+  const clampPan = useCallback((newPan, scaleArg = scaleRef.current) => {
     if (!contentRef.current || !canvasRef.current) return newPan;
 
     const cards = contentRef.current.querySelectorAll('[data-node-card="1"]');
     if (!cards.length) return newPan;
+
+    const currentScale = scaleRef.current || 1;
 
     // 1. Get viewport size
     const viewportWidth = canvasRef.current.clientWidth;
@@ -1894,6 +1896,16 @@ export default function App() {
       contentBottom = Math.max(contentBottom, y + rect.height);
     });
 
+    const worldLeft = contentLeft / currentScale;
+    const worldTop = contentTop / currentScale;
+    const worldRight = contentRight / currentScale;
+    const worldBottom = contentBottom / currentScale;
+
+    const scaledLeft = worldLeft * scaleArg;
+    const scaledTop = worldTop * scaleArg;
+    const scaledRight = worldRight * scaleArg;
+    const scaledBottom = worldBottom * scaleArg;
+
     // 3. Set pan limits with 400px padding on ALL sides
     const padding = 400;
 
@@ -1902,25 +1914,25 @@ export default function App() {
     // contentRight + pan.x = position of content's right edge on screen
     // We want: contentRight + pan.x >= padding
     // So: pan.x >= padding - contentRight
-    const minPanX = padding - contentRight;
+    const minPanX = padding - scaledRight;
 
     // Pan RIGHT limit: content's LEFT edge should stay at least 400px from viewport RIGHT edge
     // contentLeft + pan.x = position of content's left edge on screen
     // We want: contentLeft + pan.x <= viewportWidth - padding
     // So: pan.x <= viewportWidth - padding - contentLeft
-    const maxPanX = viewportWidth - padding - contentLeft;
+    const maxPanX = viewportWidth - padding - scaledLeft;
 
     // Pan UP limit: content's BOTTOM edge should stay at least 400px from viewport TOP edge
     // contentBottom + pan.y = position of content's bottom edge on screen
     // We want: contentBottom + pan.y >= padding
     // So: pan.y >= padding - contentBottom
-    const minPanY = padding - contentBottom;
+    const minPanY = padding - scaledBottom;
 
     // Pan DOWN limit: content's TOP edge should stay at least 400px from viewport BOTTOM edge
     // contentTop + pan.y = position of content's top edge on screen
     // We want: contentTop + pan.y <= viewportHeight - padding
     // So: pan.y <= viewportHeight - padding - contentTop
-    const maxPanY = viewportHeight - padding - contentTop;
+    const maxPanY = viewportHeight - padding - scaledTop;
 
     // 4. Clamp
     const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
@@ -2125,55 +2137,7 @@ export default function App() {
     }
   }, []);
 
-  // Safari gesture events for pinch zoom
-  const gestureScaleRef = useRef(1);
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const handleGestureStart = (e) => {
-      e.preventDefault();
-      gestureScaleRef.current = scale;
-    };
-
-    const handleGestureChange = (e) => {
-      e.preventDefault();
-      const next = clamp(gestureScaleRef.current * e.scale, 0.1, 3);
-      setScale(next);
-    };
-
-    const handleGestureEnd = (e) => {
-      e.preventDefault();
-    };
-
-    // Prevent browser-level pinch zoom on canvas
-    const handleWheel = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-      }
-    };
-
-    // Also prevent at document level to stop browser zoom
-    const handleDocumentWheel = (e) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-      }
-    };
-
-    canvas.addEventListener('gesturestart', handleGestureStart);
-    canvas.addEventListener('gesturechange', handleGestureChange);
-    canvas.addEventListener('gestureend', handleGestureEnd);
-    canvas.addEventListener('wheel', handleWheel, { passive: false });
-    document.addEventListener('wheel', handleDocumentWheel, { passive: false });
-
-    return () => {
-      canvas.removeEventListener('gesturestart', handleGestureStart);
-      canvas.removeEventListener('gesturechange', handleGestureChange);
-      canvas.removeEventListener('gestureend', handleGestureEnd);
-      canvas.removeEventListener('wheel', handleWheel);
-      document.removeEventListener('wheel', handleDocumentWheel);
-    };
-  }, [scale]);
+  // (gesture handlers removed; zoom handled via wheel listener on canvas)
 
   const toastTimeoutRef = useRef(null);
 
@@ -2929,47 +2893,84 @@ export default function App() {
 
   // WARNING — REGRESSION GUARDRAIL:
   // Do NOT introduce additional zoom math paths.
-  // All zoom behavior MUST go through zoomToPoint().
+  // All zoom behavior MUST go through zoomAtClientPoint().
   // Do NOT add % transforms (translate(-50%)) to the scaled element.
   // Violating these rules reintroduces drift/jitter.
-  const zoomToPoint = useCallback((nextScale, screenX, screenY) => {
-    const s = scaleRef.current;
-    const pan0 = panRef.current;
+  const zoomAtClientPoint = useCallback((nextScale, clientX, clientY) => {
+    const canvasEl = canvasRef.current;
+    if (!canvasEl) return;
 
-    const worldX = (screenX - pan0.x) / s;
-    const worldY = (screenY - pan0.y) / s;
+    const rect = canvasEl.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
 
-    const nextPan = {
-      x: screenX - worldX * nextScale,
-      y: screenY - worldY * nextScale,
-    };
+    setPan((prevPan) => {
+      const worldX = (px - prevPan.x) / scaleRef.current;
+      const worldY = (py - prevPan.y) / scaleRef.current;
+
+      const nextPan = {
+        x: px - worldX * nextScale,
+        y: py - worldY * nextScale,
+      };
+
+      const clamped = clampPan(nextPan, nextScale);
+      panRef.current = clamped;
+      return clamped;
+    });
 
     setScale(nextScale);
-    setPan(nextPan);
-
     scaleRef.current = nextScale;
-    panRef.current = nextPan;
-  }, []);
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[zoom]', {
+        scale: scaleRef.current,
+        nextScale,
+        pan: panRef.current,
+        anchor: { clientX, clientY },
+      });
+    }
+  }, [clampPan]);
 
   const zoomIn = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const r = canvas.getBoundingClientRect();
-    const cx = r.width / 2;
-    const cy = r.height / 2;
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
     const next = clamp(scaleRef.current * 1.2, 0.1, 3);
-    zoomToPoint(next, cx, cy);
-  }, [zoomToPoint]);
+    zoomAtClientPoint(next, cx, cy);
+  }, [zoomAtClientPoint]);
 
   const zoomOut = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const r = canvas.getBoundingClientRect();
-    const cx = r.width / 2;
-    const cy = r.height / 2;
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
     const next = clamp(scaleRef.current / 1.2, 0.1, 3);
-    zoomToPoint(next, cx, cy);
-  }, [zoomToPoint]);
+    zoomAtClientPoint(next, cx, cy);
+  }, [zoomAtClientPoint]);
+
+  const centerHome = useCallback(() => {
+    if (!contentRef.current || !canvasRef.current) return;
+    const rootSelector = root?.id ? `[data-node-id="${root.id}"]` : '[data-depth="0"]';
+    const rootNode = contentRef.current.querySelector(rootSelector);
+    if (!rootNode) return;
+
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const nodeCard = rootNode.querySelector('[data-node-card="1"]');
+    const nodeRect = nodeCard ? nodeCard.getBoundingClientRect() : rootNode.getBoundingClientRect();
+
+    const nodeX = nodeRect.left - canvasRect.left + nodeRect.width / 2;
+    const nodeY = nodeRect.top - canvasRect.top;
+
+    const targetX = canvasRect.width / 2;
+    const targetY = 60;
+
+    const nextPan = { x: targetX - nodeX, y: targetY - nodeY };
+    setPan(nextPan);
+    panRef.current = nextPan;
+  }, [root]);
 
   const resetView = useCallback(() => {
     const nextScale = 1;
@@ -2978,7 +2979,10 @@ export default function App() {
     setPan(nextPan);
     scaleRef.current = nextScale;
     panRef.current = nextPan;
-  }, []);
+    requestAnimationFrame(() => {
+      centerHome();
+    });
+  }, [centerHome]);
 
   const scheduleResetView = (attempts = 8) => {
     if (attempts <= 0) return;
@@ -2993,7 +2997,7 @@ export default function App() {
         scheduleResetView(attempts - 1);
         return;
       }
-      resetView();
+      centerHome();
     }, 80);
   };
 
@@ -3165,15 +3169,16 @@ export default function App() {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const r = canvas.getBoundingClientRect();
-        const anchor = lastPointerRef.current ?? { x: r.width / 2, y: r.height / 2 };
+        const anchorClientX = r.left + r.width / 2;
+        const anchorClientY = r.top + r.height / 2;
         const next = (e.key === '+' || e.key === '=')
           ? clamp(scaleRef.current * 1.2, 0.1, 3)
           : clamp(scaleRef.current / 1.2, 0.1, 3);
         e.preventDefault();
         // KEYBOARD ZOOM RULE:
         // Keyboard zoom uses last pointer position if available; otherwise uses viewport center.
-        // All zoom goes through zoomToPoint().
-        zoomToPoint(next, anchor.x, anchor.y);
+        // All zoom goes through zoomAtClientPoint().
+        zoomAtClientPoint(next, anchorClientX, anchorClientY);
         return;
       }
       // Toggle comments panel with "C"
@@ -3227,15 +3232,15 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, zoomToPoint]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, zoomAtClientPoint]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
     dx: 0,
     dy: 0,
-    isZoom: false,
-    cx: 0,
-    cy: 0,
+    isZoom: true,
+    clientX: 0,
+    clientY: 0,
     raf: null,
   });
 
@@ -3247,7 +3252,7 @@ export default function App() {
       wheelStateRef.current.raf = null;
       if (!root) return;
 
-      const { dx, dy: wheelDy, isZoom, cx, cy } = wheelStateRef.current;
+      const { dx, dy: wheelDy, isZoom, clientX, clientY } = wheelStateRef.current;
       wheelStateRef.current.dx = 0;
       wheelStateRef.current.dy = 0;
 
@@ -3256,7 +3261,7 @@ export default function App() {
         const zoomIntensity = 0.002;
         const currentScale = scaleRef.current;
         const next = Math.min(Math.max(currentScale * (1 + delta * zoomIntensity), 0.1), 3);
-        zoomToPoint(next, cx, cy);
+        zoomAtClientPoint(next, clientX, clientY);
         return;
       }
 
@@ -3271,17 +3276,14 @@ export default function App() {
       // IMPORTANT:
       // Wheel listener must be { passive:false } so preventDefault() can block browser page zoom.
       // Zoom must ONLY affect the canvas, never the window/page.
-      const isZoom = e.ctrlKey || e.metaKey;
-      if (isZoom) e.preventDefault();
+      e.preventDefault();
       if (!root) return;
 
       wheelStateRef.current.dx += e.deltaX;
       wheelStateRef.current.dy += e.deltaY;
-      wheelStateRef.current.isZoom = isZoom;
-
-      const rect = canvas.getBoundingClientRect();
-      wheelStateRef.current.cx = e.clientX - rect.left;
-      wheelStateRef.current.cy = e.clientY - rect.top;
+      wheelStateRef.current.isZoom = true;
+      wheelStateRef.current.clientX = e.clientX;
+      wheelStateRef.current.clientY = e.clientY;
 
       if (!wheelStateRef.current.raf) {
         wheelStateRef.current.raf = requestAnimationFrame(flushWheel);
@@ -3290,7 +3292,7 @@ export default function App() {
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     return () => canvas.removeEventListener('wheel', handleWheel);
-  }, [root, clampPan, zoomToPoint]);
+  }, [root, clampPan, zoomAtClientPoint]);
 
   const exportJson = () => {
     if (!root) return;

@@ -781,9 +781,9 @@ body {
 
 .content-shell {
   position: absolute;
-  left: 50%;
-  top: 200px;
-  transform: translateX(-50%);
+  left: 0;
+  top: 0;
+  transform: none;
   transform-origin: 0 0;
   will-change: transform;
 }
