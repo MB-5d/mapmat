@@ -1322,11 +1322,8 @@ export default function App() {
   const [fullImageUrl, setFullImageUrl] = useState(null);
   const [imageLoading, setImageLoading] = useState(false);
   const [scale, setScale] = useState(1);
-  const [pan, setPan] = useState({ 
-  x: window.innerWidth / 2, 
-  y: 200 
-  });
-  const scaleRef = useRef(scale);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const scaleRef = useRef(1);
   useEffect(() => {
     scaleRef.current = scale;
   }, [scale]);
@@ -1853,6 +1850,13 @@ export default function App() {
     });
   };
 
+  const updateLastPointerFromEvent = (e) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
+    lastPointerRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
   // dnd-kit sensors - require 5px movement before activating drag
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1863,7 +1867,7 @@ export default function App() {
   );
 
   // Calculate map bounds and clamp pan to limit scrolling
-  const panRef = useRef({ x: window.innerWidth / 2, y: 200 });
+  const panRef = useRef({ x: 0, y: 0 });
   panRef.current = pan;
 
   const clampPan = useCallback((newPan) => {
@@ -2905,6 +2909,7 @@ export default function App() {
   };
 
   const onPointerMove = (e) => {
+    updateLastPointerFromEvent(e);
     // Handle canvas panning
     if (!dragRef.current.dragging) return;
     const dx = e.clientX - dragRef.current.startX;
@@ -2922,6 +2927,11 @@ export default function App() {
     } catch {}
   };
 
+  // WARNING — REGRESSION GUARDRAIL:
+  // Do NOT introduce additional zoom math paths.
+  // All zoom behavior MUST go through zoomToPoint().
+  // Do NOT add % transforms (translate(-50%)) to the scaled element.
+  // Violating these rules reintroduces drift/jitter.
   const zoomToPoint = useCallback((nextScale, screenX, screenY) => {
     const s = scaleRef.current;
     const pan0 = panRef.current;
@@ -2936,14 +2946,15 @@ export default function App() {
 
     setScale(nextScale);
     setPan(nextPan);
+
     scaleRef.current = nextScale;
     panRef.current = nextPan;
   }, []);
 
   const zoomIn = useCallback(() => {
-    const shellEl = contentShellRef.current || canvasRef.current;
-    if (!shellEl) return;
-    const r = shellEl.getBoundingClientRect();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
     const cx = r.width / 2;
     const cy = r.height / 2;
     const next = clamp(scaleRef.current * 1.2, 0.1, 3);
@@ -2951,54 +2962,23 @@ export default function App() {
   }, [zoomToPoint]);
 
   const zoomOut = useCallback(() => {
-    const shellEl = contentShellRef.current || canvasRef.current;
-    if (!shellEl) return;
-    const r = shellEl.getBoundingClientRect();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
     const cx = r.width / 2;
     const cy = r.height / 2;
     const next = clamp(scaleRef.current / 1.2, 0.1, 3);
     zoomToPoint(next, cx, cy);
   }, [zoomToPoint]);
 
-  const resetView = () => {
-    // Reset to 100% scale with Home page centered at top of viewport
-    if (!contentRef.current || !canvasRef.current) {
-      setScale(1);
-      setPan({ x: 0, y: 0 });
-      return;
-    }
-
-    // First reset to default state
-    setScale(1);
-    setPan({ x: 0, y: 0 });
-
-    // Wait for render, then center on root node
-    setTimeout(() => {
-      if (!contentRef.current || !canvasRef.current) return;
-
-      const rootSelector = root?.id ? `[data-node-id="${root.id}"]` : '[data-depth="0"]';
-      const rootNode = contentRef.current.querySelector(rootSelector);
-      if (!rootNode) return;
-
-      const canvasRect = canvasRef.current.getBoundingClientRect();
-      const nodeCard = rootNode.querySelector('[data-node-card="1"]');
-      const nodeRect = nodeCard ? nodeCard.getBoundingClientRect() : rootNode.getBoundingClientRect();
-
-      // Calculate pan to center the home page horizontally and position it near top
-      // Node position relative to canvas
-      const nodeX = nodeRect.left - canvasRect.left + nodeRect.width / 2;
-      const nodeY = nodeRect.top - canvasRect.top;
-
-      // Target: center horizontally, 60px from top
-      const targetX = canvasRect.width / 2;
-      const targetY = 60;
-
-      const newPanX = targetX - nodeX;
-      const newPanY = targetY - nodeY;
-
-      setPan({ x: newPanX, y: newPanY });
-    }, 50);
-  };
+  const resetView = useCallback(() => {
+    const nextScale = 1;
+    const nextPan = { x: 0, y: 0 };
+    setScale(nextScale);
+    setPan(nextPan);
+    scaleRef.current = nextScale;
+    panRef.current = nextPan;
+  }, []);
 
   const scheduleResetView = (attempts = 8) => {
     if (attempts <= 0) return;
@@ -3182,14 +3162,17 @@ export default function App() {
         handleRedo();
       }
       if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
-        const shellEl = contentShellRef.current || canvasRef.current;
-        if (!shellEl) return;
-        const r = shellEl.getBoundingClientRect();
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const r = canvas.getBoundingClientRect();
         const anchor = lastPointerRef.current ?? { x: r.width / 2, y: r.height / 2 };
         const next = (e.key === '+' || e.key === '=')
           ? clamp(scaleRef.current * 1.2, 0.1, 3)
           : clamp(scaleRef.current / 1.2, 0.1, 3);
         e.preventDefault();
+        // KEYBOARD ZOOM RULE:
+        // Keyboard zoom uses last pointer position if available; otherwise uses viewport center.
+        // All zoom goes through zoomToPoint().
         zoomToPoint(next, anchor.x, anchor.y);
         return;
       }
@@ -3285,17 +3268,18 @@ export default function App() {
     };
 
     const handleWheel = (e) => {
-      e.preventDefault();
+      // IMPORTANT:
+      // Wheel listener must be { passive:false } so preventDefault() can block browser page zoom.
+      // Zoom must ONLY affect the canvas, never the window/page.
+      const isZoom = e.ctrlKey || e.metaKey;
+      if (isZoom) e.preventDefault();
       if (!root) return;
 
       wheelStateRef.current.dx += e.deltaX;
       wheelStateRef.current.dy += e.deltaY;
-      wheelStateRef.current.isZoom = e.ctrlKey || e.metaKey;
+      wheelStateRef.current.isZoom = isZoom;
 
-      const shellEl = contentShellRef.current || canvas;
-      if (!shellEl) return;
-
-      const rect = shellEl.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
       wheelStateRef.current.cx = e.clientX - rect.left;
       wheelStateRef.current.cy = e.clientY - rect.top;
 
@@ -5670,13 +5654,9 @@ const findNodeById = (node, id) => {
                 transformOrigin: '0 0',
               }}
               onMouseMove={(e) => {
+                updateLastPointerFromEvent(e);
                 if (drawingConnection) handleConnectionMouseMove(e);
                 else if (draggingEndpoint) handleEndpointDragMove(e);
-                const shellEl = contentShellRef.current || canvasRef.current;
-                if (shellEl) {
-                  const r = shellEl.getBoundingClientRect();
-                  lastPointerRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
-                }
               }}
               onMouseUp={(e) => {
                 if (drawingConnection) handleConnectionMouseUp(e);
