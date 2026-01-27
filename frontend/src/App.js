@@ -1363,6 +1363,10 @@ export default function App() {
   const [lastScanUrl, setLastScanUrl] = useState('');
   const autosaveTimerRef = useRef(null);
   const lastAutosaveSnapshotRef = useRef('');
+  const autosavePendingRef = useRef(null);
+  const autosaveInFlightRef = useRef(false);
+  const autosaveRetryTimerRef = useRef(null);
+  const autosaveRetryDelayRef = useRef(1000);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -1430,6 +1434,8 @@ export default function App() {
   const scanTimerRef = useRef(null);
   const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
+  const contentShellRef = useRef(null);
+  const lastPointerRef = useRef(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const viewDropdownRef = useRef(null);
   const scanOptionsRef = useRef(null);
@@ -1579,6 +1585,55 @@ export default function App() {
     return stats;
   }, [reportEntries]);
 
+  const flushAutosave = useCallback(() => {
+    if (autosaveInFlightRef.current) return;
+    const pending = autosavePendingRef.current;
+    if (!pending) return;
+
+    autosaveInFlightRef.current = true;
+    api.updateMap(pending.mapId, pending.payload)
+      .then(({ map }) => {
+        autosaveInFlightRef.current = false;
+        autosaveRetryDelayRef.current = 1000;
+        lastAutosaveSnapshotRef.current = pending.snapshot;
+        setCurrentMap(map);
+        setProjects(prev => prev.map(p => ({
+          ...p,
+          maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
+        })));
+
+        if (autosavePendingRef.current?.snapshot === pending.snapshot) {
+          autosavePendingRef.current = null;
+        }
+
+        if (autosavePendingRef.current) {
+          flushAutosave();
+        }
+      })
+      .catch(() => {
+        autosaveInFlightRef.current = false;
+        if (autosaveRetryTimerRef.current) return;
+        const delay = autosaveRetryDelayRef.current;
+        autosaveRetryDelayRef.current = Math.min(delay * 2, 30000);
+        autosaveRetryTimerRef.current = setTimeout(() => {
+          autosaveRetryTimerRef.current = null;
+          flushAutosave();
+        }, delay);
+      });
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => flushAutosave();
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [flushAutosave]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveRetryTimerRef.current) clearTimeout(autosaveRetryTimerRef.current);
+    };
+  }, []);
+
   // Autosave for existing maps (debounced)
   useEffect(() => {
     if (!currentMap?.id || !root || isImportedMap) return;
@@ -1595,31 +1650,26 @@ export default function App() {
     if (snapshot === lastAutosaveSnapshotRef.current) return;
 
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(async () => {
-      try {
-        const { map } = await api.updateMap(currentMap.id, {
+    autosaveTimerRef.current = setTimeout(() => {
+      autosavePendingRef.current = {
+        mapId: currentMap.id,
+        payload: {
           name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
           root,
           orphans,
           connections,
           colors,
           project_id: currentMap?.project_id || null,
-        });
-        lastAutosaveSnapshotRef.current = snapshot;
-        setCurrentMap(map);
-        setProjects(prev => prev.map(p => ({
-          ...p,
-          maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
-        })));
-      } catch (e) {
-        console.error('Autosave failed:', e);
-      }
+        },
+        snapshot,
+      };
+      flushAutosave();
     }, 800);
 
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, mapName, isImportedMap]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, mapName, isImportedMap, flushAutosave]);
 
   const reportTitle = useMemo(() => {
     return root?.title || getHostname(root?.url) || 'Website';
@@ -2872,8 +2922,43 @@ export default function App() {
     } catch {}
   };
 
-  const zoomIn = () => setScale((s) => clamp(s * 1.2, 0.1, 3));
-  const zoomOut = () => setScale((s) => clamp(s / 1.2, 0.1, 3));
+  const zoomToPoint = useCallback((nextScale, screenX, screenY) => {
+    const s = scaleRef.current;
+    const pan0 = panRef.current;
+
+    const worldX = (screenX - pan0.x) / s;
+    const worldY = (screenY - pan0.y) / s;
+
+    const nextPan = {
+      x: screenX - worldX * nextScale,
+      y: screenY - worldY * nextScale,
+    };
+
+    setScale(nextScale);
+    setPan(nextPan);
+    scaleRef.current = nextScale;
+    panRef.current = nextPan;
+  }, []);
+
+  const zoomIn = useCallback(() => {
+    const shellEl = contentShellRef.current || canvasRef.current;
+    if (!shellEl) return;
+    const r = shellEl.getBoundingClientRect();
+    const cx = r.width / 2;
+    const cy = r.height / 2;
+    const next = clamp(scaleRef.current * 1.2, 0.1, 3);
+    zoomToPoint(next, cx, cy);
+  }, [zoomToPoint]);
+
+  const zoomOut = useCallback(() => {
+    const shellEl = contentShellRef.current || canvasRef.current;
+    if (!shellEl) return;
+    const r = shellEl.getBoundingClientRect();
+    const cx = r.width / 2;
+    const cy = r.height / 2;
+    const next = clamp(scaleRef.current / 1.2, 0.1, 3);
+    zoomToPoint(next, cx, cy);
+  }, [zoomToPoint]);
 
   const resetView = () => {
     // Reset to 100% scale with Home page centered at top of viewport
@@ -3096,6 +3181,18 @@ export default function App() {
         e.preventDefault();
         handleRedo();
       }
+      if (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_') {
+        const shellEl = contentShellRef.current || canvasRef.current;
+        if (!shellEl) return;
+        const r = shellEl.getBoundingClientRect();
+        const anchor = lastPointerRef.current ?? { x: r.width / 2, y: r.height / 2 };
+        const next = (e.key === '+' || e.key === '=')
+          ? clamp(scaleRef.current * 1.2, 0.1, 3)
+          : clamp(scaleRef.current / 1.2, 0.1, 3);
+        e.preventDefault();
+        zoomToPoint(next, anchor.x, anchor.y);
+        return;
+      }
       // Toggle comments panel with "C"
       if (e.key === 'c' || e.key === 'C') {
         setShowCommentsPanel(prev => !prev);
@@ -3147,7 +3244,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, zoomToPoint]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -3176,15 +3273,7 @@ export default function App() {
         const zoomIntensity = 0.002;
         const currentScale = scaleRef.current;
         const next = Math.min(Math.max(currentScale * (1 + delta * zoomIntensity), 0.1), 3);
-
-        const ox = (cx - panRef.current.x) / currentScale;
-        const oy = (cy - panRef.current.y) / currentScale;
-
-        const nx = cx - ox * next;
-        const ny = cy - oy * next;
-
-        setScale(next);
-        setPan(clampPan({ x: nx, y: ny }));
+        zoomToPoint(next, cx, cy);
         return;
       }
 
@@ -3203,7 +3292,10 @@ export default function App() {
       wheelStateRef.current.dy += e.deltaY;
       wheelStateRef.current.isZoom = e.ctrlKey || e.metaKey;
 
-      const rect = canvas.getBoundingClientRect();
+      const shellEl = contentShellRef.current || canvas;
+      if (!shellEl) return;
+
+      const rect = shellEl.getBoundingClientRect();
       wheelStateRef.current.cx = e.clientX - rect.left;
       wheelStateRef.current.cy = e.clientY - rect.top;
 
@@ -3214,7 +3306,7 @@ export default function App() {
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     return () => canvas.removeEventListener('wheel', handleWheel);
-  }, [root, clampPan]);
+  }, [root, clampPan, zoomToPoint]);
 
   const exportJson = () => {
     if (!root) return;
@@ -5569,21 +5661,29 @@ const findNodeById = (node, id) => {
             onDragMove={handleDndDragMove}
             onDragEnd={handleDndDragEnd}
           >
+            <div className="content-shell" ref={contentShellRef}>
             <div
               className={`content ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
               ref={contentRef}
               style={{
-                transform: `translate(-50%, 0px) translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                transformOrigin: '0 0',
               }}
-                onMouseMove={(e) => {
-                  if (drawingConnection) handleConnectionMouseMove(e);
-                  else if (draggingEndpoint) handleEndpointDragMove(e);
-                }}
-                onMouseUp={(e) => {
-                  if (drawingConnection) handleConnectionMouseUp(e);
-                  else if (draggingEndpoint) handleEndpointDragEnd();
-                }}
-              >
+              onMouseMove={(e) => {
+                if (drawingConnection) handleConnectionMouseMove(e);
+                else if (draggingEndpoint) handleEndpointDragMove(e);
+                const shellEl = contentShellRef.current || canvasRef.current;
+                if (shellEl) {
+                  const r = shellEl.getBoundingClientRect();
+                  lastPointerRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+                }
+              }}
+              onMouseUp={(e) => {
+                if (drawingConnection) handleConnectionMouseUp(e);
+                else if (draggingEndpoint) handleEndpointDragEnd();
+              }}
+            >
+
                 <SitemapTree
                   data={renderRoot}
                   orphans={visibleOrphans}
@@ -5924,6 +6024,7 @@ const findNodeById = (node, id) => {
                   />
                 </div>
               )}
+            </div>
             </div>
 
             {/* DragOverlay - full-size floating card with children, scaled 5% larger than current zoom */}

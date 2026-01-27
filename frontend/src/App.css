@@ -684,6 +684,14 @@ body {
   background: #e2e8f0;
 }
 
+.content-shell {
+  position: absolute;
+  left: 50%;
+  top: 200px;
+  transform: translateX(-50%);
+  transform-origin: 0 0;
+}
+
 .canvas {
   position: relative;
   flex: 1;
@@ -771,10 +779,17 @@ body {
   color: #94a3b8;
 }
 
-.content {
+.content-shell {
   position: absolute;
-  left: 0;
-  top: 0;
+  left: 50%;
+  top: 200px;
+  transform: translateX(-50%);
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.content {
+  position: relative;
   transform-origin: 0 0;
   will-change: transform;
 }
