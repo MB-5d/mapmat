@@ -1495,6 +1495,7 @@ export default function App() {
     setScanHistory([]);
   }, []);
 
+
   const handleLogout = useCallback(async () => {
     try {
       await api.logout();

@@ -49,6 +49,12 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     setLoading(true);
 
     try {
+      if (user?.authMode === 'demo') {
+        setError('Demo profile is read-only.');
+        setLoading(false);
+        return;
+      }
+
       const updateData = {};
       const trimmedName = name.trim();
       if (trimmedName && trimmedName !== user.name) {
@@ -97,6 +103,11 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     setError('');
 
     try {
+      if (user?.authMode === 'demo') {
+        setError('Demo account cannot be deleted.');
+        setLoading(false);
+        return;
+      }
       await api.deleteAccount(deletePassword);
       showToast?.('Account deleted', 'success');
       onLogout?.();

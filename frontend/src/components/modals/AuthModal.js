@@ -17,6 +17,7 @@ const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
       id: 'demo',
       name: 'Demo User',
       email: 'demo@mapmat.dev',
+      authMode: 'demo',
     };
     onDemo?.(demoUser);
     onClose?.();

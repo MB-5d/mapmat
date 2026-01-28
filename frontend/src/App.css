@@ -1012,6 +1012,10 @@ body {
   bottom: 30px;
 }
 
+.node-card.has-stack-toggle .card-content {
+  padding-bottom: 44px;
+}
+
 .stack-toggle {
   position: absolute;
   left: 0;
