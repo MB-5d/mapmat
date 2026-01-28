@@ -3,7 +3,7 @@ import { Eye, EyeOff, Loader2, X } from 'lucide-react';
 
 import * as api from '../../api';
 
-const AuthModal = ({ onClose, onSuccess, showToast }) => {
+const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -11,6 +11,17 @@ const AuthModal = ({ onClose, onSuccess, showToast }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleDemoLogin = () => {
+    const demoUser = {
+      id: 'demo',
+      name: 'Demo User',
+      email: 'demo@mapmat.dev',
+    };
+    onDemo?.(demoUser);
+    onClose?.();
+    showToast?.('Demo access enabled', 'success');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -119,6 +130,19 @@ const AuthModal = ({ onClose, onSuccess, showToast }) => {
               {mode === 'login' ? 'Log In' : 'Create Account'}
             </button>
           </form>
+
+          <div className="auth-demo">
+            <div className="auth-demo-label">Quick access</div>
+            <button
+              type="button"
+              className="modal-btn secondary auth-demo-btn"
+              onClick={handleDemoLogin}
+              disabled={loading}
+            >
+              Continue as demo
+            </button>
+            <div className="auth-demo-hint">Bypasses login during build/test.</div>
+          </div>
 
           <div className="auth-footer">
             {mode === 'login' ? (

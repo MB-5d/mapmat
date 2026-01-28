@@ -5,7 +5,6 @@ import {
   LogIn,
   LogOut,
   Plus,
-  Receipt,
   Settings2,
   Upload,
   UserCircle,
@@ -51,7 +50,7 @@ const Topbar = ({
   onShowProjects,
   onShowHistory,
 }) => {
-  const { isLoggedIn, currentUser, onShowProfile, onLogout, onLogin } = useAuth();
+  const { isLoggedIn, currentUser, onShowProfile, onShowSettings, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
 
@@ -201,11 +200,15 @@ const Topbar = ({
                 <UserCircle size={16} />
                 <span>Profile</span>
               </button>
-              <button className="account-menu-item" role="menuitem" type="button">
-                <Receipt size={16} />
-                <span>Billing</span>
-              </button>
-              <button className="account-menu-item" role="menuitem" type="button">
+              <button
+                className="account-menu-item"
+                role="menuitem"
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  onShowSettings();
+                }}
+              >
                 <Settings2 size={16} />
                 <span>Settings</span>
               </button>

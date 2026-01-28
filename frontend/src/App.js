@@ -34,7 +34,8 @@ import ExportModal from './components/modals/ExportModal';
 import HistoryModal from './components/modals/HistoryModal';
 import ImageOverlay from './components/modals/ImageOverlay';
 import ImportModal from './components/modals/ImportModal';
-import ProfileModal from './components/modals/ProfileModal';
+import ProfileDrawer from './components/drawers/ProfileDrawer';
+import SettingsDrawer from './components/drawers/SettingsDrawer';
 import ProjectsModal from './components/modals/ProjectsModal';
 import PromptModal from './components/modals/PromptModal';
 import ReportDrawer from './components/reports/ReportDrawer';
@@ -612,7 +613,8 @@ export default function App() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showProfileDrawer, setShowProfileDrawer] = useState(false);
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [, setAuthLoading] = useState(true);
   const [showLanding, setShowLanding] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1486,6 +1488,13 @@ export default function App() {
     }
   };
 
+  const handleDemoAccess = useCallback((user) => {
+    setCurrentUser(user);
+    setIsLoggedIn(true);
+    setProjects([]);
+    setScanHistory([]);
+  }, []);
+
   const handleLogout = useCallback(async () => {
     try {
       await api.logout();
@@ -1497,10 +1506,24 @@ export default function App() {
     setProjects([]);
     setScanHistory([]);
     setCurrentMap(null);
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
     showToast('Logged out', 'info');
   }, [showToast]);
 
-  const handleShowProfile = useCallback(() => setShowProfileModal(true), []);
+  const handleShowProfile = useCallback(() => {
+    setShowProfileDrawer(true);
+    setShowSettingsDrawer(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+  }, []);
+
+  const handleShowSettings = useCallback(() => {
+    setShowSettingsDrawer(true);
+    setShowProfileDrawer(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+  }, []);
 
   const authValue = useMemo(() => ({
     isLoggedIn,
@@ -1508,7 +1531,8 @@ export default function App() {
     onLogin: handleLogin,
     onLogout: handleLogout,
     onShowProfile: handleShowProfile,
-  }), [isLoggedIn, currentUser, handleLogin, handleLogout, handleShowProfile]);
+    onShowSettings: handleShowSettings,
+  }), [isLoggedIn, currentUser, handleLogin, handleLogout, handleShowProfile, handleShowSettings]);
 
   const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
     if (!nodeId || !thumbnailUrl) return;
@@ -2408,12 +2432,24 @@ export default function App() {
       }
       // Toggle comments panel with "C"
       if (e.key === 'c' || e.key === 'C') {
-        setShowCommentsPanel(prev => !prev);
+        setShowCommentsPanel(prev => {
+          const next = !prev;
+          if (next) {
+            setShowReportDrawer(false);
+            setShowProfileDrawer(false);
+            setShowSettingsDrawer(false);
+          }
+          return next;
+        });
       }
       if (e.key === 'r' || e.key === 'R') {
         setShowReportDrawer(prev => {
           const next = !prev;
-          if (next) setShowCommentsPanel(false);
+          if (next) {
+            setShowCommentsPanel(false);
+            setShowProfileDrawer(false);
+            setShowSettingsDrawer(false);
+          }
           return next;
         });
       }
@@ -2452,12 +2488,18 @@ export default function App() {
         if (showReportDrawer) {
           setShowReportDrawer(false);
         }
+        if (showProfileDrawer) {
+          setShowProfileDrawer(false);
+        }
+        if (showSettingsDrawer) {
+          setShowSettingsDrawer(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, zoomAtClientPoint]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, zoomAtClientPoint]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -5086,13 +5128,27 @@ export default function App() {
                   setActiveTool('select');
                 },
                 showCommentsPanel,
-                onToggleCommentsPanel: () => setShowCommentsPanel(!showCommentsPanel),
+                onToggleCommentsPanel: () => {
+                  setShowCommentsPanel((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setShowReportDrawer(false);
+                      setShowProfileDrawer(false);
+                      setShowSettingsDrawer(false);
+                    }
+                    return next;
+                  });
+                },
                 hasAnyComments,
                 showReportDrawer,
                 onToggleReportDrawer: () => {
                   setShowReportDrawer((prev) => {
                     const next = !prev;
-                    if (next) setShowCommentsPanel(false);
+                    if (next) {
+                      setShowCommentsPanel(false);
+                      setShowProfileDrawer(false);
+                      setShowSettingsDrawer(false);
+                    }
                     return next;
                   });
                 },
@@ -5306,19 +5362,30 @@ export default function App() {
         <AuthModal
           onClose={() => setShowAuthModal(false)}
           onSuccess={handleAuthSuccess}
+          onDemo={handleDemoAccess}
           showToast={showToast}
         />
       )}
 
-      {showProfileModal && (
-        <ProfileModal
-          user={currentUser}
-          onClose={() => setShowProfileModal(false)}
-          onUpdate={(updatedUser) => setCurrentUser(updatedUser)}
-          onLogout={handleLogout}
-          showToast={showToast}
-        />
-      )}
+      <ProfileDrawer
+        isOpen={showProfileDrawer}
+        user={currentUser}
+        onClose={() => setShowProfileDrawer(false)}
+        onUpdate={(updatedUser) => setCurrentUser(updatedUser)}
+        onLogout={handleLogout}
+        showToast={showToast}
+      />
+
+      <SettingsDrawer
+        isOpen={showSettingsDrawer}
+        onClose={() => setShowSettingsDrawer(false)}
+        theme={theme}
+        onThemeChange={setTheme}
+        showThumbnails={showThumbnails}
+        onToggleThumbnails={() => setShowThumbnails((prev) => !prev)}
+        showPageNumbers={layers.pageNumbers}
+        onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
+      />
 
       {editModalNode && (
         <EditNodeModal
