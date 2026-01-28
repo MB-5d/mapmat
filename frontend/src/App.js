@@ -797,6 +797,27 @@ export default function App() {
     return map;
   }, [reportLayout]);
 
+  const parentOptions = useMemo(() => {
+    if (!root) return [];
+    const result = [];
+    const walk = (node) => {
+      if (!node) return;
+      const pageNumber = reportNumberMap.get(node.id) || '';
+      const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
+      result.push({
+        id: node.id,
+        title: node.title,
+        url: node.url,
+        pageNumber,
+        depth,
+      });
+      node.children?.forEach(walk);
+    };
+    walk(root);
+    (orphans || []).forEach(walk);
+    return result;
+  }, [root, orphans, reportNumberMap, reportLayout]);
+
   const reportEntries = useMemo(() => {
     if (!root) return [];
     const entries = buildReportEntries(root, orphans, reportNumberMap, reportLayout, colors);
@@ -3825,12 +3846,39 @@ export default function App() {
     setDeleteConfirmNode(null);
   };
 
+  const findOrphanTreeIndex = (nodeId, orphanList = orphans) => (
+    orphanList.findIndex((orphan) => findNodeById(orphan, nodeId))
+  );
+
+  const findOrphanTreeRoot = (nodeId, orphanList = orphans) => {
+    const idx = findOrphanTreeIndex(nodeId, orphanList);
+    return idx >= 0 ? orphanList[idx] : null;
+  };
+
+  const findParentInOrphans = (nodeId, orphanList = orphans) => {
+    for (const orphan of orphanList) {
+      const parent = findParent(orphan, nodeId);
+      if (parent) return parent;
+    }
+    return null;
+  };
+
+  const findNodeInOrphans = (nodeId, orphanList = orphans) => {
+    if (!nodeId) return null;
+    for (const orphan of orphanList) {
+      const found = findNodeById(orphan, nodeId);
+      if (found) return found;
+    }
+    return null;
+  };
+
   const openEditModal = (node) => {
-    // Check if it's an orphan
-    if (orphans.some(o => o.id === node.id)) {
+    const orphanRoot = findOrphanTreeRoot(node.id);
+    if (orphanRoot) {
+      const orphanParent = findParent(orphanRoot, node.id);
       setEditModalNode({
         ...node,
-        parentId: '', // Orphans have no parent
+        parentId: orphanParent?.id || '',
       });
       setEditModalMode('edit');
       return;
@@ -3845,13 +3893,14 @@ export default function App() {
   };
 
   const duplicateNode = (node) => {
-    // Check if it's an orphan
-    if (orphans.some(o => o.id === node.id)) {
+    const orphanRoot = findOrphanTreeRoot(node.id);
+    if (orphanRoot) {
+      const orphanParent = findParent(orphanRoot, node.id);
       setEditModalNode({
         ...node,
         id: undefined,
         title: `${node.title} (Copy)`,
-        parentId: '', // Orphans have no parent by default
+        parentId: orphanParent?.id || '',
       });
       setEditModalMode('duplicate');
       return;
@@ -3892,8 +3941,21 @@ export default function App() {
       }
     };
 
+    const removeNodeFromTree = (tree, nodeId) => {
+      if (!tree?.children?.length) return null;
+      const idx = tree.children.findIndex(c => c.id === nodeId);
+      if (idx !== -1) {
+        return tree.children.splice(idx, 1)[0];
+      }
+      for (const child of tree.children) {
+        const removed = removeNodeFromTree(child, nodeId);
+        if (removed) return removed;
+      }
+      return null;
+    };
+
     // Check if node is currently an orphan
-    const isCurrentlyOrphan = orphans.some(o => o.id === updatedNode.id);
+    const isCurrentlyOrphan = !!findOrphanTreeRoot(updatedNode.id);
     const newParentId = updatedNode.parentId || '';
 
     if (editModalMode === 'edit') {
@@ -3901,41 +3963,91 @@ export default function App() {
       saveStateForUndo();
 
       if (isCurrentlyOrphan) {
-        // Node is currently an orphan
-        if (newParentId === '') {
-          // Stays as orphan - just update properties
-          setOrphans(prev => prev.map(o =>
-            o.id === updatedNode.id
-              ? { ...o, title: updatedNode.title, url: updatedNode.url, pageType: updatedNode.pageType,
-                  thumbnailUrl: updatedNode.thumbnailUrl, description: updatedNode.description, metaTags: updatedNode.metaTags }
-              : o
-          ));
+        const orphanRoot = findOrphanTreeRoot(updatedNode.id);
+        const newParentInRoot = newParentId ? findNodeById(root, newParentId) : null;
+
+        if (newParentId && newParentInRoot) {
+          const orphanIndex = findOrphanTreeIndex(updatedNode.id);
+          if (orphanIndex === -1 || !orphanRoot) return;
+          const orphanCopy = structuredClone(orphanRoot);
+          const removedNode = orphanCopy.id === updatedNode.id
+            ? orphanCopy
+            : removeNodeFromTree(orphanCopy, updatedNode.id);
+          if (!removedNode) return;
+          Object.assign(removedNode, {
+            title: updatedNode.title,
+            url: updatedNode.url,
+            pageType: updatedNode.pageType,
+            thumbnailUrl: updatedNode.thumbnailUrl,
+            description: updatedNode.description,
+            metaTags: updatedNode.metaTags,
+          });
+          setOrphans((prev) => {
+            const next = structuredClone(prev);
+            if (orphanRoot.id === updatedNode.id) {
+              next.splice(orphanIndex, 1);
+            } else {
+              next[orphanIndex] = orphanCopy;
+            }
+            return next;
+          });
+          setRoot(prev => {
+            const copy = structuredClone(prev);
+            const newParent = findNodeById(copy, newParentId);
+            if (newParent) {
+              newParent.children = newParent.children || [];
+              newParent.children.push({
+                ...removedNode,
+                orphanType: 'orphan',
+                subdomainRoot: false,
+              });
+            }
+            return copy;
+          });
         } else {
-          // Moving from orphans to tree
-          const orphanNode = orphans.find(o => o.id === updatedNode.id);
-          if (orphanNode) {
-            const nodeToMove = {
-              ...orphanNode,
+          setOrphans((prev) => {
+            const next = structuredClone(prev);
+            const treeIndex = findOrphanTreeIndex(updatedNode.id, next);
+            if (treeIndex === -1) return prev;
+            const treeRoot = next[treeIndex];
+            const target = findNodeById(treeRoot, updatedNode.id);
+            if (!target) return prev;
+
+            Object.assign(target, {
               title: updatedNode.title,
               url: updatedNode.url,
               pageType: updatedNode.pageType,
               thumbnailUrl: updatedNode.thumbnailUrl,
               description: updatedNode.description,
-              metaTags: updatedNode.metaTags
-            };
-            // Remove from orphans
-            setOrphans(prev => prev.filter(o => o.id !== updatedNode.id));
-            // Add to tree
-            setRoot(prev => {
-              const copy = structuredClone(prev);
-              const newParent = findNodeById(copy, newParentId);
-              if (newParent) {
-                newParent.children = newParent.children || [];
-                newParent.children.push(nodeToMove);
-              }
-              return copy;
+              metaTags: updatedNode.metaTags,
             });
-          }
+
+            const currentParent = findParent(treeRoot, updatedNode.id);
+            const currentParentId = currentParent?.id || '';
+            if (currentParentId !== newParentId) {
+              if (currentParent) {
+                currentParent.children = (currentParent.children || []).filter((c) => c.id !== updatedNode.id);
+              } else if (treeRoot.id === updatedNode.id) {
+                next.splice(treeIndex, 1);
+              }
+
+              if (newParentId === '') {
+                next.push({
+                  ...target,
+                  orphanType: target.orphanType || treeRoot.orphanType || 'orphan',
+                  subdomainRoot: target.subdomainRoot || treeRoot.subdomainRoot || false,
+                });
+              } else {
+                const newParent = findNodeById(treeRoot, newParentId) || findNodeInOrphans(newParentId, next);
+                if (newParent) {
+                  newParent.children = newParent.children || [];
+                  newParent.children.push(target);
+                }
+              }
+            }
+
+            return next;
+          });
         }
       } else {
         // Node is in the tree
@@ -3993,9 +4105,24 @@ export default function App() {
 
       saveStateForUndo();
 
+      const newParentInOrphans = findNodeInOrphans(newParentId);
+
       if (newParentId === '') {
         // Add to orphans
         setOrphans(prev => [...prev, { ...newNode, orphanType: 'orphan', subdomainRoot: false }]);
+      } else if (newParentInOrphans) {
+        setOrphans((prev) => {
+          const next = structuredClone(prev);
+          const treeIndex = findOrphanTreeIndex(newParentId, next);
+          if (treeIndex === -1) return prev;
+          const treeRoot = next[treeIndex];
+          const parent = findNodeById(treeRoot, newParentId);
+          if (parent) {
+            parent.children = parent.children || [];
+            parent.children.push({ ...newNode, orphanType: treeRoot.orphanType || 'orphan', subdomainRoot: !!treeRoot.subdomainRoot });
+          }
+          return next;
+        });
       } else {
         setRoot((prev) => {
           const copy = structuredClone(prev);
@@ -4085,8 +4212,22 @@ export default function App() {
       } else {
         saveStateForUndo();
         const newNode = { ...newNodeData, id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` };
+        const newParentInOrphans = findNodeInOrphans(newParentId);
         if (newParentId === '') {
           setOrphans(prev => [...prev, { ...newNode, orphanType: 'orphan', subdomainRoot: false }]);
+        } else if (newParentInOrphans) {
+          setOrphans((prev) => {
+            const next = structuredClone(prev);
+            const treeIndex = findOrphanTreeIndex(newParentId, next);
+            if (treeIndex === -1) return prev;
+            const treeRoot = next[treeIndex];
+            const parent = findNodeById(treeRoot, newParentId);
+            if (parent) {
+              parent.children = parent.children || [];
+              parent.children.push({ ...newNode, orphanType: treeRoot.orphanType || 'orphan', subdomainRoot: !!treeRoot.subdomainRoot });
+            }
+            return next;
+          });
         } else {
           setRoot((prev) => {
             const copy = structuredClone(prev);
@@ -5391,7 +5532,7 @@ export default function App() {
       {editModalNode && (
         <EditNodeModal
           node={editModalNode}
-          allNodes={root ? collectAllNodes(root) : []}
+          allNodes={parentOptions}
           rootTree={root}
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
