@@ -8,8 +8,6 @@ const SettingsDrawer = ({
   onClose,
   theme,
   onThemeChange,
-  showThumbnails,
-  onToggleThumbnails,
   showPageNumbers,
   onTogglePageNumbers,
 }) => {
@@ -49,18 +47,6 @@ const SettingsDrawer = ({
 
       <section className="drawer-card">
         <div className="drawer-card-title">Canvas</div>
-        <label className="settings-toggle-row">
-          <span className="settings-toggle-text">
-            <span className="settings-toggle-title">Show thumbnails</span>
-            <span className="settings-toggle-subtitle">Display page previews on each node.</span>
-          </span>
-          <input
-            type="checkbox"
-            className="settings-switch"
-            checked={showThumbnails}
-            onChange={() => onToggleThumbnails?.()}
-          />
-        </label>
         <label className="settings-toggle-row">
           <span className="settings-toggle-text">
             <span className="settings-toggle-title">Show page numbers</span>

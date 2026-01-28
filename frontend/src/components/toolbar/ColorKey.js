@@ -21,6 +21,7 @@ const ColorKey = ({
     </div>
     {showColorKey && (
       <div className="color-key-list">
+        <div className="color-key-section">Pages</div>
         {Array.from({ length: Math.max(maxDepth + 1, colors.length) }).map((_, idx) => {
           const color = colors[idx] || colors[colors.length - 1];
           if (idx > maxDepth) return null;
@@ -44,6 +45,19 @@ const ColorKey = ({
           </div>
           );
         })}
+        <div className="color-key-section">Connections</div>
+        <div className="color-key-item static">
+          <span className="legend-line legend-userflow" />
+          <span>User Flows</span>
+        </div>
+        <div className="color-key-item static">
+          <span className="legend-line legend-crosslink" />
+          <span>Crosslinks</span>
+        </div>
+        <div className="color-key-item static">
+          <span className="legend-line legend-broken" />
+          <span>Broken Links</span>
+        </div>
       </div>
     )}
   </div>

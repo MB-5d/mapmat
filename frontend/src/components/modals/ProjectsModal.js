@@ -5,7 +5,7 @@ import {
   Edit2,
   Folder,
   FolderPlus,
-  Map as MapIcon,
+  Network,
   Trash2,
   X,
 } from 'lucide-react';
@@ -103,7 +103,7 @@ const ProjectsModal = ({
                           ) : (
                             project.maps?.map(map => (
                               <div key={map.id} className="map-item" onClick={() => onLoadMap(map)}>
-                                <MapIcon size={16} />
+                                <Network size={16} />
                                 <span className="map-name">{map.name}</span>
                                 <span className="map-date">{new Date(map.updatedAt).toLocaleDateString()}</span>
                                 <button

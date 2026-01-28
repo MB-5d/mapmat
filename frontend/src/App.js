@@ -1849,7 +1849,10 @@ export default function App() {
   };
 
   const toggleProjectExpanded = (projectId) => {
-    setExpandedProjects(prev => ({ ...prev, [projectId]: !prev[projectId] }));
+    setExpandedProjects((prev) => {
+      const isOpen = !!prev[projectId];
+      return isOpen ? {} : { [projectId]: true };
+    });
   };
 
   // History functions
@@ -5311,7 +5314,6 @@ export default function App() {
                 scale,
                 onZoomOut: zoomOut,
                 onZoomIn: zoomIn,
-                onFitToScreen: fitToScreen,
                 onResetView: resetView,
               }}
             />
@@ -5523,8 +5525,6 @@ export default function App() {
         onClose={() => setShowSettingsDrawer(false)}
         theme={theme}
         onThemeChange={setTheme}
-        showThumbnails={showThumbnails}
-        onToggleThumbnails={() => setShowThumbnails((prev) => !prev)}
         showPageNumbers={layers.pageNumbers}
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
       />

@@ -1634,6 +1634,15 @@ body {
   padding: 8px;
 }
 
+.color-key-section {
+  padding: 8px 8px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .color-key-item {
   display: flex;
   align-items: center;
@@ -1646,6 +1655,14 @@ body {
 
 .color-key-item:hover {
   background: #f1f5f9;
+}
+
+.color-key-item.static {
+  cursor: default;
+}
+
+.color-key-item.static:hover {
+  background: transparent;
 }
 
 .color-key-item:hover .color-edit-icon {
@@ -1670,6 +1687,27 @@ body {
 .color-key-item span {
   font-size: 13px;
   color: #64748b;
+}
+
+.legend-line {
+  width: 24px;
+  height: 0;
+  border-top: 3px solid transparent;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.legend-userflow {
+  border-top-color: #14b8a6;
+}
+
+.legend-crosslink {
+  border-top-color: #f97316;
+}
+
+.legend-broken {
+  border-top-color: #fca5a5;
+  border-top-style: dashed;
 }
 
 .color-key-toggle-OLD {
@@ -3763,7 +3801,8 @@ body {
 }
 
 .projects-list {
-  max-height: 400px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -3773,6 +3812,9 @@ body {
 
 .projects-modal .modal-body {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .projects-empty {
@@ -3806,6 +3848,7 @@ body {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .project-folder-header {
