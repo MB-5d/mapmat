@@ -1,6 +1,6 @@
 html {
-  height: auto;
-  overflow-y: scroll;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {

@@ -85,6 +85,10 @@ import { AuthProvider } from './contexts/AuthContext';
 // ============================================================================
 // Layout engine extracted to layout/computeLayout.js
 
+const MIN_SCALE = 0.05;
+const MAX_SCALE = 3;
+const INTERACTIVE_MIN_SCALE = 0.1;
+
 const SitemapTree = ({
   data,
   orphans = [],
@@ -111,25 +115,30 @@ const SitemapTree = ({
   onRequestThumbnail,
   expandedStacks,
   onToggleStack,
+  layout: layoutOverride,
 }) => {
   const toggleStack = (nodeId) => {
     onToggleStack?.(nodeId);
   };
 
   // Compute layout using explicit coordinate formulas
- const layout = useMemo(() => {
-  return computeLayout(data, orphans, showThumbnails, expandedStacks, {
-    mode: 'after-root', // or 'after-tree'
-    renderOrphanChildren: true,
-  });
-}, [data, orphans, showThumbnails, expandedStacks]);
+  const computedLayout = useMemo(() => {
+    if (layoutOverride) return null;
+    return computeLayout(data, orphans, showThumbnails, expandedStacks, {
+      mode: 'after-root', // or 'after-tree'
+      renderOrphanChildren: true,
+    });
+  }, [data, orphans, showThumbnails, expandedStacks, layoutOverride]);
+
+  const layout = layoutOverride || computedLayout;
 
   // Run invariant checks in development
   useEffect(() => {
+    if (!layout) return;
     checkLayoutInvariants(layout.nodes, orphans, layout.connectors);
   }, [layout, orphans]);
 
-  if (!data) return null;
+  if (!data || !layout) return null;
 
   const getBadgesForNode = (node, nodeMeta) => {
     const badges = [];
@@ -562,9 +571,7 @@ export default function App() {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const scaleRef = useRef(1);
-  useEffect(() => {
-    scaleRef.current = scale;
-  }, [scale]);
+  const panRef = useRef({ x: 0, y: 0 });
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [showColorKey, setShowColorKey] = useState(false);
   const [editingColorDepth, setEditingColorDepth] = useState(null);
@@ -670,6 +677,7 @@ export default function App() {
   const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
   const contentShellRef = useRef(null);
+  const layoutRef = useRef(null);
   const lastPointerRef = useRef(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const viewDropdownRef = useRef(null);
@@ -952,6 +960,18 @@ export default function App() {
     return filterTreeByFiles(filteredByLayers, false);
   }, [root, effectiveScanLayers]);
 
+  const mapLayout = useMemo(() => {
+    if (!renderRoot) return null;
+    return computeLayout(renderRoot, visibleOrphans, showThumbnails, expandedStacks, {
+      mode: 'after-root',
+      renderOrphanChildren: true,
+    });
+  }, [renderRoot, visibleOrphans, showThumbnails, expandedStacks]);
+
+  useEffect(() => {
+    layoutRef.current = mapLayout;
+  }, [mapLayout]);
+
   const brokenConnections = useMemo(() => {
     if (!effectiveScanLayers.brokenLinks || scanMeta.brokenLinks.length === 0) return [];
     const urlToId = new Map();
@@ -1077,8 +1097,7 @@ export default function App() {
     setOrphans([]);
     setCurrentMap(null);
     setIsImportedMap(false);
-    setScale(1);
-    setPan({ x: 0, y: 0 });
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput('');
     resetScanLayers();
     return true;
@@ -1114,80 +1133,75 @@ export default function App() {
     })
   );
 
-  // Calculate map bounds and clamp pan to limit scrolling
-  const panRef = useRef({ x: 0, y: 0 });
-  panRef.current = pan;
+  // Pan/zoom bounds derived from layout (world coordinates)
+  const worldBounds = useMemo(() => {
+    if (!mapLayout || !mapLayout.nodes || mapLayout.nodes.size === 0) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    mapLayout.nodes.forEach((node) => {
+      minX = Math.min(minX, node.x);
+      minY = Math.min(minY, node.y);
+      maxX = Math.max(maxX, node.x + node.w);
+      maxY = Math.max(maxY, node.y + node.h);
+    });
+
+    return { minX, minY, maxX, maxY };
+  }, [mapLayout]);
 
   const clampPan = useCallback((newPan, scaleArg = scaleRef.current) => {
-    if (!contentRef.current || !canvasRef.current) return newPan;
+    if (!canvasRef.current || !worldBounds) return newPan;
+    const bounds = worldBounds;
 
-    const cards = contentRef.current.querySelectorAll('[data-node-card="1"]');
-    if (!cards.length) return newPan;
-
-    const currentScale = scaleRef.current || 1;
-
-    // 1. Get viewport size
     const viewportWidth = canvasRef.current.clientWidth;
     const viewportHeight = canvasRef.current.clientHeight;
 
-    // 2. Get content bounds (in content coordinates, before pan)
-    // Cards report screen positions, so subtract current pan to get content coords
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    let contentLeft = Infinity, contentTop = Infinity, contentRight = -Infinity, contentBottom = -Infinity;
-    cards.forEach(card => {
-      const rect = card.getBoundingClientRect();
-      const x = rect.left - canvasRect.left - panRef.current.x;
-      const y = rect.top - canvasRect.top - panRef.current.y;
-      contentLeft = Math.min(contentLeft, x);
-      contentTop = Math.min(contentTop, y);
-      contentRight = Math.max(contentRight, x + rect.width);
-      contentBottom = Math.max(contentBottom, y + rect.height);
-    });
+    const scaledLeft = bounds.minX * scaleArg;
+    const scaledTop = bounds.minY * scaleArg;
+    const scaledRight = bounds.maxX * scaleArg;
+    const scaledBottom = bounds.maxY * scaleArg;
 
-    const worldLeft = contentLeft / currentScale;
-    const worldTop = contentTop / currentScale;
-    const worldRight = contentRight / currentScale;
-    const worldBottom = contentBottom / currentScale;
-
-    const scaledLeft = worldLeft * scaleArg;
-    const scaledTop = worldTop * scaleArg;
-    const scaledRight = worldRight * scaleArg;
-    const scaledBottom = worldBottom * scaleArg;
-
-    // 3. Set pan limits with 400px padding on ALL sides
+    // Keep map inside viewport with padding on all sides
     const padding = 400;
-
-    // Pan LEFT limit: content's RIGHT edge should stay at least 400px from viewport LEFT edge
-    // When panning left (negative pan.x), content moves right visually
-    // contentRight + pan.x = position of content's right edge on screen
-    // We want: contentRight + pan.x >= padding
-    // So: pan.x >= padding - contentRight
     const minPanX = padding - scaledRight;
-
-    // Pan RIGHT limit: content's LEFT edge should stay at least 400px from viewport RIGHT edge
-    // contentLeft + pan.x = position of content's left edge on screen
-    // We want: contentLeft + pan.x <= viewportWidth - padding
-    // So: pan.x <= viewportWidth - padding - contentLeft
     const maxPanX = viewportWidth - padding - scaledLeft;
-
-    // Pan UP limit: content's BOTTOM edge should stay at least 400px from viewport TOP edge
-    // contentBottom + pan.y = position of content's bottom edge on screen
-    // We want: contentBottom + pan.y >= padding
-    // So: pan.y >= padding - contentBottom
     const minPanY = padding - scaledBottom;
-
-    // Pan DOWN limit: content's TOP edge should stay at least 400px from viewport BOTTOM edge
-    // contentTop + pan.y = position of content's top edge on screen
-    // We want: contentTop + pan.y <= viewportHeight - padding
-    // So: pan.y <= viewportHeight - padding - contentTop
     const maxPanY = viewportHeight - padding - scaledTop;
 
-    // 4. Clamp
     const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
     const clampedY = Math.max(minPanY, Math.min(maxPanY, newPan.y));
 
     return { x: clampedX, y: clampedY };
-  }, []);
+  }, [worldBounds]);
+
+  const applyTransform = useCallback((next, { skipPanClamp = false } = {}) => {
+    const nextScale = clamp(
+      next?.scale ?? scaleRef.current,
+      MIN_SCALE,
+      MAX_SCALE
+    );
+    const nextPan = {
+      x: next?.x ?? panRef.current.x,
+      y: next?.y ?? panRef.current.y,
+    };
+    const clampedPan = skipPanClamp ? nextPan : clampPan(nextPan, nextScale);
+
+    scaleRef.current = nextScale;
+    panRef.current = clampedPan;
+    setScale(nextScale);
+    setPan(clampedPan);
+    return { scale: nextScale, pan: clampedPan };
+  }, [clampPan]);
+
+  const panBy = useCallback((dx, dy, opts) => {
+    const nextPan = {
+      x: panRef.current.x + dx,
+      y: panRef.current.y + dy,
+    };
+    return applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y }, opts);
+  }, [applyTransform]);
 
   const animatePanTo = useCallback((target) => {
     const start = { ...panRef.current };
@@ -1201,14 +1215,14 @@ export default function App() {
         x: start.x + (target.x - start.x) * ease,
         y: start.y + (target.y - start.y) * ease,
       };
-      setPan(clampPan(next));
+      applyTransform({ scale: scaleRef.current, x: next.x, y: next.y });
       if (elapsed < 1) {
         requestAnimationFrame(tick);
       }
     };
 
     requestAnimationFrame(tick);
-  }, [clampPan]);
+  }, [applyTransform]);
 
   const findStackParentsForNode = useCallback((node, targetId, depth = 0) => {
     if (!node) return null;
@@ -1226,7 +1240,7 @@ export default function App() {
   }, []);
 
   const focusNodeById = useCallback((nodeId) => {
-    if (!nodeId || !contentRef.current || !canvasRef.current) return;
+    if (!nodeId || !canvasRef.current) return;
 
     let stackParents = findStackParentsForNode(root, nodeId, 0);
     if (!stackParents) {
@@ -1247,30 +1261,42 @@ export default function App() {
     }
 
     const moveToNode = (attempt = 0) => {
-      const el = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
-      if (!el || !canvasRef.current) {
+      const layout = layoutRef.current;
+      if (!layout || !canvasRef.current) {
         if (attempt < 3) {
           setTimeout(() => moveToNode(attempt + 1), 120);
         }
         return;
       }
-      const rect = el.getBoundingClientRect();
-      const canvasRect = canvasRef.current.getBoundingClientRect();
-      const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
-      const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
-      const leftShift = Math.min(240, canvasRect.width * 0.25);
-      animatePanTo(clampPan({ x: panRef.current.x + dx - leftShift, y: panRef.current.y + dy }));
+      const nodeData = layout.nodes.get(nodeId);
+      if (!nodeData) {
+        if (attempt < 3) {
+          setTimeout(() => moveToNode(attempt + 1), 120);
+        }
+        return;
+      }
+
+      const canvas = canvasRef.current;
+      const leftShift = Math.min(240, canvas.clientWidth * 0.25);
+      const scale = scaleRef.current;
+      const nodeCenterX = nodeData.x + nodeData.w / 2;
+      const nodeCenterY = nodeData.y + nodeData.h / 2;
+      const targetPan = {
+        x: (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scale,
+        y: canvas.clientHeight / 2 - nodeCenterY * scale,
+      };
+      animatePanTo(targetPan);
     };
 
     requestAnimationFrame(() => {
       setTimeout(() => moveToNode(0), 80);
     });
-  }, [animatePanTo, clampPan, findStackParentsForNode, orphans, root]);
+  }, [animatePanTo, findStackParentsForNode, orphans, root]);
 
   useEffect(() => {
     if (!root) return;
-    setPan((prev) => clampPan(prev));
-  }, [effectiveScanLayers, root, orphans, scale, clampPan]);
+    applyTransform({ scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y });
+  }, [effectiveScanLayers, root, orphans, mapLayout, applyTransform]);
 
   // Check auth and load data on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1341,8 +1367,7 @@ export default function App() {
             setRoot(share.root);
             setOrphans(normalizeOrphans(share.orphans));
             setConnections(share.connections || []);
-            setScale(1);
-            setPan({ x: 0, y: 0 });
+            applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
             if (share.colors) setColors(share.colors);
             setUrlInput(share.root.url || '');
             showToast('Shared map loaded!', 'success');
@@ -1366,8 +1391,7 @@ export default function App() {
                 setRoot(sharedRoot);
                 setOrphans(normalizeOrphans(sharedOrphans));
                 setConnections(sharedConnections || []);
-                setScale(1);
-                setPan({ x: 0, y: 0 });
+                applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
                 if (sharedColors) setColors(sharedColors);
                 setUrlInput(sharedRoot.url || '');
                 showToast('Shared map loaded!', 'success');
@@ -1735,8 +1759,7 @@ export default function App() {
     setConnections([]);
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null });
-    setScale(1);
-    setPan({ x: 0, y: 0 });
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput('');
     resetScanLayers();
     setShowSaveMapModal(false);
@@ -1752,8 +1775,7 @@ export default function App() {
     setColors(map.colors || DEFAULT_COLORS);
     setCurrentMap(map);
     setShowProjectsModal(false);
-    setScale(1);
-    setPan({ x: 0, y: 0 });
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput(map.root?.url || '');
     showToast(`Loaded "${map.name}"`, 'success');
     scheduleResetView();
@@ -2038,8 +2060,7 @@ export default function App() {
         setThumbnailStats({ total: 0, completed: 0, failed: 0, avgMs: 0 });
       }
       setCurrentMap(null);
-      setScale(1);
-      setPan({ x: 0, y: 0 });
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setLastScanAt(new Date().toISOString());
       // Set map name from site title
       if (!preserveName && data.root?.title) {
@@ -2117,8 +2138,8 @@ export default function App() {
     dragRef.current.dragging = true;
     dragRef.current.startX = e.clientX;
     dragRef.current.startY = e.clientY;
-    dragRef.current.startPanX = pan.x;
-    dragRef.current.startPanY = pan.y;
+    dragRef.current.startPanX = panRef.current.x;
+    dragRef.current.startPanY = panRef.current.y;
     setIsPanning(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -2137,7 +2158,7 @@ export default function App() {
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     const newPan = { x: dragRef.current.startPanX + dx, y: dragRef.current.startPanY + dy };
-    setPan(clampPan(newPan));
+    applyTransform({ scale: scaleRef.current, x: newPan.x, y: newPan.y });
   };
 
   const onPointerUp = (e) => {
@@ -2176,14 +2197,8 @@ export default function App() {
       y: py - worldY * nextScale,
     };
 
-    // clampPan reads scaleRef.current internally (still oldScale here)
-    const clamped = clampPan(nextPan, nextScale);
-
-    panRef.current = clamped;
-    scaleRef.current = nextScale;
-    setPan(clamped);
-    setScale(nextScale);
-  }, [clampPan]);
+    applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
+  }, [applyTransform]);
 
   const zoomIn = useCallback(() => {
     const canvas = canvasRef.current;
@@ -2191,7 +2206,7 @@ export default function App() {
     const r = canvas.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
-    const next = clamp(scaleRef.current * 1.2, 0.1, 3);
+    const next = clamp(scaleRef.current * 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE);
     zoomAtClientPoint(next, cx, cy);
   }, [zoomAtClientPoint]);
 
@@ -2201,53 +2216,52 @@ export default function App() {
     const r = canvas.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
-    const next = clamp(scaleRef.current / 1.2, 0.1, 3);
+    const next = clamp(scaleRef.current / 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE);
     zoomAtClientPoint(next, cx, cy);
   }, [zoomAtClientPoint]);
 
   const centerHome = useCallback(() => {
-    if (!contentRef.current || !canvasRef.current) return;
-    const rootSelector = root?.id ? `[data-node-id="${root.id}"]` : '[data-depth="0"]';
-    const rootNode = contentRef.current.querySelector(rootSelector);
+    const canvas = canvasRef.current;
+    const layout = layoutRef.current;
+    if (!canvas || !layout || layout.nodes.size === 0) return;
+
+    const rootId = renderRoot?.id || root?.id;
+    let rootNode = rootId ? layout.nodes.get(rootId) : null;
+    if (!rootNode) {
+      rootNode = Array.from(layout.nodes.values()).find((node) => node.depth === 0) || null;
+    }
     if (!rootNode) return;
 
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    const nodeCard = rootNode.querySelector('[data-node-card="1"]');
-    const nodeRect = nodeCard ? nodeCard.getBoundingClientRect() : rootNode.getBoundingClientRect();
-
-    const nodeX = nodeRect.left - canvasRect.left + nodeRect.width / 2;
-    const nodeY = nodeRect.top - canvasRect.top;
-
-    const targetX = canvasRect.width / 2;
+    const targetX = canvas.clientWidth / 2;
     const targetY = 60;
+    const scale = scaleRef.current;
 
-    const nextPan = { x: targetX - nodeX, y: targetY - nodeY };
-    setPan(nextPan);
-    panRef.current = nextPan;
-  }, [root]);
+    const nodeCenterX = rootNode.x + rootNode.w / 2;
+    const nodeTopY = rootNode.y;
+
+    const nextPan = {
+      x: targetX - nodeCenterX * scale,
+      y: targetY - nodeTopY * scale,
+    };
+
+    applyTransform({ scale, x: nextPan.x, y: nextPan.y });
+  }, [applyTransform, renderRoot, root]);
 
   const resetView = useCallback(() => {
-    const nextScale = 1;
-    const nextPan = { x: 0, y: 0 };
-    setScale(nextScale);
-    setPan(nextPan);
-    scaleRef.current = nextScale;
-    panRef.current = nextPan;
+    applyTransform({ scale: 1, x: 0, y: 0 });
     requestAnimationFrame(() => {
       centerHome();
     });
-  }, [centerHome]);
+  }, [applyTransform, centerHome]);
 
   const scheduleResetView = (attempts = 8) => {
     if (attempts <= 0) return;
     setTimeout(() => {
-      if (!contentRef.current || !canvasRef.current) {
+      if (!layoutRef.current || !canvasRef.current) {
         scheduleResetView(attempts - 1);
         return;
       }
-      const rootSelector = root?.id ? `[data-node-id="${root.id}"]` : '[data-depth="0"]';
-      const rootNode = contentRef.current.querySelector(rootSelector);
-      if (!rootNode) {
+      if (!layoutRef.current.nodes || layoutRef.current.nodes.size === 0) {
         scheduleResetView(attempts - 1);
         return;
       }
@@ -2256,79 +2270,35 @@ export default function App() {
   };
 
   const fitToScreen = () => {
-    if (!contentRef.current || !canvasRef.current) return;
+    if (!canvasRef.current) return;
+    const bounds = worldBounds;
+    if (!bounds) return;
 
-    // Reset first to measure at scale 1
-    setScale(1);
-    setPan({ x: 0, y: 0 });
+    const mapWidth = bounds.maxX - bounds.minX;
+    const mapHeight = bounds.maxY - bounds.minY;
+    if (mapWidth <= 0 || mapHeight <= 0) return;
 
-    // Wait for render
-    setTimeout(() => {
-      if (!contentRef.current || !canvasRef.current) return;
+    const padding = 80;
+    const viewportWidth = canvasRef.current.clientWidth;
+    const viewportHeight = canvasRef.current.clientHeight;
+    const availableWidth = Math.max(0, viewportWidth - padding * 2);
+    const availableHeight = Math.max(0, viewportHeight - padding * 2);
 
-      const cards = contentRef.current.querySelectorAll('[data-node-card="1"]');
-      if (!cards.length) return;
+    const scaleX = availableWidth / mapWidth;
+    const scaleY = availableHeight / mapHeight;
+    const newScale = clamp(Math.min(scaleX, scaleY), MIN_SCALE, 1);
 
-      const canvasRect = canvasRef.current.getBoundingClientRect();
+    const mapCenterX = (bounds.minX + bounds.maxX) / 2;
+    const mapCenterY = (bounds.minY + bounds.maxY) / 2;
+    const canvasCenterX = viewportWidth / 2;
+    const canvasCenterY = viewportHeight / 2;
 
-      // Find bounds of all cards in canvas coordinates
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      cards.forEach(card => {
-        const rect = card.getBoundingClientRect();
-        minX = Math.min(minX, rect.left - canvasRect.left);
-        minY = Math.min(minY, rect.top - canvasRect.top);
-        maxX = Math.max(maxX, rect.right - canvasRect.left);
-        maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-      });
+    const nextPan = {
+      x: canvasCenterX - mapCenterX * newScale,
+      y: canvasCenterY - mapCenterY * newScale,
+    };
 
-      // Include connectors in bounds
-      const svgs = contentRef.current.querySelectorAll('.connector-svg');
-      svgs.forEach(svg => {
-        const rect = svg.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          minX = Math.min(minX, rect.left - canvasRect.left);
-          minY = Math.min(minY, rect.top - canvasRect.top);
-          maxX = Math.max(maxX, rect.right - canvasRect.left);
-          maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-        }
-      });
-
-      const mapWidth = maxX - minX;
-      const mapHeight = maxY - minY;
-      const mapCenterX = (minX + maxX) / 2;
-      const mapCenterY = (minY + maxY) / 2;
-
-      const padding = 80;
-      const availableWidth = canvasRect.width - padding * 2;
-      const availableHeight = canvasRect.height - padding * 2;
-
-      // Calculate scale to fit
-      const scaleX = availableWidth / mapWidth;
-      const scaleY = availableHeight / mapHeight;
-      const newScale = clamp(Math.min(scaleX, scaleY), 0.05, 1);
-
-      // Calculate pan to center the map
-      // At scale 1, pan 0, the map center is at (mapCenterX, mapCenterY)
-      // After scaling by newScale, it will be at a different position
-      // We need to pan so the scaled map is centered in the canvas
-
-      const canvasCenterX = canvasRect.width / 2;
-      const canvasCenterY = canvasRect.height / 2;
-
-      // The map will scale around the content origin (canvas center horizontally due to left:50%)
-      // New map center relative position = (mapCenterX - canvasCenterX) * newScale + canvasCenterX
-      // We want this to equal canvasCenterX, so:
-      // panX = canvasCenterX - ((mapCenterX - canvasCenterX) * newScale + canvasCenterX)
-      //      = -(mapCenterX - canvasCenterX) * newScale
-      //      = (canvasCenterX - mapCenterX) * newScale
-      // But actually simpler: just move the current map center to canvas center, accounting for scale
-
-      const newPanX = (canvasCenterX - mapCenterX);
-      const newPanY = (canvasCenterY - mapCenterY);
-
-      setScale(newScale);
-      setPan({ x: newPanX, y: newPanY });
-    }, 50);
+    applyTransform({ scale: newScale, x: nextPan.x, y: nextPan.y });
   };
 
   // Undo/Redo implementation
@@ -2430,8 +2400,8 @@ export default function App() {
           anchorClientY = r.top + lastPointerRef.current.y;
         }
         const next = (e.key === '+' || e.key === '=')
-          ? clamp(scaleRef.current * 1.2, 0.1, 3)
-          : clamp(scaleRef.current / 1.2, 0.1, 3);
+          ? clamp(scaleRef.current * 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE)
+          : clamp(scaleRef.current / 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE);
         e.preventDefault();
         zoomAtClientPoint(next, anchorClientX, anchorClientY);
         return;
@@ -2515,36 +2485,48 @@ export default function App() {
         const delta = -wheelDy;
         const zoomIntensity = 0.002;
         const currentScale = scaleRef.current;
-        const next = Math.min(Math.max(currentScale * (1 + delta * zoomIntensity), 0.1), 3);
+        const next = clamp(currentScale * (1 + delta * zoomIntensity), INTERACTIVE_MIN_SCALE, MAX_SCALE);
         zoomAtClientPoint(next, clientX, clientY);
         return;
       }
 
       if (dx === 0 && wheelDy === 0) return;
-      setPan((p) => clampPan({
-        x: p.x - dx,
-        y: p.y - wheelDy,
-      }));
+      panBy(-dx, -wheelDy);
     };
 
     const handleWheel = (e) => {
-      // Wheel listener uses { passive:false } so preventDefault() can block browser zoom.
-      // Only ctrl/meta+wheel triggers zoom (trackpad pinch sends ctrlKey=true).
-      // Regular scroll/swipe pans the map without blocking default behavior.
-      const isZoom = e.ctrlKey || e.metaKey;
-      if (isZoom) e.preventDefault();
+      // Always preventDefault — the canvas handles all wheel input (zoom + pan).
+      // Letting non-zoom events through causes macOS elastic overscroll, which
+      // shifts getBoundingClientRect() and corrupts subsequent zoom anchors.
+      e.preventDefault();
       if (!root) return;
 
-      wheelStateRef.current.dx += e.deltaX;
-      wheelStateRef.current.dy += e.deltaY;
-      wheelStateRef.current.isZoom = isZoom;
-      if (isZoom) {
-        wheelStateRef.current.clientX = e.clientX;
-        wheelStateRef.current.clientY = e.clientY;
+      const isZoom = e.ctrlKey || e.metaKey;
+      const ws = wheelStateRef.current;
+
+      // Normalize deltaMode before accumulating (Firefox mouse wheel uses LINE mode)
+      let dy = e.deltaY;
+      let dx = e.deltaX;
+      if (e.deltaMode === 1) { dy *= 20; dx *= 20; }       // DOM_DELTA_LINE
+      else if (e.deltaMode === 2) { dy *= 400; dx *= 400; } // DOM_DELTA_PAGE
+
+      // If gesture type changed mid-frame, flush old gesture before accumulating new one
+      if (ws.raf && ws.isZoom !== isZoom && (ws.dx !== 0 || ws.dy !== 0)) {
+        cancelAnimationFrame(ws.raf);
+        ws.raf = null;
+        flushWheel();
       }
 
-      if (!wheelStateRef.current.raf) {
-        wheelStateRef.current.raf = requestAnimationFrame(flushWheel);
+      ws.dx += dx;
+      ws.dy += dy;
+      ws.isZoom = isZoom;
+      if (isZoom) {
+        ws.clientX = e.clientX;
+        ws.clientY = e.clientY;
+      }
+
+      if (!ws.raf) {
+        ws.raf = requestAnimationFrame(flushWheel);
       }
     };
 
@@ -2556,7 +2538,7 @@ export default function App() {
         wheelStateRef.current.raf = null;
       }
     };
-  }, [root, clampPan, zoomAtClientPoint]);
+  }, [root, panBy, zoomAtClientPoint]);
 
   const exportJson = () => {
     if (!root) return;
@@ -2607,8 +2589,8 @@ export default function App() {
     if (!hasMap || !contentRef.current || !canvasRef.current) return;
 
     // Save current transform state
-    const savedScale = scale;
-    const savedPan = { ...pan };
+    const savedScale = scaleRef.current;
+    const savedPan = { ...panRef.current };
 
     showToast('Generating PDF...', 'info', true);
 
@@ -2620,8 +2602,7 @@ export default function App() {
       ]);
 
       // Reset to 1:1 scale for accurate capture
-      setScale(1);
-      setPan({ x: 0, y: 0 });
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       await new Promise(r => setTimeout(r, 200));
 
       // Capture visual map using same approach as PNG export
@@ -2631,8 +2612,7 @@ export default function App() {
       const cards = content.querySelectorAll('[data-node-card="1"]');
 
       if (!cards.length) {
-        setScale(savedScale);
-        setPan(savedPan);
+        applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
         showToast('No content to download', 'warning');
         return;
       }
@@ -2665,7 +2645,7 @@ export default function App() {
       // Position the content so the map is centered with equal padding
       const offsetX = -minX + padding;
       const offsetY = -minY + padding - 80;
-      setPan({ x: offsetX, y: offsetY });
+      applyTransform({ scale: 1, x: offsetX, y: offsetY }, { skipPanClamp: true });
 
       // Hide grid dots for export
       content.classList.add('export-mode');
@@ -2695,8 +2675,7 @@ export default function App() {
 
       // Restore grid dots and transform state
       content.classList.remove('export-mode');
-      setScale(savedScale);
-      setPan(savedPan);
+      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
 
       // Determine PDF orientation based on aspect ratio
       const isLandscape = imgWidth > imgHeight;
@@ -2741,8 +2720,7 @@ export default function App() {
       showToast(`PDF download failed: ${errorMsg}`, 'error');
       // Restore grid and transform state on error
       if (contentRef.current) contentRef.current.classList.remove('export-mode');
-      setScale(savedScale);
-      setPan(savedPan);
+      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
     }
   };
 
@@ -2976,15 +2954,14 @@ export default function App() {
     if (!hasMap || !contentRef.current || !canvasRef.current) return;
 
     // Save current transform state
-    const savedScale = scale;
-    const savedPan = { ...pan };
+    const savedScale = scaleRef.current;
+    const savedPan = { ...panRef.current };
 
     try {
       showToast('Generating PNG...', 'info', true);
 
       // Reset to 1:1 scale for accurate capture
-      setScale(1);
-      setPan({ x: 0, y: 0 });
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
 
       // Wait for React to re-render
       await new Promise(r => setTimeout(r, 200));
@@ -2998,8 +2975,7 @@ export default function App() {
       // Find bounds of all cards
       const cards = content.querySelectorAll('[data-node-card="1"]');
       if (!cards.length) {
-        setScale(savedScale);
-        setPan(savedPan);
+        applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
         showToast('No content to download', 'warning');
         return;
       }
@@ -3032,7 +3008,7 @@ export default function App() {
       // Position the content so the map is centered with equal padding on all sides
       const offsetX = -minX + padding;
       const offsetY = -minY + padding - 80; // -80 to account for content top: 80px in CSS
-      setPan({ x: offsetX, y: offsetY });
+      applyTransform({ scale: 1, x: offsetX, y: offsetY }, { skipPanClamp: true });
 
       // Hide grid dots for export
       content.style.setProperty('--export-mode', '1');
@@ -3081,8 +3057,7 @@ export default function App() {
       if (contentRef.current) contentRef.current.classList.remove('export-mode');
     } finally {
       // Restore original transform state
-      setScale(savedScale);
-      setPan(savedPan);
+      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
     }
   };
 
@@ -3256,33 +3231,28 @@ export default function App() {
 
   // Navigate to a node - pan canvas to center the node and optionally zoom
   const navigateToNode = (nodeId) => {
-    const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
-    if (!nodeElement || !canvasRef.current) return;
-
-    const nodeRect = nodeElement.getBoundingClientRect();
-    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const layout = layoutRef.current;
+    if (!nodeId || !layout || !canvasRef.current) return;
+    const nodeData = layout.nodes.get(nodeId);
+    if (!nodeData) return;
 
     // Calculate center of canvas, offset left if comments panel is open
     // Comments panel is 320px wide, so offset by half that (160px)
     const panelOffset = showCommentsPanel ? 160 : 0;
-    const canvasCenterX = (canvasRect.width / 2) - panelOffset;
-    const canvasCenterY = canvasRect.height / 2;
+    const canvas = canvasRef.current;
+    const canvasCenterX = (canvas.clientWidth / 2) - panelOffset;
+    const canvasCenterY = canvas.clientHeight / 2;
 
-    // Calculate where node currently is relative to canvas
-    const nodeCurrentX = nodeRect.left - canvasRect.left + nodeRect.width / 2;
-    const nodeCurrentY = nodeRect.top - canvasRect.top + nodeRect.height / 2;
+    const nodeCenterX = nodeData.x + nodeData.w / 2;
+    const nodeCenterY = nodeData.y + nodeData.h / 2;
 
-    // Calculate pan adjustment needed to center the node
-    const dx = canvasCenterX - nodeCurrentX;
-    const dy = canvasCenterY - nodeCurrentY;
+    const nextScale = scaleRef.current < 0.8 ? 1 : scaleRef.current;
+    const nextPan = {
+      x: canvasCenterX - nodeCenterX * nextScale,
+      y: canvasCenterY - nodeCenterY * nextScale,
+    };
 
-    // Apply the pan
-    setPan(p => clampPan({ x: p.x + dx, y: p.y + dy }));
-
-    // Optionally zoom to 100% if zoomed out
-    if (scale < 0.8) {
-      setScale(1);
-    }
+    applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
   };
 
   // Open comment popover positioned next to a node
@@ -4424,8 +4394,7 @@ export default function App() {
         setOrphans([]); // Clear orphans when importing new URLs
         setCurrentMap(null);
         setIsImportedMap(true); // Mark as imported - scanning won't work
-        setScale(1);
-        setPan({ x: 0, y: 0 });
+        applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
         setUrlInput(tree.url || '');
         setShowImportModal(false);
         showToast(`Imported ${urls.length} URLs from ${parseType}`, 'success');
@@ -4634,6 +4603,7 @@ export default function App() {
                 <SitemapTree
                   data={renderRoot}
                   orphans={visibleOrphans}
+                  layout={mapLayout}
                   showThumbnails={effectiveScanLayers.thumbnails && showThumbnails}
                   showCommentBadges={activeTool === 'comments' || showCommentsPanel}
                   canEdit={canEdit()}
@@ -4649,16 +4619,22 @@ export default function App() {
                   onViewImage={viewFullScreenshot}
                   activeId={activeId}
                   onNodeDoubleClick={(id) => {
-                    if (scale < 0.95) {
-                      const el = contentRef.current?.querySelector(`[data-node-id="${id}"]`);
-                      if (el) {
-                        const rect = el.getBoundingClientRect();
-                        const canvasRect = canvasRef.current.getBoundingClientRect();
-                        const dx = canvasRect.left + canvasRect.width / 2 - (rect.left + rect.width / 2);
-                        const dy = canvasRect.top + canvasRect.height / 2 - (rect.top + rect.height / 2);
-                        setScale(1);
-                        setPan(p => clampPan({ x: p.x + dx, y: p.y + dy }));
-                      }
+                    if (scaleRef.current < 0.95) {
+                      const layout = layoutRef.current;
+                      const canvas = canvasRef.current;
+                      if (!layout || !canvas) return;
+                      const nodeData = layout.nodes.get(id);
+                      if (!nodeData) return;
+                      const canvasCenterX = canvas.clientWidth / 2;
+                      const canvasCenterY = canvas.clientHeight / 2;
+                      const nodeCenterX = nodeData.x + nodeData.w / 2;
+                      const nodeCenterY = nodeData.y + nodeData.h / 2;
+                      const nextScale = 1;
+                      const nextPan = {
+                        x: canvasCenterX - nodeCenterX * nextScale,
+                        y: canvasCenterY - nodeCenterY * nextScale,
+                      };
+                      applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
                     }
                   }}
                   onNodeClick={(node) => {
