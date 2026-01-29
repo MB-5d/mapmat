@@ -36,6 +36,7 @@ const EditNodeModal = ({
   mode = 'edit',
   customPageTypes = [],
   onAddCustomType,
+  specialParentOptions = [],
 }) => {
   const [title, setTitle] = useState(node?.title || '');
   const [url, setUrl] = useState(node?.url || '');
@@ -45,7 +46,9 @@ const EditNodeModal = ({
 
   // Combined list of all page types
   const allPageTypes = [...PAGE_TYPES, ...customPageTypes];
-  const [parentId, setParentId] = useState(node?.parentId || '');
+  const [parentId, setParentId] = useState(
+    node?.parentId ?? specialParentOptions[0]?.value ?? ''
+  );
   const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
   const [description, setDescription] = useState(node?.description || '');
   const [metaTags, setMetaTags] = useState(node?.metaTags || '');
@@ -58,7 +61,7 @@ const EditNodeModal = ({
       title,
       url,
       pageType,
-      parentId: parentId || null,
+      parentId,
       thumbnailUrl,
       description,
       metaTags,
@@ -195,7 +198,11 @@ const EditNodeModal = ({
                 value={parentId}
                 onChange={(e) => setParentId(e.target.value)}
               >
-                <option value="">No Parent (Orphan)</option>
+                {specialParentOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
                 {parentOptions.map(n => {
                   const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(n.depth);
                   const displayTitle = n.title || n.url || 'Untitled';
