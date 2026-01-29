@@ -87,7 +87,7 @@ import { AuthProvider } from './contexts/AuthContext';
 // Layout engine extracted to layout/computeLayout.js
 
 const MIN_SCALE = 0.05;
-const MAX_SCALE = 3;
+const MAX_SCALE = 4;
 const INTERACTIVE_MIN_SCALE = 0.1;
 
 const SitemapTree = ({
@@ -568,10 +568,12 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
   return { root: rootNode, orphans: dedupedOrphans };
 };
 
-const normalizeOrphans = (list) => (list || []).map((orphan) => ({
-  ...orphan,
-  orphanType: orphan.orphanType || 'orphan',
-}));
+const normalizeOrphans = (list) => (list || [])
+  .filter(Boolean)
+  .map((orphan) => ({
+    ...orphan,
+    orphanType: orphan.orphanType || 'orphan',
+  }));
 
 export default function App() {
   const [urlInput, setUrlInput] = useState('');
@@ -854,8 +856,10 @@ export default function App() {
   const parentOptions = useMemo(() => {
     if (!root) return [];
     const result = [];
+    const seen = new Set();
     const walk = (node) => {
-      if (!node) return;
+      if (!node || seen.has(node.id)) return;
+      seen.add(node.id);
       const pageNumber = reportNumberMap.get(node.id) || '';
       const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
       result.push({
@@ -878,10 +882,38 @@ export default function App() {
       return [{ value: HOME_PARENT_ID, label: 'No Parent (Home)' }];
     }
     return [
-      { value: ORPHAN_PARENT_ID, label: 'No Parent (Orphan)' },
-      { value: SUBDOMAIN_PARENT_ID, label: 'No Parent (Subdomain)' },
+      { value: ORPHAN_PARENT_ID, label: 'No Parent (Orphan)', type: 'orphan' },
+      { value: SUBDOMAIN_PARENT_ID, label: 'No Parent (Subdomain)', type: 'subdomain' },
     ];
   }, [editModalMode, root]);
+
+  useEffect(() => {
+    if (!root) return;
+    const nodesForCounts = collectAllNodesWithOrphans(root, orphans);
+    const hasThumbnails = nodesForCounts.some((node) => !!node.thumbnailUrl);
+    const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
+    const hasAuth = nodesForCounts.some((node) => !!node.authRequired);
+    const hasErrors = nodesForCounts.some((node) => !!node.isError);
+    const hasBroken = nodesForCounts.some((node) => !!node.isBroken || node.orphanType === 'broken');
+    const hasDuplicates = nodesForCounts.some((node) => !!node.isDuplicate);
+    const hasFiles = nodesForCounts.some((node) => !!node.isFile || node.orphanType === 'file');
+    const hasSubdomains = (orphans || []).some((orphan) => !!orphan.subdomainRoot);
+    const hasOrphans = (orphans || []).some((orphan) => !orphan.subdomainRoot);
+    const hasBrokenLinks = (scanMeta?.brokenLinks || []).length > 0;
+
+    setScanLayerAvailability((prev) => ({
+      ...prev,
+      thumbnails: showThumbnails || hasThumbnails,
+      inactivePages: hasInactive,
+      subdomains: hasSubdomains,
+      authenticatedPages: hasAuth,
+      orphanPages: hasOrphans,
+      errorPages: hasErrors,
+      brokenLinks: hasBroken || hasBrokenLinks,
+      duplicates: hasDuplicates,
+      files: hasFiles,
+    }));
+  }, [root, orphans, scanMeta, showThumbnails]);
 
   const reportEntries = useMemo(() => {
     if (!root) return [];
@@ -915,6 +947,18 @@ export default function App() {
     });
     return stats;
   }, [reportEntries]);
+
+  const connectionLegend = useMemo(() => {
+    const hasUserFlows = layers.userFlows && connections.some((conn) => conn.type === 'userflow');
+    const hasCrossLinks = layers.crossLinks && connections.some((conn) => conn.type === 'crosslink');
+    const hasBrokenLinks = effectiveScanLayers.brokenLinks && (scanMeta?.brokenLinks || []).length > 0;
+    return {
+      hasUserFlows,
+      hasCrossLinks,
+      hasBrokenLinks,
+      hasAny: hasUserFlows || hasCrossLinks || hasBrokenLinks,
+    };
+  }, [connections, layers.userFlows, layers.crossLinks, effectiveScanLayers.brokenLinks, scanMeta]);
 
   const flushAutosave = useCallback(() => {
     if (autosaveInFlightRef.current) return;
@@ -1265,8 +1309,10 @@ export default function App() {
   }, [worldBounds]);
 
   const applyTransform = useCallback((next, { skipPanClamp = false } = {}) => {
+    const rawScale = next?.scale ?? scaleRef.current;
+    const safeScale = Number.isFinite(rawScale) ? rawScale : 1;
     const nextScale = clamp(
-      next?.scale ?? scaleRef.current,
+      safeScale,
       MIN_SCALE,
       MAX_SCALE
     );
@@ -2289,9 +2335,29 @@ export default function App() {
   // All zoom behavior MUST go through zoomAtClientPoint().
   // Do NOT add % transforms (translate(-50%)) to the scaled element.
   // Violating these rules reintroduces drift/jitter.
+  const getZoomBounds = useCallback(() => {
+    const canvasEl = canvasRef.current;
+    if (!canvasEl || !worldBounds) {
+      return { min: INTERACTIVE_MIN_SCALE, max: MAX_SCALE };
+    }
+    const padding = 120;
+    const mapWidth = Math.max(1, (worldBounds.maxX - worldBounds.minX) + 200);
+    const mapHeight = Math.max(1, (worldBounds.maxY - worldBounds.minY) + 200);
+    const availableWidth = Math.max(1, canvasEl.clientWidth - padding);
+    const availableHeight = Math.max(1, canvasEl.clientHeight - padding);
+    const fitScale = Math.min(availableWidth / mapWidth, availableHeight / mapHeight);
+    const min = clamp(fitScale, INTERACTIVE_MIN_SCALE, 0.75);
+    const max = clamp(Math.max(2, 1 / min), 2, MAX_SCALE);
+    return { min, max };
+  }, [worldBounds]);
+
   const zoomAtClientPoint = useCallback((nextScale, clientX, clientY) => {
     const canvasEl = canvasRef.current;
     if (!canvasEl) return;
+
+    const { min, max } = getZoomBounds();
+    const safeScale = clamp(nextScale, min, max);
+    if (!Number.isFinite(safeScale)) return;
 
     const rect = canvasEl.getBoundingClientRect();
     const px = clientX - rect.left;
@@ -2307,12 +2373,12 @@ export default function App() {
     const worldY = (py - oldPan.y) / oldScale;
 
     const nextPan = {
-      x: px - worldX * nextScale,
-      y: py - worldY * nextScale,
+      x: px - worldX * safeScale,
+      y: py - worldY * safeScale,
     };
 
-    applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
-  }, [applyTransform]);
+    applyTransform({ scale: safeScale, x: nextPan.x, y: nextPan.y });
+  }, [applyTransform, getZoomBounds]);
 
   const zoomIn = useCallback(() => {
     const canvas = canvasRef.current;
@@ -2320,9 +2386,10 @@ export default function App() {
     const r = canvas.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
-    const next = clamp(scaleRef.current * 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE);
+    const { min, max } = getZoomBounds();
+    const next = clamp(scaleRef.current * 1.2, min, max);
     zoomAtClientPoint(next, cx, cy);
-  }, [zoomAtClientPoint]);
+  }, [zoomAtClientPoint, getZoomBounds]);
 
   const zoomOut = useCallback(() => {
     const canvas = canvasRef.current;
@@ -2330,9 +2397,10 @@ export default function App() {
     const r = canvas.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
-    const next = clamp(scaleRef.current / 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE);
+    const { min, max } = getZoomBounds();
+    const next = clamp(scaleRef.current / 1.2, min, max);
     zoomAtClientPoint(next, cx, cy);
-  }, [zoomAtClientPoint]);
+  }, [zoomAtClientPoint, getZoomBounds]);
 
   const centerHome = useCallback(() => {
     const canvas = canvasRef.current;
@@ -2513,13 +2581,16 @@ export default function App() {
           anchorClientX = r.left + lastPointerRef.current.x;
           anchorClientY = r.top + lastPointerRef.current.y;
         }
+        const { min, max } = getZoomBounds();
         const next = (e.key === '+' || e.key === '=')
-          ? clamp(scaleRef.current * 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE)
-          : clamp(scaleRef.current / 1.2, INTERACTIVE_MIN_SCALE, MAX_SCALE);
+          ? clamp(scaleRef.current * 1.2, min, max)
+          : clamp(scaleRef.current / 1.2, min, max);
         e.preventDefault();
         zoomAtClientPoint(next, anchorClientX, anchorClientY);
         return;
       }
+      if (e.metaKey || e.ctrlKey) return;
+
       // Toggle comments panel with "C"
       if (e.key === 'c' || e.key === 'C') {
         setShowCommentsPanel(prev => {
@@ -2589,7 +2660,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, zoomAtClientPoint]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -2617,7 +2688,8 @@ export default function App() {
         const delta = -wheelDy;
         const zoomIntensity = 0.002;
         const currentScale = scaleRef.current;
-        const next = clamp(currentScale * (1 + delta * zoomIntensity), INTERACTIVE_MIN_SCALE, MAX_SCALE);
+        const { min, max } = getZoomBounds();
+        const next = clamp(currentScale * (1 + delta * zoomIntensity), min, max);
         zoomAtClientPoint(next, clientX, clientY);
         return;
       }
@@ -4394,6 +4466,24 @@ export default function App() {
       node.children?.forEach(clearTreeFlags);
     };
 
+    const applyTreeTypeFlags = (node, treeType) => {
+      if (!node) return;
+      if (treeType === 'subdomain') {
+        node.orphanType = 'subdomain';
+        node.subdomainRoot = false;
+      } else if (treeType === 'orphan') {
+        node.orphanType = 'orphan';
+        node.subdomainRoot = false;
+      }
+      node.children?.forEach((child) => applyTreeTypeFlags(child, treeType));
+    };
+
+    const purgeNodeFromTree = (tree, targetId) => {
+      if (!tree?.children?.length) return;
+      tree.children = tree.children.filter((child) => child.id !== targetId);
+      tree.children.forEach((child) => purgeNodeFromTree(child, targetId));
+    };
+
     const applyRootFlags = (node, type) => {
       if (!node) return;
       if (type === 'subdomain') {
@@ -4439,6 +4529,10 @@ export default function App() {
 
     if (!removedNode) return;
 
+    if (nextRoot) purgeNodeFromTree(nextRoot, nodeId);
+    nextOrphans = nextOrphans.filter((orphan) => orphan.id !== nodeId);
+    nextOrphans.forEach((orphan) => purgeNodeFromTree(orphan, nodeId));
+
     if (newParentId === ORPHAN_CONTAINER_ID || newParentId === SUBDOMAIN_CONTAINER_ID) {
       const isSubdomain = newParentId === SUBDOMAIN_CONTAINER_ID;
       const orderedRoots = nextOrphans.filter(o => !!o.subdomainRoot === isSubdomain);
@@ -4474,6 +4568,9 @@ export default function App() {
     }
 
     clearTreeFlags(removedNode);
+    if (targetMeta?.treeType === 'orphan' || targetMeta?.treeType === 'subdomain') {
+      applyTreeTypeFlags(removedNode, targetMeta.treeType);
+    }
 
     newParent.children = newParent.children || [];
     newParent.children.splice(adjustedIndex, 0, removedNode);
@@ -4499,6 +4596,8 @@ export default function App() {
       return orphans.find(o => o.id === treeRootId) || null;
     };
 
+    let rootRect = null;
+
     cards.forEach((card) => {
       const nodeId = card.getAttribute('data-node-id');
       if (!nodeId) return;
@@ -4507,6 +4606,9 @@ export default function App() {
       if (nodeId === draggedNodeId) return;
 
       const rect = card.getBoundingClientRect();
+      if (nodeId === root?.id) {
+        rootRect = rect;
+      }
       const nodeMeta = forestIndex.nodes.get(nodeId);
       if (!nodeMeta) return;
       const treeRoot = getTreeRootById(nodeMeta.treeRootId);
@@ -4534,7 +4636,7 @@ export default function App() {
         const displayCount = displayOrder.length;
         const containerId = isSubdomainRoot ? SUBDOMAIN_CONTAINER_ID : ORPHAN_CONTAINER_ID;
 
-        if (displayIndex !== -1 && canMoveNode(draggedNodeId, containerId)) {
+        if (displayIndex !== -1) {
           const insertIndexBefore = displayCount - displayIndex;
           zones.push({
             type: 'sibling-root',
@@ -4543,6 +4645,7 @@ export default function App() {
             index: insertIndexBefore,
             x: rect.left - 24,
             y: rect.top + rect.height / 2,
+            allowed: canMoveNode(draggedNodeId, containerId),
           });
           if (displayIndex === displayCount - 1) {
             const insertIndexAfter = displayCount - (displayIndex + 1);
@@ -4553,6 +4656,7 @@ export default function App() {
               index: insertIndexAfter,
               x: rect.right + 24,
               y: rect.top + rect.height / 2,
+              allowed: canMoveNode(draggedNodeId, containerId),
             });
           }
         }
@@ -4560,7 +4664,7 @@ export default function App() {
 
       // Add sibling drop zones (before this node)
       // Level 1 (depth=1) uses horizontal layout, Level 2+ (depth>1) uses vertical
-      if (depth === 1 && parent && canMoveNode(draggedNodeId, parent.id)) {
+      if (depth === 1 && parent) {
         // Horizontal layout (Level 1) - drop zones to left/right
         zones.push({
           type: 'sibling',
@@ -4569,6 +4673,7 @@ export default function App() {
           index: siblingIndex,
           x: rect.left - 24,
           y: rect.top + rect.height / 2,
+          allowed: canMoveNode(draggedNodeId, parent.id),
         });
         // Also add zone after last sibling
         if (siblingIndex === parent.children.length - 1) {
@@ -4579,9 +4684,10 @@ export default function App() {
             index: siblingIndex + 1,
             x: rect.right + 24,
             y: rect.top + rect.height / 2,
+            allowed: canMoveNode(draggedNodeId, parent.id),
           });
         }
-      } else if (depth > 1 && parent && canMoveNode(draggedNodeId, parent.id)) {
+      } else if (depth > 1 && parent) {
         // Vertical layout (Level 2+) - drop zones above/below ONLY
         zones.push({
           type: 'sibling',
@@ -4590,6 +4696,7 @@ export default function App() {
           index: siblingIndex,
           x: rect.left + rect.width / 2,
           y: rect.top - 28, // In the gap above
+          allowed: canMoveNode(draggedNodeId, parent.id),
         });
         // Also add zone after last sibling
         if (siblingIndex === parent.children.length - 1) {
@@ -4600,6 +4707,7 @@ export default function App() {
             index: siblingIndex + 1,
             x: rect.left + rect.width / 2,
             y: rect.bottom + 28, // In the gap below
+            allowed: canMoveNode(draggedNodeId, parent.id),
           });
         }
       }
@@ -4607,7 +4715,7 @@ export default function App() {
 
       // Add child drop zone if node has no children
       // Position below the card with GAP_STACK_Y spacing, center of the zone
-      if (!node.children?.length && canMoveNode(draggedNodeId, nodeId)) {
+      if (!node.children?.length) {
         const childZoneHeight = 200; // Use collapsed height as reference
         zones.push({
           type: 'child',
@@ -4616,20 +4724,52 @@ export default function App() {
           index: 0,
           x: rect.left + rect.width / 2,
           y: rect.bottom + 60 + childZoneHeight / 2, // Top of zone at rect.bottom + 60
+          allowed: canMoveNode(draggedNodeId, nodeId),
         });
       }
     });
+
+    if (rootRect) {
+      const baseX = rootRect.left - (rootRect.width / 2) - 40;
+      const centerY = rootRect.top + rootRect.height / 2;
+      const offsetY = rootRect.height * 0.65;
+
+      if (orphanRoots.length === 0) {
+        zones.push({
+          type: 'child',
+          layout: 'vertical',
+          parentId: ORPHAN_CONTAINER_ID,
+          index: 0,
+          x: baseX,
+          y: centerY + offsetY,
+          allowed: canMoveNode(draggedNodeId, ORPHAN_CONTAINER_ID),
+        });
+      }
+
+      if (subdomainRoots.length === 0) {
+        zones.push({
+          type: 'child',
+          layout: 'vertical',
+          parentId: SUBDOMAIN_CONTAINER_ID,
+          index: 0,
+          x: baseX,
+          y: centerY - offsetY,
+          allowed: canMoveNode(draggedNodeId, SUBDOMAIN_CONTAINER_ID),
+        });
+      }
+    }
 
     return zones;
   };
 
   // Find nearest drop zone within threshold
-  const findNearestDropZone = (x, y, draggedNodeId, threshold = 60) => {
+  const findNearestDropZone = (x, y, draggedNodeId, threshold = 60, { includeDisabled = false } = {}) => {
     const zones = calculateDropZones(draggedNodeId);
     let nearest = null;
     let nearestDist = Infinity;
 
     for (const zone of zones) {
+      if (!includeDisabled && zone.allowed === false) continue;
       // Skip invalid zones
       if (zone.type === 'sibling') {
         const parentMeta = forestIndex.nodes.get(zone.parentId);
@@ -4676,7 +4816,7 @@ export default function App() {
     setDragCursor({ x: currentX, y: currentY });
 
     // Find nearest drop zone
-    const nearest = findNearestDropZone(currentX, currentY, active.id, 80);
+    const nearest = findNearestDropZone(currentX, currentY, active.id, 80, { includeDisabled: true });
     setActiveDropZone(nearest);
   };
 
@@ -4698,6 +4838,13 @@ export default function App() {
 
       if (dropZone) {
         moveNode(draggedNodeId, dropZone.parentId, dropZone.index);
+      } else {
+        const attemptedZone = findNearestDropZone(finalX, finalY, draggedNodeId, 80, { includeDisabled: true })
+          || activeDropZone;
+        if (attemptedZone && attemptedZone.allowed === false) {
+          const reason = getMoveBlockReason(draggedNodeId, attemptedZone.parentId);
+          showToast(reason || 'Cannot drop here.', 'warning');
+        }
       }
     }
 
@@ -4716,6 +4863,52 @@ export default function App() {
 
   // Build a unified index for root + orphan + subdomain trees
   const forestIndex = useMemo(() => buildForestIndex(root, orphans), [root, orphans]);
+
+  const getMoveBlockReason = useCallback((sourceId, targetParentId) => {
+    if (!sourceId || !targetParentId) return 'Select a valid drop target.';
+    const sourceMeta = forestIndex.nodes.get(sourceId);
+    if (!sourceMeta) return null;
+
+    const sourceTree = forestIndex.trees.get(sourceMeta.treeRootId);
+    if (!sourceTree) return null;
+
+    if (targetParentId === ORPHAN_CONTAINER_ID) {
+      if (sourceTree.type === 'subdomain' && sourceTree.hasUrl) {
+        return 'Subdomain with a URL can only move within its own subdomain.';
+      }
+      return null;
+    }
+
+    if (targetParentId === SUBDOMAIN_CONTAINER_ID && sourceMeta.hasUrl) {
+      return 'Subdomain root requires a blank URL.';
+    }
+
+    const targetMeta = forestIndex.nodes.get(targetParentId);
+    if (!targetMeta) return null;
+
+    const targetTree = forestIndex.trees.get(targetMeta.treeRootId);
+    if (!targetTree) return null;
+
+    if (targetTree.type === 'subdomain' && sourceMeta.hasUrl && sourceMeta.treeType !== 'subdomain') {
+      return 'Pages with URLs can’t be moved under a subdomain. Clear the URL first.';
+    }
+
+    // Subdomain tree with assigned URL is locked to its own tree
+    if (sourceTree.type === 'subdomain' && sourceTree.hasUrl) {
+      if (sourceMeta.treeRootId !== targetMeta.treeRootId) {
+        return 'Subdomain with a URL can only move within its own subdomain.';
+      }
+    }
+
+    // Moving into a subdomain tree with assigned URL is only allowed within that tree
+    if (targetTree.type === 'subdomain' && targetTree.hasUrl) {
+      if (sourceMeta.treeRootId !== targetMeta.treeRootId) {
+        return 'This subdomain has a URL. Only pages inside it can move here.';
+      }
+    }
+
+    return null;
+  }, [forestIndex]);
 
   // Centralized drag/move rules for tree movement
   const canMoveNode = useCallback((sourceId, targetParentId) => {
@@ -4744,6 +4937,10 @@ export default function App() {
 
     const targetTree = forestIndex.trees.get(targetMeta.treeRootId);
     if (!targetTree) return false;
+
+    if (targetTree.type === 'subdomain' && sourceMeta.hasUrl && sourceMeta.treeType !== 'subdomain') {
+      return false;
+    }
 
     // Moving into a subdomain tree with assigned URL is only allowed within that tree
     if (targetTree.type === 'subdomain' && targetTree.hasUrl) {
@@ -4851,6 +5048,8 @@ export default function App() {
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-over');
   };
+
+  const zoomBounds = getZoomBounds();
 
   // Show landing page or app
   if (showLanding) {
@@ -5385,6 +5584,7 @@ export default function App() {
 
             {/* Drop zone indicators - only show zones near cursor */}
             {activeId && dropZones
+              .filter(zone => zone.allowed !== false)
               .filter(zone => {
                 // Only show zones within 250px of cursor (screen space)
                 const dist = Math.sqrt((dragCursor.x - zone.x) ** 2 + (dragCursor.y - zone.y) ** 2);
@@ -5473,6 +5673,7 @@ export default function App() {
                 colors,
                 maxDepth,
                 editingDepth: editingColorDepth,
+                connectionLegend,
                 onEditDepth: (depth, position) => {
                   setEditingColorDepth(depth);
                    setColorPickerPosition(position);
@@ -5538,6 +5739,8 @@ export default function App() {
               }}
               zoomProps={{
                 scale,
+                minScale: zoomBounds.min,
+                maxScale: zoomBounds.max,
                 onZoomOut: zoomOut,
                 onZoomIn: zoomIn,
                 onResetView: resetView,

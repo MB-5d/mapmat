@@ -8,6 +8,7 @@ const ColorKey = ({
   maxDepth,
   onEditDepth,
   editingDepth,
+  connectionLegend,
 }) => (
   <div className="color-key">
     <div className="color-key-header" onClick={onToggle}>
@@ -45,19 +46,29 @@ const ColorKey = ({
           </div>
           );
         })}
-        <div className="color-key-section">Connections</div>
-        <div className="color-key-item static">
-          <span className="legend-line legend-userflow" />
-          <span>User Flows</span>
-        </div>
-        <div className="color-key-item static">
-          <span className="legend-line legend-crosslink" />
-          <span>Crosslinks</span>
-        </div>
-        <div className="color-key-item static">
-          <span className="legend-line legend-broken" />
-          <span>Broken Links</span>
-        </div>
+        {connectionLegend?.hasAny && (
+          <>
+            <div className="color-key-section">Connections</div>
+            {connectionLegend?.hasUserFlows && (
+              <div className="color-key-item static">
+                <span className="legend-line legend-userflow" />
+                <span>User Flows</span>
+              </div>
+            )}
+            {connectionLegend?.hasCrossLinks && (
+              <div className="color-key-item static">
+                <span className="legend-line legend-crosslink" />
+                <span>Crosslinks</span>
+              </div>
+            )}
+            {connectionLegend?.hasBrokenLinks && (
+              <div className="color-key-item static">
+                <span className="legend-line legend-broken" />
+                <span>Broken Links</span>
+              </div>
+            )}
+          </>
+        )}
       </div>
     )}
   </div>

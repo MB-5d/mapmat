@@ -3749,6 +3749,12 @@ body {
   min-height: 80px;
 }
 
+.form-helper {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
 .edit-node-form-content .form-group,
 .profile-form .form-group {
   margin-bottom: 0;
@@ -6898,6 +6904,10 @@ body {
 [data-theme="dark"] .form-group input::placeholder,
 [data-theme="dark"] .form-group textarea::placeholder {
   color: #6b5a80;
+}
+
+[data-theme="dark"] .form-helper {
+  color: #9ca3af;
 }
 
 [data-theme="dark"] .form-group select option,

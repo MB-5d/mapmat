@@ -198,7 +198,7 @@ export const computeLayout = (
     return Math.max(NODE_H, total);
   };
 
-  const allOrphans = Array.isArray(orphans) ? orphans : [];
+  const allOrphans = Array.isArray(orphans) ? orphans.filter(Boolean) : [];
   const subdomainOrphans = allOrphans.filter((o) => o.subdomainRoot);
   const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
 

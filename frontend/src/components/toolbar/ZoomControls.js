@@ -5,22 +5,40 @@ import IconButton from '../ui/IconButton';
 
 const ZoomControls = ({
   scale,
+  minScale = 0.1,
+  maxScale = 2,
   onZoomOut,
   onZoomIn,
   onResetView,
-}) => (
-  <div className="zoom-controls">
-    <IconButton size="sm" onClick={onZoomOut} title="Zoom Out" aria-label="Zoom Out">
+}) => {
+  const safeScale = Number.isFinite(scale) ? scale : 1;
+
+  return (
+    <div className="zoom-controls">
+      <IconButton
+        size="sm"
+        onClick={onZoomOut}
+        title="Zoom Out"
+        aria-label="Zoom Out"
+        disabled={safeScale <= minScale + 0.001}
+      >
       <ZoomOut size={18} />
     </IconButton>
-    <span className="zoom-level">{Math.round(scale * 100)}%</span>
-    <IconButton size="sm" onClick={onZoomIn} title="Zoom In" aria-label="Zoom In">
+      <span className="zoom-level">{Math.round(safeScale * 100)}%</span>
+      <IconButton
+        size="sm"
+        onClick={onZoomIn}
+        title="Zoom In"
+        aria-label="Zoom In"
+        disabled={safeScale >= maxScale - 0.001}
+      >
       <ZoomIn size={18} />
     </IconButton>
     <IconButton size="sm" onClick={onResetView} title="Reset View (100%)" aria-label="Reset View">
       <Maximize2 size={18} />
     </IconButton>
-  </div>
-);
+    </div>
+  );
+};
 
 export default ZoomControls;

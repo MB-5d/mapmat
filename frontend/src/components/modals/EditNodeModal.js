@@ -53,6 +53,7 @@ const EditNodeModal = ({
   const [description, setDescription] = useState(node?.description || '');
   const [metaTags, setMetaTags] = useState(node?.metaTags || '');
   const fileInputRef = useRef(null);
+  const trimmedUrl = url.trim();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -119,6 +120,14 @@ const EditNodeModal = ({
 
   const excludeIds = getExcludeIds();
   const parentOptions = allNodes.filter(n => !excludeIds.has(n.id));
+  const hasSubdomainOption = specialParentOptions.some((option) => option.type === 'subdomain');
+  const disableSubdomainOption = hasSubdomainOption && trimmedUrl.length > 0;
+  const getSpecialOptionLabel = (option) => {
+    if (option.type === 'subdomain' && disableSubdomainOption) {
+      return `${option.label} (requires blank URL)`;
+    }
+    return option.label;
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -198,11 +207,15 @@ const EditNodeModal = ({
                 value={parentId}
                 onChange={(e) => setParentId(e.target.value)}
               >
-                {specialParentOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+                {specialParentOptions.map((option) => {
+                  const isSubdomain = option.type === 'subdomain';
+                  const isDisabled = option.disabled || (isSubdomain && disableSubdomainOption);
+                  return (
+                    <option key={option.value} value={option.value} disabled={isDisabled}>
+                      {getSpecialOptionLabel(option)}
+                    </option>
+                  );
+                })}
                 {parentOptions.map(n => {
                   const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(n.depth);
                   const displayTitle = n.title || n.url || 'Untitled';
@@ -213,6 +226,11 @@ const EditNodeModal = ({
                   );
                 })}
               </select>
+              {disableSubdomainOption && (
+                <div className="form-helper">
+                  Subdomain parent requires the URL to be blank.
+                </div>
+              )}
             </div>
 
             <div className="form-group">
