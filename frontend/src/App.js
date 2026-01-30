@@ -4055,15 +4055,15 @@ export default function App() {
     if (!best) return '';
 
     const offset = { x: 8, y: -8 };
-    const startPos = { x: best.start.x + offset.x, y: best.start.y + offset.y };
-    const endPos = { x: best.end.x + offset.x, y: best.end.y + offset.y };
+    const startPos = { x: best.start.x, y: best.start.y };
+    const endPos = { x: best.end.x, y: best.end.y };
 
     const dx = Math.abs(endPos.x - startPos.x);
     const dy = Math.abs(endPos.y - startPos.y);
     const curveOffset = Math.min(Math.max(dx, dy) * 0.5, 120);
 
-    let ctrl1 = { ...startPos };
-    let ctrl2 = { ...endPos };
+    let ctrl1 = { x: startPos.x + offset.x, y: startPos.y + offset.y };
+    let ctrl2 = { x: endPos.x + offset.x, y: endPos.y + offset.y };
 
     switch (best.sourceAnchor) {
       case 'top': ctrl1.y -= curveOffset; break;
