@@ -81,6 +81,12 @@ import {
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
 
+const DEFAULT_CONNECTION_COLORS = {
+  userFlows: '#14b8a6',
+  crossLinks: '#f97316',
+  brokenLinks: '#fca5a5',
+};
+
 // ============================================================================
 // SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
 // ============================================================================
@@ -112,6 +118,7 @@ const SitemapTree = ({
   onNodeClick,
   activeId,
   badgeVisibility,
+  layerVisibility,
   showPageNumbers,
   onRequestThumbnail,
   expandedStacks,
@@ -147,13 +154,16 @@ const SitemapTree = ({
     if (node.isMissing) badges.push('Missing');
     const orphanType = nodeMeta?.orphanType || node.orphanType;
     const isSubdomainTree = node.subdomainRoot || nodeMeta?.isSubdomainTree || orphanType === 'subdomain';
+    const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
     if (isSubdomainTree && badgeVisibility?.subdomains) badges.push('Subdomain');
     if (orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
     if (orphanType === 'file' && badgeVisibility?.files) badges.push('File');
-    if (orphanType === 'broken' && badgeVisibility?.brokenLinks) badges.push('Broken');
+    if (orphanType === 'broken' && !isOrphanRoot && badgeVisibility?.brokenLinks) badges.push('Broken Link');
     if (orphanType === 'inactive' && badgeVisibility?.inactivePages) badges.push('Inactive');
     if (node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
-    if (node.isBroken && badgeVisibility?.brokenLinks && !badges.includes('Broken')) badges.push('Broken');
+    if (node.isBroken && !isOrphanRoot && badgeVisibility?.brokenLinks && !badges.includes('Broken Link')) {
+      badges.push('Broken Link');
+    }
     if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) badges.push('Inactive');
     if (node.authRequired && badgeVisibility?.authenticatedPages) badges.push('Auth');
     if (node.isError && badgeVisibility?.errorPages) badges.push('Error');
@@ -194,6 +204,7 @@ const SitemapTree = ({
         const color = colors[Math.min(nodeData.depth, colors.length - 1)];
         const isRoot = nodeData.node.id === data.id;
         const badges = getBadgesForNode(nodeData.node, nodeData);
+        const isGhosted = isNodeGhosted(nodeData.node, nodeData, layerVisibility);
         const stackInfo = nodeData.stackInfo;
         const stackToggleParentId = stackInfo?.parentId;
         const shouldWrapStack = !!stackInfo?.collapsed;
@@ -218,6 +229,7 @@ const SitemapTree = ({
             onAddNote={onAddNote}
             onViewNotes={onViewNotes}
             activeId={activeId}
+            isGhosted={isGhosted}
             badges={badges}
             showPageNumbers={showPageNumbers}
             onRequestThumbnail={onRequestThumbnail}
@@ -399,39 +411,52 @@ const buildRootUrlSet = (rootNode) => {
   return set;
 };
 
-const filterTreeByFiles = (node, showFiles) => {
-  if (!node) return null;
-  if (!showFiles && node.isFile) return null;
-  const children = (node.children || [])
-    .map((child) => filterTreeByFiles(child, showFiles))
-    .filter(Boolean);
-  return { ...node, children };
+const isTopLevelOrphanRoot = (nodeMeta) => {
+  if (!nodeMeta) return false;
+  if (nodeMeta.depth !== 0) return false;
+  return Boolean(nodeMeta.orphanType && nodeMeta.orphanType !== 'subdomain');
 };
 
-const filterTreeByScanLayers = (node, visibility, isRoot = true) => {
-  if (!node) return null;
+const getNodePlacement = (nodeMeta) => {
+  if (!nodeMeta) return 'primary';
+  if (nodeMeta.isSubdomainTree || nodeMeta.orphanType === 'subdomain') return 'subdomain';
+  if (nodeMeta.orphanType && nodeMeta.orphanType !== 'subdomain') return 'orphan';
+  return 'primary';
+};
 
-  const shouldHide = !isRoot && (
-    (!visibility.files && node.isFile)
-    || (!visibility.errorPages && node.isError)
-    || (!visibility.inactivePages && node.isInactive)
-    || (!visibility.authenticatedPages && node.authRequired)
-    || (!visibility.brokenLinks && node.isBroken)
-    || (!visibility.duplicates && node.isDuplicate)
-    || (!visibility.subdomains && node.subdomainRoot)
-    || (!visibility.orphanPages && node.orphanType === 'orphan')
-    || (!visibility.files && node.orphanType === 'file')
-    || (!visibility.brokenLinks && node.orphanType === 'broken')
-    || (!visibility.inactivePages && node.orphanType === 'inactive')
-  );
+const getNodeType = (node, nodeMeta) => {
+  if (node?.isFile || nodeMeta?.orphanType === 'file') return 'file';
+  return 'page';
+};
 
-  if (shouldHide) return null;
+const getNodeStatusFlags = (node, nodeMeta) => {
+  const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
+  return {
+    broken: !isOrphanRoot && (node?.isBroken || nodeMeta?.orphanType === 'broken'),
+    error: Boolean(node?.isError),
+    inactive: Boolean(node?.isInactive || nodeMeta?.orphanType === 'inactive'),
+    auth: Boolean(node?.authRequired),
+    duplicate: Boolean(node?.isDuplicate),
+  };
+};
 
-  const children = (node.children || [])
-    .map((child) => filterTreeByScanLayers(child, visibility, false))
-    .filter(Boolean);
+const isNodeGhosted = (node, nodeMeta, visibility) => {
+  if (!visibility) return false;
+  const placement = getNodePlacement(nodeMeta);
+  const type = getNodeType(node, nodeMeta);
+  const status = getNodeStatusFlags(node, nodeMeta);
 
-  return { ...node, children };
+  if (placement === 'primary' && !visibility.placementPrimary) return true;
+  if (placement === 'subdomain' && !visibility.placementSubdomain) return true;
+  if (placement === 'orphan' && !visibility.placementOrphan) return true;
+  if (type === 'page' && !visibility.typePages) return true;
+  if (type === 'file' && !visibility.typeFiles) return true;
+  if (status.broken && !visibility.statusBroken) return true;
+  if (status.error && !visibility.statusError) return true;
+  if (status.inactive && !visibility.statusInactive) return true;
+  if (status.auth && !visibility.statusAuth) return true;
+  if (status.duplicate && !visibility.statusDuplicate) return true;
+  return false;
 };
 
 const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
@@ -441,10 +466,20 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
   }));
   const rootUrlSet = buildRootUrlSet(rootNode);
   const urlNodeMap = buildUrlNodeMap(rootNode, mergedOrphans);
+  const normalizedUrlNodeMap = new Map();
+
+  const addNormalizedUrl = (url, node) => {
+    if (!url) return;
+    const normalized = normalizeUrlForCompare(url);
+    if (!normalizedUrlNodeMap.has(normalized)) normalizedUrlNodeMap.set(normalized, node);
+  };
 
   const indexNodeUrls = (node) => {
     if (!node?.url) return;
     if (!urlNodeMap.has(node.url)) urlNodeMap.set(node.url, node);
+    addNormalizedUrl(node.url, node);
+    addNormalizedUrl(node.finalUrl, node);
+    addNormalizedUrl(node.canonicalUrl, node);
     node.children?.forEach(indexNodeUrls);
   };
 
@@ -512,6 +547,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       addOrphanNode(newNode, 'file');
     }
     urlNodeMap.set(newNode.url, newNode);
+    addNormalizedUrl(newNode.url, newNode);
   });
 
   (scanResult.errors || []).forEach((error) => {
@@ -525,18 +561,13 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
 
   (scanResult.brokenLinks || []).forEach((link) => {
     if (!link?.url) return;
-    const existing = urlNodeMap.get(link.url);
-    if (existing) {
-      existing.isBroken = true;
-      return;
+    let existing = urlNodeMap.get(link.url);
+    if (!existing) {
+      const normalized = normalizeUrlForCompare(link.url);
+      existing = normalizedUrlNodeMap.get(normalized);
     }
-    addOrphanNode({
-      id: makeNodeIdFromUrl(link.url),
-      url: link.url,
-      title: getUrlLabel(link.url),
-      children: [],
-      isBroken: true,
-    }, 'broken');
+    if (!existing) return;
+    existing.isBroken = true;
   });
 
   (scanResult.inactivePages || []).forEach((inactive) => {
@@ -554,6 +585,10 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       isInactive: true,
     }, 'inactive');
   });
+
+  // Seed normalized map for existing nodes in case we missed any
+  indexNodeUrls(rootNode);
+  mergedOrphans.forEach(indexNodeUrls);
 
   const seenOrphanUrls = new Set();
   const dedupedOrphans = mergedOrphans.filter((orphan) => {
@@ -595,26 +630,28 @@ export default function App() {
     brokenLinks: [],
   });
   const [scanLayerAvailability, setScanLayerAvailability] = useState({
-    thumbnails: false,
-    inactivePages: false,
-    subdomains: false,
-    authenticatedPages: false,
-    orphanPages: false,
-    errorPages: false,
-    brokenLinks: false,
-    duplicates: false,
-    files: false,
+    placementPrimary: false,
+    placementSubdomain: false,
+    placementOrphan: false,
+    typePages: false,
+    typeFiles: false,
+    statusBroken: false,
+    statusError: false,
+    statusInactive: false,
+    statusAuth: false,
+    statusDuplicate: false,
   });
   const [scanLayerVisibility, setScanLayerVisibility] = useState({
-    thumbnails: true,
-    inactivePages: true,
-    subdomains: true,
-    authenticatedPages: true,
-    orphanPages: true,
-    errorPages: true,
-    brokenLinks: true,
-    duplicates: true,
-    files: true,
+    placementPrimary: true,
+    placementSubdomain: true,
+    placementOrphan: true,
+    typePages: true,
+    typeFiles: true,
+    statusBroken: true,
+    statusError: true,
+    statusInactive: true,
+    statusAuth: true,
+    statusDuplicate: true,
   });
   const [mapName, setMapName] = useState('');
   const [isEditingMapName, setIsEditingMapName] = useState(false);
@@ -630,8 +667,10 @@ export default function App() {
   const scaleRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const [colors, setColors] = useState(DEFAULT_COLORS);
+  const [connectionColors, setConnectionColors] = useState(DEFAULT_CONNECTION_COLORS);
   const [showColorKey, setShowColorKey] = useState(false);
   const [editingColorDepth, setEditingColorDepth] = useState(null);
+  const [editingConnectionKey, setEditingConnectionKey] = useState(null);
   const [colorPickerPosition, setColorPickerPosition] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -702,10 +741,9 @@ export default function App() {
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const [layers, setLayers] = useState({
-    main: true,        // Main sitemap nodes (always visible)
-    xmlComparison: true, // XML comparison highlights
     userFlows: true,    // User journey connections
     crossLinks: true,   // Non-hierarchical links
+    brokenLinks: true,  // Broken link connections
     pageNumbers: true,
   });
 
@@ -823,17 +861,29 @@ export default function App() {
     return Math.max(getMaxDepth(root), orphanDepth);
   }, [root, orphans]);
   const totalNodes = useMemo(() => countNodes(root), [root]);
-  const effectiveScanLayers = useMemo(() => ({
-    thumbnails: scanLayerAvailability.thumbnails ? scanLayerVisibility.thumbnails : showThumbnails,
-    inactivePages: scanLayerAvailability.inactivePages ? scanLayerVisibility.inactivePages : true,
-    subdomains: scanLayerAvailability.subdomains ? scanLayerVisibility.subdomains : true,
-    authenticatedPages: scanLayerAvailability.authenticatedPages ? scanLayerVisibility.authenticatedPages : true,
-    orphanPages: scanLayerAvailability.orphanPages ? scanLayerVisibility.orphanPages : true,
-    errorPages: scanLayerAvailability.errorPages ? scanLayerVisibility.errorPages : true,
-    brokenLinks: scanLayerAvailability.brokenLinks ? scanLayerVisibility.brokenLinks : true,
-    duplicates: scanLayerVisibility.duplicates,
-    files: scanLayerAvailability.files ? scanLayerVisibility.files : true,
-  }), [scanLayerAvailability, scanLayerVisibility, showThumbnails]);
+  const layerVisibility = useMemo(() => ({
+    placementPrimary: scanLayerAvailability.placementPrimary ? scanLayerVisibility.placementPrimary : true,
+    placementSubdomain: scanLayerAvailability.placementSubdomain ? scanLayerVisibility.placementSubdomain : true,
+    placementOrphan: scanLayerAvailability.placementOrphan ? scanLayerVisibility.placementOrphan : true,
+    typePages: scanLayerAvailability.typePages ? scanLayerVisibility.typePages : true,
+    typeFiles: scanLayerAvailability.typeFiles ? scanLayerVisibility.typeFiles : true,
+    statusBroken: scanLayerAvailability.statusBroken ? scanLayerVisibility.statusBroken : true,
+    statusError: scanLayerAvailability.statusError ? scanLayerVisibility.statusError : true,
+    statusInactive: scanLayerAvailability.statusInactive ? scanLayerVisibility.statusInactive : true,
+    statusAuth: scanLayerAvailability.statusAuth ? scanLayerVisibility.statusAuth : true,
+    statusDuplicate: scanLayerAvailability.statusDuplicate ? scanLayerVisibility.statusDuplicate : true,
+  }), [scanLayerAvailability, scanLayerVisibility]);
+
+  const badgeVisibility = useMemo(() => ({
+    subdomains: true,
+    orphanPages: true,
+    files: true,
+    brokenLinks: true,
+    inactivePages: true,
+    authenticatedPages: true,
+    errorPages: true,
+    duplicates: true,
+  }), []);
 
   const reportLayout = useMemo(() => {
     if (!root) return null;
@@ -890,30 +940,35 @@ export default function App() {
   useEffect(() => {
     if (!root) return;
     const nodesForCounts = collectAllNodesWithOrphans(root, orphans);
-    const hasThumbnails = nodesForCounts.some((node) => !!node.thumbnailUrl);
+    const forestIndexForCounts = buildForestIndex(root, orphans);
+    const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
     const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
     const hasAuth = nodesForCounts.some((node) => !!node.authRequired);
     const hasErrors = nodesForCounts.some((node) => !!node.isError);
-    const hasBroken = nodesForCounts.some((node) => !!node.isBroken || node.orphanType === 'broken');
+    const hasBroken = nodesForCounts.some((node) => {
+      const meta = forestIndexForCounts.nodes.get(node.id);
+      if (isTopLevelOrphanRootMeta(meta)) return false;
+      return !!node.isBroken || node.orphanType === 'broken';
+    });
     const hasDuplicates = nodesForCounts.some((node) => !!node.isDuplicate);
-    const hasFiles = nodesForCounts.some((node) => !!node.isFile || node.orphanType === 'file');
     const hasSubdomains = (orphans || []).some((orphan) => !!orphan.subdomainRoot);
     const hasOrphans = (orphans || []).some((orphan) => !orphan.subdomainRoot);
-    const hasBrokenLinks = (scanMeta?.brokenLinks || []).length > 0;
 
     setScanLayerAvailability((prev) => ({
       ...prev,
-      thumbnails: showThumbnails || hasThumbnails,
-      inactivePages: hasInactive,
-      subdomains: hasSubdomains,
-      authenticatedPages: hasAuth,
-      orphanPages: hasOrphans,
-      errorPages: hasErrors,
-      brokenLinks: hasBroken || hasBrokenLinks,
-      duplicates: hasDuplicates,
-      files: hasFiles,
+      placementPrimary: !!root,
+      placementSubdomain: hasSubdomains,
+      placementOrphan: hasOrphans,
+      // Type layers hidden for now (until scan can classify templates)
+      typePages: false,
+      typeFiles: false,
+      statusBroken: hasBroken,
+      statusError: hasErrors,
+      statusInactive: hasInactive,
+      statusAuth: hasAuth,
+      statusDuplicate: hasDuplicates,
     }));
-  }, [root, orphans, scanMeta, showThumbnails]);
+  }, [root, orphans]);
 
   const reportEntries = useMemo(() => {
     if (!root) return [];
@@ -947,18 +1002,6 @@ export default function App() {
     });
     return stats;
   }, [reportEntries]);
-
-  const connectionLegend = useMemo(() => {
-    const hasUserFlows = layers.userFlows && connections.some((conn) => conn.type === 'userflow');
-    const hasCrossLinks = layers.crossLinks && connections.some((conn) => conn.type === 'crosslink');
-    const hasBrokenLinks = effectiveScanLayers.brokenLinks && (scanMeta?.brokenLinks || []).length > 0;
-    return {
-      hasUserFlows,
-      hasCrossLinks,
-      hasBrokenLinks,
-      hasAny: hasUserFlows || hasCrossLinks || hasBrokenLinks,
-    };
-  }, [connections, layers.userFlows, layers.crossLinks, effectiveScanLayers.brokenLinks, scanMeta]);
 
   const flushAutosave = useCallback(() => {
     if (autosaveInFlightRef.current) return;
@@ -1029,6 +1072,7 @@ export default function App() {
       orphans,
       connections,
       colors,
+      connectionColors,
       project_id: currentMap?.project_id || null,
     });
 
@@ -1044,6 +1088,7 @@ export default function App() {
           orphans,
           connections,
           colors,
+          connectionColors,
           project_id: currentMap?.project_id || null,
         },
         snapshot,
@@ -1054,7 +1099,7 @@ export default function App() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, mapName, isImportedMap, flushAutosave]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, flushAutosave]);
 
   const reportTitle = useMemo(() => {
     return root?.title || getHostname(root?.url) || 'Website';
@@ -1066,31 +1111,12 @@ export default function App() {
   }, [lastScanAt]);
 
 
-  const visibleOrphans = useMemo(() => {
-    return orphans
-      .map((orphan) => {
-        if (orphan.isDuplicate && !effectiveScanLayers.duplicates) return null;
-        if (orphan.subdomainRoot && !effectiveScanLayers.subdomains) return null;
-        if (orphan.authRequired && !effectiveScanLayers.authenticatedPages) return null;
-        if (orphan.isError && !effectiveScanLayers.errorPages) return null;
-        if (orphan.isInactive && !effectiveScanLayers.inactivePages) return null;
-        if (orphan.isBroken && !effectiveScanLayers.brokenLinks) return null;
-        if (orphan.orphanType === 'file' && !effectiveScanLayers.files) return null;
-        if (orphan.orphanType === 'broken' && !effectiveScanLayers.brokenLinks) return null;
-        if (orphan.orphanType === 'inactive' && !effectiveScanLayers.inactivePages) return null;
-        if (orphan.orphanType === 'orphan' && !effectiveScanLayers.orphanPages) return null;
-        return filterTreeByScanLayers(orphan, effectiveScanLayers, true);
-      })
-      .filter(Boolean);
-  }, [orphans, effectiveScanLayers]);
+  const visibleOrphans = useMemo(() => (orphans || []).filter(Boolean), [orphans]);
 
-  const renderRoot = useMemo(() => {
-    if (!root) return null;
-    const filteredByLayers = filterTreeByScanLayers(root, effectiveScanLayers, true);
-    if (!filteredByLayers) return null;
-    if (effectiveScanLayers.files) return filteredByLayers;
-    return filterTreeByFiles(filteredByLayers, false);
-  }, [root, effectiveScanLayers]);
+  const renderRoot = useMemo(() => root, [root]);
+
+  // Build a unified index for root + orphan + subdomain trees
+  const forestIndex = useMemo(() => buildForestIndex(root, orphans), [root, orphans]);
 
   const mapLayout = useMemo(() => {
     if (!renderRoot) return null;
@@ -1105,30 +1131,73 @@ export default function App() {
   }, [mapLayout]);
 
   const brokenConnections = useMemo(() => {
-    if (!effectiveScanLayers.brokenLinks || scanMeta.brokenLinks.length === 0) return [];
+    if (scanMeta.brokenLinks.length === 0) return [];
+    const visibleNodes = collectAllNodesWithOrphans(renderRoot, visibleOrphans);
+    const nodeById = new Map(visibleNodes.map((node) => [node.id, node]));
     const urlToId = new Map();
-    const walk = (node) => {
-      if (!node?.url) return;
-      urlToId.set(node.url, node.id);
-      node.children?.forEach(walk);
+
+    const addUrl = (url, nodeId) => {
+      if (!url) return;
+      const normalized = normalizeUrlForCompare(url);
+      if (!urlToId.has(normalized)) urlToId.set(normalized, nodeId);
+      if (!urlToId.has(url)) urlToId.set(url, nodeId);
     };
-    walk(renderRoot);
-    visibleOrphans.forEach((orphan) => {
-      if (orphan?.url) urlToId.set(orphan.url, orphan.id);
+
+    forestIndex.nodes.forEach((_meta, nodeId) => {
+      const node = nodeById.get(nodeId);
+      if (!node) return;
+      addUrl(node.url, nodeId);
+      addUrl(node.finalUrl, nodeId);
+      addUrl(node.canonicalUrl, nodeId);
     });
+
+    const getNodeIdForUrl = (url) => {
+      if (!url) return null;
+      return urlToId.get(normalizeUrlForCompare(url)) || urlToId.get(url) || null;
+    };
 
     return scanMeta.brokenLinks
       .map((link, index) => {
-        if (!link?.sourceUrl || !link?.url) return null;
-        const sourceId = urlToId.get(link.sourceUrl);
-        const targetId = urlToId.get(link.url);
-        if (!sourceId || !targetId) return null;
-        const offsetY = (index % 2 === 0 ? 1 : -1) * 4;
-        const offsetX = 4;
-        return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId, offsetY, offsetX };
+        if (!link?.url) return null;
+        const targetId = getNodeIdForUrl(link.url);
+        if (!targetId) return null;
+
+        const targetMeta = forestIndex.nodes.get(targetId);
+        if (targetMeta?.treeType === 'orphan' && targetMeta.parentId === null) return null;
+
+        const targetNode = nodeById.get(targetId);
+        const isBroken = !!targetNode?.isBroken || targetNode?.orphanType === 'broken';
+        if (!isBroken) return null;
+
+        let sourceUrl = link.sourceUrl;
+        if (!sourceUrl) {
+          sourceUrl = targetNode?.referrerUrl || targetNode?.parentUrl || null;
+        }
+        const sourceId = getNodeIdForUrl(sourceUrl);
+        if (!sourceId || sourceId === targetId) return null;
+
+        return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId };
       })
       .filter(Boolean);
-  }, [effectiveScanLayers.brokenLinks, scanMeta.brokenLinks, renderRoot, visibleOrphans]);
+  }, [scanMeta.brokenLinks, renderRoot, visibleOrphans, forestIndex]);
+
+  const connectionAvailability = useMemo(() => ({
+    userFlows: connections.some((conn) => conn.type === 'userflow'),
+    crossLinks: connections.some((conn) => conn.type === 'crosslink'),
+    brokenLinks: brokenConnections.length > 0,
+  }), [connections, brokenConnections]);
+
+  const connectionLegend = useMemo(() => {
+    const hasUserFlows = layers.userFlows && connections.some((conn) => conn.type === 'userflow');
+    const hasCrossLinks = layers.crossLinks && connections.some((conn) => conn.type === 'crosslink');
+    const hasBrokenLinks = layers.brokenLinks && brokenConnections.length > 0;
+    return {
+      hasUserFlows,
+      hasCrossLinks,
+      hasBrokenLinks,
+      hasAny: hasUserFlows || hasCrossLinks || hasBrokenLinks,
+    };
+  }, [connections, layers.userFlows, layers.crossLinks, layers.brokenLinks, brokenConnections]);
 
   // Check if there are any comments in the map (for notification dot)
   const hasAnyComments = useMemo(() => {
@@ -1194,26 +1263,28 @@ export default function App() {
   const resetScanLayers = () => {
     setScanMeta({ brokenLinks: [] });
     setScanLayerAvailability({
-      thumbnails: false,
-      inactivePages: false,
-      subdomains: false,
-      authenticatedPages: false,
-      orphanPages: false,
-      errorPages: false,
-      brokenLinks: false,
-      duplicates: false,
-      files: false,
+      placementPrimary: false,
+      placementSubdomain: false,
+      placementOrphan: false,
+      typePages: false,
+      typeFiles: false,
+      statusBroken: false,
+      statusError: false,
+      statusInactive: false,
+      statusAuth: false,
+      statusDuplicate: false,
     });
     setScanLayerVisibility({
-      thumbnails: true,
-      inactivePages: true,
-      subdomains: true,
-      authenticatedPages: true,
-      orphanPages: true,
-      errorPages: true,
-      brokenLinks: true,
-      duplicates: true,
-      files: true,
+      placementPrimary: true,
+      placementSubdomain: true,
+      placementOrphan: true,
+      typePages: true,
+      typeFiles: true,
+      statusBroken: true,
+      statusError: true,
+      statusInactive: true,
+      statusAuth: true,
+      statusDuplicate: true,
     });
   };
 
@@ -1430,7 +1501,7 @@ export default function App() {
   useEffect(() => {
     if (!root) return;
     applyTransform({ scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y });
-  }, [effectiveScanLayers, root, orphans, mapLayout, applyTransform]);
+  }, [layerVisibility, root, orphans, mapLayout, applyTransform]);
 
   // Check auth and load data on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1502,7 +1573,8 @@ export default function App() {
             setOrphans(normalizeOrphans(share.orphans));
             setConnections(share.connections || []);
             applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-            if (share.colors) setColors(share.colors);
+            setColors(share.colors || DEFAULT_COLORS);
+            setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
             setUrlInput(share.root.url || '');
             showToast('Shared map loaded!', 'success');
             window.history.replaceState({}, '', window.location.pathname);
@@ -1517,6 +1589,7 @@ export default function App() {
               const {
                 root: sharedRoot,
                 colors: sharedColors,
+                connectionColors: sharedConnectionColors,
                 orphans: sharedOrphans,
                 connections: sharedConnections
               } = JSON.parse(sharedData);
@@ -1526,7 +1599,8 @@ export default function App() {
                 setOrphans(normalizeOrphans(sharedOrphans));
                 setConnections(sharedConnections || []);
                 applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-                if (sharedColors) setColors(sharedColors);
+                setColors(sharedColors || DEFAULT_COLORS);
+                setConnectionColors(sharedConnectionColors || DEFAULT_CONNECTION_COLORS);
                 setUrlInput(sharedRoot.url || '');
                 showToast('Shared map loaded!', 'success');
                 window.history.replaceState({}, '', window.location.pathname);
@@ -1681,14 +1755,6 @@ export default function App() {
     setOrphans((prev) => prev.map((orphan) => (
       orphan.id === nodeId ? { ...orphan, thumbnailUrl } : orphan
     )));
-    if (showThumbnails) {
-      setScanLayerAvailability((prev) => (
-        prev.thumbnails ? prev : { ...prev, thumbnails: true }
-      ));
-      setScanLayerVisibility((prev) => (
-        prev.thumbnails ? prev : { ...prev, thumbnails: true }
-      ));
-    }
   };
 
   const processThumbnailQueue = () => {
@@ -1846,6 +1912,7 @@ export default function App() {
           orphans,
           connections,
           colors,
+          connectionColors,
           project_id: projectId || null,
         });
         savedMap = map;
@@ -1858,6 +1925,7 @@ export default function App() {
           orphans,
           connections,
           colors,
+          connectionColors,
           project_id: projectId || null,
         });
         savedMap = map;
@@ -1930,6 +1998,7 @@ export default function App() {
     setOrphans(normalizeOrphans(map.orphans));
     setConnections(map.connections || []);
     setColors(map.colors || DEFAULT_COLORS);
+    setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setCurrentMap(map);
     setShowProjectsModal(false);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
@@ -1980,6 +2049,7 @@ export default function App() {
         orphans,
         connections,
         colors,
+        connectionColors,
         scan_options: scanConfig || null,
         scan_depth: Number.isFinite(depthValue) ? depthValue : null,
         map_id: null,
@@ -1997,6 +2067,7 @@ export default function App() {
         orphans,
         connections,
         colors,
+        connectionColors,
         scan_options: scanConfig || null,
         scan_depth: Number.isFinite(depthValue) ? depthValue : null,
         map_id: null,
@@ -2170,34 +2241,46 @@ export default function App() {
       }
 
       const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
-      const countThumbnails = nodesForCounts.filter((node) => !!node.thumbnailUrl).length;
+      const forestIndexForCounts = buildForestIndex(merged.root, merged.orphans);
+      const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
       const authCount = nodesForCounts.filter((node) => !!node.authRequired).length;
       const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
+      const hasSubdomains = (merged.orphans || []).some((orphan) => !!orphan.subdomainRoot);
+      const hasOrphans = (merged.orphans || []).some((orphan) => !orphan.subdomainRoot);
+      const hasBroken = nodesForCounts.some((node) => {
+        const meta = forestIndexForCounts.nodes.get(node.id);
+        if (isTopLevelOrphanRootMeta(meta)) return false;
+        return !!node.isBroken || node.orphanType === 'broken';
+      });
+      const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
+      const hasErrors = nodesForCounts.some((node) => !!node.isError);
       setRoot(merged.root);
       setOrphans(merged.orphans);
       setConnections([]);
       setScanMeta({ brokenLinks: data.brokenLinks || [] });
       setScanLayerAvailability({
-        thumbnails: scanOptions.thumbnails,
-        inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
-        subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
-        authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
-        orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
-        errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
-        brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
-        duplicates: scanOptions.duplicates && duplicateCount > 0,
-        files: scanOptions.files && (data.files || []).length > 0,
+        placementPrimary: true,
+        placementSubdomain: hasSubdomains,
+        placementOrphan: hasOrphans,
+        typePages: false,
+        typeFiles: false,
+        statusBroken: hasBroken,
+        statusError: hasErrors,
+        statusInactive: hasInactive,
+        statusAuth: authCount > 0,
+        statusDuplicate: duplicateCount > 0,
       });
       setScanLayerVisibility({
-        thumbnails: scanOptions.thumbnails,
-        inactivePages: scanOptions.inactivePages && (data.inactivePages || []).length > 0,
-        subdomains: scanOptions.subdomains && (data.subdomains || []).length > 0,
-        authenticatedPages: scanOptions.authenticatedPages && authCount > 0,
-        orphanPages: scanOptions.orphanPages && (data.orphans || []).length > 0,
-        errorPages: scanOptions.errorPages && (data.errors || []).length > 0,
-        brokenLinks: scanOptions.brokenLinks && (data.brokenLinks || []).length > 0,
-        duplicates: scanOptions.duplicates && duplicateCount > 0,
-        files: scanOptions.files && (data.files || []).length > 0,
+        placementPrimary: true,
+        placementSubdomain: hasSubdomains,
+        placementOrphan: hasOrphans,
+        typePages: false,
+        typeFiles: false,
+        statusBroken: hasBroken,
+        statusError: hasErrors,
+        statusInactive: hasInactive,
+        statusAuth: authCount > 0,
+        statusDuplicate: duplicateCount > 0,
       });
       if (scanOptions.thumbnails) {
         setShowThumbnails(true);
@@ -2484,9 +2567,10 @@ export default function App() {
   };
 
   // Undo/Redo implementation
-  const saveStateForUndo = () => {
+  const saveStateForUndo = (overrideState = null) => {
     console.log('SAVING STATE FOR UNDO');
-    setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections })]);
+    const snapshot = overrideState || { root, orphans, connections, colors, connectionColors };
+    setUndoStack(prev => [...prev, JSON.stringify(snapshot)]);
     setRedoStack([]); // Clear redo on new action
   };
 
@@ -2498,7 +2582,7 @@ export default function App() {
     }
 
     // Save current state to redo stack
-    setRedoStack(prev => [...prev, JSON.stringify({ root, orphans, connections })]);
+    setRedoStack(prev => [...prev, JSON.stringify({ root, orphans, connections, colors, connectionColors })]);
 
     // Get last state from undo stack
     const lastState = undoStack[undoStack.length - 1];
@@ -2517,6 +2601,12 @@ export default function App() {
     if (parsed.connections !== undefined) {
       setConnections(parsed.connections);
     }
+    if (parsed.colors !== undefined) {
+      setColors(parsed.colors || DEFAULT_COLORS);
+    }
+    if (parsed.connectionColors !== undefined) {
+      setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
+    }
     console.log('UNDO COMPLETE');
   };
 
@@ -2528,7 +2618,7 @@ export default function App() {
     }
 
     // Save current state to undo stack
-    setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections })]);
+    setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections, colors, connectionColors })]);
 
     // Get last state from redo stack
     const lastState = redoStack[redoStack.length - 1];
@@ -2546,6 +2636,12 @@ export default function App() {
     }
     if (parsed.connections !== undefined) {
       setConnections(parsed.connections);
+    }
+    if (parsed.colors !== undefined) {
+      setColors(parsed.colors || DEFAULT_COLORS);
+    }
+    if (parsed.connectionColors !== undefined) {
+      setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
     }
     console.log('REDO COMPLETE');
   };
@@ -2746,7 +2842,7 @@ export default function App() {
 
   const exportJson = () => {
     if (!root) return;
-    downloadText('sitemap.json', JSON.stringify({ root, colors }, null, 2));
+    downloadText('sitemap.json', JSON.stringify({ root, colors, connectionColors }, null, 2));
     showToast('Downloaded JSON');
   };
 
@@ -3101,6 +3197,7 @@ export default function App() {
         orphans,
         connections,
         colors,
+        connectionColors,
         expires_in_days: 30, // Share links expire in 30 days
       });
 
@@ -3120,7 +3217,7 @@ export default function App() {
       // If not logged in, fall back to localStorage
       if (e.message?.includes('Authentication')) {
         const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const shareData = { root, orphans, connections, colors, createdAt: Date.now() };
+        const shareData = { root, orphans, connections, colors, connectionColors, createdAt: Date.now() };
         localStorage.setItem(shareId, JSON.stringify(shareData));
         const shareUrl = new URL(window.location.href);
         shareUrl.searchParams.set('share', shareId);
@@ -3932,6 +4029,54 @@ export default function App() {
       case 'right': ctrl2.x += offset; break;
       case 'bottom': ctrl2.y += offset; break;
       case 'left': ctrl2.x -= offset; break;
+      default: break;
+    }
+
+    return `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`;
+  };
+
+  const getBrokenLinkBezierPath = (sourceId, targetId) => {
+    const anchors = ['top', 'right', 'bottom', 'left'];
+    let best = null;
+
+    anchors.forEach((sourceAnchor) => {
+      const start = getAnchorPosition(sourceId, sourceAnchor);
+      if (!start) return;
+      anchors.forEach((targetAnchor) => {
+        const end = getAnchorPosition(targetId, targetAnchor);
+        if (!end) return;
+        const dist = (start.x - end.x) ** 2 + (start.y - end.y) ** 2;
+        if (!best || dist < best.dist) {
+          best = { sourceAnchor, targetAnchor, start, end, dist };
+        }
+      });
+    });
+
+    if (!best) return '';
+
+    const offset = { x: 8, y: -8 };
+    const startPos = { x: best.start.x + offset.x, y: best.start.y + offset.y };
+    const endPos = { x: best.end.x + offset.x, y: best.end.y + offset.y };
+
+    const dx = Math.abs(endPos.x - startPos.x);
+    const dy = Math.abs(endPos.y - startPos.y);
+    const curveOffset = Math.min(Math.max(dx, dy) * 0.5, 120);
+
+    let ctrl1 = { ...startPos };
+    let ctrl2 = { ...endPos };
+
+    switch (best.sourceAnchor) {
+      case 'top': ctrl1.y -= curveOffset; break;
+      case 'right': ctrl1.x += curveOffset; break;
+      case 'bottom': ctrl1.y += curveOffset; break;
+      case 'left': ctrl1.x -= curveOffset; break;
+      default: break;
+    }
+    switch (best.targetAnchor) {
+      case 'top': ctrl2.y -= curveOffset; break;
+      case 'right': ctrl2.x += curveOffset; break;
+      case 'bottom': ctrl2.y += curveOffset; break;
+      case 'left': ctrl2.x -= curveOffset; break;
       default: break;
     }
 
@@ -4861,20 +5006,50 @@ export default function App() {
     setColors(newColors);
   };
 
-  // Build a unified index for root + orphan + subdomain trees
-  const forestIndex = useMemo(() => buildForestIndex(root, orphans), [root, orphans]);
+  const updateConnectionColor = (key, color) => {
+    if (!key) return;
+    setConnectionColors((prev) => ({
+      ...prev,
+      [key]: color,
+    }));
+  };
+
+  const colorEditSnapshotRef = useRef(null);
+
+  const hasColorSnapshotChanged = useCallback((snapshot) => {
+    if (!snapshot) return false;
+    const colorsChanged = JSON.stringify(snapshot.colors) !== JSON.stringify(colors);
+    const connectionChanged = JSON.stringify(snapshot.connectionColors) !== JSON.stringify(connectionColors);
+    return colorsChanged || connectionChanged;
+  }, [colors, connectionColors]);
+
+  const commitColorUndoIfChanged = useCallback(() => {
+    const snapshot = colorEditSnapshotRef.current;
+    if (snapshot && hasColorSnapshotChanged(snapshot)) {
+      saveStateForUndo(snapshot);
+    }
+    colorEditSnapshotRef.current = null;
+  }, [hasColorSnapshotChanged, saveStateForUndo]);
+
+  const beginColorEdit = useCallback(() => {
+    commitColorUndoIfChanged();
+    colorEditSnapshotRef.current = {
+      root,
+      orphans,
+      connections,
+      colors: [...colors],
+      connectionColors: { ...connectionColors },
+    };
+  }, [commitColorUndoIfChanged, root, orphans, connections, colors, connectionColors]);
 
   const getMoveBlockReason = useCallback((sourceId, targetParentId) => {
     if (!sourceId || !targetParentId) return 'Select a valid drop target.';
     const sourceMeta = forestIndex.nodes.get(sourceId);
     if (!sourceMeta) return null;
 
-    const sourceTree = forestIndex.trees.get(sourceMeta.treeRootId);
-    if (!sourceTree) return null;
-
     if (targetParentId === ORPHAN_CONTAINER_ID) {
-      if (sourceTree.type === 'subdomain' && sourceTree.hasUrl) {
-        return 'Subdomain with a URL can only move within its own subdomain.';
+      if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
+        return 'Subdomain page with a URL can only move within its own subdomain.';
       }
       return null;
     }
@@ -4893,17 +5068,9 @@ export default function App() {
       return 'Pages with URLs can’t be moved under a subdomain. Clear the URL first.';
     }
 
-    // Subdomain tree with assigned URL is locked to its own tree
-    if (sourceTree.type === 'subdomain' && sourceTree.hasUrl) {
+    if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
       if (sourceMeta.treeRootId !== targetMeta.treeRootId) {
-        return 'Subdomain with a URL can only move within its own subdomain.';
-      }
-    }
-
-    // Moving into a subdomain tree with assigned URL is only allowed within that tree
-    if (targetTree.type === 'subdomain' && targetTree.hasUrl) {
-      if (sourceMeta.treeRootId !== targetMeta.treeRootId) {
-        return 'This subdomain has a URL. Only pages inside it can move here.';
+        return 'Subdomain page with a URL can only move within its own subdomain.';
       }
     }
 
@@ -4916,11 +5083,8 @@ export default function App() {
     const sourceMeta = forestIndex.nodes.get(sourceId);
     if (!sourceMeta) return false;
 
-    const sourceTree = forestIndex.trees.get(sourceMeta.treeRootId);
-    if (!sourceTree) return false;
-
-    // Subdomain tree with assigned URL is locked to its own tree
-    if (sourceTree.type === 'subdomain' && sourceTree.hasUrl) {
+    // Subdomain pages with URLs are locked to their own subdomain tree
+    if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
       const targetMeta = forestIndex.nodes.get(targetParentId);
       return !!targetMeta && sourceMeta.treeRootId === targetMeta.treeRootId;
     }
@@ -4940,11 +5104,6 @@ export default function App() {
 
     if (targetTree.type === 'subdomain' && sourceMeta.hasUrl && sourceMeta.treeType !== 'subdomain') {
       return false;
-    }
-
-    // Moving into a subdomain tree with assigned URL is only allowed within that tree
-    if (targetTree.type === 'subdomain' && targetTree.hasUrl) {
-      return sourceMeta.treeRootId === targetMeta.treeRootId;
     }
 
     // Root/Orphan/Subdomain-without-URL can move anywhere else
@@ -5216,7 +5375,7 @@ export default function App() {
                   data={renderRoot}
                   orphans={visibleOrphans}
                   layout={mapLayout}
-                  showThumbnails={effectiveScanLayers.thumbnails && showThumbnails}
+                  showThumbnails={showThumbnails}
                   showCommentBadges={activeTool === 'comments' || showCommentsPanel}
                   canEdit={canEdit()}
                   canComment={canComment()}
@@ -5256,7 +5415,8 @@ export default function App() {
                   }}
                   onAddNote={(node) => openCommentPopover(node.id)}
                   onViewNotes={(node) => openCommentPopover(node.id)}
-                  badgeVisibility={effectiveScanLayers}
+                  badgeVisibility={badgeVisibility}
+                  layerVisibility={layerVisibility}
                   showPageNumbers={layers.pageNumbers}
                   onRequestThumbnail={requestThumbnail}
                   expandedStacks={expandedStacks}
@@ -5276,7 +5436,7 @@ export default function App() {
                     height: '100%',
                     pointerEvents: 'none',
                     overflow: 'visible',
-                    zIndex: 5,
+                    zIndex: 0,
                   }}
                 >
                   {/* Arrowhead marker definition */}
@@ -5301,16 +5461,15 @@ export default function App() {
                   </marker>
                 </defs>
 
-                {brokenConnections.map((conn) => {
-                  const start = getAnchorPosition(conn.sourceId, 'right');
-                  const end = getAnchorPosition(conn.targetId, 'left');
-                  if (!start || !end) return null;
+                {layers.brokenLinks && brokenConnections.map((conn) => {
+                  const path = getBrokenLinkBezierPath(conn.sourceId, conn.targetId);
+                  if (!path) return null;
                   return (
                     <path
                       key={conn.id}
-                      d={`M ${start.x} ${start.y} L ${start.x + conn.offsetX} ${start.y + conn.offsetY} L ${end.x - conn.offsetX} ${start.y + conn.offsetY} L ${end.x - conn.offsetX} ${end.y + conn.offsetY} L ${end.x} ${end.y}`}
+                      d={path}
                       fill="none"
-                      stroke="#fca5a5"
+                      stroke={connectionColors.brokenLinks || DEFAULT_CONNECTION_COLORS.brokenLinks}
                       strokeWidth="2"
                       strokeDasharray="6 6"
                       strokeLinecap="round"
@@ -5331,7 +5490,9 @@ export default function App() {
                     const path = generateConnectionPath(conn);
                     if (!path) return null;
                     const isUserFlow = conn.type === 'userflow';
-                    const color = isUserFlow ? '#14b8a6' : '#f97316';
+                    const color = isUserFlow
+                      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+                      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
                     const isHovered = hoveredConnection === conn.id;
 
                     return (
@@ -5411,7 +5572,9 @@ export default function App() {
                 {drawingConnection && (() => {
                   const { startX, startY, currentX, currentY, sourceAnchor, type } = drawingConnection;
                   const isUserFlow = type === 'userflow';
-                  const color = isUserFlow ? '#14b8a6' : '#f97316';
+                  const color = isUserFlow
+                    ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+                    : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
 
                   // Calculate curved path based on source anchor direction
                   const dx = Math.abs(currentX - startX);
@@ -5450,7 +5613,9 @@ export default function App() {
                 {draggingEndpoint && (() => {
                   const { fixedX, fixedY, fixedAnchor, currentX, currentY, endpoint, type } = draggingEndpoint;
                   const isUserFlow = type === 'userflow';
-                  const color = isUserFlow ? '#14b8a6' : '#f97316';
+                  const color = isUserFlow
+                    ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+                    : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
 
                   // Determine start/end based on which endpoint is being dragged
                   const startX = endpoint === 'source' ? currentX : fixedX;
@@ -5574,7 +5739,7 @@ export default function App() {
                     number={activeDragData.number}
                     color={activeDragData.color}
                     colors={colors}
-                    showThumbnails={effectiveScanLayers.thumbnails && showThumbnails}
+                    showThumbnails={showThumbnails}
                     depth={0}
                     showPageNumbers={layers.pageNumbers}
                   />
@@ -5645,16 +5810,10 @@ export default function App() {
                     setConnectionTool(null);
                   }
                 },
-                showThumbnails: effectiveScanLayers.thumbnails && showThumbnails,
-                onToggleThumbnails: (nextValue) => {
-                  if (scanLayerAvailability.thumbnails) {
-                    setScanLayerVisibility(prev => ({ ...prev, thumbnails: nextValue }));
-                  } else {
-                    setShowThumbnails(nextValue);
-                  }
-                },
+                onToggleBrokenLinks: () => setLayers(l => ({ ...l, brokenLinks: !l.brokenLinks })),
                 showPageNumbers: layers.pageNumbers,
                 onTogglePageNumbers: () => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers })),
+                connectionAvailability,
                 scanLayerAvailability,
                 scanLayerVisibility,
                 onToggleScanLayer: (layerKey) => {
@@ -5671,12 +5830,22 @@ export default function App() {
                 showColorKey,
                 onToggle: () => setShowColorKey(v => !v),
                 colors,
+                connectionColors,
                 maxDepth,
                 editingDepth: editingColorDepth,
+                editingConnectionKey,
                 connectionLegend,
                 onEditDepth: (depth, position) => {
+                  beginColorEdit();
                   setEditingColorDepth(depth);
-                   setColorPickerPosition(position);
+                  setEditingConnectionKey(null);
+                  setColorPickerPosition(position);
+                },
+                onEditConnectionColor: (key, position) => {
+                  beginColorEdit();
+                  setEditingConnectionKey(key);
+                  setEditingColorDepth(null);
+                  setColorPickerPosition(position);
                 },
               }}
               toolbarProps={{
@@ -5809,11 +5978,23 @@ export default function App() {
       )}
 
       <EditColorModal
-        depth={editingColorDepth}
-        color={editingColorDepth !== null ? colors[editingColorDepth] : '#000000'}
-        onChange={(color) => updateLevelColor(editingColorDepth, color)}
+        depth={editingConnectionKey ?? editingColorDepth}
+        color={editingConnectionKey
+          ? (connectionColors[editingConnectionKey] || DEFAULT_CONNECTION_COLORS[editingConnectionKey])
+          : (editingColorDepth !== null ? colors[editingColorDepth] : '#000000')}
+        onChange={(color) => {
+          if (editingConnectionKey) {
+            updateConnectionColor(editingConnectionKey, color);
+            return;
+          }
+          if (editingColorDepth !== null) {
+            updateLevelColor(editingColorDepth, color);
+          }
+        }}
         onClose={() => {
+          commitColorUndoIfChanged();
           setEditingColorDepth(null);
+          setEditingConnectionKey(null);
           setColorPickerPosition(null);
         }}
         position={colorPickerPosition}

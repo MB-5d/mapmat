@@ -41,6 +41,7 @@ const NodeCard = ({
   onRequestThumbnail,
   stackInfo,
   onToggleStack,
+  isGhosted = false,
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
@@ -111,6 +112,7 @@ const NodeCard = ({
   if (stackInfo?.collapsed) classNames.push('stack-collapsed');
   if (stackInfo?.showCollapse) classNames.push('stack-expanded');
   if (stackInfo?.collapsed || stackInfo?.showCollapse) classNames.push('has-stack-toggle');
+  if (isGhosted) classNames.push('ghosted');
 
   // Anchor color based on connection tool type
   const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
@@ -322,6 +324,7 @@ const DraggableNodeCard = ({
   onRequestThumbnail,
   stackInfo,
   onToggleStack,
+  isGhosted,
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
@@ -356,6 +359,7 @@ const DraggableNodeCard = ({
         onRequestThumbnail={onRequestThumbnail}
         stackInfo={stackInfo}
         onToggleStack={onToggleStack}
+        isGhosted={isGhosted}
       />
     </div>
   );

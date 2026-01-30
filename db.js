@@ -56,6 +56,7 @@ db.exec(`
     url TEXT NOT NULL,
     root_data TEXT NOT NULL,
     colors TEXT,
+    connection_colors TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -72,6 +73,7 @@ db.exec(`
     page_count INTEGER,
     root_data TEXT NOT NULL,
     colors TEXT,
+    connection_colors TEXT,
     scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -83,6 +85,7 @@ db.exec(`
     user_id TEXT NOT NULL,
     root_data TEXT NOT NULL,
     colors TEXT,
+    connection_colors TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     expires_at DATETIME,
     view_count INTEGER DEFAULT 0,
@@ -101,10 +104,13 @@ db.exec(`
 // Backfill new columns without full migrations
 ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
+ensureColumn('maps', 'connection_colors', 'TEXT');
 ensureColumn('shares', 'orphans_data', 'TEXT');
 ensureColumn('shares', 'connections_data', 'TEXT');
+ensureColumn('shares', 'connection_colors', 'TEXT');
 ensureColumn('scan_history', 'orphans_data', 'TEXT');
 ensureColumn('scan_history', 'connections_data', 'TEXT');
+ensureColumn('scan_history', 'connection_colors', 'TEXT');
 ensureColumn('scan_history', 'scan_options', 'TEXT');
 ensureColumn('scan_history', 'scan_depth', 'INTEGER');
 ensureColumn('scan_history', 'map_id', 'TEXT');

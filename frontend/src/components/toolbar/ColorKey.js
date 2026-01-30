@@ -5,9 +5,12 @@ const ColorKey = ({
   showColorKey,
   onToggle,
   colors,
+  connectionColors,
   maxDepth,
   onEditDepth,
   editingDepth,
+  editingConnectionKey,
+  onEditConnectionColor,
   connectionLegend,
 }) => (
   <div className="color-key">
@@ -50,21 +53,69 @@ const ColorKey = ({
           <>
             <div className="color-key-section">Connections</div>
             {connectionLegend?.hasUserFlows && (
-              <div className="color-key-item static">
-                <span className="legend-line legend-userflow" />
+              <div
+                className={`color-key-item ${editingConnectionKey === 'userFlows' ? 'editing' : ''}`}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  onEditConnectionColor?.('userFlows', {
+                    top: rect.top,
+                    right: rect.right,
+                    left: rect.left,
+                    height: rect.height,
+                  });
+                }}
+              >
+                <span
+                  className="legend-line"
+                  style={{ borderTopColor: connectionColors?.userFlows || '#14b8a6' }}
+                />
                 <span>User Flows</span>
+                <Edit2 size={12} className="color-edit-icon" />
               </div>
             )}
             {connectionLegend?.hasCrossLinks && (
-              <div className="color-key-item static">
-                <span className="legend-line legend-crosslink" />
+              <div
+                className={`color-key-item ${editingConnectionKey === 'crossLinks' ? 'editing' : ''}`}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  onEditConnectionColor?.('crossLinks', {
+                    top: rect.top,
+                    right: rect.right,
+                    left: rect.left,
+                    height: rect.height,
+                  });
+                }}
+              >
+                <span
+                  className="legend-line"
+                  style={{ borderTopColor: connectionColors?.crossLinks || '#f97316' }}
+                />
                 <span>Crosslinks</span>
+                <Edit2 size={12} className="color-edit-icon" />
               </div>
             )}
             {connectionLegend?.hasBrokenLinks && (
-              <div className="color-key-item static">
-                <span className="legend-line legend-broken" />
+              <div
+                className={`color-key-item ${editingConnectionKey === 'brokenLinks' ? 'editing' : ''}`}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  onEditConnectionColor?.('brokenLinks', {
+                    top: rect.top,
+                    right: rect.right,
+                    left: rect.left,
+                    height: rect.height,
+                  });
+                }}
+              >
+                <span
+                  className="legend-line"
+                  style={{
+                    borderTopColor: connectionColors?.brokenLinks || '#fca5a5',
+                    borderTopStyle: 'dashed',
+                  }}
+                />
                 <span>Broken Links</span>
+                <Edit2 size={12} className="color-edit-icon" />
               </div>
             )}
           </>

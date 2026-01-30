@@ -1,15 +1,13 @@
 import React from 'react';
-import { ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 
 const LayersPanel = ({
   layers,
   connectionTool,
   onToggleUserFlows,
   onToggleCrossLinks,
-  showThumbnails,
-  onToggleThumbnails,
-  showPageNumbers,
-  onTogglePageNumbers,
+  onToggleBrokenLinks,
+  connectionAvailability,
   scanLayerAvailability,
   scanLayerVisibility,
   onToggleScanLayer,
@@ -19,6 +17,32 @@ const LayersPanel = ({
 }) => {
   const showScanLayers = scanLayerAvailability
     && Object.values(scanLayerAvailability).some(Boolean);
+  const showTypeLayers = false;
+  const showConnectionLayers = connectionAvailability
+    && Object.values(connectionAvailability).some(Boolean);
+  const hasPlacementLayers = !!scanLayerAvailability?.placementPrimary
+    || !!scanLayerAvailability?.placementSubdomain
+    || !!scanLayerAvailability?.placementOrphan;
+  const hasStatusLayers = !!scanLayerAvailability?.statusBroken
+    || !!scanLayerAvailability?.statusError
+    || !!scanLayerAvailability?.statusInactive
+    || !!scanLayerAvailability?.statusAuth
+    || !!scanLayerAvailability?.statusDuplicate;
+
+  const LayerToggle = ({ label, active, onToggle, disabled = false }) => (
+    <button
+      type="button"
+      className={`layers-panel-item${disabled ? ' disabled' : ''}`}
+      onClick={disabled ? undefined : onToggle}
+      aria-pressed={active}
+      disabled={disabled}
+    >
+      <span>{label}</span>
+      <span className="layers-panel-toggle">
+        {active ? <Eye size={16} /> : <EyeOff size={16} />}
+      </span>
+    </button>
+  );
 
   return (
     <div className={`layers-panel ${showViewDropdown ? 'expanded' : ''}`} ref={viewDropdownRef}>
@@ -36,142 +60,123 @@ const LayersPanel = ({
       </div>
       {showViewDropdown && (
         <div className="layers-panel-list">
-          <label className="layers-panel-item">
-            <input
-              type="checkbox"
-              checked={layers.main}
-              disabled
-              onChange={() => {}}
-            />
-            <span>Main / URL</span>
-          </label>
-         
-          <label className="layers-panel-item">
-            <input
-              type="checkbox"
-              checked={showPageNumbers}
-              onChange={onTogglePageNumbers}
-            />
-            <span>Page Numbers</span>
-          </label>
-          <label className="layers-panel-item">
-            <input
-              type="checkbox"
-              checked={layers.userFlows}
-              onChange={() => onToggleUserFlows(connectionTool)}
-            />
-            <span>User Flows</span>
-          </label>
-          <label className="layers-panel-item">
-            <input
-              type="checkbox"
-              checked={layers.crossLinks}
-              onChange={() => onToggleCrossLinks(connectionTool)}
-            />
-            <span>Cross-links</span>
-          </label>
-          <label className="layers-panel-item disabled">
-            <input
-              type="checkbox"
-              checked={layers.xmlComparison}
-              disabled
-              onChange={() => {}}
-            />
-            <span>XML Comparison</span>
-          </label>
-
           {showScanLayers && (
-            <div className="layers-panel-section">Scan Layers</div>
-          )}
-          {scanLayerAvailability?.subdomains && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.subdomains}
-                onChange={() => onToggleScanLayer('subdomains')}
-              />
-              <span>Subdomains</span>
-            </label>
-          )}
-          {scanLayerAvailability?.thumbnails && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.thumbnails}
-                onChange={() => onToggleScanLayer('thumbnails')}
-              />
-              <span>Thumbnails</span>
-            </label>
-          )}
-          {scanLayerAvailability?.inactivePages && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.inactivePages}
-                onChange={() => onToggleScanLayer('inactivePages')}
-              />
-              <span>Inactive Pages</span>
-            </label>
-          )}
-          {scanLayerAvailability?.authenticatedPages && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.authenticatedPages}
-                onChange={() => onToggleScanLayer('authenticatedPages')}
-              />
-              <span>Authenticated Pages</span>
-            </label>
-          )}
-          {scanLayerAvailability?.orphanPages && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.orphanPages}
-                onChange={() => onToggleScanLayer('orphanPages')}
-              />
-              <span>Orphan Pages</span>
-            </label>
-          )}
-          {scanLayerAvailability?.errorPages && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.errorPages}
-                onChange={() => onToggleScanLayer('errorPages')}
-              />
-              <span>Error Pages</span>
-            </label>
-          )}
-          {scanLayerAvailability?.brokenLinks && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.brokenLinks}
-                onChange={() => onToggleScanLayer('brokenLinks')}
-              />
-              <span>Broken Links</span>
-            </label>
-          )}
-          {scanLayerAvailability?.duplicates && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.duplicates}
-                onChange={() => onToggleScanLayer('duplicates')}
-              />
-              <span>Duplicates</span>
-            </label>
-          )}
-          {scanLayerAvailability?.files && (
-            <label className="layers-panel-item">
-              <input
-                type="checkbox"
-                checked={scanLayerVisibility.files}
-                onChange={() => onToggleScanLayer('files')}
-              />
-              <span>Files / Downloads</span>
-            </label>
+            <>
+              {hasPlacementLayers && (
+                <>
+                  <div className="layers-panel-section">Placement</div>
+                  {scanLayerAvailability?.placementPrimary && (
+                    <LayerToggle
+                      label="Primary"
+                      active={scanLayerVisibility.placementPrimary}
+                      onToggle={() => onToggleScanLayer('placementPrimary')}
+                    />
+                  )}
+                  {scanLayerAvailability?.placementSubdomain && (
+                    <LayerToggle
+                      label="Subdomain"
+                      active={scanLayerVisibility.placementSubdomain}
+                      onToggle={() => onToggleScanLayer('placementSubdomain')}
+                    />
+                  )}
+                  {scanLayerAvailability?.placementOrphan && (
+                    <LayerToggle
+                      label="Orphan"
+                      active={scanLayerVisibility.placementOrphan}
+                      onToggle={() => onToggleScanLayer('placementOrphan')}
+                    />
+                  )}
+                </>
+              )}
+
+              {showTypeLayers && (
+                <>
+                  <div className="layers-panel-section">Type</div>
+                  {scanLayerAvailability?.typePages && (
+                    <LayerToggle
+                      label="Pages"
+                      active={scanLayerVisibility.typePages}
+                      onToggle={() => onToggleScanLayer('typePages')}
+                    />
+                  )}
+                  {scanLayerAvailability?.typeFiles && (
+                    <LayerToggle
+                      label="Files"
+                      active={scanLayerVisibility.typeFiles}
+                      onToggle={() => onToggleScanLayer('typeFiles')}
+                    />
+                  )}
+                </>
+              )}
+
+              {hasStatusLayers && (
+                <>
+                  <div className="layers-panel-section">Status</div>
+                  {scanLayerAvailability?.statusBroken && (
+                    <LayerToggle
+                      label="Broken Link"
+                      active={scanLayerVisibility.statusBroken}
+                      onToggle={() => onToggleScanLayer('statusBroken')}
+                    />
+                  )}
+                  {scanLayerAvailability?.statusError && (
+                    <LayerToggle
+                      label="Error"
+                      active={scanLayerVisibility.statusError}
+                      onToggle={() => onToggleScanLayer('statusError')}
+                    />
+                  )}
+                  {scanLayerAvailability?.statusInactive && (
+                    <LayerToggle
+                      label="Inactive"
+                      active={scanLayerVisibility.statusInactive}
+                      onToggle={() => onToggleScanLayer('statusInactive')}
+                    />
+                  )}
+                  {scanLayerAvailability?.statusAuth && (
+                    <LayerToggle
+                      label="Auth Required"
+                      active={scanLayerVisibility.statusAuth}
+                      onToggle={() => onToggleScanLayer('statusAuth')}
+                    />
+                  )}
+                  {scanLayerAvailability?.statusDuplicate && (
+                    <LayerToggle
+                      label="Duplicates"
+                      active={scanLayerVisibility.statusDuplicate}
+                      onToggle={() => onToggleScanLayer('statusDuplicate')}
+                    />
+                  )}
+                </>
+              )}
+
+              {showConnectionLayers && (
+                <>
+                  <div className="layers-panel-section">Connections</div>
+                  {connectionAvailability?.userFlows && (
+                    <LayerToggle
+                      label="User Flows"
+                      active={layers.userFlows}
+                      onToggle={() => onToggleUserFlows(connectionTool)}
+                    />
+                  )}
+                  {connectionAvailability?.crossLinks && (
+                    <LayerToggle
+                      label="Cross-links"
+                      active={layers.crossLinks}
+                      onToggle={() => onToggleCrossLinks(connectionTool)}
+                    />
+                  )}
+                  {connectionAvailability?.brokenLinks && (
+                    <LayerToggle
+                      label="Broken Links"
+                      active={layers.brokenLinks}
+                      onToggle={onToggleBrokenLinks}
+                    />
+                  )}
+                </>
+              )}
+            </>
           )}
         </div>
       )}
