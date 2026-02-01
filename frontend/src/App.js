@@ -752,6 +752,7 @@ export default function App() {
 
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
   const [activeTool, setActiveTool] = useState('select'); // 'select', 'addNode', 'link', 'comments'
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [showReportDrawer, setShowReportDrawer] = useState(false);
   const [lastScanAt, setLastScanAt] = useState(null);
@@ -802,9 +803,13 @@ export default function App() {
   const lastPointerRef = useRef(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const selectionStartRef = useRef(null);
+  const selectionStartClientRef = useRef(null);
   const selectionActiveRef = useRef(false);
   const selectionAdditiveRef = useRef(false);
   const selectionBaseRef = useRef(new Set());
+  const selectionStartNodeRef = useRef(null);
+  const selectionStartedOnNodeRef = useRef(false);
+  const suppressNodeClickRef = useRef(false);
   const viewDropdownRef = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
@@ -813,7 +818,7 @@ export default function App() {
   const thumbnailActiveRef = useRef(0);
   const thumbnailStartRef = useRef(new Map());
   const thumbnailTotalTimeRef = useRef(0);
-  const MAX_THUMBNAIL_CONCURRENCY = 2;
+  const MAX_THUMBNAIL_CONCURRENCY = 4;
   const [thumbnailQueueSize, setThumbnailQueueSize] = useState(0);
   const [thumbnailActiveCount, setThumbnailActiveCount] = useState(0);
   const [thumbnailStats, setThumbnailStats] = useState({
@@ -821,6 +826,7 @@ export default function App() {
     completed: 0,
     failed: 0,
     avgMs: 0,
+    cached: 0,
   });
 
   // Close view dropdown when clicking outside
@@ -835,6 +841,24 @@ export default function App() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showViewDropdown]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Shift') setIsShiftPressed(true);
+    };
+    const handleKeyUp = (e) => {
+      if (e.key === 'Shift') setIsShiftPressed(false);
+    };
+    const handleBlur = () => setIsShiftPressed(false);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -904,6 +928,19 @@ export default function App() {
       setShowImageMenu(false);
     }
   }, [hasMap]);
+
+  const hasAnyThumbnails = useMemo(() => {
+    if (!root) return false;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => !!node.thumbnailUrl);
+  }, [root, orphans]);
+
+  const allThumbnailsCaptured = useMemo(() => {
+    if (!root) return false;
+    const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
+    if (nodes.length === 0) return false;
+    return nodes.every((node) => node.thumbnailUrl?.includes('/screenshots/'));
+  }, [root, orphans]);
 
   const maxDepth = useMemo(() => {
     const orphanDepth = (orphans || []).reduce((max, orphan) => {
@@ -1988,16 +2025,44 @@ export default function App() {
     if (!nodeId || !thumbnailUrl) return;
     setRoot((prev) => {
       if (!prev) return prev;
+      if (!findNodeById(prev, nodeId)) return prev;
       const copy = structuredClone(prev);
       const target = findNodeById(copy, nodeId);
-      if (target) {
-        target.thumbnailUrl = thumbnailUrl;
-      }
+      if (target) target.thumbnailUrl = thumbnailUrl;
       return copy;
     });
-    setOrphans((prev) => prev.map((orphan) => (
-      orphan.id === nodeId ? { ...orphan, thumbnailUrl } : orphan
-    )));
+    setOrphans((prev) => {
+      let updated = false;
+      const next = prev.map((orphan) => {
+        if (!findNodeById(orphan, nodeId)) return orphan;
+        const copy = structuredClone(orphan);
+        const target = findNodeById(copy, nodeId);
+        if (target) target.thumbnailUrl = thumbnailUrl;
+        updated = true;
+        return copy;
+      });
+      return updated ? next : prev;
+    });
+  };
+
+  const flushThumbnailAutosave = () => {
+    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion) return;
+    const payload = {
+      name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      project_id: currentMap?.project_id || null,
+    };
+    const snapshot = JSON.stringify(payload);
+    autosavePendingRef.current = {
+      mapId: currentMap.id,
+      payload,
+      snapshot,
+    };
+    flushAutosave();
   };
 
   const processThumbnailQueue = () => {
@@ -2051,15 +2116,18 @@ export default function App() {
         setThumbnailStats((prev) => {
           const completed = prev.completed + (success ? 1 : 0);
           const failed = prev.failed + (success ? 0 : 1);
-          const done = completed + failed;
-          const avgMs = done ? Math.round(thumbnailTotalTimeRef.current / done) : 0;
+          const processed = completed + failed;
+          const avgMs = processed ? Math.round(thumbnailTotalTimeRef.current / processed) : 0;
           return { ...prev, completed, failed, avgMs };
         });
         processThumbnailQueue();
+        if (thumbnailQueueRef.current.length === 0 && thumbnailActiveRef.current === 0 && thumbnailStats.total > 0) {
+          setTimeout(() => flushThumbnailAutosave(), 300);
+        }
       });
   };
 
-  const resetThumbnailQueue = (total) => {
+  const resetThumbnailQueue = (total, cached = 0) => {
     thumbnailQueueRef.current = [];
     thumbnailRequestRef.current = new Set();
     thumbnailActiveRef.current = 0;
@@ -2072,6 +2140,7 @@ export default function App() {
       completed: 0,
       failed: 0,
       avgMs: 0,
+      cached,
     });
   };
 
@@ -2086,16 +2155,54 @@ export default function App() {
     });
   };
 
+  const orderThumbnailNodes = (nodes) => {
+    if (!Array.isArray(nodes) || nodes.length === 0) return [];
+    const layoutNodes = layoutRef.current?.nodes || new Map();
+    const orderIndex = new Map(nodes.map((node, idx) => [node.id, idx]));
+    const groupRank = (node) => {
+      const meta = forestIndex.nodes.get(node.id);
+      if (meta?.treeType === 'subdomain') return 1;
+      if (meta?.treeType === 'orphan') return 2;
+      return 0;
+    };
+    const getPosition = (node) => {
+      const layout = layoutNodes.get(node.id);
+      if (!layout) return null;
+      return { x: layout.x, y: layout.y };
+    };
+    return [...nodes].sort((a, b) => {
+      const groupA = groupRank(a);
+      const groupB = groupRank(b);
+      if (groupA !== groupB) return groupA - groupB;
+      const posA = getPosition(a);
+      const posB = getPosition(b);
+      if (posA && posB) {
+        if (posA.y !== posB.y) return posA.y - posB.y;
+        const dir = groupA === 0 ? 1 : -1;
+        if (posA.x !== posB.x) return (posA.x - posB.x) * dir;
+        return (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0);
+      }
+      if (posA && !posB) return -1;
+      if (!posA && posB) return 1;
+      return (orderIndex.get(a.id) ?? 0) - (orderIndex.get(b.id) ?? 0);
+    });
+  };
+
   const getThumbnailCandidates = (scope) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
-    const targetIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
-    const scopedNodes = targetIds ? allNodes.filter((node) => targetIds.has(node.id)) : allNodes;
-    const candidates = scopedNodes.filter((node) => {
-      if (!node?.url) return false;
+    const baseIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = scope === 'selected'
+      ? allNodes.filter((node) => baseIds.has(node.id))
+      : allNodes;
+    const targetNodes = scopedNodes.filter((node) => node?.url);
+    const orderedTargets = orderThumbnailNodes(targetNodes);
+    const candidates = orderedTargets.filter((node) => {
       const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
       return !(node.thumbnailUrl && isScreenshotThumb);
     });
-    return { targetIds, candidates };
+    const targetIds = new Set(candidates.map((node) => node.id));
+    const cachedCount = orderedTargets.length - candidates.length;
+    return { targetIds, candidates, total: orderedTargets.length, cachedCount };
   };
 
   const handleThumbnailCapture = (scope) => {
@@ -2107,19 +2214,29 @@ export default function App() {
       showToast('Select pages to capture thumbnails', 'info');
       return;
     }
-    const { targetIds, candidates } = getThumbnailCandidates(scope);
-    if (candidates.length === 0) {
+    const { targetIds, candidates, total, cachedCount } = getThumbnailCandidates(scope);
+    if (total === 0) {
       resetThumbnailQueue(0);
-      setThumbnailScopeIds(targetIds);
+      setThumbnailScopeIds(new Set());
+      setShowThumbnails(true);
+      setShowImageMenu(false);
+      showToast('No pages with URLs to capture', 'info');
+      return;
+    }
+    resetThumbnailQueue(total, cachedCount);
+    if (candidates.length === 0) {
+      setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
       setShowImageMenu(false);
       showToast('No new thumbnails to generate', 'info');
       return;
     }
-    resetThumbnailQueue(candidates.length);
     setThumbnailScopeIds(targetIds);
     setShowThumbnails(true);
     setShowImageMenu(false);
+    candidates.forEach((node) => {
+      requestThumbnail(node);
+    });
   };
 
   // Fetch full page screenshot from backend (or display direct image URL)
@@ -2308,6 +2425,7 @@ export default function App() {
 
   const restoreVersion = (version) => {
     if (!version?.root) return;
+    const versionHasThumbnails = collectAllNodesWithOrphans(version.root, version.orphans || []).some((node) => !!node.thumbnailUrl);
     setRoot(version.root);
     setOrphans(normalizeOrphans(version.orphans));
     setConnections(version.connections || []);
@@ -2317,6 +2435,8 @@ export default function App() {
     setActiveVersionId(version.id);
     setShowVersionEditPrompt(false);
     setShowVersionHistoryDrawer(false);
+    setThumbnailScopeIds(versionHasThumbnails ? new Set() : null);
+    setShowThumbnails(versionHasThumbnails);
     const snapshot = serializeVersionSnapshot({
       root: version.root,
       orphans: version.orphans,
@@ -2500,20 +2620,22 @@ export default function App() {
 
   const loadMap = (map) => {
     resetScanLayers();
+    const mapHasThumbnails = collectAllNodesWithOrphans(map.root, map.orphans || []).some((node) => !!node.thumbnailUrl);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
     setConnections(map.connections || []);
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setCurrentMap(map);
+    setMapName(map.name || '');
     setActiveVersionId(null);
     setShowVersionEditPrompt(false);
     versionBaselineRef.current = null;
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
-    setThumbnailScopeIds(null);
+    setThumbnailScopeIds(mapHasThumbnails ? new Set() : null);
     setShowImageMenu(false);
-    setShowThumbnails(false);
+    setShowThumbnails(mapHasThumbnails);
     resetThumbnailQueue(0);
     loadMapVersions(map.id);
     setShowProjectsModal(false);
@@ -2871,6 +2993,7 @@ export default function App() {
     if (!hasMap) return;
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
+    const nodeContainer = e.target.closest('[data-node-id]');
     const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
@@ -2886,18 +3009,26 @@ export default function App() {
       setCommentingNodeId(null);
     }
 
-    if (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isOnConnection) return;
+    const shiftActive = e.shiftKey || isShiftPressed;
+    if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isOnConnection)) return;
+    if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu)) return;
 
-    const canStartSelection = e.shiftKey && activeTool === 'select' && !connectionTool;
+    const canStartSelection = shiftActive;
     if (canStartSelection) {
       const start = getWorldPointFromClient(e.clientX, e.clientY);
+      const startNodeId = nodeContainer?.getAttribute('data-node-id') || null;
       selectionActiveRef.current = true;
-      selectionAdditiveRef.current = e.shiftKey;
+      selectionAdditiveRef.current = shiftActive;
       selectionBaseRef.current = new Set(selectedNodeIds);
+      selectionStartNodeRef.current = startNodeId;
+      selectionStartedOnNodeRef.current = !!startNodeId;
       selectionStartRef.current = start;
-      setSelectionBox({ x: start.x, y: start.y, w: 0, h: 0 });
+      selectionStartClientRef.current = { x: e.clientX, y: e.clientY };
+      suppressNodeClickRef.current = true;
+      setSelectionBox(startNodeId ? null : { x: start.x, y: start.y, w: 0, h: 0 });
       setIsPanning(false);
       dragRef.current.dragging = false;
+      e.preventDefault();
       e.currentTarget.setPointerCapture(e.pointerId);
       return;
     }
@@ -2921,6 +3052,7 @@ export default function App() {
   const onPointerMove = (e) => {
     updateLastPointerFromEvent(e);
     if (selectionActiveRef.current) {
+      if (selectionStartedOnNodeRef.current) return;
       const start = selectionStartRef.current;
       if (!start) return;
       const current = getWorldPointFromClient(e.clientX, e.clientY);
@@ -2964,6 +3096,10 @@ export default function App() {
     // Handle canvas pan end
     if (selectionActiveRef.current) {
       const start = selectionStartRef.current;
+      const startClient = selectionStartClientRef.current;
+      const moved = startClient
+        ? Math.hypot(e.clientX - startClient.x, e.clientY - startClient.y)
+        : 0;
       if (start) {
         const current = getWorldPointFromClient(e.clientX, e.clientY);
         const rect = {
@@ -2972,7 +3108,7 @@ export default function App() {
           w: Math.abs(current.x - start.x),
           h: Math.abs(current.y - start.y),
         };
-        if (rect.w > 2 || rect.h > 2) {
+        if (!selectionStartedOnNodeRef.current && (rect.w > 2 || rect.h > 2)) {
           const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
           const layout = layoutRef.current;
           if (layout?.nodes?.size) {
@@ -2989,12 +3125,26 @@ export default function App() {
             });
           }
           setSelectedNodeIds(next);
+        } else if (selectionStartNodeRef.current && moved < 3) {
+          const nodeId = selectionStartNodeRef.current;
+          setSelectedNodeIds((prev) => {
+            const next = new Set(selectionAdditiveRef.current ? prev : selectionBaseRef.current);
+            if (next.has(nodeId)) {
+              next.delete(nodeId);
+            } else {
+              next.add(nodeId);
+            }
+            return next;
+          });
         } else if (!selectionAdditiveRef.current) {
           setSelectedNodeIds(new Set());
         }
       }
       selectionActiveRef.current = false;
       selectionStartRef.current = null;
+      selectionStartClientRef.current = null;
+      selectionStartNodeRef.current = null;
+      selectionStartedOnNodeRef.current = false;
       setSelectionBox(null);
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
@@ -4211,18 +4361,23 @@ export default function App() {
 
   const handleNodeClick = (node, event) => {
     if (!node) return;
-    if (activeTool === 'comments') {
+    if (suppressNodeClickRef.current) {
+      suppressNodeClickRef.current = false;
+      return;
+    }
+    const shiftActive = event?.shiftKey || isShiftPressed;
+    if (activeTool === 'comments' && !shiftActive) {
       openCommentPopover(node.id);
       return;
     }
-    if (connectionTool) return;
+    if (connectionTool && !shiftActive) return;
     if (!event) return;
     const interactiveTarget = event.target.closest(
       'button, a, input, textarea, select, .anchor-point, .stack-toggle, .comment-badge, .thumb-fullsize-btn'
     );
     if (interactiveTarget) return;
 
-    if (event.shiftKey) {
+    if (shiftActive) {
       setSelectedNodeIds((prev) => {
         const next = new Set(prev);
         if (next.has(node.id)) {
@@ -5943,7 +6098,7 @@ export default function App() {
       />
 
       <div
-        className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''}`}
+        className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -6556,6 +6711,12 @@ export default function App() {
                 },
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
+                onToggleThumbnails: () => {
+                  setShowThumbnails((prev) => !prev);
+                },
+                showThumbnails,
+                hasAnyThumbnails,
+                allThumbnailsCaptured,
                 showImageMenu,
                 imageMenuRef,
                 hasSelection: selectedNodeIds.size > 0,
@@ -6628,15 +6789,22 @@ export default function App() {
           </DndContext>
         )}
         {showThumbnails && thumbnailStats.total > 0 && (() => {
-          const completed = thumbnailStats.completed + thumbnailStats.failed;
-          const remaining = thumbnailStats.total - completed;
+          const cached = thumbnailStats.cached || 0;
+          const totalNew = Math.max(0, thumbnailStats.total - cached);
+          if (totalNew <= 0) return null;
+          const attempted = thumbnailStats.completed + thumbnailStats.failed;
+          const remaining = totalNew - attempted;
           if (remaining <= 0) return null;
           const etaMs = thumbnailStats.avgMs > 0
             ? Math.ceil((remaining * thumbnailStats.avgMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY))
             : 0;
           return (
             <div className="thumbnail-progress-toast">
-              <span>Thumbnails: {completed}/{thumbnailStats.total}</span>
+              <span>
+                Thumbnails: {thumbnailStats.completed}/{totalNew}
+                {cached > 0 ? ` (${cached} cached)` : ''}
+                {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} failed)` : ''}
+              </span>
               <span>{thumbnailStats.avgMs > 0 ? `ETA ~${formatDuration(etaMs)}` : 'Estimating...'}</span>
             </div>
           );

@@ -68,9 +68,16 @@ const PORT = process.env.PORT || 4002;
 
 // Browser instance for screenshots
 let browser = null;
-const SCREENSHOT_MIN_GAP_MS = 2000;
+const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBLIC_DOMAIN;
+const SCREENSHOT_MIN_GAP_MS = Number(
+  process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 2000 : 300)
+);
+const SCREENSHOT_MAX_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 1 : 4))
+);
 const screenshotQueue = [];
-let screenshotRunning = false;
+let screenshotActive = 0;
 const lastScreenshotByHost = new Map();
 
 const SCREENSHOT_USER_AGENTS = [
@@ -81,25 +88,34 @@ const SCREENSHOT_USER_AGENTS = [
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+const processScreenshotQueue = () => {
+  while (screenshotActive < SCREENSHOT_MAX_CONCURRENCY && screenshotQueue.length) {
+    const next = screenshotQueue.shift();
+    screenshotActive += 1;
+    Promise.resolve()
+      .then(() => next.fn())
+      .then(next.resolve)
+      .catch(next.reject)
+      .finally(() => {
+        screenshotActive -= 1;
+        processScreenshotQueue();
+      });
+  }
+};
+
 const enqueueScreenshot = async (fn) => {
   return new Promise((resolve, reject) => {
     screenshotQueue.push({ fn, resolve, reject });
-    if (!screenshotRunning) {
-      screenshotRunning = true;
-      (async () => {
-        while (screenshotQueue.length) {
-          const next = screenshotQueue.shift();
-          try {
-            const result = await next.fn();
-            next.resolve(result);
-          } catch (e) {
-            next.reject(e);
-          }
-        }
-        screenshotRunning = false;
-      })();
-    }
+    processScreenshotQueue();
   });
+};
+
+const reserveScreenshotSlot = (host) => {
+  const now = Date.now();
+  const last = lastScreenshotByHost.get(host) || 0;
+  const earliest = Math.max(last + SCREENSHOT_MIN_GAP_MS, now);
+  lastScreenshotByHost.set(host, earliest);
+  return Math.max(0, earliest - now);
 };
 
 const isLikelyBlocked = (title, bodyText) => {
@@ -1210,14 +1226,10 @@ app.get('/screenshot', async (req, res) => {
       }
     }
 
-    const host = new URL(url).hostname;
-    const now = Date.now();
-    const last = lastScreenshotByHost.get(host) || 0;
-    const waitMs = Math.max(0, SCREENSHOT_MIN_GAP_MS - (now - last));
-
     const shotResult = await enqueueScreenshot(async () => {
+      const host = new URL(url).hostname;
+      const waitMs = reserveScreenshotSlot(host);
       if (waitMs > 0) await sleep(waitMs);
-      lastScreenshotByHost.set(host, Date.now());
 
       const b = await getBrowser();
       const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];

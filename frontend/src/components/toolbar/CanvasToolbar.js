@@ -7,6 +7,8 @@ import {
   GanttChartSquare,
   History,
   Image,
+  Eye,
+  EyeOff,
   Link2,
   MessageSquare,
   MousePointer2,
@@ -33,6 +35,10 @@ const CanvasToolbar = ({
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
+  onToggleThumbnails,
+  showThumbnails,
+  hasAnyThumbnails,
+  allThumbnailsCaptured,
   showImageMenu,
   imageMenuRef,
   hasSelection,
@@ -115,12 +121,27 @@ const CanvasToolbar = ({
       </button>
       {showImageMenu && (
         <div className="canvas-tool-menu" role="menu">
+          {hasAnyThumbnails && (
+            <>
+              <button
+                className="canvas-tool-menu-toggle"
+                onClick={onToggleThumbnails}
+                type="button"
+              >
+                <span>View thumbnails</span>
+                <span className="canvas-tool-menu-toggle-icon">
+                  {showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
+                </span>
+              </button>
+              <div className="canvas-tool-menu-divider" />
+            </>
+          )}
           <div className="canvas-tool-menu-section">
             <div className="canvas-tool-menu-label">Thumbnails</div>
             <button
               className="canvas-tool-menu-item"
               onClick={onGetThumbnailsAll}
-              disabled={!hasMap}
+              disabled={!hasMap || allThumbnailsCaptured}
             >
               Get thumbnails (All)
             </button>

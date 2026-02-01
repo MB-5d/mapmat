@@ -716,6 +716,12 @@ body {
   -webkit-user-select: none !important;
 }
 
+.canvas.shift-selecting,
+.canvas.shift-selecting * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .permission-banner {
   position: absolute;
   top: 12px;
@@ -1957,6 +1963,30 @@ body {
   cursor: pointer;
   font-size: 13px;
   text-align: left;
+}
+
+.canvas-tool-menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.canvas-tool-menu-toggle:hover {
+  background: var(--color-bg-hover);
+}
+
+.canvas-tool-menu-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-secondary);
 }
 
 .canvas-tool-menu-item:hover:not(:disabled) {
