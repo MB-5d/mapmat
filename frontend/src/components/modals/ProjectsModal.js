@@ -105,7 +105,6 @@ const ProjectsModal = ({
                               <div key={map.id} className="map-item" onClick={() => onLoadMap(map)}>
                                 <Network size={16} />
                                 <span className="map-name">{map.name}</span>
-                                <span className="map-date">{new Date(map.updatedAt).toLocaleDateString()}</span>
                                 <button
                                   className="map-delete"
                                   title="Delete Map"

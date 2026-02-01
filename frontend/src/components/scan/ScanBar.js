@@ -6,8 +6,6 @@ const ScanBar = ({
   urlInput,
   onUrlInputChange,
   onUrlKeyDown,
-  showThumbnails,
-  onToggleThumbnails,
   options,
   showOptions,
   optionsRef,
@@ -83,15 +81,6 @@ const ScanBar = ({
                     <option key={i} value={i}>{i}</option>
                   ))}
                 </select>
-              </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={showThumbnails}
-                  onChange={() => onToggleThumbnails(!showThumbnails)}
-                  disabled={optionsDisabled}
-                />
-                <span>Thumbnails</span>
               </label>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input

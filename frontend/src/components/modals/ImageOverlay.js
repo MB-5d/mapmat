@@ -8,6 +8,17 @@ const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
     containerRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    if (!imageUrl) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [imageUrl, onClose]);
+
   if (!imageUrl) return null;
 
   return (

@@ -1,9 +1,12 @@
 import React from 'react';
 import {
   Bookmark,
+  BookmarkPlus,
   Download,
   FilePlus,
   GanttChartSquare,
+  History,
+  Image,
   Link2,
   MessageSquare,
   MousePointer2,
@@ -27,15 +30,25 @@ const CanvasToolbar = ({
   hasAnyComments,
   showReportDrawer,
   onToggleReportDrawer,
+  onToggleImageMenu,
+  onGetThumbnailsAll,
+  onGetThumbnailsSelected,
+  showImageMenu,
+  imageMenuRef,
+  hasSelection,
   canUndo,
   canRedo,
   onUndo,
   onRedo,
   onClearCanvas,
   onSaveMap,
+  onDuplicateMap,
+  onShowVersionHistory,
   onExport,
   onShare,
   hasMap,
+  hasSavedMap,
+  showVersionHistory,
 }) => (
   <div className="canvas-toolbar">
     <button
@@ -91,6 +104,49 @@ const CanvasToolbar = ({
       <GanttChartSquare size={20} />
     </button>
 
+    <div className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
+      <button
+        className={`canvas-tool-btn ${showImageMenu ? 'active' : ''}`}
+        onClick={onToggleImageMenu}
+        title="Images"
+        disabled={!hasMap}
+      >
+        <Image size={20} />
+      </button>
+      {showImageMenu && (
+        <div className="canvas-tool-menu" role="menu">
+          <div className="canvas-tool-menu-section">
+            <div className="canvas-tool-menu-label">Thumbnails</div>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onGetThumbnailsAll}
+              disabled={!hasMap}
+            >
+              Get thumbnails (All)
+            </button>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onGetThumbnailsSelected}
+              disabled={!hasSelection || !hasMap}
+            >
+              Get thumbnails (Selected)
+            </button>
+          </div>
+          <div className="canvas-tool-menu-divider" />
+          <div className="canvas-tool-menu-section">
+            <div className="canvas-tool-menu-label">Full screenshots</div>
+            <button className="canvas-tool-menu-item disabled" disabled>
+              Get full screenshots (All)
+            </button>
+            <button className="canvas-tool-menu-item disabled" disabled>
+              Get full screenshots (Selected)
+            </button>
+            <div className="canvas-tool-menu-hint">Coming soon</div>
+          </div>
+        </div>
+      )}
+    </div>
+
     {canEdit && <div className="canvas-toolbar-divider" />}
 
     {canEdit && (
@@ -127,7 +183,7 @@ const CanvasToolbar = ({
 
     <div className="canvas-toolbar-divider" />
 
-    {canEdit && (
+    {canEdit && !hasSavedMap && (
       <button
         className="canvas-tool-btn"
         onClick={onSaveMap}
@@ -135,6 +191,27 @@ const CanvasToolbar = ({
         title="Save Map"
       >
         <Bookmark size={20} />
+      </button>
+    )}
+
+    {canEdit && hasSavedMap && (
+      <button
+        className="canvas-tool-btn"
+        onClick={onDuplicateMap}
+        disabled={!hasMap}
+        title="Duplicate Map"
+      >
+        <BookmarkPlus size={20} />
+      </button>
+    )}
+
+    {canEdit && hasSavedMap && (
+      <button
+        className={`canvas-tool-btn ${showVersionHistory ? 'active' : ''}`}
+        onClick={onShowVersionHistory}
+        title="Version History (H)"
+      >
+        <History size={20} />
       </button>
     )}
 

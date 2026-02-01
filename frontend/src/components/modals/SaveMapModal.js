@@ -14,7 +14,7 @@ const SaveMapForm = ({
 }) => {
   // Get default name from root domain (e.g., "example" from "https://www.example.com")
   const getDefaultName = () => {
-    if (defaultName) return defaultName;
+    if (defaultName !== undefined && defaultName !== null) return defaultName;
     if (currentMap?.name) return currentMap.name;
     if (!rootUrl) return '';
     try {

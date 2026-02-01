@@ -353,6 +353,105 @@ router.delete('/maps/:id', requireAuth, (req, res) => {
   }
 });
 
+// GET /api/maps/:id/versions - Get version history for a map
+router.get('/maps/:id/versions', requireAuth, (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    if (!map) {
+      return res.status(404).json({ error: 'Map not found' });
+    }
+
+    const versions = db.prepare(`
+      SELECT * FROM map_versions
+      WHERE map_id = ? AND user_id = ?
+      ORDER BY created_at DESC
+      LIMIT 25
+    `).all(id, req.user.id);
+
+    const parsed = versions.map((v) => ({
+      ...v,
+      ...parseMapFields(v),
+    }));
+
+    res.json({ versions: parsed });
+  } catch (error) {
+    console.error('Get map versions error:', error);
+    res.status(500).json({ error: 'Failed to get map versions' });
+  }
+});
+
+// POST /api/maps/:id/versions - Create a new version
+router.post('/maps/:id/versions', requireAuth, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { root, orphans, connections, colors, connectionColors, name, notes } = req.body;
+
+    if (!root) {
+      return res.status(400).json({ error: 'Map data is required' });
+    }
+
+    const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    if (!map) {
+      return res.status(404).json({ error: 'Map not found' });
+    }
+
+    const versionRow = db.prepare(`
+      SELECT MAX(version_number) as maxVersion
+      FROM map_versions
+      WHERE map_id = ? AND user_id = ?
+    `).get(id, req.user.id);
+    const nextVersion = (versionRow?.maxVersion || 0) + 1;
+
+    const versionId = uuidv4();
+    const title = name?.trim() || 'Updated';
+
+    db.prepare(`
+      INSERT INTO map_versions (
+        id, map_id, user_id, version_number, name, notes,
+        root_data, orphans_data, connections_data, colors, connection_colors
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      versionId,
+      id,
+      req.user.id,
+      nextVersion,
+      title,
+      notes?.trim() || null,
+      JSON.stringify(root),
+      orphans ? JSON.stringify(orphans) : null,
+      connections ? JSON.stringify(connections) : null,
+      colors ? JSON.stringify(colors) : null,
+      connectionColors ? JSON.stringify(connectionColors) : null
+    );
+
+    const allVersions = db.prepare(`
+      SELECT id FROM map_versions
+      WHERE map_id = ? AND user_id = ?
+      ORDER BY created_at DESC
+    `).all(id, req.user.id);
+
+    if (allVersions.length > 25) {
+      const toDelete = allVersions.slice(25).map((row) => row.id);
+      const placeholders = toDelete.map(() => '?').join(',');
+      db.prepare(`DELETE FROM map_versions WHERE id IN (${placeholders})`).run(...toDelete);
+    }
+
+    const saved = db.prepare('SELECT * FROM map_versions WHERE id = ?').get(versionId);
+
+    res.json({
+      version: {
+        ...saved,
+        ...parseMapFields(saved),
+      },
+    });
+  } catch (error) {
+    console.error('Create map version error:', error);
+    res.status(500).json({ error: 'Failed to create map version' });
+  }
+});
+
 // ============================================
 // SCAN HISTORY
 // ============================================

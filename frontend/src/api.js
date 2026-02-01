@@ -126,6 +126,17 @@ export async function deleteMap(id) {
   return fetchApi(`/api/maps/${id}`, { method: 'DELETE' });
 }
 
+export async function getMapVersions(mapId) {
+  return fetchApi(`/api/maps/${mapId}/versions`);
+}
+
+export async function createMapVersion(mapId, payload) {
+  return fetchApi(`/api/maps/${mapId}/versions`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 // ============================================
 // HISTORY
 // ============================================

@@ -6,7 +6,7 @@ import {
   Copy,
   Edit2,
   ExternalLink,
-  Globe,
+  ImageOff,
   Loader2,
   Maximize2,
   MessageSquare,
@@ -39,9 +39,11 @@ const NodeCard = ({
   badges = [],
   showPageNumbers = true,
   onRequestThumbnail,
+  thumbnailRequestIds,
   stackInfo,
   onToggleStack,
   isGhosted = false,
+  isSelected = false,
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
@@ -52,19 +54,23 @@ const NodeCard = ({
     ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbKey}`
     : null;
   const hasThumb = Boolean(thumb);
+  const canRequestThumbnail = !thumbnailRequestIds || thumbnailRequestIds.has(node.id);
 
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
     if (showThumbnails) {
       setThumbError(false);
-      setThumbLoading(Boolean(thumb));
-      setThumbKey(k => k + 1); // Force new image request
+      setThumbLoading(canRequestThumbnail && !node.thumbnailUrl);
+      if (canRequestThumbnail) {
+        setThumbKey(k => k + 1); // Force new image request
+      }
     }
-  }, [showThumbnails, node.thumbnailUrl, node.url]);
+  }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail]);
 
   // Timeout fallback - screenshots can be slow on large scans
   useEffect(() => {
     if (!showThumbnails) return undefined;
+    if (!canRequestThumbnail) return undefined;
     const timeout = setTimeout(() => {
       if (thumbLoading) {
         setThumbError(true);
@@ -72,10 +78,11 @@ const NodeCard = ({
       }
     }, 120000);
     return () => clearTimeout(timeout);
-  }, [showThumbnails, thumbLoading, thumbKey, thumb]);
+  }, [showThumbnails, thumbLoading, thumbKey, thumb, canRequestThumbnail]);
 
   useEffect(() => {
     if (!showThumbnails || !onRequestThumbnail) return;
+    if (!canRequestThumbnail) return;
     if (node.thumbnailUrl && isScreenshotThumb) return;
     if (thumbError) return;
     let isActive = true;
@@ -91,7 +98,7 @@ const NodeCard = ({
     return () => {
       isActive = false;
     };
-  }, [showThumbnails, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError]);
+  }, [showThumbnails, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError, canRequestThumbnail]);
 
   const handleViewFull = () => {
     // Use uploaded thumbnail if available, otherwise use URL for mshots
@@ -113,6 +120,7 @@ const NodeCard = ({
   if (stackInfo?.showCollapse) classNames.push('stack-expanded');
   if (stackInfo?.collapsed || stackInfo?.showCollapse) classNames.push('has-stack-toggle');
   if (isGhosted) classNames.push('ghosted');
+  if (isSelected) classNames.push('selected');
 
   // Anchor color based on connection tool type
   const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
@@ -207,19 +215,11 @@ const NodeCard = ({
             </>
           ) : (
             <div className="thumb-placeholder">
-              <Globe size={32} strokeWidth={1.5} />
+              <ImageOff size={32} strokeWidth={1.5} />
               <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
               <span className="thumb-placeholder-text">
                 {thumbLoading ? 'Generating preview' : 'Preview unavailable'}
               </span>
-              <button
-                className="thumb-fullsize-btn thumb-fullsize-placeholder"
-                onClick={handleViewFull}
-                title="View full size"
-                type="button"
-              >
-                <Maximize2 size={14} />
-              </button>
             </div>
           )}
         </div>
@@ -322,9 +322,11 @@ const DraggableNodeCard = ({
   badges,
   showPageNumbers,
   onRequestThumbnail,
+  thumbnailRequestIds,
   stackInfo,
   onToggleStack,
   isGhosted,
+  isSelected,
 }) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
@@ -357,9 +359,11 @@ const DraggableNodeCard = ({
         badges={badges}
         showPageNumbers={showPageNumbers}
         onRequestThumbnail={onRequestThumbnail}
+        thumbnailRequestIds={thumbnailRequestIds}
         stackInfo={stackInfo}
         onToggleStack={onToggleStack}
         isGhosted={isGhosted}
+        isSelected={isSelected}
       />
     </div>
   );

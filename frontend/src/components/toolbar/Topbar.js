@@ -20,8 +20,6 @@ const Topbar = ({
   onUrlInputChange,
   onUrlKeyDown,
   hasMap,
-  showThumbnails,
-  onToggleThumbnails,
   scanOptions,
   showScanOptions,
   scanOptionsRef,
@@ -82,8 +80,6 @@ const Topbar = ({
           urlInput={urlInput}
           onUrlInputChange={onUrlInputChange}
           onUrlKeyDown={onUrlKeyDown}
-          showThumbnails={showThumbnails}
-          onToggleThumbnails={onToggleThumbnails}
           options={scanOptions}
           showOptions={showScanOptions}
           optionsRef={scanOptionsRef}

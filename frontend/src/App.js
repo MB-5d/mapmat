@@ -36,12 +36,15 @@ import ImageOverlay from './components/modals/ImageOverlay';
 import ImportModal from './components/modals/ImportModal';
 import ProfileDrawer from './components/drawers/ProfileDrawer';
 import SettingsDrawer from './components/drawers/SettingsDrawer';
+import VersionHistoryDrawer from './components/drawers/VersionHistoryDrawer';
 import ProjectsModal from './components/modals/ProjectsModal';
 import PromptModal from './components/modals/PromptModal';
 import ReportDrawer from './components/reports/ReportDrawer';
 import SaveMapModal from './components/modals/SaveMapModal';
+import SaveVersionModal from './components/modals/SaveVersionModal';
 import ShareModal from './components/modals/ShareModal';
 import ScanProgressModal from './components/scan/ScanProgressModal';
+import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
 import RightRail from './components/toolbar/RightRail';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname } from './utils/url';
@@ -121,9 +124,11 @@ const SitemapTree = ({
   layerVisibility,
   showPageNumbers,
   onRequestThumbnail,
+  thumbnailRequestIds,
   expandedStacks,
   onToggleStack,
   layout: layoutOverride,
+  selectedNodeIds,
 }) => {
   const toggleStack = (nodeId) => {
     onToggleStack?.(nodeId);
@@ -209,6 +214,7 @@ const SitemapTree = ({
         const stackToggleParentId = stackInfo?.parentId;
         const shouldWrapStack = !!stackInfo?.collapsed;
 
+        const isSelected = selectedNodeIds?.has(nodeData.node.id);
         const card = (
           <DraggableNodeCard
             node={nodeData.node}
@@ -233,10 +239,12 @@ const SitemapTree = ({
             badges={badges}
             showPageNumbers={showPageNumbers}
             onRequestThumbnail={onRequestThumbnail}
+            thumbnailRequestIds={thumbnailRequestIds}
             stackInfo={stackInfo}
             onToggleStack={() => {
               if (stackToggleParentId) toggleStack(stackToggleParentId);
             }}
+            isSelected={isSelected}
           />
         );
 
@@ -252,7 +260,7 @@ const SitemapTree = ({
               top: nodeData.y,
             }}
             onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
-            onClick={() => onNodeClick?.(nodeData.node)}
+            onClick={(e) => onNodeClick?.(nodeData.node, e)}
           >
             {shouldWrapStack ? (
               <div className="stacked-node-wrapper">
@@ -613,6 +621,7 @@ const normalizeOrphans = (list) => (list || [])
 export default function App() {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
+  const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
   const [scanOptions, setScanOptions] = useState({
     inactivePages: false,
     subdomains: false,
@@ -683,6 +692,16 @@ export default function App() {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showCreateMapModal, setShowCreateMapModal] = useState(false);
   const [showSaveMapModal, setShowSaveMapModal] = useState(false);
+  const [showVersionHistoryDrawer, setShowVersionHistoryDrawer] = useState(false);
+  const [showSaveVersionModal, setShowSaveVersionModal] = useState(false);
+  const [mapVersions, setMapVersions] = useState([]);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [activeVersionId, setActiveVersionId] = useState(null);
+  const [latestVersionId, setLatestVersionId] = useState(null);
+  const [showVersionEditPrompt, setShowVersionEditPrompt] = useState(false);
+  const [saveVersionMeta, setSaveVersionMeta] = useState({ number: 1, timestamp: '' });
+  const [duplicateMapConfig, setDuplicateMapConfig] = useState(null);
+  const [pendingLoadMap, setPendingLoadMap] = useState(null);
   const [createMapMode, setCreateMapMode] = useState(false);
   const [pendingMapCreation, setPendingMapCreation] = useState(null);
   const [pendingCreateAfterSave, setPendingCreateAfterSave] = useState(false);
@@ -705,6 +724,9 @@ export default function App() {
   const autosaveInFlightRef = useRef(false);
   const autosaveRetryTimerRef = useRef(null);
   const autosaveRetryDelayRef = useRef(1000);
+  const versionBaselineRef = useRef(null);
+  const lastVersionSnapshotRef = useRef('');
+  const versionInfoToastRef = useRef(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -740,12 +762,15 @@ export default function App() {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
+  const [showImageMenu, setShowImageMenu] = useState(false);
   const [layers, setLayers] = useState({
     userFlows: true,    // User journey connections
     crossLinks: true,   // Non-hierarchical links
     brokenLinks: true,  // Broken link connections
     pageNumbers: true,
   });
+  const [selectedNodeIds, setSelectedNodeIds] = useState(new Set());
+  const [selectionBox, setSelectionBox] = useState(null);
 
   // Connection lines state
   const [connectionTool, setConnectionTool] = useState(null); // 'userflow' | 'crosslink' | null
@@ -776,7 +801,12 @@ export default function App() {
   const layoutRef = useRef(null);
   const lastPointerRef = useRef(null);
   const dragRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
+  const selectionStartRef = useRef(null);
+  const selectionActiveRef = useRef(false);
+  const selectionAdditiveRef = useRef(false);
+  const selectionBaseRef = useRef(new Set());
   const viewDropdownRef = useRef(null);
+  const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
   const thumbnailRequestRef = useRef(new Set());
   const thumbnailQueueRef = useRef([]);
@@ -805,6 +835,18 @@ export default function App() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showViewDropdown]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (imageMenuRef.current && !imageMenuRef.current.contains(e.target)) {
+        setShowImageMenu(false);
+      }
+    };
+    if (showImageMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showImageMenu]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -854,6 +896,15 @@ export default function App() {
   }, [theme]);
 
   const hasMap = !!root;
+  useEffect(() => {
+    if (!hasMap) {
+      setSelectedNodeIds(new Set());
+      setSelectionBox(null);
+      setThumbnailScopeIds(null);
+      setShowImageMenu(false);
+    }
+  }, [hasMap]);
+
   const maxDepth = useMemo(() => {
     const orphanDepth = (orphans || []).reduce((max, orphan) => {
       return Math.max(max, getMaxDepth(orphan));
@@ -1003,6 +1054,27 @@ export default function App() {
     return stats;
   }, [reportEntries]);
 
+  const getVersionSnapshot = useCallback(() => ({
+    root,
+    orphans,
+    connections,
+    colors,
+    connectionColors,
+  }), [root, orphans, connections, colors, connectionColors]);
+
+  const serializeVersionSnapshot = useCallback((snapshot) => {
+    try {
+      return JSON.stringify(snapshot);
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const isViewingHistoricalVersion = useMemo(() => {
+    if (!activeVersionId || !latestVersionId) return false;
+    return activeVersionId !== latestVersionId;
+  }, [activeVersionId, latestVersionId]);
+
   const flushAutosave = useCallback(() => {
     if (autosaveInFlightRef.current) return;
     const pending = autosavePendingRef.current;
@@ -1064,7 +1136,7 @@ export default function App() {
 
   // Autosave for existing maps (debounced)
   useEffect(() => {
-    if (!currentMap?.id || !root || isImportedMap) return;
+    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion) return;
 
     const snapshot = JSON.stringify({
       name: currentMap?.name || mapName,
@@ -1099,7 +1171,37 @@ export default function App() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, flushAutosave]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (!currentMap?.id || !root || isViewingHistoricalVersion) return;
+      const snapshot = getVersionSnapshot();
+      const serialized = serializeVersionSnapshot(snapshot);
+      if (!serialized || serialized === lastVersionSnapshotRef.current) return;
+      const payload = {
+        ...snapshot,
+        name: 'Updated',
+      };
+      const url = `${API_BASE}/api/maps/${currentMap.id}/versions`;
+      const body = JSON.stringify(payload);
+      if (navigator.sendBeacon) {
+        const blob = new Blob([body], { type: 'application/json' });
+        const sent = navigator.sendBeacon(url, blob);
+        if (sent) return;
+      }
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body,
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentMap?.id, root, isViewingHistoricalVersion, getVersionSnapshot, serializeVersionSnapshot]);
 
   const reportTitle = useMemo(() => {
     return root?.title || getHostname(root?.url) || 'Website';
@@ -1289,6 +1391,29 @@ export default function App() {
   };
 
   const clearCanvas = async () => {
+    if (hasMap && !currentMap?.id) {
+      const wantsSave = await showConfirm({
+        title: 'Save Map?',
+        message: 'You have an unsaved map. Save it before clearing?',
+        confirmText: 'Save Map',
+        cancelText: 'Clear',
+      });
+      if (wantsSave) {
+        setCreateMapMode(false);
+        setShowSaveMapModal(true);
+        return false;
+      }
+      setRoot(null);
+      setOrphans([]);
+      setCurrentMap(null);
+      setIsImportedMap(false);
+      setShowThumbnails(false);
+      resetThumbnailQueue(0);
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+      setUrlInput('');
+      resetScanLayers();
+      return true;
+    }
     const confirmed = await showConfirm({
       title: 'Clear Canvas',
       message: 'Clear the canvas? This cannot be undone.',
@@ -1296,10 +1421,19 @@ export default function App() {
       danger: true
     });
     if (!confirmed) return false;
+    if (currentMap?.id && root && !isViewingHistoricalVersion) {
+      try {
+        await createVersionFromSnapshot({ mapId: currentMap.id });
+      } catch (error) {
+        console.error('Failed to save version before clearing', error);
+      }
+    }
     setRoot(null);
     setOrphans([]);
     setCurrentMap(null);
     setIsImportedMap(false);
+    setShowThumbnails(false);
+    resetThumbnailQueue(0);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput('');
     resetScanLayers();
@@ -1325,6 +1459,17 @@ export default function App() {
     if (!canvas) return;
     const r = canvas.getBoundingClientRect();
     lastPointerRef.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+
+  const getWorldPointFromClient = (clientX, clientY) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const scale = scaleRef.current || 1;
+    return {
+      x: (clientX - rect.left - panRef.current.x) / scale,
+      y: (clientY - rect.top - panRef.current.y) / scale,
+    };
   };
 
   // dnd-kit sensors - require 5px movement before activating drag
@@ -1621,7 +1766,7 @@ export default function App() {
 
   const toastTimeoutRef = useRef(null);
 
-  const showToast = (msg, type = 'info', persistent = false) => {
+  const showToast = useCallback((msg, type = 'info', persistent = false) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
       toastTimeoutRef.current = null;
@@ -1630,7 +1775,7 @@ export default function App() {
     if (!persistent) {
       toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
     }
-  };
+  }, []);
 
   const dismissToast = () => {
     if (toastTimeoutRef.current) {
@@ -1649,6 +1794,101 @@ export default function App() {
       default: return <Info size={18} />;
     }
   };
+
+  const loadMapVersions = useCallback(async (mapId) => {
+    if (!mapId) return;
+    setIsLoadingVersions(true);
+    try {
+      const { versions } = await api.getMapVersions(mapId);
+      const list = versions || [];
+      setMapVersions(list);
+      const latestId = list[0]?.id || null;
+      setLatestVersionId(latestId);
+      if (activeVersionId && !list.some((version) => version.id === activeVersionId)) {
+        setActiveVersionId(null);
+        versionBaselineRef.current = null;
+      }
+      if (list[0]) {
+        const snapshot = serializeVersionSnapshot({
+          root: list[0].root,
+          orphans: list[0].orphans,
+          connections: list[0].connections,
+          colors: list[0].colors || DEFAULT_COLORS,
+          connectionColors: list[0].connectionColors || DEFAULT_CONNECTION_COLORS,
+        });
+        lastVersionSnapshotRef.current = snapshot;
+      } else {
+        lastVersionSnapshotRef.current = '';
+      }
+    } catch (error) {
+      console.error('Failed to load map versions', error);
+      showToast('Failed to load versions', 'error');
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  }, [activeVersionId, showToast, serializeVersionSnapshot]);
+
+  useEffect(() => {
+    if (!currentMap?.id) {
+      setMapVersions([]);
+      setActiveVersionId(null);
+      setLatestVersionId(null);
+      setShowVersionEditPrompt(false);
+      setShowVersionHistoryDrawer(false);
+      versionBaselineRef.current = null;
+      lastVersionSnapshotRef.current = '';
+      return;
+    }
+    loadMapVersions(currentMap.id);
+  }, [currentMap?.id, loadMapVersions]);
+
+  useEffect(() => {
+    if (!showVersionHistoryDrawer || !currentMap?.id) return;
+    loadMapVersions(currentMap.id);
+  }, [showVersionHistoryDrawer, currentMap?.id, loadMapVersions]);
+
+  const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot } = {}) => {
+    const targetMapId = mapId || currentMap?.id;
+    if (!targetMapId || !root) return null;
+    const payload = snapshot || getVersionSnapshot();
+    const serialized = serializeVersionSnapshot(payload);
+    if (serialized && serialized === lastVersionSnapshotRef.current) return null;
+    const { version } = await api.createMapVersion(targetMapId, {
+      ...payload,
+      name,
+      notes,
+    });
+    lastVersionSnapshotRef.current = serialized;
+    setMapVersions((prev) => [version, ...(prev || [])].slice(0, 25));
+    setLatestVersionId(version.id);
+    return version;
+  }, [currentMap?.id, root, getVersionSnapshot, serializeVersionSnapshot]);
+
+  useEffect(() => {
+    if (!isViewingHistoricalVersion) return;
+    if (!versionBaselineRef.current || showVersionEditPrompt) return;
+    const currentSnapshot = serializeVersionSnapshot(getVersionSnapshot());
+    if (currentSnapshot && currentSnapshot !== versionBaselineRef.current) {
+      setShowVersionEditPrompt(true);
+    }
+  }, [isViewingHistoricalVersion, showVersionEditPrompt, getVersionSnapshot, serializeVersionSnapshot]);
+
+  useEffect(() => {
+    const message = 'Viewing an older version. Changes will prompt you to save a copy or override the latest.';
+    if (isViewingHistoricalVersion) {
+      if (!versionInfoToastRef.current) {
+        showToast(message, 'info', true);
+        versionInfoToastRef.current = true;
+      }
+      return;
+    }
+    if (versionInfoToastRef.current) {
+      if (toast?.message === message) {
+        setToast(null);
+      }
+      versionInfoToastRef.current = false;
+    }
+  }, [isViewingHistoricalVersion, toast, showToast]);
 
   const handleLogin = useCallback(() => {
     setShowAuthModal(true);
@@ -1715,6 +1955,7 @@ export default function App() {
     setCurrentMap(null);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
+    setShowVersionHistoryDrawer(false);
     showToast('Logged out', 'info');
   }, [showToast]);
 
@@ -1723,6 +1964,7 @@ export default function App() {
     setShowSettingsDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowVersionHistoryDrawer(false);
   }, []);
 
   const handleShowSettings = useCallback(() => {
@@ -1730,6 +1972,7 @@ export default function App() {
     setShowProfileDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowVersionHistoryDrawer(false);
   }, []);
 
   const authValue = useMemo(() => ({
@@ -1766,23 +2009,36 @@ export default function App() {
     setThumbnailActiveCount(thumbnailActiveRef.current);
     thumbnailStartRef.current.set(next.id, Date.now());
     let success = false;
+    let didResolve = false;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 45000);
+    const finish = (result) => {
+      if (didResolve) return;
+      didResolve = true;
+      next.resolve(result);
+    };
 
-    fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(next.url)}&type=thumb`)
+    fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(next.url)}&type=thumb`, {
+      signal: controller.signal,
+    })
       .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
       .then(({ ok, data }) => {
         if (ok && data?.url) {
           updateNodeThumbnail(next.id, data.url);
           success = true;
-          next.resolve(true);
+          finish(true);
           return;
         }
-        next.resolve(false);
+        finish(false);
       })
       .catch(() => {
         // Swallow errors; retries handled in the card.
-        next.resolve(false);
+        finish(false);
       })
       .finally(() => {
+        clearTimeout(timeoutId);
         thumbnailRequestRef.current.delete(next.id);
         thumbnailActiveRef.current -= 1;
         setThumbnailActiveCount(thumbnailActiveRef.current);
@@ -1803,6 +2059,22 @@ export default function App() {
       });
   };
 
+  const resetThumbnailQueue = (total) => {
+    thumbnailQueueRef.current = [];
+    thumbnailRequestRef.current = new Set();
+    thumbnailActiveRef.current = 0;
+    thumbnailStartRef.current = new Map();
+    thumbnailTotalTimeRef.current = 0;
+    setThumbnailQueueSize(0);
+    setThumbnailActiveCount(0);
+    setThumbnailStats({
+      total,
+      completed: 0,
+      failed: 0,
+      avgMs: 0,
+    });
+  };
+
   const requestThumbnail = (node) => {
     if (!node?.id || !node?.url) return Promise.resolve(false);
     if (thumbnailRequestRef.current.has(node.id)) return Promise.resolve(false);
@@ -1812,6 +2084,42 @@ export default function App() {
       setThumbnailQueueSize(thumbnailQueueRef.current.length);
       processThumbnailQueue();
     });
+  };
+
+  const getThumbnailCandidates = (scope) => {
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const targetIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = targetIds ? allNodes.filter((node) => targetIds.has(node.id)) : allNodes;
+    const candidates = scopedNodes.filter((node) => {
+      if (!node?.url) return false;
+      const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
+      return !(node.thumbnailUrl && isScreenshotThumb);
+    });
+    return { targetIds, candidates };
+  };
+
+  const handleThumbnailCapture = (scope) => {
+    if (!root) {
+      showToast('Create or load a map before capturing thumbnails', 'info');
+      return;
+    }
+    if (scope === 'selected' && selectedNodeIds.size === 0) {
+      showToast('Select pages to capture thumbnails', 'info');
+      return;
+    }
+    const { targetIds, candidates } = getThumbnailCandidates(scope);
+    if (candidates.length === 0) {
+      resetThumbnailQueue(0);
+      setThumbnailScopeIds(targetIds);
+      setShowThumbnails(true);
+      setShowImageMenu(false);
+      showToast('No new thumbnails to generate', 'info');
+      return;
+    }
+    resetThumbnailQueue(candidates.length);
+    setThumbnailScopeIds(targetIds);
+    setShowThumbnails(true);
+    setShowImageMenu(false);
   };
 
   // Fetch full page screenshot from backend (or display direct image URL)
@@ -1897,10 +2205,189 @@ export default function App() {
     }
   };
 
+  const openSaveVersionModal = () => {
+    if (!currentMap?.id || !root) {
+      showToast('Save the map first', 'warning');
+      return;
+    }
+    const nextNumber = (mapVersions[0]?.version_number || 0) + 1;
+    setSaveVersionMeta({
+      number: nextNumber,
+      timestamp: new Date().toLocaleString(),
+    });
+    setShowSaveVersionModal(true);
+  };
+
+  const handleSaveVersion = async (name, notes) => {
+    if (!currentMap?.id) return;
+    try {
+      const version = await createVersionFromSnapshot({
+        mapId: currentMap.id,
+        name,
+        notes,
+      });
+      if (version) {
+        showToast('Version saved', 'success');
+      } else {
+        showToast('No changes to save', 'info');
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to save version', 'error');
+    } finally {
+      setShowSaveVersionModal(false);
+    }
+  };
+
+  const duplicateCurrentMap = () => {
+    if (!root) {
+      showToast('No map to duplicate', 'warning');
+      return;
+    }
+    if (!currentMap?.id) {
+      setCreateMapMode(false);
+      setDuplicateMapConfig({
+        name: `${(mapName || 'Untitled Map').trim()} (Copy)`,
+        projectId: null,
+      });
+      setShowSaveMapModal(true);
+      return;
+    }
+    const baseName = (currentMap?.name || mapName || 'Untitled Map').trim();
+    setDuplicateMapConfig({
+      name: `${baseName} (Copy)`,
+      projectId: currentMap?.project_id || null,
+    });
+    setShowSaveMapModal(true);
+  };
+
+  const handleDuplicateMapSave = async (projectId, name) => {
+    const snapshot = getVersionSnapshot();
+    if (!snapshot?.root) return;
+    try {
+      const { map } = await api.saveMap({
+        name: name.trim(),
+        url: snapshot.root?.url || '',
+        root: snapshot.root,
+        orphans: snapshot.orphans,
+        connections: snapshot.connections,
+        colors: snapshot.colors,
+        connectionColors: snapshot.connectionColors,
+        project_id: projectId || null,
+      });
+      setProjects(prev => {
+        let updated = prev.map(p => ({
+          ...p,
+          maps: (p.maps || []).filter(m => m.id !== map.id),
+        }));
+        if (map.project_id) {
+          updated = updated.map(p =>
+            p.id === map.project_id
+              ? { ...p, maps: [...(p.maps || []), map] }
+              : p
+          );
+        }
+        return updated;
+      });
+      setCurrentMap(map);
+      setMapName(map.name);
+      setIsImportedMap(false);
+      setActiveVersionId(null);
+      setShowVersionEditPrompt(false);
+      versionBaselineRef.current = null;
+      lastAutosaveSnapshotRef.current = '';
+      await loadMapVersions(map.id);
+      await createVersionFromSnapshot({ mapId: map.id, snapshot });
+      showToast('Map duplicated', 'success');
+      setDuplicateMapConfig(null);
+    } catch (error) {
+      showToast(error.message || 'Failed to duplicate map', 'error');
+    } finally {
+      setShowSaveMapModal(false);
+    }
+  };
+
+  const restoreVersion = (version) => {
+    if (!version?.root) return;
+    setRoot(version.root);
+    setOrphans(normalizeOrphans(version.orphans));
+    setConnections(version.connections || []);
+    setColors(version.colors || DEFAULT_COLORS);
+    setConnectionColors(version.connectionColors || DEFAULT_CONNECTION_COLORS);
+    setUrlInput(version.root?.url || '');
+    setActiveVersionId(version.id);
+    setShowVersionEditPrompt(false);
+    setShowVersionHistoryDrawer(false);
+    const snapshot = serializeVersionSnapshot({
+      root: version.root,
+      orphans: version.orphans,
+      connections: version.connections || [],
+      colors: version.colors || DEFAULT_COLORS,
+      connectionColors: version.connectionColors || DEFAULT_CONNECTION_COLORS,
+    });
+    versionBaselineRef.current = snapshot;
+    showToast('Version restored', 'success');
+  };
+
+  const handleOverrideVersion = () => {
+    setShowVersionEditPrompt(false);
+    setActiveVersionId(null);
+    versionBaselineRef.current = null;
+  };
+
+  const handleSaveVersionCopy = async () => {
+    const snapshot = getVersionSnapshot();
+    if (!snapshot?.root) {
+      setShowVersionEditPrompt(false);
+      return;
+    }
+    const baseName = (currentMap?.name || mapName || 'Untitled Map').trim();
+    const copyName = `${baseName} (Copy)`;
+    try {
+      const { map } = await api.saveMap({
+        name: copyName,
+        url: snapshot.root?.url || '',
+        root: snapshot.root,
+        orphans: snapshot.orphans,
+        connections: snapshot.connections,
+        colors: snapshot.colors,
+        connectionColors: snapshot.connectionColors,
+        project_id: currentMap?.project_id || null,
+      });
+      setProjects(prev => {
+        let updated = prev.map(p => ({
+          ...p,
+          maps: (p.maps || []).filter(m => m.id !== map.id),
+        }));
+        if (map.project_id) {
+          updated = updated.map(p =>
+            p.id === map.project_id
+              ? { ...p, maps: [...(p.maps || []), map] }
+              : p
+          );
+        }
+        return updated;
+      });
+      setCurrentMap(map);
+      setMapName(map.name);
+      setIsImportedMap(false);
+      setUrlInput(snapshot.root?.url || '');
+      setActiveVersionId(null);
+      setShowVersionEditPrompt(false);
+      versionBaselineRef.current = null;
+      lastAutosaveSnapshotRef.current = '';
+      await loadMapVersions(map.id);
+      await createVersionFromSnapshot({ mapId: map.id, snapshot });
+      showToast('Saved as a copy', 'success');
+    } catch (error) {
+      showToast(error.message || 'Failed to save copy', 'error');
+    }
+  };
+
   // Map functions
   const saveMap = async (projectId, mapName) => {
     if (!root) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
+    const wasNewMap = !currentMap?.id;
 
     try {
       let savedMap;
@@ -1953,7 +2440,20 @@ export default function App() {
       setCurrentMap(savedMap);
       setShowSaveMapModal(false);
       showToast(`Map "${mapName}" saved`, 'success');
-      if (!currentMap?.id && lastHistoryId && lastScanUrl && root?.url === lastScanUrl) {
+      if (wasNewMap) {
+        await loadMapVersions(savedMap.id);
+        await createVersionFromSnapshot({
+          mapId: savedMap.id,
+          snapshot: getVersionSnapshot(),
+        });
+      }
+      if (pendingLoadMap) {
+        const mapToLoad = pendingLoadMap;
+        setPendingLoadMap(null);
+        loadMap(mapToLoad);
+        return;
+      }
+      if (wasNewMap && lastHistoryId && lastScanUrl && root?.url === lastScanUrl) {
         api.updateHistory(lastHistoryId, { map_id: savedMap.id })
           .then(() => {
             setScanHistory(prev => prev.map(item =>
@@ -1984,6 +2484,12 @@ export default function App() {
     setConnections([]);
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null });
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+    setThumbnailScopeIds(null);
+    setShowImageMenu(false);
+    setShowThumbnails(false);
+    resetThumbnailQueue(0);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput('');
     resetScanLayers();
@@ -2000,11 +2506,33 @@ export default function App() {
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setCurrentMap(map);
+    setActiveVersionId(null);
+    setShowVersionEditPrompt(false);
+    versionBaselineRef.current = null;
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+    setThumbnailScopeIds(null);
+    setShowImageMenu(false);
+    setShowThumbnails(false);
+    resetThumbnailQueue(0);
+    loadMapVersions(map.id);
     setShowProjectsModal(false);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput(map.root?.url || '');
     showToast(`Loaded "${map.name}"`, 'success');
     scheduleResetView();
+  };
+
+  const handleLoadMapRequest = (map) => {
+    if (hasMap && !currentMap?.id) {
+      setPendingLoadMap(map);
+      setCreateMapMode(false);
+      setDuplicateMapConfig(null);
+      setShowProjectsModal(false);
+      setShowSaveMapModal(true);
+      return;
+    }
+    loadMap(map);
   };
 
   const deleteMap = async (projectId, mapId) => {
@@ -2184,7 +2712,6 @@ export default function App() {
     startScanTimers();
 
     const scanConfig = {
-      thumbnails: showThumbnails,
       ...scanOptions,
     };
     const params = new URLSearchParams({
@@ -2256,6 +2783,9 @@ export default function App() {
       const hasErrors = nodesForCounts.some((node) => !!node.isError);
       setRoot(merged.root);
       setOrphans(merged.orphans);
+      setShowThumbnails(false);
+      setThumbnailScopeIds(null);
+      resetThumbnailQueue(0);
       setConnections([]);
       setScanMeta({ brokenLinks: data.brokenLinks || [] });
       setScanLayerAvailability({
@@ -2282,26 +2812,6 @@ export default function App() {
         statusAuth: authCount > 0,
         statusDuplicate: duplicateCount > 0,
       });
-      if (scanOptions.thumbnails) {
-        setShowThumbnails(true);
-      }
-      if (scanOptions.thumbnails) {
-        thumbnailQueueRef.current = [];
-        thumbnailRequestRef.current = new Set();
-        thumbnailActiveRef.current = 0;
-        thumbnailStartRef.current = new Map();
-        thumbnailTotalTimeRef.current = 0;
-        setThumbnailQueueSize(0);
-        setThumbnailActiveCount(0);
-        setThumbnailStats({
-          total: nodesForCounts.length,
-          completed: 0,
-          failed: 0,
-          avgMs: 0,
-        });
-      } else {
-        setThumbnailStats({ total: 0, completed: 0, failed: 0, avgMs: 0 });
-      }
       setCurrentMap(null);
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setLastScanAt(new Date().toISOString());
@@ -2378,6 +2888,20 @@ export default function App() {
 
     if (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isOnConnection) return;
 
+    const canStartSelection = e.shiftKey && activeTool === 'select' && !connectionTool;
+    if (canStartSelection) {
+      const start = getWorldPointFromClient(e.clientX, e.clientY);
+      selectionActiveRef.current = true;
+      selectionAdditiveRef.current = e.shiftKey;
+      selectionBaseRef.current = new Set(selectedNodeIds);
+      selectionStartRef.current = start;
+      setSelectionBox({ x: start.x, y: start.y, w: 0, h: 0 });
+      setIsPanning(false);
+      dragRef.current.dragging = false;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      return;
+    }
+
     dragRef.current.dragging = true;
     dragRef.current.startX = e.clientX;
     dragRef.current.startY = e.clientY;
@@ -2396,6 +2920,38 @@ export default function App() {
 
   const onPointerMove = (e) => {
     updateLastPointerFromEvent(e);
+    if (selectionActiveRef.current) {
+      const start = selectionStartRef.current;
+      if (!start) return;
+      const current = getWorldPointFromClient(e.clientX, e.clientY);
+      const rect = {
+        x: Math.min(start.x, current.x),
+        y: Math.min(start.y, current.y),
+        w: Math.abs(current.x - start.x),
+        h: Math.abs(current.y - start.y),
+      };
+      setSelectionBox(rect);
+
+      if (rect.w > 2 || rect.h > 2) {
+        const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
+        const layout = layoutRef.current;
+        if (layout?.nodes?.size) {
+          layout.nodes.forEach((nodeData) => {
+            const nx = nodeData.x;
+            const ny = nodeData.y;
+            const nw = nodeData.w;
+            const nh = nodeData.h;
+            const intersects = rect.x <= nx + nw
+              && rect.x + rect.w >= nx
+              && rect.y <= ny + nh
+              && rect.y + rect.h >= ny;
+            if (intersects) next.add(nodeData.node.id);
+          });
+        }
+        setSelectedNodeIds(next);
+      }
+      return;
+    }
     // Handle canvas panning
     if (!dragRef.current.dragging) return;
     const dx = e.clientX - dragRef.current.startX;
@@ -2406,8 +2962,56 @@ export default function App() {
 
   const onPointerUp = (e) => {
     // Handle canvas pan end
+    if (selectionActiveRef.current) {
+      const start = selectionStartRef.current;
+      if (start) {
+        const current = getWorldPointFromClient(e.clientX, e.clientY);
+        const rect = {
+          x: Math.min(start.x, current.x),
+          y: Math.min(start.y, current.y),
+          w: Math.abs(current.x - start.x),
+          h: Math.abs(current.y - start.y),
+        };
+        if (rect.w > 2 || rect.h > 2) {
+          const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
+          const layout = layoutRef.current;
+          if (layout?.nodes?.size) {
+            layout.nodes.forEach((nodeData) => {
+              const nx = nodeData.x;
+              const ny = nodeData.y;
+              const nw = nodeData.w;
+              const nh = nodeData.h;
+              const intersects = rect.x <= nx + nw
+                && rect.x + rect.w >= nx
+                && rect.y <= ny + nh
+                && rect.y + rect.h >= ny;
+              if (intersects) next.add(nodeData.node.id);
+            });
+          }
+          setSelectedNodeIds(next);
+        } else if (!selectionAdditiveRef.current) {
+          setSelectedNodeIds(new Set());
+        }
+      }
+      selectionActiveRef.current = false;
+      selectionStartRef.current = null;
+      setSelectionBox(null);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+      return;
+    }
+
+    const moved = Math.hypot(
+      e.clientX - dragRef.current.startX,
+      e.clientY - dragRef.current.startY
+    );
+    const wasDragging = dragRef.current.dragging;
     dragRef.current.dragging = false;
     setIsPanning(false);
+    if (wasDragging && moved < 3) {
+      setSelectedNodeIds(new Set());
+    }
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {}
@@ -2706,6 +3310,19 @@ export default function App() {
             setShowCommentsPanel(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowVersionHistoryDrawer(false);
+          }
+          return next;
+        });
+      }
+      if (e.key === 'h' || e.key === 'H') {
+        setShowVersionHistoryDrawer(prev => {
+          const next = !prev;
+          if (next) {
+            setShowCommentsPanel(false);
+            setShowReportDrawer(false);
+            setShowProfileDrawer(false);
+            setShowSettingsDrawer(false);
           }
           return next;
         });
@@ -2751,12 +3368,15 @@ export default function App() {
         if (showSettingsDrawer) {
           setShowSettingsDrawer(false);
         }
+        if (showVersionHistoryDrawer) {
+          setShowVersionHistoryDrawer(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -3587,6 +4207,34 @@ export default function App() {
 
     setCommentPopoverPos({ x: popoverX, y: nodeY, side });
     setCommentingNodeId(nodeId);
+  };
+
+  const handleNodeClick = (node, event) => {
+    if (!node) return;
+    if (activeTool === 'comments') {
+      openCommentPopover(node.id);
+      return;
+    }
+    if (connectionTool) return;
+    if (!event) return;
+    const interactiveTarget = event.target.closest(
+      'button, a, input, textarea, select, .anchor-point, .stack-toggle, .comment-badge, .thumb-fullsize-btn'
+    );
+    if (interactiveTarget) return;
+
+    if (event.shiftKey) {
+      setSelectedNodeIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(node.id)) {
+          next.delete(node.id);
+        } else {
+          next.add(node.id);
+        }
+        return next;
+      });
+    } else {
+      setSelectedNodeIds(new Set([node.id]));
+    }
   };
 
   // ========== CONNECTION LINE FUNCTIONS ==========
@@ -5165,6 +5813,7 @@ export default function App() {
         setIsImportedMap(true); // Mark as imported - scanning won't work
         applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
         setUrlInput(tree.url || '');
+        setMapName('');
         setShowImportModal(false);
         showToast(`Imported ${urls.length} URLs from ${parseType}`, 'success');
       } else {
@@ -5224,8 +5873,6 @@ export default function App() {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
-        showThumbnails={showThumbnails}
-        onToggleThumbnails={(nextValue) => setShowThumbnails(nextValue)}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
         scanOptionsRef={scanOptionsRef}
@@ -5370,6 +6017,17 @@ export default function App() {
                 else if (draggingEndpoint) handleEndpointDragEnd();
               }}
             >
+                {selectionBox && (
+                  <div
+                    className="selection-rect"
+                    style={{
+                      left: selectionBox.x,
+                      top: selectionBox.y,
+                      width: selectionBox.w,
+                      height: selectionBox.h,
+                    }}
+                  />
+                )}
 
                 <SitemapTree
                   data={renderRoot}
@@ -5408,21 +6066,19 @@ export default function App() {
                       applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
                     }
                   }}
-                  onNodeClick={(node) => {
-                    if (activeTool === 'comments') {
-                      openCommentPopover(node.id);
-                    }
-                  }}
+                  onNodeClick={handleNodeClick}
                   onAddNote={(node) => openCommentPopover(node.id)}
                   onViewNotes={(node) => openCommentPopover(node.id)}
                   badgeVisibility={badgeVisibility}
                   layerVisibility={layerVisibility}
                   showPageNumbers={layers.pageNumbers}
                   onRequestThumbnail={requestThumbnail}
+                  thumbnailRequestIds={thumbnailScopeIds}
                   expandedStacks={expandedStacks}
                   onToggleStack={(nodeId) => {
                     setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
                   }}
+                  selectedNodeIds={selectedNodeIds}
                 />
 
                 {/* SVG Connections Layer */}
@@ -5876,6 +6532,7 @@ export default function App() {
                       setShowReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowVersionHistoryDrawer(false);
                     }
                     return next;
                   });
@@ -5889,10 +6546,19 @@ export default function App() {
                       setShowCommentsPanel(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowVersionHistoryDrawer(false);
                     }
                     return next;
                   });
                 },
+                onToggleImageMenu: () => {
+                  setShowImageMenu((prev) => !prev);
+                },
+                onGetThumbnailsAll: () => handleThumbnailCapture('all'),
+                onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
+                showImageMenu,
+                imageMenuRef,
+                hasSelection: selectedNodeIds.size > 0,
                 canUndo,
                 canRedo,
                 onUndo: handleUndo,
@@ -5902,9 +6568,24 @@ export default function App() {
                   setCreateMapMode(false);
                   setShowSaveMapModal(true);
                 },
+                onDuplicateMap: duplicateCurrentMap,
+                onShowVersionHistory: () => {
+                  setShowVersionHistoryDrawer((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setShowCommentsPanel(false);
+                      setShowReportDrawer(false);
+                      setShowProfileDrawer(false);
+                      setShowSettingsDrawer(false);
+                    }
+                    return next;
+                  });
+                },
                 onExport: () => setShowExportModal(true),
                 onShare: () => setShowShareModal(true),
                 hasMap,
+                hasSavedMap: !!currentMap?.id,
+                showVersionHistory: showVersionHistoryDrawer,
               }}
               zoomProps={{
                 scale,
@@ -6029,23 +6710,36 @@ export default function App() {
           setShowSaveMapModal(false);
           setCreateMapMode(false);
           setPendingCreateAfterSave(false);
+          setDuplicateMapConfig(null);
+          setPendingLoadMap(null);
         }}
         isLoggedIn={isLoggedIn}
         onRequireLogin={() => {
           setShowSaveMapModal(false);
           setCreateMapMode(false);
           setPendingCreateAfterSave(false);
+          setDuplicateMapConfig(null);
+          setPendingLoadMap(null);
           setShowAuthModal(true);
         }}
         projects={projects}
         currentMap={currentMap}
         rootUrl={root?.url}
-        defaultProjectId={null}
-        defaultName={mapName}
-        onSave={createMapMode ? startBlankMapCreation : saveMap}
+        defaultProjectId={duplicateMapConfig?.projectId || null}
+        defaultName={duplicateMapConfig?.name || ''}
+        onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
-        title={createMapMode ? 'Create Map' : 'Save Map'}
-        submitLabel={createMapMode ? 'Create' : 'Save Map'}
+        title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
+        submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
+      />
+
+      <SaveVersionModal
+        show={showSaveVersionModal}
+        onClose={() => setShowSaveVersionModal(false)}
+        onSave={handleSaveVersion}
+        versionNumber={saveVersionMeta.number}
+        timestamp={saveVersionMeta.timestamp}
+        defaultName="Updated"
       />
 
       <ProjectsModal
@@ -6065,7 +6759,7 @@ export default function App() {
         onEditProjectNameCancel={() => setEditingProjectId(null)}
         onRenameProject={renameProject}
         onDeleteProject={deleteProject}
-        onLoadMap={loadMap}
+        onLoadMap={handleLoadMapRequest}
         onDeleteMap={deleteMap}
         onAddProject={async () => {
           const name = await showPrompt({
@@ -6137,6 +6831,23 @@ export default function App() {
         onThemeChange={setTheme}
         showPageNumbers={layers.pageNumbers}
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
+      />
+
+      <VersionHistoryDrawer
+        isOpen={showVersionHistoryDrawer}
+        onClose={() => setShowVersionHistoryDrawer(false)}
+        versions={mapVersions}
+        onRestoreVersion={restoreVersion}
+        activeVersionId={activeVersionId}
+        latestVersionId={latestVersionId}
+        isLoading={isLoadingVersions}
+        onAddVersion={openSaveVersionModal}
+      />
+
+      <VersionEditPromptModal
+        show={showVersionEditPrompt}
+        onSaveCopy={handleSaveVersionCopy}
+        onOverride={handleOverrideVersion}
       />
 
       {editModalNode && (

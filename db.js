@@ -63,6 +63,24 @@ db.exec(`
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
   );
 
+  -- Map Versions table (version history)
+  CREATE TABLE IF NOT EXISTS map_versions (
+    id TEXT PRIMARY KEY,
+    map_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    version_number INTEGER NOT NULL,
+    name TEXT,
+    notes TEXT,
+    root_data TEXT NOT NULL,
+    orphans_data TEXT,
+    connections_data TEXT,
+    colors TEXT,
+    connection_colors TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (map_id) REFERENCES maps(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   -- Scan history table
   CREATE TABLE IF NOT EXISTS scan_history (
     id TEXT PRIMARY KEY,
@@ -97,6 +115,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
   CREATE INDEX IF NOT EXISTS idx_maps_user ON maps(user_id);
   CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project_id);
+  CREATE INDEX IF NOT EXISTS idx_map_versions_map ON map_versions(map_id);
+  CREATE INDEX IF NOT EXISTS idx_map_versions_created ON map_versions(map_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_history_user ON scan_history(user_id);
   CREATE INDEX IF NOT EXISTS idx_shares_user ON shares(user_id);
 `);
@@ -105,6 +125,10 @@ db.exec(`
 ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
 ensureColumn('maps', 'connection_colors', 'TEXT');
+ensureColumn('map_versions', 'orphans_data', 'TEXT');
+ensureColumn('map_versions', 'connections_data', 'TEXT');
+ensureColumn('map_versions', 'connection_colors', 'TEXT');
+ensureColumn('map_versions', 'notes', 'TEXT');
 ensureColumn('shares', 'orphans_data', 'TEXT');
 ensureColumn('shares', 'connections_data', 'TEXT');
 ensureColumn('shares', 'connection_colors', 'TEXT');
