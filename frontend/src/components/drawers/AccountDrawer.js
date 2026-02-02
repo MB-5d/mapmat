@@ -10,6 +10,8 @@ const AccountDrawer = ({
   actions,
   className = '',
   ariaLabel,
+  bodyRef,
+  onBodyScroll,
   children,
 }) => {
   const [shouldRender, setShouldRender] = useState(isOpen);
@@ -71,7 +73,7 @@ const AccountDrawer = ({
         </div>
       </header>
 
-      <div className="account-drawer-body">
+      <div className="account-drawer-body" ref={bodyRef} onScroll={onBodyScroll}>
         {children}
       </div>
     </aside>

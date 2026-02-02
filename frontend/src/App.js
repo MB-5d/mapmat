@@ -125,6 +125,7 @@ const SitemapTree = ({
   showPageNumbers,
   onRequestThumbnail,
   thumbnailRequestIds,
+  thumbnailSessionId,
   expandedStacks,
   onToggleStack,
   layout: layoutOverride,
@@ -240,6 +241,7 @@ const SitemapTree = ({
             showPageNumbers={showPageNumbers}
             onRequestThumbnail={onRequestThumbnail}
             thumbnailRequestIds={thumbnailRequestIds}
+            thumbnailSessionId={thumbnailSessionId}
             stackInfo={stackInfo}
             onToggleStack={() => {
               if (stackToggleParentId) toggleStack(stackToggleParentId);
@@ -695,6 +697,8 @@ export default function App() {
   const [showVersionHistoryDrawer, setShowVersionHistoryDrawer] = useState(false);
   const [showSaveVersionModal, setShowSaveVersionModal] = useState(false);
   const [mapVersions, setMapVersions] = useState([]);
+  const [draftVersions, setDraftVersions] = useState([]);
+  const [draftLatestVersionId, setDraftLatestVersionId] = useState(null);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [latestVersionId, setLatestVersionId] = useState(null);
@@ -818,7 +822,11 @@ export default function App() {
   const thumbnailActiveRef = useRef(0);
   const thumbnailStartRef = useRef(new Map());
   const thumbnailTotalTimeRef = useRef(0);
+  const thumbnailAttemptsRef = useRef(new Map());
   const MAX_THUMBNAIL_CONCURRENCY = 4;
+  const MAX_THUMBNAIL_RETRIES = 2;
+  const THUMBNAIL_RETRY_BASE_DELAY = 800;
+  const [thumbnailSessionId, setThumbnailSessionId] = useState(0);
   const [thumbnailQueueSize, setThumbnailQueueSize] = useState(0);
   const [thumbnailActiveCount, setThumbnailActiveCount] = useState(0);
   const [thumbnailStats, setThumbnailStats] = useState({
@@ -1107,6 +1115,23 @@ export default function App() {
     }
   }, []);
 
+  const setDraftVersionFromSnapshot = useCallback((snapshot, label) => {
+    if (!snapshot?.root) return;
+    const id = `draft-${Date.now()}`;
+    setDraftVersions([{
+      id,
+      version_number: 1,
+      name: (label || 'Updated').trim() || 'Updated',
+      notes: '',
+      root: snapshot.root,
+      orphans: snapshot.orphans || [],
+      connections: snapshot.connections || [],
+      colors: snapshot.colors || DEFAULT_COLORS,
+      connectionColors: snapshot.connectionColors || DEFAULT_CONNECTION_COLORS,
+    }]);
+    setDraftLatestVersionId(id);
+  }, []);
+
   const isViewingHistoricalVersion = useMemo(() => {
     if (!activeVersionId || !latestVersionId) return false;
     return activeVersionId !== latestVersionId;
@@ -1248,6 +1273,13 @@ export default function App() {
     if (!lastScanAt) return '';
     return new Date(lastScanAt).toLocaleString();
   }, [lastScanAt]);
+
+  const versionsForDrawer = currentMap?.id ? mapVersions : (root ? draftVersions : []);
+  const latestVersionForDrawer = currentMap?.id
+    ? latestVersionId
+    : (draftLatestVersionId || draftVersions[0]?.id || null);
+  const activeVersionForDrawer = currentMap?.id ? activeVersionId : latestVersionForDrawer;
+  const isVersionLoading = currentMap?.id ? isLoadingVersions : false;
 
 
   const visibleOrphans = useMemo(() => (orphans || []).filter(Boolean), [orphans]);
@@ -1880,6 +1912,20 @@ export default function App() {
   }, [currentMap?.id, loadMapVersions]);
 
   useEffect(() => {
+    if (currentMap?.id) {
+      if (draftVersions.length > 0) setDraftVersions([]);
+      if (draftLatestVersionId) setDraftLatestVersionId(null);
+    }
+  }, [currentMap?.id, draftVersions.length, draftLatestVersionId]);
+
+  useEffect(() => {
+    if (!root) {
+      if (draftVersions.length > 0) setDraftVersions([]);
+      if (draftLatestVersionId) setDraftLatestVersionId(null);
+    }
+  }, [root, draftVersions.length, draftLatestVersionId]);
+
+  useEffect(() => {
     if (!showVersionHistoryDrawer || !currentMap?.id) return;
     loadMapVersions(currentMap.id);
   }, [showVersionHistoryDrawer, currentMap?.id, loadMapVersions]);
@@ -2069,6 +2115,10 @@ export default function App() {
     if (thumbnailActiveRef.current >= MAX_THUMBNAIL_CONCURRENCY) return;
     const next = thumbnailQueueRef.current.shift();
     if (!next) return;
+    const attempt = Number.isFinite(next.attempt)
+      ? next.attempt
+      : (thumbnailAttemptsRef.current.get(next.id) || 0);
+    thumbnailAttemptsRef.current.set(next.id, attempt);
     thumbnailActiveRef.current += 1;
     setThumbnailQueueSize(thumbnailQueueRef.current.length);
     setThumbnailActiveCount(thumbnailActiveRef.current);
@@ -2104,7 +2154,6 @@ export default function App() {
       })
       .finally(() => {
         clearTimeout(timeoutId);
-        thumbnailRequestRef.current.delete(next.id);
         thumbnailActiveRef.current -= 1;
         setThumbnailActiveCount(thumbnailActiveRef.current);
         setThumbnailQueueSize(thumbnailQueueRef.current.length);
@@ -2113,15 +2162,34 @@ export default function App() {
           thumbnailTotalTimeRef.current += Date.now() - start;
           thumbnailStartRef.current.delete(next.id);
         }
-        setThumbnailStats((prev) => {
-          const completed = prev.completed + (success ? 1 : 0);
-          const failed = prev.failed + (success ? 0 : 1);
-          const processed = completed + failed;
-          const avgMs = processed ? Math.round(thumbnailTotalTimeRef.current / processed) : 0;
-          return { ...prev, completed, failed, avgMs };
-        });
+        const shouldRetry = !success && attempt < MAX_THUMBNAIL_RETRIES;
+        if (shouldRetry) {
+          const nextAttempt = attempt + 1;
+          thumbnailAttemptsRef.current.set(next.id, nextAttempt);
+          const retryDelay = THUMBNAIL_RETRY_BASE_DELAY * nextAttempt;
+          setTimeout(() => {
+            thumbnailQueueRef.current.push({ ...next, attempt: nextAttempt });
+            setThumbnailQueueSize(thumbnailQueueRef.current.length);
+            processThumbnailQueue();
+          }, retryDelay);
+        } else {
+          thumbnailRequestRef.current.delete(next.id);
+          thumbnailAttemptsRef.current.delete(next.id);
+          setThumbnailStats((prev) => {
+            const completed = prev.completed + (success ? 1 : 0);
+            const failed = prev.failed + (success ? 0 : 1);
+            const processed = completed + failed;
+            const avgMs = processed ? Math.round(thumbnailTotalTimeRef.current / processed) : 0;
+            return { ...prev, completed, failed, avgMs };
+          });
+        }
         processThumbnailQueue();
-        if (thumbnailQueueRef.current.length === 0 && thumbnailActiveRef.current === 0 && thumbnailStats.total > 0) {
+        if (
+          thumbnailQueueRef.current.length === 0
+          && thumbnailActiveRef.current === 0
+          && thumbnailStats.total > 0
+          && thumbnailRequestRef.current.size === 0
+        ) {
           setTimeout(() => flushThumbnailAutosave(), 300);
         }
       });
@@ -2133,6 +2201,7 @@ export default function App() {
     thumbnailActiveRef.current = 0;
     thumbnailStartRef.current = new Map();
     thumbnailTotalTimeRef.current = 0;
+    thumbnailAttemptsRef.current = new Map();
     setThumbnailQueueSize(0);
     setThumbnailActiveCount(0);
     setThumbnailStats({
@@ -2149,7 +2218,8 @@ export default function App() {
     if (thumbnailRequestRef.current.has(node.id)) return Promise.resolve(false);
     thumbnailRequestRef.current.add(node.id);
     return new Promise((resolve) => {
-      thumbnailQueueRef.current.push({ id: node.id, url: node.url, resolve });
+      thumbnailAttemptsRef.current.set(node.id, 0);
+      thumbnailQueueRef.current.push({ id: node.id, url: node.url, resolve, attempt: 0 });
       setThumbnailQueueSize(thumbnailQueueRef.current.length);
       processThumbnailQueue();
     });
@@ -2223,6 +2293,7 @@ export default function App() {
       showToast('No pages with URLs to capture', 'info');
       return;
     }
+    setThumbnailSessionId((prev) => prev + 1);
     resetThumbnailQueue(total, cachedCount);
     if (candidates.length === 0) {
       setThumbnailScopeIds(new Set());
@@ -2399,9 +2470,16 @@ export default function App() {
         if (map.project_id) {
           updated = updated.map(p =>
             p.id === map.project_id
-              ? { ...p, maps: [...(p.maps || []), map] }
+              ? { ...p, maps: [map, ...(p.maps || [])] }
               : p
           );
+        } else {
+          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          if (uncategorized) {
+            uncategorized.maps = [map, ...(uncategorized.maps || [])];
+          } else {
+            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+          }
         }
         return updated;
       });
@@ -2448,10 +2526,43 @@ export default function App() {
     showToast('Version restored', 'success');
   };
 
-  const handleOverrideVersion = () => {
+  const handleOverrideVersion = async () => {
     setShowVersionEditPrompt(false);
     setActiveVersionId(null);
     versionBaselineRef.current = null;
+    if (!currentMap?.id) return;
+
+    const snapshot = getVersionSnapshot();
+    try {
+      const { map } = await api.updateMap(currentMap.id, {
+        name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
+        root: snapshot.root,
+        orphans: snapshot.orphans,
+        connections: snapshot.connections,
+        colors: snapshot.colors,
+        connectionColors: snapshot.connectionColors,
+        project_id: currentMap?.project_id || null,
+      });
+      setCurrentMap(map);
+      setMapName(map.name || '');
+      setProjects(prev => prev.map(p => ({
+        ...p,
+        maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
+      })));
+      lastAutosaveSnapshotRef.current = JSON.stringify({
+        name: map.name,
+        root: snapshot.root,
+        orphans: snapshot.orphans,
+        connections: snapshot.connections,
+        colors: snapshot.colors,
+        connectionColors: snapshot.connectionColors,
+        project_id: map.project_id || null,
+      });
+      await createVersionFromSnapshot({ mapId: map.id, snapshot, name: 'Updated' });
+      showToast('Latest version updated', 'success');
+    } catch (error) {
+      showToast(error.message || 'Failed to override latest version', 'error');
+    }
   };
 
   const handleSaveVersionCopy = async () => {
@@ -2481,21 +2592,21 @@ export default function App() {
         if (map.project_id) {
           updated = updated.map(p =>
             p.id === map.project_id
-              ? { ...p, maps: [...(p.maps || []), map] }
+              ? { ...p, maps: [map, ...(p.maps || [])] }
               : p
           );
+        } else {
+          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          if (uncategorized) {
+            uncategorized.maps = [map, ...(uncategorized.maps || [])];
+          } else {
+            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+          }
         }
         return updated;
       });
-      setCurrentMap(map);
-      setMapName(map.name);
-      setIsImportedMap(false);
-      setUrlInput(snapshot.root?.url || '');
-      setActiveVersionId(null);
       setShowVersionEditPrompt(false);
-      versionBaselineRef.current = null;
-      lastAutosaveSnapshotRef.current = '';
-      await loadMapVersions(map.id);
+      versionBaselineRef.current = serializeVersionSnapshot(snapshot);
       await createVersionFromSnapshot({ mapId: map.id, snapshot });
       showToast('Saved as a copy', 'success');
     } catch (error) {
@@ -2550,9 +2661,16 @@ export default function App() {
         if (projectId) {
           updated = updated.map(p =>
             p.id === projectId
-              ? { ...p, maps: [...(p.maps || []), savedMap] }
+              ? { ...p, maps: [savedMap, ...(p.maps || [])] }
               : p
           );
+        } else {
+          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          if (uncategorized) {
+            uncategorized.maps = [savedMap, ...(uncategorized.maps || [])];
+          } else {
+            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [savedMap] });
+          }
         }
         return updated;
       });
@@ -2935,6 +3053,13 @@ export default function App() {
         statusDuplicate: duplicateCount > 0,
       });
       setCurrentMap(null);
+      setDraftVersionFromSnapshot({
+        root: merged.root,
+        orphans: merged.orphans,
+        connections: [],
+        colors: DEFAULT_COLORS,
+        connectionColors: DEFAULT_CONNECTION_COLORS,
+      }, 'Updated');
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setLastScanAt(new Date().toISOString());
       // Set map name from site title
@@ -5297,13 +5422,13 @@ export default function App() {
                 if (projectExists) {
                   updated = updated.map(p =>
                     p.id === map.project_id
-                      ? { ...p, maps: [...(p.maps || []), map] }
+                      ? { ...p, maps: [map, ...(p.maps || [])] }
                       : p
                   );
                 } else {
                   const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
                   if (uncategorized) {
-                    uncategorized.maps.push(map);
+                    uncategorized.maps = [map, ...(uncategorized.maps || [])];
                   } else {
                     updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
                   }
@@ -5311,7 +5436,7 @@ export default function App() {
               } else {
                 const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
                 if (uncategorized) {
-                  uncategorized.maps.push(map);
+                  uncategorized.maps = [map, ...(uncategorized.maps || [])];
                 } else {
                   updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
                 }
@@ -5966,6 +6091,13 @@ export default function App() {
         setOrphans([]); // Clear orphans when importing new URLs
         setCurrentMap(null);
         setIsImportedMap(true); // Mark as imported - scanning won't work
+        setDraftVersionFromSnapshot({
+          root: tree,
+          orphans: [],
+          connections: [],
+          colors: DEFAULT_COLORS,
+          connectionColors: DEFAULT_CONNECTION_COLORS,
+        }, 'Updated');
         applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
         setUrlInput(tree.url || '');
         setMapName('');
@@ -6229,6 +6361,7 @@ export default function App() {
                   showPageNumbers={layers.pageNumbers}
                   onRequestThumbnail={requestThumbnail}
                   thumbnailRequestIds={thumbnailScopeIds}
+                  thumbnailSessionId={thumbnailSessionId}
                   expandedStacks={expandedStacks}
                   onToggleStack={(nodeId) => {
                     setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
@@ -7004,11 +7137,11 @@ export default function App() {
       <VersionHistoryDrawer
         isOpen={showVersionHistoryDrawer}
         onClose={() => setShowVersionHistoryDrawer(false)}
-        versions={mapVersions}
+        versions={versionsForDrawer}
         onRestoreVersion={restoreVersion}
-        activeVersionId={activeVersionId}
-        latestVersionId={latestVersionId}
-        isLoading={isLoadingVersions}
+        activeVersionId={activeVersionForDrawer}
+        latestVersionId={latestVersionForDrawer}
+        isLoading={isVersionLoading}
         onAddVersion={openSaveVersionModal}
       />
 

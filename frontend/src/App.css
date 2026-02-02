@@ -2967,6 +2967,28 @@ body {
   padding: 16px 0;
 }
 
+.drawer-back-to-top {
+  position: sticky;
+  bottom: 16px;
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  margin: 8px 8px 0 auto;
+  z-index: 6;
+}
+
+.drawer-back-to-top:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
 .save-version-modal .version-meta-row {
   display: flex;
   align-items: center;

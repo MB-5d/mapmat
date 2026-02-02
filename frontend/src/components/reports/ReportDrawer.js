@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowUp,
   ChevronDown,
   ChevronUp,
   Download,
@@ -27,6 +28,8 @@ const ReportDrawer = ({
   const [isClosing, setIsClosing] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const bodyRef = useRef(null);
   const [filters, setFilters] = useState(() => {
     const initial = {};
     typeOptions.forEach(option => {
@@ -59,6 +62,10 @@ const ReportDrawer = ({
     });
     setFilters(next);
   }, [isOpen, typeOptions]);
+
+  useEffect(() => {
+    if (!isOpen) setShowBackToTop(false);
+  }, [isOpen]);
 
   const typeLookup = useMemo(() => {
     const map = new Map();
@@ -114,6 +121,14 @@ const ReportDrawer = ({
     ? `${reportTitle.slice(0, 56).trim()}…`
     : reportTitle;
 
+  const handleBodyScroll = (event) => {
+    setShowBackToTop(event.currentTarget.scrollTop > 240);
+  };
+
+  const scrollToTop = () => {
+    bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   if (!shouldRender) return null;
 
   const statCards = [
@@ -160,6 +175,8 @@ const ReportDrawer = ({
 
       <div
         className="report-drawer-body"
+        ref={bodyRef}
+        onScroll={handleBodyScroll}
         onWheel={(e) => {
           e.stopPropagation();
           e.nativeEvent?.stopImmediatePropagation?.();
@@ -366,6 +383,12 @@ const ReportDrawer = ({
           )}
         </div>
       </section>
+      {showBackToTop ? (
+        <button type="button" className="drawer-back-to-top" onClick={scrollToTop}>
+          <ArrowUp size={16} />
+          Back to top
+        </button>
+      ) : null}
       </div>
     </aside>
   );

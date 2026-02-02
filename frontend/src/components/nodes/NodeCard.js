@@ -40,6 +40,7 @@ const NodeCard = ({
   showPageNumbers = true,
   onRequestThumbnail,
   thumbnailRequestIds,
+  thumbnailSessionId,
   stackInfo,
   onToggleStack,
   isGhosted = false,
@@ -65,7 +66,7 @@ const NodeCard = ({
         setThumbKey(k => k + 1); // Force new image request
       }
     }
-  }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail]);
+  }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail, thumbnailSessionId]);
 
   // Timeout fallback - screenshots can be slow on large scans
   useEffect(() => {
@@ -323,6 +324,7 @@ const DraggableNodeCard = ({
   showPageNumbers,
   onRequestThumbnail,
   thumbnailRequestIds,
+  thumbnailSessionId,
   stackInfo,
   onToggleStack,
   isGhosted,
@@ -360,6 +362,7 @@ const DraggableNodeCard = ({
         showPageNumbers={showPageNumbers}
         onRequestThumbnail={onRequestThumbnail}
         thumbnailRequestIds={thumbnailRequestIds}
+        thumbnailSessionId={thumbnailSessionId}
         stackInfo={stackInfo}
         onToggleStack={onToggleStack}
         isGhosted={isGhosted}

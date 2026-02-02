@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Bookmark,
-  BookmarkPlus,
+  CopyPlus,
   Download,
   FilePlus,
   GanttChartSquare,
@@ -222,7 +222,7 @@ const CanvasToolbar = ({
         disabled={!hasMap}
         title="Duplicate Map"
       >
-        <BookmarkPlus size={20} />
+        <CopyPlus size={20} />
       </button>
     )}
 
