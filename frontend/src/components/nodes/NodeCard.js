@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import {
   ChevronDown,
@@ -41,6 +41,10 @@ const NodeCard = ({
   onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
+  thumbnailReloadKey = 0,
+  thumbnailCaptureStopped = false,
+  onThumbnailLoad,
+  onThumbnailError,
   stackInfo,
   onToggleStack,
   isGhosted = false,
@@ -49,6 +53,7 @@ const NodeCard = ({
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
   const [thumbKey, setThumbKey] = useState(0);
+  const thumbImgRef = useRef(null);
 
   const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
   const thumb = node.thumbnailUrl
@@ -68,6 +73,26 @@ const NodeCard = ({
     }
   }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail, thumbnailSessionId]);
 
+  useEffect(() => {
+    if (!showThumbnails) return;
+    if (!canRequestThumbnail) return;
+    if (!thumbnailReloadKey) return;
+    setThumbError(false);
+    setThumbLoading(true);
+    setThumbKey(k => k + 1);
+  }, [thumbnailReloadKey, showThumbnails, canRequestThumbnail]);
+
+  useEffect(() => {
+    if (!thumbnailCaptureStopped) return;
+    if (thumbLoading) {
+      const loadedImage = thumbImgRef.current?.complete && thumbImgRef.current?.naturalWidth > 0;
+      setThumbLoading(false);
+      if (!loadedImage) {
+        setThumbError(true);
+      }
+    }
+  }, [thumbnailCaptureStopped, thumbLoading]);
+
   // Timeout fallback - screenshots can be slow on large scans
   useEffect(() => {
     if (!showThumbnails) return undefined;
@@ -76,10 +101,11 @@ const NodeCard = ({
       if (thumbLoading) {
         setThumbError(true);
         setThumbLoading(false);
+        onThumbnailError?.(node.id, node.url);
       }
     }, 120000);
     return () => clearTimeout(timeout);
-  }, [showThumbnails, thumbLoading, thumbKey, thumb, canRequestThumbnail]);
+  }, [showThumbnails, thumbLoading, thumbKey, thumb, canRequestThumbnail, node.id, node.url, onThumbnailError]);
 
   useEffect(() => {
     if (!showThumbnails || !onRequestThumbnail) return;
@@ -91,7 +117,7 @@ const NodeCard = ({
     setThumbError(false);
     onRequestThumbnail(node).then((success) => {
       if (!isActive) return;
-      if (!success && !node.thumbnailUrl) {
+      if (success === false && !node.thumbnailUrl) {
         setThumbError(true);
         setThumbLoading(false);
       }
@@ -100,6 +126,15 @@ const NodeCard = ({
       isActive = false;
     };
   }, [showThumbnails, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError, canRequestThumbnail]);
+
+  useEffect(() => {
+    if (!thumb || !thumbImgRef.current) return;
+    if (thumbImgRef.current.complete && thumbImgRef.current.naturalWidth > 0) {
+      setThumbError(false);
+      setThumbLoading(false);
+      onThumbnailLoad?.(node.id);
+    }
+  }, [thumb, node.id, onThumbnailLoad]);
 
   const handleViewFull = () => {
     // Use uploaded thumbnail if available, otherwise use URL for mshots
@@ -193,15 +228,24 @@ const NodeCard = ({
               <Loader2 size={24} className="thumb-spinner" />
             </div>
           )}
-          {hasThumb ? (
+          {hasThumb && !thumbError ? (
             <>
               <img
                 className="thumb-img"
                 src={thumb}
                 alt={node.title}
                 loading="lazy"
-                onLoad={() => setThumbLoading(false)}
-                onError={() => { setThumbError(true); setThumbLoading(false); }}
+                ref={thumbImgRef}
+                onLoad={() => {
+                  setThumbError(false);
+                  setThumbLoading(false);
+                  onThumbnailLoad?.(node.id);
+                }}
+                onError={() => {
+                  setThumbError(true);
+                  setThumbLoading(false);
+                  onThumbnailError?.(node.id, node.url);
+                }}
                 style={{ opacity: thumbLoading ? 0 : 1 }}
               />
               {!thumbLoading && (
@@ -325,6 +369,10 @@ const DraggableNodeCard = ({
   onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
+  thumbnailReloadKey,
+  thumbnailCaptureStopped,
+  onThumbnailLoad,
+  onThumbnailError,
   stackInfo,
   onToggleStack,
   isGhosted,
@@ -363,6 +411,10 @@ const DraggableNodeCard = ({
         onRequestThumbnail={onRequestThumbnail}
         thumbnailRequestIds={thumbnailRequestIds}
         thumbnailSessionId={thumbnailSessionId}
+        thumbnailReloadKey={thumbnailReloadKey}
+        thumbnailCaptureStopped={thumbnailCaptureStopped}
+        onThumbnailLoad={onThumbnailLoad}
+        onThumbnailError={onThumbnailError}
         stackInfo={stackInfo}
         onToggleStack={onToggleStack}
         isGhosted={isGhosted}

@@ -17,6 +17,7 @@ import {
   Trash2,
   X,
   XCircle,
+  XOctagon,
 } from 'lucide-react';
 
 import './App.css';
@@ -126,10 +127,15 @@ const SitemapTree = ({
   onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
+  thumbnailReloadMap,
+  thumbnailCaptureStopped,
+  onThumbnailLoad,
+  onThumbnailError,
   expandedStacks,
   onToggleStack,
   layout: layoutOverride,
   selectedNodeIds,
+  children,
 }) => {
   const toggleStack = (nodeId) => {
     onToggleStack?.(nodeId);
@@ -205,6 +211,8 @@ const SitemapTree = ({
         ))}
       </svg>
 
+      {children}
+
       {/* Render all nodes with absolute positioning */}
       {Array.from(layout.nodes.values()).map(nodeData => {
         const color = colors[Math.min(nodeData.depth, colors.length - 1)];
@@ -242,6 +250,10 @@ const SitemapTree = ({
             onRequestThumbnail={onRequestThumbnail}
             thumbnailRequestIds={thumbnailRequestIds}
             thumbnailSessionId={thumbnailSessionId}
+            thumbnailReloadKey={thumbnailReloadMap?.[nodeData.node.id] || 0}
+            thumbnailCaptureStopped={thumbnailCaptureStopped}
+            onThumbnailLoad={onThumbnailLoad}
+            onThumbnailError={onThumbnailError}
             stackInfo={stackInfo}
             onToggleStack={() => {
               if (stackToggleParentId) toggleStack(stackToggleParentId);
@@ -817,24 +829,36 @@ export default function App() {
   const viewDropdownRef = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
-  const thumbnailRequestRef = useRef(new Set());
   const thumbnailQueueRef = useRef([]);
+  const thumbnailQueuedRef = useRef(new Set());
+  const thumbnailInFlightRef = useRef(new Set());
+  const thumbnailAbortControllersRef = useRef(new Map());
   const thumbnailActiveRef = useRef(0);
-  const thumbnailStartRef = useRef(new Map());
+  const thumbnailLoadStartRef = useRef(new Map());
   const thumbnailTotalTimeRef = useRef(0);
   const thumbnailAttemptsRef = useRef(new Map());
+  const thumbnailExpectedRef = useRef(new Set());
+  const thumbnailLoadedRef = useRef(new Set());
+  const thumbnailErrorRef = useRef(new Set());
+  const thumbnailCompletedRef = useRef(false);
+  const thumbnailStopRequestedRef = useRef(false);
+  const thumbnailSessionRef = useRef(0);
+  const thumbnailElapsedStartRef = useRef(0);
+  const thumbnailElapsedTimerRef = useRef(null);
   const MAX_THUMBNAIL_CONCURRENCY = 4;
-  const MAX_THUMBNAIL_RETRIES = 2;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
   const [thumbnailSessionId, setThumbnailSessionId] = useState(0);
   const [thumbnailQueueSize, setThumbnailQueueSize] = useState(0);
   const [thumbnailActiveCount, setThumbnailActiveCount] = useState(0);
+  const [thumbnailReloadMap, setThumbnailReloadMap] = useState({});
+  const [thumbnailElapsedMs, setThumbnailElapsedMs] = useState(0);
   const [thumbnailStats, setThumbnailStats] = useState({
     total: 0,
-    completed: 0,
+    loaded: 0,
     failed: 0,
     avgMs: 0,
     cached: 0,
+    stopped: false,
   });
 
   // Close view dropdown when clicking outside
@@ -1302,7 +1326,6 @@ export default function App() {
   }, [mapLayout]);
 
   const brokenConnections = useMemo(() => {
-    if (scanMeta.brokenLinks.length === 0) return [];
     const visibleNodes = collectAllNodesWithOrphans(renderRoot, visibleOrphans);
     const nodeById = new Map(visibleNodes.map((node) => [node.id, node]));
     const urlToId = new Map();
@@ -1327,7 +1350,16 @@ export default function App() {
       return urlToId.get(normalizeUrlForCompare(url)) || urlToId.get(url) || null;
     };
 
-    return scanMeta.brokenLinks
+    const brokenInputs = (scanMeta.brokenLinks && scanMeta.brokenLinks.length > 0)
+      ? scanMeta.brokenLinks
+      : visibleNodes
+        .filter((node) => !!node?.isBroken || node?.orphanType === 'broken')
+        .map((node) => ({
+          url: node.url,
+          sourceUrl: node.referrerUrl || node.parentUrl || null,
+        }));
+
+    return brokenInputs
       .map((link, index) => {
         if (!link?.url) return null;
         const targetId = getNodeIdForUrl(link.url);
@@ -1344,13 +1376,21 @@ export default function App() {
         if (!sourceUrl) {
           sourceUrl = targetNode?.referrerUrl || targetNode?.parentUrl || null;
         }
-        const sourceId = getNodeIdForUrl(sourceUrl);
+        let sourceId = getNodeIdForUrl(sourceUrl);
+        if (!sourceId) {
+          sourceId = forestIndex.nodes.get(targetId)?.parentId || null;
+        }
         if (!sourceId || sourceId === targetId) return null;
 
         return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId };
       })
       .filter(Boolean);
   }, [scanMeta.brokenLinks, renderRoot, visibleOrphans, forestIndex]);
+
+  const autoCrosslinkConnections = useMemo(
+    () => connections.filter((conn) => conn.type === 'crosslink' && conn.autoRoute),
+    [connections]
+  );
 
   const connectionAvailability = useMemo(() => ({
     userFlows: connections.some((conn) => conn.type === 'userflow'),
@@ -1369,6 +1409,20 @@ export default function App() {
       hasAny: hasUserFlows || hasCrossLinks || hasBrokenLinks,
     };
   }, [connections, layers.userFlows, layers.crossLinks, layers.brokenLinks, brokenConnections]);
+
+  const isCrosslinkGhosted = useCallback((conn) => {
+    if (!conn || !layerVisibility) return false;
+    const sourceMeta = forestIndex.nodes.get(conn.sourceNodeId);
+    const targetMeta = forestIndex.nodes.get(conn.targetNodeId);
+    const isPlacementHidden = (meta) => {
+      if (!meta) return false;
+      if (meta.treeType === 'subdomain' && !layerVisibility.placementSubdomain) return true;
+      if (meta.treeType === 'orphan' && !layerVisibility.placementOrphan) return true;
+      if (meta.treeType === 'root' && !layerVisibility.placementPrimary) return true;
+      return false;
+    };
+    return isPlacementHidden(sourceMeta) || isPlacementHidden(targetMeta);
+  }, [forestIndex, layerVisibility]);
 
   // Check if there are any comments in the map (for notification dot)
   const hasAnyComments = useMemo(() => {
@@ -2091,6 +2145,14 @@ export default function App() {
     });
   };
 
+  const bumpThumbnailReload = useCallback((nodeId) => {
+    if (!nodeId) return;
+    setThumbnailReloadMap((prev) => ({
+      ...prev,
+      [nodeId]: (prev[nodeId] || 0) + 1,
+    }));
+  }, []);
+
   const flushThumbnailAutosave = () => {
     if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion) return;
     const payload = {
@@ -2111,10 +2173,58 @@ export default function App() {
     flushAutosave();
   };
 
+  const updateThumbnailErrorState = useCallback((nodeId, hasError) => {
+    if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
+    const errorSet = thumbnailErrorRef.current;
+    if (hasError) {
+      if (!errorSet.has(nodeId)) {
+        errorSet.add(nodeId);
+        setThumbnailStats((prev) => ({ ...prev, failed: prev.failed + 1 }));
+      }
+      return;
+    }
+    if (errorSet.has(nodeId)) {
+      errorSet.delete(nodeId);
+      setThumbnailStats((prev) => ({ ...prev, failed: Math.max(0, prev.failed - 1) }));
+    }
+  }, []);
+
+  const scheduleThumbnailRetry = useCallback((nodeId, url, attemptOverride) => {
+    if (!nodeId || !url) return;
+    if (thumbnailStopRequestedRef.current) return;
+    const currentAttempt = Number.isFinite(attemptOverride)
+      ? attemptOverride
+      : (thumbnailAttemptsRef.current.get(nodeId) || 0);
+    const nextAttempt = currentAttempt + 1;
+    thumbnailAttemptsRef.current.set(nodeId, nextAttempt);
+    const retryDelay = Math.min(THUMBNAIL_RETRY_BASE_DELAY * nextAttempt, 15000);
+    const sessionId = thumbnailSessionRef.current;
+    setTimeout(() => {
+      if (thumbnailStopRequestedRef.current) return;
+      if (thumbnailSessionRef.current !== sessionId) return;
+      if (thumbnailQueuedRef.current.has(nodeId) || thumbnailInFlightRef.current.has(nodeId)) return;
+      thumbnailQueuedRef.current.add(nodeId);
+      thumbnailQueueRef.current.push({
+        id: nodeId,
+        url,
+        attempt: nextAttempt,
+        sessionId,
+      });
+      setThumbnailQueueSize(thumbnailQueueRef.current.length);
+      processThumbnailQueue();
+    }, retryDelay);
+  }, []);
+
   const processThumbnailQueue = () => {
+    if (thumbnailStopRequestedRef.current) return;
     if (thumbnailActiveRef.current >= MAX_THUMBNAIL_CONCURRENCY) return;
     const next = thumbnailQueueRef.current.shift();
     if (!next) return;
+    if (next.sessionId && next.sessionId !== thumbnailSessionRef.current) {
+      processThumbnailQueue();
+      return;
+    }
+    thumbnailQueuedRef.current.delete(next.id);
     const attempt = Number.isFinite(next.attempt)
       ? next.attempt
       : (thumbnailAttemptsRef.current.get(next.id) || 0);
@@ -2122,18 +2232,14 @@ export default function App() {
     thumbnailActiveRef.current += 1;
     setThumbnailQueueSize(thumbnailQueueRef.current.length);
     setThumbnailActiveCount(thumbnailActiveRef.current);
-    thumbnailStartRef.current.set(next.id, Date.now());
+    thumbnailLoadStartRef.current.set(next.id, Date.now());
+    thumbnailInFlightRef.current.add(next.id);
     let success = false;
-    let didResolve = false;
     const controller = new AbortController();
+    thumbnailAbortControllersRef.current.set(next.id, controller);
     const timeoutId = setTimeout(() => {
       controller.abort();
     }, 45000);
-    const finish = (result) => {
-      if (didResolve) return;
-      didResolve = true;
-      next.resolve(result);
-    };
 
     fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(next.url)}&type=thumb`, {
       signal: controller.signal,
@@ -2142,88 +2248,127 @@ export default function App() {
       .then(({ ok, data }) => {
         if (ok && data?.url) {
           updateNodeThumbnail(next.id, data.url);
+          bumpThumbnailReload(next.id);
+          updateThumbnailErrorState(next.id, false);
           success = true;
-          finish(true);
-          return;
         }
-        finish(false);
       })
-      .catch(() => {
-        // Swallow errors; retries handled in the card.
-        finish(false);
-      })
+      .catch(() => {})
       .finally(() => {
         clearTimeout(timeoutId);
-        thumbnailActiveRef.current -= 1;
-        setThumbnailActiveCount(thumbnailActiveRef.current);
-        setThumbnailQueueSize(thumbnailQueueRef.current.length);
-        const start = thumbnailStartRef.current.get(next.id);
-        if (start) {
-          thumbnailTotalTimeRef.current += Date.now() - start;
-          thumbnailStartRef.current.delete(next.id);
+        const isStale = next.sessionId && next.sessionId !== thumbnailSessionRef.current;
+        if (!isStale) {
+          thumbnailActiveRef.current -= 1;
+          setThumbnailActiveCount(thumbnailActiveRef.current);
+          setThumbnailQueueSize(thumbnailQueueRef.current.length);
         }
-        const shouldRetry = !success && attempt < MAX_THUMBNAIL_RETRIES;
-        if (shouldRetry) {
-          const nextAttempt = attempt + 1;
-          thumbnailAttemptsRef.current.set(next.id, nextAttempt);
-          const retryDelay = THUMBNAIL_RETRY_BASE_DELAY * nextAttempt;
-          setTimeout(() => {
-            thumbnailQueueRef.current.push({ ...next, attempt: nextAttempt });
-            setThumbnailQueueSize(thumbnailQueueRef.current.length);
-            processThumbnailQueue();
-          }, retryDelay);
-        } else {
-          thumbnailRequestRef.current.delete(next.id);
-          thumbnailAttemptsRef.current.delete(next.id);
-          setThumbnailStats((prev) => {
-            const completed = prev.completed + (success ? 1 : 0);
-            const failed = prev.failed + (success ? 0 : 1);
-            const processed = completed + failed;
-            const avgMs = processed ? Math.round(thumbnailTotalTimeRef.current / processed) : 0;
-            return { ...prev, completed, failed, avgMs };
-          });
+        thumbnailInFlightRef.current.delete(next.id);
+        thumbnailAbortControllersRef.current.delete(next.id);
+        if (isStale) {
+          processThumbnailQueue();
+          return;
+        }
+        if (!success) {
+          thumbnailLoadStartRef.current.delete(next.id);
+        }
+        if (thumbnailStopRequestedRef.current) {
+          processThumbnailQueue();
+          return;
+        }
+        if (!success) {
+          updateThumbnailErrorState(next.id, true);
+          scheduleThumbnailRetry(next.id, next.url, attempt);
         }
         processThumbnailQueue();
-        if (
-          thumbnailQueueRef.current.length === 0
-          && thumbnailActiveRef.current === 0
-          && thumbnailStats.total > 0
-          && thumbnailRequestRef.current.size === 0
-        ) {
-          setTimeout(() => flushThumbnailAutosave(), 300);
-        }
       });
   };
 
-  const resetThumbnailQueue = (total, cached = 0) => {
+  const resetThumbnailQueue = (total, cached = 0, bumpSession = true) => {
+    if (bumpSession) {
+      const nextSessionId = thumbnailSessionRef.current + 1;
+      thumbnailSessionRef.current = nextSessionId;
+      setThumbnailSessionId(nextSessionId);
+    }
     thumbnailQueueRef.current = [];
-    thumbnailRequestRef.current = new Set();
+    thumbnailQueuedRef.current.clear();
+    thumbnailInFlightRef.current.clear();
+    thumbnailAbortControllersRef.current.forEach((controller) => controller.abort());
+    thumbnailAbortControllersRef.current.clear();
     thumbnailActiveRef.current = 0;
-    thumbnailStartRef.current = new Map();
+    thumbnailLoadStartRef.current = new Map();
     thumbnailTotalTimeRef.current = 0;
     thumbnailAttemptsRef.current = new Map();
+    thumbnailExpectedRef.current = new Set();
+    thumbnailLoadedRef.current = new Set();
+    thumbnailErrorRef.current = new Set();
+    thumbnailCompletedRef.current = false;
+    thumbnailStopRequestedRef.current = false;
     setThumbnailQueueSize(0);
     setThumbnailActiveCount(0);
+    setThumbnailReloadMap({});
     setThumbnailStats({
       total,
-      completed: 0,
+      loaded: 0,
       failed: 0,
       avgMs: 0,
       cached,
+      stopped: false,
     });
   };
 
   const requestThumbnail = (node) => {
     if (!node?.id || !node?.url) return Promise.resolve(false);
-    if (thumbnailRequestRef.current.has(node.id)) return Promise.resolve(false);
-    thumbnailRequestRef.current.add(node.id);
-    return new Promise((resolve) => {
+    if (thumbnailStopRequestedRef.current) return Promise.resolve(true);
+    if (thumbnailQueuedRef.current.has(node.id) || thumbnailInFlightRef.current.has(node.id)) {
+      return Promise.resolve(true);
+    }
+    if (!thumbnailAttemptsRef.current.has(node.id)) {
       thumbnailAttemptsRef.current.set(node.id, 0);
-      thumbnailQueueRef.current.push({ id: node.id, url: node.url, resolve, attempt: 0 });
-      setThumbnailQueueSize(thumbnailQueueRef.current.length);
-      processThumbnailQueue();
+    }
+    thumbnailQueuedRef.current.add(node.id);
+    thumbnailQueueRef.current.push({
+      id: node.id,
+      url: node.url,
+      attempt: 0,
+      sessionId: thumbnailSessionRef.current,
     });
+    setThumbnailQueueSize(thumbnailQueueRef.current.length);
+    processThumbnailQueue();
+    return Promise.resolve(true);
   };
+
+  const handleThumbnailImageLoad = useCallback((nodeId) => {
+    if (thumbnailStopRequestedRef.current) return;
+    if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
+    if (thumbnailLoadedRef.current.has(nodeId)) return;
+    thumbnailLoadedRef.current.add(nodeId);
+    updateThumbnailErrorState(nodeId, false);
+    const start = thumbnailLoadStartRef.current.get(nodeId);
+    if (start) {
+      thumbnailTotalTimeRef.current += Date.now() - start;
+      thumbnailLoadStartRef.current.delete(nodeId);
+    }
+    thumbnailAttemptsRef.current.delete(nodeId);
+    const loadedCount = thumbnailLoadedRef.current.size;
+    const expectedCount = thumbnailExpectedRef.current.size;
+    setThumbnailStats((prev) => ({
+      ...prev,
+      loaded: loadedCount,
+      avgMs: loadedCount ? Math.round(thumbnailTotalTimeRef.current / loadedCount) : 0,
+    }));
+    if (!thumbnailCompletedRef.current && expectedCount > 0 && loadedCount >= expectedCount) {
+      thumbnailCompletedRef.current = true;
+      setTimeout(() => flushThumbnailAutosave(), 300);
+    }
+  }, [flushThumbnailAutosave, updateThumbnailErrorState]);
+
+  const handleThumbnailImageError = useCallback((nodeId, url) => {
+    if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
+    if (thumbnailStopRequestedRef.current) return;
+    thumbnailLoadStartRef.current.delete(nodeId);
+    updateThumbnailErrorState(nodeId, true);
+    scheduleThumbnailRetry(nodeId, url);
+  }, [scheduleThumbnailRetry, updateThumbnailErrorState]);
 
   const orderThumbnailNodes = (nodes) => {
     if (!Array.isArray(nodes) || nodes.length === 0) return [];
@@ -2293,8 +2438,10 @@ export default function App() {
       showToast('No pages with URLs to capture', 'info');
       return;
     }
-    setThumbnailSessionId((prev) => prev + 1);
-    resetThumbnailQueue(total, cachedCount);
+    resetThumbnailQueue(total, cachedCount, true);
+    thumbnailElapsedStartRef.current = Date.now();
+    setThumbnailElapsedMs(0);
+    thumbnailExpectedRef.current = new Set(candidates.map((node) => node.id));
     if (candidates.length === 0) {
       setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
@@ -2309,6 +2456,56 @@ export default function App() {
       requestThumbnail(node);
     });
   };
+
+  const handleStopThumbnailCapture = async () => {
+    if (!thumbnailStats.total || thumbnailStats.stopped) return;
+    const confirmed = await showConfirm({
+      title: 'Stop capturing thumbnails?',
+      message: 'This will stop the capture process. Thumbnails already captured will be kept.',
+      confirmText: 'Stop',
+      cancelText: 'Keep going',
+      danger: true,
+    });
+    if (!confirmed) return;
+    thumbnailStopRequestedRef.current = true;
+    thumbnailQueueRef.current = [];
+    thumbnailQueuedRef.current.clear();
+    thumbnailAbortControllersRef.current.forEach((controller) => controller.abort());
+    thumbnailAbortControllersRef.current.clear();
+    setThumbnailQueueSize(0);
+    setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+    setTimeout(() => flushThumbnailAutosave(), 300);
+  };
+
+  useEffect(() => {
+    const cached = thumbnailStats.cached || 0;
+    const totalNew = Math.max(0, thumbnailStats.total - cached);
+    const isActive = showThumbnails
+      && totalNew > 0
+      && !thumbnailStats.stopped
+      && thumbnailStats.loaded < totalNew;
+    if (!isActive) {
+      if (thumbnailElapsedTimerRef.current) {
+        clearInterval(thumbnailElapsedTimerRef.current);
+        thumbnailElapsedTimerRef.current = null;
+      }
+      return undefined;
+    }
+    if (!thumbnailElapsedStartRef.current) {
+      thumbnailElapsedStartRef.current = Date.now();
+    }
+    const tick = () => {
+      setThumbnailElapsedMs(Date.now() - thumbnailElapsedStartRef.current);
+    };
+    tick();
+    thumbnailElapsedTimerRef.current = setInterval(tick, 1000);
+    return () => {
+      if (thumbnailElapsedTimerRef.current) {
+        clearInterval(thumbnailElapsedTimerRef.current);
+        thumbnailElapsedTimerRef.current = null;
+      }
+    };
+  }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.stopped, thumbnailStats.total]);
 
   // Fetch full page screenshot from backend (or display direct image URL)
   const viewFullScreenshot = async (urlOrImage, isDirectImage = false, nodeId = null) => {
@@ -3021,12 +3218,29 @@ export default function App() {
       });
       const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
       const hasErrors = nodesForCounts.some((node) => !!node.isError);
+      const seenCrosslinks = new Set();
+      const scannedCrosslinks = (data.crosslinks || [])
+        .map((link, index) => {
+          if (!link?.sourceId || !link?.targetId || link.sourceId === link.targetId) return null;
+          const key = [link.sourceId, link.targetId].sort().join('::');
+          if (seenCrosslinks.has(key)) return null;
+          seenCrosslinks.add(key);
+          return {
+            id: `scan-crosslink-${link.sourceId}-${link.targetId}-${index}`,
+            type: 'crosslink',
+            sourceNodeId: link.sourceId,
+            targetNodeId: link.targetId,
+            autoRoute: true,
+            locked: true,
+          };
+        })
+        .filter(Boolean);
       setRoot(merged.root);
       setOrphans(merged.orphans);
       setShowThumbnails(false);
       setThumbnailScopeIds(null);
       resetThumbnailQueue(0);
-      setConnections([]);
+      setConnections(scannedCrosslinks);
       setScanMeta({ brokenLinks: data.brokenLinks || [] });
       setScanLayerAvailability({
         placementPrimary: true,
@@ -3056,7 +3270,7 @@ export default function App() {
       setDraftVersionFromSnapshot({
         root: merged.root,
         orphans: merged.orphans,
-        connections: [],
+        connections: scannedCrosslinks,
         colors: DEFAULT_COLORS,
         connectionColors: DEFAULT_CONNECTION_COLORS,
       }, 'Updated');
@@ -3119,7 +3333,7 @@ export default function App() {
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isOnConnection = e.target.closest('.connections-layer');
@@ -4522,17 +4736,31 @@ export default function App() {
   const SNAP_RADIUS = 30; // Magnetic snap radius in canvas pixels
 
   // Get anchor position in canvas coordinates
-  const getAnchorPosition = (nodeId, anchor) => {
-    const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
-    if (!nodeElement) return null;
+  const getAnchorPosition = useCallback((nodeId, anchor) => {
+    const layoutNode = mapLayout?.nodes?.get(nodeId);
+    const nodeX = layoutNode?.x ?? null;
+    const nodeY = layoutNode?.y ?? null;
+    const nodeW = layoutNode?.w ?? LAYOUT.NODE_W;
+    const nodeH = layoutNode?.h ?? getNodeH(showThumbnails);
 
-    const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
-    if (!nodeWrapper) return null;
+    if (nodeX === null || nodeY === null) {
+      const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+      if (!nodeElement) return null;
 
-    const nodeX = parseFloat(nodeWrapper.style.left) || 0;
-    const nodeY = parseFloat(nodeWrapper.style.top) || 0;
-    const nodeW = LAYOUT.NODE_W;
-    const nodeH = getNodeH(showThumbnails);
+      const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
+      if (!nodeWrapper) return null;
+
+      const domX = parseFloat(nodeWrapper.style.left) || 0;
+      const domY = parseFloat(nodeWrapper.style.top) || 0;
+
+      switch (anchor) {
+        case 'top': return { x: domX + nodeW / 2, y: domY };
+        case 'right': return { x: domX + nodeW, y: domY + nodeH / 2 };
+        case 'bottom': return { x: domX + nodeW / 2, y: domY + nodeH };
+        case 'left': return { x: domX, y: domY + nodeH / 2 };
+        default: return { x: domX + nodeW / 2, y: domY + nodeH / 2 };
+      }
+    }
 
     switch (anchor) {
       case 'top': return { x: nodeX + nodeW / 2, y: nodeY };
@@ -4541,7 +4769,7 @@ export default function App() {
       case 'left': return { x: nodeX, y: nodeY + nodeH / 2 };
       default: return { x: nodeX + nodeW / 2, y: nodeY + nodeH / 2 };
     }
-  };
+  }, [mapLayout, showThumbnails]);
 
   // Find nearest anchor point within snap radius (for magnetic snapping)
   const findNearestAnchor = (cursorX, cursorY, excludeNodeId, connectionType) => {
@@ -4911,12 +5139,24 @@ export default function App() {
     );
   };
 
+  const getAnchorSpacing = useCallback((count, anchor) => {
+    if (count <= 1) return 0;
+    const axisLength = (anchor === 'top' || anchor === 'bottom')
+      ? (LAYOUT.NODE_W - 24)
+      : (getNodeH(showThumbnails) - 24);
+    const computed = axisLength / Math.max(count - 1, 1);
+    const maxSpacing = count > 12 ? 12 : 16;
+    const minSpacing = count > 12 ? 2 : 6;
+    return Math.max(minSpacing, Math.min(maxSpacing, computed));
+  }, [showThumbnails]);
+
   const getAnchorOffset = (conn, nodeId, anchor, isSource) => {
     const shared = getConnectionsAtAnchor(nodeId, anchor, isSource);
     if (shared.length <= 1) return { x: 0, y: 0 };
 
     const index = shared.findIndex(c => c.id === conn.id);
-    const offset = (index - (shared.length - 1) / 2) * 16;
+    const spacing = getAnchorSpacing(shared.length, anchor);
+    const offset = (index - (shared.length - 1) / 2) * spacing;
 
     return (anchor === 'top' || anchor === 'bottom')
       ? { x: offset, y: 0 }
@@ -4963,7 +5203,7 @@ export default function App() {
     return `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`;
   };
 
-  const getBrokenLinkBezierPath = (sourceId, targetId) => {
+  const getBestAnchorPair = useCallback((sourceId, targetId) => {
     const anchors = ['top', 'right', 'bottom', 'left'];
     let best = null;
 
@@ -4975,32 +5215,73 @@ export default function App() {
         if (!end) return;
         const dist = (start.x - end.x) ** 2 + (start.y - end.y) ** 2;
         if (!best || dist < best.dist) {
-          best = { sourceAnchor, targetAnchor, start, end, dist };
+          best = { sourceAnchor, targetAnchor, dist };
         }
       });
     });
 
-    if (!best) return '';
+    if (!best) return null;
+    return { sourceAnchor: best.sourceAnchor, targetAnchor: best.targetAnchor };
+  }, [getAnchorPosition]);
 
-    const offset = { x: 8, y: -8 };
-    const startPos = { x: best.start.x, y: best.start.y };
-    const endPos = { x: best.end.x, y: best.end.y };
+  // ========== END CONNECTION LINE FUNCTIONS ==========
+
+  const brokenAnchorPairs = useMemo(() => {
+    const map = new Map();
+    brokenConnections.forEach((conn) => {
+      const best = getBestAnchorPair(conn.sourceId, conn.targetId);
+      if (best) map.set(conn.id, best);
+    });
+    return map;
+  }, [brokenConnections, getBestAnchorPair]);
+
+  const getBrokenLinkOffset = useCallback((connId, nodeId, anchor, isSource) => {
+    const shared = brokenConnections.filter((conn) => {
+      const anchors = brokenAnchorPairs.get(conn.id);
+      if (!anchors) return false;
+      if (isSource) {
+        return conn.sourceId === nodeId && anchors.sourceAnchor === anchor;
+      }
+      return conn.targetId === nodeId && anchors.targetAnchor === anchor;
+    });
+    if (shared.length <= 1) return { x: 0, y: 0 };
+    const index = shared.findIndex((conn) => conn.id === connId);
+    if (index < 0) return { x: 0, y: 0 };
+    const spacing = getAnchorSpacing(shared.length, anchor);
+    const offset = (index - (shared.length - 1) / 2) * spacing;
+    return (anchor === 'top' || anchor === 'bottom')
+      ? { x: offset, y: 0 }
+      : { x: 0, y: offset };
+  }, [brokenConnections, brokenAnchorPairs, getAnchorSpacing]);
+
+  const getBrokenLinkPathForConnection = useCallback((conn) => {
+    const anchors = brokenAnchorPairs.get(conn.id);
+    if (!anchors) return '';
+    const start = getAnchorPosition(conn.sourceId, anchors.sourceAnchor);
+    const end = getAnchorPosition(conn.targetId, anchors.targetAnchor);
+    if (!start || !end) return '';
+
+    const srcOffset = getBrokenLinkOffset(conn.id, conn.sourceId, anchors.sourceAnchor, true);
+    const tgtOffset = getBrokenLinkOffset(conn.id, conn.targetId, anchors.targetAnchor, false);
+    const startPos = { x: start.x + srcOffset.x, y: start.y + srcOffset.y };
+    const endPos = { x: end.x + tgtOffset.x, y: end.y + tgtOffset.y };
 
     const dx = Math.abs(endPos.x - startPos.x);
     const dy = Math.abs(endPos.y - startPos.y);
     const curveOffset = Math.min(Math.max(dx, dy) * 0.5, 120);
 
-    let ctrl1 = { x: startPos.x + offset.x, y: startPos.y + offset.y };
-    let ctrl2 = { x: endPos.x + offset.x, y: endPos.y + offset.y };
+    const ctrlOffset = { x: 8, y: -8 };
+    let ctrl1 = { x: startPos.x + ctrlOffset.x, y: startPos.y + ctrlOffset.y };
+    let ctrl2 = { x: endPos.x + ctrlOffset.x, y: endPos.y + ctrlOffset.y };
 
-    switch (best.sourceAnchor) {
+    switch (anchors.sourceAnchor) {
       case 'top': ctrl1.y -= curveOffset; break;
       case 'right': ctrl1.x += curveOffset; break;
       case 'bottom': ctrl1.y += curveOffset; break;
       case 'left': ctrl1.x -= curveOffset; break;
       default: break;
     }
-    switch (best.targetAnchor) {
+    switch (anchors.targetAnchor) {
       case 'top': ctrl2.y -= curveOffset; break;
       case 'right': ctrl2.x += curveOffset; break;
       case 'bottom': ctrl2.y += curveOffset; break;
@@ -5009,9 +5290,25 @@ export default function App() {
     }
 
     return `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`;
-  };
+  }, [brokenAnchorPairs, getAnchorPosition, getBrokenLinkOffset]);
 
-  // ========== END CONNECTION LINE FUNCTIONS ==========
+  useEffect(() => {
+    if (!mapLayout) return;
+    setConnections((prev) => {
+      let changed = false;
+      const next = prev.map((conn) => {
+        if (conn.type !== 'crosslink' || !conn.autoRoute) return conn;
+        const best = getBestAnchorPair(conn.sourceNodeId, conn.targetNodeId);
+        if (!best) return conn;
+        if (conn.sourceAnchor === best.sourceAnchor && conn.targetAnchor === best.targetAnchor) {
+          return conn;
+        }
+        changed = true;
+        return { ...conn, sourceAnchor: best.sourceAnchor, targetAnchor: best.targetAnchor };
+      });
+      return changed ? next : prev;
+    });
+  }, [mapLayout, showThumbnails, getBestAnchorPair]);
 
   // Opens delete confirmation modal
   const requestDeleteNode = (id) => {
@@ -6362,27 +6659,30 @@ export default function App() {
                   onRequestThumbnail={requestThumbnail}
                   thumbnailRequestIds={thumbnailScopeIds}
                   thumbnailSessionId={thumbnailSessionId}
+                  thumbnailReloadMap={thumbnailReloadMap}
+                  thumbnailCaptureStopped={thumbnailStats.stopped}
+                  onThumbnailLoad={handleThumbnailImageLoad}
+                  onThumbnailError={handleThumbnailImageError}
                   expandedStacks={expandedStacks}
                   onToggleStack={(nodeId) => {
                     setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
                   }}
                   selectedNodeIds={selectedNodeIds}
-                />
-
-                {/* SVG Connections Layer */}
-                <svg
-                  className="connections-layer"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    pointerEvents: 'none',
-                    overflow: 'visible',
-                    zIndex: 0,
-                  }}
                 >
+                  {/* SVG Connections Layer */}
+                  <svg
+                    className="connections-layer"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'auto',
+                      overflow: 'visible',
+                      zIndex: 0,
+                    }}
+                  >
                   {/* Arrowhead marker definition */}
                   <defs>
                     <marker
@@ -6403,21 +6703,131 @@ export default function App() {
                       strokeLinejoin="miter"
                     />
                   </marker>
+                  <filter
+                    id="connection-glow"
+                    x="-50%"
+                    y="-50%"
+                    width="200%"
+                    height="200%"
+                    colorInterpolationFilters="sRGB"
+                  >
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+                    <feComponentTransfer in="blur" result="glow">
+                      <feFuncA type="linear" slope="0.6" />
+                    </feComponentTransfer>
+                    <feMerge>
+                      <feMergeNode in="glow" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
                 </defs>
 
-                {layers.brokenLinks && brokenConnections.map((conn) => {
-                  const path = getBrokenLinkBezierPath(conn.sourceId, conn.targetId);
+                {layers.crossLinks && autoCrosslinkConnections.map((conn) => {
+                  const path = conn.sourceAnchor && conn.targetAnchor
+                    ? generateConnectionPath(conn)
+                    : (() => {
+                      const best = getBestAnchorPair(conn.sourceNodeId, conn.targetNodeId);
+                      if (!best) return '';
+                      return generateConnectionPath({ ...conn, ...best });
+                    })();
                   if (!path) return null;
+                  const ghosted = isCrosslinkGhosted(conn);
+                  const isHovered = hoveredConnection === conn.id;
+                  const baseOpacity = ghosted ? 0.2 : 0.5;
+                  const lineOpacity = isHovered ? (ghosted ? 0.4 : 1) : baseOpacity;
+                  const glowOpacity = isHovered ? (ghosted ? 0.24 : 0.6) : 0;
+                  const baseWidth = 2;
+                  const lineWidth = isHovered ? baseWidth + 1 : baseWidth;
+                  const color = connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks;
+
                   return (
-                    <path
-                      key={conn.id}
-                      d={path}
-                      fill="none"
-                      stroke={connectionColors.brokenLinks || DEFAULT_CONNECTION_COLORS.brokenLinks}
-                      strokeWidth="2"
-                      strokeDasharray="6 6"
-                      strokeLinecap="round"
-                    />
+                    <g key={conn.id}>
+                      <path
+                        className="connection-hit"
+                        d={path}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={16}
+                        strokeOpacity={0}
+                        strokeLinecap="round"
+                        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredConnection(conn.id)}
+                        onMouseLeave={() => setHoveredConnection(null)}
+                      />
+                      <path
+                        className="connection-glow"
+                        d={path}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={lineWidth + 2}
+                        strokeOpacity={glowOpacity}
+                        strokeLinecap="round"
+                        strokeDasharray="8 6"
+                        filter="url(#connection-glow)"
+                        style={{ pointerEvents: 'none' }}
+                      />
+                      <path
+                        className="connection-line"
+                        d={path}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={lineWidth}
+                        strokeDasharray="8 6"
+                        strokeLinecap="round"
+                        strokeOpacity={lineOpacity}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    </g>
+                  );
+                })}
+
+                {layers.brokenLinks && brokenConnections.map((conn) => {
+                  const path = getBrokenLinkPathForConnection(conn);
+                  if (!path) return null;
+                  const isHovered = hoveredConnection === conn.id;
+                  const baseWidth = 2;
+                  const lineWidth = isHovered ? baseWidth + 1 : baseWidth;
+                  const color = connectionColors.brokenLinks || DEFAULT_CONNECTION_COLORS.brokenLinks;
+                  const lineOpacity = isHovered ? 1 : 1;
+                  const glowOpacity = isHovered ? 0.6 : 0;
+                  return (
+                    <g key={conn.id}>
+                      <path
+                        className="connection-hit"
+                        d={path}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={16}
+                        strokeOpacity={0}
+                        strokeLinecap="round"
+                        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                        onMouseEnter={() => setHoveredConnection(conn.id)}
+                        onMouseLeave={() => setHoveredConnection(null)}
+                      />
+                      <path
+                        className="connection-glow"
+                        d={path}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={lineWidth + 2}
+                        strokeOpacity={glowOpacity}
+                        strokeLinecap="round"
+                        strokeDasharray="6 6"
+                        filter="url(#connection-glow)"
+                        style={{ pointerEvents: 'none' }}
+                      />
+                      <path
+                        className="connection-line"
+                        d={path}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={lineWidth}
+                        strokeDasharray="6 6"
+                        strokeLinecap="round"
+                        strokeOpacity={lineOpacity}
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    </g>
                   );
                 })}
 
@@ -6426,6 +6836,7 @@ export default function App() {
                   .filter(conn => {
                     if (conn.type === 'userflow' && !layers.userFlows) return false;
                     if (conn.type === 'crosslink' && !layers.crossLinks) return false;
+                    if (conn.type === 'crosslink' && conn.autoRoute) return false;
                     // Hide connection being dragged
                     if (draggingEndpoint?.connectionId === conn.id) return false;
                     return true;
@@ -6434,19 +6845,32 @@ export default function App() {
                     const path = generateConnectionPath(conn);
                     if (!path) return null;
                     const isUserFlow = conn.type === 'userflow';
+                    const isCrosslink = conn.type === 'crosslink';
+                    const crosslinkGhosted = isCrosslink && isCrosslinkGhosted(conn);
                     const color = isUserFlow
                       ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
                       : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
                     const isHovered = hoveredConnection === conn.id;
+                    const baseWidth = 2;
+                    const lineWidth = isHovered ? baseWidth + 1 : baseWidth;
+                    const baseOpacity = isCrosslink && crosslinkGhosted ? 0.4 : 1;
+                    const lineOpacity = isHovered
+                      ? (isCrosslink && crosslinkGhosted ? 0.4 : 1)
+                      : baseOpacity;
+                    const glowOpacity = isHovered
+                      ? (isCrosslink && crosslinkGhosted ? 0.24 : 0.6)
+                      : 0;
 
                     return (
                       <g key={conn.id}>
                         {/* Invisible hit area for easier hovering */}
                         <path
+                          className="connection-hit"
                           d={path}
                           fill="none"
-                          stroke="transparent"
+                          stroke={color}
                           strokeWidth={16}
+                          strokeOpacity={0}
                           strokeLinecap="round"
                           style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
                           onMouseEnter={() => setHoveredConnection(conn.id)}
@@ -6486,26 +6910,29 @@ export default function App() {
                           }}
                         />
                         {/* Glow effect on hover */}
-                        {isHovered && (
-                          <path
-                            d={path}
-                            fill="none"
-                            stroke={color}
-                            strokeWidth={8}
-                            strokeOpacity={0.3}
-                            strokeLinecap="round"
-                            strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                          />
-                        )}
-                        {/* Main line */}
                         <path
+                          className="connection-glow"
                           d={path}
                           fill="none"
                           stroke={color}
-                          strokeWidth={isHovered ? 3 : 2}
+                          strokeWidth={lineWidth + 2}
+                          strokeOpacity={glowOpacity}
+                          strokeLinecap="round"
+                          strokeDasharray={isUserFlow ? 'none' : '8 6'}
+                          filter="url(#connection-glow)"
+                          style={{ pointerEvents: 'none' }}
+                        />
+                        {/* Main line */}
+                        <path
+                          className="connection-line"
+                          d={path}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth={lineWidth}
                           strokeLinecap="round"
                           strokeDasharray={isUserFlow ? 'none' : '8 6'}
                           markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+                          strokeOpacity={lineOpacity}
                           style={{ pointerEvents: 'none' }}
                         />
                       </g>
@@ -6610,6 +7037,7 @@ export default function App() {
                   );
                 })()}
               </svg>
+                </SitemapTree>
 
               {/* Connection context menu */}
               {connectionMenu && (
@@ -6922,23 +7350,37 @@ export default function App() {
           </DndContext>
         )}
         {showThumbnails && thumbnailStats.total > 0 && (() => {
+          if (thumbnailStats.stopped) return null;
           const cached = thumbnailStats.cached || 0;
           const totalNew = Math.max(0, thumbnailStats.total - cached);
           if (totalNew <= 0) return null;
-          const attempted = thumbnailStats.completed + thumbnailStats.failed;
-          const remaining = totalNew - attempted;
+          const remaining = totalNew - thumbnailStats.loaded;
           if (remaining <= 0) return null;
           const etaMs = thumbnailStats.avgMs > 0
             ? Math.ceil((remaining * thumbnailStats.avgMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY))
             : 0;
           return (
             <div className="thumbnail-progress-toast">
-              <span>
-                Thumbnails: {thumbnailStats.completed}/{totalNew}
-                {cached > 0 ? ` (${cached} cached)` : ''}
-                {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} failed)` : ''}
-              </span>
-              <span>{thumbnailStats.avgMs > 0 ? `ETA ~${formatDuration(etaMs)}` : 'Estimating...'}</span>
+              <div className="thumbnail-progress-details">
+                <span>
+                  Thumbnails: {thumbnailStats.loaded}/{totalNew}
+                  {cached > 0 ? ` (${cached} cached)` : ''}
+                  {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} retrying)` : ''}
+                </span>
+                <span className="thumbnail-progress-line">
+                  <span className="thumbnail-progress-bar" aria-hidden="true" />
+                  {formatDuration(thumbnailElapsedMs)} | ETA ~{thumbnailStats.avgMs > 0 ? formatDuration(etaMs) : '--:--'}
+                </span>
+              </div>
+              <button
+                className="thumbnail-progress-stop"
+                onClick={handleStopThumbnailCapture}
+                title="Stop thumbnail capture"
+                onPointerDown={(event) => event.stopPropagation()}
+                type="button"
+              >
+                <XOctagon size={16} />
+              </button>
             </div>
           );
         })()}

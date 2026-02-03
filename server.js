@@ -445,6 +445,7 @@ function normalizeScanOptions(options = {}) {
     orphanPages: Boolean(options.orphanPages),
     errorPages: Boolean(options.errorPages),
     brokenLinks: Boolean(options.brokenLinks),
+    duplicates: Boolean(options.duplicates),
     files: Boolean(options.files),
     crosslinks: Boolean(options.crosslinks),
   };
@@ -766,27 +767,29 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   });
 
-  const canonicalIndex = new Map();
-  const rootNode = nodes.get(rootUrl);
-  if (rootNode) {
-    const rootKey = canonicalKeyFor(rootNode);
-    if (rootKey) canonicalIndex.set(rootKey, rootNode.url);
-    rootNode.isDuplicate = false;
-    rootNode.duplicateOf = null;
+  if (scanOptions.duplicates) {
+    const canonicalIndex = new Map();
+    const rootNode = nodes.get(rootUrl);
+    if (rootNode) {
+      const rootKey = canonicalKeyFor(rootNode);
+      if (rootKey) canonicalIndex.set(rootKey, rootNode.url);
+      rootNode.isDuplicate = false;
+      rootNode.duplicateOf = null;
+    }
+    nodes.forEach((node) => {
+      if (node.url === rootUrl) return;
+      const key = canonicalKeyFor(node);
+      if (!key) return;
+      if (!canonicalIndex.has(key)) {
+        canonicalIndex.set(key, node.url);
+        return;
+      }
+      if (canonicalIndex.get(key) !== node.url) {
+        node.isDuplicate = true;
+        node.duplicateOf = canonicalIndex.get(key);
+      }
+    });
   }
-  nodes.forEach((node) => {
-    if (node.url === rootUrl) return;
-    const key = canonicalKeyFor(node);
-    if (!key) return;
-    if (!canonicalIndex.has(key)) {
-      canonicalIndex.set(key, node.url);
-      return;
-    }
-    if (canonicalIndex.get(key) !== node.url) {
-      node.isDuplicate = true;
-      node.duplicateOf = canonicalIndex.get(key);
-    }
-  });
 
   // Reset children before regrouping
   nodes.forEach((node) => {
@@ -870,8 +873,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     if (scanOptions.orphanPages) {
       if (!node.isMissing) orphanCandidates.push(node);
-    } else {
-      pushUniqueChild(nodes.get(rootUrl), node);
     }
   }
 
@@ -1050,24 +1051,26 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   prunedOrphanNodes.forEach(stripInternalFields);
   subdomainNodes.forEach(stripInternalFields);
 
-  const canonicalToRootUrl = new Map();
-  const collectCanonical = (node) => {
-    const key = canonicalKeyFor(node);
-    if (key && !canonicalToRootUrl.has(key)) canonicalToRootUrl.set(key, node.url);
-    node.children?.forEach(collectCanonical);
-  };
-  if (root) collectCanonical(root);
+  if (scanOptions.duplicates) {
+    const canonicalToRootUrl = new Map();
+    const collectCanonical = (node) => {
+      const key = canonicalKeyFor(node);
+      if (key && !canonicalToRootUrl.has(key)) canonicalToRootUrl.set(key, node.url);
+      node.children?.forEach(collectCanonical);
+    };
+    if (root) collectCanonical(root);
 
-  const markDuplicateTree = (node) => {
-    const key = canonicalKeyFor(node);
-    if (key && canonicalToRootUrl.has(key) && canonicalToRootUrl.get(key) !== node.url) {
-      node.isDuplicate = true;
-      node.duplicateOf = canonicalToRootUrl.get(key);
-    }
-    node.children?.forEach(markDuplicateTree);
-  };
-  orphanNodes.forEach(markDuplicateTree);
-  subdomainNodes.forEach(markDuplicateTree);
+    const markDuplicateTree = (node) => {
+      const key = canonicalKeyFor(node);
+      if (key && canonicalToRootUrl.has(key) && canonicalToRootUrl.get(key) !== node.url) {
+        node.isDuplicate = true;
+        node.duplicateOf = canonicalToRootUrl.get(key);
+      }
+      node.children?.forEach(markDuplicateTree);
+    };
+    orphanNodes.forEach(markDuplicateTree);
+    subdomainNodes.forEach(markDuplicateTree);
+  }
 
   let crosslinks = [];
   if (scanOptions.crosslinks) {

@@ -828,19 +828,20 @@ body {
 /* Main container with computed dimensions */
 .sitemap-tree-absolute {
   position: relative;
+  z-index: 1;
 }
 
 /* Each node is absolutely positioned */
 .sitemap-node-positioned {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   width: var(--node-w);
 }
 
 /* Stacked cards positioning */
 .stacked-cards-positioned {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   cursor: pointer;
   width: var(--node-w);
 }
@@ -900,7 +901,7 @@ body {
   height: 100%;
   pointer-events: none;
   overflow: visible;
-  z-index: 0;
+  z-index: 1;
 }
 
 .vertical-connector {
@@ -1025,6 +1026,9 @@ body {
 
 .node-card.selected {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.8);
+  outline: 3px solid rgba(99, 102, 241, 0.6);
+  outline-offset: 2px;
+  z-index: 2;
 }
 
 .node-card.ghosted {
@@ -1252,11 +1256,20 @@ body {
 
 /* Connections layer */
 .connections-layer {
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .connections-layer path {
+  pointer-events: none;
+}
+
+.connection-hit {
   pointer-events: stroke;
+}
+
+.connection-line,
+.connection-glow {
+  transition: stroke-width 140ms ease-out, stroke-opacity 140ms ease-out;
 }
 
 /* Connection context menu */
@@ -1714,24 +1727,31 @@ body {
 }
 
 .legend-line {
-  width: 24px;
-  height: 0;
-  border-top: 3px solid transparent;
+  width: 28px;
+  height: 2px;
   border-radius: 999px;
   flex-shrink: 0;
+  background: var(--legend-color, #94a3b8);
 }
 
-.legend-userflow {
-  border-top-color: #14b8a6;
+.legend-line-solid {
+  background: var(--legend-color, #94a3b8);
 }
 
-.legend-crosslink {
-  border-top-color: #f97316;
+.legend-line-crosslinks {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--legend-color, #f97316) 0 8px,
+    transparent 8px 14px
+  );
 }
 
-.legend-broken {
-  border-top-color: #fca5a5;
-  border-top-style: dashed;
+.legend-line-broken {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--legend-color, #fca5a5) 0 6px,
+    transparent 6px 12px
+  );
 }
 
 .color-key-toggle-OLD {
@@ -1842,6 +1862,13 @@ body {
 .layers-panel-item.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.layers-panel-hint {
+  padding: 0 8px 6px 32px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: #94a3b8;
 }
 
 .layers-panel-toggle {
@@ -5616,6 +5643,72 @@ body {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.2);
   z-index: 1200;
   backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+
+.thumbnail-progress-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.thumbnail-progress-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.thumbnail-progress-bar {
+  width: 36px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+.thumbnail-progress-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: inherit;
+  animation: thumbnail-bar 1.1s linear infinite;
+}
+
+@keyframes thumbnail-bar {
+  0% {
+    left: -40%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+.thumbnail-progress-stop {
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.thumbnail-progress-stop:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.thumbnail-progress-stop:active {
+  transform: translateY(1px);
 }
 
 .save-map-form {
@@ -6580,6 +6673,8 @@ body {
 
 [data-theme="dark"] .node-card.selected {
   box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.9);
+  outline: 3px solid rgba(129, 140, 248, 0.7);
+  outline-offset: 2px;
 }
 
 [data-theme="dark"] .node-card:hover {
@@ -7055,6 +7150,10 @@ body {
 
 [data-theme="dark"] .layers-panel-item:hover {
   background: #301E3F;
+}
+
+[data-theme="dark"] .layers-panel-hint {
+  color: #6b5a80;
 }
 
 [data-theme="dark"] .layers-panel-toggle {

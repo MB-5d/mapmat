@@ -66,8 +66,8 @@ const ColorKey = ({
                 }}
               >
                 <span
-                  className="legend-line"
-                  style={{ borderTopColor: connectionColors?.userFlows || '#14b8a6' }}
+                  className="legend-line legend-line-solid"
+                  style={{ '--legend-color': connectionColors?.userFlows || '#14b8a6' }}
                 />
                 <span>User Flows</span>
                 <Edit2 size={12} className="color-edit-icon" />
@@ -87,8 +87,8 @@ const ColorKey = ({
                 }}
               >
                 <span
-                  className="legend-line"
-                  style={{ borderTopColor: connectionColors?.crossLinks || '#f97316' }}
+                  className="legend-line legend-line-crosslinks"
+                  style={{ '--legend-color': connectionColors?.crossLinks || '#f97316' }}
                 />
                 <span>Crosslinks</span>
                 <Edit2 size={12} className="color-edit-icon" />
@@ -108,11 +108,8 @@ const ColorKey = ({
                 }}
               >
                 <span
-                  className="legend-line"
-                  style={{
-                    borderTopColor: connectionColors?.brokenLinks || '#fca5a5',
-                    borderTopStyle: 'dashed',
-                  }}
+                  className="legend-line legend-line-broken"
+                  style={{ '--legend-color': connectionColors?.brokenLinks || '#fca5a5' }}
                 />
                 <span>Broken Links</span>
                 <Edit2 size={12} className="color-edit-icon" />

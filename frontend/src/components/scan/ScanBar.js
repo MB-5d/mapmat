@@ -82,15 +82,7 @@ const ScanBar = ({
                   ))}
                 </select>
               </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.inactivePages}
-                  onChange={() => onOptionChange('inactivePages')}
-                  disabled={optionsDisabled}
-                />
-                <span>Inactive pages</span>
-              </label>
+              <div className="layers-panel-section">Placement</div>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
@@ -103,20 +95,22 @@ const ScanBar = ({
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
-                  checked={options.authenticatedPages}
-                  onChange={() => onOptionChange('authenticatedPages')}
-                  disabled={optionsDisabled}
-                />
-                <span>Authenticated Pages</span>
-              </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
                   checked={options.orphanPages}
                   onChange={() => onOptionChange('orphanPages')}
                   disabled={optionsDisabled}
                 />
                 <span>Orphan Pages</span>
+              </label>
+
+              <div className="layers-panel-section">Status</div>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={options.inactivePages}
+                  onChange={() => onOptionChange('inactivePages')}
+                  disabled={optionsDisabled}
+                />
+                <span>Inactive pages</span>
               </label>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
@@ -130,12 +124,23 @@ const ScanBar = ({
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
-                  checked={options.brokenLinks}
-                  onChange={() => onOptionChange('brokenLinks')}
+                  checked={options.duplicates}
+                  onChange={() => onOptionChange('duplicates')}
                   disabled={optionsDisabled}
                 />
-                <span>Broken links</span>
+                <span>Duplicates</span>
               </label>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={options.authenticatedPages}
+                  onChange={() => onOptionChange('authenticatedPages')}
+                  disabled={optionsDisabled}
+                />
+                <span>Authenticated Pages</span>
+              </label>
+
+              <div className="layers-panel-section">Type</div>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
                   type="checkbox"
@@ -144,6 +149,17 @@ const ScanBar = ({
                   disabled={optionsDisabled}
                 />
                 <span>Files / Downloads</span>
+              </label>
+
+              <div className="layers-panel-section">Connections</div>
+              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={options.brokenLinks}
+                  onChange={() => onOptionChange('brokenLinks')}
+                  disabled={optionsDisabled}
+                />
+                <span>Broken links</span>
               </label>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
@@ -154,15 +170,9 @@ const ScanBar = ({
                 />
                 <span>Crosslinks</span>
               </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.duplicates}
-                  onChange={() => onOptionChange('duplicates')}
-                  disabled={optionsDisabled}
-                />
-                <span>Duplicates</span>
-              </label>
+              <div className="layers-panel-hint">
+                Limited by scan depth and max pages.
+              </div>
             </div>
           </div>
         )}
