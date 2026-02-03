@@ -687,11 +687,13 @@ export default function App() {
   const [imageLoading, setImageLoading] = useState(false);
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const scaleRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [connectionColors, setConnectionColors] = useState(DEFAULT_CONNECTION_COLORS);
   const [showColorKey, setShowColorKey] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(false);
   const [editingColorDepth, setEditingColorDepth] = useState(null);
   const [editingConnectionKey, setEditingConnectionKey] = useState(null);
   const [colorPickerPosition, setColorPickerPosition] = useState(null);
@@ -860,6 +862,21 @@ export default function App() {
     cached: 0,
     stopped: false,
   });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const updateSize = () => {
+      setCanvasSize({
+        width: canvas.clientWidth,
+        height: canvas.clientHeight,
+      });
+    };
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [showLanding]);
 
   // Close view dropdown when clicking outside
   useEffect(() => {
@@ -1695,6 +1712,24 @@ export default function App() {
     };
 
     requestAnimationFrame(tick);
+  }, [applyTransform]);
+
+  const panToWorldPoint = useCallback((worldX, worldY) => {
+    const nextPan = {
+      x: -worldX * scaleRef.current,
+      y: -worldY * scaleRef.current,
+    };
+    applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y });
+  }, [applyTransform]);
+
+  const centerOnWorldPoint = useCallback((worldX, worldY) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const nextPan = {
+      x: canvas.clientWidth / 2 - worldX * scaleRef.current,
+      y: canvas.clientHeight / 2 - worldY * scaleRef.current,
+    };
+    applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y });
   }, [applyTransform]);
 
   const findStackParentsForNode = useCallback((node, targetId, depth = 0) => {
@@ -3333,7 +3368,7 @@ export default function App() {
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast, .minimap');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isOnConnection = e.target.closest('.connections-layer');
@@ -3577,6 +3612,15 @@ export default function App() {
     const next = clamp(scaleRef.current / 1.2, min, max);
     zoomAtClientPoint(next, cx, cy);
   }, [zoomAtClientPoint, getZoomBounds]);
+
+  const zoomTo = useCallback((nextScale) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    zoomAtClientPoint(nextScale, cx, cy);
+  }, [zoomAtClientPoint]);
 
   const centerHome = useCallback(() => {
     const canvas = canvasRef.current;
@@ -4076,6 +4120,7 @@ export default function App() {
         filter: (node) => {
           if (node.classList?.contains('zoom-controls')) return false;
           if (node.classList?.contains('color-key')) return false;
+          if (node.classList?.contains('minimap')) return false;
           // Exclude cross-origin thumbnail images
           if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
           return true;
@@ -4443,6 +4488,7 @@ export default function App() {
           // Exclude zoom controls, color key, and grid from export
           if (node.classList?.contains('zoom-controls')) return false;
           if (node.classList?.contains('color-key')) return false;
+          if (node.classList?.contains('minimap')) return false;
           // Exclude cross-origin thumbnail images
           if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
           return true;
@@ -7316,6 +7362,21 @@ export default function App() {
                 onZoomOut: zoomOut,
                 onZoomIn: zoomIn,
                 onResetView: resetView,
+                onToggleMinimap: () => setShowMinimap((prev) => !prev),
+                showMinimap,
+              }}
+              minimapProps={{
+                isOpen: showMinimap,
+                layout: mapLayout,
+                bounds: worldBounds,
+                canvasSize,
+                pan,
+                scale,
+                minScale: zoomBounds.min,
+                maxScale: zoomBounds.max,
+                onPanTo: panToWorldPoint,
+                onCenterOn: centerOnWorldPoint,
+                onZoomTo: zoomTo,
               }}
             />
             <ReportDrawer
