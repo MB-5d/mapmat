@@ -17,15 +17,24 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const dns = require('dns').promises;
+const net = require('net');
 
 // Initialize database (creates tables if needed)
-require('./db');
+const db = require('./db');
 
 // Import routes
-const { router: authRouter } = require('./routes/auth');
+const { router: authRouter, authMiddleware } = require('./routes/auth');
 const apiRouter = require('./routes/api');
 
 const app = express();
+const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBLIC_DOMAIN;
+const RUN_MODE = process.env.RUN_MODE || 'both'; // 'web' | 'worker' | 'both'
+const RUN_WEB = RUN_MODE === 'both' || RUN_MODE === 'web';
+const RUN_WORKER = RUN_MODE === 'both' || RUN_MODE === 'worker';
+if (process.env.TRUST_PROXY === 'true' || isProd) {
+  app.set('trust proxy', 1);
+}
 
 // CORS configuration - allow credentials for cookies
 const defaultOrigins = [
@@ -68,7 +77,20 @@ const PORT = process.env.PORT || 4002;
 
 // Browser instance for screenshots
 let browser = null;
-const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBLIC_DOMAIN;
+const SCAN_LIMITS = {
+  maxPagesDefault: Number(process.env.SCAN_MAX_PAGES_DEFAULT ?? 300),
+  maxPagesHard: Number(process.env.SCAN_MAX_PAGES_HARD ?? 1000),
+  maxDepthDefault: Number(process.env.SCAN_MAX_DEPTH_DEFAULT ?? 6),
+  maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 10),
+};
+const SCAN_API_KEY = process.env.SCAN_API_KEY || null;
+const ALLOW_PRIVATE_NETWORKS = process.env.ALLOW_PRIVATE_NETWORKS === 'true'
+  || (!isProd && process.env.ALLOW_PRIVATE_NETWORKS !== 'false');
+const SCAN_RATE_WINDOW_MS = Number(process.env.SCAN_RATE_WINDOW_MS ?? (isProd ? 60000 : 10000));
+const SCAN_RATE_LIMIT = Number(process.env.SCAN_RATE_LIMIT ?? (isProd ? 60 : 120));
+const SCREENSHOT_RATE_WINDOW_MS = Number(process.env.SCREENSHOT_RATE_WINDOW_MS ?? (isProd ? 60000 : 10000));
+const SCREENSHOT_RATE_LIMIT = Number(process.env.SCREENSHOT_RATE_LIMIT ?? (isProd ? 30 : 60));
+const SCREENSHOT_QUEUE_MAX = Number(process.env.SCREENSHOT_QUEUE_MAX ?? (isProd ? 25 : 100));
 const SCREENSHOT_MIN_GAP_MS = Number(
   process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 2000 : 300)
 );
@@ -88,6 +110,214 @@ const SCREENSHOT_USER_AGENTS = [
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+const normalizeIp = (ip) => (ip && ip.startsWith('::ffff:') ? ip.slice(7) : ip);
+
+const isPrivateIp = (ip) => {
+  const normalized = normalizeIp(ip);
+  const version = net.isIP(normalized);
+  if (version === 4) {
+    const [a, b] = normalized.split('.').map(Number);
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a >= 224) return true; // multicast/reserved
+    return false;
+  }
+  if (version === 6) {
+    const lower = normalized.toLowerCase();
+    if (lower === '::1') return true;
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA
+    if (lower.startsWith('fe80')) return true; // link-local
+    if (lower.startsWith('::ffff:')) return isPrivateIp(lower.slice(7));
+    return false;
+  }
+  return true;
+};
+
+const isHostBlocked = (hostname) => {
+  const lower = hostname.toLowerCase();
+  return (
+    lower === 'localhost'
+    || lower.endsWith('.localhost')
+    || lower.endsWith('.local')
+  );
+};
+
+async function assertSafeUrl(rawUrl) {
+  let urlObj;
+  try {
+    urlObj = new URL(rawUrl);
+  } catch {
+    throw new Error('Invalid URL');
+  }
+
+  if (!['http:', 'https:'].includes(urlObj.protocol)) {
+    throw new Error('Invalid URL protocol');
+  }
+
+  const hostname = urlObj.hostname;
+  if (!ALLOW_PRIVATE_NETWORKS) {
+    if (isHostBlocked(hostname)) throw new Error('Blocked host');
+    if (net.isIP(hostname)) {
+      if (isPrivateIp(hostname)) throw new Error('Blocked host');
+    } else {
+      let records = [];
+      try {
+        records = await dns.lookup(hostname, { all: true, verbatim: true });
+      } catch {
+        throw new Error('Unable to resolve host');
+      }
+      if (!records.length) throw new Error('Unable to resolve host');
+      if (records.some((rec) => isPrivateIp(rec.address))) {
+        throw new Error('Blocked host');
+      }
+    }
+  }
+
+  return urlObj.toString();
+}
+
+const clampInt = (value, { min, max, fallback }) => {
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+};
+
+const getClientIp = (req) => {
+  const ip = req.ip || req.connection?.remoteAddress || '';
+  return normalizeIp(ip);
+};
+
+const createRateLimiter = ({ windowMs, max }) => {
+  const hits = new Map();
+  let lastSweep = Date.now();
+
+  return (req, res, next) => {
+    const now = Date.now();
+    const ip = getClientIp(req) || 'unknown';
+    const entry = hits.get(ip);
+
+    if (!entry || now - entry.start >= windowMs) {
+      hits.set(ip, { start: now, count: 1 });
+    } else if (entry.count >= max) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    } else {
+      entry.count += 1;
+    }
+
+    if (now - lastSweep >= windowMs) {
+      lastSweep = now;
+      for (const [key, value] of hits.entries()) {
+        if (now - value.start >= windowMs) hits.delete(key);
+      }
+    }
+
+    return next();
+  };
+};
+
+const requireApiKey = (req, res, next) => {
+  if (!SCAN_API_KEY) return next();
+  const key = req.get('x-api-key') || req.query?.api_key || req.body?.api_key;
+  if (key !== SCAN_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  return next();
+};
+
+const getApiKey = (req) => req.get('x-api-key') || req.query?.api_key || req.body?.api_key || null;
+
+const recordUsage = (req, eventType, quantity = 1, meta = null) => {
+  try {
+    const userId = req.user?.id || null;
+    const apiKey = getApiKey(req);
+    const ip = getClientIp(req);
+    const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
+    const id = crypto.randomUUID();
+    db.prepare(`
+      INSERT INTO usage_events (id, user_id, api_key, ip_hash, event_type, quantity, meta)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      userId,
+      apiKey,
+      ipHash,
+      eventType,
+      quantity,
+      meta ? JSON.stringify(meta) : null
+    );
+  } catch (error) {
+    console.warn('Usage record error:', error.message);
+  }
+};
+
+const USAGE_WINDOW_HOURS = Number(process.env.USAGE_WINDOW_HOURS ?? 24);
+const USAGE_LIMITS = {
+  scan: Number(process.env.USAGE_LIMIT_SCAN ?? (isProd ? 100 : 1000)),
+  scan_stream: Number(process.env.USAGE_LIMIT_SCAN_STREAM ?? (isProd ? 100 : 1000)),
+  scan_job: Number(process.env.USAGE_LIMIT_SCAN_JOB ?? (isProd ? 100 : 1000)),
+  screenshot: Number(process.env.USAGE_LIMIT_SCREENSHOT ?? (isProd ? 200 : 2000)),
+  screenshot_job: Number(process.env.USAGE_LIMIT_SCREENSHOT_JOB ?? (isProd ? 200 : 2000)),
+};
+
+const getUsageLimit = (eventType) => {
+  const limit = USAGE_LIMITS[eventType];
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+  return limit;
+};
+
+const getUsageIdentity = (req) => {
+  if (req.user?.id) return { column: 'user_id', value: req.user.id };
+  const apiKey = getApiKey(req);
+  if (apiKey) return { column: 'api_key', value: apiKey };
+  const ip = getClientIp(req);
+  const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
+  if (ipHash) return { column: 'ip_hash', value: ipHash };
+  return null;
+};
+
+const checkUsageLimit = (req, eventType) => {
+  const limit = getUsageLimit(eventType);
+  if (!limit) return { allowed: true };
+
+  const identity = getUsageIdentity(req);
+  if (!identity) return { allowed: true };
+
+  const windowSpec = `-${USAGE_WINDOW_HOURS} hours`;
+  const row = db.prepare(`
+    SELECT COALESCE(SUM(quantity), 0) as total
+    FROM usage_events
+    WHERE event_type = ?
+      AND ${identity.column} = ?
+      AND created_at >= datetime('now', ?)
+  `).get(eventType, identity.value, windowSpec);
+
+  if (row?.total >= limit) {
+    return { allowed: false, limit, used: row.total };
+  }
+
+  return { allowed: true, limit, used: row?.total || 0 };
+};
+
+const enforceUsageLimit = (eventType) => (req, res, next) => {
+  const check = checkUsageLimit(req, eventType);
+  if (!check.allowed) {
+    return res.status(429).json({
+      error: 'Usage limit exceeded',
+      eventType,
+      limit: check.limit,
+      used: check.used,
+    });
+  }
+  return next();
+};
+
+const scanLimiter = createRateLimiter({ windowMs: SCAN_RATE_WINDOW_MS, max: SCAN_RATE_LIMIT });
+const screenshotLimiter = createRateLimiter({ windowMs: SCREENSHOT_RATE_WINDOW_MS, max: SCREENSHOT_RATE_LIMIT });
+
 const processScreenshotQueue = () => {
   while (screenshotActive < SCREENSHOT_MAX_CONCURRENCY && screenshotQueue.length) {
     const next = screenshotQueue.shift();
@@ -105,6 +335,10 @@ const processScreenshotQueue = () => {
 
 const enqueueScreenshot = async (fn) => {
   return new Promise((resolve, reject) => {
+    if (screenshotQueue.length >= SCREENSHOT_QUEUE_MAX) {
+      reject(new Error('Screenshot queue full'));
+      return;
+    }
     screenshotQueue.push({ fn, resolve, reject });
     processScreenshotQueue();
   });
@@ -116,6 +350,132 @@ const reserveScreenshotSlot = (host) => {
   const earliest = Math.max(last + SCREENSHOT_MIN_GAP_MS, now);
   lastScreenshotByHost.set(host, earliest);
   return Math.max(0, earliest - now);
+};
+
+const JOB_TYPES = {
+  scan: 'scan',
+  screenshot: 'screenshot',
+};
+const JOB_STATUS = {
+  queued: 'queued',
+  running: 'running',
+  complete: 'complete',
+  failed: 'failed',
+  canceled: 'canceled',
+};
+const JOB_POLL_INTERVAL_MS = Number(process.env.JOB_POLL_INTERVAL_MS ?? (isProd ? 1000 : 500));
+const JOB_MAX_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.JOB_MAX_CONCURRENCY ?? (isProd ? 1 : 2))
+);
+
+const parseJsonSafe = (raw) => {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
+const serializeJobRow = (row, includeResult = true) => {
+  if (!row) return null;
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    payload: parseJsonSafe(row.payload),
+    progress: parseJsonSafe(row.progress),
+    result: includeResult ? parseJsonSafe(row.result) : null,
+    error: row.error || null,
+  };
+};
+
+const getJobRow = (id) => db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
+
+const createJob = ({ type, payload, req }) => {
+  const id = crypto.randomUUID();
+  const userId = req.user?.id || null;
+  const apiKey = getApiKey(req);
+  const ip = getClientIp(req);
+  const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
+
+  db.prepare(`
+    INSERT INTO jobs (id, type, status, user_id, api_key, ip_hash, payload)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    type,
+    JOB_STATUS.queued,
+    userId,
+    apiKey,
+    ipHash,
+    JSON.stringify(payload || {})
+  );
+
+  return id;
+};
+
+let activeJobs = 0;
+
+const takeNextJob = db.transaction(() => {
+  const job = db.prepare(`
+    SELECT * FROM jobs
+    WHERE status = ?
+    ORDER BY created_at ASC
+    LIMIT 1
+  `).get(JOB_STATUS.queued);
+  if (!job) return null;
+
+  const updated = db.prepare(`
+    UPDATE jobs SET status = ?, started_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status = ?
+  `).run(JOB_STATUS.running, job.id, JOB_STATUS.queued);
+
+  if (updated.changes !== 1) return null;
+  return job;
+});
+
+const updateJobProgress = (id, progress) => {
+  db.prepare('UPDATE jobs SET progress = ? WHERE id = ?').run(JSON.stringify(progress), id);
+};
+
+const markJobComplete = (id, result) => {
+  db.prepare(`
+    UPDATE jobs
+    SET status = ?, result = ?, finished_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(JOB_STATUS.complete, JSON.stringify(result || {}), id);
+};
+
+const markJobFailed = (id, error) => {
+  db.prepare(`
+    UPDATE jobs
+    SET status = ?, error = ?, finished_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(JOB_STATUS.failed, error?.message || String(error || 'Job failed'), id);
+};
+
+const markJobCanceled = (id) => {
+  db.prepare(`
+    UPDATE jobs
+    SET status = ?, finished_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status IN (?, ?)
+  `).run(JOB_STATUS.canceled, id, JOB_STATUS.queued, JOB_STATUS.running);
+};
+
+const shouldAbortJob = (id, throttleMs = 1000) => {
+  let lastCheck = 0;
+  return () => {
+    const now = Date.now();
+    if (now - lastCheck < throttleMs) return false;
+    lastCheck = now;
+    const row = db.prepare('SELECT status FROM jobs WHERE id = ?').get(id);
+    return row?.status === JOB_STATUS.canceled;
+  };
 };
 
 const isLikelyBlocked = (title, bodyText) => {
@@ -136,8 +496,8 @@ async function getBrowser() {
   return browser;
 }
 
-const DEFAULT_MAX_PAGES = 300;
-const DEFAULT_MAX_DEPTH = 6;
+const DEFAULT_MAX_PAGES = SCAN_LIMITS.maxPagesDefault;
+const DEFAULT_MAX_DEPTH = SCAN_LIMITS.maxDepthDefault;
 
 function normalizeUrl(raw) {
   try {
@@ -451,7 +811,7 @@ function normalizeScanOptions(options = {}) {
   };
 }
 
-async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null) {
+async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null, shouldAbort = null) {
   const scanOptions = normalizeScanOptions(options);
   const seed = normalizeUrl(startUrl);
   if (!seed) throw new Error('Invalid URL');
@@ -464,7 +824,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const visited = new Set();
   const referrerMap = new Map();
-  const queue = [{ url: seed, depth: 0 }];
+  const queue = [];
+  const queued = new Set();
+  let queueIndex = 0;
+  const enqueue = (url, depth) => {
+    if (!url) return;
+    if (queued.has(url)) return;
+    queued.add(url);
+    queue.push({ url, depth });
+  };
+  enqueue(seed, 0);
   const sitemapOrder = new Map();
   let discoveryCounter = 0;
 
@@ -485,7 +854,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   for (const path of commonPaths) {
     const commonUrl = normalizeUrl(`${origin}${path}`);
     if (commonUrl) {
-      queue.push({ url: commonUrl, depth: 1 });
+      enqueue(commonUrl, 1);
     }
   }
 
@@ -503,7 +872,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       const norm = normalizeUrl(loc);
       if (norm && sameOrigin(norm, origin)) {
         if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-        queue.push({ url: norm, depth: 1 });
+        enqueue(norm, 1);
       }
     });
     // Also check for sitemap index
@@ -531,7 +900,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           const norm = normalizeUrl(u);
           if (norm && sameOrigin(norm, origin)) {
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-            queue.push({ url: norm, depth: 1 });
+            enqueue(norm, 1);
           }
         }
       } else {
@@ -541,7 +910,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           const norm = normalizeUrl(loc);
           if (norm && sameOrigin(norm, origin)) {
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-            queue.push({ url: norm, depth: 1 });
+            enqueue(norm, 1);
           }
         });
       }
@@ -562,8 +931,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   let brokenChecks = 0;
   const extraHeaders = {};
 
-  while (queue.length && visited.size < maxPages) {
-    const { url, depth } = queue.shift();
+  while (queueIndex < queue.length && visited.size < maxPages) {
+    if (shouldAbort?.()) throw new Error('Scan aborted');
+    const { url, depth } = queue[queueIndex++];
 
     if (visited.has(url)) continue;
     visited.add(url);
@@ -571,7 +941,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     // Send progress update
     if (onProgress) {
-      onProgress({ scanned: visited.size, queued: queue.length });
+      onProgress({ scanned: visited.size, queued: Math.max(0, queue.length - queueIndex) });
     }
 
     if (depth > maxDepth) continue;
@@ -679,7 +1049,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         if (!referrerMap.has(link) && link !== normalizedReferrer) {
           referrerMap.set(link, normalizedReferrer);
         }
-      queue.push({ url: link, depth: d });
+      enqueue(link, d);
     }
   }
 
@@ -1104,31 +1474,221 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 }
 
+const getBaseUrl = () => (
+  process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+    : `http://localhost:${PORT}`
+);
+
+async function captureScreenshot(safeUrl, type = 'full') {
+  const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
+  const filename = `${urlHash}_${type}.png`;
+  const filepath = path.join(SCREENSHOT_DIR, filename);
+  const baseUrl = getBaseUrl();
+
+  if (fs.existsSync(filepath)) {
+    const stats = fs.statSync(filepath);
+    const ageMs = Date.now() - stats.mtimeMs;
+    if (ageMs < 3600000) { // 1 hour
+      return {
+        url: `${baseUrl}/screenshots/${filename}`,
+        cached: true
+      };
+    }
+  }
+
+  const shotResult = await enqueueScreenshot(async () => {
+    const host = new URL(safeUrl).hostname;
+    const waitMs = reserveScreenshotSlot(host);
+    if (waitMs > 0) await sleep(waitMs);
+
+    const b = await getBrowser();
+    const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];
+    const context = await b.newContext({
+      userAgent: ua,
+      viewport: { width: 1280, height: 720 },
+      extraHTTPHeaders: {
+        'Accept-Language': 'en-US,en;q=0.9',
+        DNT: '1',
+      },
+    });
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+    const page = await context.newPage();
+
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await page.goto(safeUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30000
+        });
+        await page.waitForTimeout(1200);
+
+        const title = await page.title();
+        const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
+        const blocked = isLikelyBlocked(title, bodyText);
+
+        if (type === 'full') {
+          await page.screenshot({
+            path: filepath,
+            fullPage: true,
+            type: 'png'
+          });
+        } else {
+          await page.screenshot({
+            path: filepath,
+            fullPage: false,
+            type: 'png'
+          });
+        }
+
+        await page.close();
+        await context.close();
+        if (blocked) {
+          return { blocked: true };
+        }
+        return { blocked: false };
+      } catch (err) {
+        lastError = err;
+        await page.waitForTimeout(800 + Math.floor(Math.random() * 400));
+      }
+    }
+
+    await page.close();
+    await context.close();
+    throw lastError || new Error('Screenshot failed');
+  });
+
+  return {
+    url: `${baseUrl}/screenshots/${filename}`,
+    cached: false,
+    blocked: shotResult?.blocked || false
+  };
+}
+
+async function processJob(job) {
+  const jobId = job.id;
+  const payload = parseJsonSafe(job.payload) || {};
+  try {
+    if (job.type === JOB_TYPES.scan) {
+      const progressState = { lastUpdate: 0, lastScanned: 0 };
+      const abortCheck = shouldAbortJob(jobId);
+      const progressCb = (progress) => {
+        const now = Date.now();
+        if (progress.scanned - progressState.lastScanned < 5 && now - progressState.lastUpdate < 500) {
+          return;
+        }
+        progressState.lastUpdate = now;
+        progressState.lastScanned = progress.scanned;
+        updateJobProgress(jobId, progress);
+      };
+
+      const result = await crawlSite(
+        payload.url,
+        payload.maxPages,
+        payload.maxDepth,
+        payload.options || {},
+        progressCb,
+        abortCheck
+      );
+
+      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
+      if (statusRow?.status === JOB_STATUS.canceled) return;
+
+      markJobComplete(jobId, result);
+      return;
+    }
+
+    if (job.type === JOB_TYPES.screenshot) {
+      const result = await captureScreenshot(payload.url, payload.type || 'full');
+      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
+      if (statusRow?.status === JOB_STATUS.canceled) return;
+      markJobComplete(jobId, result);
+      return;
+    }
+
+    throw new Error(`Unknown job type: ${job.type}`);
+  } catch (error) {
+    const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
+    if (statusRow?.status === JOB_STATUS.canceled) return;
+    markJobFailed(jobId, error);
+  }
+}
+
+const runJobLoop = () => {
+  while (activeJobs < JOB_MAX_CONCURRENCY) {
+    const job = takeNextJob();
+    if (!job) break;
+    activeJobs += 1;
+    processJob(job)
+      .catch((err) => console.error('Job processing error:', err))
+      .finally(() => {
+        activeJobs -= 1;
+      });
+  }
+};
+
+if (RUN_WORKER) {
+  setInterval(runJobLoop, JOB_POLL_INTERVAL_MS);
+  setTimeout(runJobLoop, 0);
+}
+
 app.get('/', (_, res) => res.status(200).send('Loxo backend OK'));
 app.get('/health', (_, res) => res.json({ ok: true }));
 
-app.post('/scan', async (req, res) => {
+app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
   const { url, maxPages, maxDepth, options } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
+    const safeUrl = await assertSafeUrl(url);
+    const maxPagesSafe = clampInt(maxPages, {
+      min: 1,
+      max: SCAN_LIMITS.maxPagesHard,
+      fallback: DEFAULT_MAX_PAGES,
+    });
+    const maxDepthSafe = clampInt(maxDepth, {
+      min: 1,
+      max: SCAN_LIMITS.maxDepthHard,
+      fallback: DEFAULT_MAX_DEPTH,
+    });
+
+    recordUsage(req, 'scan', 1, {
+      host: new URL(safeUrl).hostname,
+      maxPages: maxPagesSafe,
+      maxDepth: maxDepthSafe,
+    });
+
     const result = await crawlSite(
-      url,
-      Number.isFinite(maxPages) ? maxPages : DEFAULT_MAX_PAGES,
-      Number.isFinite(maxDepth) ? maxDepth : DEFAULT_MAX_DEPTH,
+      safeUrl,
+      maxPagesSafe,
+      maxDepthSafe,
       options || {}
     );
     res.json(result);
   } catch (e) {
-    res.status(500).json({ error: e.message || 'Scan failed' });
+    const message = e.message || 'Scan failed';
+    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+      ? 400
+      : 500;
+    res.status(status).json({ error: message });
   }
 });
 
 // SSE endpoint for scan with progress updates
-app.get('/scan-stream', async (req, res) => {
+app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_stream'), async (req, res) => {
   const { url, maxPages, maxDepth, options } = req.query;
   if (!url) {
     return res.status(400).json({ error: 'Missing url parameter' });
+  }
+
+  let safeUrl;
+  try {
+    safeUrl = await assertSafeUrl(url);
+  } catch (e) {
+    return res.status(400).json({ error: e.message || 'Invalid url' });
   }
 
   // Set up SSE headers
@@ -1168,12 +1728,30 @@ app.get('/scan-stream', async (req, res) => {
       parsedOptions = {};
     }
 
+    const maxPagesSafe = clampInt(maxPages, {
+      min: 1,
+      max: SCAN_LIMITS.maxPagesHard,
+      fallback: DEFAULT_MAX_PAGES,
+    });
+    const maxDepthSafe = clampInt(maxDepth, {
+      min: 1,
+      max: SCAN_LIMITS.maxDepthHard,
+      fallback: DEFAULT_MAX_DEPTH,
+    });
+
+    recordUsage(req, 'scan_stream', 1, {
+      host: new URL(safeUrl).hostname,
+      maxPages: maxPagesSafe,
+      maxDepth: maxDepthSafe,
+    });
+
     const result = await crawlSite(
-      url,
-      Number.isFinite(Number(maxPages)) ? Number(maxPages) : DEFAULT_MAX_PAGES,
-      Number.isFinite(Number(maxDepth)) ? Number(maxDepth) : DEFAULT_MAX_DEPTH,
+      safeUrl,
+      maxPagesSafe,
+      maxDepthSafe,
       parsedOptions,
-      (progress) => sendEvent('progress', progress)
+      (progress) => sendEvent('progress', progress),
+      () => aborted
     );
 
     try {
@@ -1194,11 +1772,125 @@ app.get('/scan-stream', async (req, res) => {
   }
 });
 
+// Background scan jobs
+app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_job'), async (req, res) => {
+  const { url, maxPages, maxDepth, options } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    const safeUrl = await assertSafeUrl(url);
+    const maxPagesSafe = clampInt(maxPages, {
+      min: 1,
+      max: SCAN_LIMITS.maxPagesHard,
+      fallback: DEFAULT_MAX_PAGES,
+    });
+    const maxDepthSafe = clampInt(maxDepth, {
+      min: 1,
+      max: SCAN_LIMITS.maxDepthHard,
+      fallback: DEFAULT_MAX_DEPTH,
+    });
+
+    const jobId = createJob({
+      type: JOB_TYPES.scan,
+      payload: {
+        url: safeUrl,
+        maxPages: maxPagesSafe,
+        maxDepth: maxDepthSafe,
+        options: options || {},
+      },
+      req,
+    });
+
+    recordUsage(req, 'scan_job', 1, {
+      host: new URL(safeUrl).hostname,
+      maxPages: maxPagesSafe,
+      maxDepth: maxDepthSafe,
+    });
+
+    res.json({ jobId });
+  } catch (e) {
+    const message = e.message || 'Failed to create scan job';
+    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+      ? 400
+      : 500;
+    res.status(status).json({ error: message });
+  }
+});
+
+app.get('/scan-jobs/:id', authMiddleware, requireApiKey, (req, res) => {
+  const { id } = req.params;
+  const includeResult = req.query.include_result !== 'false';
+  const row = getJobRow(id);
+  if (!row || row.type !== JOB_TYPES.scan) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  res.json({ job: serializeJobRow(row, includeResult) });
+});
+
+app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, (req, res) => {
+  const { id } = req.params;
+  const row = getJobRow(id);
+  if (!row || row.type !== JOB_TYPES.scan) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  markJobCanceled(id);
+  res.json({ success: true });
+});
+
+app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
+  const { id } = req.params;
+  const includeResult = req.query.include_result !== 'false';
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  let closed = false;
+  req.on('close', () => {
+    closed = true;
+  });
+
+  const sendEvent = (event, data) => {
+    if (closed) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const interval = setInterval(() => {
+    if (closed) {
+      clearInterval(interval);
+      return;
+    }
+    const row = getJobRow(id);
+    if (!row || row.type !== JOB_TYPES.scan) {
+      sendEvent('error', { error: 'Job not found' });
+      clearInterval(interval);
+      res.end();
+      return;
+    }
+    const job = serializeJobRow(row, includeResult);
+    sendEvent('update', job);
+    if ([JOB_STATUS.complete, JOB_STATUS.failed, JOB_STATUS.canceled].includes(job.status)) {
+      sendEvent('complete', job);
+      clearInterval(interval);
+      res.end();
+    }
+  }, 1000);
+});
+
 // Screenshot endpoint - captures full-page screenshot
 // Note: Playwright requires browser binaries which may not be available on all hosts
-app.get('/screenshot', async (req, res) => {
+app.get('/screenshot', authMiddleware, screenshotLimiter, requireApiKey, enforceUsageLimit('screenshot'), async (req, res) => {
   const { url, type = 'full' } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
+  let safeUrl;
+  try {
+    safeUrl = await assertSafeUrl(url);
+  } catch (e) {
+    return res.status(400).json({ error: e.message || 'Invalid url' });
+  }
 
   // Check if we're in production without Playwright support
   if (process.env.DISABLE_SCREENSHOTS === 'true') {
@@ -1209,106 +1901,108 @@ app.get('/screenshot', async (req, res) => {
   }
 
   try {
-    // Create a unique filename based on URL hash
-    const urlHash = crypto.createHash('sha256').update(url).digest('hex');
-    const filename = `${urlHash}_${type}.png`;
-    const filepath = path.join(SCREENSHOT_DIR, filename);
-
-    // Check if screenshot already exists and is recent (less than 1 hour old)
-    if (fs.existsSync(filepath)) {
-      const stats = fs.statSync(filepath);
-      const ageMs = Date.now() - stats.mtimeMs;
-      if (ageMs < 3600000) { // 1 hour
-        const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-          ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-          : `http://localhost:${PORT}`;
-        return res.json({
-          url: `${baseUrl}/screenshots/${filename}`,
-          cached: true
-        });
-      }
-    }
-
-    const shotResult = await enqueueScreenshot(async () => {
-      const host = new URL(url).hostname;
-      const waitMs = reserveScreenshotSlot(host);
-      if (waitMs > 0) await sleep(waitMs);
-
-      const b = await getBrowser();
-      const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];
-      const context = await b.newContext({
-        userAgent: ua,
-        viewport: { width: 1280, height: 720 },
-        extraHTTPHeaders: {
-          'Accept-Language': 'en-US,en;q=0.9',
-          DNT: '1',
-        },
-      });
-      await context.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      });
-      const page = await context.newPage();
-
-      let lastError = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-          await page.goto(url, {
-            waitUntil: 'domcontentloaded',
-            timeout: 30000
-          });
-          await page.waitForTimeout(1200);
-
-          const title = await page.title();
-          const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
-          const blocked = isLikelyBlocked(title, bodyText);
-
-          if (type === 'full') {
-            await page.screenshot({
-              path: filepath,
-              fullPage: true,
-              type: 'png'
-            });
-          } else {
-            await page.screenshot({
-              path: filepath,
-              fullPage: false,
-              type: 'png'
-            });
-          }
-
-          await page.close();
-          await context.close();
-          if (blocked) {
-            return { blocked: true };
-          }
-          return { blocked: false };
-        } catch (err) {
-          lastError = err;
-          await page.waitForTimeout(800 + Math.floor(Math.random() * 400));
-        }
-      }
-
-      await page.close();
-      await context.close();
-      throw lastError || new Error('Screenshot failed');
-    });
-
-    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : `http://localhost:${PORT}`;
-    res.json({
-      url: `${baseUrl}/screenshots/${filename}`,
-      cached: false,
-      blocked: shotResult?.blocked || false
-    });
+    recordUsage(req, 'screenshot', 1, { host: new URL(safeUrl).hostname });
+    const result = await captureScreenshot(safeUrl, type);
+    res.json(result);
   } catch (e) {
     console.error('Screenshot error:', e.message);
     // Return a short, user-friendly error
+    if (e.message?.includes('Screenshot queue full')) {
+      return res.status(429).json({ error: 'Screenshot queue full' });
+    }
     const shortError = e.message?.includes('Executable')
       ? 'Screenshots not available in this environment'
       : 'Screenshot failed';
     res.status(500).json({ error: shortError });
   }
+});
+
+// Background screenshot jobs
+app.post('/screenshot-jobs', authMiddleware, screenshotLimiter, requireApiKey, enforceUsageLimit('screenshot_job'), async (req, res) => {
+  const { url, type = 'full' } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    const safeUrl = await assertSafeUrl(url);
+    const jobId = createJob({
+      type: JOB_TYPES.screenshot,
+      payload: { url: safeUrl, type },
+      req,
+    });
+
+    recordUsage(req, 'screenshot_job', 1, { host: new URL(safeUrl).hostname });
+
+    res.json({ jobId });
+  } catch (e) {
+    const message = e.message || 'Failed to create screenshot job';
+    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+      ? 400
+      : 500;
+    res.status(status).json({ error: message });
+  }
+});
+
+app.get('/screenshot-jobs/:id', authMiddleware, requireApiKey, (req, res) => {
+  const { id } = req.params;
+  const includeResult = req.query.include_result !== 'false';
+  const row = getJobRow(id);
+  if (!row || row.type !== JOB_TYPES.screenshot) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  res.json({ job: serializeJobRow(row, includeResult) });
+});
+
+app.post('/screenshot-jobs/:id/cancel', authMiddleware, requireApiKey, (req, res) => {
+  const { id } = req.params;
+  const row = getJobRow(id);
+  if (!row || row.type !== JOB_TYPES.screenshot) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  markJobCanceled(id);
+  res.json({ success: true });
+});
+
+app.get('/screenshot-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
+  const { id } = req.params;
+  const includeResult = req.query.include_result !== 'false';
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  let closed = false;
+  req.on('close', () => {
+    closed = true;
+  });
+
+  const sendEvent = (event, data) => {
+    if (closed) return;
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const interval = setInterval(() => {
+    if (closed) {
+      clearInterval(interval);
+      return;
+    }
+    const row = getJobRow(id);
+    if (!row || row.type !== JOB_TYPES.screenshot) {
+      sendEvent('error', { error: 'Job not found' });
+      clearInterval(interval);
+      res.end();
+      return;
+    }
+    const job = serializeJobRow(row, includeResult);
+    sendEvent('update', job);
+    if ([JOB_STATUS.complete, JOB_STATUS.failed, JOB_STATUS.canceled].includes(job.status)) {
+      sendEvent('complete', job);
+      clearInterval(interval);
+      res.end();
+    }
+  }, 1000);
 });
 
 // Cleanup on exit
@@ -1317,6 +2011,8 @@ process.on('SIGINT', async () => {
   process.exit();
 });
 
-app.listen(PORT, () => {
-  console.log(`Map Mat Backend running on http://localhost:${PORT}`);
-});
+if (RUN_WEB) {
+  app.listen(PORT, () => {
+    console.log(`Map Mat Backend running on http://localhost:${PORT}`);
+  });
+}

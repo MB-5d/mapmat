@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "start:worker": "RUN_MODE=worker node server.js",
     "test:smoke": "node scripts/smoke-test.js"
   },
   "engines": {

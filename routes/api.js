@@ -9,6 +9,35 @@ const { authMiddleware, requireAuth } = require('./auth');
 
 const router = express.Router();
 
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 100;
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || null;
+
+function requireAdminKey(req, res, next) {
+  if (!ADMIN_API_KEY) {
+    return res.status(503).json({ error: 'Admin access not configured' });
+  }
+  const key = req.get('x-admin-key') || req.get('x-api-key') || req.query?.admin_key;
+  if (key !== ADMIN_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  return next();
+}
+
+function parsePagination(query, { defaultLimit = DEFAULT_PAGE_SIZE, maxLimit = MAX_PAGE_SIZE } = {}) {
+  const limitRaw = query?.limit;
+  const offsetRaw = query?.offset;
+  const parsedLimit = Number.parseInt(limitRaw, 10);
+  const parsedOffset = Number.parseInt(offsetRaw, 10);
+
+  const limit = Number.isFinite(parsedLimit)
+    ? Math.min(Math.max(parsedLimit, 1), maxLimit)
+    : defaultLimit;
+  const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+
+  return { limit, offset };
+}
+
 // Safe JSON.parse wrapper — returns fallback for null/undefined,
 // throws descriptive error if parsing fails.
 function safeParse(raw, fieldName, fallback = undefined) {
@@ -42,21 +71,59 @@ function parseMapFields(row) {
 router.use(authMiddleware);
 
 // ============================================
+// ADMIN / USAGE
+// ============================================
+
+// GET /api/admin/usage - Aggregated usage metrics
+router.get('/admin/usage', requireAdminKey, (req, res) => {
+  try {
+    const daysRaw = Number.parseInt(req.query?.days, 10);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30;
+    const since = `-${days} days`;
+
+    const byDay = db.prepare(`
+      SELECT date(created_at) as day, event_type as eventType,
+             COUNT(*) as events, SUM(quantity) as quantity
+      FROM usage_events
+      WHERE created_at >= datetime('now', ?)
+      GROUP BY day, eventType
+      ORDER BY day DESC
+    `).all(since);
+
+    const totals = db.prepare(`
+      SELECT event_type as eventType, COUNT(*) as events, SUM(quantity) as quantity
+      FROM usage_events
+      WHERE created_at >= datetime('now', ?)
+      GROUP BY eventType
+      ORDER BY events DESC
+    `).all(since);
+
+    res.json({ days, totals, byDay });
+  } catch (error) {
+    console.error('Get usage error:', error);
+    res.status(500).json({ error: 'Failed to get usage' });
+  }
+});
+
+// ============================================
 // PROJECTS
 // ============================================
 
 // GET /api/projects - Get all projects for current user
 router.get('/projects', requireAuth, (req, res) => {
   try {
+    const { limit, offset } = parsePagination(req.query);
     const projects = db.prepare(`
       SELECT p.*,
         (SELECT COUNT(*) FROM maps WHERE project_id = p.id) as map_count
       FROM projects p
       WHERE p.user_id = ?
       ORDER BY p.created_at DESC
-    `).all(req.user.id);
+      LIMIT ? OFFSET ?
+    `).all(req.user.id, limit, offset);
+    const total = db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ?').get(req.user.id)?.count || 0;
 
-    res.json({ projects });
+    res.json({ projects, pagination: { limit, offset, total } });
   } catch (error) {
     console.error('Get projects error:', error);
     res.status(500).json({ error: 'Failed to get projects' });
@@ -148,6 +215,7 @@ router.delete('/projects/:id', requireAuth, (req, res) => {
 router.get('/maps', requireAuth, (req, res) => {
   try {
     const { project_id } = req.query;
+    const { limit, offset } = parsePagination(req.query);
 
     let query = `
       SELECT m.*, p.name as project_name
@@ -162,9 +230,17 @@ router.get('/maps', requireAuth, (req, res) => {
       params.push(project_id);
     }
 
-    query += ' ORDER BY m.updated_at DESC';
+    query += ' ORDER BY m.updated_at DESC LIMIT ? OFFSET ?';
 
-    const maps = db.prepare(query).all(...params);
+    const maps = db.prepare(query).all(...params, limit, offset);
+    let total = 0;
+    if (project_id) {
+      total = db.prepare('SELECT COUNT(*) as count FROM maps WHERE user_id = ? AND project_id = ?')
+        .get(req.user.id, project_id)?.count || 0;
+    } else {
+      total = db.prepare('SELECT COUNT(*) as count FROM maps WHERE user_id = ?')
+        .get(req.user.id)?.count || 0;
+    }
 
     // Parse JSON fields
     const parsed = maps.map(m => ({
@@ -172,7 +248,7 @@ router.get('/maps', requireAuth, (req, res) => {
       ...parseMapFields(m),
     }));
 
-    res.json({ maps: parsed });
+    res.json({ maps: parsed, pagination: { limit, offset, total } });
   } catch (error) {
     console.error('Get maps error:', error);
     res.status(500).json({ error: 'Failed to get maps' });
@@ -459,14 +535,16 @@ router.post('/maps/:id/versions', requireAuth, (req, res) => {
 // GET /api/history - Get scan history for current user
 router.get('/history', requireAuth, (req, res) => {
   try {
-    const { limit = 50 } = req.query;
+    const { limit, offset } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
     const history = db.prepare(`
       SELECT * FROM scan_history
       WHERE user_id = ?
       ORDER BY scanned_at DESC
-      LIMIT ?
-    `).all(req.user.id, parseInt(limit));
+      LIMIT ? OFFSET ?
+    `).all(req.user.id, limit, offset);
+    const total = db.prepare('SELECT COUNT(*) as count FROM scan_history WHERE user_id = ?')
+      .get(req.user.id)?.count || 0;
 
     // Parse JSON fields
     const parsed = history.map(h => ({
@@ -477,7 +555,7 @@ router.get('/history', requireAuth, (req, res) => {
       map_id: h.map_id || null,
     }));
 
-    res.json({ history: parsed });
+    res.json({ history: parsed, pagination: { limit, offset, total } });
   } catch (error) {
     console.error('Get history error:', error);
     res.status(500).json({ error: 'Failed to get history' });
@@ -693,6 +771,7 @@ router.delete('/shares/:id', requireAuth, (req, res) => {
 // GET /api/shares - Get all shares created by current user
 router.get('/shares', requireAuth, (req, res) => {
   try {
+    const { limit, offset } = parsePagination(req.query);
     const shares = db.prepare(`
       SELECT s.id, s.map_id, s.created_at, s.expires_at, s.view_count,
         m.name as map_name
@@ -700,9 +779,12 @@ router.get('/shares', requireAuth, (req, res) => {
       LEFT JOIN maps m ON s.map_id = m.id
       WHERE s.user_id = ?
       ORDER BY s.created_at DESC
-    `).all(req.user.id);
+      LIMIT ? OFFSET ?
+    `).all(req.user.id, limit, offset);
+    const total = db.prepare('SELECT COUNT(*) as count FROM shares WHERE user_id = ?')
+      .get(req.user.id)?.count || 0;
 
-    res.json({ shares });
+    res.json({ shares, pagination: { limit, offset, total } });
   } catch (error) {
     console.error('Get shares error:', error);
     res.status(500).json({ error: 'Failed to get shares' });

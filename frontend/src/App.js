@@ -154,7 +154,7 @@ const SitemapTree = ({
 
   // Run invariant checks in development
   useEffect(() => {
-    if (!layout) return;
+    if (!layout || process.env.NODE_ENV === 'production') return;
     checkLayoutInvariants(layout.nodes, orphans, layout.connectors);
   }, [layout, orphans]);
 
@@ -811,7 +811,7 @@ export default function App() {
   const [dragCursor, setDragCursor] = useState({ x: 0, y: 0 }); // Track cursor for proximity filtering
 
   const canvasRef = useRef(null);
-  const scanAbortRef = useRef(null);
+  const scanJobIdRef = useRef(null);
   const eventSourceRef = useRef(null);
   const scanTimerRef = useRef(null);
   const messageTimerRef = useRef(null);
@@ -3155,8 +3155,10 @@ export default function App() {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-    if (scanAbortRef.current) {
-      scanAbortRef.current.abort();
+    const jobId = scanJobIdRef.current;
+    scanJobIdRef.current = null;
+    if (jobId) {
+      api.cancelScanJob(jobId).catch(() => {});
     }
     stopScanTimers();
     setLoading(false);
@@ -3165,7 +3167,7 @@ export default function App() {
     showToast('Scan cancelled', 'info');
   };
 
-  const scan = (overrideUrl, preserveName = false) => {
+  const scan = async (overrideUrl, preserveName = false) => {
     let urlToScan = urlInput;
     if (typeof overrideUrl === 'string') {
       urlToScan = overrideUrl;
@@ -3177,7 +3179,7 @@ export default function App() {
     }
 
     const parsedDepth = Number.parseInt(scanDepth, 10);
-    const depthValue = Number.isFinite(parsedDepth) ? Math.min(Math.max(parsedDepth, 0), 8) : 4;
+    const depthValue = Number.isFinite(parsedDepth) ? Math.min(Math.max(parsedDepth, 1), 8) : 4;
 
     setLoading(true);
     setScanProgress({ scanned: 0, queued: 0 });
@@ -3186,45 +3188,85 @@ export default function App() {
     const scanConfig = {
       ...scanOptions,
     };
-    const params = new URLSearchParams({
-      url,
-      maxDepth: String(depthValue),
-      options: JSON.stringify(scanConfig),
-    });
+    let jobId;
+    try {
+      const jobResponse = await api.createScanJob({
+        url,
+        maxDepth: depthValue,
+        options: scanConfig,
+      });
+      jobId = jobResponse?.jobId;
+      if (!jobId) {
+        throw new Error('Failed to start scan');
+      }
+    } catch (err) {
+      console.error('Scan job creation failed:', err);
+      showToast(err.message || 'Failed to start scan', 'error');
+      stopScanTimers();
+      setLoading(false);
+      setScanProgress({ scanned: 0, queued: 0 });
+      return;
+    }
 
-    // Use SSE for progress updates
-    const eventSource = new EventSource(
-      `${API_BASE}/scan-stream?${params.toString()}`
-    );
+    scanJobIdRef.current = jobId;
+
+    const eventSource = new EventSource(`${API_BASE}/scan-jobs/${jobId}/stream`);
     eventSourceRef.current = eventSource;
 
-    eventSource.addEventListener('progress', (e) => {
+    eventSource.addEventListener('update', (e) => {
       try {
-        const data = JSON.parse(e.data);
-        setScanProgress(data);
+        const job = JSON.parse(e.data);
+        if (job?.progress) {
+          setScanProgress(job.progress);
+        }
       } catch {}
     });
 
     eventSource.addEventListener('complete', (e) => {
-      let data;
+      let job;
       try {
-        data = JSON.parse(e.data);
+        job = JSON.parse(e.data);
       } catch (err) {
         console.error('Scan payload parse failed:', err);
         showToast('Scan completed but response could not be read', 'error');
         eventSource.close();
         eventSourceRef.current = null;
+        scanJobIdRef.current = null;
         stopScanTimers();
         setLoading(false);
         setScanProgress({ scanned: 0, queued: 0 });
         return;
       }
 
+      if (job?.status === 'failed') {
+        showToast(`Scan failed: ${job.error || 'Unknown error'}`, 'error');
+        eventSource.close();
+        eventSourceRef.current = null;
+        scanJobIdRef.current = null;
+        stopScanTimers();
+        setLoading(false);
+        setScanProgress({ scanned: 0, queued: 0 });
+        return;
+      }
+
+      if (job?.status === 'canceled') {
+        showToast('Scan cancelled', 'info');
+        eventSource.close();
+        eventSourceRef.current = null;
+        scanJobIdRef.current = null;
+        stopScanTimers();
+        setLoading(false);
+        setScanProgress({ scanned: 0, queued: 0 });
+        return;
+      }
+
+      const data = job?.result;
       if (!data?.root) {
         console.error('Scan completed without a root node:', data);
         showToast('Scan completed but returned no pages', 'error');
         eventSource.close();
         eventSourceRef.current = null;
+        scanJobIdRef.current = null;
         stopScanTimers();
         setLoading(false);
         setScanProgress({ scanned: 0, queued: 0 });
@@ -3330,6 +3372,7 @@ export default function App() {
 
       eventSource.close();
       eventSourceRef.current = null;
+      scanJobIdRef.current = null;
       stopScanTimers();
       setLoading(false);
       setScanProgress({ scanned: 0, queued: 0 });
@@ -3344,15 +3387,17 @@ export default function App() {
       }
       eventSource.close();
       eventSourceRef.current = null;
+      scanJobIdRef.current = null;
       stopScanTimers();
       setLoading(false);
       setScanProgress({ scanned: 0, queued: 0 });
     });
 
     eventSource.onerror = () => {
-      showToast('Scan failed: Connection error');
+      showToast('Scan failed: Connection error', 'error');
       eventSource.close();
       eventSourceRef.current = null;
+      scanJobIdRef.current = null;
       stopScanTimers();
       setLoading(false);
       setScanProgress({ scanned: 0, queued: 0 });

@@ -77,6 +77,14 @@ export async function getProjects() {
   return fetchApi('/api/projects');
 }
 
+export async function getProjectsPage({ limit = 50, offset = 0 } = {}) {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (offset !== undefined) params.set('offset', String(offset));
+  const query = params.toString();
+  return fetchApi(`/api/projects${query ? `?${query}` : ''}`);
+}
+
 export async function createProject(name) {
   return fetchApi('/api/projects', {
     method: 'POST',
@@ -102,6 +110,15 @@ export async function deleteProject(id) {
 export async function getMaps(projectId) {
   const query = projectId ? `?project_id=${projectId}` : '';
   return fetchApi(`/api/maps${query}`);
+}
+
+export async function getMapsPage(projectId, { limit = 50, offset = 0 } = {}) {
+  const params = new URLSearchParams();
+  if (projectId) params.set('project_id', projectId);
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (offset !== undefined) params.set('offset', String(offset));
+  const query = params.toString();
+  return fetchApi(`/api/maps${query ? `?${query}` : ''}`);
 }
 
 export async function getMap(id) {
@@ -141,8 +158,20 @@ export async function createMapVersion(mapId, payload) {
 // HISTORY
 // ============================================
 
-export async function getHistory(limit = 50) {
-  return fetchApi(`/api/history?limit=${limit}`);
+export async function getHistory(limitOrOptions = 50, maybeOffset = 0) {
+  let limit = 50;
+  let offset = 0;
+  if (typeof limitOrOptions === 'object' && limitOrOptions !== null) {
+    limit = limitOrOptions.limit ?? 50;
+    offset = limitOrOptions.offset ?? 0;
+  } else {
+    limit = limitOrOptions;
+    offset = maybeOffset || 0;
+  }
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (offset !== undefined) params.set('offset', String(offset));
+  return fetchApi(`/api/history?${params.toString()}`);
 }
 
 export async function addToHistory(data) {
@@ -167,6 +196,42 @@ export async function deleteHistory(ids) {
 }
 
 // ============================================
+// BACKGROUND JOBS
+// ============================================
+
+export async function createScanJob(payload) {
+  return fetchApi('/scan-jobs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getScanJob(id, { includeResult = true } = {}) {
+  const query = includeResult ? '' : '?include_result=false';
+  return fetchApi(`/scan-jobs/${id}${query}`);
+}
+
+export async function cancelScanJob(id) {
+  return fetchApi(`/scan-jobs/${id}/cancel`, { method: 'POST' });
+}
+
+export async function createScreenshotJob(payload) {
+  return fetchApi('/screenshot-jobs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getScreenshotJob(id, { includeResult = true } = {}) {
+  const query = includeResult ? '' : '?include_result=false';
+  return fetchApi(`/screenshot-jobs/${id}${query}`);
+}
+
+export async function cancelScreenshotJob(id) {
+  return fetchApi(`/screenshot-jobs/${id}/cancel`, { method: 'POST' });
+}
+
+// ============================================
 // SHARES
 // ============================================
 
@@ -183,6 +248,14 @@ export async function getShare(id) {
 
 export async function getMyShares() {
   return fetchApi('/api/shares');
+}
+
+export async function getMySharesPage({ limit = 50, offset = 0 } = {}) {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (offset !== undefined) params.set('offset', String(offset));
+  const query = params.toString();
+  return fetchApi(`/api/shares${query ? `?${query}` : ''}`);
 }
 
 export async function deleteShare(id) {

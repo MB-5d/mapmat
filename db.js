@@ -111,6 +111,36 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  -- Usage events (for metering)
+  CREATE TABLE IF NOT EXISTS usage_events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    api_key TEXT,
+    ip_hash TEXT,
+    event_type TEXT NOT NULL,
+    quantity INTEGER DEFAULT 1,
+    meta TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  -- Background jobs (scan/screenshot)
+  CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    finished_at DATETIME,
+    user_id TEXT,
+    api_key TEXT,
+    ip_hash TEXT,
+    payload TEXT,
+    progress TEXT,
+    result TEXT,
+    error TEXT
+  );
+
   -- Create indexes for faster queries
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
   CREATE INDEX IF NOT EXISTS idx_maps_user ON maps(user_id);
@@ -119,6 +149,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_map_versions_created ON map_versions(map_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_history_user ON scan_history(user_id);
   CREATE INDEX IF NOT EXISTS idx_shares_user ON shares(user_id);
+  CREATE INDEX IF NOT EXISTS idx_usage_events_type_time ON usage_events(event_type, created_at);
+  CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events(user_id);
+  CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
 `);
 
 // Backfill new columns without full migrations
@@ -138,6 +171,7 @@ ensureColumn('scan_history', 'connection_colors', 'TEXT');
 ensureColumn('scan_history', 'scan_options', 'TEXT');
 ensureColumn('scan_history', 'scan_depth', 'INTEGER');
 ensureColumn('scan_history', 'map_id', 'TEXT');
+ensureColumn('usage_events', 'meta', 'TEXT');
 
 console.log('Database initialized successfully');
 

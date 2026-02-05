@@ -21,6 +21,12 @@ npm install
 node server.js
 ```
 
+### Worker (Jobs)
+```bash
+cd mapmat
+npm run start:worker
+```
+
 ### Frontend (Port 3000)
 ```bash
 cd mapmat/frontend
@@ -75,6 +81,16 @@ vercel
 | `FRONTEND_URL` | Frontend URL for CORS | http://localhost:3000 |
 | `JWT_SECRET` | Secret for JWT tokens | (dev default) |
 | `NODE_ENV` | Environment | development |
+| `RUN_MODE` | `web`, `worker`, or `both` | both |
+| `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
+| `USAGE_LIMIT_SCAN` | Daily/rolling scan limit | 100 (prod) |
+| `USAGE_LIMIT_SCAN_STREAM` | Daily/rolling scan-stream limit | 100 (prod) |
+| `USAGE_LIMIT_SCAN_JOB` | Daily/rolling scan job limit | 100 (prod) |
+| `USAGE_LIMIT_SCREENSHOT` | Daily/rolling screenshot limit | 200 (prod) |
+| `USAGE_LIMIT_SCREENSHOT_JOB` | Daily/rolling screenshot job limit | 200 (prod) |
+| `JOB_MAX_CONCURRENCY` | Max concurrent jobs in worker | 1 (prod) |
+| `JOB_POLL_INTERVAL_MS` | Job polling interval | 1000 (prod) |
+| `ADMIN_API_KEY` | Admin usage endpoint key | (unset) |
 
 ### Frontend
 | Variable | Description | Default |

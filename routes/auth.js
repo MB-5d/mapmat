@@ -10,27 +10,42 @@ const db = require('../db');
 
 const router = express.Router();
 
+const isProd = process.env.NODE_ENV === 'production';
 // JWT secret - in production, use environment variable
-const JWT_SECRET = process.env.JWT_SECRET || 'mapmat-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (isProd && !JWT_SECRET) {
+  throw new Error('JWT_SECRET is required in production');
+}
+const JWT_SECRET_EFFECTIVE = JWT_SECRET || 'mapmat-dev-secret-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 
 // Cookie options
+const COOKIE_SAMESITE = process.env.COOKIE_SAMESITE || (isProd ? 'none' : 'lax');
+const COOKIE_SECURE = process.env.COOKIE_SECURE
+  ? process.env.COOKIE_SECURE === 'true'
+  : isProd;
+const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || undefined;
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: COOKIE_SECURE,
+  sameSite: COOKIE_SAMESITE,
+  domain: COOKIE_DOMAIN,
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+};
+const CLEAR_COOKIE_OPTIONS = {
+  ...COOKIE_OPTIONS,
+  maxAge: 0,
 };
 
 // Generate JWT token
 function generateToken(userId) {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign({ userId }, JWT_SECRET_EFFECTIVE, { expiresIn: JWT_EXPIRES_IN });
 }
 
 // Verify JWT token
 function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, JWT_SECRET_EFFECTIVE);
   } catch {
     return null;
   }
@@ -153,7 +168,7 @@ router.post('/login', async (req, res) => {
 
 // POST /auth/logout - Logout (clear cookie)
 router.post('/logout', (req, res) => {
-  res.clearCookie('auth_token');
+  res.clearCookie('auth_token', CLEAR_COOKIE_OPTIONS);
   res.json({ success: true });
 });
 
@@ -242,7 +257,7 @@ router.delete('/me', authMiddleware, requireAuth, async (req, res) => {
     // Delete user (cascades to projects, maps, history, shares)
     db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
 
-    res.clearCookie('auth_token');
+    res.clearCookie('auth_token', CLEAR_COOKIE_OPTIONS);
     res.json({ success: true });
   } catch (error) {
     console.error('Delete account error:', error);
