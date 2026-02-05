@@ -3368,7 +3368,7 @@ export default function App() {
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast, .minimap');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast, .minimap-navigator');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isOnConnection = e.target.closest('.connections-layer');
@@ -4120,7 +4120,7 @@ export default function App() {
         filter: (node) => {
           if (node.classList?.contains('zoom-controls')) return false;
           if (node.classList?.contains('color-key')) return false;
-          if (node.classList?.contains('minimap')) return false;
+          if (node.classList?.contains('minimap-navigator')) return false;
           // Exclude cross-origin thumbnail images
           if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
           return true;
@@ -4488,7 +4488,7 @@ export default function App() {
           // Exclude zoom controls, color key, and grid from export
           if (node.classList?.contains('zoom-controls')) return false;
           if (node.classList?.contains('color-key')) return false;
-          if (node.classList?.contains('minimap')) return false;
+          if (node.classList?.contains('minimap-navigator')) return false;
           // Exclude cross-origin thumbnail images
           if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
           return true;
@@ -7374,9 +7374,12 @@ export default function App() {
                 scale,
                 minScale: zoomBounds.min,
                 maxScale: zoomBounds.max,
+                colors,
                 onPanTo: panToWorldPoint,
                 onCenterOn: centerOnWorldPoint,
                 onZoomTo: zoomTo,
+                onZoomIn: zoomIn,
+                onZoomOut: zoomOut,
               }}
             />
             <ReportDrawer

@@ -1,0 +1,206 @@
+.minimap-navigator {
+  position: fixed;
+  right: 16px;
+  bottom: 76px;
+  width: 320px;
+  padding: 12px 12px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-primary);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  --minimap-panel: #f8fafc;
+  --minimap-gutter: var(--color-bg-primary);
+}
+
+.minimap-navigator-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(15, 23, 42, 0.9);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 4px 6px;
+  border-radius: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.minimap-navigator-preview {
+  position: relative;
+  flex: 0 0 110px;
+  border-radius: 10px;
+  background: var(--minimap-panel);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.minimap-navigator-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.minimap-navigator-map {
+  fill: transparent;
+  stroke: transparent;
+}
+
+.minimap-navigator-node {
+  stroke: rgba(15, 23, 42, 0.12);
+  stroke-width: 0.6;
+}
+
+.minimap-navigator-connector {
+  stroke: rgba(148, 163, 184, 0.6);
+  stroke-width: 1;
+}
+
+.minimap-navigator-viewport {
+  fill: none;
+  stroke: #ff2d2d;
+  stroke-width: 3;
+}
+
+.minimap-navigator-gutter,
+.minimap-navigator-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.minimap-navigator-gutter-left {
+  left: 0;
+  width: 12px;
+  background: var(--minimap-gutter);
+}
+
+.minimap-navigator-gutter-right {
+  right: 0;
+  width: 12px;
+  background: var(--minimap-gutter);
+}
+
+.minimap-navigator-fade-left {
+  left: 12px;
+  width: 24px;
+  background: linear-gradient(
+    90deg,
+    var(--minimap-gutter) 0%,
+    rgba(13, 8, 18, 0.55) 45%,
+    transparent 100%
+  );
+}
+
+.minimap-navigator-fade-right {
+  right: 12px;
+  width: 24px;
+  background: linear-gradient(
+    270deg,
+    var(--minimap-gutter) 0%,
+    rgba(13, 8, 18, 0.55) 45%,
+    transparent 100%
+  );
+}
+
+.minimap-navigator-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 32px;
+}
+
+[data-theme="dark"] .minimap-navigator-label {
+  color: rgba(226, 232, 240, 0.9);
+  background: rgba(22, 14, 30, 0.8);
+}
+
+.minimap-navigator-zoom-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.minimap-navigator-zoom-btn:hover {
+  color: #1e293b;
+}
+
+.minimap-navigator-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.minimap-navigator-thumb {
+  position: absolute;
+  top: -5px;
+  height: 16px;
+  border-radius: 6px;
+  background: var(--color-primary);
+  box-shadow: 0 4px 8px rgba(99, 102, 241, 0.3);
+}
+
+[data-theme="dark"] .minimap-navigator {
+  border-color: #2d1f3d;
+  background: #1a1022;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  --minimap-panel: #0d0812;
+  --minimap-gutter: #1a1022;
+}
+
+[data-theme="dark"] .minimap-navigator-node {
+  stroke: rgba(226, 232, 240, 0.18);
+}
+
+[data-theme="dark"] .minimap-navigator-connector {
+  stroke: rgba(148, 163, 184, 0.4);
+}
+
+[data-theme="dark"] .minimap-navigator-zoom-btn {
+  color: #9f8fb8;
+  background: transparent;
+}
+
+[data-theme="dark"] .minimap-navigator-zoom-btn:hover {
+  color: #e2e0e8;
+}
+
+.minimap-navigator[data-edge-left="true"] .minimap-navigator-gutter-left,
+.minimap-navigator[data-edge-left="true"] .minimap-navigator-fade-left {
+  opacity: 0;
+}
+
+.minimap-navigator[data-edge-right="true"] .minimap-navigator-gutter-right,
+.minimap-navigator[data-edge-right="true"] .minimap-navigator-fade-right {
+  opacity: 0;
+}
+
+.minimap-navigator-label {
+  display: none;
+}
+
+.minimap-navigator-fade {
+  display: none;
+}
+
+[data-theme="dark"] .minimap-navigator-track {
+  background: rgba(148, 163, 184, 0.2);
+}

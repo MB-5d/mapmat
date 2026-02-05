@@ -3,8 +3,8 @@ import React from 'react';
 import CanvasToolbar from './CanvasToolbar';
 import ColorKey from './ColorKey';
 import LayersPanel from './LayersPanel';
-import Minimap from './Minimap';
 import ZoomControls from './ZoomControls';
+import { MinimapNavigator } from '../minimap';
 
 const RightRail = ({
   layersPanelProps,
@@ -17,7 +17,7 @@ const RightRail = ({
     <LayersPanel {...layersPanelProps} />
     <ColorKey {...colorKeyProps} />
     <CanvasToolbar {...toolbarProps} />
-    {minimapProps?.isOpen && <Minimap {...minimapProps} />}
+    {minimapProps?.isOpen && <MinimapNavigator {...minimapProps} />}
     <ZoomControls {...zoomProps} />
   </>
 );
