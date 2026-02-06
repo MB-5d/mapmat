@@ -11,11 +11,10 @@ const LayersPanel = ({
   scanLayerAvailability,
   scanLayerVisibility,
   onToggleScanLayer,
-  changeFilters = { showChanges: true, statuses: {}, hideDeleted: false },
-  onToggleShowChanges,
+  changeFilters = { statuses: {} },
   onToggleChangeStatus,
-  onToggleHideDeleted,
   changeStatusOptions = [],
+  showChangeSection = false,
   showViewDropdown,
   onToggleDropdown,
   viewDropdownRef,
@@ -184,29 +183,19 @@ const LayersPanel = ({
             </>
           )}
 
-          <div className="layers-panel-section">Changes</div>
-          <LayerToggle
-            label="Show changes"
-            active={changeFilters.showChanges}
-            onToggle={onToggleShowChanges}
-          />
-          <div className="change-chip-group">
-            {changeStatusOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`change-chip ${changeFilters.statuses?.[option.value] ? 'active' : ''}`}
-                onClick={() => onToggleChangeStatus?.(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <LayerToggle
-            label="Hide deleted"
-            active={changeFilters.hideDeleted}
-            onToggle={onToggleHideDeleted}
-          />
+          {showChangeSection && (
+            <>
+              <div className="layers-panel-section">Markers</div>
+              {changeStatusOptions.map((option) => (
+                <LayerToggle
+                  key={option.value}
+                  label={option.label}
+                  active={changeFilters.statuses?.[option.value]}
+                  onToggle={() => onToggleChangeStatus?.(option.value)}
+                />
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

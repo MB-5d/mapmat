@@ -163,9 +163,7 @@ const SitemapTree = ({
 
   if (!data || !layout) return null;
 
-  const showAnnotations = changeFilters?.showChanges ?? true;
   const statusFilters = changeFilters?.statuses || {};
-  const hideDeleted = Boolean(changeFilters?.hideDeleted);
 
   const getBadgesForNode = (node, nodeMeta) => {
     const badges = [];
@@ -232,11 +230,10 @@ const SitemapTree = ({
           || note.length > 0
           || (Array.isArray(annotations.tags) && annotations.tags.length > 0);
         const isDeleted = status === 'deleted';
-        const hiddenByStatus = showAnnotations && status !== 'none' && statusFilters[status] === false;
-        const hiddenByDeleted = hideDeleted && isDeleted;
-        const isHidden = hiddenByStatus || hiddenByDeleted;
+        const markerFilteredOut = status !== 'none' && statusFilters[status] === false;
         const isGhosted = isNodeGhosted(nodeData.node, nodeData, layerVisibility)
-          || (showAnnotations && isDeleted && !hiddenByDeleted && hasAnnotation);
+          || markerFilteredOut
+          || (isDeleted && hasAnnotation);
         const stackInfo = nodeData.stackInfo;
         const stackToggleParentId = stackInfo?.parentId;
         const shouldWrapStack = !!stackInfo?.collapsed;
@@ -265,7 +262,7 @@ const SitemapTree = ({
             isGhosted={isGhosted}
             badges={badges}
             showPageNumbers={showPageNumbers}
-            showAnnotations={showAnnotations}
+            showAnnotations={!markerFilteredOut}
             onRequestThumbnail={onRequestThumbnail}
             thumbnailRequestIds={thumbnailRequestIds}
             thumbnailSessionId={thumbnailSessionId}
@@ -284,7 +281,7 @@ const SitemapTree = ({
         return (
           <div
             key={nodeData.node.id}
-            className={`sitemap-node-positioned${isHidden ? ' sitemap-node-hidden' : ''}`}
+            className="sitemap-node-positioned"
             data-node-id={nodeData.node.id}
             data-depth={nodeData.depth}
             style={{
@@ -809,12 +806,10 @@ export default function App() {
     pageNumbers: true,
   });
   const [changeFilters, setChangeFilters] = useState(() => ({
-    showChanges: true,
     statuses: ANNOTATION_STATUS_OPTIONS.reduce((acc, option) => {
       acc[option.value] = true;
       return acc;
     }, {}),
-    hideDeleted: false,
   }));
   const [selectedNodeIds, setSelectedNodeIds] = useState(new Set());
   const [selectionBox, setSelectionBox] = useState(null);
@@ -1481,6 +1476,42 @@ export default function App() {
     const orphansHaveComments = orphans.some(o => o.comments?.length > 0);
     return rootHasComments || orphansHaveComments;
   }, [root, orphans]);
+
+  const markerStatusUsage = useMemo(() => {
+    const usedStatuses = new Set();
+    let hasAnyMarker = false;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    nodes.forEach((node) => {
+      const annotations = node?.annotations;
+      if (!annotations) return;
+      const status = annotations.status || 'none';
+      const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
+      const hasTags = Array.isArray(annotations.tags)
+        ? annotations.tags.some((tag) => tag && tag.trim())
+        : false;
+      if (status !== 'none') {
+        usedStatuses.add(status);
+        hasAnyMarker = true;
+      } else if (note.length > 0 || hasTags) {
+        hasAnyMarker = true;
+      }
+    });
+    return { usedStatuses, hasAnyMarker };
+  }, [root, orphans]);
+
+  const markerStatusOptions = useMemo(
+    () => ANNOTATION_STATUS_OPTIONS.filter((option) => markerStatusUsage.usedStatuses.has(option.value)),
+    [markerStatusUsage],
+  );
+
+  const showMarkerSection = markerStatusOptions.length > 0 && markerStatusUsage.hasAnyMarker;
+
+  const isAnnotationVisible = useCallback((node) => {
+    if (!node) return true;
+    const status = node?.annotations?.status || 'none';
+    if (status === 'none') return true;
+    return changeFilters?.statuses?.[status] !== false;
+  }, [changeFilters]);
 
   // Read access level from URL on load
   useEffect(() => {
@@ -4819,7 +4850,6 @@ export default function App() {
       return updated ? next : prev;
     });
 
-    setChangeFilters((prev) => (prev.showChanges ? prev : { ...prev, showChanges: true }));
   };
 
   // Get node by ID (from tree or orphans)
@@ -7414,7 +7444,7 @@ export default function App() {
                     showThumbnails={showThumbnails}
                     depth={0}
                     showPageNumbers={layers.pageNumbers}
-                    showAnnotations={changeFilters.showChanges}
+                    showAnnotations={isAnnotationVisible(activeNode)}
                   />
                 </div>
               ) : null}
@@ -7496,9 +7526,6 @@ export default function App() {
                   }));
                 },
                 changeFilters,
-                onToggleShowChanges: () => {
-                  setChangeFilters(prev => ({ ...prev, showChanges: !prev.showChanges }));
-                },
                 onToggleChangeStatus: (status) => {
                   setChangeFilters(prev => ({
                     ...prev,
@@ -7508,10 +7535,8 @@ export default function App() {
                     },
                   }));
                 },
-                onToggleHideDeleted: () => {
-                  setChangeFilters(prev => ({ ...prev, hideDeleted: !prev.hideDeleted }));
-                },
-                changeStatusOptions: ANNOTATION_STATUS_OPTIONS,
+                changeStatusOptions: markerStatusOptions,
+                showChangeSection: showMarkerSection,
                 showViewDropdown,
                 onToggleDropdown: () => setShowViewDropdown(!showViewDropdown),
                 viewDropdownRef,
