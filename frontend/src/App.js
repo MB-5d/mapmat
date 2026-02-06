@@ -793,6 +793,7 @@ export default function App() {
   const [lastScanAt, setLastScanAt] = useState(null);
   const [expandedStacks, setExpandedStacks] = useState({});
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
+  const [commentingNodeSnapshot, setCommentingNodeSnapshot] = useState(null);
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
   const [undoStack, setUndoStack] = useState([]);
@@ -3491,6 +3492,7 @@ export default function App() {
     // Close comment popover when clicking outside of it (but not on cards or UI)
     if (commentingNodeId && !isInsidePopover && !isInsideCard) {
       setCommentingNodeId(null);
+      setCommentingNodeSnapshot(null);
     }
 
     const shiftActive = e.shiftKey || isShiftPressed;
@@ -4004,6 +4006,7 @@ export default function App() {
         if (showCommentsPanel) {
           setActiveTool('select');
           setCommentingNodeId(null); // Close popover when switching tools
+          setCommentingNodeSnapshot(null);
         }
         if (showReportDrawer) {
           setShowReportDrawer(false);
@@ -4630,6 +4633,35 @@ export default function App() {
     }
   };
 
+  const updateCommentsForNode = (nodeId, updater) => {
+    let updated = false;
+    const nextOrphans = orphans.map((orphan) => {
+      if (!orphan) return orphan;
+      const copy = structuredClone(orphan);
+      const target = findNodeById(copy, nodeId);
+      if (!target) return orphan;
+      target.comments = updater(target.comments || []);
+      updated = true;
+      return copy;
+    });
+
+    if (updated) {
+      setOrphans(nextOrphans);
+      return;
+    }
+
+    setRoot((prev) => {
+      if (!prev) return prev;
+      const copy = structuredClone(prev);
+      const target = findNodeById(copy, nodeId);
+      if (target) {
+        target.comments = updater(target.comments || []);
+        return copy;
+      }
+      return prev;
+    });
+  };
+
   // Add a comment to a node
   const addCommentToNode = (nodeId, commentText, parentCommentId = null) => {
     if (!commentText.trim()) return;
@@ -4661,52 +4693,12 @@ export default function App() {
       };
 
       saveStateForUndo();
-
-      // Check if it's an orphan
-      const orphanIndex = orphans.findIndex(o => o.id === nodeId);
-      if (orphanIndex !== -1) {
-        setOrphans(prev => prev.map((o, i) =>
-          i === orphanIndex
-            ? { ...o, comments: addReplyToComment(o.comments || []) }
-            : o
-        ));
-        return;
-      }
-
-      // Update in tree
-      setRoot(prev => {
-        const copy = structuredClone(prev);
-        const node = findNodeById(copy, nodeId);
-        if (node) {
-          node.comments = addReplyToComment(node.comments || []);
-        }
-        return copy;
-      });
+      updateCommentsForNode(nodeId, addReplyToComment);
       return;
     }
 
     saveStateForUndo();
-
-    // Check if it's an orphan
-    const orphanIndex = orphans.findIndex(o => o.id === nodeId);
-    if (orphanIndex !== -1) {
-      setOrphans(prev => prev.map((o, i) =>
-        i === orphanIndex
-          ? { ...o, comments: [...(o.comments || []), newComment] }
-          : o
-      ));
-      return;
-    }
-
-    // Update in tree
-    setRoot(prev => {
-      const copy = structuredClone(prev);
-      const node = findNodeById(copy, nodeId);
-      if (node) {
-        node.comments = [...(node.comments || []), newComment];
-      }
-      return copy;
-    });
+    updateCommentsForNode(nodeId, (comments) => [...comments, newComment]);
   };
 
   // Toggle completed state on a comment
@@ -4730,27 +4722,7 @@ export default function App() {
     };
 
     saveStateForUndo();
-
-    // Check if it's an orphan
-    const orphanIndex = orphans.findIndex(o => o.id === nodeId);
-    if (orphanIndex !== -1) {
-      setOrphans(prev => prev.map((o, i) =>
-        i === orphanIndex
-          ? { ...o, comments: toggleInComments(o.comments || []) }
-          : o
-      ));
-      return;
-    }
-
-    // Update in tree
-    setRoot(prev => {
-      const copy = structuredClone(prev);
-      const node = findNodeById(copy, nodeId);
-      if (node) {
-        node.comments = toggleInComments(node.comments || []);
-      }
-      return copy;
-    });
+    updateCommentsForNode(nodeId, toggleInComments);
   };
 
   // Delete a comment from a node
@@ -4768,27 +4740,7 @@ export default function App() {
     };
 
     saveStateForUndo();
-
-    // Check if it's an orphan
-    const orphanIndex = orphans.findIndex(o => o.id === nodeId);
-    if (orphanIndex !== -1) {
-      setOrphans(prev => prev.map((o, i) =>
-        i === orphanIndex
-          ? { ...o, comments: deleteFromComments(o.comments || []) }
-          : o
-      ));
-      return;
-    }
-
-    // Update in tree
-    setRoot(prev => {
-      const copy = structuredClone(prev);
-      const node = findNodeById(copy, nodeId);
-      if (node) {
-        node.comments = deleteFromComments(node.comments || []);
-      }
-      return copy;
-    });
+    updateCommentsForNode(nodeId, deleteFromComments);
   };
 
   const applyAnnotationsInTree = (tree, idSet, updater) => {
@@ -4854,9 +4806,16 @@ export default function App() {
 
   // Get node by ID (from tree or orphans)
   const getNodeById = (nodeId) => {
-    const orphan = orphans.find(o => o.id === nodeId);
-    if (orphan) return orphan;
-    return findNodeById(root, nodeId);
+    if (!nodeId) return null;
+    const layoutNode = layoutRef.current?.nodes?.get(nodeId);
+    if (layoutNode?.node) return layoutNode.node;
+    const rootMatch = findNodeById(root, nodeId);
+    if (rootMatch) return rootMatch;
+    for (const orphan of orphans) {
+      const match = findNodeById(orphan, nodeId);
+      if (match) return match;
+    }
+    return null;
   };
 
   const nodeMenuStatus = nodeMenu
@@ -4890,26 +4849,58 @@ export default function App() {
   };
 
   // Open comment popover positioned next to a node
-  const openCommentPopover = (nodeId) => {
+  const openCommentPopover = (nodeOrId) => {
+    if (!canvasRef.current) return;
+    const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
+    if (!nodeId) return;
+    if (typeof nodeOrId === 'object') {
+      setCommentingNodeSnapshot(nodeOrId);
+    } else {
+      const resolvedNode = getNodeById(nodeId);
+      setCommentingNodeSnapshot(resolvedNode || null);
+    }
+
+    let nodeX = null;
+    let nodeY = null;
+    let nodeW = LAYOUT.NODE_W;
+    let nodeRect = null;
     const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
-    if (!nodeElement || !canvasRef.current) return;
 
-    // Get node position in canvas coordinates (from the positioned wrapper)
-    const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
-    if (!nodeWrapper) return;
+    if (nodeElement) {
+      const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
+      if (nodeWrapper) {
+        const wrapperLeft = parseFloat(nodeWrapper.style.left);
+        const wrapperTop = parseFloat(nodeWrapper.style.top);
+        if (Number.isFinite(wrapperLeft)) nodeX = wrapperLeft;
+        if (Number.isFinite(wrapperTop)) nodeY = wrapperTop;
+      }
+      nodeRect = nodeElement.getBoundingClientRect();
+    }
 
-    const nodeX = parseFloat(nodeWrapper.style.left) || 0;
-    const nodeY = parseFloat(nodeWrapper.style.top) || 0;
-    const nodeW = LAYOUT.NODE_W;
+    if (nodeX === null || nodeY === null) {
+      const layoutNode = layoutRef.current?.nodes?.get(nodeId);
+      if (layoutNode) {
+        nodeX = layoutNode.x ?? 0;
+        nodeY = layoutNode.y ?? 0;
+        nodeW = layoutNode.w ?? LAYOUT.NODE_W;
+      }
+    }
+
+    if (nodeX === null || nodeY === null) return;
     const popoverWidth = 320;
     const gap = 16;
 
     // Get the node's screen position to check if popover fits on right
-    const nodeRect = nodeElement.getBoundingClientRect();
     const canvasRect = canvasRef.current.getBoundingClientRect();
 
     // Check if there's enough room on the right side of the node (in screen space)
-    const rightSpaceAvailable = canvasRect.right - nodeRect.right;
+    const rightSpaceAvailable = nodeRect
+      ? (canvasRect.right - nodeRect.right)
+      : (() => {
+        const scaleValue = scaleRef.current || scale || 1;
+        const screenRight = canvasRect.left + panRef.current.x + (nodeX + nodeW) * scaleValue;
+        return canvasRect.right - screenRight;
+      })();
     const needsLeftPosition = rightSpaceAvailable < (popoverWidth + gap);
 
     // Calculate popover position in canvas coordinates
@@ -4965,7 +4956,7 @@ export default function App() {
     }
     const shiftActive = event?.shiftKey || isShiftPressed;
     if (activeTool === 'comments' && !shiftActive) {
-      openCommentPopover(node.id);
+      openCommentPopover(node);
       return;
     }
     if (connectionTool && !shiftActive) return;
@@ -6941,8 +6932,8 @@ export default function App() {
                   }}
                   onNodeClick={handleNodeClick}
                   onNodeContextMenu={openNodeMenu}
-                  onAddNote={(node) => openCommentPopover(node.id)}
-                  onViewNotes={(node) => openCommentPopover(node.id)}
+                  onAddNote={(node) => openCommentPopover(node)}
+                  onViewNotes={(node) => openCommentPopover(node)}
                   badgeVisibility={badgeVisibility}
                   layerVisibility={layerVisibility}
                   changeFilters={changeFilters}
@@ -7405,7 +7396,10 @@ export default function App() {
               )}
 
               {/* Comment Popover - positioned next to node */}
-              {commentingNodeId && getNodeById(commentingNodeId) && (
+              {(() => {
+                const activeNode = commentingNodeId ? (getNodeById(commentingNodeId) || commentingNodeSnapshot) : null;
+                if (!commentingNodeId || !activeNode) return null;
+                return (
                 <div
                   className={`comment-popover-container ${commentPopoverPos.side}`}
                   style={{
@@ -7416,8 +7410,11 @@ export default function App() {
                   }}
                 >
                   <CommentPopover
-                    node={getNodeById(commentingNodeId)}
-                    onClose={() => setCommentingNodeId(null)}
+                    node={activeNode}
+                    onClose={() => {
+                      setCommentingNodeId(null);
+                      setCommentingNodeSnapshot(null);
+                    }}
                     onAddComment={addCommentToNode}
                     onToggleCompleted={toggleCommentCompleted}
                     onDeleteComment={deleteComment}
@@ -7425,7 +7422,8 @@ export default function App() {
                     canComment={canComment()}
                   />
                 </div>
-              )}
+                );
+              })()}
             </div>
             </div>
 
@@ -7754,11 +7752,10 @@ export default function App() {
           orphans={orphans}
           onClose={() => setShowCommentsPanel(false)}
           onCommentClick={(nodeId) => {
-            navigateToNode(nodeId);
-            // Small delay to let pan complete before calculating popover position
-            setTimeout(() => openCommentPopover(nodeId), 100);
+            // Small delay to let animated pan complete before calculating popover position
+            setTimeout(() => openCommentPopover(nodeId), 480);
           }}
-          onNavigateToNode={navigateToNode}
+          onNavigateToNode={focusNodeById}
         />
       )}
 
