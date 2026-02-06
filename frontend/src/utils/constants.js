@@ -40,6 +40,19 @@ export const REPORT_TYPE_OPTIONS = [
   { key: 'authenticatedPages', label: 'Authenticated Pages' },
 ];
 
+export const ANNOTATION_STATUS_OPTIONS = [
+  { value: 'new', label: 'New' },
+  { value: 'moved', label: 'Moved' },
+  { value: 'deleted', label: 'Deleted' },
+  { value: 'to_move', label: 'To Move' },
+  { value: 'to_delete', label: 'To Delete' },
+];
+
+export const ANNOTATION_STATUS_LABELS = ANNOTATION_STATUS_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = option.label;
+  return acc;
+}, { none: 'None', note: 'Note' });
+
 // Layout constants (Single Source of Truth)
 export const LAYOUT = {
   NODE_W: 288,

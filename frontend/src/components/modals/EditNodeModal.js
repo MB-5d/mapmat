@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X } from 'lucide-react';
 
+import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
+
 // Page types for dropdown
 const PAGE_TYPES = [
   'Page',
@@ -52,11 +54,19 @@ const EditNodeModal = ({
   const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
   const [description, setDescription] = useState(node?.description || '');
   const [metaTags, setMetaTags] = useState(node?.metaTags || '');
+  const [annotationStatus, setAnnotationStatus] = useState(node?.annotations?.status || 'none');
+  const [annotationTags, setAnnotationTags] = useState((node?.annotations?.tags || []).join(', '));
+  const [annotationNote, setAnnotationNote] = useState(node?.annotations?.note || '');
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const trimmedNote = annotationNote.trim();
+    const tags = annotationTags
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean);
     onSave({
       ...node,
       title,
@@ -66,6 +76,11 @@ const EditNodeModal = ({
       thumbnailUrl,
       description,
       metaTags,
+      annotations: {
+        status: annotationStatus || 'none',
+        tags,
+        note: trimmedNote,
+      },
     });
     onClose();
   };
@@ -320,6 +335,40 @@ const EditNodeModal = ({
                 value={metaTags}
                 onChange={(e) => setMetaTags(e.target.value)}
                 placeholder="Comma-separated tags: seo, marketing, landing"
+                rows={2}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Status</label>
+              <select
+                value={annotationStatus}
+                onChange={(e) => setAnnotationStatus(e.target.value)}
+              >
+                <option value="none">None</option>
+                {ANNOTATION_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Tags</label>
+              <input
+                type="text"
+                value={annotationTags}
+                onChange={(e) => setAnnotationTags(e.target.value)}
+                placeholder="Comma-separated tags"
+              />
+              <div className="form-helper">Optional labels for filtering and collaboration.</div>
+            </div>
+
+            <div className="form-group">
+              <label>Note</label>
+              <textarea
+                value={annotationNote}
+                onChange={(e) => setAnnotationNote(e.target.value)}
+                placeholder="Short note shown on the node"
                 rows={2}
               />
             </div>

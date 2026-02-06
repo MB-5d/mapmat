@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { getHostname } from '../../utils/url';
+import { ANNOTATION_STATUS_LABELS } from '../../utils/constants';
 
 const NodeCard = ({
   node,
@@ -38,6 +39,7 @@ const NodeCard = ({
   dragHandleProps,
   badges = [],
   showPageNumbers = true,
+  showAnnotations = true,
   onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
@@ -61,6 +63,22 @@ const NodeCard = ({
     : null;
   const hasThumb = Boolean(thumb);
   const canRequestThumbnail = !thumbnailRequestIds || thumbnailRequestIds.has(node.id);
+  const annotations = node?.annotations || {};
+  const status = annotations.status || 'none';
+  const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
+  const tags = Array.isArray(annotations.tags) ? annotations.tags : [];
+  const hasTags = tags.length > 0;
+  const hasStatus = status !== 'none';
+  const showBadge = showAnnotations && (hasStatus || note || hasTags);
+  const statusLabel = ANNOTATION_STATUS_LABELS[status] || 'Note';
+  const badgeLabel = hasStatus ? statusLabel : (hasTags ? 'Tagged' : 'Note');
+  const badgeTitleParts = [];
+  if (hasStatus) badgeTitleParts.push(statusLabel);
+  if (note) badgeTitleParts.push(note);
+  if (tags.length > 0) badgeTitleParts.push(`Tags: ${tags.join(', ')}`);
+  const badgeTitle = badgeTitleParts.join('\n');
+  const isDeleted = showAnnotations && status === 'deleted';
+  const shouldGhost = isGhosted || isDeleted;
 
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
@@ -155,7 +173,8 @@ const NodeCard = ({
   if (stackInfo?.collapsed) classNames.push('stack-collapsed');
   if (stackInfo?.showCollapse) classNames.push('stack-expanded');
   if (stackInfo?.collapsed || stackInfo?.showCollapse) classNames.push('has-stack-toggle');
-  if (isGhosted) classNames.push('ghosted');
+  if (shouldGhost) classNames.push('ghosted');
+  if (isDeleted) classNames.push('deleted');
   if (isSelected) classNames.push('selected');
 
   // Anchor color based on connection tool type
@@ -271,8 +290,20 @@ const NodeCard = ({
       )}
 
       <div className="card-content">
-        <div className="card-title" title={node.title}>
-          {node.title}
+        <div className="card-content-top">
+          <div className="card-title" title={node.title}>
+            {node.title}
+          </div>
+          {showBadge && (
+            <div
+              className={`node-status-badge ${hasStatus ? `status-${status}` : 'status-note'}`}
+              title={badgeTitle}
+              aria-hidden="true"
+            >
+              <span className="node-status-text">{badgeLabel}</span>
+              {note && <span className="node-status-note-dot" />}
+            </div>
+          )}
         </div>
 
         {showPageNumbers && <span className="page-number">{number}</span>}
@@ -373,6 +404,7 @@ const DraggableNodeCard = ({
   thumbnailCaptureStopped,
   onThumbnailLoad,
   onThumbnailError,
+  showAnnotations,
   stackInfo,
   onToggleStack,
   isGhosted,
@@ -408,6 +440,7 @@ const DraggableNodeCard = ({
         dragHandleProps={canEdit && !connectionTool ? { ...listeners, ...attributes } : {}}
         badges={badges}
         showPageNumbers={showPageNumbers}
+        showAnnotations={showAnnotations}
         onRequestThumbnail={onRequestThumbnail}
         thumbnailRequestIds={thumbnailRequestIds}
         thumbnailSessionId={thumbnailSessionId}
@@ -425,7 +458,17 @@ const DraggableNodeCard = ({
 };
 
 // Component for rendering a node and its children in the DragOverlay
-const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, badges, showPageNumbers = true }) => {
+const DragOverlayTree = ({
+  node,
+  number,
+  color,
+  colors,
+  showThumbnails,
+  depth,
+  badges,
+  showPageNumbers = true,
+  showAnnotations = true,
+}) => {
   const childColor = colors[Math.min(depth + 1, colors.length - 1)];
   const INDENT = 40;
   const GAP = 60;
@@ -437,6 +480,7 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, b
         number={number}
         color={color}
         showThumbnails={showThumbnails}
+        showAnnotations={showAnnotations}
         isRoot={false}
         isDragging={true}
         onDelete={() => {}}
@@ -465,6 +509,7 @@ const DragOverlayTree = ({ node, number, color, colors, showThumbnails, depth, b
                 depth={depth + 1}
                 badges={badges}
                 showPageNumbers={showPageNumbers}
+                showAnnotations={showAnnotations}
               />
             </div>
           ))}

@@ -55,6 +55,7 @@ import {
   ACCESS_LEVELS,
   SCAN_MESSAGES,
   REPORT_TYPE_OPTIONS,
+  ANNOTATION_STATUS_OPTIONS,
   LAYOUT,
 } from './utils/constants';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
@@ -120,9 +121,11 @@ const SitemapTree = ({
   onViewNotes,
   onNodeDoubleClick,
   onNodeClick,
+  onNodeContextMenu,
   activeId,
   badgeVisibility,
   layerVisibility,
+  changeFilters,
   showPageNumbers,
   onRequestThumbnail,
   thumbnailRequestIds,
@@ -159,6 +162,10 @@ const SitemapTree = ({
   }, [layout, orphans]);
 
   if (!data || !layout) return null;
+
+  const showAnnotations = changeFilters?.showChanges ?? true;
+  const statusFilters = changeFilters?.statuses || {};
+  const hideDeleted = Boolean(changeFilters?.hideDeleted);
 
   const getBadgesForNode = (node, nodeMeta) => {
     const badges = [];
@@ -218,7 +225,18 @@ const SitemapTree = ({
         const color = colors[Math.min(nodeData.depth, colors.length - 1)];
         const isRoot = nodeData.node.id === data.id;
         const badges = getBadgesForNode(nodeData.node, nodeData);
-        const isGhosted = isNodeGhosted(nodeData.node, nodeData, layerVisibility);
+        const annotations = nodeData.node?.annotations || {};
+        const status = annotations.status || 'none';
+        const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
+        const hasAnnotation = status !== 'none'
+          || note.length > 0
+          || (Array.isArray(annotations.tags) && annotations.tags.length > 0);
+        const isDeleted = status === 'deleted';
+        const hiddenByStatus = showAnnotations && status !== 'none' && statusFilters[status] === false;
+        const hiddenByDeleted = hideDeleted && isDeleted;
+        const isHidden = hiddenByStatus || hiddenByDeleted;
+        const isGhosted = isNodeGhosted(nodeData.node, nodeData, layerVisibility)
+          || (showAnnotations && isDeleted && !hiddenByDeleted && hasAnnotation);
         const stackInfo = nodeData.stackInfo;
         const stackToggleParentId = stackInfo?.parentId;
         const shouldWrapStack = !!stackInfo?.collapsed;
@@ -247,6 +265,7 @@ const SitemapTree = ({
             isGhosted={isGhosted}
             badges={badges}
             showPageNumbers={showPageNumbers}
+            showAnnotations={showAnnotations}
             onRequestThumbnail={onRequestThumbnail}
             thumbnailRequestIds={thumbnailRequestIds}
             thumbnailSessionId={thumbnailSessionId}
@@ -265,7 +284,7 @@ const SitemapTree = ({
         return (
           <div
             key={nodeData.node.id}
-            className="sitemap-node-positioned"
+            className={`sitemap-node-positioned${isHidden ? ' sitemap-node-hidden' : ''}`}
             data-node-id={nodeData.node.id}
             data-depth={nodeData.depth}
             style={{
@@ -275,6 +294,7 @@ const SitemapTree = ({
             }}
             onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
             onClick={(e) => onNodeClick?.(nodeData.node, e)}
+            onContextMenu={(e) => onNodeContextMenu?.(nodeData.node.id, e)}
           >
             {shouldWrapStack ? (
               <div className="stacked-node-wrapper">
@@ -788,6 +808,14 @@ export default function App() {
     brokenLinks: true,  // Broken link connections
     pageNumbers: true,
   });
+  const [changeFilters, setChangeFilters] = useState(() => ({
+    showChanges: true,
+    statuses: ANNOTATION_STATUS_OPTIONS.reduce((acc, option) => {
+      acc[option.value] = true;
+      return acc;
+    }, {}),
+    hideDeleted: false,
+  }));
   const [selectedNodeIds, setSelectedNodeIds] = useState(new Set());
   const [selectionBox, setSelectionBox] = useState(null);
 
@@ -798,6 +826,7 @@ export default function App() {
   const [hoveredConnection, setHoveredConnection] = useState(null); // ID of hovered connection
   const [connectionMenu, setConnectionMenu] = useState(null); // { connectionId, x, y }
   const [draggingEndpoint, setDraggingEndpoint] = useState(null); // { connectionId, endpoint: 'source'|'target', ... }
+  const [nodeMenu, setNodeMenu] = useState(null); // { nodeId, x, y, targetIds }
 
   // Theme: 'light', 'dark', or 'auto'
   const [theme, setTheme] = useState('auto');
@@ -3416,11 +3445,16 @@ export default function App() {
     const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast, .minimap-navigator');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
+    const isInsideNodeMenu = e.target.closest('.node-menu');
     const isOnConnection = e.target.closest('.connections-layer');
 
     // Close connection menu when clicking outside of it
     if (connectionMenu && !isInsideConnectionMenu) {
       setConnectionMenu(null);
+    }
+
+    if (nodeMenu && !isInsideNodeMenu) {
+      setNodeMenu(null);
     }
 
     // Close comment popover when clicking outside of it (but not on cards or UI)
@@ -3429,8 +3463,8 @@ export default function App() {
     }
 
     const shiftActive = e.shiftKey || isShiftPressed;
-    if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isOnConnection)) return;
-    if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu)) return;
+    if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
+    if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu)) return;
 
     const canStartSelection = shiftActive;
     if (canStartSelection) {
@@ -3933,6 +3967,9 @@ export default function App() {
         if (connectionMenu) {
           setConnectionMenu(null);
         }
+        if (nodeMenu) {
+          setNodeMenu(null);
+        }
         if (showCommentsPanel) {
           setActiveTool('select');
           setCommentingNodeId(null); // Close popover when switching tools
@@ -3954,7 +3991,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -4723,12 +4760,78 @@ export default function App() {
     });
   };
 
+  const applyAnnotationsInTree = (tree, idSet, updater) => {
+    if (!tree) return false;
+    let updated = false;
+    const stack = [tree];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current) continue;
+      if (idSet.has(current.id)) {
+        updater(current);
+        updated = true;
+      }
+      if (current.children?.length) {
+        current.children.forEach((child) => stack.push(child));
+      }
+    }
+    return updated;
+  };
+
+  const applyAnnotationStatus = (nodeIds, status, options = {}) => {
+    if (!nodeIds || nodeIds.length === 0) return;
+    const idSet = new Set(nodeIds);
+    const now = new Date().toISOString();
+    const { clear = false } = options;
+
+    const updateNode = (node) => {
+      const existing = node.annotations || {};
+      const nextStatus = status || 'none';
+      node.annotations = {
+        status: nextStatus,
+        tags: clear ? [] : (Array.isArray(existing.tags) ? existing.tags : []),
+        note: clear ? '' : (typeof existing.note === 'string' ? existing.note : ''),
+        meta: {
+          createdAt: existing.meta?.createdAt || now,
+          updatedAt: now,
+        },
+      };
+    };
+
+    saveStateForUndo();
+
+    setRoot((prev) => {
+      if (!prev) return prev;
+      const copy = structuredClone(prev);
+      applyAnnotationsInTree(copy, idSet, updateNode);
+      return copy;
+    });
+
+    setOrphans((prev) => {
+      let updated = false;
+      const next = prev.map((orphan) => {
+        if (!orphan) return orphan;
+        const orphanCopy = structuredClone(orphan);
+        const changed = applyAnnotationsInTree(orphanCopy, idSet, updateNode);
+        if (changed) updated = true;
+        return changed ? orphanCopy : orphan;
+      });
+      return updated ? next : prev;
+    });
+
+    setChangeFilters((prev) => (prev.showChanges ? prev : { ...prev, showChanges: true }));
+  };
+
   // Get node by ID (from tree or orphans)
   const getNodeById = (nodeId) => {
     const orphan = orphans.find(o => o.id === nodeId);
     if (orphan) return orphan;
     return findNodeById(root, nodeId);
   };
+
+  const nodeMenuStatus = nodeMenu
+    ? (getNodeById(nodeMenu.nodeId)?.annotations?.status || 'none')
+    : 'none';
 
   // Navigate to a node - pan canvas to center the node and optionally zoom
   const navigateToNode = (nodeId) => {
@@ -4789,6 +4892,41 @@ export default function App() {
     setCommentingNodeId(nodeId);
   };
 
+  const openNodeMenu = (nodeId, event) => {
+    if (!nodeId || !event) return;
+    if (!canEdit() && !canComment()) return;
+    if (!contentRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const interactiveTarget = event.target.closest(
+      'button, a, input, textarea, select, .anchor-point, .stack-toggle, .comment-badge, .thumb-fullsize-btn'
+    );
+    if (interactiveTarget) return;
+
+    if (connectionMenu) {
+      setConnectionMenu(null);
+    }
+
+    const contentRect = contentRef.current.getBoundingClientRect();
+    const scaleValue = scaleRef.current || scale || 1;
+    const menuX = (event.clientX - contentRect.left) / scaleValue;
+    const menuY = (event.clientY - contentRect.top) / scaleValue;
+
+    const hasSelection = selectedNodeIds?.has(nodeId);
+    const targetIds = hasSelection ? Array.from(selectedNodeIds) : [nodeId];
+    if (!hasSelection) {
+      setSelectedNodeIds(new Set([nodeId]));
+    }
+
+    setNodeMenu({
+      nodeId,
+      x: menuX,
+      y: menuY,
+      targetIds,
+    });
+  };
+
   const handleNodeClick = (node, event) => {
     if (!node) return;
     if (suppressNodeClickRef.current) {
@@ -4803,7 +4941,7 @@ export default function App() {
     if (connectionTool && !shiftActive) return;
     if (!event) return;
     const interactiveTarget = event.target.closest(
-      'button, a, input, textarea, select, .anchor-point, .stack-toggle, .comment-badge, .thumb-fullsize-btn'
+      'button, a, input, textarea, select, .anchor-point, .stack-toggle, .comment-badge, .thumb-fullsize-btn, .node-status-badge'
     );
     if (interactiveTarget) return;
 
@@ -5521,6 +5659,19 @@ export default function App() {
     setEditModalMode('duplicate');
   };
 
+  const buildAnnotations = (incoming, existing = null) => {
+    const now = new Date().toISOString();
+    if (!incoming && !existing) return null;
+    const status = incoming?.status ?? existing?.status ?? 'none';
+    const tags = Array.isArray(incoming?.tags) ? incoming.tags : (existing?.tags || []);
+    const note = typeof incoming?.note === 'string' ? incoming.note : (existing?.note || '');
+    const meta = {
+      createdAt: existing?.meta?.createdAt || incoming?.meta?.createdAt || now,
+      updatedAt: now,
+    };
+    return { status, tags, note, meta };
+  };
+
   const saveNodeChanges = (updatedNode) => {
     // Helper to find parent in a tree
     const findParentInTree = (tree, nodeId, parent = null) => {
@@ -5604,6 +5755,7 @@ export default function App() {
             thumbnailUrl: updatedNode.thumbnailUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
+            annotations: buildAnnotations(updatedNode.annotations, removedNode.annotations),
           });
           setOrphans((prev) => {
             const next = structuredClone(prev);
@@ -5643,6 +5795,7 @@ export default function App() {
               thumbnailUrl: updatedNode.thumbnailUrl,
               description: updatedNode.description,
               metaTags: updatedNode.metaTags,
+              annotations: buildAnnotations(updatedNode.annotations, target.annotations),
             });
 
             const currentParent = findParent(treeRoot, updatedNode.id);
@@ -5691,6 +5844,7 @@ export default function App() {
             thumbnailUrl: updatedNode.thumbnailUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
+            annotations: buildAnnotations(updatedNode.annotations, target.annotations),
           });
 
           // Check if parent changed
@@ -5725,9 +5879,16 @@ export default function App() {
       }
     } else if (editModalMode === 'duplicate') {
       // Create a copy of the node
+      const now = new Date().toISOString();
       const newNode = {
         ...updatedNode,
         id: `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        annotations: buildAnnotations(updatedNode.annotations, {
+          status: 'none',
+          tags: [],
+          note: '',
+          meta: { createdAt: now, updatedAt: now },
+        }),
         children: [], // Don't copy children for duplicates
         comments: [], // Fresh comments for duplicates
       };
@@ -5767,6 +5928,7 @@ export default function App() {
       }
     } else if (editModalMode === 'add') {
       // Create a new blank node
+      const now = new Date().toISOString();
       const newNodeData = {
         url: updatedNode.url || '',
         title: updatedNode.title || 'New Page',
@@ -5774,6 +5936,12 @@ export default function App() {
         thumbnailUrl: updatedNode.thumbnailUrl || '',
         description: updatedNode.description || '',
         metaTags: updatedNode.metaTags || {},
+        annotations: buildAnnotations(updatedNode.annotations, {
+          status: 'none',
+          tags: [],
+          note: '',
+          meta: { createdAt: now, updatedAt: now },
+        }),
         children: [],
         comments: [],
       };
@@ -6742,10 +6910,12 @@ export default function App() {
                     }
                   }}
                   onNodeClick={handleNodeClick}
+                  onNodeContextMenu={openNodeMenu}
                   onAddNote={(node) => openCommentPopover(node.id)}
                   onViewNotes={(node) => openCommentPopover(node.id)}
                   badgeVisibility={badgeVisibility}
                   layerVisibility={layerVisibility}
+                  changeFilters={changeFilters}
                   showPageNumbers={layers.pageNumbers}
                   onRequestThumbnail={requestThumbnail}
                   thumbnailRequestIds={thumbnailScopeIds}
@@ -7165,6 +7335,45 @@ export default function App() {
                 </div>
               )}
 
+              {/* Node annotation context menu */}
+              {nodeMenu && (
+                <div
+                  className="node-menu"
+                  style={{
+                    position: 'absolute',
+                    left: nodeMenu.x,
+                    top: nodeMenu.y,
+                    zIndex: 1000,
+                  }}
+                >
+                  <div className="node-menu-title">
+                    Mark as{nodeMenu.targetIds?.length > 1 ? ` (${nodeMenu.targetIds.length})` : ''}
+                  </div>
+                  {ANNOTATION_STATUS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      className={`node-menu-item${nodeMenuStatus === option.value ? ' active' : ''}`}
+                      onClick={() => {
+                        applyAnnotationStatus(nodeMenu.targetIds || [], option.value);
+                        setNodeMenu(null);
+                      }}
+                    >
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                  <div className="node-menu-divider" />
+                  <button
+                    className="node-menu-item clear"
+                    onClick={() => {
+                      applyAnnotationStatus(nodeMenu.targetIds || [], 'none', { clear: true });
+                      setNodeMenu(null);
+                    }}
+                  >
+                    <span>Clear</span>
+                  </button>
+                </div>
+              )}
+
               {/* Comment Popover - positioned next to node */}
               {commentingNodeId && getNodeById(commentingNodeId) && (
                 <div
@@ -7205,6 +7414,7 @@ export default function App() {
                     showThumbnails={showThumbnails}
                     depth={0}
                     showPageNumbers={layers.pageNumbers}
+                    showAnnotations={changeFilters.showChanges}
                   />
                 </div>
               ) : null}
@@ -7285,6 +7495,23 @@ export default function App() {
                     [layerKey]: !prev[layerKey],
                   }));
                 },
+                changeFilters,
+                onToggleShowChanges: () => {
+                  setChangeFilters(prev => ({ ...prev, showChanges: !prev.showChanges }));
+                },
+                onToggleChangeStatus: (status) => {
+                  setChangeFilters(prev => ({
+                    ...prev,
+                    statuses: {
+                      ...prev.statuses,
+                      [status]: !prev.statuses?.[status],
+                    },
+                  }));
+                },
+                onToggleHideDeleted: () => {
+                  setChangeFilters(prev => ({ ...prev, hideDeleted: !prev.hideDeleted }));
+                },
+                changeStatusOptions: ANNOTATION_STATUS_OPTIONS,
                 showViewDropdown,
                 onToggleDropdown: () => setShowViewDropdown(!showViewDropdown),
                 viewDropdownRef,
