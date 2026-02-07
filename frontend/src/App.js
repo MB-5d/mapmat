@@ -1492,6 +1492,25 @@ export default function App() {
     return { usedStatuses, hasAnyMarker: usedStatuses.size > 0 };
   }, [root, orphans]);
 
+  const shouldAutoMarkMoved = useMemo(() => {
+    if (!root || isImportedMap) return false;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => {
+      if (!node) return false;
+      return !!node.parentUrl
+        || !!node.referrerUrl
+        || !!node.canonicalUrl
+        || !!node.finalUrl
+        || !!node.isBroken
+        || !!node.isError
+        || !!node.isInactive
+        || !!node.authRequired
+        || !!node.isDuplicate
+        || !!node.isFile
+        || !!node.isMissing;
+    });
+  }, [root, orphans, isImportedMap]);
+
   const markerStatusOptions = useMemo(
     () => ANNOTATION_STATUS_OPTIONS.filter((option) => markerStatusUsage.usedStatuses.has(option.value)),
     [markerStatusUsage],
@@ -5721,6 +5740,14 @@ export default function App() {
     return { status, tags, note, meta };
   };
 
+  const maybeMarkNodeMoved = (node) => {
+    if (!shouldAutoMarkMoved) return;
+    if (!hasAssignedUrl(node)) return;
+    const currentStatus = node?.annotations?.status || 'none';
+    if (currentStatus === 'moved' || currentStatus === 'deleted' || currentStatus === 'to_delete') return;
+    node.annotations = buildAnnotations({ status: 'moved' }, node.annotations);
+  };
+
   const saveNodeChanges = (updatedNode) => {
     // Helper to find parent in a tree
     const findParentInTree = (tree, nodeId, parent = null) => {
@@ -5806,6 +5833,7 @@ export default function App() {
             metaTags: updatedNode.metaTags,
             annotations: buildAnnotations(updatedNode.annotations, removedNode.annotations),
           });
+          maybeMarkNodeMoved(removedNode);
           setOrphans((prev) => {
             const next = structuredClone(prev);
             if (orphanRoot.id === updatedNode.id) {
@@ -5854,6 +5882,7 @@ export default function App() {
             const movingToRootLevel = wantsSubdomainRoot || wantsOrphanRoot;
 
             if (currentParentId !== newParentId || (movingToRootLevel && targetRootType !== currentRootType)) {
+              maybeMarkNodeMoved(target);
               if (currentParent) {
                 currentParent.children = (currentParent.children || []).filter((c) => c.id !== updatedNode.id);
               } else if (treeRoot.id === updatedNode.id) {
@@ -5901,6 +5930,7 @@ export default function App() {
           const currentParentId = currentParent?.id || '';
 
           if (currentParentId !== newParentId) {
+            maybeMarkNodeMoved(target);
             // Parent changed - need to move the node
             // Don't allow moving root node
             if (copy.id === updatedNode.id) return copy;
@@ -6206,6 +6236,8 @@ export default function App() {
     }
 
     if (!removedNode) return;
+
+    maybeMarkNodeMoved(removedNode);
 
     if (nextRoot) purgeNodeFromTree(nextRoot, nodeId);
     nextOrphans = nextOrphans.filter((orphan) => orphan.id !== nodeId);

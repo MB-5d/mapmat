@@ -340,7 +340,7 @@ const EditNodeModal = ({
             </div>
 
             <div className="form-group">
-              <label>Status</label>
+              <label>Marker</label>
               <select
                 value={annotationStatus}
                 onChange={(e) => setAnnotationStatus(e.target.value)}
