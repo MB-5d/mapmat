@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sliders, Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon, Monitor } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
 
@@ -23,7 +23,6 @@ const SettingsDrawer = ({
       onClose={onClose}
       title="Settings"
       subtitle="Personalize your workspace"
-      icon={<Sliders size={18} />}
       className="settings-drawer"
     >
       <section className="drawer-card">

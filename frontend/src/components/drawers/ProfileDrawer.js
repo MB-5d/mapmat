@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, User } from 'lucide-react';
 
 import * as api from '../../api';
@@ -31,15 +31,6 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, user]);
-
-  const initials = useMemo(() => {
-    const source = user?.name || user?.email || '';
-    if (!source) return 'U';
-    const parts = source.trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return 'U';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  }, [user]);
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -124,11 +115,6 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       onClose={onClose}
       title="Profile"
       subtitle="Manage your account"
-      icon={(
-        <div className="account-drawer-avatar">
-          {initials}
-        </div>
-      )}
       className="profile-drawer"
     >
       <div className="account-hero">
@@ -214,7 +200,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           </button>
 
           <div className="form-section danger-zone">
-            <h4>Danger Zone</h4>
+            <h4>Delete account</h4>
             <p>Deleting your account will permanently remove all your projects, maps, and data.</p>
             <button
               type="button"

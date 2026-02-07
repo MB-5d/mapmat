@@ -2190,6 +2190,8 @@ export default function App() {
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
     setShowVersionHistoryDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
   }, []);
 
   const handleShowSettings = useCallback(() => {
@@ -2197,6 +2199,28 @@ export default function App() {
     setShowProfileDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowVersionHistoryDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
+  }, []);
+
+  const handleShowProjects = useCallback(() => {
+    setShowProjectsModal(true);
+    setShowHistoryModal(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
+    setShowVersionHistoryDrawer(false);
+  }, []);
+
+  const handleShowHistory = useCallback(() => {
+    setShowHistoryModal(true);
+    setShowProjectsModal(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
     setShowVersionHistoryDrawer(false);
   }, []);
 
@@ -3936,6 +3960,8 @@ export default function App() {
             setShowReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowProjectsModal(false);
+            setShowHistoryModal(false);
           }
           return next;
         });
@@ -3948,6 +3974,8 @@ export default function App() {
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowVersionHistoryDrawer(false);
+            setShowProjectsModal(false);
+            setShowHistoryModal(false);
           }
           return next;
         });
@@ -3960,6 +3988,8 @@ export default function App() {
             setShowReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
+            setShowProjectsModal(false);
+            setShowHistoryModal(false);
           }
           return next;
         });
@@ -4011,6 +4041,12 @@ export default function App() {
         }
         if (showVersionHistoryDrawer) {
           setShowVersionHistoryDrawer(false);
+        }
+        if (showProjectsModal) {
+          setShowProjectsModal(false);
+        }
+        if (showHistoryModal) {
+          setShowHistoryModal(false);
         }
       }
     };
@@ -6794,8 +6830,8 @@ export default function App() {
           setShowCreateMapModal(true);
         }}
         onImportFile={() => setShowImportModal(true)}
-        onShowProjects={() => setShowProjectsModal(true)}
-        onShowHistory={() => setShowHistoryModal(true)}
+        onShowProjects={handleShowProjects}
+        onShowHistory={handleShowHistory}
       />
 
       <div
@@ -7582,6 +7618,8 @@ export default function App() {
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowVersionHistoryDrawer(false);
+                      setShowProjectsModal(false);
+                      setShowHistoryModal(false);
                     }
                     return next;
                   });
@@ -7596,6 +7634,8 @@ export default function App() {
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowVersionHistoryDrawer(false);
+                      setShowProjectsModal(false);
+                      setShowHistoryModal(false);
                     }
                     return next;
                   });
@@ -7632,6 +7672,8 @@ export default function App() {
                       setShowReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
+                      setShowProjectsModal(false);
+                      setShowHistoryModal(false);
                     }
                     return next;
                   });

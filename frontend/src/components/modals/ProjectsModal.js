@@ -7,8 +7,9 @@ import {
   FolderPlus,
   Network,
   Trash2,
-  X,
 } from 'lucide-react';
+
+import AccountDrawer from '../drawers/AccountDrawer';
 
 const ProjectsModal = ({
   show,
@@ -28,18 +29,15 @@ const ProjectsModal = ({
   onDeleteMap,
   onAddProject,
 }) => {
-  if (!show) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-lg modal-scrollable projects-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Projects & Maps</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-
+    <AccountDrawer
+      isOpen={show}
+      onClose={onClose}
+      title="Projects"
+      subtitle="Projects & Maps"
+      className="projects-drawer"
+    >
+      <div className="projects-modal">
         <div className="modal-body">
           {!isLoggedIn ? (
             <div className="projects-empty">
@@ -132,7 +130,7 @@ const ProjectsModal = ({
           )}
         </div>
       </div>
-    </div>
+    </AccountDrawer>
   );
 };
 

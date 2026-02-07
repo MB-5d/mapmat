@@ -100,10 +100,13 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS pages (
     url TEXT PRIMARY KEY,
     title TEXT,
-    status TEXT,
+    status TEXT NOT NULL DEFAULT 'Active',
     type TEXT,
+    severity TEXT NOT NULL DEFAULT 'Healthy',
     placement TEXT NOT NULL DEFAULT 'Primary',
     parent_url TEXT,
+    discovery_source TEXT NOT NULL DEFAULT 'crawl',
+    links_in INTEGER NOT NULL DEFAULT 0,
     depth INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -188,10 +191,18 @@ ensureColumn('scan_history', 'scan_depth', 'INTEGER');
 ensureColumn('scan_history', 'map_id', 'TEXT');
 ensureColumn('usage_events', 'meta', 'TEXT');
 ensureColumn('pages', 'placement', "TEXT NOT NULL DEFAULT 'Primary'");
+ensureColumn('pages', 'status', "TEXT NOT NULL DEFAULT 'Active'");
+ensureColumn('pages', 'severity', "TEXT NOT NULL DEFAULT 'Healthy'");
 ensureColumn('pages', 'parent_url', 'TEXT');
+ensureColumn('pages', 'discovery_source', "TEXT NOT NULL DEFAULT 'crawl'");
+ensureColumn('pages', 'links_in', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('pages', 'depth', 'INTEGER');
 
 db.prepare("UPDATE pages SET placement = 'Primary' WHERE placement IS NULL OR placement = ''").run();
+db.prepare("UPDATE pages SET status = 'Active' WHERE status IS NULL OR status = ''").run();
+db.prepare("UPDATE pages SET severity = 'Healthy' WHERE severity IS NULL OR severity = ''").run();
+db.prepare("UPDATE pages SET discovery_source = 'crawl' WHERE discovery_source IS NULL OR discovery_source = ''").run();
+db.prepare("UPDATE pages SET links_in = 0 WHERE links_in IS NULL").run();
 
 console.log('Database initialized successfully');
 

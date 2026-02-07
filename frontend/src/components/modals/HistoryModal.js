@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckSquare, Globe, Square, Trash2, X } from 'lucide-react';
+import { CheckSquare, Globe, Square, Trash2 } from 'lucide-react';
+
+import AccountDrawer from '../drawers/AccountDrawer';
 
 const HistoryModal = ({
   show,
@@ -29,17 +31,15 @@ const HistoryModal = ({
     });
   }, [scanHistory, sortOrder]);
 
-  if (!show) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-lg modal-scrollable history-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Scan History</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
+    <AccountDrawer
+      isOpen={show}
+      onClose={onClose}
+      title="History"
+      subtitle="Scan History"
+      className="history-drawer"
+    >
+      <div className="history-modal">
         <div className="modal-body">
           {scanHistory.length === 0 ? (
             <div className="history-empty">
@@ -109,7 +109,7 @@ const HistoryModal = ({
           )}
         </div>
       </div>
-    </div>
+    </AccountDrawer>
   );
 };
 

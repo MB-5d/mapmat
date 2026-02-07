@@ -24,7 +24,7 @@ const net = require('net');
 const db = require('./db');
 
 // Import routes
-const { router: authRouter, authMiddleware } = require('./routes/auth');
+const { router: authRouter, authMiddleware, requireAuth } = require('./routes/auth');
 const apiRouter = require('./routes/api');
 
 const app = express();
@@ -106,6 +106,22 @@ const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+];
+
+const DISCOVERY_SUBDOMAIN_PREFIXES = [
+  'dev',
+  'staging',
+  'test',
+  'beta',
+  'qa',
+  'old',
+  'legacy',
+  'v1',
+  'archive',
+  'admin',
+  'internal',
+  'portal',
+  'api',
 ];
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -355,6 +371,7 @@ const reserveScreenshotSlot = (host) => {
 const JOB_TYPES = {
   scan: 'scan',
   screenshot: 'screenshot',
+  discovery: 'discovery',
 };
 const JOB_STATUS = {
   queued: 'queued',
@@ -395,6 +412,23 @@ const serializeJobRow = (row, includeResult = true) => {
 };
 
 const getJobRow = (id) => db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
+
+const findActiveDiscoveryJob = (mapId) => {
+  const rows = db.prepare(`
+    SELECT id, payload
+    FROM jobs
+    WHERE type = ? AND status IN (?, ?)
+    ORDER BY created_at ASC
+  `).all(JOB_TYPES.discovery, JOB_STATUS.queued, JOB_STATUS.running);
+
+  for (const row of rows) {
+    const payload = parseJsonSafe(row.payload) || {};
+    if (payload.mapId === mapId || payload.id === mapId) {
+      return row.id;
+    }
+  }
+  return null;
+};
 
 const createJob = ({ type, payload, req }) => {
   const id = crypto.randomUUID();
@@ -646,12 +680,46 @@ function safeIdFromUrl(urlStr) {
   );
 }
 
-const PAGE_STATUS_OK = 'OK';
+const PAGE_STATUS_ACTIVE = 'Active';
+const PAGE_STATUS_REDIRECT = 'Redirect';
+const PAGE_STATUS_ERROR = 'Error';
 const PAGE_STATUS_MISSING = 'Missing';
 const PAGE_TYPE_PAGE = 'Page';
 const PAGE_TYPE_VIRTUAL = 'Virtual Node';
+const PAGE_SEVERITY_WARNING = 'Warning';
 
-function persistPagesForIa(nodes, baseHost) {
+const getStatusFromHttp = (statusCode) => {
+  if (statusCode >= 200 && statusCode < 300) return PAGE_STATUS_ACTIVE;
+  if (statusCode >= 300 && statusCode < 400) return PAGE_STATUS_REDIRECT;
+  if (statusCode >= 400) return PAGE_STATUS_ERROR;
+  return PAGE_STATUS_ERROR;
+};
+
+const getPlacementWithOrphan = ({ basePlacement, discoverySource, linksIn }) => {
+  if (!basePlacement) return null;
+  if (discoverySource === 'sitemap' && linksIn === 0) {
+    return `${basePlacement} Orphan`;
+  }
+  return basePlacement;
+};
+
+const getSeverityForPage = ({ placement, status }) => {
+  if (placement === 'Subdomain Orphan' && status === PAGE_STATUS_ACTIVE) {
+    return 'Security Risk';
+  }
+  if (status === PAGE_STATUS_ERROR) return 'Critical';
+  if (status === PAGE_STATUS_REDIRECT) return PAGE_SEVERITY_WARNING;
+  if (placement === 'Primary Orphan') return 'High';
+  if (status === PAGE_STATUS_MISSING) return 'Medium';
+  return 'Healthy';
+};
+
+function persistPagesForIa(
+  nodes,
+  baseHost,
+  discoverySourceByUrl = new Map(),
+  linksInCounts = new Map()
+) {
   if (!nodes || nodes.size === 0) {
     return {
       totalSaved: 0,
@@ -662,18 +730,60 @@ function persistPagesForIa(nodes, baseHost) {
     };
   }
 
+  const pageColumns = db.prepare('PRAGMA table_info(pages)').all().map((col) => col.name);
+  const hasType = pageColumns.includes('type');
+  const hasDepth = pageColumns.includes('depth');
+
+  const selectColumns = [
+    'url',
+    'title',
+    'status',
+    'placement',
+    'parent_url',
+    'severity',
+    'discovery_source',
+    'links_in',
+  ];
+  if (hasType) selectColumns.push('type');
+  if (hasDepth) selectColumns.push('depth');
+
   const selectStmt = db.prepare(`
-    SELECT url, status, type, placement, parent_url, depth, title
+    SELECT ${selectColumns.join(', ')}
     FROM pages
     WHERE url = ?
   `);
+
+  const insertColumns = [
+    'url',
+    'title',
+    'status',
+    'severity',
+    'placement',
+    'parent_url',
+    'discovery_source',
+    'links_in',
+  ];
+  if (hasType) insertColumns.push('type');
+  if (hasDepth) insertColumns.push('depth');
   const insertStmt = db.prepare(`
-    INSERT INTO pages (url, title, status, type, placement, parent_url, depth, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    INSERT INTO pages (${insertColumns.join(', ')}, created_at, updated_at)
+    VALUES (${insertColumns.map(() => '?').join(', ')}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `);
+
+  const updateColumns = [
+    'title',
+    'status',
+    'severity',
+    'placement',
+    'parent_url',
+    'discovery_source',
+    'links_in',
+  ];
+  if (hasType) updateColumns.push('type');
+  if (hasDepth) updateColumns.push('depth');
   const updateStmt = db.prepare(`
     UPDATE pages
-    SET title = ?, status = ?, type = ?, placement = ?, parent_url = ?, depth = ?, updated_at = CURRENT_TIMESTAMP
+    SET ${updateColumns.map((col) => `${col} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP
     WHERE url = ?
   `);
 
@@ -685,15 +795,77 @@ function persistPagesForIa(nodes, baseHost) {
     return row;
   };
 
-  const upsertPage = ({ url, title, status, type, placement, parent_url, depth }) => {
+  const buildInsertValues = (row) => {
+    const values = [
+      row.url,
+      row.title,
+      row.status,
+      row.severity,
+      row.placement,
+      row.parent_url,
+      row.discovery_source,
+      row.links_in,
+    ];
+    if (hasType) values.push(row.type ?? null);
+    if (hasDepth) values.push(row.depth ?? null);
+    return values;
+  };
+
+  const buildUpdateValues = (row) => {
+    const values = [
+      row.title,
+      row.status,
+      row.severity,
+      row.placement,
+      row.parent_url,
+      row.discovery_source,
+      row.links_in,
+    ];
+    if (hasType) values.push(row.type ?? null);
+    if (hasDepth) values.push(row.depth ?? null);
+    values.push(row.url);
+    return values;
+  };
+
+  const upsertPage = ({
+    url,
+    title,
+    status,
+    type,
+    basePlacement,
+    parent_url,
+    depth,
+    discovery_source,
+    incomingLinks = 0,
+  }) => {
     const existing = readExisting(url);
     const isIncomingVirtual = type === PAGE_TYPE_VIRTUAL;
     const isExistingVirtual = existing
       && (existing.type === PAGE_TYPE_VIRTUAL || existing.status === PAGE_STATUS_MISSING);
 
     if (!existing) {
-      insertStmt.run(url, title, status, type, placement, parent_url, depth);
-      known.set(url, { url, title, status, type, placement, parent_url, depth });
+      const nextLinksIn = incomingLinks;
+      const nextDiscoverySource = discovery_source || 'crawl';
+      const nextPlacement = getPlacementWithOrphan({
+        basePlacement,
+        discoverySource: nextDiscoverySource,
+        linksIn: nextLinksIn,
+      });
+      const nextSeverity = getSeverityForPage({ placement: nextPlacement, status });
+      const row = {
+        url,
+        title,
+        status,
+        severity: nextSeverity,
+        placement: nextPlacement,
+        parent_url,
+        discovery_source: nextDiscoverySource,
+        links_in: nextLinksIn,
+        type,
+        depth,
+      };
+      insertStmt.run(...buildInsertValues(row));
+      known.set(url, row);
       return { inserted: true, virtual: isIncomingVirtual };
     }
 
@@ -701,31 +873,59 @@ function persistPagesForIa(nodes, baseHost) {
       return { skipped: true };
     }
 
-    const nextStatus = isExistingVirtual && !isIncomingVirtual ? status : (existing.status || status);
-    const nextType = isExistingVirtual && !isIncomingVirtual ? type : (existing.type || type);
+    const existingLinks = Number.isFinite(existing.links_in) ? existing.links_in : 0;
+    const nextLinksIn = existingLinks + incomingLinks;
+
+    const nextDiscoverySource = existing.discovery_source === 'crawl'
+      ? 'crawl'
+      : (discovery_source === 'crawl'
+        ? 'crawl'
+        : (discovery_source || existing.discovery_source || 'crawl'));
+
+    const nextPlacement = getPlacementWithOrphan({
+      basePlacement,
+      discoverySource: nextDiscoverySource,
+      linksIn: nextLinksIn,
+    });
+
+    const nextStatus = isExistingVirtual && !isIncomingVirtual
+      ? status
+      : (!isExistingVirtual && isIncomingVirtual ? existing.status : status);
+    const nextType = hasType
+      ? (isExistingVirtual && !isIncomingVirtual
+        ? type
+        : (!isExistingVirtual && isIncomingVirtual ? existing.type : type))
+      : undefined;
     const nextTitle = title || existing.title || null;
-    const nextPlacement = placement || existing.placement || null;
-    const nextParent = parent_url || existing.parent_url || null;
-    const nextDepth = depth ?? existing.depth ?? null;
+    const nextParent = parent_url;
+    const nextDepth = hasDepth ? depth : existing.depth ?? null;
+    const nextSeverity = getSeverityForPage({ placement: nextPlacement, status: nextStatus });
 
     const needsUpdate = nextTitle !== existing.title
       || nextStatus !== existing.status
-      || nextType !== existing.type
+      || nextSeverity !== existing.severity
       || nextPlacement !== existing.placement
       || nextParent !== existing.parent_url
-      || nextDepth !== existing.depth;
+      || nextDiscoverySource !== existing.discovery_source
+      || nextLinksIn !== existing.links_in
+      || (hasType && nextType !== existing.type)
+      || (hasDepth && nextDepth !== existing.depth);
 
     if (needsUpdate) {
-      updateStmt.run(nextTitle, nextStatus, nextType, nextPlacement, nextParent, nextDepth, url);
-      known.set(url, {
+      const row = {
         url,
         title: nextTitle,
         status: nextStatus,
-        type: nextType,
+        severity: nextSeverity,
         placement: nextPlacement,
         parent_url: nextParent,
+        discovery_source: nextDiscoverySource,
+        links_in: nextLinksIn,
+        type: nextType,
         depth: nextDepth,
-      });
+      };
+      updateStmt.run(...buildUpdateValues(row));
+      known.set(url, row);
     }
 
     return { updated: needsUpdate, upgraded: isExistingVirtual && !isIncomingVirtual };
@@ -739,8 +939,8 @@ function persistPagesForIa(nodes, baseHost) {
       parentUrl = getParentUrl(parentUrl);
     }
     chain.forEach((parent) => {
-      const placement = getPlacementForUrl(parent, baseHost);
-      if (!placement) return;
+      const basePlacement = getPlacementForUrl(parent, baseHost);
+      if (!basePlacement) return;
       const depth = getUrlDepth(parent);
       const parentParent = getParentUrl(parent);
       upsertPage({
@@ -748,9 +948,11 @@ function persistPagesForIa(nodes, baseHost) {
         title: getTitleFromUrl(parent),
         status: PAGE_STATUS_MISSING,
         type: PAGE_TYPE_VIRTUAL,
-        placement,
+        basePlacement,
         parent_url: parentParent,
         depth,
+        discovery_source: 'crawl',
+        incomingLinks: 0,
       });
     });
   };
@@ -769,27 +971,38 @@ function persistPagesForIa(nodes, baseHost) {
       if (persisted.has(canonicalUrl)) return;
       persisted.add(canonicalUrl);
 
-      const placement = getPlacementForUrl(canonicalUrl, baseHost);
-      if (!placement) return;
-      if (placement === 'Subdomain') subdomainCount += 1;
+      const basePlacement = getPlacementForUrl(canonicalUrl, baseHost);
+      if (!basePlacement) return;
+      if (basePlacement === 'Subdomain') subdomainCount += 1;
 
       ensureParentChain(canonicalUrl);
 
       const depth = getUrlDepth(canonicalUrl);
       const parentUrl = getParentUrl(canonicalUrl);
       const isMissing = Boolean(node.isMissing);
-      const status = isMissing ? PAGE_STATUS_MISSING : PAGE_STATUS_OK;
+      let status = isMissing
+        ? PAGE_STATUS_MISSING
+        : getStatusFromHttp(Number.isFinite(node.httpStatus) ? node.httpStatus : 0);
+      if (!isMissing && status === PAGE_STATUS_ACTIVE && node.wasRedirect) {
+        status = PAGE_STATUS_REDIRECT;
+      }
       const type = isMissing ? PAGE_TYPE_VIRTUAL : PAGE_TYPE_PAGE;
       const title = node.title || getTitleFromUrl(canonicalUrl);
+      const incomingLinks = linksInCounts.get(canonicalUrl) || 0;
+      const discoverySource = isMissing
+        ? 'crawl'
+        : (discoverySourceByUrl.get(canonicalUrl) || 'crawl');
 
       const result = upsertPage({
         url: canonicalUrl,
         title,
         status,
         type,
-        placement,
+        basePlacement,
         parent_url: parentUrl,
         depth,
+        discovery_source: discoverySource,
+        incomingLinks,
       });
 
       if (result?.inserted || result?.updated) {
@@ -797,6 +1010,57 @@ function persistPagesForIa(nodes, baseHost) {
       }
       if (result?.inserted && result?.virtual) {
         virtualInserted += 1;
+      }
+    });
+
+    linksInCounts.forEach((count, url) => {
+      if (!count) return;
+      if (persisted.has(url)) return;
+
+      const existing = readExisting(url);
+      if (!existing) return;
+      const basePlacement = getPlacementForUrl(url, baseHost);
+      if (!basePlacement) return;
+
+      const nextLinksIn = (Number.isFinite(existing.links_in) ? existing.links_in : 0) + count;
+      const nextDiscoverySource = 'crawl';
+      const nextPlacement = getPlacementWithOrphan({
+        basePlacement,
+        discoverySource: nextDiscoverySource,
+        linksIn: nextLinksIn,
+      });
+      const nextStatus = existing.status || PAGE_STATUS_ACTIVE;
+      const nextSeverity = getSeverityForPage({ placement: nextPlacement, status: nextStatus });
+      const parentUrl = getParentUrl(url);
+      const depth = hasDepth ? getUrlDepth(url) : existing.depth ?? null;
+      const nextTitle = existing.title || getTitleFromUrl(url);
+      const nextType = hasType ? existing.type : undefined;
+
+      const needsUpdate = nextTitle !== existing.title
+        || nextStatus !== existing.status
+        || nextSeverity !== existing.severity
+        || nextPlacement !== existing.placement
+        || parentUrl !== existing.parent_url
+        || nextDiscoverySource !== existing.discovery_source
+        || nextLinksIn !== existing.links_in
+        || (hasType && nextType !== existing.type)
+        || (hasDepth && depth !== existing.depth);
+
+      if (needsUpdate) {
+        const row = {
+          url,
+          title: nextTitle,
+          status: nextStatus,
+          severity: nextSeverity,
+          placement: nextPlacement,
+          parent_url: parentUrl,
+          discovery_source: nextDiscoverySource,
+          links_in: nextLinksIn,
+          type: nextType,
+          depth,
+        };
+        updateStmt.run(...buildUpdateValues(row));
+        known.set(url, row);
       }
     });
   });
@@ -930,6 +1194,204 @@ async function checkLinkStatus(url, extraHeaders = {}) {
   }
 }
 
+const resolveMapBaseUrl = (mapRow) => {
+  if (!mapRow) return null;
+  if (mapRow.url) {
+    try {
+      return new URL(mapRow.url).toString();
+    } catch {
+      // fall through
+    }
+  }
+  const root = parseJsonSafe(mapRow.root_data);
+  if (root?.url) {
+    try {
+      return new URL(root.url).toString();
+    } catch {
+      // fall through
+    }
+  }
+  return null;
+};
+
+const probeSubdomainOrigin = async (host, abortCheck = null) => {
+  const attempts = [
+    { protocol: 'https', url: `https://${host}/` },
+    { protocol: 'http', url: `http://${host}/` },
+  ];
+  let lastError = null;
+  for (const attempt of attempts) {
+    if (abortCheck?.()) throw new Error('Discovery aborted');
+    try {
+      const res = await fetchPage(attempt.url);
+      return {
+        ok: true,
+        protocol: attempt.protocol,
+        origin: `${attempt.protocol}://${host}`,
+        status: res.status,
+      };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  return { ok: false, error: lastError };
+};
+
+const collectSitemapUrls = async (origin, hostNormalized, protocol, abortCheck = null) => {
+  const urls = new Set();
+  const processed = new Set();
+  const MAX_SITEMAPS = 12;
+
+  const normalizeSitemapUrl = (loc) => {
+    try {
+      const resolved = new URL(loc, origin);
+      if (normalizeHost(resolved.hostname) !== hostNormalized) return null;
+      resolved.hostname = hostNormalized;
+      resolved.protocol = `${protocol}:`;
+      resolved.hash = '';
+      return normalizeUrl(resolved.toString());
+    } catch {
+      return null;
+    }
+  };
+
+  const processSitemap = async (sitemapUrl) => {
+    if (abortCheck?.()) throw new Error('Discovery aborted');
+    const normalizedSitemap = normalizeUrl(sitemapUrl);
+    if (!normalizedSitemap) return;
+    if (processed.has(normalizedSitemap)) return;
+    if (processed.size >= MAX_SITEMAPS) return;
+    processed.add(normalizedSitemap);
+
+    try {
+      const sitemapRes = await axios.get(sitemapUrl, {
+        timeout: 10000,
+        headers: { 'User-Agent': 'MapMatBot/1.0' },
+        validateStatus: (s) => s >= 200 && s < 400,
+      });
+
+      if (sitemapUrl.endsWith('.txt')) {
+        const lines = sitemapRes.data.split('\n').map((u) => u.trim()).filter(Boolean);
+        for (const line of lines) {
+          const norm = normalizeSitemapUrl(line);
+          if (norm) urls.add(norm);
+        }
+        return;
+      }
+
+      const $ = cheerio.load(sitemapRes.data, { xmlMode: true });
+      const subSitemaps = [];
+
+      $('url > loc').each((_, el) => {
+        const loc = $(el).text().trim();
+        const norm = normalizeSitemapUrl(loc);
+        if (norm) urls.add(norm);
+      });
+
+      $('sitemap > loc').each((_, el) => {
+        const loc = $(el).text().trim();
+        if (loc) subSitemaps.push(loc);
+      });
+
+      for (const loc of subSitemaps) {
+        await processSitemap(loc);
+      }
+    } catch {
+      // ignore sitemap fetch errors
+    }
+  };
+
+  await processSitemap(`${origin}/sitemap.xml`);
+  return Array.from(urls);
+};
+
+const runDiscoveryJob = async (jobId, payload) => {
+  const mapId = payload?.mapId || payload?.id;
+  if (!mapId) throw new Error('Missing mapId');
+
+  const mapRow = db.prepare('SELECT id, url, root_data FROM maps WHERE id = ?').get(mapId);
+  if (!mapRow) throw new Error('Map not found');
+
+  const baseUrl = resolveMapBaseUrl(mapRow);
+  if (!baseUrl) throw new Error('Map url not found');
+
+  const baseHost = normalizeHost(new URL(baseUrl).hostname);
+  const abortCheck = shouldAbortJob(jobId);
+
+  const nodes = new Map();
+  const discoverySourceByUrl = new Map();
+  const linksInCounts = new Map();
+
+  const summary = {
+    mapId,
+    baseHost,
+    prefixesChecked: 0,
+    subdomainsFound: 0,
+    urlsDiscovered: 0,
+    urlsProcessed: 0,
+  };
+
+  let lastProgress = 0;
+  const maybeUpdateProgress = () => {
+    const now = Date.now();
+    if (now - lastProgress < 500) return;
+    lastProgress = now;
+    updateJobProgress(jobId, summary);
+  };
+
+  for (const prefix of DISCOVERY_SUBDOMAIN_PREFIXES) {
+    if (abortCheck()) throw new Error('Discovery aborted');
+    summary.prefixesChecked += 1;
+
+    const host = `${prefix}.${baseHost}`;
+    const hostNormalized = normalizeHost(host);
+    const probe = await probeSubdomainOrigin(host, abortCheck);
+    if (!probe.ok) {
+      maybeUpdateProgress();
+      continue;
+    }
+
+    summary.subdomainsFound += 1;
+    maybeUpdateProgress();
+
+    const sitemapUrls = await collectSitemapUrls(probe.origin, hostNormalized, probe.protocol, abortCheck);
+    if (!sitemapUrls.length) {
+      continue;
+    }
+
+    for (const url of sitemapUrls) {
+      if (abortCheck()) throw new Error('Discovery aborted');
+      if (nodes.has(url)) continue;
+
+      const statusResult = await checkLinkStatus(url);
+      const httpStatus = Number.isFinite(statusResult.status) ? statusResult.status : 0;
+
+      nodes.set(url, {
+        url,
+        title: getTitleFromUrl(url),
+        httpStatus,
+        wasRedirect: false,
+      });
+      discoverySourceByUrl.set(url, 'sitemap');
+      summary.urlsDiscovered += 1;
+      summary.urlsProcessed += 1;
+      maybeUpdateProgress();
+    }
+  }
+
+  let iaSummary = null;
+  if (nodes.size) {
+    iaSummary = persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
+  }
+
+  return {
+    ...summary,
+    saved: iaSummary?.totalSaved || 0,
+    virtualInserted: iaSummary?.virtualInserted || 0,
+    subdomainRows: iaSummary?.subdomainCount || 0,
+  };
+};
+
 function extractLinks(html, baseUrl) {
   const $ = cheerio.load(html);
   const links = new Set();
@@ -1017,6 +1479,30 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     return true;
   };
 
+  const discoverySourceByUrl = new Map();
+  const linksInCounts = new Map();
+  const linkEdgeSet = new Set();
+
+  const recordDiscovery = (url, source) => {
+    const normalized = normalizeUrl(url);
+    if (!normalized) return;
+    const existing = discoverySourceByUrl.get(normalized);
+    if (existing === 'crawl') return;
+    if (source === 'crawl' || !existing) {
+      discoverySourceByUrl.set(normalized, source);
+    }
+  };
+
+  const recordLinkEdge = (fromUrl, toUrl) => {
+    const from = normalizeUrl(fromUrl);
+    const to = normalizeUrl(toUrl);
+    if (!from || !to) return;
+    const edgeKey = `${from}>>${to}`;
+    if (linkEdgeSet.has(edgeKey)) return;
+    linkEdgeSet.add(edgeKey);
+    linksInCounts.set(to, (linksInCounts.get(to) || 0) + 1);
+  };
+
   const visited = new Set();
   const referrerMap = new Map();
   const queue = [];
@@ -1029,6 +1515,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     queue.push({ url, depth });
   };
   enqueue(seed, 0);
+  recordDiscovery(seed, 'crawl');
   const sitemapOrder = new Map();
   let discoveryCounter = 0;
 
@@ -1049,6 +1536,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   for (const path of commonPaths) {
     const commonUrl = normalizeUrl(`${origin}${path}`);
     if (commonUrl) {
+      recordDiscovery(commonUrl, 'crawl');
       enqueue(commonUrl, 1);
     }
   }
@@ -1079,6 +1567,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         for (const u of urls) {
           const norm = normalizeUrl(u);
           if (norm && allowUrl(norm)) {
+            recordDiscovery(norm, 'sitemap');
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
             enqueue(norm, 1);
           }
@@ -1093,6 +1582,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
         if (norm && allowUrl(norm)) {
+          recordDiscovery(norm, 'sitemap');
           if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
           enqueue(norm, 1);
         }
@@ -1164,6 +1654,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           title: new URL(url).pathname === '/' ? new URL(url).hostname : url,
           parentUrl: getParentUrl(url),
           discoveryIndex,
+          httpStatus: status,
+          wasRedirect: false,
         });
       }
       continue;
@@ -1200,6 +1692,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const parentUrl = getParentUrl(finalUrl || url);
     const canonicalUrl = extractCanonicalUrl(html, finalUrl || url);
     const isAuthPage = status === 401 || status === 403;
+    const wasRedirect = normalizeUrl(finalUrl || url) !== normalizeUrl(url);
 
     pageMap.set(url, {
       url,
@@ -1210,6 +1703,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       authRequired: status === 401 || status === 403,
       thumbnailUrl: undefined,
       discoveryIndex,
+      httpStatus: status,
+      wasRedirect,
     });
 
     const links = extractLinks(html, finalUrl || url);
@@ -1238,6 +1733,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         continue;
       }
 
+      recordLinkEdge(url, link);
+      recordDiscovery(link, 'crawl');
+
       const d = depth + 1;
       if (d > maxDepth) continue;
       if (visited.has(link)) continue;
@@ -1252,7 +1750,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   // Ensure the root exists
   if (!pageMap.has(seed)) {
-    pageMap.set(seed, { url: seed, title: new URL(seed).hostname, parentUrl: null, discoveryIndex: -1 });
+    pageMap.set(seed, {
+      url: seed,
+      title: new URL(seed).hostname,
+      parentUrl: null,
+      discoveryIndex: -1,
+      httpStatus: null,
+      wasRedirect: false,
+    });
   }
 
   const scannedKeys = new Set();
@@ -1275,6 +1780,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       referrerUrl: referrerMap.get(url) || null,
       authRequired: meta.authRequired || false,
       thumbnailUrl: meta.thumbnailUrl || undefined,
+      httpStatus: meta.httpStatus ?? null,
+      wasRedirect: meta.wasRedirect || false,
       children: [],
     });
   }
@@ -1640,7 +2147,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   }
 
   try {
-    const iaSummary = persistPagesForIa(nodes, baseHost);
+    const iaSummary = persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
     console.log(
       `[scan] IA summary: saved=${iaSummary.totalSaved}, virtual=${iaSummary.virtualInserted}, subdomains=${iaSummary.subdomainCount}, queries=${iaSummary.queryBehavior}, domain=${iaSummary.domainParsing}`
     );
@@ -1809,6 +2316,14 @@ async function processJob(job) {
 
     if (job.type === JOB_TYPES.screenshot) {
       const result = await captureScreenshot(payload.url, payload.type || 'full');
+      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
+      if (statusRow?.status === JOB_STATUS.canceled) return;
+      markJobComplete(jobId, result);
+      return;
+    }
+
+    if (job.type === JOB_TYPES.discovery) {
+      const result = await runDiscoveryJob(jobId, payload);
       const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
       if (statusRow?.status === JOB_STATUS.canceled) return;
       markJobComplete(jobId, result);
@@ -2084,6 +2599,40 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
       res.end();
     }
   }, 1000);
+});
+
+// Background discovery job (subdomain sitemap ingestion)
+app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+  if (!map) {
+    return res.status(404).json({ error: 'Map not found' });
+  }
+
+  try {
+    const existingJobId = findActiveDiscoveryJob(id);
+    if (existingJobId) {
+      return res.json({
+        ok: true,
+        alreadyRunning: true,
+        jobId: existingJobId,
+        jobType: JOB_TYPES.discovery,
+        mapId: id,
+      });
+    }
+
+    const jobId = createJob({
+      type: JOB_TYPES.discovery,
+      payload: { mapId: id },
+      req,
+    });
+
+    res.json({ ok: true, jobType: JOB_TYPES.discovery, mapId: id, jobId });
+  } catch (e) {
+    const message = e.message || 'Failed to create discovery job';
+    res.status(500).json({ error: message });
+  }
 });
 
 // Screenshot endpoint - captures full-page screenshot
