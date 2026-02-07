@@ -1480,24 +1480,16 @@ export default function App() {
 
   const markerStatusUsage = useMemo(() => {
     const usedStatuses = new Set();
-    let hasAnyMarker = false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
     nodes.forEach((node) => {
       const annotations = node?.annotations;
       if (!annotations) return;
       const status = annotations.status || 'none';
-      const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
-      const hasTags = Array.isArray(annotations.tags)
-        ? annotations.tags.some((tag) => tag && tag.trim())
-        : false;
       if (status !== 'none') {
         usedStatuses.add(status);
-        hasAnyMarker = true;
-      } else if (note.length > 0 || hasTags) {
-        hasAnyMarker = true;
       }
     });
-    return { usedStatuses, hasAnyMarker };
+    return { usedStatuses, hasAnyMarker: usedStatuses.size > 0 };
   }, [root, orphans]);
 
   const markerStatusOptions = useMemo(

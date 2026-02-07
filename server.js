@@ -520,6 +520,27 @@ function normalizeUrl(raw) {
   }
 }
 
+function getUrlDepth(urlStr) {
+  try {
+    const u = new URL(urlStr);
+    const parts = u.pathname.split('/').filter(Boolean);
+    return parts.length;
+  } catch {
+    return 0;
+  }
+}
+
+function getPlacementForUrl(urlStr, baseHost) {
+  try {
+    const host = normalizeHost(new URL(urlStr).hostname);
+    if (host === baseHost) return 'Primary';
+    if (host.endsWith(`.${baseHost}`)) return 'Subdomain';
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function sameOrigin(a, b) {
   try {
     const ua = new URL(a);
@@ -555,7 +576,7 @@ function sameDomain(a, b) {
 }
 
 function normalizeHost(hostname) {
-  return hostname.replace(/^www\./i, '');
+  return hostname.replace(/^www\./i, '').toLowerCase();
 }
 
 function getCanonicalKey(urlStr) {
@@ -623,6 +644,172 @@ function safeIdFromUrl(urlStr) {
       .toString('base64')
       .replace(/[^a-zA-Z0-9]/g, '')
   );
+}
+
+const PAGE_STATUS_OK = 'OK';
+const PAGE_STATUS_MISSING = 'Missing';
+const PAGE_TYPE_PAGE = 'Page';
+const PAGE_TYPE_VIRTUAL = 'Virtual Node';
+
+function persistPagesForIa(nodes, baseHost) {
+  if (!nodes || nodes.size === 0) {
+    return {
+      totalSaved: 0,
+      virtualInserted: 0,
+      subdomainCount: 0,
+      queryBehavior: 'preserved',
+      domainParsing: 'base-host-fallback',
+    };
+  }
+
+  const selectStmt = db.prepare(`
+    SELECT url, status, type, placement, parent_url, depth, title
+    FROM pages
+    WHERE url = ?
+  `);
+  const insertStmt = db.prepare(`
+    INSERT INTO pages (url, title, status, type, placement, parent_url, depth, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `);
+  const updateStmt = db.prepare(`
+    UPDATE pages
+    SET title = ?, status = ?, type = ?, placement = ?, parent_url = ?, depth = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE url = ?
+  `);
+
+  const known = new Map();
+  const readExisting = (url) => {
+    if (known.has(url)) return known.get(url);
+    const row = selectStmt.get(url) || null;
+    known.set(url, row);
+    return row;
+  };
+
+  const upsertPage = ({ url, title, status, type, placement, parent_url, depth }) => {
+    const existing = readExisting(url);
+    const isIncomingVirtual = type === PAGE_TYPE_VIRTUAL;
+    const isExistingVirtual = existing
+      && (existing.type === PAGE_TYPE_VIRTUAL || existing.status === PAGE_STATUS_MISSING);
+
+    if (!existing) {
+      insertStmt.run(url, title, status, type, placement, parent_url, depth);
+      known.set(url, { url, title, status, type, placement, parent_url, depth });
+      return { inserted: true, virtual: isIncomingVirtual };
+    }
+
+    if (!isExistingVirtual && isIncomingVirtual) {
+      return { skipped: true };
+    }
+
+    const nextStatus = isExistingVirtual && !isIncomingVirtual ? status : (existing.status || status);
+    const nextType = isExistingVirtual && !isIncomingVirtual ? type : (existing.type || type);
+    const nextTitle = title || existing.title || null;
+    const nextPlacement = placement || existing.placement || null;
+    const nextParent = parent_url || existing.parent_url || null;
+    const nextDepth = depth ?? existing.depth ?? null;
+
+    const needsUpdate = nextTitle !== existing.title
+      || nextStatus !== existing.status
+      || nextType !== existing.type
+      || nextPlacement !== existing.placement
+      || nextParent !== existing.parent_url
+      || nextDepth !== existing.depth;
+
+    if (needsUpdate) {
+      updateStmt.run(nextTitle, nextStatus, nextType, nextPlacement, nextParent, nextDepth, url);
+      known.set(url, {
+        url,
+        title: nextTitle,
+        status: nextStatus,
+        type: nextType,
+        placement: nextPlacement,
+        parent_url: nextParent,
+        depth: nextDepth,
+      });
+    }
+
+    return { updated: needsUpdate, upgraded: isExistingVirtual && !isIncomingVirtual };
+  };
+
+  const ensureParentChain = (url) => {
+    const chain = [];
+    let parentUrl = getParentUrl(url);
+    while (parentUrl) {
+      chain.unshift(parentUrl);
+      parentUrl = getParentUrl(parentUrl);
+    }
+    chain.forEach((parent) => {
+      const placement = getPlacementForUrl(parent, baseHost);
+      if (!placement) return;
+      const depth = getUrlDepth(parent);
+      const parentParent = getParentUrl(parent);
+      upsertPage({
+        url: parent,
+        title: getTitleFromUrl(parent),
+        status: PAGE_STATUS_MISSING,
+        type: PAGE_TYPE_VIRTUAL,
+        placement,
+        parent_url: parentParent,
+        depth,
+      });
+    });
+  };
+
+  const pages = Array.from(nodes.values());
+  let totalSaved = 0;
+  let virtualInserted = 0;
+  let subdomainCount = 0;
+
+  const persisted = new Set();
+
+  const run = db.transaction(() => {
+    pages.forEach((node) => {
+      const canonicalUrl = normalizeUrl(node.url);
+      if (!canonicalUrl) return;
+      if (persisted.has(canonicalUrl)) return;
+      persisted.add(canonicalUrl);
+
+      const placement = getPlacementForUrl(canonicalUrl, baseHost);
+      if (!placement) return;
+      if (placement === 'Subdomain') subdomainCount += 1;
+
+      ensureParentChain(canonicalUrl);
+
+      const depth = getUrlDepth(canonicalUrl);
+      const parentUrl = getParentUrl(canonicalUrl);
+      const isMissing = Boolean(node.isMissing);
+      const status = isMissing ? PAGE_STATUS_MISSING : PAGE_STATUS_OK;
+      const type = isMissing ? PAGE_TYPE_VIRTUAL : PAGE_TYPE_PAGE;
+      const title = node.title || getTitleFromUrl(canonicalUrl);
+
+      const result = upsertPage({
+        url: canonicalUrl,
+        title,
+        status,
+        type,
+        placement,
+        parent_url: parentUrl,
+        depth,
+      });
+
+      if (result?.inserted || result?.updated) {
+        totalSaved += 1;
+      }
+      if (result?.inserted && result?.virtual) {
+        virtualInserted += 1;
+      }
+    });
+  });
+
+  run();
+
+  return {
+    totalSaved,
+    virtualInserted,
+    subdomainCount,
+    queryBehavior: 'preserved',
+    domainParsing: 'base-host-fallback',
+  };
 }
 
 function extractTitle(html, fallbackUrl) {
@@ -817,10 +1004,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   if (!seed) throw new Error('Invalid URL');
 
   const origin = new URL(seed).origin;
+  const baseHost = normalizeHost(new URL(seed).hostname);
   const allowSubdomains = scanOptions.subdomains;
-  const allowUrl = (candidate) => (
-    allowSubdomains ? sameDomain(candidate, origin) : sameOrigin(candidate, origin)
-  );
+  const allowUrl = (candidate) => {
+    const normalized = normalizeUrl(candidate);
+    if (!normalized) return false;
+    const placement = getPlacementForUrl(normalized, baseHost);
+    if (!placement) return false;
+    if (!allowSubdomains) {
+      return placement === 'Primary' && sameOrigin(normalized, origin);
+    }
+    return true;
+  };
 
   const visited = new Set();
   const referrerMap = new Map();
@@ -858,65 +1053,67 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   }
 
-  // Try to fetch and parse sitemap.xml for additional URLs
-  try {
-    const sitemapUrl = `${origin}/sitemap.xml`;
-    const sitemapRes = await axios.get(sitemapUrl, {
-      timeout: 10000,
-      headers: { 'User-Agent': 'MapMatBot/1.0' },
-      validateStatus: (s) => s >= 200 && s < 400,
-    });
-    const $ = cheerio.load(sitemapRes.data, { xmlMode: true });
-    $('url > loc').each((_, el) => {
-      const loc = $(el).text().trim();
-      const norm = normalizeUrl(loc);
-      if (norm && sameOrigin(norm, origin)) {
-        if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-        enqueue(norm, 1);
-      }
-    });
-    // Also check for sitemap index
-    $('sitemap > loc').each((_, el) => {
-      const loc = $(el).text().trim();
-      // We could fetch these sub-sitemaps too, but skip for now to keep it simple
-    });
-  } catch {
-    // Sitemap not available, continue without it
-  }
+  const processedSitemaps = new Set();
+  const MAX_SITEMAPS = 12;
 
-  // Try sitemap_index.xml and sitemap-index.xml as alternatives
-  for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
+  const processSitemap = async (sitemapUrl) => {
+    const normalizedSitemap = normalizeUrl(sitemapUrl);
+    if (!normalizedSitemap) return;
+    if (processedSitemaps.has(normalizedSitemap)) return;
+    if (processedSitemaps.size >= MAX_SITEMAPS) return;
+
+    const placement = getPlacementForUrl(normalizedSitemap, baseHost);
+    if (!placement) return;
+
+    processedSitemaps.add(normalizedSitemap);
+
     try {
-      const sitemapUrl = `${origin}${altSitemap}`;
       const sitemapRes = await axios.get(sitemapUrl, {
-        timeout: 5000,
+        timeout: 10000,
         headers: { 'User-Agent': 'MapMatBot/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
-      if (altSitemap.endsWith('.txt')) {
-        // Plain text sitemap - one URL per line
-        const urls = sitemapRes.data.split('\n').map(u => u.trim()).filter(Boolean);
+
+      if (sitemapUrl.endsWith('.txt')) {
+        const urls = sitemapRes.data.split('\n').map((u) => u.trim()).filter(Boolean);
         for (const u of urls) {
           const norm = normalizeUrl(u);
-          if (norm && sameOrigin(norm, origin)) {
+          if (norm && allowUrl(norm)) {
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
             enqueue(norm, 1);
           }
         }
-      } else {
-        const $ = cheerio.load(sitemapRes.data, { xmlMode: true });
-        $('url > loc, sitemap > loc').each((_, el) => {
-          const loc = $(el).text().trim();
-          const norm = normalizeUrl(loc);
-          if (norm && sameOrigin(norm, origin)) {
-            if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-            enqueue(norm, 1);
-          }
-        });
+        return;
+      }
+
+      const $ = cheerio.load(sitemapRes.data, { xmlMode: true });
+      const subSitemaps = [];
+
+      $('url > loc').each((_, el) => {
+        const loc = $(el).text().trim();
+        const norm = normalizeUrl(loc);
+        if (norm && allowUrl(norm)) {
+          if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
+          enqueue(norm, 1);
+        }
+      });
+
+      $('sitemap > loc').each((_, el) => {
+        const loc = $(el).text().trim();
+        if (loc) subSitemaps.push(loc);
+      });
+
+      for (const loc of subSitemaps) {
+        await processSitemap(loc);
       }
     } catch {
       // Not available, continue
     }
+  };
+
+  await processSitemap(`${origin}/sitemap.xml`);
+  for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
+    await processSitemap(`${origin}${altSitemap}`);
   }
 
   // url -> { url, title, parentUrl }
@@ -1440,6 +1637,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     };
     orphanNodes.forEach(markDuplicateTree);
     subdomainNodes.forEach(markDuplicateTree);
+  }
+
+  try {
+    const iaSummary = persistPagesForIa(nodes, baseHost);
+    console.log(
+      `[scan] IA summary: saved=${iaSummary.totalSaved}, virtual=${iaSummary.virtualInserted}, subdomains=${iaSummary.subdomainCount}, queries=${iaSummary.queryBehavior}, domain=${iaSummary.domainParsing}`
+    );
+  } catch (err) {
+    console.error('IA persistence failed:', err?.message || err);
   }
 
   let crosslinks = [];

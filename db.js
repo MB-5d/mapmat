@@ -96,6 +96,19 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  -- Pages table (for IA features)
+  CREATE TABLE IF NOT EXISTS pages (
+    url TEXT PRIMARY KEY,
+    title TEXT,
+    status TEXT,
+    type TEXT,
+    placement TEXT NOT NULL DEFAULT 'Primary',
+    parent_url TEXT,
+    depth INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   -- Shares table (for sharing maps via link)
   CREATE TABLE IF NOT EXISTS shares (
     id TEXT PRIMARY KEY,
@@ -152,6 +165,8 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_usage_events_type_time ON usage_events(event_type, created_at);
   CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events(user_id);
   CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_pages_parent ON pages(parent_url);
+  CREATE INDEX IF NOT EXISTS idx_pages_placement ON pages(placement);
 `);
 
 // Backfill new columns without full migrations
@@ -172,6 +187,11 @@ ensureColumn('scan_history', 'scan_options', 'TEXT');
 ensureColumn('scan_history', 'scan_depth', 'INTEGER');
 ensureColumn('scan_history', 'map_id', 'TEXT');
 ensureColumn('usage_events', 'meta', 'TEXT');
+ensureColumn('pages', 'placement', "TEXT NOT NULL DEFAULT 'Primary'");
+ensureColumn('pages', 'parent_url', 'TEXT');
+ensureColumn('pages', 'depth', 'INTEGER');
+
+db.prepare("UPDATE pages SET placement = 'Primary' WHERE placement IS NULL OR placement = ''").run();
 
 console.log('Database initialized successfully');
 

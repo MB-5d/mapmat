@@ -67,11 +67,10 @@ const NodeCard = ({
   const status = annotations.status || 'none';
   const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
   const tags = Array.isArray(annotations.tags) ? annotations.tags : [];
-  const hasTags = tags.length > 0;
   const hasStatus = status !== 'none';
-  const showBadge = showAnnotations && (hasStatus || note || hasTags);
-  const statusLabel = ANNOTATION_STATUS_LABELS[status] || 'Note';
-  const badgeLabel = hasStatus ? statusLabel : (hasTags ? 'Tagged' : 'Note');
+  const showBadge = showAnnotations && hasStatus;
+  const statusLabel = ANNOTATION_STATUS_LABELS[status] || status;
+  const badgeLabel = statusLabel;
   const badgeTitleParts = [];
   if (hasStatus) badgeTitleParts.push(statusLabel);
   if (note) badgeTitleParts.push(note);
