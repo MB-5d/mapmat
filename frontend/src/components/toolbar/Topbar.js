@@ -129,7 +129,7 @@ const Topbar = ({
     </div>
 
       <div className="topbar-right">
-      {canEdit && (
+      {(isLoggedIn ? canEdit : true) && (
         <button
           className="icon-btn"
           title="Create New Map"
@@ -139,7 +139,7 @@ const Topbar = ({
         </button>
       )}
 
-      {canEdit && (
+      {(isLoggedIn ? canEdit : true) && (
         <button
           className="icon-btn"
           title="Import File"
