@@ -14,7 +14,7 @@ A visual sitemap generator that crawls websites and creates interactive tree dia
 
 ## Local Development
 
-### Backend (Port 4000)
+### Backend (Port 4002)
 ```bash
 cd mapmat
 npm install
@@ -52,7 +52,12 @@ railway up
 # - FRONTEND_URL = https://your-app.vercel.app
 # - JWT_SECRET = your-secret-key
 # - NODE_ENV = production
+# - DB_PATH = /data/mapmat.db   # if using a Railway volume mounted at /data
 ```
+
+Railway runtime config in `railway.json` uses:
+- `startCommand`: `node server.js`
+- health check endpoint: `GET /health` (returns `200` with JSON `{ "ok": true }`)
 
 **Frontend → Vercel:**
 ```bash
@@ -67,20 +72,31 @@ vercel
 # - REACT_APP_API_BASE = https://your-railway-url.up.railway.app
 ```
 
+Vercel project setting:
+- Root Directory should be `frontend`
+
 ### Option 2: Quick Deploy Links
 
 1. **Backend**: Push to GitHub, then connect to [Railway](https://railway.app/new)
 2. **Frontend**: Push to GitHub, then import at [Vercel](https://vercel.com/new)
+
+## SQLite Persistence on Railway
+
+1. Add a Railway Volume to the backend service.
+2. Mount the volume to `/data` (or any mount path you choose).
+3. Set `DB_PATH` to `<mount-path>/mapmat.db` (example: `/data/mapmat.db`).
+4. Redeploy and confirm startup logs include the mounted `DB_PATH`.
 
 ## Environment Variables
 
 ### Backend
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PORT` | Server port | 4000 |
+| `PORT` | Server port | 4002 |
 | `FRONTEND_URL` | Frontend URL for CORS | http://localhost:3000 |
 | `JWT_SECRET` | Secret for JWT tokens | (dev default) |
 | `NODE_ENV` | Environment | development |
+| `DB_PATH` | SQLite database file path | `./data/mapmat.db` locally, `/data/mapmat.db` on Railway volume |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
 | `USAGE_LIMIT_SCAN` | Daily/rolling scan limit | 100 (prod) |
@@ -95,7 +111,7 @@ vercel
 ### Frontend
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `REACT_APP_API_BASE` | Backend API URL | http://localhost:4000 |
+| `REACT_APP_API_BASE` | Backend API URL | http://localhost:4002 |
 
 ## Tech Stack
 

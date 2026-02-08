@@ -7,13 +7,20 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure data directory exists
-const DATA_DIR = path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+const DEFAULT_DATA_DIR = path.join(__dirname, 'data');
+const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH;
+const defaultDbPath = railwayVolumeDir
+  ? path.join(railwayVolumeDir, 'mapmat.db')
+  : path.join(DEFAULT_DATA_DIR, 'mapmat.db');
+const DB_PATH = process.env.DB_PATH || defaultDbPath;
+const DB_DIR = path.dirname(DB_PATH);
+
+// Ensure target directory exists for local and mounted-volume deployments.
+if (!fs.existsSync(DB_DIR)) {
+  fs.mkdirSync(DB_DIR, { recursive: true });
 }
 
-const db = new Database(path.join(DATA_DIR, 'mapmat.db'));
+const db = new Database(DB_PATH);
 
 // Enable foreign keys
 db.pragma('foreign_keys = ON');
@@ -204,6 +211,6 @@ db.prepare("UPDATE pages SET severity = 'Healthy' WHERE severity IS NULL OR seve
 db.prepare("UPDATE pages SET discovery_source = 'crawl' WHERE discovery_source IS NULL OR discovery_source = ''").run();
 db.prepare("UPDATE pages SET links_in = 0 WHERE links_in IS NULL").run();
 
-console.log('Database initialized successfully');
+console.log(`Database initialized successfully at ${DB_PATH}`);
 
 module.exports = db;

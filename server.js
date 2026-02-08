@@ -1,5 +1,5 @@
 /**
- * MAP MAT BACKEND SERVER - PORT 4000
+ * MAP MAT BACKEND SERVER - PORT 4002
  * Visual sitemap generator with user accounts, projects, and sharing.
  *
  * Run:
@@ -2357,7 +2357,7 @@ if (RUN_WORKER) {
 }
 
 app.get('/', (_, res) => res.status(200).send('Loxo backend OK'));
-app.get('/health', (_, res) => res.json({ ok: true }));
+app.get('/health', (_, res) => res.status(200).json({ ok: true }));
 
 app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
   const { url, maxPages, maxDepth, options } = req.body || {};
