@@ -13,6 +13,7 @@ import {
 
 import ScanBar from '../scan/ScanBar';
 import { useAuth } from '../../contexts/AuthContext';
+import mapmatLogo from '../../assets/MM-Logo.svg';
 
 const Topbar = ({
   canEdit,
@@ -70,7 +71,9 @@ const Topbar = ({
   return (
     <div className="topbar">
       <div className="topbar-left">
-        <div className="brand">Map Mat</div>
+        <div className="brand">
+          <img className="brand-logo" src={mapmatLogo} alt="Map Mat" />
+        </div>
       </div>
 
     <div className="topbar-center">

@@ -74,7 +74,7 @@ html {
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+  font-family: 'Nata Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
   background: #f8fafc;
   color: #1e293b;
 }
@@ -286,15 +286,15 @@ body {
 }
 
 .brand {
-  font-size: 22px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  background: linear-gradient(135deg, #e879f9 0%, #a855f7 50%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  display: flex;
+  align-items: center;
   white-space: nowrap;
+}
+
+.brand-logo {
+  height: 26px;
+  width: auto;
+  display: block;
 }
 
 .search-container {
@@ -1778,7 +1778,7 @@ body {
   font-weight: 500;
   font-size: 14px;
   color: #64748b;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Nata Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .key-toggle {
@@ -1959,7 +1959,7 @@ body {
   font-weight: 500;
   font-size: 13px;
   color: #64748b;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Nata Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .layers-panel-list {
