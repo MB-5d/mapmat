@@ -37,6 +37,15 @@ if (process.env.TRUST_PROXY === 'true' || isProd) {
 }
 
 // CORS configuration - allow credentials for cookies
+const parseEnvBool = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+};
+const normalizeOrigin = (origin) => String(origin || '').trim().replace(/\/+$/, '');
+const ALLOW_VERCEL_PREVIEWS = parseEnvBool(process.env.ALLOW_VERCEL_PREVIEWS, false);
 const defaultOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
@@ -44,15 +53,28 @@ const defaultOrigins = [
   'http://127.0.0.1:3001',
 ];
 const envOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',').map((origin) => origin.trim()).filter(Boolean)
+  ? process.env.FRONTEND_URL.split(',').map((origin) => normalizeOrigin(origin)).filter(Boolean)
   : [];
 const allowedOrigins = envOrigins.length ? envOrigins : defaultOrigins;
+const isAllowedVercelPreviewOrigin = (origin) => {
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === 'https:' && parsed.hostname.endsWith('.vercel.app');
+  } catch {
+    return false;
+  }
+};
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error(`CORS blocked origin: ${origin}`), false);
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (allowedOrigins.includes(normalizedOrigin)) return callback(null, true);
+    if (ALLOW_VERCEL_PREVIEWS && isAllowedVercelPreviewOrigin(normalizedOrigin)) {
+      return callback(null, true);
+    }
+    console.warn(`CORS blocked origin: ${origin}`);
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

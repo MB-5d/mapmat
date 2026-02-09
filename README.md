@@ -94,6 +94,7 @@ Vercel project setting:
 |----------|-------------|---------|
 | `PORT` | Server port | 4002 |
 | `FRONTEND_URL` | Frontend URL for CORS | http://localhost:3000 |
+| `ALLOW_VERCEL_PREVIEWS` | Allow `*.vercel.app` preview origins for CORS | false |
 | `JWT_SECRET` | Secret for JWT tokens | (dev default) |
 | `NODE_ENV` | Environment | development |
 | `DB_PATH` | SQLite database file path | `./data/mapmat.db` locally, `/data/mapmat.db` on Railway volume |

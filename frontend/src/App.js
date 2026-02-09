@@ -740,12 +740,22 @@ export default function App() {
   const [createMapMode, setCreateMapMode] = useState(false);
   const [pendingMapCreation, setPendingMapCreation] = useState(null);
   const [pendingCreateAfterSave, setPendingCreateAfterSave] = useState(false);
+  const [pendingLogoutAfterSave, setPendingLogoutAfterSave] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState({});
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [shareEmails, setShareEmails] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [sharePermission, setSharePermission] = useState(ACCESS_LEVELS.VIEW); // Permission for shared link
+  const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return !!params.get('share');
+  });
+  const [currentShareAccess, setCurrentShareAccess] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const access = params.get('access');
+    return Object.values(ACCESS_LEVELS).includes(access) ? access : null;
+  });
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
   const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
@@ -1528,10 +1538,16 @@ export default function App() {
   // Read access level from URL on load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const shareId = params.get('share');
     const access = params.get('access');
 
+    if (shareId) {
+      setHasCreatedShareLink(true);
+    }
     if (access && Object.values(ACCESS_LEVELS).includes(access)) {
       setAccessLevel(access);
+      setSharePermission(access);
+      setCurrentShareAccess(access);
     }
   }, []);
 
@@ -1620,6 +1636,8 @@ export default function App() {
       setCurrentMap(null);
       setIsImportedMap(false);
       setShowThumbnails(false);
+      setHasCreatedShareLink(false);
+      setCurrentShareAccess(null);
       resetThumbnailQueue(0);
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setUrlInput('');
@@ -1645,6 +1663,8 @@ export default function App() {
     setCurrentMap(null);
     setIsImportedMap(false);
     setShowThumbnails(false);
+    setHasCreatedShareLink(false);
+    setCurrentShareAccess(null);
     resetThumbnailQueue(0);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput('');
@@ -1951,6 +1971,7 @@ export default function App() {
             setColors(share.colors || DEFAULT_COLORS);
             setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
             setUrlInput(share.root.url || '');
+            setHasCreatedShareLink(true);
             showToast('Shared map loaded!', 'success');
             window.history.replaceState({}, '', window.location.pathname);
             scheduleResetView();
@@ -1977,6 +1998,7 @@ export default function App() {
                 setColors(sharedColors || DEFAULT_COLORS);
                 setConnectionColors(sharedConnectionColors || DEFAULT_CONNECTION_COLORS);
                 setUrlInput(sharedRoot.url || '');
+                setHasCreatedShareLink(true);
                 showToast('Shared map loaded!', 'success');
                 window.history.replaceState({}, '', window.location.pathname);
                 scheduleResetView();
@@ -2141,6 +2163,7 @@ export default function App() {
   const handleAuthSuccess = async (user) => {
     setCurrentUser(user);
     setIsLoggedIn(true);
+    setAccessLevel(ACCESS_LEVELS.EDIT);
 
     // Load user's projects, maps, and history
     try {
@@ -2181,27 +2204,106 @@ export default function App() {
   const handleDemoAccess = useCallback((user) => {
     setCurrentUser(user);
     setIsLoggedIn(true);
+    setAccessLevel(ACCESS_LEVELS.EDIT);
     setProjects([]);
     setScanHistory([]);
   }, []);
 
 
-  const handleLogout = useCallback(async () => {
+  const applyLoggedOutState = useCallback(({ preserveViewOnlyMap = false } = {}) => {
+    try {
+      if (preserveViewOnlyMap && root) {
+        setCurrentUser(null);
+        setIsLoggedIn(false);
+        setProjects([]);
+        setScanHistory([]);
+        setCurrentMap(null);
+        setAccessLevel(ACCESS_LEVELS.VIEW);
+        setShowSaveMapModal(false);
+        setShowProfileDrawer(false);
+        setShowSettingsDrawer(false);
+        setShowVersionHistoryDrawer(false);
+        showToast('Logged out. Map is now view-only.', 'info');
+        return;
+      }
+
+      setCurrentUser(null);
+      setIsLoggedIn(false);
+      setProjects([]);
+      setScanHistory([]);
+      setRoot(null);
+      setOrphans([]);
+      setConnections([]);
+      setCurrentMap(null);
+      setIsImportedMap(false);
+      setShowThumbnails(false);
+      setSelectedNodeIds(new Set());
+      setSelectionBox(null);
+      setThumbnailScopeIds(null);
+      setShowImageMenu(false);
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+      setUrlInput('');
+      resetScanLayers();
+      setShowSaveMapModal(false);
+      setShowProfileDrawer(false);
+      setShowSettingsDrawer(false);
+      setShowVersionHistoryDrawer(false);
+      showToast('Logged out', 'info');
+    } finally {
+      setPendingLogoutAfterSave(false);
+      setPendingCreateAfterSave(false);
+      setPendingLoadMap(null);
+      setHasCreatedShareLink(false);
+      setCurrentShareAccess(null);
+    }
+  }, [applyTransform, resetScanLayers, root, showToast]);
+
+  const performLogout = useCallback(async ({ preserveViewOnlyMap = false } = {}) => {
     try {
       await api.logout();
     } catch (e) {
       console.error('Logout error:', e);
     }
-    setCurrentUser(null);
-    setIsLoggedIn(false);
-    setProjects([]);
-    setScanHistory([]);
-    setCurrentMap(null);
-    setShowProfileDrawer(false);
-    setShowSettingsDrawer(false);
-    setShowVersionHistoryDrawer(false);
-    showToast('Logged out', 'info');
-  }, [showToast]);
+    applyLoggedOutState({ preserveViewOnlyMap });
+  }, [applyLoggedOutState]);
+
+  const handleLogout = useCallback(async () => {
+    const hasUnsavedMap = hasMap && !currentMap?.id;
+
+    if (hasUnsavedMap) {
+      const wantsSave = await showConfirm({
+        title: 'Save before logout?',
+        message: 'You have an unsaved map. Save it before logging out?',
+        confirmText: 'Save Map',
+        cancelText: 'Log Out',
+      });
+      if (wantsSave) {
+        setPendingLogoutAfterSave(true);
+        setCreateMapMode(false);
+        setDuplicateMapConfig(null);
+        setShowSaveMapModal(true);
+        return;
+      }
+      await performLogout({ preserveViewOnlyMap: false });
+      return;
+    }
+
+    const shouldPreserveAsViewOnly = Boolean(currentMap?.id)
+      && (
+        accessLevel === ACCESS_LEVELS.VIEW
+        || (hasCreatedShareLink && currentShareAccess === ACCESS_LEVELS.VIEW)
+      );
+
+    await performLogout({ preserveViewOnlyMap: shouldPreserveAsViewOnly });
+  }, [
+    accessLevel,
+    currentMap?.id,
+    hasCreatedShareLink,
+    hasMap,
+    currentShareAccess,
+    performLogout,
+    showConfirm,
+  ]);
 
   const handleShowProfile = useCallback(() => {
     setShowProfileDrawer(true);
@@ -3006,6 +3108,17 @@ export default function App() {
       setCurrentMap(savedMap);
       setShowSaveMapModal(false);
       showToast(`Map "${mapName}" saved`, 'success');
+
+      if (pendingLogoutAfterSave) {
+        const shouldPreserveAsViewOnly = Boolean(savedMap?.id)
+          && (
+            accessLevel === ACCESS_LEVELS.VIEW
+            || (hasCreatedShareLink && currentShareAccess === ACCESS_LEVELS.VIEW)
+          );
+        await performLogout({ preserveViewOnlyMap: shouldPreserveAsViewOnly });
+        return;
+      }
+
       if (wasNewMap) {
         await loadMapVersions(savedMap.id);
         await createVersionFromSnapshot({
@@ -3048,6 +3161,8 @@ export default function App() {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
+    setHasCreatedShareLink(false);
+    setCurrentShareAccess(null);
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null });
     setSelectedNodeIds(new Set());
@@ -3066,6 +3181,8 @@ export default function App() {
 
   const loadMap = (map) => {
     resetScanLayers();
+    setHasCreatedShareLink(false);
+    setCurrentShareAccess(null);
     const mapHasThumbnails = collectAllNodesWithOrphans(map.root, map.orphans || []).some((node) => !!node.thumbnailUrl);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
@@ -4526,6 +4643,8 @@ export default function App() {
       await navigator.clipboard.writeText(shareUrl.toString());
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
+      setHasCreatedShareLink(true);
+      setCurrentShareAccess(permission);
 
       const permLabel = permission === ACCESS_LEVELS.VIEW ? 'view-only' :
                         permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
@@ -4542,6 +4661,8 @@ export default function App() {
         await navigator.clipboard.writeText(shareUrl.toString());
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2000);
+        setHasCreatedShareLink(true);
+        setCurrentShareAccess(permission);
 
         const permLabel = permission === ACCESS_LEVELS.VIEW ? 'view-only' :
                           permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
@@ -7877,6 +7998,7 @@ export default function App() {
           setShowSaveMapModal(false);
           setCreateMapMode(false);
           setPendingCreateAfterSave(false);
+          setPendingLogoutAfterSave(false);
           setDuplicateMapConfig(null);
           setPendingLoadMap(null);
         }}
@@ -7885,6 +8007,7 @@ export default function App() {
           setShowSaveMapModal(false);
           setCreateMapMode(false);
           setPendingCreateAfterSave(false);
+          setPendingLogoutAfterSave(false);
           setDuplicateMapConfig(null);
           setPendingLoadMap(null);
           setShowAuthModal(true);

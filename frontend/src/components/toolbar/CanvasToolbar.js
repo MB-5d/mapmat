@@ -226,11 +226,11 @@ const CanvasToolbar = ({
       </button>
     )}
 
-    {canEdit && hasSavedMap && (
+    {canEdit && hasMap && (
       <button
         className={`canvas-tool-btn ${showVersionHistory ? 'active' : ''}`}
         onClick={onShowVersionHistory}
-        title="Version History (H)"
+        title={hasSavedMap ? 'Version History (H)' : 'Version History (draft, save map to persist)'}
       >
         <History size={20} />
       </button>
