@@ -37,6 +37,62 @@ const CLEAR_COOKIE_OPTIONS = {
   maxAge: 0,
 };
 
+// Temporary test-auth mode for development/user testing.
+// Disable before launch by setting TEST_AUTH_ENABLED=false (or removing it).
+function parseEnvBool(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+const TEST_AUTH_ENABLED = parseEnvBool(process.env.TEST_AUTH_ENABLED, !isProd);
+const TEST_AUTH_SEED_EMAIL = (process.env.TEST_AUTH_SEED_EMAIL || 'matt@email.com').trim().toLowerCase();
+const TEST_AUTH_SEED_PASSWORD = process.env.TEST_AUTH_SEED_PASSWORD || 'Admin123';
+const TEST_AUTH_SEED_NAME = process.env.TEST_AUTH_SEED_NAME || 'Matt Test';
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+// Seed a known test user for iterative QA cycles.
+function seedTestUserIfEnabled() {
+  console.log(`[auth] Test auth mode: ${TEST_AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
+  if (!TEST_AUTH_ENABLED) return;
+  if (!TEST_AUTH_SEED_EMAIL || !TEST_AUTH_SEED_PASSWORD) {
+    console.warn('[auth] Test auth enabled but seed account variables are missing');
+    return;
+  }
+
+  try {
+    const passwordHash = bcrypt.hashSync(TEST_AUTH_SEED_PASSWORD, 10);
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(TEST_AUTH_SEED_EMAIL);
+
+    if (existing) {
+      db.prepare(`
+        UPDATE users
+        SET password_hash = ?, name = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(passwordHash, TEST_AUTH_SEED_NAME, existing.id);
+      console.log(`[auth] Refreshed test account credentials: ${TEST_AUTH_SEED_EMAIL}`);
+      return;
+    }
+
+    const userId = uuidv4();
+    db.prepare(`
+      INSERT INTO users (id, email, password_hash, name)
+      VALUES (?, ?, ?, ?)
+    `).run(userId, TEST_AUTH_SEED_EMAIL, passwordHash, TEST_AUTH_SEED_NAME);
+
+    console.log(`[auth] Seeded test account: ${TEST_AUTH_SEED_EMAIL}`);
+  } catch (error) {
+    console.error('[auth] Failed to seed test account:', error);
+  }
+}
+
+seedTestUserIfEnabled();
+
 // Generate JWT token
 function generateToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET_EFFECTIVE, { expiresIn: JWT_EXPIRES_IN });
@@ -83,8 +139,9 @@ function requireAuth(req, res, next) {
 router.post('/signup', async (req, res) => {
   try {
     const { email, password, name } = req.body;
+    const emailNormalized = normalizeEmail(email);
 
-    if (!email || !password) {
+    if (!emailNormalized || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
@@ -93,7 +150,7 @@ router.post('/signup', async (req, res) => {
     }
 
     // Check if email already exists
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(emailNormalized);
     if (existing) {
       return res.status(400).json({ error: 'An account with this email already exists' });
     }
@@ -104,12 +161,12 @@ router.post('/signup', async (req, res) => {
 
     // Create user
     const userId = uuidv4();
-    const displayName = name || email.split('@')[0];
+    const displayName = name || emailNormalized.split('@')[0];
 
     db.prepare(`
       INSERT INTO users (id, email, password_hash, name)
       VALUES (?, ?, ?, ?)
-    `).run(userId, email.toLowerCase(), passwordHash, displayName);
+    `).run(userId, emailNormalized, passwordHash, displayName);
 
     // Generate token and set cookie
     const token = generateToken(userId);
@@ -118,7 +175,7 @@ router.post('/signup', async (req, res) => {
     res.json({
       user: {
         id: userId,
-        email: email.toLowerCase(),
+        email: emailNormalized,
         name: displayName,
       },
     });
@@ -132,13 +189,34 @@ router.post('/signup', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    const emailNormalized = normalizeEmail(email);
 
-    if (!email || !password) {
+    if (!emailNormalized || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
     // Find user
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase());
+    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(emailNormalized);
+
+    // In test-auth mode, allow quick account bootstrap by logging in with a new fake account.
+    if (!user && TEST_AUTH_ENABLED) {
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+
+      const userId = uuidv4();
+      const displayName = emailNormalized.split('@')[0];
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(password, salt);
+
+      db.prepare(`
+        INSERT INTO users (id, email, password_hash, name)
+        VALUES (?, ?, ?, ?)
+      `).run(userId, emailNormalized, passwordHash, displayName);
+
+      user = db.prepare('SELECT * FROM users WHERE email = ?').get(emailNormalized);
+    }
+
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }

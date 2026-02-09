@@ -97,6 +97,10 @@ Vercel project setting:
 | `JWT_SECRET` | Secret for JWT tokens | (dev default) |
 | `NODE_ENV` | Environment | development |
 | `DB_PATH` | SQLite database file path | `./data/mapmat.db` locally, `/data/mapmat.db` on Railway volume |
+| `TEST_AUTH_ENABLED` | Enables temporary test-account mode | true locally, false in production |
+| `TEST_AUTH_SEED_EMAIL` | Seed account email when test mode is enabled | matt@email.com |
+| `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |
+| `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Matt Test |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
 | `USAGE_LIMIT_SCAN` | Daily/rolling scan limit | 100 (prod) |
@@ -112,6 +116,12 @@ Vercel project setting:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `REACT_APP_API_BASE` | Backend API URL | http://localhost:4002 |
+
+Temporary testing note:
+- `TEST_AUTH_ENABLED=true` allows login with auto-created fake accounts and seeds the default test user above.
+- In test mode, the seed account password is refreshed on backend restart/deploy.
+- Accepted truthy values for `TEST_AUTH_ENABLED`: `true`, `1`, `yes`, `on` (case-insensitive).
+- Set `TEST_AUTH_ENABLED=false` before launch.
 
 ## Tech Stack
 
