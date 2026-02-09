@@ -101,6 +101,7 @@ Vercel project setting:
 | `TEST_AUTH_SEED_EMAIL` | Seed account email when test mode is enabled | matt@email.com |
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |
 | `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Matt Test |
+| `AUTH_HEADER_FALLBACK` | Allows bearer token auth header fallback when cross-site cookies fail | same default as `TEST_AUTH_ENABLED` |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
 | `USAGE_LIMIT_SCAN` | Daily/rolling scan limit | 100 (prod) |
@@ -121,6 +122,7 @@ Temporary testing note:
 - `TEST_AUTH_ENABLED=true` allows login with auto-created fake accounts and seeds the default test user above.
 - In test mode, the seed account password is refreshed on backend restart/deploy.
 - Accepted truthy values for `TEST_AUTH_ENABLED`: `true`, `1`, `yes`, `on` (case-insensitive).
+- `AUTH_HEADER_FALLBACK=true` lets the frontend send `Authorization: Bearer ...` if browser cross-site cookies are blocked.
 - Set `TEST_AUTH_ENABLED=false` before launch.
 
 ## Tech Stack

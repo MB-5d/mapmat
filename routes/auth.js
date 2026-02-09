@@ -51,6 +51,7 @@ const TEST_AUTH_ENABLED = parseEnvBool(process.env.TEST_AUTH_ENABLED, !isProd);
 const TEST_AUTH_SEED_EMAIL = (process.env.TEST_AUTH_SEED_EMAIL || 'matt@email.com').trim().toLowerCase();
 const TEST_AUTH_SEED_PASSWORD = process.env.TEST_AUTH_SEED_PASSWORD || 'Admin123';
 const TEST_AUTH_SEED_NAME = process.env.TEST_AUTH_SEED_NAME || 'Matt Test';
+const AUTH_HEADER_FALLBACK = parseEnvBool(process.env.AUTH_HEADER_FALLBACK, TEST_AUTH_ENABLED);
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -92,6 +93,7 @@ function seedTestUserIfEnabled() {
 }
 
 seedTestUserIfEnabled();
+console.log(`[auth] Authorization header fallback: ${AUTH_HEADER_FALLBACK ? 'ENABLED' : 'DISABLED'}`);
 
 // Generate JWT token
 function generateToken(userId) {
@@ -107,9 +109,18 @@ function verifyToken(token) {
   }
 }
 
+function extractBearerToken(req) {
+  const header = req.get('authorization') || '';
+  if (!header.toLowerCase().startsWith('bearer ')) return null;
+  const token = header.slice(7).trim();
+  return token || null;
+}
+
 // Auth middleware - attaches user to request if authenticated
 function authMiddleware(req, res, next) {
-  const token = req.cookies?.auth_token;
+  const bearerToken = AUTH_HEADER_FALLBACK ? extractBearerToken(req) : null;
+  const cookieToken = req.cookies?.auth_token;
+  const token = bearerToken || cookieToken;
 
   if (!token) {
     req.user = null;
@@ -178,6 +189,7 @@ router.post('/signup', async (req, res) => {
         email: emailNormalized,
         name: displayName,
       },
+      token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
     console.error('Signup error:', error);
@@ -237,6 +249,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         name: user.name,
       },
+      token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
     console.error('Login error:', error);

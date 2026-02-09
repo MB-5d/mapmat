@@ -4,15 +4,55 @@
 
 import { API_BASE } from './utils/constants';
 
+const AUTH_TOKEN_KEY = 'mapmat_auth_token';
+
+function canUseStorage() {
+  return typeof window !== 'undefined' && !!window.localStorage;
+}
+
+function getStoredAuthToken() {
+  if (!canUseStorage()) return null;
+  try {
+    return window.localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredAuthToken(token) {
+  if (!canUseStorage()) return;
+  try {
+    if (token) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } catch {
+    // Ignore storage errors in private mode/blocked storage scenarios.
+  }
+}
+
+function clearStoredAuthToken() {
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
 // Fetch wrapper with credentials and error handling
 async function fetchApi(endpoint, options = {}) {
+  const authToken = getStoredAuthToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  if (authToken && !headers.Authorization && !headers.authorization) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     credentials: 'include', // Include cookies
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
 
   let data;
@@ -34,21 +74,29 @@ async function fetchApi(endpoint, options = {}) {
 // ============================================
 
 export async function signup(email, password, name) {
-  return fetchApi('/auth/signup', {
+  const result = await fetchApi('/auth/signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, name }),
   });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
 }
 
 export async function login(email, password) {
-  return fetchApi('/auth/login', {
+  const result = await fetchApi('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
 }
 
 export async function logout() {
-  return fetchApi('/auth/logout', { method: 'POST' });
+  try {
+    return await fetchApi('/auth/logout', { method: 'POST' });
+  } finally {
+    clearStoredAuthToken();
+  }
 }
 
 export async function getMe() {
@@ -63,10 +111,12 @@ export async function updateProfile(data) {
 }
 
 export async function deleteAccount(password) {
-  return fetchApi('/auth/me', {
+  const result = await fetchApi('/auth/me', {
     method: 'DELETE',
     body: JSON.stringify({ password }),
   });
+  clearStoredAuthToken();
+  return result;
 }
 
 // ============================================
