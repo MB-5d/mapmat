@@ -47,6 +47,8 @@
   --modal-bg: #ffffff;
   --modal-overlay-bg: rgba(0, 0, 0, 0.5);
   --modal-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+  --shadow-rgb: 0, 0, 0;
+  --shadow-rgb-deep: 15, 23, 42;
   --modal-padding: 24px;
   --modal-header-padding: 24px;
   --modal-footer-padding: 24px;
@@ -93,6 +95,11 @@ body {
   --modal-card-bg: #0d0812;
   --modal-card-bg-hover: #1a1025;
   --modal-card-border: #301E3F;
+  --shadow-rgb: 180, 180, 180;
+  --shadow-rgb-deep: 160, 160, 160;
+  --modal-shadow: 0 20px 25px rgba(var(--shadow-rgb), 0.12);
+  --shadow-soft: 0 4px 12px rgba(var(--shadow-rgb), 0.12);
+  --shadow-strong: 0 12px 24px rgba(var(--shadow-rgb-deep), 0.18);
 }
 
 .ui-btn {
@@ -4551,6 +4558,66 @@ body {
   background: #fef2f2;
 }
 
+.map-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-move {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #6366f1;
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.map-item:hover .map-move {
+  opacity: 1;
+}
+
+.map-move:hover {
+  background: #eef2ff;
+}
+
+.map-move-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.map-move-row select {
+  flex: 1;
+}
+
+.map-move-confirm,
+.map-move-cancel {
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.map-move-confirm {
+  color: #1e293b;
+}
+
+.map-move-cancel {
+  color: #64748b;
+}
+
 .projects-modal .add-project-btn {
   display: flex;
   align-items: center;
@@ -6088,6 +6155,13 @@ body {
   margin-bottom: 12px;
 }
 
+.save-map-share {
+  padding: 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 12px;
+}
+
 .share-permission-options {
   display: flex;
   flex-direction: column;
@@ -7040,6 +7114,28 @@ body {
 [data-theme="dark"] .map-delete:hover {
   background: #3d1f2e;
   color: #f87171;
+}
+
+[data-theme="dark"] .map-move {
+  background: #1a1022;
+  border-color: #301E3F;
+  color: #a78bfa;
+}
+
+[data-theme="dark"] .map-move:hover {
+  background: #2d1f3d;
+  color: #d6bcfa;
+}
+
+[data-theme="dark"] .map-move-row {
+  background: #1a1022;
+  border-bottom-color: #301E3F;
+}
+
+[data-theme="dark"] .map-move-confirm,
+[data-theme="dark"] .map-move-cancel {
+  background: #0d0812;
+  border-color: #301E3F;
 }
 
 /* History Modal - Dark Mode */

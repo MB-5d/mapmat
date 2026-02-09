@@ -2793,9 +2793,23 @@ export default function App() {
   };
 
   const renameProject = async (projectId, newName) => {
-    if (!newName?.trim()) return;
+    if (projectId === 'uncategorized') {
+      setEditingProjectId(null);
+      return;
+    }
+    const trimmedName = newName?.trim();
+    if (!trimmedName) {
+      setEditingProjectId(null);
+      showToast('Project name is required', 'error');
+      return;
+    }
+    const current = projects.find(p => p.id === projectId);
+    if (current && current.name === trimmedName) {
+      setEditingProjectId(null);
+      return;
+    }
     try {
-      const { project } = await api.updateProject(projectId, newName.trim());
+      const { project } = await api.updateProject(projectId, trimmedName);
       setProjects(prev => prev.map(p =>
         p.id === projectId ? { ...p, name: project.name } : p
       ));
@@ -2807,6 +2821,10 @@ export default function App() {
   };
 
   const deleteProject = async (projectId) => {
+    if (projectId === 'uncategorized') {
+      showToast('Cannot delete Uncategorized', 'warning');
+      return;
+    }
     const confirmed = await showConfirm({
       title: 'Delete Project',
       message: 'Delete this project and all its maps?',
@@ -2820,6 +2838,45 @@ export default function App() {
       showToast('Project deleted', 'success');
     } catch (e) {
       showToast(e.message || 'Failed to delete project', 'error');
+    }
+  };
+
+  const moveMapToProject = async (mapId, targetProjectId) => {
+    if (!mapId) return;
+    const currentProjectId = projects.find(p => (p.maps || []).some(m => m.id === mapId))?.id || null;
+    if ((currentProjectId || null) === (targetProjectId || null)) {
+      return;
+    }
+    try {
+      const { map } = await api.updateMap(mapId, { project_id: targetProjectId || null });
+      setProjects(prev => {
+        let updated = prev.map(p => ({
+          ...p,
+          maps: (p.maps || []).filter(m => m.id !== map.id),
+        }));
+        if (map.project_id) {
+          updated = updated.map(p =>
+            p.id === map.project_id
+              ? { ...p, maps: [map, ...(p.maps || [])] }
+              : p
+          );
+        } else {
+          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          if (uncategorized) {
+            uncategorized.maps = [map, ...(uncategorized.maps || [])];
+          } else {
+            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+          }
+        }
+        return updated;
+      });
+      if (currentMap?.id === map.id) {
+        setCurrentMap(map);
+        setMapName(map.name || '');
+      }
+      showToast('Map moved', 'success');
+    } catch (e) {
+      showToast(e.message || 'Failed to move map', 'error');
     }
   };
 
@@ -2878,7 +2935,7 @@ export default function App() {
     setShowSaveMapModal(true);
   };
 
-  const handleDuplicateMapSave = async (projectId, name) => {
+  const handleDuplicateMapSave = async (projectId, name, notes) => {
     const snapshot = getVersionSnapshot();
     if (!snapshot?.root) return;
     try {
@@ -2890,6 +2947,7 @@ export default function App() {
         connections: snapshot.connections,
         colors: snapshot.colors,
         connectionColors: snapshot.connectionColors,
+        notes: notes?.trim() || null,
         project_id: projectId || null,
       });
       setProjects(prev => {
@@ -3045,7 +3103,7 @@ export default function App() {
   };
 
   // Map functions
-  const saveMap = async (projectId, mapName) => {
+  const saveMap = async (projectId, mapName, notes) => {
     if (!root) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
     const wasNewMap = !currentMap?.id;
@@ -3061,6 +3119,7 @@ export default function App() {
           connections,
           colors,
           connectionColors,
+          notes: notes?.trim() || null,
           project_id: projectId || null,
         });
         savedMap = map;
@@ -3074,6 +3133,7 @@ export default function App() {
           connections,
           colors,
           connectionColors,
+          notes: notes?.trim() || null,
           project_id: projectId || null,
         });
         savedMap = map;
@@ -3152,11 +3212,11 @@ export default function App() {
     }
   };
 
-  const startBlankMapCreation = (projectId, mapName) => {
+  const startBlankMapCreation = (projectId, mapName, notes) => {
     if (!mapName?.trim()) return;
     const trimmedName = mapName.trim();
     setCreateMapMode(false);
-    setPendingMapCreation({ name: trimmedName, projectId: projectId || null });
+    setPendingMapCreation({ name: trimmedName, projectId: projectId || null, notes: notes?.trim() || '' });
     setMapName(trimmedName);
     setRoot(null);
     setOrphans([]);
@@ -3164,7 +3224,7 @@ export default function App() {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setIsImportedMap(false);
-    setCurrentMap({ name: trimmedName, project_id: projectId || null });
+    setCurrentMap({ name: trimmedName, project_id: projectId || null, notes: notes?.trim() || '' });
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
     setThumbnailScopeIds(null);
@@ -6150,6 +6210,7 @@ export default function App() {
         const newRoot = { ...newNodeData, id: 'root' };
         const mapNameToUse = pendingMapCreation?.name || currentMap?.name || mapName || 'Untitled Map';
         const projectIdToUse = pendingMapCreation?.projectId || currentMap?.project_id || null;
+        const mapNotesToUse = pendingMapCreation?.notes || currentMap?.notes || '';
 
         const mapToSave = {
           name: mapNameToUse,
@@ -6157,6 +6218,7 @@ export default function App() {
           root: newRoot,
           orphans: [],
           colors: DEFAULT_COLORS,
+          notes: mapNotesToUse,
           project_id: projectIdToUse,
         };
 
@@ -8017,6 +8079,10 @@ export default function App() {
         rootUrl={root?.url}
         defaultProjectId={duplicateMapConfig?.projectId || null}
         defaultName={duplicateMapConfig?.name || ''}
+        defaultNotes={currentMap?.notes || ''}
+        accessLevels={ACCESS_LEVELS}
+        sharePermission={sharePermission}
+        onChangePermission={setSharePermission}
         onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
         title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
@@ -8051,6 +8117,7 @@ export default function App() {
         onDeleteProject={deleteProject}
         onLoadMap={handleLoadMapRequest}
         onDeleteMap={deleteMap}
+        onMoveMap={moveMapToProject}
         onAddProject={async () => {
           const name = await showPrompt({
             title: 'New Project',

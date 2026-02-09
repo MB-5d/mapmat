@@ -60,6 +60,7 @@ db.exec(`
     user_id TEXT NOT NULL,
     project_id TEXT,
     name TEXT NOT NULL,
+    notes TEXT,
     url TEXT NOT NULL,
     root_data TEXT NOT NULL,
     colors TEXT,
@@ -183,6 +184,7 @@ db.exec(`
 ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
 ensureColumn('maps', 'connection_colors', 'TEXT');
+ensureColumn('maps', 'notes', 'TEXT');
 ensureColumn('map_versions', 'orphans_data', 'TEXT');
 ensureColumn('map_versions', 'connections_data', 'TEXT');
 ensureColumn('map_versions', 'connection_colors', 'TEXT');
