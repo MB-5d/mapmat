@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FolderPlus, X } from 'lucide-react';
+import { Edit2, Eye, FolderPlus, MessageSquare, X } from 'lucide-react';
 
 const SaveMapForm = ({
   projects,
@@ -7,6 +7,9 @@ const SaveMapForm = ({
   rootUrl,
   defaultProjectId,
   defaultName,
+  accessLevels,
+  sharePermission,
+  onChangePermission,
   onSave,
   onCreateProject,
   onCancel,
@@ -69,6 +72,52 @@ const SaveMapForm = ({
           ))}
         </select>
       </div>
+      {accessLevels && sharePermission && onChangePermission ? (
+        <div className="save-map-share">
+          <div className="share-section-title">Sharing permissions</div>
+          <div className="share-permission-options">
+            <label className={`share-permission-option ${sharePermission === accessLevels.VIEW ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="saveMapSharePermission"
+                checked={sharePermission === accessLevels.VIEW}
+                onChange={() => onChangePermission(accessLevels.VIEW)}
+              />
+              <Eye size={16} />
+              <div className="share-permission-text">
+                <span className="share-permission-label">View only</span>
+                <span className="share-permission-desc">Can view the sitemap</span>
+              </div>
+            </label>
+            <label className={`share-permission-option ${sharePermission === accessLevels.COMMENT ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="saveMapSharePermission"
+                checked={sharePermission === accessLevels.COMMENT}
+                onChange={() => onChangePermission(accessLevels.COMMENT)}
+              />
+              <MessageSquare size={16} />
+              <div className="share-permission-text">
+                <span className="share-permission-label">Can comment</span>
+                <span className="share-permission-desc">View and add comments</span>
+              </div>
+            </label>
+            <label className={`share-permission-option ${sharePermission === accessLevels.EDIT ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="saveMapSharePermission"
+                checked={sharePermission === accessLevels.EDIT}
+                onChange={() => onChangePermission(accessLevels.EDIT)}
+              />
+              <Edit2 size={16} />
+              <div className="share-permission-text">
+                <span className="share-permission-label">Can edit</span>
+                <span className="share-permission-desc">Full editing access</span>
+              </div>
+            </label>
+          </div>
+        </div>
+      ) : null}
       {!showNewProject ? (
         <button className="new-project-link" onClick={() => setShowNewProject(true)}>
           <FolderPlus size={14} />
@@ -112,6 +161,9 @@ const SaveMapModal = ({
   rootUrl,
   defaultProjectId,
   defaultName,
+  accessLevels,
+  sharePermission,
+  onChangePermission,
   onSave,
   onCreateProject,
   title = 'Save Map',
@@ -147,6 +199,9 @@ const SaveMapModal = ({
               rootUrl={rootUrl}
               defaultProjectId={defaultProjectId}
               defaultName={defaultName}
+              accessLevels={accessLevels}
+              sharePermission={sharePermission}
+              onChangePermission={onChangePermission}
               onSave={onSave}
               onCreateProject={onCreateProject}
               onCancel={onClose}

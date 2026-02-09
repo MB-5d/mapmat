@@ -1555,6 +1555,12 @@ export default function App() {
   const canEdit = () => accessLevel === ACCESS_LEVELS.EDIT;
   const canComment = () => accessLevel === ACCESS_LEVELS.COMMENT || accessLevel === ACCESS_LEVELS.EDIT;
 
+  useEffect(() => {
+    if (!canComment() && showCommentsPanel) {
+      setShowCommentsPanel(false);
+    }
+  }, [accessLevel, showCommentsPanel]);
+
   // Theme toggle functions
   const toggleTheme = () => {
     setTheme(prev => {
@@ -1574,6 +1580,8 @@ export default function App() {
     }
     return theme;
   };
+
+  const showThemeToggle = process.env.REACT_APP_SHOW_THEME_TOGGLE !== 'false';
 
   // Show confirmation modal and return promise
   const showConfirm = ({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
@@ -3631,6 +3639,8 @@ export default function App() {
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isInsideNodeMenu = e.target.closest('.node-menu');
     const isOnConnection = e.target.closest('.connections-layer');
+    const clickedNodeId = nodeContainer?.getAttribute('data-node-id') || null;
+    const clickedSelected = clickedNodeId ? selectedNodeIds.has(clickedNodeId) : false;
 
     // Close connection menu when clicking outside of it
     if (connectionMenu && !isInsideConnectionMenu) {
@@ -3648,6 +3658,18 @@ export default function App() {
     }
 
     const shiftActive = e.shiftKey || isShiftPressed;
+    if (
+      !shiftActive
+      && selectedNodeIds.size > 0
+      && !clickedSelected
+      && !isUIControl
+      && !isInsidePopover
+      && !isInsideConnectionMenu
+      && !isInsideNodeMenu
+      && !isOnConnection
+    ) {
+      setSelectedNodeIds(new Set());
+    }
     if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
     if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu)) return;
 
@@ -3976,6 +3998,7 @@ export default function App() {
   };
 
   const handleUndo = () => {
+    if (!canEdit()) return;
     console.log('UNDO CLICKED, stack:', undoStack.length);
     if (undoStack.length === 0) {
       console.log('Nothing to undo');
@@ -4012,6 +4035,7 @@ export default function App() {
   };
 
   const handleRedo = () => {
+    if (!canEdit()) return;
     console.log('REDO CLICKED, stack:', redoStack.length);
     if (redoStack.length === 0) {
       console.log('Nothing to redo');
@@ -4057,6 +4081,7 @@ export default function App() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        if (!canEdit()) return;
         e.preventDefault();
         if (e.shiftKey) {
           handleRedo();
@@ -4065,6 +4090,7 @@ export default function App() {
         }
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+        if (!canEdit()) return;
         e.preventDefault();
         handleRedo();
       }
@@ -4090,6 +4116,7 @@ export default function App() {
 
       // Toggle comments panel with "C"
       if (e.key === 'c' || e.key === 'C') {
+        if (!canComment()) return;
         setShowCommentsPanel(prev => {
           const next = !prev;
           if (next) {
@@ -4117,6 +4144,7 @@ export default function App() {
         });
       }
       if (e.key === 'h' || e.key === 'H') {
+        if (!canEdit()) return;
         setShowVersionHistoryDrawer(prev => {
           const next = !prev;
           if (next) {
@@ -4189,7 +4217,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
+  }, [accessLevel, undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -4564,7 +4592,7 @@ export default function App() {
   <meta charset="utf-8">
   <title>Site Index - ${hostname}</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+    body { font-family: 'Nata Sans', sans-serif; margin: 40px; color: #333; }
     h1 { color: #6366f1; margin-bottom: 5px; }
     .subtitle { color: #64748b; margin-bottom: 30px; }
     .meta { color: #94a3b8; font-size: 12px; margin-bottom: 20px; }
@@ -5019,6 +5047,7 @@ export default function App() {
   // Open comment popover positioned next to a node
   const openCommentPopover = (nodeOrId) => {
     if (!canvasRef.current) return;
+    if (!canComment()) return;
     const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
     if (!nodeId) return;
     if (typeof nodeOrId === 'object') {
@@ -7008,17 +7037,19 @@ export default function App() {
         )}
 
         {/* Theme toggle */}
-        <button
-          className="theme-toggle"
-          onClick={toggleTheme}
-          title={`Switch to ${getCurrentTheme() === 'dark' ? 'light' : 'dark'} mode`}
-        >
-          <div className={`theme-toggle-track ${getCurrentTheme()}`}>
-            <Sun size={14} className="theme-icon sun" />
-            <Moon size={14} className="theme-icon moon" />
-            <div className="theme-toggle-thumb" />
-          </div>
-        </button>
+        {showThemeToggle && (
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title={`Switch to ${getCurrentTheme() === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            <div className={`theme-toggle-track ${getCurrentTheme()}`}>
+              <Sun size={14} className="theme-icon sun" />
+              <Moon size={14} className="theme-icon moon" />
+              <div className="theme-toggle-thumb" />
+            </div>
+          </button>
+        )}
 
         {!hasMap && (
           <div className="blank">
@@ -7079,7 +7110,7 @@ export default function App() {
                   orphans={visibleOrphans}
                   layout={mapLayout}
                   showThumbnails={showThumbnails}
-                  showCommentBadges={activeTool === 'comments' || showCommentsPanel}
+                  showCommentBadges={canComment() && (activeTool === 'comments' || showCommentsPanel)}
                   canEdit={canEdit()}
                   canComment={canComment()}
                   connectionTool={connectionTool}
@@ -7726,6 +7757,7 @@ export default function App() {
                 colors,
                 connectionColors,
                 maxDepth,
+                canEdit: canEdit(),
                 editingDepth: editingColorDepth,
                 editingConnectionKey,
                 connectionLegend,
@@ -7744,6 +7776,7 @@ export default function App() {
               }}
               toolbarProps={{
                 canEdit: canEdit(),
+                canComment: canComment(),
                 activeTool,
                 connectionTool,
                 onSelectTool: () => {
@@ -7764,6 +7797,7 @@ export default function App() {
                 },
                 showCommentsPanel,
                 onToggleCommentsPanel: () => {
+                  if (!canComment()) return;
                   setShowCommentsPanel((prev) => {
                     const next = !prev;
                     if (next) {
@@ -7933,7 +7967,7 @@ export default function App() {
       </div>
 
       {/* Comments Panel - Right Rail */}
-      {showCommentsPanel && (
+      {showCommentsPanel && canComment() && (
         <CommentsPanel
           root={root}
           orphans={orphans}
@@ -8017,6 +8051,9 @@ export default function App() {
         rootUrl={root?.url}
         defaultProjectId={duplicateMapConfig?.projectId || null}
         defaultName={duplicateMapConfig?.name || ''}
+        accessLevels={ACCESS_LEVELS}
+        sharePermission={sharePermission}
+        onChangePermission={setSharePermission}
         onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
         title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}

@@ -11,14 +11,25 @@ const SaveVersionModal = ({
 }) => {
   const [name, setName] = useState(defaultName);
   const [notes, setNotes] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!show) return;
     setName(defaultName);
     setNotes('');
+    setError('');
   }, [show, defaultName]);
 
   if (!show) return null;
+
+  const handleSave = () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError('Title is required');
+      return;
+    }
+    onSave(trimmedName, notes.trim());
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -40,14 +51,18 @@ const SaveVersionModal = ({
           </div>
 
           <div className="form-group">
-            <label>Title (optional)</label>
+            <label>Title</label>
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (error && e.target.value.trim()) setError('');
+              }}
               placeholder="Updated"
               autoFocus
             />
+            {error ? <div className="form-error">{error}</div> : null}
           </div>
 
           <div className="form-group">
@@ -67,7 +82,7 @@ const SaveVersionModal = ({
           </button>
           <button
             className="modal-btn primary"
-            onClick={() => onSave(name.trim(), notes.trim())}
+            onClick={handleSave}
           >
             Save Version
           </button>

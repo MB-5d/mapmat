@@ -7,6 +7,7 @@ const ColorKey = ({
   colors,
   connectionColors,
   maxDepth,
+  canEdit,
   onEditDepth,
   editingDepth,
   editingConnectionKey,
@@ -32,8 +33,9 @@ const ColorKey = ({
           return (
             <div
               key={idx}
-              className={`color-key-item ${editingDepth === idx ? 'editing' : ''}`}
+              className={`color-key-item ${editingDepth === idx ? 'editing' : ''}${!canEdit ? ' disabled' : ''}`}
               onClick={(e) => {
+                if (!canEdit) return;
                 const rect = e.currentTarget.getBoundingClientRect();
                 onEditDepth(idx, {
                   top: rect.top,
@@ -45,7 +47,7 @@ const ColorKey = ({
             >
             <div className={`color-swatch ${editingDepth === idx ? 'editing' : ''}`} style={{ backgroundColor: color }} />
             <span>Level {idx}</span>
-            <Edit2 size={12} className="color-edit-icon" />
+            {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
           </div>
           );
         })}
@@ -54,8 +56,9 @@ const ColorKey = ({
             <div className="color-key-section">Connections</div>
             {connectionLegend?.hasUserFlows && (
               <div
-                className={`color-key-item ${editingConnectionKey === 'userFlows' ? 'editing' : ''}`}
+                className={`color-key-item ${editingConnectionKey === 'userFlows' ? 'editing' : ''}${!canEdit ? ' disabled' : ''}`}
                 onClick={(e) => {
+                  if (!canEdit) return;
                   const rect = e.currentTarget.getBoundingClientRect();
                   onEditConnectionColor?.('userFlows', {
                     top: rect.top,
@@ -70,13 +73,14 @@ const ColorKey = ({
                   style={{ '--legend-color': connectionColors?.userFlows || '#14b8a6' }}
                 />
                 <span>User Flows</span>
-                <Edit2 size={12} className="color-edit-icon" />
+                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
               </div>
             )}
             {connectionLegend?.hasCrossLinks && (
               <div
-                className={`color-key-item ${editingConnectionKey === 'crossLinks' ? 'editing' : ''}`}
+                className={`color-key-item ${editingConnectionKey === 'crossLinks' ? 'editing' : ''}${!canEdit ? ' disabled' : ''}`}
                 onClick={(e) => {
+                  if (!canEdit) return;
                   const rect = e.currentTarget.getBoundingClientRect();
                   onEditConnectionColor?.('crossLinks', {
                     top: rect.top,
@@ -91,13 +95,14 @@ const ColorKey = ({
                   style={{ '--legend-color': connectionColors?.crossLinks || '#f97316' }}
                 />
                 <span>Crosslinks</span>
-                <Edit2 size={12} className="color-edit-icon" />
+                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
               </div>
             )}
             {connectionLegend?.hasBrokenLinks && (
               <div
-                className={`color-key-item ${editingConnectionKey === 'brokenLinks' ? 'editing' : ''}`}
+                className={`color-key-item ${editingConnectionKey === 'brokenLinks' ? 'editing' : ''}${!canEdit ? ' disabled' : ''}`}
                 onClick={(e) => {
+                  if (!canEdit) return;
                   const rect = e.currentTarget.getBoundingClientRect();
                   onEditConnectionColor?.('brokenLinks', {
                     top: rect.top,
@@ -112,7 +117,7 @@ const ColorKey = ({
                   style={{ '--legend-color': connectionColors?.brokenLinks || '#fca5a5' }}
                 />
                 <span>Broken Links</span>
-                <Edit2 size={12} className="color-edit-icon" />
+                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
               </div>
             )}
           </>

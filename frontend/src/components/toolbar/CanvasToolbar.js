@@ -21,6 +21,7 @@ import {
 
 const CanvasToolbar = ({
   canEdit,
+  canComment,
   activeTool,
   connectionTool,
   onSelectTool,
@@ -66,18 +67,6 @@ const CanvasToolbar = ({
     </button>
     {canEdit && (
       <button
-        className="canvas-tool-btn"
-        title="Add Page"
-        onClick={onAddPage}
-      >
-        <FilePlus size={20} />
-      </button>
-    )}
-
-    {canEdit && <div className="canvas-toolbar-divider" />}
-
-    {canEdit && (
-      <button
         className={`canvas-tool-btn ${connectionTool === 'userflow' ? 'active' : ''}`}
         onClick={onToggleUserFlow}
         title="User Flow (F)"
@@ -94,21 +83,8 @@ const CanvasToolbar = ({
         <Link2 size={20} />
       </button>
     )}
-    <button
-      className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''}`}
-      onClick={onToggleCommentsPanel}
-      title="Comments (C)"
-    >
-      <MessageSquare size={20} />
-      {hasAnyComments && <span className="notification-dot" />}
-    </button>
-    <button
-      className={`canvas-tool-btn ${showReportDrawer ? 'active' : ''}`}
-      onClick={onToggleReportDrawer}
-      title="Report (R)"
-    >
-      <GanttChartSquare size={20} />
-    </button>
+
+    <div className="canvas-toolbar-divider" />
 
     <div className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
       <button
@@ -168,6 +144,23 @@ const CanvasToolbar = ({
       )}
     </div>
 
+    <button
+      className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''} ${!canComment ? 'disabled' : ''}`}
+      onClick={onToggleCommentsPanel}
+      title="Comments (C)"
+      disabled={!canComment}
+    >
+      <MessageSquare size={20} />
+      {hasAnyComments && canComment && <span className="notification-dot" />}
+    </button>
+    <button
+      className={`canvas-tool-btn ${showReportDrawer ? 'active' : ''}`}
+      onClick={onToggleReportDrawer}
+      title="Report (R)"
+    >
+      <GanttChartSquare size={20} />
+    </button>
+
     {canEdit && <div className="canvas-toolbar-divider" />}
 
     {canEdit && (
@@ -190,7 +183,6 @@ const CanvasToolbar = ({
         <Redo2 size={20} />
       </button>
     )}
-
     {canEdit && (
       <button
         className={`canvas-tool-btn ${!hasMap ? 'disabled' : ''}`}
@@ -202,7 +194,17 @@ const CanvasToolbar = ({
       </button>
     )}
 
-    <div className="canvas-toolbar-divider" />
+    {canEdit && <div className="canvas-toolbar-divider" />}
+
+    {canEdit && (
+      <button
+        className="canvas-tool-btn"
+        title="Add Page"
+        onClick={onAddPage}
+      >
+        <FilePlus size={20} />
+      </button>
+    )}
 
     {canEdit && !hasSavedMap && (
       <button
@@ -225,6 +227,8 @@ const CanvasToolbar = ({
         <CopyPlus size={20} />
       </button>
     )}
+
+    <div className="canvas-toolbar-divider" />
 
     {canEdit && hasMap && (
       <button

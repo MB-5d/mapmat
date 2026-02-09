@@ -7,7 +7,7 @@
   border-radius: 14px;
   border: 1px solid var(--color-border);
   background: var(--color-bg-primary);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px rgba(var(--shadow-rgb-deep), 0.18);
   overflow: hidden;
   z-index: 55;
   display: flex;
@@ -161,7 +161,7 @@
 [data-theme="dark"] .minimap-navigator {
   border-color: #2d1f3d;
   background: #1a1022;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 28px rgba(var(--shadow-rgb), 0.35);
   --minimap-panel: #0d0812;
   --minimap-gutter: #1a1022;
 }
