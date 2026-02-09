@@ -3,7 +3,7 @@
  * Visual sitemap generator with user accounts, projects, and sharing.
  *
  * Run:
- *   cd +Mattper
+ *   cd mapmat
  *   npm i
  *   node server.js
  */
@@ -64,15 +64,16 @@ const isAllowedVercelPreviewOrigin = (origin) => {
     return false;
   }
 };
+const isCorsOriginAllowed = (origin) => {
+  if (!origin) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (allowedOrigins.includes(normalizedOrigin)) return true;
+  return ALLOW_VERCEL_PREVIEWS && isAllowedVercelPreviewOrigin(normalizedOrigin);
+};
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const normalizedOrigin = normalizeOrigin(origin);
-    if (allowedOrigins.includes(normalizedOrigin)) return callback(null, true);
-    if (ALLOW_VERCEL_PREVIEWS && isAllowedVercelPreviewOrigin(normalizedOrigin)) {
-      return callback(null, true);
-    }
+    if (isCorsOriginAllowed(origin)) return callback(null, true);
     console.warn(`CORS blocked origin: ${origin}`);
     return callback(null, false);
   },
@@ -2439,7 +2440,13 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
-  res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_URL || 'http://localhost:3000');
+  const requestOrigin = req.get('origin');
+  const fallbackOrigin = allowedOrigins[0] || 'http://localhost:3000';
+  res.setHeader(
+    'Access-Control-Allow-Origin',
+    isCorsOriginAllowed(requestOrigin) && requestOrigin ? requestOrigin : fallbackOrigin
+  );
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.flushHeaders();
 

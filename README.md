@@ -36,6 +36,18 @@ npm start
 
 ## Deployment
 
+### Safe Release Workflow
+
+Use separate branches and services to avoid breaking production:
+
+- `main` -> production (public)
+- `staging` -> staging (QA)
+- `feature/*` -> PR into `staging`
+
+Detailed setup steps are in `docs/deployment-workflow.md`.
+
+CI checks for PRs are in `.github/workflows/pr-checks.yml`.
+
 ### Option 1: Railway + Vercel (Recommended)
 
 **Backend → Railway:**
@@ -52,7 +64,7 @@ railway up
 # - FRONTEND_URL = https://your-app.vercel.app
 # - JWT_SECRET = your-secret-key
 # - NODE_ENV = production
-# - DB_PATH = /data/mapmat.db   # if using a Railway volume mounted at /data
+# - DB_PATH = /app/data/mapmat.db   # if using a Railway volume mounted at /app/data
 ```
 
 Railway runtime config in `railway.json` uses:
@@ -83,8 +95,8 @@ Vercel project setting:
 ## SQLite Persistence on Railway
 
 1. Add a Railway Volume to the backend service.
-2. Mount the volume to `/data` (or any mount path you choose).
-3. Set `DB_PATH` to `<mount-path>/mapmat.db` (example: `/data/mapmat.db`).
+2. Mount the volume to `/app/data` (or any mount path you choose).
+3. Set `DB_PATH` to `<mount-path>/mapmat.db` (example: `/app/data/mapmat.db`).
 4. Redeploy and confirm startup logs include the mounted `DB_PATH`.
 
 ## Environment Variables
@@ -97,7 +109,7 @@ Vercel project setting:
 | `ALLOW_VERCEL_PREVIEWS` | Allow `*.vercel.app` preview origins for CORS | false |
 | `JWT_SECRET` | Secret for JWT tokens | (dev default) |
 | `NODE_ENV` | Environment | development |
-| `DB_PATH` | SQLite database file path | `./data/mapmat.db` locally, `/data/mapmat.db` on Railway volume |
+| `DB_PATH` | SQLite database file path | `./data/mapmat.db` locally, `/app/data/mapmat.db` on Railway volume |
 | `TEST_AUTH_ENABLED` | Enables temporary test-account mode | true locally, false in production |
 | `TEST_AUTH_SEED_EMAIL` | Seed account email when test mode is enabled | matt@email.com |
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |

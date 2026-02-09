@@ -6,6 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "start:worker": "RUN_MODE=worker node server.js",
+    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js",
+    "check:frontend-build": "cd frontend && CI=false npm run build",
+    "backup:archive": "bash scripts/backup-repo.sh",
     "test:smoke": "node scripts/smoke-test.js",
     "test:ia": "node scripts/ia-test.js"
   },
