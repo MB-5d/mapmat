@@ -52,10 +52,100 @@ const TEST_AUTH_SEED_EMAIL = (process.env.TEST_AUTH_SEED_EMAIL || 'matt@email.co
 const TEST_AUTH_SEED_PASSWORD = process.env.TEST_AUTH_SEED_PASSWORD || 'Admin123';
 const TEST_AUTH_SEED_NAME = process.env.TEST_AUTH_SEED_NAME || 'Matt Test';
 const AUTH_HEADER_FALLBACK = parseEnvBool(process.env.AUTH_HEADER_FALLBACK, TEST_AUTH_ENABLED);
+const AUTH_RATE_WINDOW_MS = Number(process.env.AUTH_RATE_WINDOW_MS ?? 15 * 60 * 1000);
+const AUTH_LOGIN_RATE_LIMIT = Number(
+  process.env.AUTH_LOGIN_RATE_LIMIT ?? (TEST_AUTH_ENABLED ? 300 : (isProd ? 50 : 150))
+);
+const AUTH_SIGNUP_RATE_LIMIT = Number(
+  process.env.AUTH_SIGNUP_RATE_LIMIT ?? (TEST_AUTH_ENABLED ? 150 : (isProd ? 25 : 100))
+);
+const AUTH_PROFILE_RATE_LIMIT = Number(
+  process.env.AUTH_PROFILE_RATE_LIMIT ?? (isProd ? 50 : 150)
+);
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
+
+const normalizeIp = (ip) => (ip && ip.startsWith('::ffff:') ? ip.slice(7) : ip || '');
+
+const getClientIp = (req) => normalizeIp(req.ip || req.connection?.remoteAddress || 'unknown');
+
+const logSecurityEvent = (event, details = {}, level = 'warn') => {
+  const payload = {
+    ts: new Date().toISOString(),
+    event,
+    ...details,
+  };
+  const line = `[security] ${JSON.stringify(payload)}`;
+  if (level === 'error') {
+    console.error(line);
+    return;
+  }
+  console.warn(line);
+};
+
+function createRateLimiter({ windowMs, max, name }) {
+  const hits = new Map();
+  let lastSweep = Date.now();
+  const safeWindowMs = Number.isFinite(windowMs) && windowMs > 0 ? windowMs : 15 * 60 * 1000;
+  const safeMax = Number.isFinite(max) && max > 0 ? max : 100;
+
+  return (req, res, next) => {
+    const now = Date.now();
+    const ip = getClientIp(req);
+    const key = `${name}:${ip}`;
+    const entry = hits.get(key);
+
+    if (!entry || now - entry.start >= safeWindowMs) {
+      hits.set(key, { start: now, count: 1 });
+      return next();
+    }
+
+    if (entry.count >= safeMax) {
+      const retryAfterSec = Math.max(1, Math.ceil((entry.start + safeWindowMs - now) / 1000));
+      res.set('Retry-After', String(retryAfterSec));
+      logSecurityEvent('auth_rate_limit_blocked', {
+        limiter: name,
+        ip,
+        method: req.method,
+        path: req.originalUrl || req.url,
+        max: safeMax,
+        windowMs: safeWindowMs,
+      });
+      return res.status(429).json({ error: 'Too many attempts. Please try again later.' });
+    }
+
+    entry.count += 1;
+
+    if (now - lastSweep >= safeWindowMs) {
+      lastSweep = now;
+      for (const [bucketKey, bucket] of hits.entries()) {
+        if (now - bucket.start >= safeWindowMs) hits.delete(bucketKey);
+      }
+    }
+
+    return next();
+  };
+}
+
+const signupLimiter = createRateLimiter({
+  windowMs: AUTH_RATE_WINDOW_MS,
+  max: AUTH_SIGNUP_RATE_LIMIT,
+  name: 'auth_signup',
+});
+
+const loginLimiter = createRateLimiter({
+  windowMs: AUTH_RATE_WINDOW_MS,
+  max: AUTH_LOGIN_RATE_LIMIT,
+  name: 'auth_login',
+});
+
+const profileMutationLimiter = createRateLimiter({
+  windowMs: AUTH_RATE_WINDOW_MS,
+  max: AUTH_PROFILE_RATE_LIMIT,
+  name: 'auth_profile_mutation',
+});
 
 // Seed a known test user for iterative QA cycles.
 function seedTestUserIfEnabled() {
@@ -147,7 +237,7 @@ function requireAuth(req, res, next) {
 }
 
 // POST /auth/signup - Create new account
-router.post('/signup', async (req, res) => {
+router.post('/signup', signupLimiter, async (req, res) => {
   try {
     const { email, password, name } = req.body;
     const emailNormalized = normalizeEmail(email);
@@ -198,7 +288,7 @@ router.post('/signup', async (req, res) => {
 });
 
 // POST /auth/login - Login to existing account
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     const emailNormalized = normalizeEmail(email);
@@ -280,7 +370,7 @@ router.get('/me', authMiddleware, (req, res) => {
 });
 
 // PUT /auth/me - Update current user profile
-router.put('/me', authMiddleware, requireAuth, async (req, res) => {
+router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (req, res) => {
   try {
     const { name, currentPassword, newPassword } = req.body;
 
@@ -331,7 +421,7 @@ router.put('/me', authMiddleware, requireAuth, async (req, res) => {
 });
 
 // DELETE /auth/me - Delete account
-router.delete('/me', authMiddleware, requireAuth, async (req, res) => {
+router.delete('/me', authMiddleware, requireAuth, profileMutationLimiter, async (req, res) => {
   try {
     const { password } = req.body;
 
