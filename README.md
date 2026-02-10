@@ -45,6 +45,7 @@ Use separate branches and services to avoid breaking production:
 - `feature/*` -> PR into `staging`
 
 Detailed setup steps are in `docs/deployment-workflow.md`.
+Release checklist and promotion steps are in `docs/release-sop.md`.
 
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.
 
