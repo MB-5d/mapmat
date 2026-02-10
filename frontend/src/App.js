@@ -1555,12 +1555,6 @@ export default function App() {
   const canEdit = () => accessLevel === ACCESS_LEVELS.EDIT;
   const canComment = () => accessLevel === ACCESS_LEVELS.COMMENT || accessLevel === ACCESS_LEVELS.EDIT;
 
-  useEffect(() => {
-    if (!canComment() && showCommentsPanel) {
-      setShowCommentsPanel(false);
-    }
-  }, [accessLevel, showCommentsPanel]);
-
   // Theme toggle functions
   const toggleTheme = () => {
     setTheme(prev => {
@@ -1580,8 +1574,6 @@ export default function App() {
     }
     return theme;
   };
-
-  const showThemeToggle = process.env.REACT_APP_SHOW_THEME_TOGGLE !== 'false';
 
   // Show confirmation modal and return promise
   const showConfirm = ({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
@@ -2801,9 +2793,23 @@ export default function App() {
   };
 
   const renameProject = async (projectId, newName) => {
-    if (!newName?.trim()) return;
+    if (projectId === 'uncategorized') {
+      setEditingProjectId(null);
+      return;
+    }
+    const trimmedName = newName?.trim();
+    if (!trimmedName) {
+      setEditingProjectId(null);
+      showToast('Project name is required', 'error');
+      return;
+    }
+    const current = projects.find(p => p.id === projectId);
+    if (current && current.name === trimmedName) {
+      setEditingProjectId(null);
+      return;
+    }
     try {
-      const { project } = await api.updateProject(projectId, newName.trim());
+      const { project } = await api.updateProject(projectId, trimmedName);
       setProjects(prev => prev.map(p =>
         p.id === projectId ? { ...p, name: project.name } : p
       ));
@@ -2815,6 +2821,10 @@ export default function App() {
   };
 
   const deleteProject = async (projectId) => {
+    if (projectId === 'uncategorized') {
+      showToast('Cannot delete Uncategorized', 'warning');
+      return;
+    }
     const confirmed = await showConfirm({
       title: 'Delete Project',
       message: 'Delete this project and all its maps?',
@@ -2828,6 +2838,45 @@ export default function App() {
       showToast('Project deleted', 'success');
     } catch (e) {
       showToast(e.message || 'Failed to delete project', 'error');
+    }
+  };
+
+  const moveMapToProject = async (mapId, targetProjectId) => {
+    if (!mapId) return;
+    const currentProjectId = projects.find(p => (p.maps || []).some(m => m.id === mapId))?.id || null;
+    if ((currentProjectId || null) === (targetProjectId || null)) {
+      return;
+    }
+    try {
+      const { map } = await api.updateMap(mapId, { project_id: targetProjectId || null });
+      setProjects(prev => {
+        let updated = prev.map(p => ({
+          ...p,
+          maps: (p.maps || []).filter(m => m.id !== map.id),
+        }));
+        if (map.project_id) {
+          updated = updated.map(p =>
+            p.id === map.project_id
+              ? { ...p, maps: [map, ...(p.maps || [])] }
+              : p
+          );
+        } else {
+          const uncategorized = updated.find(p => p.id === 'uncategorized' || p.name === 'Uncategorized');
+          if (uncategorized) {
+            uncategorized.maps = [map, ...(uncategorized.maps || [])];
+          } else {
+            updated.push({ id: 'uncategorized', name: 'Uncategorized', maps: [map] });
+          }
+        }
+        return updated;
+      });
+      if (currentMap?.id === map.id) {
+        setCurrentMap(map);
+        setMapName(map.name || '');
+      }
+      showToast('Map moved', 'success');
+    } catch (e) {
+      showToast(e.message || 'Failed to move map', 'error');
     }
   };
 
@@ -2886,7 +2935,7 @@ export default function App() {
     setShowSaveMapModal(true);
   };
 
-  const handleDuplicateMapSave = async (projectId, name) => {
+  const handleDuplicateMapSave = async (projectId, name, notes) => {
     const snapshot = getVersionSnapshot();
     if (!snapshot?.root) return;
     try {
@@ -2898,6 +2947,7 @@ export default function App() {
         connections: snapshot.connections,
         colors: snapshot.colors,
         connectionColors: snapshot.connectionColors,
+        notes: notes?.trim() || null,
         project_id: projectId || null,
       });
       setProjects(prev => {
@@ -3053,7 +3103,7 @@ export default function App() {
   };
 
   // Map functions
-  const saveMap = async (projectId, mapName) => {
+  const saveMap = async (projectId, mapName, notes) => {
     if (!root) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
     const wasNewMap = !currentMap?.id;
@@ -3069,6 +3119,7 @@ export default function App() {
           connections,
           colors,
           connectionColors,
+          notes: notes?.trim() || null,
           project_id: projectId || null,
         });
         savedMap = map;
@@ -3082,6 +3133,7 @@ export default function App() {
           connections,
           colors,
           connectionColors,
+          notes: notes?.trim() || null,
           project_id: projectId || null,
         });
         savedMap = map;
@@ -3160,11 +3212,11 @@ export default function App() {
     }
   };
 
-  const startBlankMapCreation = (projectId, mapName) => {
+  const startBlankMapCreation = (projectId, mapName, notes) => {
     if (!mapName?.trim()) return;
     const trimmedName = mapName.trim();
     setCreateMapMode(false);
-    setPendingMapCreation({ name: trimmedName, projectId: projectId || null });
+    setPendingMapCreation({ name: trimmedName, projectId: projectId || null, notes: notes?.trim() || '' });
     setMapName(trimmedName);
     setRoot(null);
     setOrphans([]);
@@ -3172,7 +3224,7 @@ export default function App() {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setIsImportedMap(false);
-    setCurrentMap({ name: trimmedName, project_id: projectId || null });
+    setCurrentMap({ name: trimmedName, project_id: projectId || null, notes: notes?.trim() || '' });
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
     setThumbnailScopeIds(null);
@@ -3639,8 +3691,6 @@ export default function App() {
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isInsideNodeMenu = e.target.closest('.node-menu');
     const isOnConnection = e.target.closest('.connections-layer');
-    const clickedNodeId = nodeContainer?.getAttribute('data-node-id') || null;
-    const clickedSelected = clickedNodeId ? selectedNodeIds.has(clickedNodeId) : false;
 
     // Close connection menu when clicking outside of it
     if (connectionMenu && !isInsideConnectionMenu) {
@@ -3658,18 +3708,6 @@ export default function App() {
     }
 
     const shiftActive = e.shiftKey || isShiftPressed;
-    if (
-      !shiftActive
-      && selectedNodeIds.size > 0
-      && !clickedSelected
-      && !isUIControl
-      && !isInsidePopover
-      && !isInsideConnectionMenu
-      && !isInsideNodeMenu
-      && !isOnConnection
-    ) {
-      setSelectedNodeIds(new Set());
-    }
     if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
     if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu)) return;
 
@@ -3998,7 +4036,6 @@ export default function App() {
   };
 
   const handleUndo = () => {
-    if (!canEdit()) return;
     console.log('UNDO CLICKED, stack:', undoStack.length);
     if (undoStack.length === 0) {
       console.log('Nothing to undo');
@@ -4035,7 +4072,6 @@ export default function App() {
   };
 
   const handleRedo = () => {
-    if (!canEdit()) return;
     console.log('REDO CLICKED, stack:', redoStack.length);
     if (redoStack.length === 0) {
       console.log('Nothing to redo');
@@ -4081,7 +4117,6 @@ export default function App() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
       if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-        if (!canEdit()) return;
         e.preventDefault();
         if (e.shiftKey) {
           handleRedo();
@@ -4090,7 +4125,6 @@ export default function App() {
         }
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
-        if (!canEdit()) return;
         e.preventDefault();
         handleRedo();
       }
@@ -4116,7 +4150,6 @@ export default function App() {
 
       // Toggle comments panel with "C"
       if (e.key === 'c' || e.key === 'C') {
-        if (!canComment()) return;
         setShowCommentsPanel(prev => {
           const next = !prev;
           if (next) {
@@ -4144,7 +4177,6 @@ export default function App() {
         });
       }
       if (e.key === 'h' || e.key === 'H') {
-        if (!canEdit()) return;
         setShowVersionHistoryDrawer(prev => {
           const next = !prev;
           if (next) {
@@ -4217,7 +4249,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [accessLevel, undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -4592,7 +4624,7 @@ export default function App() {
   <meta charset="utf-8">
   <title>Site Index - ${hostname}</title>
   <style>
-    body { font-family: 'Nata Sans', sans-serif; margin: 40px; color: #333; }
+    body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
     h1 { color: #6366f1; margin-bottom: 5px; }
     .subtitle { color: #64748b; margin-bottom: 30px; }
     .meta { color: #94a3b8; font-size: 12px; margin-bottom: 20px; }
@@ -5047,7 +5079,6 @@ export default function App() {
   // Open comment popover positioned next to a node
   const openCommentPopover = (nodeOrId) => {
     if (!canvasRef.current) return;
-    if (!canComment()) return;
     const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
     if (!nodeId) return;
     if (typeof nodeOrId === 'object') {
@@ -6179,6 +6210,7 @@ export default function App() {
         const newRoot = { ...newNodeData, id: 'root' };
         const mapNameToUse = pendingMapCreation?.name || currentMap?.name || mapName || 'Untitled Map';
         const projectIdToUse = pendingMapCreation?.projectId || currentMap?.project_id || null;
+        const mapNotesToUse = pendingMapCreation?.notes || currentMap?.notes || '';
 
         const mapToSave = {
           name: mapNameToUse,
@@ -6186,6 +6218,7 @@ export default function App() {
           root: newRoot,
           orphans: [],
           colors: DEFAULT_COLORS,
+          notes: mapNotesToUse,
           project_id: projectIdToUse,
         };
 
@@ -7037,19 +7070,17 @@ export default function App() {
         )}
 
         {/* Theme toggle */}
-        {showThemeToggle && (
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            title={`Switch to ${getCurrentTheme() === 'dark' ? 'light' : 'dark'} mode`}
-          >
-            <div className={`theme-toggle-track ${getCurrentTheme()}`}>
-              <Sun size={14} className="theme-icon sun" />
-              <Moon size={14} className="theme-icon moon" />
-              <div className="theme-toggle-thumb" />
-            </div>
-          </button>
-        )}
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          title={`Switch to ${getCurrentTheme() === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          <div className={`theme-toggle-track ${getCurrentTheme()}`}>
+            <Sun size={14} className="theme-icon sun" />
+            <Moon size={14} className="theme-icon moon" />
+            <div className="theme-toggle-thumb" />
+          </div>
+        </button>
 
         {!hasMap && (
           <div className="blank">
@@ -7110,7 +7141,7 @@ export default function App() {
                   orphans={visibleOrphans}
                   layout={mapLayout}
                   showThumbnails={showThumbnails}
-                  showCommentBadges={canComment() && (activeTool === 'comments' || showCommentsPanel)}
+                  showCommentBadges={activeTool === 'comments' || showCommentsPanel}
                   canEdit={canEdit()}
                   canComment={canComment()}
                   connectionTool={connectionTool}
@@ -7757,7 +7788,6 @@ export default function App() {
                 colors,
                 connectionColors,
                 maxDepth,
-                canEdit: canEdit(),
                 editingDepth: editingColorDepth,
                 editingConnectionKey,
                 connectionLegend,
@@ -7776,7 +7806,6 @@ export default function App() {
               }}
               toolbarProps={{
                 canEdit: canEdit(),
-                canComment: canComment(),
                 activeTool,
                 connectionTool,
                 onSelectTool: () => {
@@ -7797,7 +7826,6 @@ export default function App() {
                 },
                 showCommentsPanel,
                 onToggleCommentsPanel: () => {
-                  if (!canComment()) return;
                   setShowCommentsPanel((prev) => {
                     const next = !prev;
                     if (next) {
@@ -7967,7 +7995,7 @@ export default function App() {
       </div>
 
       {/* Comments Panel - Right Rail */}
-      {showCommentsPanel && canComment() && (
+      {showCommentsPanel && (
         <CommentsPanel
           root={root}
           orphans={orphans}
@@ -8051,6 +8079,7 @@ export default function App() {
         rootUrl={root?.url}
         defaultProjectId={duplicateMapConfig?.projectId || null}
         defaultName={duplicateMapConfig?.name || ''}
+        defaultNotes={currentMap?.notes || ''}
         accessLevels={ACCESS_LEVELS}
         sharePermission={sharePermission}
         onChangePermission={setSharePermission}
@@ -8088,6 +8117,7 @@ export default function App() {
         onDeleteProject={deleteProject}
         onLoadMap={handleLoadMapRequest}
         onDeleteMap={deleteMap}
+        onMoveMap={moveMapToProject}
         onAddProject={async () => {
           const name = await showPrompt({
             title: 'New Project',

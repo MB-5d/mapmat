@@ -11,6 +11,13 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+let helmet = null;
+try {
+  helmet = require('helmet');
+} catch {
+  // Optional at runtime until dependencies are refreshed.
+  helmet = null;
+}
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { chromium } = require('playwright');
@@ -35,6 +42,7 @@ const RUN_WORKER = RUN_MODE === 'both' || RUN_MODE === 'worker';
 if (process.env.TRUST_PROXY === 'true' || isProd) {
   app.set('trust proxy', 1);
 }
+app.disable('x-powered-by');
 
 // CORS configuration - allow credentials for cookies
 const parseEnvBool = (value, fallback = false) => {
@@ -71,10 +79,23 @@ const isCorsOriginAllowed = (origin) => {
   return ALLOW_VERCEL_PREVIEWS && isAllowedVercelPreviewOrigin(normalizedOrigin);
 };
 
+if (helmet) {
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
+} else {
+  console.warn('[security] {"event":"helmet_unavailable","message":"Install dependencies to enable Helmet"}');
+}
+
 app.use(cors({
   origin: (origin, callback) => {
     if (isCorsOriginAllowed(origin)) return callback(null, true);
-    console.warn(`CORS blocked origin: ${origin}`);
+    logSecurityEvent('cors_blocked_origin', {
+      origin: origin || null,
+      allowVercelPreviews: ALLOW_VERCEL_PREVIEWS,
+    });
     return callback(null, false);
   },
   credentials: true,
@@ -230,7 +251,67 @@ const getClientIp = (req) => {
   return normalizeIp(ip);
 };
 
-const createRateLimiter = ({ windowMs, max }) => {
+const logSecurityEvent = (event, details = {}, level = 'warn') => {
+  const payload = {
+    ts: new Date().toISOString(),
+    event,
+    ...details,
+  };
+  const line = `[security] ${JSON.stringify(payload)}`;
+  if (level === 'error') {
+    console.error(line);
+    return;
+  }
+  console.warn(line);
+};
+
+const SECURITY_SPIKE_WINDOW_MS = Number(process.env.SECURITY_SPIKE_WINDOW_MS ?? 60000);
+const SECURITY_401_SPIKE_THRESHOLD = Number(process.env.SECURITY_401_SPIKE_THRESHOLD ?? (isProd ? 25 : 200));
+const SECURITY_429_SPIKE_THRESHOLD = Number(process.env.SECURITY_429_SPIKE_THRESHOLD ?? (isProd ? 20 : 200));
+const securitySpikeCounters = new Map();
+
+const monitorStatusSpike = (req, statusCode) => {
+  if (statusCode !== 401 && statusCode !== 429) return;
+  const threshold = statusCode === 401 ? SECURITY_401_SPIKE_THRESHOLD : SECURITY_429_SPIKE_THRESHOLD;
+  if (!Number.isFinite(threshold) || threshold <= 0) return;
+
+  const now = Date.now();
+  const windowBucket = Math.floor(now / SECURITY_SPIKE_WINDOW_MS);
+  const key = `${statusCode}:${windowBucket}`;
+  const nextCount = (securitySpikeCounters.get(key) || 0) + 1;
+  securitySpikeCounters.set(key, nextCount);
+
+  if (nextCount === threshold || nextCount % threshold === 0) {
+    logSecurityEvent('status_spike', {
+      statusCode,
+      count: nextCount,
+      windowMs: SECURITY_SPIKE_WINDOW_MS,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      ip: getClientIp(req) || 'unknown',
+    });
+  }
+
+  // Remove old buckets
+  if (securitySpikeCounters.size > 64) {
+    const minActiveBucket = windowBucket - 2;
+    for (const bucketKey of securitySpikeCounters.keys()) {
+      const [, bucket] = bucketKey.split(':');
+      if (Number(bucket) < minActiveBucket) {
+        securitySpikeCounters.delete(bucketKey);
+      }
+    }
+  }
+};
+
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    monitorStatusSpike(req, res.statusCode);
+  });
+  next();
+});
+
+const createRateLimiter = ({ windowMs, max, name = 'default' }) => {
   const hits = new Map();
   let lastSweep = Date.now();
 
@@ -242,6 +323,14 @@ const createRateLimiter = ({ windowMs, max }) => {
     if (!entry || now - entry.start >= windowMs) {
       hits.set(ip, { start: now, count: 1 });
     } else if (entry.count >= max) {
+      logSecurityEvent('rate_limit_blocked', {
+        limiter: name,
+        ip,
+        method: req.method,
+        path: req.originalUrl || req.url,
+        windowMs,
+        max,
+      });
       return res.status(429).json({ error: 'Rate limit exceeded' });
     } else {
       entry.count += 1;
@@ -354,8 +443,12 @@ const enforceUsageLimit = (eventType) => (req, res, next) => {
   return next();
 };
 
-const scanLimiter = createRateLimiter({ windowMs: SCAN_RATE_WINDOW_MS, max: SCAN_RATE_LIMIT });
-const screenshotLimiter = createRateLimiter({ windowMs: SCREENSHOT_RATE_WINDOW_MS, max: SCREENSHOT_RATE_LIMIT });
+const scanLimiter = createRateLimiter({ windowMs: SCAN_RATE_WINDOW_MS, max: SCAN_RATE_LIMIT, name: 'scan' });
+const screenshotLimiter = createRateLimiter({
+  windowMs: SCREENSHOT_RATE_WINDOW_MS,
+  max: SCREENSHOT_RATE_LIMIT,
+  name: 'screenshot',
+});
 
 const processScreenshotQueue = () => {
   while (screenshotActive < SCREENSHOT_MAX_CONCURRENCY && screenshotQueue.length) {

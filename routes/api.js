@@ -286,7 +286,7 @@ router.get('/maps/:id', requireAuth, (req, res) => {
 // POST /api/maps - Save a new map
 router.post('/maps', requireAuth, (req, res) => {
   try {
-    const { name, url, root, orphans, connections, colors, connectionColors, project_id } = req.body;
+    const { name, url, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({ error: 'Map name is required' });
@@ -307,13 +307,14 @@ router.post('/maps', requireAuth, (req, res) => {
     const mapId = uuidv4();
 
     db.prepare(`
-      INSERT INTO maps (id, user_id, project_id, name, url, root_data, orphans_data, connections_data, colors, connection_colors)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO maps (id, user_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       mapId,
       req.user.id,
       project_id || null,
       name.trim(),
+      notes ? notes.trim() : null,
       url || root.url || '',
       JSON.stringify(root),
       orphans ? JSON.stringify(orphans) : null,
@@ -340,7 +341,7 @@ router.post('/maps', requireAuth, (req, res) => {
 router.put('/maps/:id', requireAuth, (req, res) => {
   try {
     const { id } = req.params;
-    const { name, root, orphans, connections, colors, connectionColors, project_id } = req.body;
+    const { name, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
 
     // Verify ownership
     const map = db.prepare('SELECT * FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
@@ -355,6 +356,10 @@ router.put('/maps/:id', requireAuth, (req, res) => {
     if (name !== undefined) {
       updates.push('name = ?');
       params.push(name.trim());
+    }
+    if (notes !== undefined) {
+      updates.push('notes = ?');
+      params.push(notes ? notes.trim() : null);
     }
     if (root !== undefined) {
       updates.push('root_data = ?');

@@ -7,6 +7,7 @@ const SaveMapForm = ({
   rootUrl,
   defaultProjectId,
   defaultName,
+  defaultNotes,
   accessLevels,
   sharePermission,
   onChangePermission,
@@ -35,10 +36,11 @@ const SaveMapForm = ({
   const [selectedProject, setSelectedProject] = useState(defaultProjectId || '');
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
+  const [notes, setNotes] = useState(defaultNotes || currentMap?.notes || '');
 
   const handleSave = () => {
     if (!mapName.trim()) return;
-    onSave(selectedProject || null, mapName);
+    onSave(selectedProject || null, mapName, notes);
   };
 
   const handleCreateProject = () => {
@@ -72,52 +74,6 @@ const SaveMapForm = ({
           ))}
         </select>
       </div>
-      {accessLevels && sharePermission && onChangePermission ? (
-        <div className="save-map-share">
-          <div className="share-section-title">Sharing permissions</div>
-          <div className="share-permission-options">
-            <label className={`share-permission-option ${sharePermission === accessLevels.VIEW ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="saveMapSharePermission"
-                checked={sharePermission === accessLevels.VIEW}
-                onChange={() => onChangePermission(accessLevels.VIEW)}
-              />
-              <Eye size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">View only</span>
-                <span className="share-permission-desc">Can view the sitemap</span>
-              </div>
-            </label>
-            <label className={`share-permission-option ${sharePermission === accessLevels.COMMENT ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="saveMapSharePermission"
-                checked={sharePermission === accessLevels.COMMENT}
-                onChange={() => onChangePermission(accessLevels.COMMENT)}
-              />
-              <MessageSquare size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">Can comment</span>
-                <span className="share-permission-desc">View and add comments</span>
-              </div>
-            </label>
-            <label className={`share-permission-option ${sharePermission === accessLevels.EDIT ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="saveMapSharePermission"
-                checked={sharePermission === accessLevels.EDIT}
-                onChange={() => onChangePermission(accessLevels.EDIT)}
-              />
-              <Edit2 size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">Can edit</span>
-                <span className="share-permission-desc">Full editing access</span>
-              </div>
-            </label>
-          </div>
-        </div>
-      ) : null}
       {!showNewProject ? (
         <button className="new-project-link" onClick={() => setShowNewProject(true)}>
           <FolderPlus size={14} />
@@ -137,6 +93,61 @@ const SaveMapForm = ({
           />
           <button onClick={handleCreateProject}>Create</button>
           <button className="cancel" onClick={() => setShowNewProject(false)}>Cancel</button>
+        </div>
+      )}
+      <div className="form-group">
+        <label>Notes (optional)</label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Add notes about this map..."
+          rows={3}
+        />
+      </div>
+      {accessLevels && (
+        <div className="share-section save-map-share">
+          <div className="share-section-title">Sharing permissions</div>
+          <div className="share-permission-options">
+            <label className={`share-permission-option ${sharePermission === accessLevels.VIEW ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="sharePermission"
+                checked={sharePermission === accessLevels.VIEW}
+                onChange={() => onChangePermission(accessLevels.VIEW)}
+              />
+              <Eye size={16} />
+              <div className="share-permission-text">
+                <span className="share-permission-label">View only</span>
+                <span className="share-permission-desc">Can view the sitemap</span>
+              </div>
+            </label>
+            <label className={`share-permission-option ${sharePermission === accessLevels.COMMENT ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="sharePermission"
+                checked={sharePermission === accessLevels.COMMENT}
+                onChange={() => onChangePermission(accessLevels.COMMENT)}
+              />
+              <MessageSquare size={16} />
+              <div className="share-permission-text">
+                <span className="share-permission-label">Can comment</span>
+                <span className="share-permission-desc">View and add comments</span>
+              </div>
+            </label>
+            <label className={`share-permission-option ${sharePermission === accessLevels.EDIT ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="sharePermission"
+                checked={sharePermission === accessLevels.EDIT}
+                onChange={() => onChangePermission(accessLevels.EDIT)}
+              />
+              <Edit2 size={16} />
+              <div className="share-permission-text">
+                <span className="share-permission-label">Can edit</span>
+                <span className="share-permission-desc">Full editing access</span>
+              </div>
+            </label>
+          </div>
         </div>
       )}
       <div className="modal-footer">
@@ -161,6 +172,7 @@ const SaveMapModal = ({
   rootUrl,
   defaultProjectId,
   defaultName,
+  defaultNotes,
   accessLevels,
   sharePermission,
   onChangePermission,
@@ -199,6 +211,7 @@ const SaveMapModal = ({
               rootUrl={rootUrl}
               defaultProjectId={defaultProjectId}
               defaultName={defaultName}
+              defaultNotes={defaultNotes}
               accessLevels={accessLevels}
               sharePermission={sharePermission}
               onChangePermission={onChangePermission}
