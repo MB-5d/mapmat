@@ -9,6 +9,7 @@
     "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "backup:archive": "bash scripts/backup-repo.sh",
+    "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.js",
     "test:smoke": "node scripts/smoke-test.js",
     "test:ia": "node scripts/ia-test.js"
   },
@@ -25,6 +26,7 @@
     "express": "^4.18.2",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
+    "pg": "^8.13.1",
     "playwright": "^1.57.0",
     "uuid": "^9.0.0"
   }

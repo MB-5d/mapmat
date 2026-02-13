@@ -46,6 +46,7 @@ Use separate branches and services to avoid breaking production:
 
 Detailed setup steps are in `docs/deployment-workflow.md`.
 Release checklist and promotion steps are in `docs/release-sop.md`.
+Postgres migration starter guide is in `docs/postgres-migration.md`.
 
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.
 
@@ -116,6 +117,7 @@ Vercel project setting:
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |
 | `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Matt Test |
 | `AUTH_HEADER_FALLBACK` | Allows bearer token auth header fallback when cross-site cookies fail | same default as `TEST_AUTH_ENABLED` |
+| `DATABASE_URL` | Postgres connection string (used by migration tooling in Phase 4) | (unset) |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
 | `USAGE_LIMIT_SCAN` | Daily/rolling scan limit | 100 (prod) |
