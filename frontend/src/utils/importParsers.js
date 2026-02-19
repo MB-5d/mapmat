@@ -88,21 +88,20 @@ export const parseHtml = (text, baseUrl = '') => {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'text/html');
   const urls = [];
+  const fallbackBase = 'https://example.invalid';
 
   doc.querySelectorAll('a[href]').forEach(a => {
-    let href = a.getAttribute('href');
-    if (href && !href.startsWith('#') && !href.startsWith('javascript:') && !href.startsWith('mailto:')) {
-      try {
-        // Try to resolve relative URLs
-        if (baseUrl && !href.startsWith('http')) {
-          href = new URL(href, baseUrl).href;
-        }
-        if (href.startsWith('http')) {
-          urls.push(href);
-        }
-      } catch {
-        // Skip invalid URLs
+    const href = a.getAttribute('href')?.trim();
+    if (!href || href.startsWith('#')) return;
+
+    try {
+      // Resolve relative URLs, then only keep http(s) links.
+      const parsed = new URL(href, baseUrl || fallbackBase);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        urls.push(parsed.href);
       }
+    } catch {
+      // Skip invalid URLs
     }
   });
 
