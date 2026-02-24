@@ -26,6 +26,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const dns = require('dns').promises;
 const net = require('net');
+const { probePostgres } = require('./utils/postgresProbe');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -118,6 +119,7 @@ app.use('/auth', authRouter);
 app.use('/api', apiRouter);
 
 const PORT = process.env.PORT || 4002;
+const DB_PROVIDER = (process.env.DB_PROVIDER || 'sqlite').trim().toLowerCase();
 
 // Browser instance for screenshots
 let browser = null;
@@ -2473,7 +2475,32 @@ if (RUN_WORKER) {
 }
 
 app.get('/', (_, res) => res.status(200).send('Loxo backend OK'));
+const PG_HEALTH_CACHE_MS = Number(process.env.PG_HEALTH_CACHE_MS || 30000);
+let pgHealthCache = {
+  ts: 0,
+  value: null,
+};
+
+const getCachedPostgresHealth = async () => {
+  const now = Date.now();
+  if (pgHealthCache.value && now - pgHealthCache.ts < PG_HEALTH_CACHE_MS) {
+    return pgHealthCache.value;
+  }
+  const value = await probePostgres(process.env.DATABASE_URL);
+  pgHealthCache = { ts: now, value };
+  return value;
+};
+
 app.get('/health', (_, res) => res.status(200).json({ ok: true }));
+
+app.get('/health/db', async (_, res) => {
+  const pg = await getCachedPostgresHealth();
+  return res.status(200).json({
+    ok: true,
+    runtime: DB_PROVIDER,
+    postgres: pg,
+  });
+});
 
 app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
   const { url, maxPages, maxDepth, options } = req.body || {};

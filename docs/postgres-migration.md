@@ -56,13 +56,22 @@ DATABASE_URL="postgres://..." MIGRATION_TRUNCATE=true npm run migrate:postgres
 
 After migration:
 
-1. Check script output table counts.
-2. In Postgres, run spot checks:
+1. Run parity checker:
+
+```bash
+DATABASE_URL="postgres://..." npm run verify:postgres
+```
+
+2. Confirm output shows:
+- matching `sqlite` and `postgres` counts
+- `countMatch: true`
+- `sampleMatch: true`
+
+3. Optional manual spot checks:
 - `SELECT COUNT(*) FROM users;`
 - `SELECT COUNT(*) FROM maps;`
 - `SELECT COUNT(*) FROM map_versions;`
 - `SELECT COUNT(*) FROM jobs;`
-3. Confirm recent records exist:
 - `SELECT id, created_at FROM maps ORDER BY created_at DESC LIMIT 5;`
 
 ## 5) Do not switch app runtime yet
@@ -75,10 +84,28 @@ Next step (Phase 4b) will introduce runtime DB abstraction and controlled cutove
 2. staging runtime switch
 3. production cutover
 
+## 7) Phase 4b Readiness Checks
+
+Before runtime cutover, verify Postgres target health:
+
+```bash
+DATABASE_URL="postgres://..." npm run check:postgres
+```
+
+Expected:
+
+- `configured: true`
+- `reachable: true`
+- `missingTableCount: 0`
+
+Runtime health visibility endpoint:
+
+- `GET /health/db`
+- Returns runtime provider (`sqlite` by default) and cached Postgres probe status.
+
 ## 6) Rollback safety
 
 If migration fails:
 
 - Script rolls back Postgres transaction automatically.
 - SQLite source is read-only and unchanged.
-
