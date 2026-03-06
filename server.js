@@ -119,7 +119,13 @@ app.use('/auth', authRouter);
 app.use('/api', apiRouter);
 
 const PORT = process.env.PORT || 4002;
-const DB_PROVIDER = (process.env.DB_PROVIDER || 'sqlite').trim().toLowerCase();
+const DB_RUNTIME = db.runtime || {
+  requestedProvider: (process.env.DB_PROVIDER || 'sqlite').trim().toLowerCase(),
+  activeProvider: 'sqlite',
+  supportedProviders: ['sqlite'],
+  fallback: false,
+};
+const DB_PROVIDER = DB_RUNTIME.activeProvider;
 
 // Browser instance for screenshots
 let browser = null;
@@ -2498,6 +2504,9 @@ app.get('/health/db', async (_, res) => {
   return res.status(200).json({
     ok: true,
     runtime: DB_PROVIDER,
+    runtimeRequested: DB_RUNTIME.requestedProvider,
+    runtimeFallback: DB_RUNTIME.fallback,
+    supportedRuntimes: DB_RUNTIME.supportedProviders,
     postgres: pg,
   });
 });

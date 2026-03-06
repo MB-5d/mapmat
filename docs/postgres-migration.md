@@ -78,13 +78,13 @@ DATABASE_URL="postgres://..." npm run verify:postgres
 
 Current app runtime remains SQLite.
 
-Next step (Phase 4b) will introduce runtime DB abstraction and controlled cutover:
+Next steps:
 
 1. read-only validation against Postgres
 2. staging runtime switch
 3. production cutover
 
-## 7) Phase 4b Readiness Checks
+## 6) Phase 4b Readiness Checks
 
 Before runtime cutover, verify Postgres target health:
 
@@ -103,7 +103,34 @@ Runtime health visibility endpoint:
 - `GET /health/db`
 - Returns runtime provider (`sqlite` by default) and cached Postgres probe status.
 
-## 6) Rollback safety
+## 7) Phase 4c Preflight (Staging)
+
+Before cutover work, run endpoint checks from your local machine:
+
+```bash
+HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" npm run check:db-health
+```
+
+Expected staging output:
+
+- `ok: true`
+- `postgres.configured: true`
+- `postgres.reachable: true`
+- `postgres.missingTables: []`
+
+Runtime fields now include:
+
+- `runtime` (active runtime provider)
+- `runtimeRequested` (what env asked for via `DB_PROVIDER`)
+- `runtimeFallback` (whether runtime had to fall back)
+- `supportedRuntimes` (currently `["sqlite"]`)
+
+Important:
+
+- Current runtime remains SQLite by design.
+- Setting `DB_PROVIDER=postgres` today is not a completed cutover; use this phase to validate readiness only.
+
+## 8) Rollback safety
 
 If migration fails:
 
