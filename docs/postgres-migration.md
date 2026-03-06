@@ -118,6 +118,19 @@ Expected staging output:
 - `postgres.reachable: true`
 - `postgres.missingTables: []`
 
+Run parity validation against staging endpoint:
+
+```bash
+PARITY_URL="https://mapmat-staging.up.railway.app/health/db/parity" npm run check:db-parity
+```
+
+Expected:
+
+- `configured: true`
+- `reachable: true`
+- `allMatch: true`
+- `mismatchCount: 0`
+
 Runtime fields now include:
 
 - `runtime` (active runtime provider)

@@ -9,6 +9,7 @@
     "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:db-health": "node scripts/check-db-health.js",
+    "check:db-parity": "node scripts/check-db-parity.js",
     "check:postgres": "node scripts/check-postgres-connection.js",
     "backup:archive": "bash scripts/backup-repo.sh",
     "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.js",
