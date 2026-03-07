@@ -74,7 +74,6 @@ import {
   comparePageNumbers,
 } from './utils/reportUtils';
 import {
-  generateId,
   parseXmlSitemap,
   parseRssAtom,
   parseHtml,
@@ -309,24 +308,6 @@ const SitemapTree = ({
 
     </div>
   );
-};
-
-// Helper to collect all nodes from tree with page numbers and depth
-const collectAllNodes = (node, result = [], pageNumber = '1', depth = 0) => {
-  if (!node) return result;
-  result.push({
-    id: node.id,
-    title: node.title,
-    url: node.url,
-    pageNumber,
-    depth
-  });
-  if (node.children) {
-    node.children.forEach((child, idx) => {
-      collectAllNodes(child, result, `${pageNumber}.${idx + 1}`, depth + 1);
-    });
-  }
-  return result;
 };
 
 const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
@@ -885,8 +866,8 @@ export default function App() {
   const MAX_THUMBNAIL_CONCURRENCY = 4;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
   const [thumbnailSessionId, setThumbnailSessionId] = useState(0);
-  const [thumbnailQueueSize, setThumbnailQueueSize] = useState(0);
-  const [thumbnailActiveCount, setThumbnailActiveCount] = useState(0);
+  const [, setThumbnailQueueSize] = useState(0);
+  const [, setThumbnailActiveCount] = useState(0);
   const [thumbnailReloadMap, setThumbnailReloadMap] = useState({});
   const [thumbnailElapsedMs, setThumbnailElapsedMs] = useState(0);
   const [thumbnailStats, setThumbnailStats] = useState({
@@ -1576,7 +1557,7 @@ export default function App() {
   };
 
   // Show confirmation modal and return promise
-  const showConfirm = ({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
+  const showConfirm = useCallback(({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
     return new Promise((resolve) => {
       setConfirmModal({
         title,
@@ -1588,9 +1569,9 @@ export default function App() {
         onCancel: () => { setConfirmModal(null); resolve(false); },
       });
     });
-  };
+  }, []);
 
-  const resetScanLayers = () => {
+  const resetScanLayers = useCallback(() => {
     setScanMeta({ brokenLinks: [] });
     setScanLayerAvailability({
       placementPrimary: false,
@@ -1616,7 +1597,7 @@ export default function App() {
       statusAuth: true,
       statusDuplicate: true,
     });
-  };
+  }, []);
 
   const clearCanvas = async () => {
     if (hasMap && !currentMap?.id) {
@@ -1899,7 +1880,6 @@ export default function App() {
   }, [layerVisibility, root, orphans, mapLayout, applyTransform]);
 
   // Check auth and load data on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     const initAuth = async () => {
       try {
@@ -2012,6 +1992,8 @@ export default function App() {
           }
         });
     }
+    // Intentionally run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // (gesture handlers removed; zoom handled via wheel listener on canvas)

@@ -4,7 +4,11 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
+const projectStore = require('../stores/projectStore');
+const mapStore = require('../stores/mapStore');
+const historyStore = require('../stores/historyStore');
+const shareStore = require('../stores/shareStore');
+const usageStore = require('../stores/usageStore');
 const { authMiddleware, requireAuth } = require('./auth');
 
 const router = express.Router();
@@ -81,22 +85,8 @@ router.get('/admin/usage', requireAdminKey, (req, res) => {
     const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30;
     const since = `-${days} days`;
 
-    const byDay = db.prepare(`
-      SELECT date(created_at) as day, event_type as eventType,
-             COUNT(*) as events, SUM(quantity) as quantity
-      FROM usage_events
-      WHERE created_at >= datetime('now', ?)
-      GROUP BY day, eventType
-      ORDER BY day DESC
-    `).all(since);
-
-    const totals = db.prepare(`
-      SELECT event_type as eventType, COUNT(*) as events, SUM(quantity) as quantity
-      FROM usage_events
-      WHERE created_at >= datetime('now', ?)
-      GROUP BY eventType
-      ORDER BY events DESC
-    `).all(since);
+    const byDay = usageStore.getUsageByDaySince(since);
+    const totals = usageStore.getUsageTotalsSince(since);
 
     res.json({ days, totals, byDay });
   } catch (error) {
@@ -113,15 +103,8 @@ router.get('/admin/usage', requireAdminKey, (req, res) => {
 router.get('/projects', requireAuth, (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query);
-    const projects = db.prepare(`
-      SELECT p.*,
-        (SELECT COUNT(*) FROM maps WHERE project_id = p.id) as map_count
-      FROM projects p
-      WHERE p.user_id = ?
-      ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
-    `).all(req.user.id, limit, offset);
-    const total = db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ?').get(req.user.id)?.count || 0;
+    const projects = projectStore.listProjectsByUser(req.user.id, { limit, offset });
+    const total = projectStore.countProjectsByUser(req.user.id);
 
     res.json({ projects, pagination: { limit, offset, total } });
   } catch (error) {
@@ -141,12 +124,12 @@ router.post('/projects', requireAuth, (req, res) => {
 
     const projectId = uuidv4();
 
-    db.prepare(`
-      INSERT INTO projects (id, user_id, name)
-      VALUES (?, ?, ?)
-    `).run(projectId, req.user.id, name.trim());
-
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    projectStore.createProject({
+      id: projectId,
+      userId: req.user.id,
+      name: name.trim(),
+    });
+    const project = projectStore.getProjectById(projectId);
 
     res.json({ project: { ...project, map_count: 0 } });
   } catch (error) {
@@ -162,7 +145,7 @@ router.put('/projects/:id', requireAuth, (req, res) => {
     const { name } = req.body;
 
     // Verify ownership
-    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const project = projectStore.getProjectForUser(id, req.user.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
@@ -171,15 +154,12 @@ router.put('/projects/:id', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Project name is required' });
     }
 
-    db.prepare(`
-      UPDATE projects SET name = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(name.trim(), id);
+    projectStore.updateProjectName(id, name.trim());
 
-    const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
-    const mapCount = db.prepare('SELECT COUNT(*) as count FROM maps WHERE project_id = ?').get(id);
+    const updated = projectStore.getProjectById(id);
+    const mapCount = projectStore.countMapsByProject(id);
 
-    res.json({ project: { ...updated, map_count: mapCount.count } });
+    res.json({ project: { ...updated, map_count: mapCount } });
   } catch (error) {
     console.error('Update project error:', error);
     res.status(500).json({ error: 'Failed to update project' });
@@ -192,13 +172,13 @@ router.delete('/projects/:id', requireAuth, (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const project = projectStore.getProjectForUser(id, req.user.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
     // Delete project (maps will have project_id set to NULL due to ON DELETE SET NULL)
-    db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    projectStore.deleteProject(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -217,30 +197,16 @@ router.get('/maps', requireAuth, (req, res) => {
     const { project_id } = req.query;
     const { limit, offset } = parsePagination(req.query);
 
-    let query = `
-      SELECT m.*, p.name as project_name
-      FROM maps m
-      LEFT JOIN projects p ON m.project_id = p.id
-      WHERE m.user_id = ?
-    `;
-    const params = [req.user.id];
-
-    if (project_id) {
-      query += ' AND m.project_id = ?';
-      params.push(project_id);
-    }
-
-    query += ' ORDER BY m.updated_at DESC LIMIT ? OFFSET ?';
-
-    const maps = db.prepare(query).all(...params, limit, offset);
-    let total = 0;
-    if (project_id) {
-      total = db.prepare('SELECT COUNT(*) as count FROM maps WHERE user_id = ? AND project_id = ?')
-        .get(req.user.id, project_id)?.count || 0;
-    } else {
-      total = db.prepare('SELECT COUNT(*) as count FROM maps WHERE user_id = ?')
-        .get(req.user.id)?.count || 0;
-    }
+    const maps = mapStore.listMapsByUser({
+      userId: req.user.id,
+      projectId: project_id || null,
+      limit,
+      offset,
+    });
+    const total = mapStore.countMapsByUser({
+      userId: req.user.id,
+      projectId: project_id || null,
+    });
 
     // Parse JSON fields
     const parsed = maps.map(m => ({
@@ -260,12 +226,7 @@ router.get('/maps/:id', requireAuth, (req, res) => {
   try {
     const { id } = req.params;
 
-    const map = db.prepare(`
-      SELECT m.*, p.name as project_name
-      FROM maps m
-      LEFT JOIN projects p ON m.project_id = p.id
-      WHERE m.id = ? AND m.user_id = ?
-    `).get(id, req.user.id);
+    const map = mapStore.getMapWithProjectForUser(id, req.user.id);
 
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
@@ -298,7 +259,7 @@ router.post('/maps', requireAuth, (req, res) => {
 
     // If project_id provided, verify ownership
     if (project_id) {
-      const project = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, req.user.id);
+      const project = projectStore.getProjectForUser(project_id, req.user.id);
       if (!project) {
         return res.status(400).json({ error: 'Project not found' });
       }
@@ -306,24 +267,21 @@ router.post('/maps', requireAuth, (req, res) => {
 
     const mapId = uuidv4();
 
-    db.prepare(`
-      INSERT INTO maps (id, user_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      mapId,
-      req.user.id,
-      project_id || null,
-      name.trim(),
-      notes ? notes.trim() : null,
-      url || root.url || '',
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null
-    );
+    mapStore.createMap({
+      id: mapId,
+      userId: req.user.id,
+      projectId: project_id || null,
+      name: name.trim(),
+      notes: notes ? notes.trim() : null,
+      url: url || root.url || '',
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+    });
 
-    const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(mapId);
+    const map = mapStore.getMapById(mapId);
 
     res.json({
       map: {
@@ -344,63 +302,48 @@ router.put('/maps/:id', requireAuth, (req, res) => {
     const { name, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
 
     // Verify ownership
-    const map = db.prepare('SELECT * FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    // Build update query
-    const updates = [];
-    const params = [];
+    const patch = {};
 
     if (name !== undefined) {
-      updates.push('name = ?');
-      params.push(name.trim());
+      patch.name = name.trim();
     }
     if (notes !== undefined) {
-      updates.push('notes = ?');
-      params.push(notes ? notes.trim() : null);
+      patch.notes = notes ? notes.trim() : null;
     }
     if (root !== undefined) {
-      updates.push('root_data = ?');
-      params.push(JSON.stringify(root));
+      patch.rootData = JSON.stringify(root);
     }
     if (orphans !== undefined) {
-      updates.push('orphans_data = ?');
-      params.push(orphans ? JSON.stringify(orphans) : null);
+      patch.orphansData = orphans ? JSON.stringify(orphans) : null;
     }
     if (connections !== undefined) {
-      updates.push('connections_data = ?');
-      params.push(connections ? JSON.stringify(connections) : null);
+      patch.connectionsData = connections ? JSON.stringify(connections) : null;
     }
     if (colors !== undefined) {
-      updates.push('colors = ?');
-      params.push(colors ? JSON.stringify(colors) : null);
+      patch.colors = colors ? JSON.stringify(colors) : null;
     }
     if (connectionColors !== undefined) {
-      updates.push('connection_colors = ?');
-      params.push(connectionColors ? JSON.stringify(connectionColors) : null);
+      patch.connectionColors = connectionColors ? JSON.stringify(connectionColors) : null;
     }
     if (project_id !== undefined) {
       // Verify project ownership if setting a project
       if (project_id) {
-        const project = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, req.user.id);
+        const project = projectStore.getProjectForUser(project_id, req.user.id);
         if (!project) {
           return res.status(400).json({ error: 'Project not found' });
         }
       }
-      updates.push('project_id = ?');
-      params.push(project_id || null);
+      patch.projectId = project_id || null;
     }
 
-    if (updates.length > 0) {
-      updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(id);
+    mapStore.updateMapById(id, patch);
 
-      db.prepare(`UPDATE maps SET ${updates.join(', ')} WHERE id = ?`).run(...params);
-    }
-
-    const updated = db.prepare('SELECT * FROM maps WHERE id = ?').get(id);
+    const updated = mapStore.getMapById(id);
 
     res.json({
       map: {
@@ -420,12 +363,12 @@ router.delete('/maps/:id', requireAuth, (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const map = db.prepare('SELECT * FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    db.prepare('DELETE FROM maps WHERE id = ?').run(id);
+    mapStore.deleteMapById(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -439,17 +382,12 @@ router.get('/maps/:id/versions', requireAuth, (req, res) => {
   try {
     const { id } = req.params;
 
-    const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const versions = db.prepare(`
-      SELECT * FROM map_versions
-      WHERE map_id = ? AND user_id = ?
-      ORDER BY created_at DESC
-      LIMIT 25
-    `).all(id, req.user.id);
+    const versions = mapStore.listMapVersionsForUserMap(id, req.user.id, 25);
 
     const parsed = versions.map((v) => ({
       ...v,
@@ -473,53 +411,38 @@ router.post('/maps/:id/versions', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
-    const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const versionRow = db.prepare(`
-      SELECT MAX(version_number) as maxVersion
-      FROM map_versions
-      WHERE map_id = ? AND user_id = ?
-    `).get(id, req.user.id);
-    const nextVersion = (versionRow?.maxVersion || 0) + 1;
+    const nextVersion = mapStore.getNextMapVersionNumber(id, req.user.id);
 
     const versionId = uuidv4();
     const title = name?.trim() || 'Updated';
 
-    db.prepare(`
-      INSERT INTO map_versions (
-        id, map_id, user_id, version_number, name, notes,
-        root_data, orphans_data, connections_data, colors, connection_colors
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      versionId,
-      id,
-      req.user.id,
-      nextVersion,
-      title,
-      notes?.trim() || null,
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null
-    );
+    mapStore.createMapVersion({
+      id: versionId,
+      mapId: id,
+      userId: req.user.id,
+      versionNumber: nextVersion,
+      name: title,
+      notes: notes?.trim() || null,
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+    });
 
-    const allVersions = db.prepare(`
-      SELECT id FROM map_versions
-      WHERE map_id = ? AND user_id = ?
-      ORDER BY created_at DESC
-    `).all(id, req.user.id);
+    const allVersions = mapStore.listMapVersionIdsForUserMap(id, req.user.id);
 
     if (allVersions.length > 25) {
       const toDelete = allVersions.slice(25).map((row) => row.id);
-      const placeholders = toDelete.map(() => '?').join(',');
-      db.prepare(`DELETE FROM map_versions WHERE id IN (${placeholders})`).run(...toDelete);
+      mapStore.deleteMapVersionsByIds(toDelete);
     }
 
-    const saved = db.prepare('SELECT * FROM map_versions WHERE id = ?').get(versionId);
+    const saved = mapStore.getMapVersionById(versionId);
 
     res.json({
       version: {
@@ -542,14 +465,8 @@ router.get('/history', requireAuth, (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
-    const history = db.prepare(`
-      SELECT * FROM scan_history
-      WHERE user_id = ?
-      ORDER BY scanned_at DESC
-      LIMIT ? OFFSET ?
-    `).all(req.user.id, limit, offset);
-    const total = db.prepare('SELECT COUNT(*) as count FROM scan_history WHERE user_id = ?')
-      .get(req.user.id)?.count || 0;
+    const history = historyStore.listHistoryByUser(req.user.id, { limit, offset });
+    const total = historyStore.countHistoryByUser(req.user.id);
 
     // Parse JSON fields
     const parsed = history.map(h => ({
@@ -578,36 +495,25 @@ router.post('/history', requireAuth, (req, res) => {
 
     const historyId = uuidv4();
 
-    db.prepare(`
-      INSERT INTO scan_history (id, user_id, url, hostname, title, page_count, root_data, orphans_data, connections_data, colors, connection_colors, scan_options, scan_depth, map_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      historyId,
-      req.user.id,
-      url || root.url || '',
-      hostname || '',
-      title || '',
-      page_count || 0,
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null,
-      scan_options ? JSON.stringify(scan_options) : null,
-      scan_depth ?? null,
-      map_id || null
-    );
+    historyStore.createHistory({
+      id: historyId,
+      userId: req.user.id,
+      url: url || root.url || '',
+      hostname: hostname || '',
+      title: title || '',
+      pageCount: page_count || 0,
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      scanOptions: scan_options ? JSON.stringify(scan_options) : null,
+      scanDepth: scan_depth ?? null,
+      mapId: map_id || null,
+    });
 
     // Keep only last 50 entries
-    db.prepare(`
-      DELETE FROM scan_history
-      WHERE user_id = ? AND id NOT IN (
-        SELECT id FROM scan_history
-        WHERE user_id = ?
-        ORDER BY scanned_at DESC
-        LIMIT 50
-      )
-    `).run(req.user.id, req.user.id);
+    historyStore.trimHistoryByUser(req.user.id, 50);
 
     res.json({ success: true, id: historyId });
   } catch (error) {
@@ -622,15 +528,12 @@ router.put('/history/:id', requireAuth, (req, res) => {
     const { id } = req.params;
     const { map_id } = req.body || {};
 
-    const historyItem = db.prepare('SELECT * FROM scan_history WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const historyItem = historyStore.getHistoryItemForUser(id, req.user.id);
     if (!historyItem) {
       return res.status(404).json({ error: 'History item not found' });
     }
 
-    db.prepare(`
-      UPDATE scan_history SET map_id = ?, scanned_at = scanned_at
-      WHERE id = ?
-    `).run(map_id || null, id);
+    historyStore.updateHistoryMapId(id, map_id || null);
 
     res.json({ success: true });
   } catch (error) {
@@ -648,11 +551,7 @@ router.delete('/history', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'IDs are required' });
     }
 
-    const placeholders = ids.map(() => '?').join(',');
-    db.prepare(`
-      DELETE FROM scan_history
-      WHERE id IN (${placeholders}) AND user_id = ?
-    `).run(...ids, req.user.id);
+    historyStore.deleteHistoryByIdsForUser(ids, req.user.id);
 
     res.json({ success: true, deleted: ids.length });
   } catch (error) {
@@ -676,7 +575,7 @@ router.post('/shares', requireAuth, (req, res) => {
 
     // If map_id provided, verify ownership
     if (map_id) {
-      const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(map_id, req.user.id);
+      const map = mapStore.getMapForUser(map_id, req.user.id);
       if (!map) {
         return res.status(400).json({ error: 'Map not found' });
       }
@@ -687,20 +586,17 @@ router.post('/shares', requireAuth, (req, res) => {
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
 
-    db.prepare(`
-      INSERT INTO shares (id, map_id, user_id, root_data, orphans_data, connections_data, colors, connection_colors, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      shareId,
-      map_id || null,
-      req.user.id,
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null,
-      expiresAt
-    );
+    shareStore.createShare({
+      id: shareId,
+      mapId: map_id || null,
+      userId: req.user.id,
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      expiresAt,
+    });
 
     res.json({
       share: {
@@ -719,12 +615,7 @@ router.get('/shares/:id', (req, res) => {
   try {
     const { id } = req.params;
 
-    const share = db.prepare(`
-      SELECT s.*, u.name as shared_by_name
-      FROM shares s
-      LEFT JOIN users u ON s.user_id = u.id
-      WHERE s.id = ?
-    `).get(id);
+    const share = shareStore.getShareWithUserById(id);
 
     if (!share) {
       return res.status(404).json({ error: 'Share not found' });
@@ -736,7 +627,7 @@ router.get('/shares/:id', (req, res) => {
     }
 
     // Increment view count
-    db.prepare('UPDATE shares SET view_count = view_count + 1 WHERE id = ?').run(id);
+    shareStore.incrementShareViewCount(id);
 
     res.json({
       share: {
@@ -759,12 +650,12 @@ router.delete('/shares/:id', requireAuth, (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const share = db.prepare('SELECT * FROM shares WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const share = shareStore.getShareForUser(id, req.user.id);
     if (!share) {
       return res.status(404).json({ error: 'Share not found' });
     }
 
-    db.prepare('DELETE FROM shares WHERE id = ?').run(id);
+    shareStore.deleteShare(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -777,17 +668,8 @@ router.delete('/shares/:id', requireAuth, (req, res) => {
 router.get('/shares', requireAuth, (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query);
-    const shares = db.prepare(`
-      SELECT s.id, s.map_id, s.created_at, s.expires_at, s.view_count,
-        m.name as map_name
-      FROM shares s
-      LEFT JOIN maps m ON s.map_id = m.id
-      WHERE s.user_id = ?
-      ORDER BY s.created_at DESC
-      LIMIT ? OFFSET ?
-    `).all(req.user.id, limit, offset);
-    const total = db.prepare('SELECT COUNT(*) as count FROM shares WHERE user_id = ?')
-      .get(req.user.id)?.count || 0;
+    const shares = shareStore.listSharesByUser(req.user.id, { limit, offset });
+    const total = shareStore.countSharesByUser(req.user.id);
 
     res.json({ shares, pagination: { limit, offset, total } });
   } catch (error) {
