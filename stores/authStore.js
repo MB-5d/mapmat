@@ -1,57 +1,61 @@
 const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
+const adapter = require('./dbAdapter');
 
 function findUserIdByEmail(email) {
-  const row = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  const row = adapter.queryOne('SELECT id FROM users WHERE email = ?', [email]);
   return row?.id || null;
 }
 
 function getUserById(userId) {
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(userId) || null;
+  return adapter.queryOne('SELECT * FROM users WHERE id = ?', [userId]);
 }
 
 function getPublicUserById(userId) {
-  return db.prepare('SELECT id, email, name, created_at FROM users WHERE id = ?').get(userId) || null;
+  return adapter.queryOne('SELECT id, email, name, created_at FROM users WHERE id = ?', [userId]);
 }
 
 function getUserByEmail(email) {
-  return db.prepare('SELECT * FROM users WHERE email = ?').get(email) || null;
+  return adapter.queryOne('SELECT * FROM users WHERE email = ?', [email]);
 }
 
 function createUser({ email, passwordHash, name }) {
   const id = uuidv4();
-  db.prepare(`
+  adapter.execute(`
     INSERT INTO users (id, email, password_hash, name)
     VALUES (?, ?, ?, ?)
-  `).run(id, email, passwordHash, name);
+  `, [id, email, passwordHash, name]);
   return getUserById(id);
 }
 
 function updateSeedUserCredentials({ userId, passwordHash, name }) {
-  db.prepare(`
+  adapter.execute(`
     UPDATE users
     SET password_hash = ?, name = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(passwordHash, name, userId);
+  `, [passwordHash, name, userId]);
 }
 
 function updateUserPassword(userId, passwordHash) {
-  db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(passwordHash, userId);
+  adapter.execute(
+    'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [passwordHash, userId]
+  );
 }
 
 function updateUserName(userId, name) {
-  db.prepare('UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(name, userId);
+  adapter.execute(
+    'UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [name, userId]
+  );
 }
 
 function getUserPasswordHash(userId) {
-  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId);
+  const row = adapter.queryOne('SELECT password_hash FROM users WHERE id = ?', [userId]);
   return row?.password_hash || null;
 }
 
 function deleteUser(userId) {
-  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  adapter.execute('DELETE FROM users WHERE id = ?', [userId]);
 }
 
 module.exports = {

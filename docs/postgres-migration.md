@@ -149,3 +149,31 @@ If migration fails:
 
 - Script rolls back Postgres transaction automatically.
 - SQLite source is read-only and unchanged.
+
+## 9) Phase 4d Adapter Boundary (No Runtime Cutover Yet)
+
+This phase keeps runtime on SQLite but moves DB access behind store adapters so we can switch providers safely later.
+
+Current expectation:
+
+- `runtime: "sqlite"`
+- `postgres.configured: true`
+- `postgres.reachable: true`
+- `postgres.missingTables: []`
+
+Validation command:
+
+```bash
+HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" \
+REQUIRE_RUNTIME=sqlite \
+EXPECT_RUNTIME_FALLBACK=false \
+npm run check:db-health
+```
+
+Optional guardrail check (when toggling `DB_PROVIDER` to an unsupported provider):
+
+```bash
+HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" \
+EXPECT_RUNTIME_FALLBACK=true \
+npm run check:db-health
+```

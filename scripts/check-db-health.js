@@ -5,9 +5,18 @@
 const DEFAULT_HEALTH_URL = 'http://localhost:4002/health/db';
 const HEALTH_DB_URL = process.env.HEALTH_DB_URL || DEFAULT_HEALTH_URL;
 const REQUIRE_RUNTIME = process.env.REQUIRE_RUNTIME || '';
+const EXPECT_RUNTIME_FALLBACK_RAW = process.env.EXPECT_RUNTIME_FALLBACK;
 const REQUIRE_POSTGRES_READY = !['0', 'false', 'no', 'off'].includes(
   String(process.env.REQUIRE_POSTGRES_READY || 'true').trim().toLowerCase()
 );
+
+function parseOptionalBool(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  throw new Error(`Invalid boolean value "${value}"`);
+}
 
 async function fetchJson(url) {
   const controller = new AbortController();
@@ -54,6 +63,13 @@ async function run() {
   if (REQUIRE_RUNTIME && summary.runtime !== REQUIRE_RUNTIME) {
     throw new Error(
       `Expected runtime "${REQUIRE_RUNTIME}" but got "${summary.runtime}".`
+    );
+  }
+
+  const expectedFallback = parseOptionalBool(EXPECT_RUNTIME_FALLBACK_RAW);
+  if (expectedFallback !== null && summary.runtimeFallback !== expectedFallback) {
+    throw new Error(
+      `Expected runtimeFallback=${expectedFallback} but got runtimeFallback=${summary.runtimeFallback}.`
     );
   }
 

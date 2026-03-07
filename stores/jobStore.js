@@ -1,18 +1,18 @@
-const db = require('../db');
+const adapter = require('./dbAdapter');
 
 function getJobById(id) {
-  return db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) || null;
+  return adapter.queryOne('SELECT * FROM jobs WHERE id = ?', [id]);
 }
 
 function listJobPayloadsByTypeAndStatuses(type, statuses) {
   if (!Array.isArray(statuses) || statuses.length === 0) return [];
   const placeholders = statuses.map(() => '?').join(', ');
-  return db.prepare(`
+  return adapter.queryAll(`
     SELECT id, payload
     FROM jobs
     WHERE type = ? AND status IN (${placeholders})
     ORDER BY created_at ASC
-  `).all(type, ...statuses);
+  `, [type, ...statuses]);
 }
 
 function insertJob({
@@ -24,68 +24,68 @@ function insertJob({
   ipHash,
   payload,
 }) {
-  db.prepare(`
+  adapter.execute(`
     INSERT INTO jobs (id, type, status, user_id, api_key, ip_hash, payload)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `, [
     id,
     type,
     status,
     userId || null,
     apiKey || null,
     ipHash || null,
-    payload || null
-  );
+    payload || null,
+  ]);
 }
 
-const takeNextQueuedJob = db.transaction(({ queuedStatus, runningStatus }) => {
-  const job = db.prepare(`
+const takeNextQueuedJob = adapter.transaction(({ queuedStatus, runningStatus }) => {
+  const job = adapter.queryOne(`
     SELECT * FROM jobs
     WHERE status = ?
     ORDER BY created_at ASC
     LIMIT 1
-  `).get(queuedStatus);
+  `, [queuedStatus]);
   if (!job) return null;
 
-  const updated = db.prepare(`
+  const updated = adapter.execute(`
     UPDATE jobs SET status = ?, started_at = CURRENT_TIMESTAMP
     WHERE id = ? AND status = ?
-  `).run(runningStatus, job.id, queuedStatus);
+  `, [runningStatus, job.id, queuedStatus]);
 
   if (updated.changes !== 1) return null;
   return job;
 });
 
 function updateJobProgress(id, progressJson) {
-  db.prepare('UPDATE jobs SET progress = ? WHERE id = ?').run(progressJson, id);
+  adapter.execute('UPDATE jobs SET progress = ? WHERE id = ?', [progressJson, id]);
 }
 
 function markJobComplete(id, completeStatus, resultJson) {
-  db.prepare(`
+  adapter.execute(`
     UPDATE jobs
     SET status = ?, result = ?, finished_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(completeStatus, resultJson, id);
+  `, [completeStatus, resultJson, id]);
 }
 
 function markJobFailed(id, failedStatus, errorText) {
-  db.prepare(`
+  adapter.execute(`
     UPDATE jobs
     SET status = ?, error = ?, finished_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(failedStatus, errorText, id);
+  `, [failedStatus, errorText, id]);
 }
 
 function markJobCanceled(id, canceledStatus, queuedStatus, runningStatus) {
-  db.prepare(`
+  adapter.execute(`
     UPDATE jobs
     SET status = ?, finished_at = CURRENT_TIMESTAMP
     WHERE id = ? AND status IN (?, ?)
-  `).run(canceledStatus, id, queuedStatus, runningStatus);
+  `, [canceledStatus, id, queuedStatus, runningStatus]);
 }
 
 function getJobStatus(id) {
-  return db.prepare('SELECT status FROM jobs WHERE id = ?').get(id)?.status || null;
+  return adapter.queryOne('SELECT status FROM jobs WHERE id = ?', [id])?.status || null;
 }
 
 module.exports = {

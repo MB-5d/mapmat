@@ -1,24 +1,24 @@
-const db = require('../db');
+const adapter = require('./dbAdapter');
 
 function getUsageByDaySince(sinceModifier) {
-  return db.prepare(`
+  return adapter.queryAll(`
     SELECT date(created_at) as day, event_type as eventType,
            COUNT(*) as events, SUM(quantity) as quantity
     FROM usage_events
     WHERE created_at >= datetime('now', ?)
     GROUP BY day, eventType
     ORDER BY day DESC
-  `).all(sinceModifier);
+  `, [sinceModifier]);
 }
 
 function getUsageTotalsSince(sinceModifier) {
-  return db.prepare(`
+  return adapter.queryAll(`
     SELECT event_type as eventType, COUNT(*) as events, SUM(quantity) as quantity
     FROM usage_events
     WHERE created_at >= datetime('now', ?)
     GROUP BY eventType
     ORDER BY events DESC
-  `).all(sinceModifier);
+  `, [sinceModifier]);
 }
 
 module.exports = {
