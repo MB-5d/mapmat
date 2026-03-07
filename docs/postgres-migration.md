@@ -185,3 +185,36 @@ HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" \
 EXPECT_RUNTIME_FALLBACK=true \
 npm run check:db-health
 ```
+
+## 10) Phase 4e Staging Canary (Requested Postgres, Active SQLite Fallback)
+
+Goal:
+
+- Keep app runtime on SQLite.
+- Intentionally set staging `DB_PROVIDER=postgres` to prove fallback safety.
+- Validate health + parity in one command.
+
+Important shell context:
+
+- Commands run at `root@...:/app#` are **inside Railway service container**.
+- Commands run at `matthewbraun@... MapMat %` are **local machine**.
+
+Canary validation command (run from local machine):
+
+```bash
+HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" \
+PARITY_URL="https://mapmat-staging.up.railway.app/health/db/parity" \
+REQUIRE_RUNTIME=sqlite \
+REQUIRE_RUNTIME_REQUESTED=postgres \
+EXPECT_RUNTIME_FALLBACK=true \
+npm run check:db-canary
+```
+
+Expected:
+
+- health shows:
+  - `runtime: "sqlite"`
+  - `runtimeRequested: "postgres"`
+  - `runtimeFallback: true`
+  - Postgres readiness healthy
+- parity shows `allMatch: true`

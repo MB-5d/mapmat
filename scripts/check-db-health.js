@@ -5,6 +5,7 @@
 const DEFAULT_HEALTH_URL = 'http://localhost:4002/health/db';
 const HEALTH_DB_URL = process.env.HEALTH_DB_URL || DEFAULT_HEALTH_URL;
 const REQUIRE_RUNTIME = process.env.REQUIRE_RUNTIME || '';
+const REQUIRE_RUNTIME_REQUESTED = process.env.REQUIRE_RUNTIME_REQUESTED || '';
 const EXPECT_RUNTIME_FALLBACK_RAW = process.env.EXPECT_RUNTIME_FALLBACK;
 const REQUIRE_POSTGRES_READY = !['0', 'false', 'no', 'off'].includes(
   String(process.env.REQUIRE_POSTGRES_READY || 'true').trim().toLowerCase()
@@ -63,6 +64,12 @@ async function run() {
   if (REQUIRE_RUNTIME && summary.runtime !== REQUIRE_RUNTIME) {
     throw new Error(
       `Expected runtime "${REQUIRE_RUNTIME}" but got "${summary.runtime}".`
+    );
+  }
+
+  if (REQUIRE_RUNTIME_REQUESTED && summary.runtimeRequested !== REQUIRE_RUNTIME_REQUESTED) {
+    throw new Error(
+      `Expected runtimeRequested "${REQUIRE_RUNTIME_REQUESTED}" but got "${summary.runtimeRequested}".`
     );
   }
 

@@ -8,6 +8,7 @@
     "start:worker": "RUN_MODE=worker node server.js",
     "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node scripts/check-db-boundary.js",
     "check:frontend-build": "cd frontend && CI=false npm run build",
+    "check:db-canary": "node scripts/check-db-canary.js",
     "check:db-health": "node scripts/check-db-health.js",
     "check:db-parity": "node scripts/check-db-parity.js",
     "check:postgres": "node scripts/check-postgres-connection.js",
