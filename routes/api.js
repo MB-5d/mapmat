@@ -5,6 +5,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
+const projectStore = require('../stores/projectStore');
 const { authMiddleware, requireAuth } = require('./auth');
 
 const router = express.Router();
@@ -113,15 +114,8 @@ router.get('/admin/usage', requireAdminKey, (req, res) => {
 router.get('/projects', requireAuth, (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query);
-    const projects = db.prepare(`
-      SELECT p.*,
-        (SELECT COUNT(*) FROM maps WHERE project_id = p.id) as map_count
-      FROM projects p
-      WHERE p.user_id = ?
-      ORDER BY p.created_at DESC
-      LIMIT ? OFFSET ?
-    `).all(req.user.id, limit, offset);
-    const total = db.prepare('SELECT COUNT(*) as count FROM projects WHERE user_id = ?').get(req.user.id)?.count || 0;
+    const projects = projectStore.listProjectsByUser(req.user.id, { limit, offset });
+    const total = projectStore.countProjectsByUser(req.user.id);
 
     res.json({ projects, pagination: { limit, offset, total } });
   } catch (error) {
@@ -141,12 +135,12 @@ router.post('/projects', requireAuth, (req, res) => {
 
     const projectId = uuidv4();
 
-    db.prepare(`
-      INSERT INTO projects (id, user_id, name)
-      VALUES (?, ?, ?)
-    `).run(projectId, req.user.id, name.trim());
-
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+    projectStore.createProject({
+      id: projectId,
+      userId: req.user.id,
+      name: name.trim(),
+    });
+    const project = projectStore.getProjectById(projectId);
 
     res.json({ project: { ...project, map_count: 0 } });
   } catch (error) {
@@ -162,7 +156,7 @@ router.put('/projects/:id', requireAuth, (req, res) => {
     const { name } = req.body;
 
     // Verify ownership
-    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const project = projectStore.getProjectForUser(id, req.user.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
@@ -171,15 +165,12 @@ router.put('/projects/:id', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Project name is required' });
     }
 
-    db.prepare(`
-      UPDATE projects SET name = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(name.trim(), id);
+    projectStore.updateProjectName(id, name.trim());
 
-    const updated = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
-    const mapCount = db.prepare('SELECT COUNT(*) as count FROM maps WHERE project_id = ?').get(id);
+    const updated = projectStore.getProjectById(id);
+    const mapCount = projectStore.countMapsByProject(id);
 
-    res.json({ project: { ...updated, map_count: mapCount.count } });
+    res.json({ project: { ...updated, map_count: mapCount } });
   } catch (error) {
     console.error('Update project error:', error);
     res.status(500).json({ error: 'Failed to update project' });
@@ -192,13 +183,13 @@ router.delete('/projects/:id', requireAuth, (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const project = db.prepare('SELECT * FROM projects WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const project = projectStore.getProjectForUser(id, req.user.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
     // Delete project (maps will have project_id set to NULL due to ON DELETE SET NULL)
-    db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    projectStore.deleteProject(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -298,7 +289,7 @@ router.post('/maps', requireAuth, (req, res) => {
 
     // If project_id provided, verify ownership
     if (project_id) {
-      const project = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, req.user.id);
+      const project = projectStore.getProjectForUser(project_id, req.user.id);
       if (!project) {
         return res.status(400).json({ error: 'Project not found' });
       }
@@ -384,7 +375,7 @@ router.put('/maps/:id', requireAuth, (req, res) => {
     if (project_id !== undefined) {
       // Verify project ownership if setting a project
       if (project_id) {
-        const project = db.prepare('SELECT id FROM projects WHERE id = ? AND user_id = ?').get(project_id, req.user.id);
+        const project = projectStore.getProjectForUser(project_id, req.user.id);
         if (!project) {
           return res.status(400).json({ error: 'Project not found' });
         }
