@@ -4,11 +4,11 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
 const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
+const usageStore = require('../stores/usageStore');
 const { authMiddleware, requireAuth } = require('./auth');
 
 const router = express.Router();
@@ -85,22 +85,8 @@ router.get('/admin/usage', requireAdminKey, (req, res) => {
     const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30;
     const since = `-${days} days`;
 
-    const byDay = db.prepare(`
-      SELECT date(created_at) as day, event_type as eventType,
-             COUNT(*) as events, SUM(quantity) as quantity
-      FROM usage_events
-      WHERE created_at >= datetime('now', ?)
-      GROUP BY day, eventType
-      ORDER BY day DESC
-    `).all(since);
-
-    const totals = db.prepare(`
-      SELECT event_type as eventType, COUNT(*) as events, SUM(quantity) as quantity
-      FROM usage_events
-      WHERE created_at >= datetime('now', ?)
-      GROUP BY eventType
-      ORDER BY events DESC
-    `).all(since);
+    const byDay = usageStore.getUsageByDaySince(since);
+    const totals = usageStore.getUsageTotalsSince(since);
 
     res.json({ days, totals, byDay });
   } catch (error) {

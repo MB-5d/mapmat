@@ -28,6 +28,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const { probePostgres } = require('./utils/postgresProbe');
 const { probePostgresParity } = require('./utils/postgresParityProbe');
+const jobStore = require('./stores/jobStore');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -536,15 +537,13 @@ const serializeJobRow = (row, includeResult = true) => {
   };
 };
 
-const getJobRow = (id) => db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
+const getJobRow = (id) => jobStore.getJobById(id);
 
 const findActiveDiscoveryJob = (mapId) => {
-  const rows = db.prepare(`
-    SELECT id, payload
-    FROM jobs
-    WHERE type = ? AND status IN (?, ?)
-    ORDER BY created_at ASC
-  `).all(JOB_TYPES.discovery, JOB_STATUS.queued, JOB_STATUS.running);
+  const rows = jobStore.listJobPayloadsByTypeAndStatuses(
+    JOB_TYPES.discovery,
+    [JOB_STATUS.queued, JOB_STATUS.running]
+  );
 
   for (const row of rows) {
     const payload = parseJsonSafe(row.payload) || {};
@@ -562,68 +561,49 @@ const createJob = ({ type, payload, req }) => {
   const ip = getClientIp(req);
   const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
 
-  db.prepare(`
-    INSERT INTO jobs (id, type, status, user_id, api_key, ip_hash, payload)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  jobStore.insertJob({
     id,
     type,
-    JOB_STATUS.queued,
+    status: JOB_STATUS.queued,
     userId,
     apiKey,
     ipHash,
-    JSON.stringify(payload || {})
-  );
+    payload: JSON.stringify(payload || {}),
+  });
 
   return id;
 };
 
 let activeJobs = 0;
 
-const takeNextJob = db.transaction(() => {
-  const job = db.prepare(`
-    SELECT * FROM jobs
-    WHERE status = ?
-    ORDER BY created_at ASC
-    LIMIT 1
-  `).get(JOB_STATUS.queued);
-  if (!job) return null;
-
-  const updated = db.prepare(`
-    UPDATE jobs SET status = ?, started_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND status = ?
-  `).run(JOB_STATUS.running, job.id, JOB_STATUS.queued);
-
-  if (updated.changes !== 1) return null;
-  return job;
+const takeNextJob = () => jobStore.takeNextQueuedJob({
+  queuedStatus: JOB_STATUS.queued,
+  runningStatus: JOB_STATUS.running,
 });
 
 const updateJobProgress = (id, progress) => {
-  db.prepare('UPDATE jobs SET progress = ? WHERE id = ?').run(JSON.stringify(progress), id);
+  jobStore.updateJobProgress(id, JSON.stringify(progress));
 };
 
 const markJobComplete = (id, result) => {
-  db.prepare(`
-    UPDATE jobs
-    SET status = ?, result = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(JOB_STATUS.complete, JSON.stringify(result || {}), id);
+  jobStore.markJobComplete(id, JOB_STATUS.complete, JSON.stringify(result || {}));
 };
 
 const markJobFailed = (id, error) => {
-  db.prepare(`
-    UPDATE jobs
-    SET status = ?, error = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(JOB_STATUS.failed, error?.message || String(error || 'Job failed'), id);
+  jobStore.markJobFailed(
+    id,
+    JOB_STATUS.failed,
+    error?.message || String(error || 'Job failed')
+  );
 };
 
 const markJobCanceled = (id) => {
-  db.prepare(`
-    UPDATE jobs
-    SET status = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND status IN (?, ?)
-  `).run(JOB_STATUS.canceled, id, JOB_STATUS.queued, JOB_STATUS.running);
+  jobStore.markJobCanceled(
+    id,
+    JOB_STATUS.canceled,
+    JOB_STATUS.queued,
+    JOB_STATUS.running
+  );
 };
 
 const shouldAbortJob = (id, throttleMs = 1000) => {
@@ -632,8 +612,7 @@ const shouldAbortJob = (id, throttleMs = 1000) => {
     const now = Date.now();
     if (now - lastCheck < throttleMs) return false;
     lastCheck = now;
-    const row = db.prepare('SELECT status FROM jobs WHERE id = ?').get(id);
-    return row?.status === JOB_STATUS.canceled;
+    return jobStore.getJobStatus(id) === JOB_STATUS.canceled;
   };
 };
 
@@ -2432,8 +2411,7 @@ async function processJob(job) {
         abortCheck
       );
 
-      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-      if (statusRow?.status === JOB_STATUS.canceled) return;
+      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
 
       markJobComplete(jobId, result);
       return;
@@ -2441,24 +2419,21 @@ async function processJob(job) {
 
     if (job.type === JOB_TYPES.screenshot) {
       const result = await captureScreenshot(payload.url, payload.type || 'full');
-      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-      if (statusRow?.status === JOB_STATUS.canceled) return;
+      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
       markJobComplete(jobId, result);
       return;
     }
 
     if (job.type === JOB_TYPES.discovery) {
       const result = await runDiscoveryJob(jobId, payload);
-      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-      if (statusRow?.status === JOB_STATUS.canceled) return;
+      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
       markJobComplete(jobId, result);
       return;
     }
 
     throw new Error(`Unknown job type: ${job.type}`);
   } catch (error) {
-    const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-    if (statusRow?.status === JOB_STATUS.canceled) return;
+    if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
     markJobFailed(jobId, error);
   }
 }
