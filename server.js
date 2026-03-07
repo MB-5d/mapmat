@@ -30,6 +30,7 @@ const { probePostgres } = require('./utils/postgresProbe');
 const { probePostgresParity } = require('./utils/postgresParityProbe');
 const jobStore = require('./stores/jobStore');
 const mapStore = require('./stores/mapStore');
+const pageStore = require('./stores/pageStore');
 const usageStore = require('./stores/usageStore');
 
 // Initialize database (creates tables if needed)
@@ -830,7 +831,7 @@ function persistPagesForIa(
     };
   }
 
-  const pageColumns = db.prepare('PRAGMA table_info(pages)').all().map((col) => col.name);
+  const pageColumns = pageStore.getPageColumns();
   const hasType = pageColumns.includes('type');
   const hasDepth = pageColumns.includes('depth');
 
@@ -847,84 +848,12 @@ function persistPagesForIa(
   if (hasType) selectColumns.push('type');
   if (hasDepth) selectColumns.push('depth');
 
-  const selectStmt = db.prepare(`
-    SELECT ${selectColumns.join(', ')}
-    FROM pages
-    WHERE url = ?
-  `);
-
-  const insertColumns = [
-    'url',
-    'title',
-    'status',
-    'severity',
-    'placement',
-    'parent_url',
-    'discovery_source',
-    'links_in',
-  ];
-  if (hasType) insertColumns.push('type');
-  if (hasDepth) insertColumns.push('depth');
-  const insertStmt = db.prepare(`
-    INSERT INTO pages (${insertColumns.join(', ')}, created_at, updated_at)
-    VALUES (${insertColumns.map(() => '?').join(', ')}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `);
-
-  const updateColumns = [
-    'title',
-    'status',
-    'severity',
-    'placement',
-    'parent_url',
-    'discovery_source',
-    'links_in',
-  ];
-  if (hasType) updateColumns.push('type');
-  if (hasDepth) updateColumns.push('depth');
-  const updateStmt = db.prepare(`
-    UPDATE pages
-    SET ${updateColumns.map((col) => `${col} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP
-    WHERE url = ?
-  `);
-
   const known = new Map();
   const readExisting = (url) => {
     if (known.has(url)) return known.get(url);
-    const row = selectStmt.get(url) || null;
+    const row = pageStore.getPageByUrl(url, selectColumns) || null;
     known.set(url, row);
     return row;
-  };
-
-  const buildInsertValues = (row) => {
-    const values = [
-      row.url,
-      row.title,
-      row.status,
-      row.severity,
-      row.placement,
-      row.parent_url,
-      row.discovery_source,
-      row.links_in,
-    ];
-    if (hasType) values.push(row.type ?? null);
-    if (hasDepth) values.push(row.depth ?? null);
-    return values;
-  };
-
-  const buildUpdateValues = (row) => {
-    const values = [
-      row.title,
-      row.status,
-      row.severity,
-      row.placement,
-      row.parent_url,
-      row.discovery_source,
-      row.links_in,
-    ];
-    if (hasType) values.push(row.type ?? null);
-    if (hasDepth) values.push(row.depth ?? null);
-    values.push(row.url);
-    return values;
   };
 
   const upsertPage = ({
@@ -964,7 +893,7 @@ function persistPagesForIa(
         type,
         depth,
       };
-      insertStmt.run(...buildInsertValues(row));
+      pageStore.insertPage(row, { hasType, hasDepth });
       known.set(url, row);
       return { inserted: true, virtual: isIncomingVirtual };
     }
@@ -1024,7 +953,7 @@ function persistPagesForIa(
         type: nextType,
         depth: nextDepth,
       };
-      updateStmt.run(...buildUpdateValues(row));
+      pageStore.updatePage(row, { hasType, hasDepth });
       known.set(url, row);
     }
 
@@ -1064,7 +993,7 @@ function persistPagesForIa(
 
   const persisted = new Set();
 
-  const run = db.transaction(() => {
+  const run = pageStore.transaction(() => {
     pages.forEach((node) => {
       const canonicalUrl = normalizeUrl(node.url);
       if (!canonicalUrl) return;
@@ -1159,7 +1088,7 @@ function persistPagesForIa(
           type: nextType,
           depth,
         };
-        updateStmt.run(...buildUpdateValues(row));
+        pageStore.updatePage(row, { hasType, hasDepth });
         known.set(url, row);
       }
     });
