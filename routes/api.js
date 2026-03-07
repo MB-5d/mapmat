@@ -7,6 +7,8 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
+const historyStore = require('../stores/historyStore');
+const shareStore = require('../stores/shareStore');
 const { authMiddleware, requireAuth } = require('./auth');
 
 const router = express.Router();
@@ -477,14 +479,8 @@ router.get('/history', requireAuth, (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
-    const history = db.prepare(`
-      SELECT * FROM scan_history
-      WHERE user_id = ?
-      ORDER BY scanned_at DESC
-      LIMIT ? OFFSET ?
-    `).all(req.user.id, limit, offset);
-    const total = db.prepare('SELECT COUNT(*) as count FROM scan_history WHERE user_id = ?')
-      .get(req.user.id)?.count || 0;
+    const history = historyStore.listHistoryByUser(req.user.id, { limit, offset });
+    const total = historyStore.countHistoryByUser(req.user.id);
 
     // Parse JSON fields
     const parsed = history.map(h => ({
@@ -513,36 +509,25 @@ router.post('/history', requireAuth, (req, res) => {
 
     const historyId = uuidv4();
 
-    db.prepare(`
-      INSERT INTO scan_history (id, user_id, url, hostname, title, page_count, root_data, orphans_data, connections_data, colors, connection_colors, scan_options, scan_depth, map_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      historyId,
-      req.user.id,
-      url || root.url || '',
-      hostname || '',
-      title || '',
-      page_count || 0,
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null,
-      scan_options ? JSON.stringify(scan_options) : null,
-      scan_depth ?? null,
-      map_id || null
-    );
+    historyStore.createHistory({
+      id: historyId,
+      userId: req.user.id,
+      url: url || root.url || '',
+      hostname: hostname || '',
+      title: title || '',
+      pageCount: page_count || 0,
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      scanOptions: scan_options ? JSON.stringify(scan_options) : null,
+      scanDepth: scan_depth ?? null,
+      mapId: map_id || null,
+    });
 
     // Keep only last 50 entries
-    db.prepare(`
-      DELETE FROM scan_history
-      WHERE user_id = ? AND id NOT IN (
-        SELECT id FROM scan_history
-        WHERE user_id = ?
-        ORDER BY scanned_at DESC
-        LIMIT 50
-      )
-    `).run(req.user.id, req.user.id);
+    historyStore.trimHistoryByUser(req.user.id, 50);
 
     res.json({ success: true, id: historyId });
   } catch (error) {
@@ -557,15 +542,12 @@ router.put('/history/:id', requireAuth, (req, res) => {
     const { id } = req.params;
     const { map_id } = req.body || {};
 
-    const historyItem = db.prepare('SELECT * FROM scan_history WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const historyItem = historyStore.getHistoryItemForUser(id, req.user.id);
     if (!historyItem) {
       return res.status(404).json({ error: 'History item not found' });
     }
 
-    db.prepare(`
-      UPDATE scan_history SET map_id = ?, scanned_at = scanned_at
-      WHERE id = ?
-    `).run(map_id || null, id);
+    historyStore.updateHistoryMapId(id, map_id || null);
 
     res.json({ success: true });
   } catch (error) {
@@ -583,11 +565,7 @@ router.delete('/history', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'IDs are required' });
     }
 
-    const placeholders = ids.map(() => '?').join(',');
-    db.prepare(`
-      DELETE FROM scan_history
-      WHERE id IN (${placeholders}) AND user_id = ?
-    `).run(...ids, req.user.id);
+    historyStore.deleteHistoryByIdsForUser(ids, req.user.id);
 
     res.json({ success: true, deleted: ids.length });
   } catch (error) {
@@ -622,20 +600,17 @@ router.post('/shares', requireAuth, (req, res) => {
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
 
-    db.prepare(`
-      INSERT INTO shares (id, map_id, user_id, root_data, orphans_data, connections_data, colors, connection_colors, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      shareId,
-      map_id || null,
-      req.user.id,
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null,
-      expiresAt
-    );
+    shareStore.createShare({
+      id: shareId,
+      mapId: map_id || null,
+      userId: req.user.id,
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      expiresAt,
+    });
 
     res.json({
       share: {
@@ -654,12 +629,7 @@ router.get('/shares/:id', (req, res) => {
   try {
     const { id } = req.params;
 
-    const share = db.prepare(`
-      SELECT s.*, u.name as shared_by_name
-      FROM shares s
-      LEFT JOIN users u ON s.user_id = u.id
-      WHERE s.id = ?
-    `).get(id);
+    const share = shareStore.getShareWithUserById(id);
 
     if (!share) {
       return res.status(404).json({ error: 'Share not found' });
@@ -671,7 +641,7 @@ router.get('/shares/:id', (req, res) => {
     }
 
     // Increment view count
-    db.prepare('UPDATE shares SET view_count = view_count + 1 WHERE id = ?').run(id);
+    shareStore.incrementShareViewCount(id);
 
     res.json({
       share: {
@@ -694,12 +664,12 @@ router.delete('/shares/:id', requireAuth, (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const share = db.prepare('SELECT * FROM shares WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const share = shareStore.getShareForUser(id, req.user.id);
     if (!share) {
       return res.status(404).json({ error: 'Share not found' });
     }
 
-    db.prepare('DELETE FROM shares WHERE id = ?').run(id);
+    shareStore.deleteShare(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -712,17 +682,8 @@ router.delete('/shares/:id', requireAuth, (req, res) => {
 router.get('/shares', requireAuth, (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query);
-    const shares = db.prepare(`
-      SELECT s.id, s.map_id, s.created_at, s.expires_at, s.view_count,
-        m.name as map_name
-      FROM shares s
-      LEFT JOIN maps m ON s.map_id = m.id
-      WHERE s.user_id = ?
-      ORDER BY s.created_at DESC
-      LIMIT ? OFFSET ?
-    `).all(req.user.id, limit, offset);
-    const total = db.prepare('SELECT COUNT(*) as count FROM shares WHERE user_id = ?')
-      .get(req.user.id)?.count || 0;
+    const shares = shareStore.listSharesByUser(req.user.id, { limit, offset });
+    const total = shareStore.countSharesByUser(req.user.id);
 
     res.json({ shares, pagination: { limit, offset, total } });
   } catch (error) {
