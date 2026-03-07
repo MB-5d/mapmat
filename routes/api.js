@@ -6,6 +6,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const projectStore = require('../stores/projectStore');
+const mapStore = require('../stores/mapStore');
 const { authMiddleware, requireAuth } = require('./auth');
 
 const router = express.Router();
@@ -208,30 +209,16 @@ router.get('/maps', requireAuth, (req, res) => {
     const { project_id } = req.query;
     const { limit, offset } = parsePagination(req.query);
 
-    let query = `
-      SELECT m.*, p.name as project_name
-      FROM maps m
-      LEFT JOIN projects p ON m.project_id = p.id
-      WHERE m.user_id = ?
-    `;
-    const params = [req.user.id];
-
-    if (project_id) {
-      query += ' AND m.project_id = ?';
-      params.push(project_id);
-    }
-
-    query += ' ORDER BY m.updated_at DESC LIMIT ? OFFSET ?';
-
-    const maps = db.prepare(query).all(...params, limit, offset);
-    let total = 0;
-    if (project_id) {
-      total = db.prepare('SELECT COUNT(*) as count FROM maps WHERE user_id = ? AND project_id = ?')
-        .get(req.user.id, project_id)?.count || 0;
-    } else {
-      total = db.prepare('SELECT COUNT(*) as count FROM maps WHERE user_id = ?')
-        .get(req.user.id)?.count || 0;
-    }
+    const maps = mapStore.listMapsByUser({
+      userId: req.user.id,
+      projectId: project_id || null,
+      limit,
+      offset,
+    });
+    const total = mapStore.countMapsByUser({
+      userId: req.user.id,
+      projectId: project_id || null,
+    });
 
     // Parse JSON fields
     const parsed = maps.map(m => ({
@@ -251,12 +238,7 @@ router.get('/maps/:id', requireAuth, (req, res) => {
   try {
     const { id } = req.params;
 
-    const map = db.prepare(`
-      SELECT m.*, p.name as project_name
-      FROM maps m
-      LEFT JOIN projects p ON m.project_id = p.id
-      WHERE m.id = ? AND m.user_id = ?
-    `).get(id, req.user.id);
+    const map = mapStore.getMapWithProjectForUser(id, req.user.id);
 
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
@@ -297,24 +279,21 @@ router.post('/maps', requireAuth, (req, res) => {
 
     const mapId = uuidv4();
 
-    db.prepare(`
-      INSERT INTO maps (id, user_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      mapId,
-      req.user.id,
-      project_id || null,
-      name.trim(),
-      notes ? notes.trim() : null,
-      url || root.url || '',
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null
-    );
+    mapStore.createMap({
+      id: mapId,
+      userId: req.user.id,
+      projectId: project_id || null,
+      name: name.trim(),
+      notes: notes ? notes.trim() : null,
+      url: url || root.url || '',
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+    });
 
-    const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(mapId);
+    const map = mapStore.getMapById(mapId);
 
     res.json({
       map: {
@@ -335,42 +314,33 @@ router.put('/maps/:id', requireAuth, (req, res) => {
     const { name, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
 
     // Verify ownership
-    const map = db.prepare('SELECT * FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    // Build update query
-    const updates = [];
-    const params = [];
+    const patch = {};
 
     if (name !== undefined) {
-      updates.push('name = ?');
-      params.push(name.trim());
+      patch.name = name.trim();
     }
     if (notes !== undefined) {
-      updates.push('notes = ?');
-      params.push(notes ? notes.trim() : null);
+      patch.notes = notes ? notes.trim() : null;
     }
     if (root !== undefined) {
-      updates.push('root_data = ?');
-      params.push(JSON.stringify(root));
+      patch.rootData = JSON.stringify(root);
     }
     if (orphans !== undefined) {
-      updates.push('orphans_data = ?');
-      params.push(orphans ? JSON.stringify(orphans) : null);
+      patch.orphansData = orphans ? JSON.stringify(orphans) : null;
     }
     if (connections !== undefined) {
-      updates.push('connections_data = ?');
-      params.push(connections ? JSON.stringify(connections) : null);
+      patch.connectionsData = connections ? JSON.stringify(connections) : null;
     }
     if (colors !== undefined) {
-      updates.push('colors = ?');
-      params.push(colors ? JSON.stringify(colors) : null);
+      patch.colors = colors ? JSON.stringify(colors) : null;
     }
     if (connectionColors !== undefined) {
-      updates.push('connection_colors = ?');
-      params.push(connectionColors ? JSON.stringify(connectionColors) : null);
+      patch.connectionColors = connectionColors ? JSON.stringify(connectionColors) : null;
     }
     if (project_id !== undefined) {
       // Verify project ownership if setting a project
@@ -380,18 +350,12 @@ router.put('/maps/:id', requireAuth, (req, res) => {
           return res.status(400).json({ error: 'Project not found' });
         }
       }
-      updates.push('project_id = ?');
-      params.push(project_id || null);
+      patch.projectId = project_id || null;
     }
 
-    if (updates.length > 0) {
-      updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(id);
+    mapStore.updateMapById(id, patch);
 
-      db.prepare(`UPDATE maps SET ${updates.join(', ')} WHERE id = ?`).run(...params);
-    }
-
-    const updated = db.prepare('SELECT * FROM maps WHERE id = ?').get(id);
+    const updated = mapStore.getMapById(id);
 
     res.json({
       map: {
@@ -411,12 +375,12 @@ router.delete('/maps/:id', requireAuth, (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const map = db.prepare('SELECT * FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    db.prepare('DELETE FROM maps WHERE id = ?').run(id);
+    mapStore.deleteMapById(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -430,17 +394,12 @@ router.get('/maps/:id/versions', requireAuth, (req, res) => {
   try {
     const { id } = req.params;
 
-    const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const versions = db.prepare(`
-      SELECT * FROM map_versions
-      WHERE map_id = ? AND user_id = ?
-      ORDER BY created_at DESC
-      LIMIT 25
-    `).all(id, req.user.id);
+    const versions = mapStore.listMapVersionsForUserMap(id, req.user.id, 25);
 
     const parsed = versions.map((v) => ({
       ...v,
@@ -464,53 +423,38 @@ router.post('/maps/:id/versions', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
-    const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+    const map = mapStore.getMapForUser(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const versionRow = db.prepare(`
-      SELECT MAX(version_number) as maxVersion
-      FROM map_versions
-      WHERE map_id = ? AND user_id = ?
-    `).get(id, req.user.id);
-    const nextVersion = (versionRow?.maxVersion || 0) + 1;
+    const nextVersion = mapStore.getNextMapVersionNumber(id, req.user.id);
 
     const versionId = uuidv4();
     const title = name?.trim() || 'Updated';
 
-    db.prepare(`
-      INSERT INTO map_versions (
-        id, map_id, user_id, version_number, name, notes,
-        root_data, orphans_data, connections_data, colors, connection_colors
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      versionId,
-      id,
-      req.user.id,
-      nextVersion,
-      title,
-      notes?.trim() || null,
-      JSON.stringify(root),
-      orphans ? JSON.stringify(orphans) : null,
-      connections ? JSON.stringify(connections) : null,
-      colors ? JSON.stringify(colors) : null,
-      connectionColors ? JSON.stringify(connectionColors) : null
-    );
+    mapStore.createMapVersion({
+      id: versionId,
+      mapId: id,
+      userId: req.user.id,
+      versionNumber: nextVersion,
+      name: title,
+      notes: notes?.trim() || null,
+      rootData: JSON.stringify(root),
+      orphansData: orphans ? JSON.stringify(orphans) : null,
+      connectionsData: connections ? JSON.stringify(connections) : null,
+      colors: colors ? JSON.stringify(colors) : null,
+      connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+    });
 
-    const allVersions = db.prepare(`
-      SELECT id FROM map_versions
-      WHERE map_id = ? AND user_id = ?
-      ORDER BY created_at DESC
-    `).all(id, req.user.id);
+    const allVersions = mapStore.listMapVersionIdsForUserMap(id, req.user.id);
 
     if (allVersions.length > 25) {
       const toDelete = allVersions.slice(25).map((row) => row.id);
-      const placeholders = toDelete.map(() => '?').join(',');
-      db.prepare(`DELETE FROM map_versions WHERE id IN (${placeholders})`).run(...toDelete);
+      mapStore.deleteMapVersionsByIds(toDelete);
     }
 
-    const saved = db.prepare('SELECT * FROM map_versions WHERE id = ?').get(versionId);
+    const saved = mapStore.getMapVersionById(versionId);
 
     res.json({
       version: {
@@ -667,7 +611,7 @@ router.post('/shares', requireAuth, (req, res) => {
 
     // If map_id provided, verify ownership
     if (map_id) {
-      const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(map_id, req.user.id);
+      const map = mapStore.getMapForUser(map_id, req.user.id);
       if (!map) {
         return res.status(400).json({ error: 'Map not found' });
       }
