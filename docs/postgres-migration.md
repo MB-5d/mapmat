@@ -170,6 +170,14 @@ EXPECT_RUNTIME_FALLBACK=false \
 npm run check:db-health
 ```
 
+Boundary guard command:
+
+```bash
+npm run check:backend
+```
+
+`check:backend` now includes a DB-boundary validator that fails if direct SQL calls are added outside `stores/dbAdapter.js`.
+
 Optional guardrail check (when toggling `DB_PROVIDER` to an unsupported provider):
 
 ```bash
