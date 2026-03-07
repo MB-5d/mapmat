@@ -29,6 +29,8 @@ const net = require('net');
 const { probePostgres } = require('./utils/postgresProbe');
 const { probePostgresParity } = require('./utils/postgresParityProbe');
 const jobStore = require('./stores/jobStore');
+const mapStore = require('./stores/mapStore');
+const usageStore = require('./stores/usageStore');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -374,19 +376,15 @@ const recordUsage = (req, eventType, quantity = 1, meta = null) => {
     const apiKey = getApiKey(req);
     const ip = getClientIp(req);
     const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
-    const id = crypto.randomUUID();
-    db.prepare(`
-      INSERT INTO usage_events (id, user_id, api_key, ip_hash, event_type, quantity, meta)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
+    usageStore.insertUsageEvent({
+      id: crypto.randomUUID(),
       userId,
       apiKey,
       ipHash,
       eventType,
       quantity,
-      meta ? JSON.stringify(meta) : null
-    );
+      meta,
+    });
   } catch (error) {
     console.warn('Usage record error:', error.message);
   }
@@ -424,20 +422,18 @@ const checkUsageLimit = (req, eventType) => {
   const identity = getUsageIdentity(req);
   if (!identity) return { allowed: true };
 
-  const windowSpec = `-${USAGE_WINDOW_HOURS} hours`;
-  const row = db.prepare(`
-    SELECT COALESCE(SUM(quantity), 0) as total
-    FROM usage_events
-    WHERE event_type = ?
-      AND ${identity.column} = ?
-      AND created_at >= datetime('now', ?)
-  `).get(eventType, identity.value, windowSpec);
+  const used = usageStore.getUsageTotalForWindow({
+    eventType,
+    identityColumn: identity.column,
+    identityValue: identity.value,
+    windowHours: USAGE_WINDOW_HOURS,
+  });
 
-  if (row?.total >= limit) {
-    return { allowed: false, limit, used: row.total };
+  if (used >= limit) {
+    return { allowed: false, limit, used };
   }
 
-  return { allowed: true, limit, used: row?.total || 0 };
+  return { allowed: true, limit, used };
 };
 
 const enforceUsageLimit = (eventType) => (req, res, next) => {
@@ -1413,7 +1409,7 @@ const runDiscoveryJob = async (jobId, payload) => {
   const mapId = payload?.mapId || payload?.id;
   if (!mapId) throw new Error('Missing mapId');
 
-  const mapRow = db.prepare('SELECT id, url, root_data FROM maps WHERE id = ?').get(mapId);
+  const mapRow = mapStore.getMapById(mapId);
   if (!mapRow) throw new Error('Map not found');
 
   const baseUrl = resolveMapBaseUrl(mapRow);
@@ -2768,7 +2764,7 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
 app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res) => {
   const { id } = req.params;
 
-  const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+  const map = mapStore.getMapForUser(id, req.user.id);
   if (!map) {
     return res.status(404).json({ error: 'Map not found' });
   }
