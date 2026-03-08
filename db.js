@@ -7,6 +7,18 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
+const REQUESTED_DB_PROVIDER = String(process.env.DB_PROVIDER || 'sqlite').trim().toLowerCase();
+const SUPPORTED_RUNTIME_PROVIDERS = ['sqlite'];
+const ACTIVE_DB_PROVIDER = SUPPORTED_RUNTIME_PROVIDERS.includes(REQUESTED_DB_PROVIDER)
+  ? REQUESTED_DB_PROVIDER
+  : 'sqlite';
+const providerFallback = REQUESTED_DB_PROVIDER !== ACTIVE_DB_PROVIDER;
+if (providerFallback) {
+  console.warn(
+    `[db] Requested DB_PROVIDER="${REQUESTED_DB_PROVIDER}" is not supported yet; falling back to "${ACTIVE_DB_PROVIDER}".`
+  );
+}
+
 const DEFAULT_DATA_DIR = path.join(__dirname, 'data');
 const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH;
 const defaultDbPath = railwayVolumeDir
@@ -213,6 +225,18 @@ db.prepare("UPDATE pages SET severity = 'Healthy' WHERE severity IS NULL OR seve
 db.prepare("UPDATE pages SET discovery_source = 'crawl' WHERE discovery_source IS NULL OR discovery_source = ''").run();
 db.prepare("UPDATE pages SET links_in = 0 WHERE links_in IS NULL").run();
 
-console.log(`Database initialized successfully at ${DB_PATH}`);
+const runtime = {
+  requestedProvider: REQUESTED_DB_PROVIDER,
+  activeProvider: ACTIVE_DB_PROVIDER,
+  supportedProviders: SUPPORTED_RUNTIME_PROVIDERS,
+  fallback: providerFallback,
+  dbPath: DB_PATH,
+};
+
+console.log(
+  `Database initialized successfully at ${DB_PATH} (runtime=${runtime.activeProvider}, requested=${runtime.requestedProvider})`
+);
+db.runtime = runtime;
 
 module.exports = db;
+module.exports.runtime = runtime;

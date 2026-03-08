@@ -26,6 +26,12 @@ const fs = require('fs');
 const crypto = require('crypto');
 const dns = require('dns').promises;
 const net = require('net');
+const { probePostgres } = require('./utils/postgresProbe');
+const { probePostgresParity } = require('./utils/postgresParityProbe');
+const jobStore = require('./stores/jobStore');
+const mapStore = require('./stores/mapStore');
+const pageStore = require('./stores/pageStore');
+const usageStore = require('./stores/usageStore');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -118,6 +124,13 @@ app.use('/auth', authRouter);
 app.use('/api', apiRouter);
 
 const PORT = process.env.PORT || 4002;
+const DB_RUNTIME = db.runtime || {
+  requestedProvider: (process.env.DB_PROVIDER || 'sqlite').trim().toLowerCase(),
+  activeProvider: 'sqlite',
+  supportedProviders: ['sqlite'],
+  fallback: false,
+};
+const DB_PROVIDER = DB_RUNTIME.activeProvider;
 
 // Browser instance for screenshots
 let browser = null;
@@ -364,19 +377,15 @@ const recordUsage = (req, eventType, quantity = 1, meta = null) => {
     const apiKey = getApiKey(req);
     const ip = getClientIp(req);
     const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
-    const id = crypto.randomUUID();
-    db.prepare(`
-      INSERT INTO usage_events (id, user_id, api_key, ip_hash, event_type, quantity, meta)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
+    usageStore.insertUsageEvent({
+      id: crypto.randomUUID(),
       userId,
       apiKey,
       ipHash,
       eventType,
       quantity,
-      meta ? JSON.stringify(meta) : null
-    );
+      meta,
+    });
   } catch (error) {
     console.warn('Usage record error:', error.message);
   }
@@ -414,20 +423,18 @@ const checkUsageLimit = (req, eventType) => {
   const identity = getUsageIdentity(req);
   if (!identity) return { allowed: true };
 
-  const windowSpec = `-${USAGE_WINDOW_HOURS} hours`;
-  const row = db.prepare(`
-    SELECT COALESCE(SUM(quantity), 0) as total
-    FROM usage_events
-    WHERE event_type = ?
-      AND ${identity.column} = ?
-      AND created_at >= datetime('now', ?)
-  `).get(eventType, identity.value, windowSpec);
+  const used = usageStore.getUsageTotalForWindow({
+    eventType,
+    identityColumn: identity.column,
+    identityValue: identity.value,
+    windowHours: USAGE_WINDOW_HOURS,
+  });
 
-  if (row?.total >= limit) {
-    return { allowed: false, limit, used: row.total };
+  if (used >= limit) {
+    return { allowed: false, limit, used };
   }
 
-  return { allowed: true, limit, used: row?.total || 0 };
+  return { allowed: true, limit, used };
 };
 
 const enforceUsageLimit = (eventType) => (req, res, next) => {
@@ -527,15 +534,13 @@ const serializeJobRow = (row, includeResult = true) => {
   };
 };
 
-const getJobRow = (id) => db.prepare('SELECT * FROM jobs WHERE id = ?').get(id);
+const getJobRow = (id) => jobStore.getJobById(id);
 
 const findActiveDiscoveryJob = (mapId) => {
-  const rows = db.prepare(`
-    SELECT id, payload
-    FROM jobs
-    WHERE type = ? AND status IN (?, ?)
-    ORDER BY created_at ASC
-  `).all(JOB_TYPES.discovery, JOB_STATUS.queued, JOB_STATUS.running);
+  const rows = jobStore.listJobPayloadsByTypeAndStatuses(
+    JOB_TYPES.discovery,
+    [JOB_STATUS.queued, JOB_STATUS.running]
+  );
 
   for (const row of rows) {
     const payload = parseJsonSafe(row.payload) || {};
@@ -553,68 +558,49 @@ const createJob = ({ type, payload, req }) => {
   const ip = getClientIp(req);
   const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
 
-  db.prepare(`
-    INSERT INTO jobs (id, type, status, user_id, api_key, ip_hash, payload)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  jobStore.insertJob({
     id,
     type,
-    JOB_STATUS.queued,
+    status: JOB_STATUS.queued,
     userId,
     apiKey,
     ipHash,
-    JSON.stringify(payload || {})
-  );
+    payload: JSON.stringify(payload || {}),
+  });
 
   return id;
 };
 
 let activeJobs = 0;
 
-const takeNextJob = db.transaction(() => {
-  const job = db.prepare(`
-    SELECT * FROM jobs
-    WHERE status = ?
-    ORDER BY created_at ASC
-    LIMIT 1
-  `).get(JOB_STATUS.queued);
-  if (!job) return null;
-
-  const updated = db.prepare(`
-    UPDATE jobs SET status = ?, started_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND status = ?
-  `).run(JOB_STATUS.running, job.id, JOB_STATUS.queued);
-
-  if (updated.changes !== 1) return null;
-  return job;
+const takeNextJob = () => jobStore.takeNextQueuedJob({
+  queuedStatus: JOB_STATUS.queued,
+  runningStatus: JOB_STATUS.running,
 });
 
 const updateJobProgress = (id, progress) => {
-  db.prepare('UPDATE jobs SET progress = ? WHERE id = ?').run(JSON.stringify(progress), id);
+  jobStore.updateJobProgress(id, JSON.stringify(progress));
 };
 
 const markJobComplete = (id, result) => {
-  db.prepare(`
-    UPDATE jobs
-    SET status = ?, result = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(JOB_STATUS.complete, JSON.stringify(result || {}), id);
+  jobStore.markJobComplete(id, JOB_STATUS.complete, JSON.stringify(result || {}));
 };
 
 const markJobFailed = (id, error) => {
-  db.prepare(`
-    UPDATE jobs
-    SET status = ?, error = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(JOB_STATUS.failed, error?.message || String(error || 'Job failed'), id);
+  jobStore.markJobFailed(
+    id,
+    JOB_STATUS.failed,
+    error?.message || String(error || 'Job failed')
+  );
 };
 
 const markJobCanceled = (id) => {
-  db.prepare(`
-    UPDATE jobs
-    SET status = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND status IN (?, ?)
-  `).run(JOB_STATUS.canceled, id, JOB_STATUS.queued, JOB_STATUS.running);
+  jobStore.markJobCanceled(
+    id,
+    JOB_STATUS.canceled,
+    JOB_STATUS.queued,
+    JOB_STATUS.running
+  );
 };
 
 const shouldAbortJob = (id, throttleMs = 1000) => {
@@ -623,8 +609,7 @@ const shouldAbortJob = (id, throttleMs = 1000) => {
     const now = Date.now();
     if (now - lastCheck < throttleMs) return false;
     lastCheck = now;
-    const row = db.prepare('SELECT status FROM jobs WHERE id = ?').get(id);
-    return row?.status === JOB_STATUS.canceled;
+    return jobStore.getJobStatus(id) === JOB_STATUS.canceled;
   };
 };
 
@@ -846,7 +831,7 @@ function persistPagesForIa(
     };
   }
 
-  const pageColumns = db.prepare('PRAGMA table_info(pages)').all().map((col) => col.name);
+  const pageColumns = pageStore.getPageColumns();
   const hasType = pageColumns.includes('type');
   const hasDepth = pageColumns.includes('depth');
 
@@ -863,84 +848,12 @@ function persistPagesForIa(
   if (hasType) selectColumns.push('type');
   if (hasDepth) selectColumns.push('depth');
 
-  const selectStmt = db.prepare(`
-    SELECT ${selectColumns.join(', ')}
-    FROM pages
-    WHERE url = ?
-  `);
-
-  const insertColumns = [
-    'url',
-    'title',
-    'status',
-    'severity',
-    'placement',
-    'parent_url',
-    'discovery_source',
-    'links_in',
-  ];
-  if (hasType) insertColumns.push('type');
-  if (hasDepth) insertColumns.push('depth');
-  const insertStmt = db.prepare(`
-    INSERT INTO pages (${insertColumns.join(', ')}, created_at, updated_at)
-    VALUES (${insertColumns.map(() => '?').join(', ')}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `);
-
-  const updateColumns = [
-    'title',
-    'status',
-    'severity',
-    'placement',
-    'parent_url',
-    'discovery_source',
-    'links_in',
-  ];
-  if (hasType) updateColumns.push('type');
-  if (hasDepth) updateColumns.push('depth');
-  const updateStmt = db.prepare(`
-    UPDATE pages
-    SET ${updateColumns.map((col) => `${col} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP
-    WHERE url = ?
-  `);
-
   const known = new Map();
   const readExisting = (url) => {
     if (known.has(url)) return known.get(url);
-    const row = selectStmt.get(url) || null;
+    const row = pageStore.getPageByUrl(url, selectColumns) || null;
     known.set(url, row);
     return row;
-  };
-
-  const buildInsertValues = (row) => {
-    const values = [
-      row.url,
-      row.title,
-      row.status,
-      row.severity,
-      row.placement,
-      row.parent_url,
-      row.discovery_source,
-      row.links_in,
-    ];
-    if (hasType) values.push(row.type ?? null);
-    if (hasDepth) values.push(row.depth ?? null);
-    return values;
-  };
-
-  const buildUpdateValues = (row) => {
-    const values = [
-      row.title,
-      row.status,
-      row.severity,
-      row.placement,
-      row.parent_url,
-      row.discovery_source,
-      row.links_in,
-    ];
-    if (hasType) values.push(row.type ?? null);
-    if (hasDepth) values.push(row.depth ?? null);
-    values.push(row.url);
-    return values;
   };
 
   const upsertPage = ({
@@ -980,7 +893,7 @@ function persistPagesForIa(
         type,
         depth,
       };
-      insertStmt.run(...buildInsertValues(row));
+      pageStore.insertPage(row, { hasType, hasDepth });
       known.set(url, row);
       return { inserted: true, virtual: isIncomingVirtual };
     }
@@ -1040,7 +953,7 @@ function persistPagesForIa(
         type: nextType,
         depth: nextDepth,
       };
-      updateStmt.run(...buildUpdateValues(row));
+      pageStore.updatePage(row, { hasType, hasDepth });
       known.set(url, row);
     }
 
@@ -1080,7 +993,7 @@ function persistPagesForIa(
 
   const persisted = new Set();
 
-  const run = db.transaction(() => {
+  const run = pageStore.transaction(() => {
     pages.forEach((node) => {
       const canonicalUrl = normalizeUrl(node.url);
       if (!canonicalUrl) return;
@@ -1175,7 +1088,7 @@ function persistPagesForIa(
           type: nextType,
           depth,
         };
-        updateStmt.run(...buildUpdateValues(row));
+        pageStore.updatePage(row, { hasType, hasDepth });
         known.set(url, row);
       }
     });
@@ -1425,7 +1338,7 @@ const runDiscoveryJob = async (jobId, payload) => {
   const mapId = payload?.mapId || payload?.id;
   if (!mapId) throw new Error('Missing mapId');
 
-  const mapRow = db.prepare('SELECT id, url, root_data FROM maps WHERE id = ?').get(mapId);
+  const mapRow = mapStore.getMapById(mapId);
   if (!mapRow) throw new Error('Map not found');
 
   const baseUrl = resolveMapBaseUrl(mapRow);
@@ -2423,8 +2336,7 @@ async function processJob(job) {
         abortCheck
       );
 
-      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-      if (statusRow?.status === JOB_STATUS.canceled) return;
+      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
 
       markJobComplete(jobId, result);
       return;
@@ -2432,24 +2344,21 @@ async function processJob(job) {
 
     if (job.type === JOB_TYPES.screenshot) {
       const result = await captureScreenshot(payload.url, payload.type || 'full');
-      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-      if (statusRow?.status === JOB_STATUS.canceled) return;
+      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
       markJobComplete(jobId, result);
       return;
     }
 
     if (job.type === JOB_TYPES.discovery) {
       const result = await runDiscoveryJob(jobId, payload);
-      const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-      if (statusRow?.status === JOB_STATUS.canceled) return;
+      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
       markJobComplete(jobId, result);
       return;
     }
 
     throw new Error(`Unknown job type: ${job.type}`);
   } catch (error) {
-    const statusRow = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
-    if (statusRow?.status === JOB_STATUS.canceled) return;
+    if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
     markJobFailed(jobId, error);
   }
 }
@@ -2473,7 +2382,64 @@ if (RUN_WORKER) {
 }
 
 app.get('/', (_, res) => res.status(200).send('Loxo backend OK'));
+const PG_HEALTH_CACHE_MS = Number(process.env.PG_HEALTH_CACHE_MS || 30000);
+let pgHealthCache = {
+  ts: 0,
+  value: null,
+};
+let pgParityCache = {
+  ts: 0,
+  value: null,
+};
+
+const getCachedPostgresHealth = async () => {
+  const now = Date.now();
+  if (pgHealthCache.value && now - pgHealthCache.ts < PG_HEALTH_CACHE_MS) {
+    return pgHealthCache.value;
+  }
+  const value = await probePostgres(process.env.DATABASE_URL);
+  pgHealthCache = { ts: now, value };
+  return value;
+};
+
+const getCachedPostgresParity = async () => {
+  const now = Date.now();
+  if (pgParityCache.value && now - pgParityCache.ts < PG_HEALTH_CACHE_MS) {
+    return pgParityCache.value;
+  }
+  const value = await probePostgresParity({
+    databaseUrl: process.env.DATABASE_URL,
+    sqliteDb: db,
+  });
+  pgParityCache = { ts: now, value };
+  return value;
+};
+
 app.get('/health', (_, res) => res.status(200).json({ ok: true }));
+
+app.get('/health/db', async (_, res) => {
+  const pg = await getCachedPostgresHealth();
+  return res.status(200).json({
+    ok: true,
+    runtime: DB_PROVIDER,
+    runtimeRequested: DB_RUNTIME.requestedProvider,
+    runtimeFallback: DB_RUNTIME.fallback,
+    supportedRuntimes: DB_RUNTIME.supportedProviders,
+    postgres: pg,
+  });
+});
+
+app.get('/health/db/parity', async (_, res) => {
+  const parity = await getCachedPostgresParity();
+  return res.status(200).json({
+    ok: true,
+    runtime: DB_PROVIDER,
+    runtimeRequested: DB_RUNTIME.requestedProvider,
+    runtimeFallback: DB_RUNTIME.fallback,
+    supportedRuntimes: DB_RUNTIME.supportedProviders,
+    postgresParity: parity,
+  });
+});
 
 app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
   const { url, maxPages, maxDepth, options } = req.body || {};
@@ -2727,7 +2693,7 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
 app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res) => {
   const { id } = req.params;
 
-  const map = db.prepare('SELECT id FROM maps WHERE id = ? AND user_id = ?').get(id, req.user.id);
+  const map = mapStore.getMapForUser(id, req.user.id);
   if (!map) {
     return res.status(404).json({ error: 'Map not found' });
   }

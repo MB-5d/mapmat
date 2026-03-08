@@ -5,8 +5,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
+const authStore = require('../stores/authStore');
 
 const router = express.Router();
 
@@ -158,23 +157,23 @@ function seedTestUserIfEnabled() {
 
   try {
     const passwordHash = bcrypt.hashSync(TEST_AUTH_SEED_PASSWORD, 10);
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(TEST_AUTH_SEED_EMAIL);
+    const existingUserId = authStore.findUserIdByEmail(TEST_AUTH_SEED_EMAIL);
 
-    if (existing) {
-      db.prepare(`
-        UPDATE users
-        SET password_hash = ?, name = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(passwordHash, TEST_AUTH_SEED_NAME, existing.id);
+    if (existingUserId) {
+      authStore.updateSeedUserCredentials({
+        userId: existingUserId,
+        passwordHash,
+        name: TEST_AUTH_SEED_NAME,
+      });
       console.log(`[auth] Refreshed test account credentials: ${TEST_AUTH_SEED_EMAIL}`);
       return;
     }
 
-    const userId = uuidv4();
-    db.prepare(`
-      INSERT INTO users (id, email, password_hash, name)
-      VALUES (?, ?, ?, ?)
-    `).run(userId, TEST_AUTH_SEED_EMAIL, passwordHash, TEST_AUTH_SEED_NAME);
+    authStore.createUser({
+      email: TEST_AUTH_SEED_EMAIL,
+      passwordHash,
+      name: TEST_AUTH_SEED_NAME,
+    });
 
     console.log(`[auth] Seeded test account: ${TEST_AUTH_SEED_EMAIL}`);
   } catch (error) {
@@ -223,7 +222,7 @@ function authMiddleware(req, res, next) {
     return next();
   }
 
-  const user = db.prepare('SELECT id, email, name, created_at FROM users WHERE id = ?').get(decoded.userId);
+  const user = authStore.getPublicUserById(decoded.userId);
   req.user = user || null;
   next();
 }
@@ -251,8 +250,8 @@ router.post('/signup', signupLimiter, async (req, res) => {
     }
 
     // Check if email already exists
-    const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(emailNormalized);
-    if (existing) {
+    const existingUserId = authStore.findUserIdByEmail(emailNormalized);
+    if (existingUserId) {
       return res.status(400).json({ error: 'An account with this email already exists' });
     }
 
@@ -261,21 +260,21 @@ router.post('/signup', signupLimiter, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     // Create user
-    const userId = uuidv4();
     const displayName = name || emailNormalized.split('@')[0];
 
-    db.prepare(`
-      INSERT INTO users (id, email, password_hash, name)
-      VALUES (?, ?, ?, ?)
-    `).run(userId, emailNormalized, passwordHash, displayName);
+    const createdUser = authStore.createUser({
+      email: emailNormalized,
+      passwordHash,
+      name: displayName,
+    });
 
     // Generate token and set cookie
-    const token = generateToken(userId);
+    const token = generateToken(createdUser.id);
     res.cookie('auth_token', token, COOKIE_OPTIONS);
 
     res.json({
       user: {
-        id: userId,
+        id: createdUser.id,
         email: emailNormalized,
         name: displayName,
       },
@@ -298,7 +297,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     // Find user
-    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(emailNormalized);
+    let user = authStore.getUserByEmail(emailNormalized);
 
     // In test-auth mode, allow quick account bootstrap by logging in with a new fake account.
     if (!user && TEST_AUTH_ENABLED) {
@@ -306,17 +305,15 @@ router.post('/login', loginLimiter, async (req, res) => {
         return res.status(400).json({ error: 'Password must be at least 6 characters' });
       }
 
-      const userId = uuidv4();
       const displayName = emailNormalized.split('@')[0];
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(password, salt);
 
-      db.prepare(`
-        INSERT INTO users (id, email, password_hash, name)
-        VALUES (?, ?, ?, ?)
-      `).run(userId, emailNormalized, passwordHash, displayName);
-
-      user = db.prepare('SELECT * FROM users WHERE email = ?').get(emailNormalized);
+      user = authStore.createUser({
+        email: emailNormalized,
+        passwordHash,
+        name: displayName,
+      });
     }
 
     if (!user) {
@@ -380,8 +377,8 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
         return res.status(400).json({ error: 'Current password is required to change password' });
       }
 
-      const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
-      const isValid = await bcrypt.compare(currentPassword, user.password_hash);
+      const passwordHashCurrent = authStore.getUserPasswordHash(req.user.id);
+      const isValid = await bcrypt.compare(currentPassword, passwordHashCurrent || '');
       if (!isValid) {
         return res.status(401).json({ error: 'Current password is incorrect' });
       }
@@ -393,18 +390,16 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(newPassword, salt);
 
-      db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(passwordHash, req.user.id);
+      authStore.updateUserPassword(req.user.id, passwordHash);
     }
 
     // Update name if provided
     if (name !== undefined) {
-      db.prepare('UPDATE users SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .run(name, req.user.id);
+      authStore.updateUserName(req.user.id, name);
     }
 
     // Get updated user
-    const updated = db.prepare('SELECT id, email, name, created_at FROM users WHERE id = ?').get(req.user.id);
+    const updated = authStore.getPublicUserById(req.user.id);
 
     res.json({
       user: {
@@ -429,14 +424,14 @@ router.delete('/me', authMiddleware, requireAuth, profileMutationLimiter, async 
       return res.status(400).json({ error: 'Password is required to delete account' });
     }
 
-    const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
-    const isValid = await bcrypt.compare(password, user.password_hash);
+    const passwordHashCurrent = authStore.getUserPasswordHash(req.user.id);
+    const isValid = await bcrypt.compare(password, passwordHashCurrent || '');
     if (!isValid) {
       return res.status(401).json({ error: 'Password is incorrect' });
     }
 
     // Delete user (cascades to projects, maps, history, shares)
-    db.prepare('DELETE FROM users WHERE id = ?').run(req.user.id);
+    authStore.deleteUser(req.user.id);
 
     res.clearCookie('auth_token', CLEAR_COOKIE_OPTIONS);
     res.json({ success: true });
