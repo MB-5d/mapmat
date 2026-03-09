@@ -218,3 +218,35 @@ Expected:
   - `runtimeFallback: true`
   - Postgres readiness healthy
 - parity shows `allMatch: true`
+
+## 11) Phase 5 Daily Ops (Shadow Postgres While Runtime Stays SQLite)
+
+Use these shortcuts from repo root:
+
+```bash
+npm run verify:phase5:staging
+```
+
+```bash
+npm run verify:phase5:production
+```
+
+If production canary fails with parity mismatch, re-sync production shadow Postgres:
+
+```bash
+railway ssh -s mapmat -e production
+```
+
+Then inside the Railway shell (`root@...:/app#`):
+
+```bash
+cd /app
+MIGRATION_TRUNCATE=true SQLITE_DB_PATH=/app/data/mapmat.db npm run migrate:postgres
+exit
+```
+
+Then back on your local shell:
+
+```bash
+npm run verify:phase5:production
+```
