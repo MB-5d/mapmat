@@ -18,6 +18,8 @@
     "check:db-parity:staging": "PARITY_URL=\"https://mapmat-staging.up.railway.app/health/db/parity\" node scripts/check-db-parity.js",
     "check:db-parity:production": "PARITY_URL=\"https://mapmat-production.up.railway.app/health/db/parity\" node scripts/check-db-parity.js",
     "check:postgres": "node scripts/check-postgres-connection.js",
+    "shadow:sync:staging": "railway ssh -s mapmat -e staging \"cd /app && MIGRATION_TRUNCATE=true SQLITE_DB_PATH=/app/data/mapmat.db npm run migrate:postgres\"",
+    "shadow:sync:production": "railway ssh -s mapmat -e production \"cd /app && MIGRATION_TRUNCATE=true SQLITE_DB_PATH=/app/data/mapmat.db npm run migrate:postgres\"",
     "backup:archive": "bash scripts/backup-repo.sh",
     "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.js",
     "verify:postgres": "node scripts/verify-postgres-migration.js",
@@ -25,7 +27,9 @@
     "test:smoke:staging": "API_BASE=\"https://mapmat-staging.up.railway.app\" node scripts/smoke-test.js",
     "test:smoke:production": "API_BASE=\"https://mapmat-production.up.railway.app\" node scripts/smoke-test.js",
     "verify:phase5:staging": "npm run check:db-canary:staging && npm run test:smoke:staging",
+    "verify:phase5:staging:resync": "npm run shadow:sync:staging && npm run verify:phase5:staging",
     "verify:phase5:production": "npm run check:db-canary:production && npm run test:smoke:production",
+    "verify:phase5:production:resync": "npm run shadow:sync:production && npm run verify:phase5:production",
     "test:ia": "node scripts/ia-test.js"
   },
   "engines": {

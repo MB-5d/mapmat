@@ -231,6 +231,16 @@ npm run verify:phase5:staging
 npm run verify:phase5:production
 ```
 
+If parity fails (expected when new writes land in SQLite first), use the automatic re-sync commands:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+```bash
+npm run verify:phase5:production:resync
+```
+
 If production canary fails with parity mismatch, re-sync production shadow Postgres:
 
 ```bash
@@ -250,3 +260,20 @@ Then back on your local shell:
 ```bash
 npm run verify:phase5:production
 ```
+
+## 12) Next Step (Phase 6 Entry)
+
+Phase 6 starts when you want runtime cutover work.
+
+Entry criteria:
+
+- `npm run verify:phase5:staging` passes
+- `npm run verify:phase5:production` passes
+- `DB_PROVIDER=postgres` is set in staging and production (requested runtime)
+- `/health/db` shows:
+  - `runtime: "sqlite"`
+  - `runtimeRequested: "postgres"`
+  - `runtimeFallback: true`
+  - `postgres.reachable: true`
+
+At this point, proceed to implementing real Postgres runtime support (not just shadow parity).

@@ -55,6 +55,13 @@ npm run verify:phase5:staging
 npm run verify:phase5:production
 ```
 
+If parity drifts (normal while runtime is still SQLite), use the one-command re-sync:
+
+```bash
+npm run verify:phase5:staging:resync
+npm run verify:phase5:production:resync
+```
+
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.
 
 ### Option 1: Railway + Vercel (Recommended)
