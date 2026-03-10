@@ -48,6 +48,13 @@ Detailed setup steps are in `docs/deployment-workflow.md`.
 Release checklist and promotion steps are in `docs/release-sop.md`.
 Postgres migration starter guide is in `docs/postgres-migration.md`.
 
+Phase 5 quick checks (repo root):
+
+```bash
+npm run verify:phase5:staging
+npm run verify:phase5:production
+```
+
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.
 
 ### Option 1: Railway + Vercel (Recommended)
