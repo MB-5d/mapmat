@@ -277,3 +277,37 @@ Entry criteria:
   - `postgres.reachable: true`
 
 At this point, proceed to implementing real Postgres runtime support (not just shadow parity).
+
+## 13) Phase 6A (Started): Async Store Boundary for Runtime Cutover
+
+Phase 6A adds cutover-safe scaffolding without changing runtime behavior yet.
+
+What is now in place:
+
+- `stores/dbAdapter.js`
+  - adds async DB methods:
+    - `queryOneAsync`
+    - `queryAllAsync`
+    - `executeAsync`
+    - `transactionAsync`
+  - keeps existing sync methods for current sqlite runtime
+  - includes Postgres pool/query translation support behind runtime gates
+- `stores/authStore.js`
+  - now uses async adapter methods for auth data access
+- `routes/auth.js`
+  - now awaits store operations across signup/login/profile/delete
+  - test-auth seed path now runs async
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Expected: pass with no DB-boundary violations and no syntax errors.
+
+Important:
+
+- Runtime remains sqlite shadow mode in Phase 6A.
+- Do **not** change `SUPPORTED_RUNTIME_PROVIDERS` to include `postgres` yet.
+- Continue using phase 5 canary/parity checks during this migration stage.

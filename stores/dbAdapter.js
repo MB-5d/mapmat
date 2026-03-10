@@ -1,3 +1,5 @@
+const { AsyncLocalStorage } = require('async_hooks');
+const { Pool } = require('pg');
 const db = require('../db');
 
 const runtime = db.runtime || {
@@ -7,32 +9,131 @@ const runtime = db.runtime || {
   fallback: false,
 };
 
-function ensureSupportedRuntime() {
+const txStorage = new AsyncLocalStorage();
+let pgPool = null;
+
+function ensureSqliteRuntime() {
   if (runtime.activeProvider !== 'sqlite') {
     throw new Error(
-      `DB runtime "${runtime.activeProvider}" is not implemented in store adapter yet.`
+      `DB runtime "${runtime.activeProvider}" is not implemented in sync store adapter APIs.`
     );
   }
 }
 
+function ensurePostgresPool() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required for postgres runtime.');
+  }
+  if (!pgPool) {
+    pgPool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: Number(process.env.PG_POOL_MAX || 10),
+      idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || 30000),
+    });
+  }
+  return pgPool;
+}
+
+function toPostgresSql(sql) {
+  let index = 0;
+  return String(sql || '').replace(/\?/g, () => {
+    index += 1;
+    return `$${index}`;
+  });
+}
+
+async function runPostgresQuery(sql, params = []) {
+  const text = toPostgresSql(sql);
+  const txClient = txStorage.getStore() || null;
+  if (txClient) return txClient.query(text, params);
+  return ensurePostgresPool().query(text, params);
+}
+
 function queryOne(sql, params = []) {
-  ensureSupportedRuntime();
+  ensureSqliteRuntime();
   return db.prepare(sql).get(...params) || null;
 }
 
 function queryAll(sql, params = []) {
-  ensureSupportedRuntime();
+  ensureSqliteRuntime();
   return db.prepare(sql).all(...params);
 }
 
 function execute(sql, params = []) {
-  ensureSupportedRuntime();
+  ensureSqliteRuntime();
   return db.prepare(sql).run(...params);
 }
 
 function transaction(fn) {
-  ensureSupportedRuntime();
+  ensureSqliteRuntime();
   return db.transaction(fn);
+}
+
+async function queryOneAsync(sql, params = []) {
+  if (runtime.activeProvider === 'sqlite') {
+    return queryOne(sql, params);
+  }
+  const result = await runPostgresQuery(sql, params);
+  return result.rows[0] || null;
+}
+
+async function queryAllAsync(sql, params = []) {
+  if (runtime.activeProvider === 'sqlite') {
+    return queryAll(sql, params);
+  }
+  const result = await runPostgresQuery(sql, params);
+  return result.rows;
+}
+
+async function executeAsync(sql, params = []) {
+  if (runtime.activeProvider === 'sqlite') {
+    return execute(sql, params);
+  }
+  const result = await runPostgresQuery(sql, params);
+  return {
+    changes: Number(result.rowCount || 0),
+    lastInsertRowid: null,
+  };
+}
+
+function transactionAsync(fn) {
+  if (runtime.activeProvider === 'sqlite') {
+    return async (...args) => {
+      db.exec('BEGIN');
+      try {
+        const result = await fn(...args);
+        db.exec('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          db.exec('ROLLBACK');
+        } catch {
+          // Ignore rollback errors.
+        }
+        throw error;
+      }
+    };
+  }
+
+  return async (...args) => {
+    const pool = ensurePostgresPool();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await txStorage.run(client, () => fn(...args));
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // Ignore rollback errors.
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
 }
 
 function placeholders(count) {
@@ -45,5 +146,9 @@ module.exports = {
   queryAll,
   execute,
   transaction,
+  queryOneAsync,
+  queryAllAsync,
+  executeAsync,
+  transactionAsync,
   placeholders,
 };
