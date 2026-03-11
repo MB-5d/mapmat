@@ -372,23 +372,21 @@ const requireApiKey = (req, res, next) => {
 const getApiKey = (req) => req.get('x-api-key') || req.query?.api_key || req.body?.api_key || null;
 
 const recordUsage = (req, eventType, quantity = 1, meta = null) => {
-  try {
-    const userId = req.user?.id || null;
-    const apiKey = getApiKey(req);
-    const ip = getClientIp(req);
-    const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
-    usageStore.insertUsageEvent({
-      id: crypto.randomUUID(),
-      userId,
-      apiKey,
-      ipHash,
-      eventType,
-      quantity,
-      meta,
-    });
-  } catch (error) {
+  const userId = req.user?.id || null;
+  const apiKey = getApiKey(req);
+  const ip = getClientIp(req);
+  const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
+  usageStore.insertUsageEventAsync({
+    id: crypto.randomUUID(),
+    userId,
+    apiKey,
+    ipHash,
+    eventType,
+    quantity,
+    meta,
+  }).catch((error) => {
     console.warn('Usage record error:', error.message);
-  }
+  });
 };
 
 const USAGE_WINDOW_HOURS = Number(process.env.USAGE_WINDOW_HOURS ?? 24);
@@ -416,14 +414,14 @@ const getUsageIdentity = (req) => {
   return null;
 };
 
-const checkUsageLimit = (req, eventType) => {
+const checkUsageLimit = async (req, eventType) => {
   const limit = getUsageLimit(eventType);
   if (!limit) return { allowed: true };
 
   const identity = getUsageIdentity(req);
   if (!identity) return { allowed: true };
 
-  const used = usageStore.getUsageTotalForWindow({
+  const used = await usageStore.getUsageTotalForWindowAsync({
     eventType,
     identityColumn: identity.column,
     identityValue: identity.value,
@@ -437,8 +435,8 @@ const checkUsageLimit = (req, eventType) => {
   return { allowed: true, limit, used };
 };
 
-const enforceUsageLimit = (eventType) => (req, res, next) => {
-  const check = checkUsageLimit(req, eventType);
+const enforceUsageLimit = (eventType) => async (req, res, next) => {
+  const check = await checkUsageLimit(req, eventType);
   if (!check.allowed) {
     return res.status(429).json({
       error: 'Usage limit exceeded',

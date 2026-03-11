@@ -349,3 +349,42 @@ If parity mismatches (normal while sqlite gets new writes), re-sync and re-run:
 ```bash
 npm run verify:phase5:staging:resync
 ```
+
+## 15) Phase 6C (Started): Usage Path Async Conversion
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- migrate usage reads/writes and usage limit checks to async store APIs
+
+What is now in place:
+
+- `stores/usageStore.js`
+  - async variants added for:
+    - usage by day
+    - usage totals
+    - usage event insert
+    - usage window total checks
+- `routes/api.js`
+  - `/api/admin/usage` now awaits async usage store methods
+- `server.js`
+  - usage recording now calls async insert path
+  - usage limit middleware now awaits async usage-window totals
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Then verify shadow parity safety on staging:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```

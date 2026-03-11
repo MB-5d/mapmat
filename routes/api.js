@@ -85,8 +85,8 @@ router.get('/admin/usage', requireAdminKey, async (req, res) => {
     const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30;
     const since = `-${days} days`;
 
-    const byDay = usageStore.getUsageByDaySince(since);
-    const totals = usageStore.getUsageTotalsSince(since);
+    const byDay = await usageStore.getUsageByDaySinceAsync(since);
+    const totals = await usageStore.getUsageTotalsSinceAsync(since);
 
     res.json({ days, totals, byDay });
   } catch (error) {
