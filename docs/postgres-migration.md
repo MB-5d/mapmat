@@ -311,3 +311,41 @@ Important:
 - Runtime remains sqlite shadow mode in Phase 6A.
 - Do **not** change `SUPPORTED_RUNTIME_PROVIDERS` to include `postgres` yet.
 - Continue using phase 5 canary/parity checks during this migration stage.
+
+## 14) Phase 6B (Started): Projects/Maps/History/Shares Route-Store Async Path
+
+Goal:
+
+- keep runtime behavior unchanged (still sqlite fallback)
+- migrate API route/store calls to async DB adapter path so runtime cutover can happen safely in a later phase
+
+What is now in place:
+
+- `stores/projectStore.js`
+  - async variants added for list/count/create/read/update/delete project operations
+- `stores/mapStore.js`
+  - async variants added for maps and map version operations
+- `stores/historyStore.js`
+  - async variants added for list/count/create/trim/update/delete history operations
+- `stores/shareStore.js`
+  - async variants added for create/read/increment/delete/list/count share operations
+- `routes/api.js`
+  - handlers now run `async` and await store operations on projects/maps/history/shares paths
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Recommended shadow-runtime safety checks (staging):
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity mismatches (normal while sqlite gets new writes), re-sync and re-run:
+
+```bash
+npm run verify:phase5:staging:resync
+```
