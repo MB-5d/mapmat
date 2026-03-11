@@ -388,3 +388,45 @@ If parity drifts due to fresh sqlite writes:
 ```bash
 npm run verify:phase5:staging:resync
 ```
+
+## 16) Phase 6D (Started): Job Queue + Stream Routes Async Conversion
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- move job read/write paths to async store APIs to remove sync DB coupling before runtime cutover
+
+What is now in place:
+
+- `stores/jobStore.js`
+  - async variants added for:
+    - job lookup
+    - list active job payloads
+    - insert job
+    - claim next queued job (transactional)
+    - update progress
+    - complete/fail/cancel
+    - status lookup
+- `server.js`
+  - job helpers now use async store methods
+  - worker loop now runs async job claim/update path
+  - scan/screenshot/discovery job endpoints now await async job operations
+  - stream pollers now read job state through async APIs
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow health/parity:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```

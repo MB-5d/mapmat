@@ -532,10 +532,10 @@ const serializeJobRow = (row, includeResult = true) => {
   };
 };
 
-const getJobRow = (id) => jobStore.getJobById(id);
+const getJobRow = (id) => jobStore.getJobByIdAsync(id);
 
-const findActiveDiscoveryJob = (mapId) => {
-  const rows = jobStore.listJobPayloadsByTypeAndStatuses(
+const findActiveDiscoveryJob = async (mapId) => {
+  const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
     JOB_TYPES.discovery,
     [JOB_STATUS.queued, JOB_STATUS.running]
   );
@@ -549,14 +549,14 @@ const findActiveDiscoveryJob = (mapId) => {
   return null;
 };
 
-const createJob = ({ type, payload, req }) => {
+const createJob = async ({ type, payload, req }) => {
   const id = crypto.randomUUID();
   const userId = req.user?.id || null;
   const apiKey = getApiKey(req);
   const ip = getClientIp(req);
   const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
 
-  jobStore.insertJob({
+  await jobStore.insertJobAsync({
     id,
     type,
     status: JOB_STATUS.queued,
@@ -571,29 +571,29 @@ const createJob = ({ type, payload, req }) => {
 
 let activeJobs = 0;
 
-const takeNextJob = () => jobStore.takeNextQueuedJob({
+const takeNextJob = () => jobStore.takeNextQueuedJobAsync({
   queuedStatus: JOB_STATUS.queued,
   runningStatus: JOB_STATUS.running,
 });
 
-const updateJobProgress = (id, progress) => {
-  jobStore.updateJobProgress(id, JSON.stringify(progress));
+const updateJobProgress = async (id, progress) => {
+  await jobStore.updateJobProgressAsync(id, JSON.stringify(progress));
 };
 
-const markJobComplete = (id, result) => {
-  jobStore.markJobComplete(id, JOB_STATUS.complete, JSON.stringify(result || {}));
+const markJobComplete = async (id, result) => {
+  await jobStore.markJobCompleteAsync(id, JOB_STATUS.complete, JSON.stringify(result || {}));
 };
 
-const markJobFailed = (id, error) => {
-  jobStore.markJobFailed(
+const markJobFailed = async (id, error) => {
+  await jobStore.markJobFailedAsync(
     id,
     JOB_STATUS.failed,
     error?.message || String(error || 'Job failed')
   );
 };
 
-const markJobCanceled = (id) => {
-  jobStore.markJobCanceled(
+const markJobCanceled = async (id) => {
+  await jobStore.markJobCanceledAsync(
     id,
     JOB_STATUS.canceled,
     JOB_STATUS.queued,
@@ -603,11 +603,11 @@ const markJobCanceled = (id) => {
 
 const shouldAbortJob = (id, throttleMs = 1000) => {
   let lastCheck = 0;
-  return () => {
+  return async () => {
     const now = Date.now();
     if (now - lastCheck < throttleMs) return false;
     lastCheck = now;
-    return jobStore.getJobStatus(id) === JOB_STATUS.canceled;
+    return (await jobStore.getJobStatusAsync(id)) === JOB_STATUS.canceled;
   };
 };
 
@@ -1646,7 +1646,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const extraHeaders = {};
 
   while (queueIndex < queue.length && visited.size < maxPages) {
-    if (shouldAbort?.()) throw new Error('Scan aborted');
+    if (await shouldAbort?.()) throw new Error('Scan aborted');
     const { url, depth } = queue[queueIndex++];
 
     if (visited.has(url)) continue;
@@ -2322,7 +2322,9 @@ async function processJob(job) {
         }
         progressState.lastUpdate = now;
         progressState.lastScanned = progress.scanned;
-        updateJobProgress(jobId, progress);
+        updateJobProgress(jobId, progress).catch((err) => {
+          console.error('Job progress update error:', err);
+        });
       };
 
       const result = await crawlSite(
@@ -2334,36 +2336,39 @@ async function processJob(job) {
         abortCheck
       );
 
-      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
+      if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
 
-      markJobComplete(jobId, result);
+      await markJobComplete(jobId, result);
       return;
     }
 
     if (job.type === JOB_TYPES.screenshot) {
       const result = await captureScreenshot(payload.url, payload.type || 'full');
-      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
-      markJobComplete(jobId, result);
+      if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+      await markJobComplete(jobId, result);
       return;
     }
 
     if (job.type === JOB_TYPES.discovery) {
       const result = await runDiscoveryJob(jobId, payload);
-      if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
-      markJobComplete(jobId, result);
+      if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+      await markJobComplete(jobId, result);
       return;
     }
 
     throw new Error(`Unknown job type: ${job.type}`);
   } catch (error) {
-    if (jobStore.getJobStatus(jobId) === JOB_STATUS.canceled) return;
-    markJobFailed(jobId, error);
+    if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+    await markJobFailed(jobId, error);
   }
 }
 
-const runJobLoop = () => {
+let jobLoopRunning = false;
+const runJobLoop = async () => {
+  if (jobLoopRunning) return;
+  jobLoopRunning = true;
   while (activeJobs < JOB_MAX_CONCURRENCY) {
-    const job = takeNextJob();
+    const job = await takeNextJob();
     if (!job) break;
     activeJobs += 1;
     processJob(job)
@@ -2372,11 +2377,16 @@ const runJobLoop = () => {
         activeJobs -= 1;
       });
   }
+  jobLoopRunning = false;
 };
 
 if (RUN_WORKER) {
-  setInterval(runJobLoop, JOB_POLL_INTERVAL_MS);
-  setTimeout(runJobLoop, 0);
+  setInterval(() => {
+    runJobLoop().catch((err) => console.error('Job loop error:', err));
+  }, JOB_POLL_INTERVAL_MS);
+  setTimeout(() => {
+    runJobLoop().catch((err) => console.error('Job loop error:', err));
+  }, 0);
 }
 
 app.get('/', (_, res) => res.status(200).send('Loxo backend OK'));
@@ -2597,7 +2607,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
       fallback: DEFAULT_MAX_DEPTH,
     });
 
-    const jobId = createJob({
+    const jobId = await createJob({
       type: JOB_TYPES.scan,
       payload: {
         url: safeUrl,
@@ -2624,23 +2634,23 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
   }
 });
 
-app.get('/scan-jobs/:id', authMiddleware, requireApiKey, (req, res) => {
+app.get('/scan-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
-  const row = getJobRow(id);
+  const row = await getJobRow(id);
   if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
   }
   res.json({ job: serializeJobRow(row, includeResult) });
 });
 
-app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, (req, res) => {
+app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
-  const row = getJobRow(id);
+  const row = await getJobRow(id);
   if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
   }
-  markJobCanceled(id);
+  await markJobCanceled(id);
   res.json({ success: true });
 });
 
@@ -2665,12 +2675,12 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  const interval = setInterval(() => {
+  const interval = setInterval(async () => {
     if (closed) {
       clearInterval(interval);
       return;
     }
-    const row = getJobRow(id);
+    const row = await getJobRow(id);
     if (!row || row.type !== JOB_TYPES.scan) {
       sendEvent('error', { error: 'Job not found' });
       clearInterval(interval);
@@ -2691,13 +2701,13 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
 app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res) => {
   const { id } = req.params;
 
-  const map = mapStore.getMapForUser(id, req.user.id);
+  const map = await mapStore.getMapForUserAsync(id, req.user.id);
   if (!map) {
     return res.status(404).json({ error: 'Map not found' });
   }
 
   try {
-    const existingJobId = findActiveDiscoveryJob(id);
+    const existingJobId = await findActiveDiscoveryJob(id);
     if (existingJobId) {
       return res.json({
         ok: true,
@@ -2708,7 +2718,7 @@ app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res
       });
     }
 
-    const jobId = createJob({
+    const jobId = await createJob({
       type: JOB_TYPES.discovery,
       payload: { mapId: id },
       req,
@@ -2765,7 +2775,7 @@ app.post('/screenshot-jobs', authMiddleware, screenshotLimiter, requireApiKey, e
 
   try {
     const safeUrl = await assertSafeUrl(url);
-    const jobId = createJob({
+    const jobId = await createJob({
       type: JOB_TYPES.screenshot,
       payload: { url: safeUrl, type },
       req,
@@ -2783,23 +2793,23 @@ app.post('/screenshot-jobs', authMiddleware, screenshotLimiter, requireApiKey, e
   }
 });
 
-app.get('/screenshot-jobs/:id', authMiddleware, requireApiKey, (req, res) => {
+app.get('/screenshot-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
-  const row = getJobRow(id);
+  const row = await getJobRow(id);
   if (!row || row.type !== JOB_TYPES.screenshot) {
     return res.status(404).json({ error: 'Job not found' });
   }
   res.json({ job: serializeJobRow(row, includeResult) });
 });
 
-app.post('/screenshot-jobs/:id/cancel', authMiddleware, requireApiKey, (req, res) => {
+app.post('/screenshot-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
-  const row = getJobRow(id);
+  const row = await getJobRow(id);
   if (!row || row.type !== JOB_TYPES.screenshot) {
     return res.status(404).json({ error: 'Job not found' });
   }
-  markJobCanceled(id);
+  await markJobCanceled(id);
   res.json({ success: true });
 });
 
@@ -2824,12 +2834,12 @@ app.get('/screenshot-jobs/:id/stream', authMiddleware, requireApiKey, (req, res)
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  const interval = setInterval(() => {
+  const interval = setInterval(async () => {
     if (closed) {
       clearInterval(interval);
       return;
     }
-    const row = getJobRow(id);
+    const row = await getJobRow(id);
     if (!row || row.type !== JOB_TYPES.screenshot) {
       sendEvent('error', { error: 'Job not found' });
       clearInterval(interval);
