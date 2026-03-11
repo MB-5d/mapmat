@@ -813,7 +813,7 @@ const getSeverityForPage = ({ placement, status }) => {
   return 'Healthy';
 };
 
-function persistPagesForIa(
+async function persistPagesForIa(
   nodes,
   baseHost,
   discoverySourceByUrl = new Map(),
@@ -829,7 +829,7 @@ function persistPagesForIa(
     };
   }
 
-  const pageColumns = pageStore.getPageColumns();
+  const pageColumns = await pageStore.getPageColumnsAsync();
   const hasType = pageColumns.includes('type');
   const hasDepth = pageColumns.includes('depth');
 
@@ -847,14 +847,14 @@ function persistPagesForIa(
   if (hasDepth) selectColumns.push('depth');
 
   const known = new Map();
-  const readExisting = (url) => {
+  const readExisting = async (url) => {
     if (known.has(url)) return known.get(url);
-    const row = pageStore.getPageByUrl(url, selectColumns) || null;
+    const row = (await pageStore.getPageByUrlAsync(url, selectColumns)) || null;
     known.set(url, row);
     return row;
   };
 
-  const upsertPage = ({
+  const upsertPage = async ({
     url,
     title,
     status,
@@ -865,7 +865,7 @@ function persistPagesForIa(
     discovery_source,
     incomingLinks = 0,
   }) => {
-    const existing = readExisting(url);
+    const existing = await readExisting(url);
     const isIncomingVirtual = type === PAGE_TYPE_VIRTUAL;
     const isExistingVirtual = existing
       && (existing.type === PAGE_TYPE_VIRTUAL || existing.status === PAGE_STATUS_MISSING);
@@ -891,7 +891,7 @@ function persistPagesForIa(
         type,
         depth,
       };
-      pageStore.insertPage(row, { hasType, hasDepth });
+      await pageStore.insertPageAsync(row, { hasType, hasDepth });
       known.set(url, row);
       return { inserted: true, virtual: isIncomingVirtual };
     }
@@ -951,26 +951,26 @@ function persistPagesForIa(
         type: nextType,
         depth: nextDepth,
       };
-      pageStore.updatePage(row, { hasType, hasDepth });
+      await pageStore.updatePageAsync(row, { hasType, hasDepth });
       known.set(url, row);
     }
 
     return { updated: needsUpdate, upgraded: isExistingVirtual && !isIncomingVirtual };
   };
 
-  const ensureParentChain = (url) => {
+  const ensureParentChain = async (url) => {
     const chain = [];
     let parentUrl = getParentUrl(url);
     while (parentUrl) {
       chain.unshift(parentUrl);
       parentUrl = getParentUrl(parentUrl);
     }
-    chain.forEach((parent) => {
+    for (const parent of chain) {
       const basePlacement = getPlacementForUrl(parent, baseHost);
-      if (!basePlacement) return;
+      if (!basePlacement) continue;
       const depth = getUrlDepth(parent);
       const parentParent = getParentUrl(parent);
-      upsertPage({
+      await upsertPage({
         url: parent,
         title: getTitleFromUrl(parent),
         status: PAGE_STATUS_MISSING,
@@ -981,7 +981,7 @@ function persistPagesForIa(
         discovery_source: 'crawl',
         incomingLinks: 0,
       });
-    });
+    }
   };
 
   const pages = Array.from(nodes.values());
@@ -991,18 +991,18 @@ function persistPagesForIa(
 
   const persisted = new Set();
 
-  const run = pageStore.transaction(() => {
-    pages.forEach((node) => {
+  const run = pageStore.transactionAsync(async () => {
+    for (const node of pages) {
       const canonicalUrl = normalizeUrl(node.url);
-      if (!canonicalUrl) return;
-      if (persisted.has(canonicalUrl)) return;
+      if (!canonicalUrl) continue;
+      if (persisted.has(canonicalUrl)) continue;
       persisted.add(canonicalUrl);
 
       const basePlacement = getPlacementForUrl(canonicalUrl, baseHost);
-      if (!basePlacement) return;
+      if (!basePlacement) continue;
       if (basePlacement === 'Subdomain') subdomainCount += 1;
 
-      ensureParentChain(canonicalUrl);
+      await ensureParentChain(canonicalUrl);
 
       const depth = getUrlDepth(canonicalUrl);
       const parentUrl = getParentUrl(canonicalUrl);
@@ -1020,7 +1020,7 @@ function persistPagesForIa(
         ? 'crawl'
         : (discoverySourceByUrl.get(canonicalUrl) || 'crawl');
 
-      const result = upsertPage({
+      const result = await upsertPage({
         url: canonicalUrl,
         title,
         status,
@@ -1038,16 +1038,16 @@ function persistPagesForIa(
       if (result?.inserted && result?.virtual) {
         virtualInserted += 1;
       }
-    });
+    }
 
-    linksInCounts.forEach((count, url) => {
-      if (!count) return;
-      if (persisted.has(url)) return;
+    for (const [url, count] of linksInCounts.entries()) {
+      if (!count) continue;
+      if (persisted.has(url)) continue;
 
-      const existing = readExisting(url);
-      if (!existing) return;
+      const existing = await readExisting(url);
+      if (!existing) continue;
       const basePlacement = getPlacementForUrl(url, baseHost);
-      if (!basePlacement) return;
+      if (!basePlacement) continue;
 
       const nextLinksIn = (Number.isFinite(existing.links_in) ? existing.links_in : 0) + count;
       const nextDiscoverySource = 'crawl';
@@ -1086,13 +1086,13 @@ function persistPagesForIa(
           type: nextType,
           depth,
         };
-        pageStore.updatePage(row, { hasType, hasDepth });
+        await pageStore.updatePageAsync(row, { hasType, hasDepth });
         known.set(url, row);
       }
-    });
+    }
   });
 
-  run();
+  await run();
 
   return {
     totalSaved,
@@ -1248,7 +1248,7 @@ const probeSubdomainOrigin = async (host, abortCheck = null) => {
   ];
   let lastError = null;
   for (const attempt of attempts) {
-    if (abortCheck?.()) throw new Error('Discovery aborted');
+    if (await abortCheck?.()) throw new Error('Discovery aborted');
     try {
       const res = await fetchPage(attempt.url);
       return {
@@ -1283,7 +1283,7 @@ const collectSitemapUrls = async (origin, hostNormalized, protocol, abortCheck =
   };
 
   const processSitemap = async (sitemapUrl) => {
-    if (abortCheck?.()) throw new Error('Discovery aborted');
+    if (await abortCheck?.()) throw new Error('Discovery aborted');
     const normalizedSitemap = normalizeUrl(sitemapUrl);
     if (!normalizedSitemap) return;
     if (processed.has(normalizedSitemap)) return;
@@ -1336,7 +1336,7 @@ const runDiscoveryJob = async (jobId, payload) => {
   const mapId = payload?.mapId || payload?.id;
   if (!mapId) throw new Error('Missing mapId');
 
-  const mapRow = mapStore.getMapById(mapId);
+  const mapRow = await mapStore.getMapByIdAsync(mapId);
   if (!mapRow) throw new Error('Map not found');
 
   const baseUrl = resolveMapBaseUrl(mapRow);
@@ -1367,7 +1367,7 @@ const runDiscoveryJob = async (jobId, payload) => {
   };
 
   for (const prefix of DISCOVERY_SUBDOMAIN_PREFIXES) {
-    if (abortCheck()) throw new Error('Discovery aborted');
+    if (await abortCheck()) throw new Error('Discovery aborted');
     summary.prefixesChecked += 1;
 
     const host = `${prefix}.${baseHost}`;
@@ -1387,7 +1387,7 @@ const runDiscoveryJob = async (jobId, payload) => {
     }
 
     for (const url of sitemapUrls) {
-      if (abortCheck()) throw new Error('Discovery aborted');
+      if (await abortCheck()) throw new Error('Discovery aborted');
       if (nodes.has(url)) continue;
 
       const statusResult = await checkLinkStatus(url);
@@ -1408,7 +1408,7 @@ const runDiscoveryJob = async (jobId, payload) => {
 
   let iaSummary = null;
   if (nodes.size) {
-    iaSummary = persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
+    iaSummary = await persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
   }
 
   return {
@@ -2174,7 +2174,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   }
 
   try {
-    const iaSummary = persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
+    const iaSummary = await persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
     console.log(
       `[scan] IA summary: saved=${iaSummary.totalSaved}, virtual=${iaSummary.virtualInserted}, subdomains=${iaSummary.subdomainCount}, queries=${iaSummary.queryBehavior}, domain=${iaSummary.domainParsing}`
     );

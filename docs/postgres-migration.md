@@ -389,6 +389,45 @@ If parity drifts due to fresh sqlite writes:
 npm run verify:phase5:staging:resync
 ```
 
+## 17) Phase 6E (Started): IA Persistence + Discovery Async Conversion
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- migrate IA page persistence and discovery abort paths to async store APIs
+
+What is now in place:
+
+- `stores/pageStore.js`
+  - async variants added for:
+    - page schema columns lookup
+    - page lookup by URL
+    - insert page
+    - update page
+    - transaction wrapper
+- `server.js`
+  - `persistPagesForIa` now runs async and writes through async page store methods
+  - discovery path now awaits async abort checks (fixes async-cancellation correctness)
+  - discovery map lookup now uses async map store API
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow health/parity:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
 ## 16) Phase 6D (Started): Job Queue + Stream Routes Async Conversion
 
 Goal:
