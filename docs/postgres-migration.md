@@ -576,3 +576,23 @@ Validation:
 ```bash
 npm run check:backend
 ```
+
+## 21) Phase 6I (Started): Continue Store Simplification (Jobs)
+
+Goal:
+
+- remove remaining duplicate sync job-store APIs
+- keep only async job-store APIs used by runtime paths
+
+What is now in place:
+
+- `stores/jobStore.js`
+  - removed sync function variants and sync exports
+- `scripts/check-store-exports-async.js`
+  - now also enforces async-only exports for `jobStore`
+
+Validation:
+
+```bash
+npm run check:backend
+```
