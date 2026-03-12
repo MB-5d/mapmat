@@ -28,6 +28,9 @@ jobs:
       - name: Validate Backend Syntax
         run: npm run check:backend
 
+      - name: Validate Backend Syntax (Postgres Runtime Mode)
+        run: npm run check:backend:postgres
+
   frontend-build:
     name: Frontend Build
     runs-on: ubuntu-latest

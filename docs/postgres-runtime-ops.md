@@ -30,6 +30,7 @@ npm run verify:runtime:all
 
 - `check:db-health:*` validates runtime + Postgres readiness.
 - `test:smoke:*` validates core API behavior (save/load/share, scan-stream path).
+- CI also runs `npm run check:backend:postgres` on pull requests.
 
 ## Railway UI Checklist
 
