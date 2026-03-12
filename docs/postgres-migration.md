@@ -596,3 +596,24 @@ Validation:
 ```bash
 npm run check:backend
 ```
+
+## 22) Phase 6J (Started): Continue Store Simplification (Maps)
+
+Goal:
+
+- remove remaining duplicate sync map-store APIs
+- keep only async map-store APIs used by runtime paths
+
+What is now in place:
+
+- `stores/mapStore.js`
+  - removed sync function variants and sync exports
+  - retains async-only APIs for maps + map versions operations
+- `scripts/check-store-exports-async.js`
+  - now also enforces async-only exports for `mapStore`
+
+Validation:
+
+```bash
+npm run check:backend
+```

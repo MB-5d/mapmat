@@ -4,6 +4,7 @@ const STORE_MODULES = [
   'authStore',
   'historyStore',
   'jobStore',
+  'mapStore',
   'pageStore',
   'projectStore',
   'shareStore',
