@@ -507,3 +507,44 @@ If parity drifts due to fresh sqlite writes:
 ```bash
 npm run verify:phase5:staging:resync
 ```
+
+## 19) Phase 6G (Started): Remove Redundant Sync Store APIs
+
+Goal:
+
+- reduce duplicate DB access paths before runtime cutover
+- keep only explicit async store APIs in migrated modules
+- prevent accidental reintroduction of sync exports
+
+What is now in place:
+
+- `stores/authStore.js`
+  - removed backward-compat sync aliases
+- `stores/projectStore.js`
+  - removed sync function variants and sync exports
+- `stores/shareStore.js`
+  - removed sync function variants and sync exports
+- `stores/usageStore.js`
+  - removed sync function variants and sync exports
+- `scripts/check-store-exports-async.js`
+  - verifies targeted stores export async-only function names
+- `package.json`
+  - `check:backend` now runs async-export guard
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow safety:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "start:worker": "RUN_MODE=worker node server.js",
-    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js",
+    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js && node scripts/check-store-exports-async.js",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:db-canary": "node scripts/check-db-canary.js",
     "check:db-canary:staging": "HEALTH_DB_URL=\"https://mapmat-staging.up.railway.app/health/db\" PARITY_URL=\"https://mapmat-staging.up.railway.app/health/db/parity\" REQUIRE_RUNTIME=sqlite REQUIRE_RUNTIME_REQUESTED=postgres EXPECT_RUNTIME_FALLBACK=true node scripts/check-db-canary.js",

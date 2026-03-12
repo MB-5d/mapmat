@@ -61,18 +61,6 @@ async function deleteUserAsync(userId) {
   return await adapter.executeAsync('DELETE FROM users WHERE id = ?', [userId]);
 }
 
-// Backward-compatible aliases while callers are migrated.
-const findUserIdByEmail = findUserIdByEmailAsync;
-const getUserById = getUserByIdAsync;
-const getPublicUserById = getPublicUserByIdAsync;
-const getUserByEmail = getUserByEmailAsync;
-const createUser = createUserAsync;
-const updateSeedUserCredentials = updateSeedUserCredentialsAsync;
-const updateUserPassword = updateUserPasswordAsync;
-const updateUserName = updateUserNameAsync;
-const getUserPasswordHash = getUserPasswordHashAsync;
-const deleteUser = deleteUserAsync;
-
 module.exports = {
   findUserIdByEmailAsync,
   getUserByIdAsync,
@@ -84,14 +72,4 @@ module.exports = {
   updateUserNameAsync,
   getUserPasswordHashAsync,
   deleteUserAsync,
-  findUserIdByEmail,
-  getUserById,
-  getPublicUserById,
-  getUserByEmail,
-  createUser,
-  updateSeedUserCredentials,
-  updateUserPassword,
-  updateUserName,
-  getUserPasswordHash,
-  deleteUser,
 };
