@@ -31,6 +31,7 @@ const jobStore = require('./stores/jobStore');
 const mapStore = require('./stores/mapStore');
 const pageStore = require('./stores/pageStore');
 const usageStore = require('./stores/usageStore');
+const permissionPolicy = require('./policies/permissionPolicy');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -2673,6 +2674,18 @@ app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res
 
   const map = await mapStore.getMapForUserAsync(id, req.user.id);
   if (!map) {
+    return res.status(404).json({ error: 'Map not found' });
+  }
+
+  const canRunDiscovery = permissionPolicy.canForResource(
+    permissionPolicy.ACTIONS.DISCOVERY_RUN,
+    {
+      actorUserId: req.user.id,
+      resourceOwnerUserId: map.user_id,
+    }
+  );
+
+  if (!canRunDiscovery) {
     return res.status(404).json({ error: 'Map not found' });
   }
 

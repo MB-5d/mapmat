@@ -10,6 +10,7 @@ const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
 const { authMiddleware, requireAuth } = require('./auth');
+const permissionPolicy = require('../policies/permissionPolicy');
 
 const router = express.Router();
 
@@ -69,6 +70,35 @@ function parseMapFields(row) {
     connections_data: undefined,
     connection_colors: undefined,
   };
+}
+
+function denyResource(res, { status = 404, error = 'Resource not found' } = {}) {
+  res.status(status).json({ error });
+  return false;
+}
+
+function ensureResourceAction({
+  req,
+  res,
+  resource,
+  action,
+  failureStatus = 404,
+  failureError = 'Resource not found',
+}) {
+  if (!resource) {
+    return denyResource(res, { status: failureStatus, error: failureError });
+  }
+
+  const role = permissionPolicy.resolveResourceRole({
+    actorUserId: req.user?.id || null,
+    resourceOwnerUserId: resource.user_id || null,
+  });
+
+  if (!permissionPolicy.can(action, role)) {
+    return denyResource(res, { status: failureStatus, error: failureError });
+  }
+
+  return true;
 }
 
 // Apply auth middleware to all routes
@@ -146,9 +176,13 @@ router.put('/projects/:id', requireAuth, async (req, res) => {
 
     // Verify ownership
     const project = await projectStore.getProjectForUserAsync(id, req.user.id);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: project,
+      action: permissionPolicy.ACTIONS.PROJECT_UPDATE,
+      failureError: 'Project not found',
+    })) return;
 
     if (!name?.trim()) {
       return res.status(400).json({ error: 'Project name is required' });
@@ -173,9 +207,13 @@ router.delete('/projects/:id', requireAuth, async (req, res) => {
 
     // Verify ownership
     const project = await projectStore.getProjectForUserAsync(id, req.user.id);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: project,
+      action: permissionPolicy.ACTIONS.PROJECT_DELETE,
+      failureError: 'Project not found',
+    })) return;
 
     // Delete project (maps will have project_id set to NULL due to ON DELETE SET NULL)
     await projectStore.deleteProjectAsync(id);
@@ -228,9 +266,13 @@ router.get('/maps/:id', requireAuth, async (req, res) => {
 
     const map = await mapStore.getMapWithProjectForUserAsync(id, req.user.id);
 
-    if (!map) {
-      return res.status(404).json({ error: 'Map not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_READ,
+      failureError: 'Map not found',
+    })) return;
 
     res.json({
       map: {
@@ -260,9 +302,14 @@ router.post('/maps', requireAuth, async (req, res) => {
     // If project_id provided, verify ownership
     if (project_id) {
       const project = await projectStore.getProjectForUserAsync(project_id, req.user.id);
-      if (!project) {
-        return res.status(400).json({ error: 'Project not found' });
-      }
+      if (!ensureResourceAction({
+        req,
+        res,
+        resource: project,
+        action: permissionPolicy.ACTIONS.MAP_CREATE,
+        failureStatus: 400,
+        failureError: 'Project not found',
+      })) return;
     }
 
     const mapId = uuidv4();
@@ -303,9 +350,13 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
 
     // Verify ownership
     const map = await mapStore.getMapForUserAsync(id, req.user.id);
-    if (!map) {
-      return res.status(404).json({ error: 'Map not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_UPDATE,
+      failureError: 'Map not found',
+    })) return;
 
     const patch = {};
 
@@ -334,9 +385,14 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       // Verify project ownership if setting a project
       if (project_id) {
         const project = await projectStore.getProjectForUserAsync(project_id, req.user.id);
-        if (!project) {
-          return res.status(400).json({ error: 'Project not found' });
-        }
+        if (!ensureResourceAction({
+          req,
+          res,
+          resource: project,
+          action: permissionPolicy.ACTIONS.MAP_UPDATE,
+          failureStatus: 400,
+          failureError: 'Project not found',
+        })) return;
       }
       patch.projectId = project_id || null;
     }
@@ -364,9 +420,13 @@ router.delete('/maps/:id', requireAuth, async (req, res) => {
 
     // Verify ownership
     const map = await mapStore.getMapForUserAsync(id, req.user.id);
-    if (!map) {
-      return res.status(404).json({ error: 'Map not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_DELETE,
+      failureError: 'Map not found',
+    })) return;
 
     await mapStore.deleteMapByIdAsync(id);
 
@@ -383,9 +443,13 @@ router.get('/maps/:id/versions', requireAuth, async (req, res) => {
     const { id } = req.params;
 
     const map = await mapStore.getMapForUserAsync(id, req.user.id);
-    if (!map) {
-      return res.status(404).json({ error: 'Map not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_VERSION_LIST,
+      failureError: 'Map not found',
+    })) return;
 
     const versions = await mapStore.listMapVersionsForUserMapAsync(id, req.user.id, 25);
 
@@ -412,9 +476,13 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
     }
 
     const map = await mapStore.getMapForUserAsync(id, req.user.id);
-    if (!map) {
-      return res.status(404).json({ error: 'Map not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_VERSION_CREATE,
+      failureError: 'Map not found',
+    })) return;
 
     const nextVersion = await mapStore.getNextMapVersionNumberAsync(id, req.user.id);
 
@@ -529,9 +597,13 @@ router.put('/history/:id', requireAuth, async (req, res) => {
     const { map_id } = req.body || {};
 
     const historyItem = await historyStore.getHistoryItemForUserAsync(id, req.user.id);
-    if (!historyItem) {
-      return res.status(404).json({ error: 'History item not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: historyItem,
+      action: permissionPolicy.ACTIONS.HISTORY_UPDATE,
+      failureError: 'History item not found',
+    })) return;
 
     await historyStore.updateHistoryMapIdAsync(id, map_id || null);
 
@@ -576,9 +648,14 @@ router.post('/shares', requireAuth, async (req, res) => {
     // If map_id provided, verify ownership
     if (map_id) {
       const map = await mapStore.getMapForUserAsync(map_id, req.user.id);
-      if (!map) {
-        return res.status(400).json({ error: 'Map not found' });
-      }
+      if (!ensureResourceAction({
+        req,
+        res,
+        resource: map,
+        action: permissionPolicy.ACTIONS.SHARE_CREATE,
+        failureStatus: 400,
+        failureError: 'Map not found',
+      })) return;
     }
 
     const shareId = uuidv4();
@@ -651,9 +728,13 @@ router.delete('/shares/:id', requireAuth, async (req, res) => {
 
     // Verify ownership
     const share = await shareStore.getShareForUserAsync(id, req.user.id);
-    if (!share) {
-      return res.status(404).json({ error: 'Share not found' });
-    }
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: share,
+      action: permissionPolicy.ACTIONS.SHARE_DELETE,
+      failureError: 'Share not found',
+    })) return;
 
     await shareStore.deleteShareAsync(id);
 
