@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "start:worker": "RUN_MODE=worker node server.js",
-    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node --check policies/permissionPolicy.js && node scripts/check-permission-policy.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js && node scripts/check-store-exports-async.js && node scripts/check-db-adapter-exports.js",
+    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node --check routes/collaboration.js && node --check stores/collaborationStore.js && node --check policies/permissionPolicy.js && node scripts/check-permission-policy.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js && node scripts/check-store-exports-async.js && node scripts/check-db-adapter-exports.js",
     "check:backend:postgres": "DB_PROVIDER=postgres npm run check:backend",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:db-health": "node scripts/check-db-health.js",

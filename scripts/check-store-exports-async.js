@@ -2,6 +2,7 @@ const path = require('path');
 
 const STORE_MODULES = [
   'authStore',
+  'collaborationStore',
   'historyStore',
   'jobStore',
   'mapStore',

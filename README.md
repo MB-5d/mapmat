@@ -48,6 +48,7 @@ Detailed setup steps are in `docs/deployment-workflow.md`.
 Release checklist and promotion steps are in `docs/release-sop.md`.
 Current Postgres runtime ops are in `docs/postgres-runtime-ops.md`.
 Historical migration log is in `docs/postgres-migration.md`.
+Collaboration backend foundation docs are in `docs/collaboration-backend.md`.
 
 Postgres runtime quick checks (repo root):
 
@@ -131,6 +132,9 @@ Optional:
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |
 | `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Matt Test |
 | `AUTH_HEADER_FALLBACK` | Allows bearer token auth header fallback when cross-site cookies fail | same default as `TEST_AUTH_ENABLED` |
+| `COLLABORATION_BACKEND_ENABLED` | Enables Phase 9B collaboration API endpoints | false |
+| `COLLAB_INVITE_DEFAULT_DAYS` | Default invite expiration in days | 7 |
+| `COLLAB_INVITE_MAX_DAYS` | Max invite expiration accepted by API | 30 |
 | `DATABASE_URL` | Postgres runtime connection string | (unset) |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
