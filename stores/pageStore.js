@@ -1,6 +1,15 @@
 const adapter = require('./dbAdapter');
+const runtimeProvider = adapter.runtime?.activeProvider || 'sqlite';
 
 async function getPageColumnsAsync() {
+  if (runtimeProvider === 'postgres') {
+    return (await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'pages'
+      ORDER BY ordinal_position
+    `)).map((col) => col.column_name);
+  }
   return (await adapter.queryAllAsync('PRAGMA table_info(pages)')).map((col) => col.name);
 }
 

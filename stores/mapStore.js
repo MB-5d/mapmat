@@ -138,11 +138,11 @@ function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
 
 async function getNextMapVersionNumberAsync(mapId, userId) {
   const row = await adapter.queryOneAsync(`
-    SELECT MAX(version_number) as maxVersion
+    SELECT MAX(version_number) as "maxVersion"
     FROM map_versions
     WHERE map_id = ? AND user_id = ?
   `, [mapId, userId]);
-  return (row?.maxVersion || 0) + 1;
+  return Number(row?.maxVersion || 0) + 1;
 }
 
 function createMapVersionAsync({

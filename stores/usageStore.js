@@ -1,28 +1,66 @@
 const adapter = require('./dbAdapter');
+const runtimeProvider = adapter.runtime?.activeProvider || 'sqlite';
 
 function toSqlTimestamp(date) {
   return new Date(date).toISOString().slice(0, 19).replace('T', ' ');
 }
 
+function parseSinceModifierDays(sinceModifier) {
+  const match = String(sinceModifier || '').trim().match(/^-\s*(\d+)\s*days?$/i);
+  if (!match) {
+    throw new Error(`Unsupported since modifier: ${sinceModifier}`);
+  }
+  return Number(match[1]);
+}
+
+function normalizeUsageRows(rows) {
+  return rows.map((row) => ({
+    ...row,
+    events: Number(row.events || 0),
+    quantity: Number(row.quantity || 0),
+  }));
+}
+
 function getUsageByDaySinceAsync(sinceModifier) {
+  if (runtimeProvider === 'postgres') {
+    const days = parseSinceModifierDays(sinceModifier);
+    return adapter.queryAllAsync(`
+      SELECT DATE(created_at) AS day, event_type AS "eventType",
+             COUNT(*) AS events, COALESCE(SUM(quantity), 0) AS quantity
+      FROM usage_events
+      WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+      GROUP BY day, event_type
+      ORDER BY day DESC
+    `, [days]).then(normalizeUsageRows);
+  }
   return adapter.queryAllAsync(`
-    SELECT date(created_at) as day, event_type as eventType,
+    SELECT date(created_at) as day, event_type as "eventType",
            COUNT(*) as events, SUM(quantity) as quantity
     FROM usage_events
     WHERE created_at >= datetime('now', ?)
-    GROUP BY day, eventType
+    GROUP BY day, "eventType"
     ORDER BY day DESC
-  `, [sinceModifier]);
+  `, [sinceModifier]).then(normalizeUsageRows);
 }
 
 function getUsageTotalsSinceAsync(sinceModifier) {
+  if (runtimeProvider === 'postgres') {
+    const days = parseSinceModifierDays(sinceModifier);
+    return adapter.queryAllAsync(`
+      SELECT event_type AS "eventType", COUNT(*) AS events, COALESCE(SUM(quantity), 0) AS quantity
+      FROM usage_events
+      WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+      GROUP BY event_type
+      ORDER BY events DESC
+    `, [days]).then(normalizeUsageRows);
+  }
   return adapter.queryAllAsync(`
-    SELECT event_type as eventType, COUNT(*) as events, SUM(quantity) as quantity
+    SELECT event_type as "eventType", COUNT(*) as events, SUM(quantity) as quantity
     FROM usage_events
     WHERE created_at >= datetime('now', ?)
-    GROUP BY eventType
+    GROUP BY "eventType"
     ORDER BY events DESC
-  `, [sinceModifier]);
+  `, [sinceModifier]).then(normalizeUsageRows);
 }
 
 function insertUsageEventAsync({
