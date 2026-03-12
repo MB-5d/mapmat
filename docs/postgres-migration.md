@@ -1,12 +1,18 @@
-# Postgres Migration (Phase 4)
+# Postgres Migration Log (Historical Phases 4-7)
 
-This is the first migration step from SQLite to PostgreSQL.
+This file is the historical implementation log of the SQLite -> Postgres migration.
 
-Scope of this step:
+Current live runtime ops moved to:
 
-- Keep runtime on SQLite (no behavior change in prod/staging yet).
-- Add a one-way migration tool to copy existing SQLite data into Postgres.
-- Prepare verification steps before switching the app runtime.
+- `docs/postgres-runtime-ops.md`
+
+Current state (as of March 12, 2026):
+
+- staging runtime: `postgres`
+- production runtime: `postgres`
+- runtime fallback canary model from earlier phases is retired
+
+The sections below are preserved for change history and traceability.
 
 ## 1) Create Postgres Target
 
