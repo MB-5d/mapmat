@@ -79,14 +79,14 @@ router.use(authMiddleware);
 // ============================================
 
 // GET /api/admin/usage - Aggregated usage metrics
-router.get('/admin/usage', requireAdminKey, (req, res) => {
+router.get('/admin/usage', requireAdminKey, async (req, res) => {
   try {
     const daysRaw = Number.parseInt(req.query?.days, 10);
     const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30;
     const since = `-${days} days`;
 
-    const byDay = usageStore.getUsageByDaySince(since);
-    const totals = usageStore.getUsageTotalsSince(since);
+    const byDay = await usageStore.getUsageByDaySinceAsync(since);
+    const totals = await usageStore.getUsageTotalsSinceAsync(since);
 
     res.json({ days, totals, byDay });
   } catch (error) {
@@ -100,11 +100,11 @@ router.get('/admin/usage', requireAdminKey, (req, res) => {
 // ============================================
 
 // GET /api/projects - Get all projects for current user
-router.get('/projects', requireAuth, (req, res) => {
+router.get('/projects', requireAuth, async (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query);
-    const projects = projectStore.listProjectsByUser(req.user.id, { limit, offset });
-    const total = projectStore.countProjectsByUser(req.user.id);
+    const projects = await projectStore.listProjectsByUserAsync(req.user.id, { limit, offset });
+    const total = await projectStore.countProjectsByUserAsync(req.user.id);
 
     res.json({ projects, pagination: { limit, offset, total } });
   } catch (error) {
@@ -114,7 +114,7 @@ router.get('/projects', requireAuth, (req, res) => {
 });
 
 // POST /api/projects - Create a new project
-router.post('/projects', requireAuth, (req, res) => {
+router.post('/projects', requireAuth, async (req, res) => {
   try {
     const { name } = req.body;
 
@@ -124,12 +124,12 @@ router.post('/projects', requireAuth, (req, res) => {
 
     const projectId = uuidv4();
 
-    projectStore.createProject({
+    await projectStore.createProjectAsync({
       id: projectId,
       userId: req.user.id,
       name: name.trim(),
     });
-    const project = projectStore.getProjectById(projectId);
+    const project = await projectStore.getProjectByIdAsync(projectId);
 
     res.json({ project: { ...project, map_count: 0 } });
   } catch (error) {
@@ -139,13 +139,13 @@ router.post('/projects', requireAuth, (req, res) => {
 });
 
 // PUT /api/projects/:id - Update a project
-router.put('/projects/:id', requireAuth, (req, res) => {
+router.put('/projects/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name } = req.body;
 
     // Verify ownership
-    const project = projectStore.getProjectForUser(id, req.user.id);
+    const project = await projectStore.getProjectForUserAsync(id, req.user.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
@@ -154,10 +154,10 @@ router.put('/projects/:id', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Project name is required' });
     }
 
-    projectStore.updateProjectName(id, name.trim());
+    await projectStore.updateProjectNameAsync(id, name.trim());
 
-    const updated = projectStore.getProjectById(id);
-    const mapCount = projectStore.countMapsByProject(id);
+    const updated = await projectStore.getProjectByIdAsync(id);
+    const mapCount = await projectStore.countMapsByProjectAsync(id);
 
     res.json({ project: { ...updated, map_count: mapCount } });
   } catch (error) {
@@ -167,18 +167,18 @@ router.put('/projects/:id', requireAuth, (req, res) => {
 });
 
 // DELETE /api/projects/:id - Delete a project
-router.delete('/projects/:id', requireAuth, (req, res) => {
+router.delete('/projects/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
     // Verify ownership
-    const project = projectStore.getProjectForUser(id, req.user.id);
+    const project = await projectStore.getProjectForUserAsync(id, req.user.id);
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
     // Delete project (maps will have project_id set to NULL due to ON DELETE SET NULL)
-    projectStore.deleteProject(id);
+    await projectStore.deleteProjectAsync(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -192,18 +192,18 @@ router.delete('/projects/:id', requireAuth, (req, res) => {
 // ============================================
 
 // GET /api/maps - Get all maps for current user (optionally filtered by project)
-router.get('/maps', requireAuth, (req, res) => {
+router.get('/maps', requireAuth, async (req, res) => {
   try {
     const { project_id } = req.query;
     const { limit, offset } = parsePagination(req.query);
 
-    const maps = mapStore.listMapsByUser({
+    const maps = await mapStore.listMapsByUserAsync({
       userId: req.user.id,
       projectId: project_id || null,
       limit,
       offset,
     });
-    const total = mapStore.countMapsByUser({
+    const total = await mapStore.countMapsByUserAsync({
       userId: req.user.id,
       projectId: project_id || null,
     });
@@ -222,11 +222,11 @@ router.get('/maps', requireAuth, (req, res) => {
 });
 
 // GET /api/maps/:id - Get a specific map
-router.get('/maps/:id', requireAuth, (req, res) => {
+router.get('/maps/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const map = mapStore.getMapWithProjectForUser(id, req.user.id);
+    const map = await mapStore.getMapWithProjectForUserAsync(id, req.user.id);
 
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
@@ -245,7 +245,7 @@ router.get('/maps/:id', requireAuth, (req, res) => {
 });
 
 // POST /api/maps - Save a new map
-router.post('/maps', requireAuth, (req, res) => {
+router.post('/maps', requireAuth, async (req, res) => {
   try {
     const { name, url, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
 
@@ -259,7 +259,7 @@ router.post('/maps', requireAuth, (req, res) => {
 
     // If project_id provided, verify ownership
     if (project_id) {
-      const project = projectStore.getProjectForUser(project_id, req.user.id);
+      const project = await projectStore.getProjectForUserAsync(project_id, req.user.id);
       if (!project) {
         return res.status(400).json({ error: 'Project not found' });
       }
@@ -267,7 +267,7 @@ router.post('/maps', requireAuth, (req, res) => {
 
     const mapId = uuidv4();
 
-    mapStore.createMap({
+    await mapStore.createMapAsync({
       id: mapId,
       userId: req.user.id,
       projectId: project_id || null,
@@ -281,7 +281,7 @@ router.post('/maps', requireAuth, (req, res) => {
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
     });
 
-    const map = mapStore.getMapById(mapId);
+    const map = await mapStore.getMapByIdAsync(mapId);
 
     res.json({
       map: {
@@ -296,13 +296,13 @@ router.post('/maps', requireAuth, (req, res) => {
 });
 
 // PUT /api/maps/:id - Update a map
-router.put('/maps/:id', requireAuth, (req, res) => {
+router.put('/maps/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
 
     // Verify ownership
-    const map = mapStore.getMapForUser(id, req.user.id);
+    const map = await mapStore.getMapForUserAsync(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
@@ -333,7 +333,7 @@ router.put('/maps/:id', requireAuth, (req, res) => {
     if (project_id !== undefined) {
       // Verify project ownership if setting a project
       if (project_id) {
-        const project = projectStore.getProjectForUser(project_id, req.user.id);
+        const project = await projectStore.getProjectForUserAsync(project_id, req.user.id);
         if (!project) {
           return res.status(400).json({ error: 'Project not found' });
         }
@@ -341,9 +341,9 @@ router.put('/maps/:id', requireAuth, (req, res) => {
       patch.projectId = project_id || null;
     }
 
-    mapStore.updateMapById(id, patch);
+    await mapStore.updateMapByIdAsync(id, patch);
 
-    const updated = mapStore.getMapById(id);
+    const updated = await mapStore.getMapByIdAsync(id);
 
     res.json({
       map: {
@@ -358,17 +358,17 @@ router.put('/maps/:id', requireAuth, (req, res) => {
 });
 
 // DELETE /api/maps/:id - Delete a map
-router.delete('/maps/:id', requireAuth, (req, res) => {
+router.delete('/maps/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
     // Verify ownership
-    const map = mapStore.getMapForUser(id, req.user.id);
+    const map = await mapStore.getMapForUserAsync(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    mapStore.deleteMapById(id);
+    await mapStore.deleteMapByIdAsync(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -378,16 +378,16 @@ router.delete('/maps/:id', requireAuth, (req, res) => {
 });
 
 // GET /api/maps/:id/versions - Get version history for a map
-router.get('/maps/:id/versions', requireAuth, (req, res) => {
+router.get('/maps/:id/versions', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const map = mapStore.getMapForUser(id, req.user.id);
+    const map = await mapStore.getMapForUserAsync(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const versions = mapStore.listMapVersionsForUserMap(id, req.user.id, 25);
+    const versions = await mapStore.listMapVersionsForUserMapAsync(id, req.user.id, 25);
 
     const parsed = versions.map((v) => ({
       ...v,
@@ -402,7 +402,7 @@ router.get('/maps/:id/versions', requireAuth, (req, res) => {
 });
 
 // POST /api/maps/:id/versions - Create a new version
-router.post('/maps/:id/versions', requireAuth, (req, res) => {
+router.post('/maps/:id/versions', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { root, orphans, connections, colors, connectionColors, name, notes } = req.body;
@@ -411,17 +411,17 @@ router.post('/maps/:id/versions', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
-    const map = mapStore.getMapForUser(id, req.user.id);
+    const map = await mapStore.getMapForUserAsync(id, req.user.id);
     if (!map) {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const nextVersion = mapStore.getNextMapVersionNumber(id, req.user.id);
+    const nextVersion = await mapStore.getNextMapVersionNumberAsync(id, req.user.id);
 
     const versionId = uuidv4();
     const title = name?.trim() || 'Updated';
 
-    mapStore.createMapVersion({
+    await mapStore.createMapVersionAsync({
       id: versionId,
       mapId: id,
       userId: req.user.id,
@@ -435,14 +435,14 @@ router.post('/maps/:id/versions', requireAuth, (req, res) => {
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
     });
 
-    const allVersions = mapStore.listMapVersionIdsForUserMap(id, req.user.id);
+    const allVersions = await mapStore.listMapVersionIdsForUserMapAsync(id, req.user.id);
 
     if (allVersions.length > 25) {
       const toDelete = allVersions.slice(25).map((row) => row.id);
-      mapStore.deleteMapVersionsByIds(toDelete);
+      await mapStore.deleteMapVersionsByIdsAsync(toDelete);
     }
 
-    const saved = mapStore.getMapVersionById(versionId);
+    const saved = await mapStore.getMapVersionByIdAsync(versionId);
 
     res.json({
       version: {
@@ -461,12 +461,12 @@ router.post('/maps/:id/versions', requireAuth, (req, res) => {
 // ============================================
 
 // GET /api/history - Get scan history for current user
-router.get('/history', requireAuth, (req, res) => {
+router.get('/history', requireAuth, async (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
 
-    const history = historyStore.listHistoryByUser(req.user.id, { limit, offset });
-    const total = historyStore.countHistoryByUser(req.user.id);
+    const history = await historyStore.listHistoryByUserAsync(req.user.id, { limit, offset });
+    const total = await historyStore.countHistoryByUserAsync(req.user.id);
 
     // Parse JSON fields
     const parsed = history.map(h => ({
@@ -485,7 +485,7 @@ router.get('/history', requireAuth, (req, res) => {
 });
 
 // POST /api/history - Add to scan history
-router.post('/history', requireAuth, (req, res) => {
+router.post('/history', requireAuth, async (req, res) => {
   try {
     const { url, hostname, title, page_count, root, orphans, connections, colors, connectionColors, scan_options, scan_depth, map_id } = req.body;
 
@@ -495,7 +495,7 @@ router.post('/history', requireAuth, (req, res) => {
 
     const historyId = uuidv4();
 
-    historyStore.createHistory({
+    await historyStore.createHistoryAsync({
       id: historyId,
       userId: req.user.id,
       url: url || root.url || '',
@@ -513,7 +513,7 @@ router.post('/history', requireAuth, (req, res) => {
     });
 
     // Keep only last 50 entries
-    historyStore.trimHistoryByUser(req.user.id, 50);
+    await historyStore.trimHistoryByUserAsync(req.user.id, 50);
 
     res.json({ success: true, id: historyId });
   } catch (error) {
@@ -523,17 +523,17 @@ router.post('/history', requireAuth, (req, res) => {
 });
 
 // PUT /api/history/:id - Update a history item (e.g., attach saved map)
-router.put('/history/:id', requireAuth, (req, res) => {
+router.put('/history/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { map_id } = req.body || {};
 
-    const historyItem = historyStore.getHistoryItemForUser(id, req.user.id);
+    const historyItem = await historyStore.getHistoryItemForUserAsync(id, req.user.id);
     if (!historyItem) {
       return res.status(404).json({ error: 'History item not found' });
     }
 
-    historyStore.updateHistoryMapId(id, map_id || null);
+    await historyStore.updateHistoryMapIdAsync(id, map_id || null);
 
     res.json({ success: true });
   } catch (error) {
@@ -543,7 +543,7 @@ router.put('/history/:id', requireAuth, (req, res) => {
 });
 
 // DELETE /api/history - Delete history items
-router.delete('/history', requireAuth, (req, res) => {
+router.delete('/history', requireAuth, async (req, res) => {
   try {
     const { ids } = req.body;
 
@@ -551,7 +551,7 @@ router.delete('/history', requireAuth, (req, res) => {
       return res.status(400).json({ error: 'IDs are required' });
     }
 
-    historyStore.deleteHistoryByIdsForUser(ids, req.user.id);
+    await historyStore.deleteHistoryByIdsForUserAsync(ids, req.user.id);
 
     res.json({ success: true, deleted: ids.length });
   } catch (error) {
@@ -565,7 +565,7 @@ router.delete('/history', requireAuth, (req, res) => {
 // ============================================
 
 // POST /api/shares - Create a share link
-router.post('/shares', requireAuth, (req, res) => {
+router.post('/shares', requireAuth, async (req, res) => {
   try {
     const { map_id, root, orphans, connections, colors, connectionColors, expires_in_days } = req.body;
 
@@ -575,7 +575,7 @@ router.post('/shares', requireAuth, (req, res) => {
 
     // If map_id provided, verify ownership
     if (map_id) {
-      const map = mapStore.getMapForUser(map_id, req.user.id);
+      const map = await mapStore.getMapForUserAsync(map_id, req.user.id);
       if (!map) {
         return res.status(400).json({ error: 'Map not found' });
       }
@@ -586,7 +586,7 @@ router.post('/shares', requireAuth, (req, res) => {
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
 
-    shareStore.createShare({
+    await shareStore.createShareAsync({
       id: shareId,
       mapId: map_id || null,
       userId: req.user.id,
@@ -611,11 +611,11 @@ router.post('/shares', requireAuth, (req, res) => {
 });
 
 // GET /api/shares/:id - Get a shared map (public, no auth required)
-router.get('/shares/:id', (req, res) => {
+router.get('/shares/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const share = shareStore.getShareWithUserById(id);
+    const share = await shareStore.getShareWithUserByIdAsync(id);
 
     if (!share) {
       return res.status(404).json({ error: 'Share not found' });
@@ -627,7 +627,7 @@ router.get('/shares/:id', (req, res) => {
     }
 
     // Increment view count
-    shareStore.incrementShareViewCount(id);
+    await shareStore.incrementShareViewCountAsync(id);
 
     res.json({
       share: {
@@ -645,17 +645,17 @@ router.get('/shares/:id', (req, res) => {
 });
 
 // DELETE /api/shares/:id - Delete a share link
-router.delete('/shares/:id', requireAuth, (req, res) => {
+router.delete('/shares/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
     // Verify ownership
-    const share = shareStore.getShareForUser(id, req.user.id);
+    const share = await shareStore.getShareForUserAsync(id, req.user.id);
     if (!share) {
       return res.status(404).json({ error: 'Share not found' });
     }
 
-    shareStore.deleteShare(id);
+    await shareStore.deleteShareAsync(id);
 
     res.json({ success: true });
   } catch (error) {
@@ -665,11 +665,11 @@ router.delete('/shares/:id', requireAuth, (req, res) => {
 });
 
 // GET /api/shares - Get all shares created by current user
-router.get('/shares', requireAuth, (req, res) => {
+router.get('/shares', requireAuth, async (req, res) => {
   try {
     const { limit, offset } = parsePagination(req.query);
-    const shares = shareStore.listSharesByUser(req.user.id, { limit, offset });
-    const total = shareStore.countSharesByUser(req.user.id);
+    const shares = await shareStore.listSharesByUserAsync(req.user.id, { limit, offset });
+    const total = await shareStore.countSharesByUserAsync(req.user.id);
 
     res.json({ shares, pagination: { limit, offset, total } });
   } catch (error) {

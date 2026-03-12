@@ -147,7 +147,7 @@ const profileMutationLimiter = createRateLimiter({
 });
 
 // Seed a known test user for iterative QA cycles.
-function seedTestUserIfEnabled() {
+async function seedTestUserIfEnabled() {
   console.log(`[auth] Test auth mode: ${TEST_AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
   if (!TEST_AUTH_ENABLED) return;
   if (!TEST_AUTH_SEED_EMAIL || !TEST_AUTH_SEED_PASSWORD) {
@@ -156,11 +156,11 @@ function seedTestUserIfEnabled() {
   }
 
   try {
-    const passwordHash = bcrypt.hashSync(TEST_AUTH_SEED_PASSWORD, 10);
-    const existingUserId = authStore.findUserIdByEmail(TEST_AUTH_SEED_EMAIL);
+    const passwordHash = await bcrypt.hash(TEST_AUTH_SEED_PASSWORD, 10);
+    const existingUserId = await authStore.findUserIdByEmailAsync(TEST_AUTH_SEED_EMAIL);
 
     if (existingUserId) {
-      authStore.updateSeedUserCredentials({
+      await authStore.updateSeedUserCredentialsAsync({
         userId: existingUserId,
         passwordHash,
         name: TEST_AUTH_SEED_NAME,
@@ -169,7 +169,7 @@ function seedTestUserIfEnabled() {
       return;
     }
 
-    authStore.createUser({
+    await authStore.createUserAsync({
       email: TEST_AUTH_SEED_EMAIL,
       passwordHash,
       name: TEST_AUTH_SEED_NAME,
@@ -181,7 +181,9 @@ function seedTestUserIfEnabled() {
   }
 }
 
-seedTestUserIfEnabled();
+seedTestUserIfEnabled().catch((error) => {
+  console.error('[auth] Failed to seed test account:', error);
+});
 console.log(`[auth] Authorization header fallback: ${AUTH_HEADER_FALLBACK ? 'ENABLED' : 'DISABLED'}`);
 
 // Generate JWT token
@@ -206,7 +208,7 @@ function extractBearerToken(req) {
 }
 
 // Auth middleware - attaches user to request if authenticated
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   const bearerToken = AUTH_HEADER_FALLBACK ? extractBearerToken(req) : null;
   const cookieToken = req.cookies?.auth_token;
   const token = bearerToken || cookieToken;
@@ -222,9 +224,15 @@ function authMiddleware(req, res, next) {
     return next();
   }
 
-  const user = authStore.getPublicUserById(decoded.userId);
-  req.user = user || null;
-  next();
+  try {
+    const user = await authStore.getPublicUserByIdAsync(decoded.userId);
+    req.user = user || null;
+    next();
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    req.user = null;
+    next();
+  }
 }
 
 // Require auth middleware - returns 401 if not authenticated
@@ -250,7 +258,7 @@ router.post('/signup', signupLimiter, async (req, res) => {
     }
 
     // Check if email already exists
-    const existingUserId = authStore.findUserIdByEmail(emailNormalized);
+    const existingUserId = await authStore.findUserIdByEmailAsync(emailNormalized);
     if (existingUserId) {
       return res.status(400).json({ error: 'An account with this email already exists' });
     }
@@ -262,7 +270,7 @@ router.post('/signup', signupLimiter, async (req, res) => {
     // Create user
     const displayName = name || emailNormalized.split('@')[0];
 
-    const createdUser = authStore.createUser({
+    const createdUser = await authStore.createUserAsync({
       email: emailNormalized,
       passwordHash,
       name: displayName,
@@ -297,7 +305,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     // Find user
-    let user = authStore.getUserByEmail(emailNormalized);
+    let user = await authStore.getUserByEmailAsync(emailNormalized);
 
     // In test-auth mode, allow quick account bootstrap by logging in with a new fake account.
     if (!user && TEST_AUTH_ENABLED) {
@@ -309,7 +317,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(password, salt);
 
-      user = authStore.createUser({
+      user = await authStore.createUserAsync({
         email: emailNormalized,
         passwordHash,
         name: displayName,
@@ -377,7 +385,7 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
         return res.status(400).json({ error: 'Current password is required to change password' });
       }
 
-      const passwordHashCurrent = authStore.getUserPasswordHash(req.user.id);
+      const passwordHashCurrent = await authStore.getUserPasswordHashAsync(req.user.id);
       const isValid = await bcrypt.compare(currentPassword, passwordHashCurrent || '');
       if (!isValid) {
         return res.status(401).json({ error: 'Current password is incorrect' });
@@ -390,16 +398,16 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(newPassword, salt);
 
-      authStore.updateUserPassword(req.user.id, passwordHash);
+      await authStore.updateUserPasswordAsync(req.user.id, passwordHash);
     }
 
     // Update name if provided
     if (name !== undefined) {
-      authStore.updateUserName(req.user.id, name);
+      await authStore.updateUserNameAsync(req.user.id, name);
     }
 
     // Get updated user
-    const updated = authStore.getPublicUserById(req.user.id);
+    const updated = await authStore.getPublicUserByIdAsync(req.user.id);
 
     res.json({
       user: {
@@ -424,14 +432,14 @@ router.delete('/me', authMiddleware, requireAuth, profileMutationLimiter, async 
       return res.status(400).json({ error: 'Password is required to delete account' });
     }
 
-    const passwordHashCurrent = authStore.getUserPasswordHash(req.user.id);
+    const passwordHashCurrent = await authStore.getUserPasswordHashAsync(req.user.id);
     const isValid = await bcrypt.compare(password, passwordHashCurrent || '');
     if (!isValid) {
       return res.status(401).json({ error: 'Password is incorrect' });
     }
 
     // Delete user (cascades to projects, maps, history, shares)
-    authStore.deleteUser(req.user.id);
+    await authStore.deleteUserAsync(req.user.id);
 
     res.clearCookie('auth_token', CLEAR_COOKIE_OPTIONS);
     res.json({ success: true });

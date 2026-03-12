@@ -1,6 +1,6 @@
 const adapter = require('./dbAdapter');
 
-function listMapsByUser({ userId, projectId, limit, offset }) {
+function listMapsByUserAsync({ userId, projectId, limit, offset }) {
   let query = `
     SELECT m.*, p.name as project_name
     FROM maps m
@@ -17,21 +17,21 @@ function listMapsByUser({ userId, projectId, limit, offset }) {
   query += ' ORDER BY m.updated_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
-  return adapter.queryAll(query, params);
+  return adapter.queryAllAsync(query, params);
 }
 
-function countMapsByUser({ userId, projectId }) {
+async function countMapsByUserAsync({ userId, projectId }) {
   if (projectId) {
-    return adapter.queryOne(
+    return (await adapter.queryOneAsync(
       'SELECT COUNT(*) as count FROM maps WHERE user_id = ? AND project_id = ?',
       [userId, projectId]
-    )?.count || 0;
+    ))?.count || 0;
   }
-  return adapter.queryOne('SELECT COUNT(*) as count FROM maps WHERE user_id = ?', [userId])?.count || 0;
+  return (await adapter.queryOneAsync('SELECT COUNT(*) as count FROM maps WHERE user_id = ?', [userId]))?.count || 0;
 }
 
-function getMapWithProjectForUser(mapId, userId) {
-  return adapter.queryOne(`
+function getMapWithProjectForUserAsync(mapId, userId) {
+  return adapter.queryOneAsync(`
     SELECT m.*, p.name as project_name
     FROM maps m
     LEFT JOIN projects p ON m.project_id = p.id
@@ -39,15 +39,15 @@ function getMapWithProjectForUser(mapId, userId) {
   `, [mapId, userId]);
 }
 
-function getMapForUser(mapId, userId) {
-  return adapter.queryOne('SELECT * FROM maps WHERE id = ? AND user_id = ?', [mapId, userId]);
+function getMapForUserAsync(mapId, userId) {
+  return adapter.queryOneAsync('SELECT * FROM maps WHERE id = ? AND user_id = ?', [mapId, userId]);
 }
 
-function getMapById(mapId) {
-  return adapter.queryOne('SELECT * FROM maps WHERE id = ?', [mapId]);
+function getMapByIdAsync(mapId) {
+  return adapter.queryOneAsync('SELECT * FROM maps WHERE id = ?', [mapId]);
 }
 
-function createMap({
+function createMapAsync({
   id,
   userId,
   projectId,
@@ -60,7 +60,7 @@ function createMap({
   colors,
   connectionColors,
 }) {
-  adapter.execute(`
+  return adapter.executeAsync(`
     INSERT INTO maps (id, user_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
@@ -78,7 +78,7 @@ function createMap({
   ]);
 }
 
-function updateMapById(mapId, patch) {
+async function updateMapByIdAsync(mapId, patch) {
   const updates = [];
   const params = [];
 
@@ -119,16 +119,16 @@ function updateMapById(mapId, patch) {
 
   updates.push('updated_at = CURRENT_TIMESTAMP');
   params.push(mapId);
-  adapter.execute(`UPDATE maps SET ${updates.join(', ')} WHERE id = ?`, params);
+  await adapter.executeAsync(`UPDATE maps SET ${updates.join(', ')} WHERE id = ?`, params);
   return true;
 }
 
-function deleteMapById(mapId) {
-  adapter.execute('DELETE FROM maps WHERE id = ?', [mapId]);
+function deleteMapByIdAsync(mapId) {
+  return adapter.executeAsync('DELETE FROM maps WHERE id = ?', [mapId]);
 }
 
-function listMapVersionsForUserMap(mapId, userId, limit = 25) {
-  return adapter.queryAll(`
+function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
+  return adapter.queryAllAsync(`
     SELECT * FROM map_versions
     WHERE map_id = ? AND user_id = ?
     ORDER BY created_at DESC
@@ -136,16 +136,16 @@ function listMapVersionsForUserMap(mapId, userId, limit = 25) {
   `, [mapId, userId, limit]);
 }
 
-function getNextMapVersionNumber(mapId, userId) {
-  const row = adapter.queryOne(`
-    SELECT MAX(version_number) as maxVersion
+async function getNextMapVersionNumberAsync(mapId, userId) {
+  const row = await adapter.queryOneAsync(`
+    SELECT MAX(version_number) as "maxVersion"
     FROM map_versions
     WHERE map_id = ? AND user_id = ?
   `, [mapId, userId]);
-  return (row?.maxVersion || 0) + 1;
+  return Number(row?.maxVersion || 0) + 1;
 }
 
-function createMapVersion({
+function createMapVersionAsync({
   id,
   mapId,
   userId,
@@ -158,7 +158,7 @@ function createMapVersion({
   colors,
   connectionColors,
 }) {
-  adapter.execute(`
+  return adapter.executeAsync(`
     INSERT INTO map_versions (
       id, map_id, user_id, version_number, name, notes,
       root_data, orphans_data, connections_data, colors, connection_colors
@@ -178,37 +178,37 @@ function createMapVersion({
   ]);
 }
 
-function listMapVersionIdsForUserMap(mapId, userId) {
-  return adapter.queryAll(`
+function listMapVersionIdsForUserMapAsync(mapId, userId) {
+  return adapter.queryAllAsync(`
     SELECT id FROM map_versions
     WHERE map_id = ? AND user_id = ?
     ORDER BY created_at DESC
   `, [mapId, userId]);
 }
 
-function deleteMapVersionsByIds(ids) {
+async function deleteMapVersionsByIdsAsync(ids) {
   if (!ids || ids.length === 0) return 0;
   const placeholders = adapter.placeholders(ids.length);
-  return adapter.execute(`DELETE FROM map_versions WHERE id IN (${placeholders})`, ids).changes || 0;
+  return (await adapter.executeAsync(`DELETE FROM map_versions WHERE id IN (${placeholders})`, ids)).changes || 0;
 }
 
-function getMapVersionById(versionId) {
-  return adapter.queryOne('SELECT * FROM map_versions WHERE id = ?', [versionId]);
+function getMapVersionByIdAsync(versionId) {
+  return adapter.queryOneAsync('SELECT * FROM map_versions WHERE id = ?', [versionId]);
 }
 
 module.exports = {
-  listMapsByUser,
-  countMapsByUser,
-  getMapWithProjectForUser,
-  getMapForUser,
-  getMapById,
-  createMap,
-  updateMapById,
-  deleteMapById,
-  listMapVersionsForUserMap,
-  getNextMapVersionNumber,
-  createMapVersion,
-  listMapVersionIdsForUserMap,
-  deleteMapVersionsByIds,
-  getMapVersionById,
+  listMapsByUserAsync,
+  countMapsByUserAsync,
+  getMapWithProjectForUserAsync,
+  getMapForUserAsync,
+  getMapByIdAsync,
+  createMapAsync,
+  updateMapByIdAsync,
+  deleteMapByIdAsync,
+  listMapVersionsForUserMapAsync,
+  getNextMapVersionNumberAsync,
+  createMapVersionAsync,
+  listMapVersionIdsForUserMapAsync,
+  deleteMapVersionsByIdsAsync,
+  getMapVersionByIdAsync,
 };

@@ -231,6 +231,16 @@ npm run verify:phase5:staging
 npm run verify:phase5:production
 ```
 
+If parity fails (expected when new writes land in SQLite first), use the automatic re-sync commands:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+```bash
+npm run verify:phase5:production:resync
+```
+
 If production canary fails with parity mismatch, re-sync production shadow Postgres:
 
 ```bash
@@ -250,3 +260,432 @@ Then back on your local shell:
 ```bash
 npm run verify:phase5:production
 ```
+
+## 12) Next Step (Phase 6 Entry)
+
+Phase 6 starts when you want runtime cutover work.
+
+Entry criteria:
+
+- `npm run verify:phase5:staging` passes
+- `npm run verify:phase5:production` passes
+- `DB_PROVIDER=postgres` is set in staging and production (requested runtime)
+- `/health/db` shows:
+  - `runtime: "sqlite"`
+  - `runtimeRequested: "postgres"`
+  - `runtimeFallback: true`
+  - `postgres.reachable: true`
+
+At this point, proceed to implementing real Postgres runtime support (not just shadow parity).
+
+## 13) Phase 6A (Started): Async Store Boundary for Runtime Cutover
+
+Phase 6A adds cutover-safe scaffolding without changing runtime behavior yet.
+
+What is now in place:
+
+- `stores/dbAdapter.js`
+  - adds async DB methods:
+    - `queryOneAsync`
+    - `queryAllAsync`
+    - `executeAsync`
+    - `transactionAsync`
+  - keeps existing sync methods for current sqlite runtime
+  - includes Postgres pool/query translation support behind runtime gates
+- `stores/authStore.js`
+  - now uses async adapter methods for auth data access
+- `routes/auth.js`
+  - now awaits store operations across signup/login/profile/delete
+  - test-auth seed path now runs async
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Expected: pass with no DB-boundary violations and no syntax errors.
+
+Important:
+
+- Runtime remains sqlite shadow mode in Phase 6A.
+- Do **not** change `SUPPORTED_RUNTIME_PROVIDERS` to include `postgres` yet.
+- Continue using phase 5 canary/parity checks during this migration stage.
+
+## 14) Phase 6B (Started): Projects/Maps/History/Shares Route-Store Async Path
+
+Goal:
+
+- keep runtime behavior unchanged (still sqlite fallback)
+- migrate API route/store calls to async DB adapter path so runtime cutover can happen safely in a later phase
+
+What is now in place:
+
+- `stores/projectStore.js`
+  - async variants added for list/count/create/read/update/delete project operations
+- `stores/mapStore.js`
+  - async variants added for maps and map version operations
+- `stores/historyStore.js`
+  - async variants added for list/count/create/trim/update/delete history operations
+- `stores/shareStore.js`
+  - async variants added for create/read/increment/delete/list/count share operations
+- `routes/api.js`
+  - handlers now run `async` and await store operations on projects/maps/history/shares paths
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Recommended shadow-runtime safety checks (staging):
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity mismatches (normal while sqlite gets new writes), re-sync and re-run:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+## 15) Phase 6C (Started): Usage Path Async Conversion
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- migrate usage reads/writes and usage limit checks to async store APIs
+
+What is now in place:
+
+- `stores/usageStore.js`
+  - async variants added for:
+    - usage by day
+    - usage totals
+    - usage event insert
+    - usage window total checks
+- `routes/api.js`
+  - `/api/admin/usage` now awaits async usage store methods
+- `server.js`
+  - usage recording now calls async insert path
+  - usage limit middleware now awaits async usage-window totals
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Then verify shadow parity safety on staging:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+## 18) Phase 6F (Started): Async Store API Guardrail for Runtime Cutover
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- enforce that `server.js` and `routes/*` only call async store methods
+- remove ambiguous auth store method naming before postgres runtime enablement
+
+What is now in place:
+
+- `stores/authStore.js`
+  - explicit `*Async` auth APIs added and exported
+  - backward-compatible aliases retained temporarily
+- `routes/auth.js`
+  - now calls explicit async auth store methods only
+- `scripts/check-store-async-boundary.js`
+  - fails if `server.js` or `routes/*` call non-async store methods
+- `package.json`
+  - `check:backend` now includes store-async boundary guardrail
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow safety:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+## 17) Phase 6E (Started): IA Persistence + Discovery Async Conversion
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- migrate IA page persistence and discovery abort paths to async store APIs
+
+What is now in place:
+
+- `stores/pageStore.js`
+  - async variants added for:
+    - page schema columns lookup
+    - page lookup by URL
+    - insert page
+    - update page
+    - transaction wrapper
+- `server.js`
+  - `persistPagesForIa` now runs async and writes through async page store methods
+  - discovery path now awaits async abort checks (fixes async-cancellation correctness)
+  - discovery map lookup now uses async map store API
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow health/parity:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+## 16) Phase 6D (Started): Job Queue + Stream Routes Async Conversion
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- move job read/write paths to async store APIs to remove sync DB coupling before runtime cutover
+
+What is now in place:
+
+- `stores/jobStore.js`
+  - async variants added for:
+    - job lookup
+    - list active job payloads
+    - insert job
+    - claim next queued job (transactional)
+    - update progress
+    - complete/fail/cancel
+    - status lookup
+- `server.js`
+  - job helpers now use async store methods
+  - worker loop now runs async job claim/update path
+  - scan/screenshot/discovery job endpoints now await async job operations
+  - stream pollers now read job state through async APIs
+
+Validation for this phase:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow health/parity:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+## 19) Phase 6G (Started): Remove Redundant Sync Store APIs
+
+Goal:
+
+- reduce duplicate DB access paths before runtime cutover
+- keep only explicit async store APIs in migrated modules
+- prevent accidental reintroduction of sync exports
+
+What is now in place:
+
+- `stores/authStore.js`
+  - removed backward-compat sync aliases
+- `stores/projectStore.js`
+  - removed sync function variants and sync exports
+- `stores/shareStore.js`
+  - removed sync function variants and sync exports
+- `stores/usageStore.js`
+  - removed sync function variants and sync exports
+- `scripts/check-store-exports-async.js`
+  - verifies targeted stores export async-only function names
+- `package.json`
+  - `check:backend` now runs async-export guard
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow safety:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
+## 20) Phase 6H (Started): Continue Store Simplification (History + Pages)
+
+Goal:
+
+- continue reducing duplicate sync/async paths
+- keep only explicit async APIs in additional migrated stores
+
+What is now in place:
+
+- `stores/historyStore.js`
+  - removed sync function variants and sync exports
+- `stores/pageStore.js`
+  - removed sync function variants and sync exports
+- `scripts/check-store-exports-async.js`
+  - now enforces async-only exports for:
+    - `authStore`
+    - `historyStore`
+    - `pageStore`
+    - `projectStore`
+    - `shareStore`
+    - `usageStore`
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+## 21) Phase 6I (Started): Continue Store Simplification (Jobs)
+
+Goal:
+
+- remove remaining duplicate sync job-store APIs
+- keep only async job-store APIs used by runtime paths
+
+What is now in place:
+
+- `stores/jobStore.js`
+  - removed sync function variants and sync exports
+- `scripts/check-store-exports-async.js`
+  - now also enforces async-only exports for `jobStore`
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+## 22) Phase 6J (Started): Continue Store Simplification (Maps)
+
+Goal:
+
+- remove remaining duplicate sync map-store APIs
+- keep only async map-store APIs used by runtime paths
+
+What is now in place:
+
+- `stores/mapStore.js`
+  - removed sync function variants and sync exports
+  - retains async-only APIs for maps + map versions operations
+- `scripts/check-store-exports-async.js`
+  - now also enforces async-only exports for `mapStore`
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+## 23) Phase 6K (Started): Adapter Export Surface Cleanup
+
+Goal:
+
+- remove remaining sync adapter API surface from module exports
+- prevent reintroducing sync adapter exports by mistake
+
+What is now in place:
+
+- `stores/dbAdapter.js`
+  - sync sqlite helpers are now internal-only
+  - exported query API surface is async-only:
+    - `queryOneAsync`
+    - `queryAllAsync`
+    - `executeAsync`
+    - `transactionAsync`
+- `scripts/check-db-adapter-exports.js`
+  - fails if forbidden sync adapter exports are reintroduced
+- `package.json`
+  - `check:backend` now includes adapter export guard check
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+## 24) Phase 6L (Started): Operator Workflow Simplification
+
+Goal:
+
+- reduce repetitive manual parity recovery steps
+- keep staging/production verification workflow predictable
+
+What is now in place:
+
+- `package.json`
+  - `verify:phase5:staging:auto`
+    - runs `verify:phase5:staging`
+    - automatically falls back to `verify:phase5:staging:resync` on failure
+  - `verify:phase5:production:auto`
+    - runs `verify:phase5:production`
+    - automatically falls back to `verify:phase5:production:resync` on failure
+
+Recommended daily commands:
+
+```bash
+npm run verify:phase5:staging:auto
+npm run verify:phase5:production:auto
+```
+
+## 25) Phase 6M (Started): Stabilize Canary Against Single-Write Drift
+
+Goal:
+
+- reduce false negatives in canary checks caused by a single write landing in SQLite right after a resync
+- keep true drift detection active
+
+What is now in place:
+
+- `scripts/check-db-canary.js`
+  - supports optional `PARITY_MAX_TOTAL_DRIFT` tolerance
+  - still fails when readiness fails or drift exceeds tolerance
+- `package.json`
+  - `check:db-canary:staging` sets `PARITY_MAX_TOTAL_DRIFT=4`
+  - `check:db-canary:production` sets `PARITY_MAX_TOTAL_DRIFT=4`
+
+Why `4`:
+
+- one user write commonly increments four mirrored counters (`users`, `maps`, `shares`, `usage_events`)
+- this keeps checks stable while still flagging larger divergence

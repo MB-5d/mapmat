@@ -13,6 +13,7 @@ const REQUIRE_RUNTIME_REQUESTED = process.env.REQUIRE_RUNTIME_REQUESTED || 'post
 const EXPECT_RUNTIME_FALLBACK = !['0', 'false', 'no', 'off'].includes(
   String(process.env.EXPECT_RUNTIME_FALLBACK || 'true').trim().toLowerCase()
 );
+const PARITY_MAX_TOTAL_DRIFT = Number(process.env.PARITY_MAX_TOTAL_DRIFT || 0);
 
 async function fetchJson(url, timeoutMs = 10000) {
   const controller = new AbortController();
@@ -74,6 +75,12 @@ async function run() {
   const parity = parityPayload?.postgresParity || {};
   const rows = Array.isArray(parity.tables) ? parity.tables : [];
   const mismatches = rows.filter((row) => !row.match);
+  const totalDrift = mismatches.reduce((sum, row) => {
+    const sqlite = Number(row.sqlite);
+    const postgres = Number(row.postgres);
+    if (!Number.isFinite(sqlite) || !Number.isFinite(postgres)) return sum;
+    return sum + Math.abs(sqlite - postgres);
+  }, 0);
   console.table(rows.map((row) => ({
     table: row.table,
     sqlite: row.sqlite,
@@ -87,11 +94,14 @@ async function run() {
     reachable: Boolean(parity.reachable),
     allMatch: Boolean(parity.allMatch),
     mismatchCount: mismatches.length,
+    totalDrift,
+    maxTotalDrift: PARITY_MAX_TOTAL_DRIFT,
     error: parity.error || null,
   };
   console.log('[db-canary] Parity summary:', paritySummary);
 
-  if (!paritySummary.ok || !paritySummary.configured || !paritySummary.reachable || !paritySummary.allMatch) {
+  const parityWithinTolerance = paritySummary.allMatch || totalDrift <= PARITY_MAX_TOTAL_DRIFT;
+  if (!paritySummary.ok || !paritySummary.configured || !paritySummary.reachable || !parityWithinTolerance) {
     throw new Error('Parity check failed.');
   }
 

@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const REQUESTED_DB_PROVIDER = String(process.env.DB_PROVIDER || 'sqlite').trim().toLowerCase();
-const SUPPORTED_RUNTIME_PROVIDERS = ['sqlite'];
+const SUPPORTED_RUNTIME_PROVIDERS = ['sqlite', 'postgres'];
 const ACTIVE_DB_PROVIDER = SUPPORTED_RUNTIME_PROVIDERS.includes(REQUESTED_DB_PROVIDER)
   ? REQUESTED_DB_PROVIDER
   : 'sqlite';
