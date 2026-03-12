@@ -48,6 +48,6 @@ For each environment:
 
 ## Notes
 
-- Legacy phase-era command names (`verify:phase5:*`, `verify:phase7*`) map to the new runtime verify flow.
+- Legacy phase-era command names (`verify:phase5:*`, `verify:phase7*`) were retired in Phase 8D.
 - Shadow/parity tooling (`check-db-canary`, `check-db-parity`, `/health/db/parity`) was retired in Phase 8.
 - The historical phase-by-phase implementation log remains in `docs/postgres-migration.md`.
