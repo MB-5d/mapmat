@@ -668,3 +668,24 @@ Recommended daily commands:
 npm run verify:phase5:staging:auto
 npm run verify:phase5:production:auto
 ```
+
+## 25) Phase 6M (Started): Stabilize Canary Against Single-Write Drift
+
+Goal:
+
+- reduce false negatives in canary checks caused by a single write landing in SQLite right after a resync
+- keep true drift detection active
+
+What is now in place:
+
+- `scripts/check-db-canary.js`
+  - supports optional `PARITY_MAX_TOTAL_DRIFT` tolerance
+  - still fails when readiness fails or drift exceeds tolerance
+- `package.json`
+  - `check:db-canary:staging` sets `PARITY_MAX_TOTAL_DRIFT=4`
+  - `check:db-canary:production` sets `PARITY_MAX_TOTAL_DRIFT=4`
+
+Why `4`:
+
+- one user write commonly increments four mirrored counters (`users`, `maps`, `shares`, `usage_events`)
+- this keeps checks stable while still flagging larger divergence
