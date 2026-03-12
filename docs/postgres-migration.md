@@ -389,6 +389,44 @@ If parity drifts due to fresh sqlite writes:
 npm run verify:phase5:staging:resync
 ```
 
+## 18) Phase 6F (Started): Async Store API Guardrail for Runtime Cutover
+
+Goal:
+
+- keep runtime behavior unchanged (`sqlite` active + `postgres` requested fallback)
+- enforce that `server.js` and `routes/*` only call async store methods
+- remove ambiguous auth store method naming before postgres runtime enablement
+
+What is now in place:
+
+- `stores/authStore.js`
+  - explicit `*Async` auth APIs added and exported
+  - backward-compatible aliases retained temporarily
+- `routes/auth.js`
+  - now calls explicit async auth store methods only
+- `scripts/check-store-async-boundary.js`
+  - fails if `server.js` or `routes/*` call non-async store methods
+- `package.json`
+  - `check:backend` now includes store-async boundary guardrail
+
+Validation:
+
+```bash
+npm run check:backend
+```
+
+Then verify staging shadow safety:
+
+```bash
+npm run verify:phase5:staging
+```
+
+If parity drifts due to fresh sqlite writes:
+
+```bash
+npm run verify:phase5:staging:resync
+```
+
 ## 17) Phase 6E (Started): IA Persistence + Discovery Async Conversion
 
 Goal:
