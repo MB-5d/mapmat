@@ -548,3 +548,31 @@ If parity drifts due to fresh sqlite writes:
 ```bash
 npm run verify:phase5:staging:resync
 ```
+
+## 20) Phase 6H (Started): Continue Store Simplification (History + Pages)
+
+Goal:
+
+- continue reducing duplicate sync/async paths
+- keep only explicit async APIs in additional migrated stores
+
+What is now in place:
+
+- `stores/historyStore.js`
+  - removed sync function variants and sync exports
+- `stores/pageStore.js`
+  - removed sync function variants and sync exports
+- `scripts/check-store-exports-async.js`
+  - now enforces async-only exports for:
+    - `authStore`
+    - `historyStore`
+    - `pageStore`
+    - `projectStore`
+    - `shareStore`
+    - `usageStore`
+
+Validation:
+
+```bash
+npm run check:backend
+```
