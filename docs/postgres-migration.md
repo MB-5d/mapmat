@@ -617,3 +617,30 @@ Validation:
 ```bash
 npm run check:backend
 ```
+
+## 23) Phase 6K (Started): Adapter Export Surface Cleanup
+
+Goal:
+
+- remove remaining sync adapter API surface from module exports
+- prevent reintroducing sync adapter exports by mistake
+
+What is now in place:
+
+- `stores/dbAdapter.js`
+  - sync sqlite helpers are now internal-only
+  - exported query API surface is async-only:
+    - `queryOneAsync`
+    - `queryAllAsync`
+    - `executeAsync`
+    - `transactionAsync`
+- `scripts/check-db-adapter-exports.js`
+  - fails if forbidden sync adapter exports are reintroduced
+- `package.json`
+  - `check:backend` now includes adapter export guard check
+
+Validation:
+
+```bash
+npm run check:backend
+```

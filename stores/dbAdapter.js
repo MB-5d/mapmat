@@ -49,29 +49,25 @@ async function runPostgresQuery(sql, params = []) {
   return ensurePostgresPool().query(text, params);
 }
 
-function queryOne(sql, params = []) {
+function queryOneSync(sql, params = []) {
   ensureSqliteRuntime();
   return db.prepare(sql).get(...params) || null;
 }
 
-function queryAll(sql, params = []) {
+function queryAllSync(sql, params = []) {
   ensureSqliteRuntime();
   return db.prepare(sql).all(...params);
 }
 
-function execute(sql, params = []) {
+function executeSync(sql, params = []) {
   ensureSqliteRuntime();
   return db.prepare(sql).run(...params);
 }
 
-function transaction(fn) {
-  ensureSqliteRuntime();
-  return db.transaction(fn);
-}
 
 async function queryOneAsync(sql, params = []) {
   if (runtime.activeProvider === 'sqlite') {
-    return queryOne(sql, params);
+    return queryOneSync(sql, params);
   }
   const result = await runPostgresQuery(sql, params);
   return result.rows[0] || null;
@@ -79,7 +75,7 @@ async function queryOneAsync(sql, params = []) {
 
 async function queryAllAsync(sql, params = []) {
   if (runtime.activeProvider === 'sqlite') {
-    return queryAll(sql, params);
+    return queryAllSync(sql, params);
   }
   const result = await runPostgresQuery(sql, params);
   return result.rows;
@@ -87,7 +83,7 @@ async function queryAllAsync(sql, params = []) {
 
 async function executeAsync(sql, params = []) {
   if (runtime.activeProvider === 'sqlite') {
-    return execute(sql, params);
+    return executeSync(sql, params);
   }
   const result = await runPostgresQuery(sql, params);
   return {
@@ -142,10 +138,6 @@ function placeholders(count) {
 
 module.exports = {
   runtime,
-  queryOne,
-  queryAll,
-  execute,
-  transaction,
   queryOneAsync,
   queryAllAsync,
   executeAsync,
