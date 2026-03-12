@@ -11,6 +11,7 @@ Current state (as of March 12, 2026):
 - staging runtime: `postgres`
 - production runtime: `postgres`
 - runtime fallback canary model from earlier phases is retired
+- parity endpoint/scripts used in early phases were removed in Phase 8 cleanup
 
 The sections below are preserved for change history and traceability.
 

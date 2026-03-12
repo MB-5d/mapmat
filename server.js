@@ -27,7 +27,6 @@ const crypto = require('crypto');
 const dns = require('dns').promises;
 const net = require('net');
 const { probePostgres } = require('./utils/postgresProbe');
-const { probePostgresParity } = require('./utils/postgresParityProbe');
 const jobStore = require('./stores/jobStore');
 const mapStore = require('./stores/mapStore');
 const pageStore = require('./stores/pageStore');
@@ -2395,10 +2394,6 @@ let pgHealthCache = {
   ts: 0,
   value: null,
 };
-let pgParityCache = {
-  ts: 0,
-  value: null,
-};
 
 const getCachedPostgresHealth = async () => {
   const now = Date.now();
@@ -2407,19 +2402,6 @@ const getCachedPostgresHealth = async () => {
   }
   const value = await probePostgres(process.env.DATABASE_URL);
   pgHealthCache = { ts: now, value };
-  return value;
-};
-
-const getCachedPostgresParity = async () => {
-  const now = Date.now();
-  if (pgParityCache.value && now - pgParityCache.ts < PG_HEALTH_CACHE_MS) {
-    return pgParityCache.value;
-  }
-  const value = await probePostgresParity({
-    databaseUrl: process.env.DATABASE_URL,
-    sqliteDb: db,
-  });
-  pgParityCache = { ts: now, value };
   return value;
 };
 
@@ -2434,18 +2416,6 @@ app.get('/health/db', async (_, res) => {
     runtimeFallback: DB_RUNTIME.fallback,
     supportedRuntimes: DB_RUNTIME.supportedProviders,
     postgres: pg,
-  });
-});
-
-app.get('/health/db/parity', async (_, res) => {
-  const parity = await getCachedPostgresParity();
-  return res.status(200).json({
-    ok: true,
-    runtime: DB_PROVIDER,
-    runtimeRequested: DB_RUNTIME.requestedProvider,
-    runtimeFallback: DB_RUNTIME.fallback,
-    supportedRuntimes: DB_RUNTIME.supportedProviders,
-    postgresParity: parity,
   });
 });
 
