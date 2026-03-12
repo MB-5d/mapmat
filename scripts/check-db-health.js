@@ -7,6 +7,8 @@ const HEALTH_DB_URL = process.env.HEALTH_DB_URL || DEFAULT_HEALTH_URL;
 const REQUIRE_RUNTIME = process.env.REQUIRE_RUNTIME || '';
 const REQUIRE_RUNTIME_REQUESTED = process.env.REQUIRE_RUNTIME_REQUESTED || '';
 const EXPECT_RUNTIME_FALLBACK_RAW = process.env.EXPECT_RUNTIME_FALLBACK;
+const HEALTH_TIMEOUT_MS = Number(process.env.HEALTH_TIMEOUT_MS || 10_000);
+const HEALTH_CHECK_ATTEMPTS = Math.max(1, Number(process.env.HEALTH_CHECK_ATTEMPTS || 3));
 const REQUIRE_POSTGRES_READY = !['0', 'false', 'no', 'off'].includes(
   String(process.env.REQUIRE_POSTGRES_READY || 'true').trim().toLowerCase()
 );
@@ -19,9 +21,18 @@ function parseOptionalBool(value) {
   throw new Error(`Invalid boolean value "${value}"`);
 }
 
-async function fetchJson(url) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isTransientFetchError(error) {
+  if (!error) return false;
+  if (error.name === 'AbortError') return true;
+  const message = String(error.message || '').toLowerCase();
+  return message.includes('operation was aborted') || message.includes('fetch failed');
+}
+
+async function fetchJsonOnce(url) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
     const response = await fetch(url, { signal: controller.signal });
     const body = await response.text();
@@ -38,6 +49,27 @@ async function fetchJson(url) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchJson(url) {
+  for (let attempt = 1; attempt <= HEALTH_CHECK_ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchJsonOnce(url);
+    } catch (error) {
+      const isLastAttempt = attempt >= HEALTH_CHECK_ATTEMPTS;
+      if (!isTransientFetchError(error) || isLastAttempt) {
+        throw error;
+      }
+      const waitMs = attempt * 400;
+      console.warn(
+        `[db-health] Transient fetch error on attempt ${attempt}/${HEALTH_CHECK_ATTEMPTS}; retrying in ${waitMs}ms: ${error.message}`
+      );
+      // Small backoff avoids false negatives from brief network/edge hiccups.
+      await sleep(waitMs);
+    }
+  }
+
+  throw new Error('Health check fetch failed after retries.');
 }
 
 async function run() {
