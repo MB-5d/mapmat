@@ -644,3 +644,27 @@ Validation:
 ```bash
 npm run check:backend
 ```
+
+## 24) Phase 6L (Started): Operator Workflow Simplification
+
+Goal:
+
+- reduce repetitive manual parity recovery steps
+- keep staging/production verification workflow predictable
+
+What is now in place:
+
+- `package.json`
+  - `verify:phase5:staging:auto`
+    - runs `verify:phase5:staging`
+    - automatically falls back to `verify:phase5:staging:resync` on failure
+  - `verify:phase5:production:auto`
+    - runs `verify:phase5:production`
+    - automatically falls back to `verify:phase5:production:resync` on failure
+
+Recommended daily commands:
+
+```bash
+npm run verify:phase5:staging:auto
+npm run verify:phase5:production:auto
+```

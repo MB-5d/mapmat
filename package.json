@@ -30,7 +30,9 @@
     "verify:phase5:staging:resync": "npm run shadow:sync:staging && npm run verify:phase5:staging",
     "verify:phase5:production": "npm run check:db-canary:production && npm run test:smoke:production",
     "verify:phase5:production:resync": "npm run shadow:sync:production && npm run verify:phase5:production",
-    "test:ia": "node scripts/ia-test.js"
+    "test:ia": "node scripts/ia-test.js",
+    "verify:phase5:staging:auto": "npm run verify:phase5:staging || npm run verify:phase5:staging:resync",
+    "verify:phase5:production:auto": "npm run verify:phase5:production || npm run verify:phase5:production:resync"
   },
   "engines": {
     "node": ">=18.0.0"
