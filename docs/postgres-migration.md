@@ -15,6 +15,8 @@ Current state (as of March 12, 2026):
 
 The sections below are preserved for change history and traceability.
 
+Note: historical command examples in this document (especially `verify:phase5:*` and parity/canary commands) may be retired in current builds. Use `docs/postgres-runtime-ops.md` for current commands.
+
 ## 1) Create Postgres Target
 
 Use either:

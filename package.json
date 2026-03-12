@@ -24,17 +24,8 @@
     "verify:runtime:staging": "npm run check:db-health:staging && npm run test:smoke:staging",
     "verify:runtime:production": "npm run check:db-health:production && npm run test:smoke:production",
     "verify:runtime:all": "npm run verify:runtime:staging && npm run verify:runtime:production",
-    "verify:phase5:staging": "npm run verify:runtime:staging",
-    "verify:phase5:staging:resync": "npm run verify:runtime:staging",
-    "verify:phase5:production": "npm run verify:runtime:production",
-    "verify:phase5:production:resync": "npm run verify:runtime:production",
     "test:ia": "node scripts/ia-test.js",
-    "verify:phase5:staging:auto": "npm run verify:phase5:staging || npm run verify:phase5:staging:resync",
-    "verify:phase5:production:auto": "npm run verify:phase5:production || npm run verify:phase5:production:resync",
-    "verify:phase7a:staging": "npm run verify:runtime:staging",
-    "verify:phase7a:production": "npm run verify:runtime:production",
-    "verify:phase7b:staging": "npm run verify:runtime:staging",
-    "verify:phase7b:production": "npm run verify:runtime:production"
+    "verify:runtime:all:auto": "npm run verify:runtime:all"
   },
   "engines": {
     "node": ">=18.0.0"
