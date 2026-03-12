@@ -46,20 +46,14 @@ Use separate branches and services to avoid breaking production:
 
 Detailed setup steps are in `docs/deployment-workflow.md`.
 Release checklist and promotion steps are in `docs/release-sop.md`.
-Postgres migration starter guide is in `docs/postgres-migration.md`.
+Current Postgres runtime ops are in `docs/postgres-runtime-ops.md`.
+Historical migration log is in `docs/postgres-migration.md`.
 
-Phase 5 quick checks (repo root):
-
-```bash
-npm run verify:phase5:staging
-npm run verify:phase5:production
-```
-
-If parity drifts (normal while runtime is still SQLite), use the one-command re-sync:
+Postgres runtime quick checks (repo root):
 
 ```bash
-npm run verify:phase5:staging:resync
-npm run verify:phase5:production:resync
+npm run verify:runtime:staging
+npm run verify:runtime:production
 ```
 
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.
@@ -80,7 +74,8 @@ railway up
 # - FRONTEND_URL = https://your-app.vercel.app
 # - JWT_SECRET = your-secret-key
 # - NODE_ENV = production
-# - DB_PATH = /app/data/mapmat.db   # if using a Railway volume mounted at /app/data
+# - DB_PROVIDER = postgres
+# - DATABASE_URL = postgres://...
 ```
 
 Railway runtime config in `railway.json` uses:
@@ -108,12 +103,16 @@ Vercel project setting:
 1. **Backend**: Push to GitHub, then connect to [Railway](https://railway.app/new)
 2. **Frontend**: Push to GitHub, then import at [Vercel](https://vercel.com/new)
 
-## SQLite Persistence on Railway
+## Database Runtime on Railway
 
-1. Add a Railway Volume to the backend service.
-2. Mount the volume to `/app/data` (or any mount path you choose).
-3. Set `DB_PATH` to `<mount-path>/mapmat.db` (example: `/app/data/mapmat.db`).
-4. Redeploy and confirm startup logs include the mounted `DB_PATH`.
+Production/staging should run with:
+
+1. `DB_PROVIDER=postgres`
+2. `DATABASE_URL=postgres://...`
+
+Optional:
+
+- `DB_PATH` can still be set for local SQLite/dev fallback scenarios.
 
 ## Environment Variables
 
@@ -125,13 +124,14 @@ Vercel project setting:
 | `ALLOW_VERCEL_PREVIEWS` | Allow `*.vercel.app` preview origins for CORS | false |
 | `JWT_SECRET` | Secret for JWT tokens | (dev default) |
 | `NODE_ENV` | Environment | development |
-| `DB_PATH` | SQLite database file path | `./data/mapmat.db` locally, `/app/data/mapmat.db` on Railway volume |
+| `DB_PROVIDER` | Active runtime provider (`sqlite` or `postgres`) | `sqlite` |
+| `DB_PATH` | SQLite database file path (local/dev fallback) | `./data/mapmat.db` |
 | `TEST_AUTH_ENABLED` | Enables temporary test-account mode | true locally, false in production |
 | `TEST_AUTH_SEED_EMAIL` | Seed account email when test mode is enabled | matt@email.com |
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |
 | `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Matt Test |
 | `AUTH_HEADER_FALLBACK` | Allows bearer token auth header fallback when cross-site cookies fail | same default as `TEST_AUTH_ENABLED` |
-| `DATABASE_URL` | Postgres connection string (used by migration tooling in Phase 4) | (unset) |
+| `DATABASE_URL` | Postgres runtime connection string | (unset) |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
 | `USAGE_LIMIT_SCAN` | Daily/rolling scan limit | 100 (prod) |
@@ -157,6 +157,6 @@ Temporary testing note:
 
 ## Tech Stack
 
-- **Backend**: Node.js, Express, SQLite, Playwright
+- **Backend**: Node.js, Express, PostgreSQL (runtime), SQLite (local/dev), Playwright
 - **Frontend**: React, Lucide Icons
 - **Auth**: JWT + HTTP-only cookies
