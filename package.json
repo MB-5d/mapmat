@@ -15,6 +15,7 @@
     "check:db-health:staging": "HEALTH_DB_URL=\"https://mapmat-staging.up.railway.app/health/db\" REQUIRE_RUNTIME=sqlite REQUIRE_RUNTIME_REQUESTED=postgres EXPECT_RUNTIME_FALLBACK=true node scripts/check-db-health.js",
     "check:db-health:staging:postgres": "HEALTH_DB_URL=\"https://mapmat-staging.up.railway.app/health/db\" REQUIRE_RUNTIME=postgres REQUIRE_RUNTIME_REQUESTED=postgres EXPECT_RUNTIME_FALLBACK=false node scripts/check-db-health.js",
     "check:db-health:production": "HEALTH_DB_URL=\"https://mapmat-production.up.railway.app/health/db\" REQUIRE_RUNTIME=sqlite REQUIRE_RUNTIME_REQUESTED=postgres EXPECT_RUNTIME_FALLBACK=true node scripts/check-db-health.js",
+    "check:db-health:production:postgres": "HEALTH_DB_URL=\"https://mapmat-production.up.railway.app/health/db\" REQUIRE_RUNTIME=postgres REQUIRE_RUNTIME_REQUESTED=postgres EXPECT_RUNTIME_FALLBACK=false node scripts/check-db-health.js",
     "check:db-parity": "node scripts/check-db-parity.js",
     "check:db-parity:staging": "PARITY_URL=\"https://mapmat-staging.up.railway.app/health/db/parity\" node scripts/check-db-parity.js",
     "check:db-parity:production": "PARITY_URL=\"https://mapmat-production.up.railway.app/health/db/parity\" node scripts/check-db-parity.js",
@@ -34,7 +35,10 @@
     "test:ia": "node scripts/ia-test.js",
     "verify:phase5:staging:auto": "npm run verify:phase5:staging || npm run verify:phase5:staging:resync",
     "verify:phase5:production:auto": "npm run verify:phase5:production || npm run verify:phase5:production:resync",
-    "verify:phase7a:staging": "npm run check:db-health:staging:postgres && npm run test:smoke:staging"
+    "verify:phase7a:staging": "npm run check:db-health:staging:postgres && npm run test:smoke:staging",
+    "verify:phase7a:production": "npm run check:db-health:production:postgres && npm run test:smoke:production",
+    "verify:phase7b:staging": "npm run verify:phase7a:staging",
+    "verify:phase7b:production": "npm run verify:phase7a:production"
   },
   "engines": {
     "node": ">=18.0.0"
