@@ -159,9 +159,39 @@ const SCREENSHOT_MAX_CONCURRENCY = Math.max(
   1,
   Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 1 : 4))
 );
+const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.SCREENSHOT_CAPTURE_TIMEOUT_MS ?? (isProd ? 45000 : 60000))
+);
+const SCREENSHOT_CACHE_TTL_MS = Math.max(
+  60000,
+  Number(process.env.SCREENSHOT_CACHE_TTL_MS ?? 3600000)
+);
+const SCREENSHOT_FULL_MAX_HEIGHT = Math.max(
+  720,
+  Number(process.env.SCREENSHOT_FULL_MAX_HEIGHT ?? 16000)
+);
+const SCREENSHOT_FULL_MAX_WIDTH = Math.max(
+  320,
+  Number(process.env.SCREENSHOT_FULL_MAX_WIDTH ?? 1920)
+);
+const SCREENSHOT_CLEANUP_INTERVAL_MS = Math.max(
+  10000,
+  Number(process.env.SCREENSHOT_CLEANUP_INTERVAL_MS ?? 300000)
+);
+const SCREENSHOT_CLEANUP_MAX_FILES = Math.max(
+  1,
+  Number(process.env.SCREENSHOT_CLEANUP_MAX_FILES ?? 50)
+);
 const screenshotQueue = [];
 let screenshotActive = 0;
 const lastScreenshotByHost = new Map();
+let screenshotLastCleanupAt = 0;
+
+const SCREENSHOT_TYPES = Object.freeze({
+  full: 'full',
+  thumb: 'thumb',
+});
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -374,12 +404,13 @@ const requireApiKey = (req, res, next) => {
 };
 
 const getApiKey = (req) => req.get('x-api-key') || req.query?.api_key || req.body?.api_key || null;
+const hashIp = (ip) => (ip ? crypto.createHash('sha256').update(ip).digest('hex') : null);
 
 const recordUsage = (req, eventType, quantity = 1, meta = null) => {
   const userId = req.user?.id || null;
   const apiKey = getApiKey(req);
   const ip = getClientIp(req);
-  const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
+  const ipHash = hashIp(ip);
   usageStore.insertUsageEventAsync({
     id: crypto.randomUUID(),
     userId,
@@ -493,6 +524,66 @@ const reserveScreenshotSlot = (host) => {
   return Math.max(0, earliest - now);
 };
 
+const normalizeScreenshotType = (type) => {
+  const normalized = String(type || '').trim().toLowerCase();
+  if (!normalized) return SCREENSHOT_TYPES.full;
+  if (normalized === SCREENSHOT_TYPES.full || normalized === SCREENSHOT_TYPES.thumb) {
+    return normalized;
+  }
+  return null;
+};
+
+const isJobVisibleToRequest = (row, req) => {
+  if (!row) return false;
+  const userId = req.user?.id || null;
+  const apiKey = getApiKey(req);
+  const ip = getClientIp(req);
+  const ipHash = hashIp(ip);
+
+  if (row.user_id && userId) {
+    return row.user_id === userId;
+  }
+  if (row.api_key && apiKey) {
+    return row.api_key === apiKey;
+  }
+  if (row.ip_hash && ipHash) {
+    return row.ip_hash === ipHash;
+  }
+  return false;
+};
+
+const cleanupStaleScreenshots = () => {
+  const now = Date.now();
+  if (now - screenshotLastCleanupAt < SCREENSHOT_CLEANUP_INTERVAL_MS) return;
+  screenshotLastCleanupAt = now;
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(SCREENSHOT_DIR, { withFileTypes: true });
+  } catch (error) {
+    console.warn('Screenshot cleanup read error:', error.message);
+    return;
+  }
+
+  let deleted = 0;
+  for (const entry of entries) {
+    if (deleted >= SCREENSHOT_CLEANUP_MAX_FILES) break;
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith('.png')) continue;
+
+    const filepath = path.join(SCREENSHOT_DIR, entry.name);
+    try {
+      const stats = fs.statSync(filepath);
+      const ageMs = now - stats.mtimeMs;
+      if (ageMs <= SCREENSHOT_CACHE_TTL_MS) continue;
+      fs.unlinkSync(filepath);
+      deleted += 1;
+    } catch {
+      // Ignore stale file races and permission edge-cases.
+    }
+  }
+};
+
 const JOB_TYPES = {
   scan: 'scan',
   screenshot: 'screenshot',
@@ -558,7 +649,7 @@ const createJob = async ({ type, payload, req }) => {
   const userId = req.user?.id || null;
   const apiKey = getApiKey(req);
   const ip = getClientIp(req);
-  const ipHash = ip ? crypto.createHash('sha256').update(ip).digest('hex') : null;
+  const ipHash = hashIp(ip);
 
   await jobStore.insertJobAsync({
     id,
@@ -628,6 +719,9 @@ async function getBrowser() {
   if (!browser) {
     browser = await chromium.launch({
       headless: true,
+    });
+    browser.on('disconnected', () => {
+      browser = null;
     });
   }
   return browser;
@@ -2224,19 +2318,29 @@ const getBaseUrl = () => (
     : `http://localhost:${PORT}`
 );
 
-async function captureScreenshot(safeUrl, type = 'full') {
+async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
+  const normalizedType = normalizeScreenshotType(type);
+  if (!normalizedType) {
+    throw new Error('Invalid screenshot type. Use full or thumb.');
+  }
+
+  cleanupStaleScreenshots();
+
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
-  const filename = `${urlHash}_${type}.png`;
+  const filename = `${urlHash}_${normalizedType}.png`;
   const filepath = path.join(SCREENSHOT_DIR, filename);
   const baseUrl = getBaseUrl();
 
   if (fs.existsSync(filepath)) {
     const stats = fs.statSync(filepath);
     const ageMs = Date.now() - stats.mtimeMs;
-    if (ageMs < 3600000) { // 1 hour
+    if (ageMs < SCREENSHOT_CACHE_TTL_MS) {
       return {
         url: `${baseUrl}/screenshots/${filename}`,
-        cached: true
+        cached: true,
+        type: normalizedType,
+        blocked: false,
+        truncated: false,
       };
     }
   }
@@ -2256,59 +2360,93 @@ async function captureScreenshot(safeUrl, type = 'full') {
         DNT: '1',
       },
     });
-    await context.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    });
-    const page = await context.newPage();
+    let page = null;
 
-    let lastError = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        await page.goto(safeUrl, {
-          waitUntil: 'domcontentloaded',
-          timeout: 30000
-        });
-        await page.waitForTimeout(1200);
+    try {
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
+      page = await context.newPage();
 
-        const title = await page.title();
-        const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
-        const blocked = isLikelyBlocked(title, bodyText);
-
-        if (type === 'full') {
-          await page.screenshot({
-            path: filepath,
-            fullPage: true,
-            type: 'png'
+      let lastError = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await page.goto(safeUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: SCREENSHOT_CAPTURE_TIMEOUT_MS,
           });
-        } else {
-          await page.screenshot({
-            path: filepath,
-            fullPage: false,
-            type: 'png'
-          });
-        }
+          await page.waitForTimeout(1200);
 
-        await page.close();
-        await context.close();
-        if (blocked) {
-          return { blocked: true };
+          const title = await page.title();
+          const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
+          const blocked = isLikelyBlocked(title, bodyText);
+
+          let truncated = false;
+          if (normalizedType === SCREENSHOT_TYPES.full) {
+            const metrics = await page.evaluate(() => {
+              const doc = document.documentElement;
+              const body = document.body;
+              const scrollWidth = Math.max(doc?.scrollWidth || 0, body?.scrollWidth || 0, 1);
+              const scrollHeight = Math.max(doc?.scrollHeight || 0, body?.scrollHeight || 0, 1);
+              return { scrollWidth, scrollHeight };
+            });
+
+            const clipWidth = Math.max(1, Math.min(Math.ceil(metrics.scrollWidth), SCREENSHOT_FULL_MAX_WIDTH));
+            const scrollHeight = Math.max(1, Math.ceil(metrics.scrollHeight));
+
+            if (scrollHeight > SCREENSHOT_FULL_MAX_HEIGHT) {
+              truncated = true;
+              await page.setViewportSize({
+                width: Math.max(320, clipWidth),
+                height: SCREENSHOT_FULL_MAX_HEIGHT,
+              });
+              await page.screenshot({
+                path: filepath,
+                type: 'png',
+                clip: {
+                  x: 0,
+                  y: 0,
+                  width: clipWidth,
+                  height: SCREENSHOT_FULL_MAX_HEIGHT,
+                },
+              });
+            } else {
+              await page.screenshot({
+                path: filepath,
+                fullPage: true,
+                type: 'png',
+              });
+            }
+          } else {
+            await page.screenshot({
+              path: filepath,
+              fullPage: false,
+              type: 'png',
+            });
+          }
+
+          return { blocked, truncated };
+        } catch (err) {
+          lastError = err;
+          await page.waitForTimeout(800 + Math.floor(Math.random() * 400));
         }
-        return { blocked: false };
-      } catch (err) {
-        lastError = err;
-        await page.waitForTimeout(800 + Math.floor(Math.random() * 400));
       }
-    }
 
-    await page.close();
-    await context.close();
-    throw lastError || new Error('Screenshot failed');
+      throw lastError || new Error('Screenshot failed');
+    } finally {
+      if (page) {
+        await page.close().catch(() => {});
+      }
+      await context.close().catch(() => {});
+    }
   });
 
   return {
     url: `${baseUrl}/screenshots/${filename}`,
     cached: false,
-    blocked: shotResult?.blocked || false
+    type: normalizedType,
+    blocked: shotResult?.blocked || false,
+    truncated: shotResult?.truncated || false,
   };
 }
 
@@ -2721,8 +2859,12 @@ app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res
 // Screenshot endpoint - captures full-page screenshot
 // Note: Playwright requires browser binaries which may not be available on all hosts
 app.get('/screenshot', authMiddleware, screenshotLimiter, requireApiKey, enforceUsageLimit('screenshot'), async (req, res) => {
-  const { url, type = 'full' } = req.query;
+  const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
+  const screenshotType = normalizeScreenshotType(req.query?.type);
+  if (!screenshotType) {
+    return res.status(400).json({ error: 'Invalid type. Use full or thumb.' });
+  }
   let safeUrl;
   try {
     safeUrl = await assertSafeUrl(url);
@@ -2739,8 +2881,8 @@ app.get('/screenshot', authMiddleware, screenshotLimiter, requireApiKey, enforce
   }
 
   try {
-    recordUsage(req, 'screenshot', 1, { host: new URL(safeUrl).hostname });
-    const result = await captureScreenshot(safeUrl, type);
+    recordUsage(req, 'screenshot', 1, { host: new URL(safeUrl).hostname, type: screenshotType });
+    const result = await captureScreenshot(safeUrl, screenshotType);
     res.json(result);
   } catch (e) {
     console.error('Screenshot error:', e.message);
@@ -2757,18 +2899,22 @@ app.get('/screenshot', authMiddleware, screenshotLimiter, requireApiKey, enforce
 
 // Background screenshot jobs
 app.post('/screenshot-jobs', authMiddleware, screenshotLimiter, requireApiKey, enforceUsageLimit('screenshot_job'), async (req, res) => {
-  const { url, type = 'full' } = req.body || {};
+  const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
+  const screenshotType = normalizeScreenshotType(req.body?.type);
+  if (!screenshotType) {
+    return res.status(400).json({ error: 'Invalid type. Use full or thumb.' });
+  }
 
   try {
     const safeUrl = await assertSafeUrl(url);
     const jobId = await createJob({
       type: JOB_TYPES.screenshot,
-      payload: { url: safeUrl, type },
+      payload: { url: safeUrl, type: screenshotType },
       req,
     });
 
-    recordUsage(req, 'screenshot_job', 1, { host: new URL(safeUrl).hostname });
+    recordUsage(req, 'screenshot_job', 1, { host: new URL(safeUrl).hostname, type: screenshotType });
 
     res.json({ jobId });
   } catch (e) {
@@ -2784,7 +2930,7 @@ app.get('/screenshot-jobs/:id', authMiddleware, requireApiKey, async (req, res) 
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
   const row = await getJobRow(id);
-  if (!row || row.type !== JOB_TYPES.screenshot) {
+  if (!row || row.type !== JOB_TYPES.screenshot || !isJobVisibleToRequest(row, req)) {
     return res.status(404).json({ error: 'Job not found' });
   }
   res.json({ job: serializeJobRow(row, includeResult) });
@@ -2793,7 +2939,7 @@ app.get('/screenshot-jobs/:id', authMiddleware, requireApiKey, async (req, res) 
 app.post('/screenshot-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const row = await getJobRow(id);
-  if (!row || row.type !== JOB_TYPES.screenshot) {
+  if (!row || row.type !== JOB_TYPES.screenshot || !isJobVisibleToRequest(row, req)) {
     return res.status(404).json({ error: 'Job not found' });
   }
   await markJobCanceled(id);
@@ -2827,7 +2973,7 @@ app.get('/screenshot-jobs/:id/stream', authMiddleware, requireApiKey, (req, res)
       return;
     }
     const row = await getJobRow(id);
-    if (!row || row.type !== JOB_TYPES.screenshot) {
+    if (!row || row.type !== JOB_TYPES.screenshot || !isJobVisibleToRequest(row, req)) {
       sendEvent('error', { error: 'Job not found' });
       clearInterval(interval);
       res.end();
