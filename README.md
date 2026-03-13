@@ -77,6 +77,7 @@ Co-editing persisted load harness (repo root):
 
 ```bash
 npm run check:coediting:load
+npm run check:coediting:soak
 ```
 
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.

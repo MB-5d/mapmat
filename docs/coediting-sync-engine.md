@@ -113,7 +113,8 @@ Repo checks used for this phase now include:
 - `node scripts/check-coediting-sync-engine.js`
 - `node scripts/check-coediting-simulation.js`
 - `node scripts/check-coediting-load.js`
+- `node scripts/check-coediting-soak.js`
 
 The simulation harness covers stale-client replay, rebase after version conflict, and out-of-order recovery via replay.
 
-The load harness covers deterministic persisted op ingest/replay pressure across multiple clients in a single room session model.
+The load/soak harnesses cover deterministic persisted op ingest/replay pressure across multiple clients in a single room session model.
