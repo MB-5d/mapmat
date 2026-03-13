@@ -51,6 +51,7 @@ Historical migration log is in `docs/postgres-migration.md`.
 Collaboration backend foundation docs are in `docs/collaboration-backend.md`.
 Realtime collaboration baseline docs are in `docs/realtime-collaboration-baseline.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
+Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
 Postgres runtime quick checks (repo root):
 
@@ -140,6 +141,12 @@ Optional:
 | `REALTIME_BASELINE_ENABLED` | Enables Phase 9D realtime baseline API endpoints | false |
 | `REALTIME_PRESENCE_TTL_SEC` | Presence session TTL window (seconds) | 90 |
 | `REALTIME_PRESENCE_HEARTBEAT_SEC` | Suggested heartbeat interval returned by API (seconds) | 20 |
+| `SCREENSHOT_CAPTURE_TIMEOUT_MS` | Per-attempt screenshot navigation timeout | 60000 |
+| `SCREENSHOT_CACHE_TTL_MS` | Screenshot cache TTL before recapture | 3600000 |
+| `SCREENSHOT_FULL_MAX_HEIGHT` | Max height for full screenshots (px) before truncation | 16000 |
+| `SCREENSHOT_FULL_MAX_WIDTH` | Max width for full screenshots (px) | 1920 |
+| `SCREENSHOT_CLEANUP_INTERVAL_MS` | Min interval between stale screenshot cleanup runs | 300000 |
+| `SCREENSHOT_CLEANUP_MAX_FILES` | Max stale screenshot files deleted per cleanup run | 50 |
 | `DATABASE_URL` | Postgres runtime connection string | (unset) |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
@@ -160,6 +167,7 @@ Optional:
 | `REACT_APP_REALTIME_BASELINE_ENABLED` | Enables Phase 9D presence/session awareness UI | false |
 | `REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC` | Frontend heartbeat cadence (seconds) for presence baseline | 20 |
 | `REACT_APP_PERMISSION_GATING_ENABLED` | Enables Phase 9E API-driven role/feature UI gating | false |
+| `REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED` | Enables Phase 9F full screenshot job pipeline in UI | false |
 
 Temporary testing note:
 - `TEST_AUTH_ENABLED=true` allows login with auto-created fake accounts and seeds the default test user above.

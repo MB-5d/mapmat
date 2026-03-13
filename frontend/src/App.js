@@ -120,6 +120,10 @@ const PERMISSION_GATING_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_PERMISSION_GATING_ENABLED,
   false
 );
+const SCREENSHOT_JOB_PIPELINE_ENABLED = parseEnvBool(
+  process.env.REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED,
+  false
+);
 const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
   Number.parseInt(process.env.REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC || '20', 10) || 20,
   5,
@@ -3112,16 +3116,50 @@ export default function App() {
     showToast('Loading full page screenshot...', 'loading', true);
 
     try {
-      const res = await fetch(
-        `${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=full`
-      );
-      const data = await res.json();
+      let data = null;
 
-      if (data.error) {
+      if (SCREENSHOT_JOB_PIPELINE_ENABLED) {
+        const { jobId } = await api.createScreenshotJob({ url: urlOrImage, type: 'full' });
+        if (!jobId) throw new Error('Failed to start screenshot job');
+
+        const startedAt = Date.now();
+        const timeoutMs = 120000;
+        while (true) {
+          const { job } = await api.getScreenshotJob(jobId, { includeResult: true });
+          if (!job) throw new Error('Screenshot job not found');
+
+          if (job.status === 'complete') {
+            data = job.result || {};
+            break;
+          }
+          if (job.status === 'failed') {
+            throw new Error(job.error || 'Screenshot job failed');
+          }
+          if (job.status === 'canceled') {
+            throw new Error('Screenshot job canceled');
+          }
+          if (Date.now() - startedAt > timeoutMs) {
+            try {
+              await api.cancelScreenshotJob(jobId);
+            } catch {
+              // no-op
+            }
+            throw new Error('Screenshot job timed out');
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+        }
+      } else {
+        const res = await fetch(
+          `${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=full`
+        );
+        data = await res.json();
+      }
+
+      if (data?.error) {
         throw new Error(data.error);
       }
 
-      if (data.url) {
+      if (data?.url) {
         setFullImageUrl(data.url);
         setToast(null); // Clear the loading toast
         if (nodeId) {
