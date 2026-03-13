@@ -13,11 +13,11 @@ const usageStore = require('../stores/usageStore');
 const { authMiddleware, requireAuth } = require('./auth');
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
-  resolveCoeditingRollout,
-  resolveCoeditingSystemStatus,
+  resolveCoeditingRolloutAsync,
+  resolveCoeditingSystemStatusAsync,
   summarizeCoeditingRolloutConfig,
 } = require('../utils/coeditingRollout');
-const { getCoeditingHealthSnapshot } = require('../utils/coeditingObservability');
+const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
 
 const router = express.Router();
 
@@ -213,8 +213,8 @@ router.get('/admin/usage', requireAdminKey, async (req, res) => {
 // GET /api/admin/coediting - rollout + health summary for operational checks
 router.get('/admin/coediting', requireAdminKey, async (_req, res) => {
   try {
-    const health = getCoeditingHealthSnapshot();
-    const status = resolveCoeditingSystemStatus({ healthSnapshot: health });
+    const health = await getCoeditingHealthSnapshotAsync();
+    const status = await resolveCoeditingSystemStatusAsync({ healthSnapshot: health });
     res.json({
       ok: true,
       status: status.status,
@@ -403,7 +403,7 @@ router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const coediting = resolveCoeditingRollout({
+    const coediting = await resolveCoeditingRolloutAsync({
       mapId: id,
       actorId: req.user.id,
       role,

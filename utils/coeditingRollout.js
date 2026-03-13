@@ -1,5 +1,8 @@
 const permissionPolicy = require('../policies/permissionPolicy');
-const { getCoeditingHealthSnapshot } = require('./coeditingObservability');
+const {
+  getCoeditingHealthSnapshot,
+  getCoeditingHealthSnapshotAsync,
+} = require('./coeditingObservability');
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -136,6 +139,23 @@ function resolveCoeditingRollout({
   };
 }
 
+async function resolveCoeditingRolloutAsync({
+  mapId,
+  actorId,
+  role,
+  env = process.env,
+  healthSnapshot = null,
+} = {}) {
+  const effectiveHealth = healthSnapshot || await getCoeditingHealthSnapshotAsync(env);
+  return resolveCoeditingRollout({
+    mapId,
+    actorId,
+    role,
+    env,
+    healthSnapshot: effectiveHealth,
+  });
+}
+
 function resolveCoeditingSystemStatus({
   env = process.env,
   healthSnapshot = null,
@@ -171,9 +191,22 @@ function resolveCoeditingSystemStatus({
   };
 }
 
+async function resolveCoeditingSystemStatusAsync({
+  env = process.env,
+  healthSnapshot = null,
+} = {}) {
+  const effectiveHealth = healthSnapshot || await getCoeditingHealthSnapshotAsync(env);
+  return resolveCoeditingSystemStatus({
+    env,
+    healthSnapshot: effectiveHealth,
+  });
+}
+
 module.exports = {
   createCoeditingRolloutConfigFromEnv,
   summarizeCoeditingRolloutConfig,
   resolveCoeditingRollout,
+  resolveCoeditingRolloutAsync,
   resolveCoeditingSystemStatus,
+  resolveCoeditingSystemStatusAsync,
 };

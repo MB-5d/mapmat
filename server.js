@@ -33,10 +33,10 @@ const mapStore = require('./stores/mapStore');
 const pageStore = require('./stores/pageStore');
 const usageStore = require('./stores/usageStore');
 const permissionPolicy = require('./policies/permissionPolicy');
-const { getCoeditingHealthSnapshot } = require('./utils/coeditingObservability');
+const { getCoeditingHealthSnapshotAsync } = require('./utils/coeditingObservability');
 const {
   summarizeCoeditingRolloutConfig,
-  resolveCoeditingSystemStatus,
+  resolveCoeditingSystemStatusAsync,
 } = require('./utils/coeditingRollout');
 
 // Initialize database (creates tables if needed)
@@ -2571,24 +2571,29 @@ app.get('/health/db', async (_, res) => {
   });
 });
 
-app.get('/health/coediting', (_req, res) => {
-  const health = getCoeditingHealthSnapshot();
-  const rollout = summarizeCoeditingRolloutConfig();
-  const status = resolveCoeditingSystemStatus({ healthSnapshot: health });
-  return res.status(200).json({
-    ok: true,
-    status: status.status,
-    reason: status.reason,
-    reasons: status.reasons,
-    health: {
-      status: health.status,
-      readOnlyFallbackActive: health.readOnlyFallbackActive,
-      reasons: health.reasons,
-      windowSec: health.windowSec,
-      observedAt: health.observedAt,
-    },
-    rollout,
-  });
+app.get('/health/coediting', async (_req, res) => {
+  try {
+    const health = await getCoeditingHealthSnapshotAsync();
+    const rollout = summarizeCoeditingRolloutConfig();
+    const status = await resolveCoeditingSystemStatusAsync({ healthSnapshot: health });
+    return res.status(200).json({
+      ok: true,
+      status: status.status,
+      reason: status.reason,
+      reasons: status.reasons,
+      health: {
+        status: health.status,
+        readOnlyFallbackActive: health.readOnlyFallbackActive,
+        reasons: health.reasons,
+        windowSec: health.windowSec,
+        observedAt: health.observedAt,
+      },
+      rollout,
+    });
+  } catch (error) {
+    console.error('Get coediting health error:', error);
+    return res.status(500).json({ error: 'Failed to resolve coediting health' });
+  }
 });
 
 app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {

@@ -2,8 +2,11 @@ const crypto = require('crypto');
 const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
 const permissionPolicy = require('../policies/permissionPolicy');
-const { resolveCoeditingRollout } = require('./coeditingRollout');
-const { recordDroppedEvent, recordReconnectEvent } = require('./coeditingObservability');
+const { resolveCoeditingRolloutAsync } = require('./coeditingRollout');
+const {
+  recordDroppedEventAsync,
+  recordReconnectEventAsync,
+} = require('./coeditingObservability');
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const SESSION_ID_PATTERN = /^[A-Za-z0-9._:-]{6,120}$/;
@@ -448,6 +451,22 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
   const joinTimeoutMs = config.joinTimeoutSec * 1000;
   let nextConnectionId = 1;
 
+  function queueConnectionWork(connection, work) {
+    const previous = connection.messageChain || Promise.resolve();
+    connection.messageChain = previous
+      .catch(() => {})
+      .then(work)
+      .catch((error) => {
+        logger.error?.('Coediting transport message error:', error);
+        if (connection.closed) return;
+        sendJson(connection, {
+          type: MESSAGE_TYPES.ERROR,
+          error: 'Failed to process realtime message',
+        });
+        closeConnection(connection, 1011, 'Failed to process realtime message');
+      });
+  }
+
   function sendJson(connection, payload) {
     if (!connection || connection.closed || connection.socket.destroyed || connection.socket.writableEnded) {
       return false;
@@ -456,7 +475,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     const json = JSON.stringify(payload);
     const jsonBytes = Buffer.byteLength(json);
     if (jsonBytes > config.maxMessageBytes) {
-      recordDroppedEvent('message_too_large');
+      void recordDroppedEventAsync('message_too_large');
       closeConnection(connection, 1009, 'Message exceeds max size');
       return false;
     }
@@ -465,13 +484,13 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     try {
       frame = encodeTextFrame(json);
     } catch {
-      recordDroppedEvent('message_too_large');
+      void recordDroppedEventAsync('message_too_large');
       closeConnection(connection, 1009, 'Message exceeds max size');
       return false;
     }
 
     if (connection.socket.writableLength + frame.length > config.maxBackpressureBytes) {
-      recordDroppedEvent('backpressure_limit');
+      void recordDroppedEventAsync('backpressure_limit');
       closeConnection(connection, 1013, 'Backpressure limit exceeded');
       return false;
     }
@@ -547,10 +566,10 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     return delivered;
   }
 
-  function handleJoin(connection, rawMessage) {
+  async function handleJoin(connection, rawMessage) {
     if (connection.closed) return;
 
-    const rollout = resolveCoeditingRollout({
+    const rollout = await resolveCoeditingRolloutAsync({
       mapId: connection.mapId,
       actorId: connection.user.id,
       role: connection.role,
@@ -599,7 +618,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
 
     connection.joinedSession = result.session;
     if (result.resumed) {
-      recordReconnectEvent();
+      void recordReconnectEventAsync();
     }
 
     if (result.replacedSession && result.replacedSession.connection !== connection) {
@@ -708,7 +727,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     });
   }
 
-  function handleMessage(connection, message) {
+  async function handleMessage(connection, message) {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
       sendJson(connection, {
         type: MESSAGE_TYPES.ERROR,
@@ -729,7 +748,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     if (type !== MESSAGE_TYPES.HEARTBEAT) {
       const rateLimit = registry.consumeRoomMessage(connection.mapId, Date.now());
       if (!rateLimit.allowed) {
-        recordDroppedEvent('room_rate_limit');
+        void recordDroppedEventAsync('room_rate_limit');
         sendJson(connection, {
           type: MESSAGE_TYPES.ERROR,
           error: 'Room rate limit exceeded',
@@ -741,7 +760,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     }
 
     if (type === MESSAGE_TYPES.JOIN || type === MESSAGE_TYPES.RESUME) {
-      handleJoin(connection, message);
+      await handleJoin(connection, message);
       return;
     }
 
@@ -816,7 +835,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       return;
     }
 
-    const rollout = resolveCoeditingRollout({
+    const rollout = await resolveCoeditingRolloutAsync({
       mapId: parsedPath.mapId,
       actorId: user.id,
       role,
@@ -850,12 +869,13 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       rollout,
       joinedSession: null,
       joinTimer: null,
+      messageChain: Promise.resolve(),
     };
     nextConnectionId += 1;
 
     connection.joinTimer = setTimeout(() => {
       if (!connection.joinedSession) {
-        recordDroppedEvent('join_timeout');
+        void recordDroppedEventAsync('join_timeout');
         sendJson(connection, {
           type: MESSAGE_TYPES.ERROR,
           error: 'Join timed out',
@@ -882,57 +902,62 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
 
     socket.on('data', (chunk) => {
       if (connection.closed) return;
-      connection.buffer = Buffer.concat([connection.buffer, chunk]);
+      queueConnectionWork(connection, async () => {
+        connection.buffer = Buffer.concat([connection.buffer, chunk]);
 
-      const decoded = decodeFrames(connection.buffer, config.maxMessageBytes);
-      connection.buffer = decoded.remaining;
+        const decoded = decodeFrames(connection.buffer, config.maxMessageBytes);
+        connection.buffer = decoded.remaining;
 
-      if (decoded.errorCode) {
-        recordDroppedEvent('invalid_frame');
-        sendJson(connection, {
-          type: MESSAGE_TYPES.ERROR,
-          error: decoded.errorReason,
-        });
-        closeConnection(connection, decoded.errorCode, decoded.errorReason);
-        return;
-      }
-
-      for (const frame of decoded.frames) {
-        if (frame.opcode === 0x8) {
-          closeConnection(connection, 1000, 'Client closed');
+        if (decoded.errorCode) {
+          void recordDroppedEventAsync('invalid_frame');
+          sendJson(connection, {
+            type: MESSAGE_TYPES.ERROR,
+            error: decoded.errorReason,
+          });
+          closeConnection(connection, decoded.errorCode, decoded.errorReason);
           return;
         }
 
-        if (frame.opcode === 0x9) {
-          if (!socket.destroyed && !socket.writableEnded) {
-            socket.write(encodePongFrame(frame.payload));
+        for (const frame of decoded.frames) {
+          if (frame.opcode === 0x8) {
+            closeConnection(connection, 1000, 'Client closed');
+            return;
           }
-          continue;
-        }
 
-        if (frame.opcode === 0xA) {
-          continue;
-        }
+          if (frame.opcode === 0x9) {
+            if (!socket.destroyed && !socket.writableEnded) {
+              socket.write(encodePongFrame(frame.payload));
+            }
+            continue;
+          }
 
-        if (frame.opcode !== 0x1) {
-          sendJson(connection, {
-            type: MESSAGE_TYPES.ERROR,
-            error: 'Only text frames are supported',
-          });
-          closeConnection(connection, 1003, 'Only text frames are supported');
-          return;
-        }
+          if (frame.opcode === 0xA) {
+            continue;
+          }
 
-        try {
-          const message = JSON.parse(frame.payload.toString('utf8'));
-          handleMessage(connection, message);
-        } catch {
-          sendJson(connection, {
-            type: MESSAGE_TYPES.ERROR,
-            error: 'Invalid JSON message',
-          });
+          if (frame.opcode !== 0x1) {
+            sendJson(connection, {
+              type: MESSAGE_TYPES.ERROR,
+              error: 'Only text frames are supported',
+            });
+            closeConnection(connection, 1003, 'Only text frames are supported');
+            return;
+          }
+
+          let message = null;
+          try {
+            message = JSON.parse(frame.payload.toString('utf8'));
+          } catch {
+            sendJson(connection, {
+              type: MESSAGE_TYPES.ERROR,
+              error: 'Invalid JSON message',
+            });
+            continue;
+          }
+
+          await handleMessage(connection, message);
         }
-      }
+      });
     });
 
     socket.on('close', () => {
@@ -941,7 +966,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
 
     socket.on('error', (error) => {
       logger.error?.('Coediting transport socket error:', error);
-      recordDroppedEvent('socket_error');
+      void recordDroppedEventAsync('socket_error');
       closeConnection(connection, 1011, 'Socket error');
     });
   }
@@ -949,7 +974,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
   const sweepInterval = setInterval(() => {
     const expiredSessions = registry.getExpiredSessions(Date.now(), idleTimeoutMs);
     for (const session of expiredSessions) {
-      recordDroppedEvent('heartbeat_timeout');
+      void recordDroppedEventAsync('heartbeat_timeout');
       closeConnection(session.connection, 1008, 'Heartbeat timeout');
     }
   }, Math.max(heartbeatIntervalMs, 5000));

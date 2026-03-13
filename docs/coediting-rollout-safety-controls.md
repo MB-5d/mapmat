@@ -31,6 +31,7 @@ The rollout stays fail-closed:
 - `COEDITING_DEGRADE_CONFLICTS_PER_WINDOW=0`
 - `COEDITING_DEGRADE_RECONNECTS_PER_WINDOW=0`
 - `COEDITING_DEGRADE_DROPPED_PER_WINDOW=0`
+- `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=false`
 
 When any enabled threshold is exceeded inside the rolling window, scoped live co-editing moves to `read_only`.
 
@@ -70,7 +71,7 @@ When any enabled threshold is exceeded inside the rolling window, scoped live co
 
 ## Structured observability
 
-In-memory metrics currently track:
+When `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=false`, in-memory metrics track:
 
 - commit latency
 - version conflicts
@@ -78,7 +79,14 @@ In-memory metrics currently track:
 - dropped events
 - read-only blocks
 
-These metrics are process-local and reset on restart/deploy. Treat them as a local circuit breaker and operational signal, not as a long-term analytics store.
+When `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=true`, those same counters are also written into the active runtime database and rollout/health resolution reads the shared aggregate instead of a single-process view.
+
+Implementation notes:
+
+- no extra worker is required
+- local in-memory counters remain as the fallback path
+- the shared aggregate is bucketed for low write amplification and coarse operational health, not tenant analytics
+- public `GET /health/coediting` stays coarse; `GET /api/admin/coediting` remains the richer operational surface
 
 ## Frontend behavior
 
@@ -94,6 +102,7 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 
 - `npm run check:backend`
 - `npm run check:backend:postgres`
+- `node scripts/check-coediting-observability.js`
 - `npm run check:frontend-build`
 - `npm run verify:realtime:staging`
 - `npm run verify:realtime:production`

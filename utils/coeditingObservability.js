@@ -1,3 +1,8 @@
+const coeditingStore = require('../stores/coeditingStore');
+
+const OBSERVABILITY_BUCKET_MS = 10000;
+const ERROR_LOG_THROTTLE_MS = 60000;
+
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
   const normalized = String(value).trim().toLowerCase();
@@ -15,6 +20,7 @@ function clampInt(value, fallback, { min, max }) {
 function createCoeditingObservabilityConfigFromEnv(env = process.env) {
   return {
     forceReadOnly: parseEnvBool(env.COEDITING_FORCE_READ_ONLY, false),
+    distributedEnabled: parseEnvBool(env.COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED, false),
     windowSec: clampInt(env.COEDITING_METRICS_WINDOW_SEC, 300, { min: 30, max: 3600 }),
     conflictLimit: clampInt(env.COEDITING_DEGRADE_CONFLICTS_PER_WINDOW, 0, { min: 0, max: 100000 }),
     reconnectLimit: clampInt(env.COEDITING_DEGRADE_RECONNECTS_PER_WINDOW, 0, { min: 0, max: 100000 }),
@@ -37,6 +43,16 @@ const metricState = {
     readOnlyBlocks: 0,
   },
 };
+
+const loggedErrors = new Map();
+
+function logObservabilityError(kind, error) {
+  const now = Date.now();
+  const lastLoggedAt = loggedErrors.get(kind) || 0;
+  if (now - lastLoggedAt < ERROR_LOG_THROTTLE_MS) return;
+  loggedErrors.set(kind, now);
+  console.error(`Coediting observability ${kind} error:`, error);
+}
 
 function pruneEntries(entries, windowStart, maxEntries = 2000) {
   const next = entries.filter((entry) => entry.ts >= windowStart);
@@ -109,27 +125,28 @@ function summarizeReasonCounts(entries) {
   return counts;
 }
 
-function getCoeditingHealthSnapshot(env = process.env) {
-  const config = createCoeditingObservabilityConfigFromEnv(env);
-  const now = Date.now();
-  const windowStart = now - (config.windowSec * 1000);
-
-  metricState.commitLatencies = pruneEntries(metricState.commitLatencies, windowStart);
-  metricState.conflicts = pruneEntries(metricState.conflicts, windowStart);
-  metricState.reconnects = pruneEntries(metricState.reconnects, windowStart);
-  metricState.dropped = pruneEntries(metricState.dropped, windowStart);
-  metricState.readOnlyBlocks = pruneEntries(metricState.readOnlyBlocks, windowStart);
-
-  const recentConflicts = metricState.conflicts.length;
-  const recentReconnects = metricState.reconnects.length;
-  const recentDropped = metricState.dropped.length;
-  const latency = getLatencySummary(metricState.commitLatencies);
-
+function buildHealthSnapshot(config, {
+  commitLatencyCount,
+  commitLatencyAvgMs,
+  commitLatencyP95Ms,
+  conflictsRecent,
+  conflictsTotal,
+  reconnectsRecent,
+  reconnectsTotal,
+  droppedRecent,
+  droppedTotal,
+  droppedReasons,
+  readOnlyBlocksRecent,
+  readOnlyBlocksTotal,
+  committedOpsTotal,
+  source,
+  observedAt,
+}) {
   const reasons = [];
   if (config.forceReadOnly) reasons.push('force_read_only');
-  if (config.conflictLimit > 0 && recentConflicts >= config.conflictLimit) reasons.push('conflict_limit');
-  if (config.reconnectLimit > 0 && recentReconnects >= config.reconnectLimit) reasons.push('reconnect_limit');
-  if (config.droppedLimit > 0 && recentDropped >= config.droppedLimit) reasons.push('dropped_limit');
+  if (config.conflictLimit > 0 && conflictsRecent >= config.conflictLimit) reasons.push('conflict_limit');
+  if (config.reconnectLimit > 0 && reconnectsRecent >= config.reconnectLimit) reasons.push('reconnect_limit');
+  if (config.droppedLimit > 0 && droppedRecent >= config.droppedLimit) reasons.push('dropped_limit');
 
   return {
     status: reasons.length > 0 ? 'read_only' : 'healthy',
@@ -143,30 +160,259 @@ function getCoeditingHealthSnapshot(env = process.env) {
       droppedLimit: config.droppedLimit,
     },
     metrics: {
-      commitLatencyMs: latency,
+      commitLatencyMs: {
+        count: commitLatencyCount,
+        avgMs: commitLatencyAvgMs,
+        p95Ms: commitLatencyP95Ms,
+      },
       conflicts: {
-        recent: recentConflicts,
-        total: metricState.totals.conflicts,
+        recent: conflictsRecent,
+        total: conflictsTotal,
       },
       reconnects: {
-        recent: recentReconnects,
-        total: metricState.totals.reconnects,
+        recent: reconnectsRecent,
+        total: reconnectsTotal,
       },
       dropped: {
-        recent: recentDropped,
-        total: metricState.totals.dropped,
-        reasons: summarizeReasonCounts(metricState.dropped),
+        recent: droppedRecent,
+        total: droppedTotal,
+        reasons: droppedReasons,
       },
       readOnlyBlocks: {
-        recent: metricState.readOnlyBlocks.length,
-        total: metricState.totals.readOnlyBlocks,
+        recent: readOnlyBlocksRecent,
+        total: readOnlyBlocksTotal,
       },
       committedOps: {
-        total: metricState.totals.commitLatencyCount,
+        total: committedOpsTotal,
       },
     },
-    observedAt: new Date(now).toISOString(),
+    source,
+    observedAt,
   };
+}
+
+function getLocalMetricSummary(env = process.env) {
+  const config = createCoeditingObservabilityConfigFromEnv(env);
+  const now = Date.now();
+  const windowStart = now - (config.windowSec * 1000);
+
+  metricState.commitLatencies = pruneEntries(metricState.commitLatencies, windowStart);
+  metricState.conflicts = pruneEntries(metricState.conflicts, windowStart);
+  metricState.reconnects = pruneEntries(metricState.reconnects, windowStart);
+  metricState.dropped = pruneEntries(metricState.dropped, windowStart);
+  metricState.readOnlyBlocks = pruneEntries(metricState.readOnlyBlocks, windowStart);
+
+  const latency = getLatencySummary(metricState.commitLatencies);
+  return buildHealthSnapshot(config, {
+    commitLatencyCount: latency.count,
+    commitLatencyAvgMs: latency.avgMs,
+    commitLatencyP95Ms: latency.p95Ms,
+    conflictsRecent: metricState.conflicts.length,
+    conflictsTotal: metricState.totals.conflicts,
+    reconnectsRecent: metricState.reconnects.length,
+    reconnectsTotal: metricState.totals.reconnects,
+    droppedRecent: metricState.dropped.length,
+    droppedTotal: metricState.totals.dropped,
+    droppedReasons: summarizeReasonCounts(metricState.dropped),
+    readOnlyBlocksRecent: metricState.readOnlyBlocks.length,
+    readOnlyBlocksTotal: metricState.totals.readOnlyBlocks,
+    committedOpsTotal: metricState.totals.commitLatencyCount,
+    source: 'local',
+    observedAt: new Date(now).toISOString(),
+  });
+}
+
+function normalizeBucketReason(reason) {
+  const normalized = String(reason || '').trim();
+  return normalized || '';
+}
+
+function toBucketStart(now) {
+  return new Date(Math.floor(now / OBSERVABILITY_BUCKET_MS) * OBSERVABILITY_BUCKET_MS).toISOString();
+}
+
+async function persistDistributedMetricAsync({
+  metricType,
+  reason = '',
+  sampleCount = 1,
+  valueSum = 0,
+  valueMax = 0,
+  now = Date.now(),
+  env = process.env,
+}) {
+  const config = createCoeditingObservabilityConfigFromEnv(env);
+  if (!config.distributedEnabled) return false;
+
+  try {
+    await coeditingStore.ensureCoeditingSchemaAsync();
+    await coeditingStore.upsertObservabilityBucketAsync({
+      bucketStart: toBucketStart(now),
+      metricType,
+      reason: normalizeBucketReason(reason),
+      sampleCount,
+      valueSum,
+      valueMax,
+    });
+    return true;
+  } catch (error) {
+    logObservabilityError('persist', error);
+    return false;
+  }
+}
+
+function buildDistributedMetricSummary(rows) {
+  const summary = {
+    commitLatency: {
+      count: 0,
+      sumMs: 0,
+    },
+    conflicts: 0,
+    reconnects: 0,
+    dropped: 0,
+    droppedReasons: {},
+    readOnlyBlocks: 0,
+  };
+
+  for (const row of rows) {
+    const metricType = String(row.metric_type || '').trim();
+    const sampleCount = Number(row.sample_count || 0);
+    const valueSum = Number(row.value_sum || 0);
+    const reason = normalizeBucketReason(row.reason);
+
+    if (metricType === 'commit_latency') {
+      summary.commitLatency.count += sampleCount;
+      summary.commitLatency.sumMs += valueSum;
+      continue;
+    }
+    if (metricType === 'conflict') {
+      summary.conflicts += sampleCount;
+      continue;
+    }
+    if (metricType === 'reconnect') {
+      summary.reconnects += sampleCount;
+      continue;
+    }
+    if (metricType === 'dropped') {
+      summary.dropped += sampleCount;
+      if (reason) {
+        summary.droppedReasons[reason] = (summary.droppedReasons[reason] || 0) + sampleCount;
+      }
+      continue;
+    }
+    if (metricType === 'read_only_block') {
+      summary.readOnlyBlocks += sampleCount;
+    }
+  }
+
+  return summary;
+}
+
+function getCoeditingHealthSnapshot(env = process.env) {
+  return getLocalMetricSummary(env);
+}
+
+async function getCoeditingHealthSnapshotAsync(env = process.env) {
+  const config = createCoeditingObservabilityConfigFromEnv(env);
+  if (!config.distributedEnabled) {
+    return getLocalMetricSummary(env);
+  }
+
+  try {
+    const now = Date.now();
+    const windowStart = now - (config.windowSec * 1000);
+    const bucketStart = toBucketStart(windowStart);
+
+    await coeditingStore.ensureCoeditingSchemaAsync();
+    const [recentRows, totalRows] = await Promise.all([
+      coeditingStore.listObservabilityBucketsAsync({ bucketStart }),
+      coeditingStore.listObservabilityBucketsAsync(),
+    ]);
+
+    const recent = buildDistributedMetricSummary(recentRows);
+    const totals = buildDistributedMetricSummary(totalRows);
+    const commitLatencyAvgMs = recent.commitLatency.count > 0
+      ? Math.round(recent.commitLatency.sumMs / recent.commitLatency.count)
+      : 0;
+
+    return buildHealthSnapshot(config, {
+      commitLatencyCount: recent.commitLatency.count,
+      commitLatencyAvgMs,
+      commitLatencyP95Ms: recent.commitLatency.count > 0 ? null : 0,
+      conflictsRecent: recent.conflicts,
+      conflictsTotal: totals.conflicts,
+      reconnectsRecent: recent.reconnects,
+      reconnectsTotal: totals.reconnects,
+      droppedRecent: recent.dropped,
+      droppedTotal: totals.dropped,
+      droppedReasons: recent.droppedReasons,
+      readOnlyBlocksRecent: recent.readOnlyBlocks,
+      readOnlyBlocksTotal: totals.readOnlyBlocks,
+      committedOpsTotal: totals.commitLatency.count,
+      source: 'distributed',
+      observedAt: new Date(now).toISOString(),
+    });
+  } catch (error) {
+    logObservabilityError('read', error);
+    return {
+      ...getLocalMetricSummary(env),
+      source: 'local_fallback',
+    };
+  }
+}
+
+async function recordCommitLatencyAsync(ms, now = Date.now(), { env = process.env } = {}) {
+  const safeMs = Number.isFinite(ms) ? Math.max(0, Math.round(ms)) : 0;
+  recordCommitLatency(safeMs, now);
+  return persistDistributedMetricAsync({
+    metricType: 'commit_latency',
+    sampleCount: 1,
+    valueSum: safeMs,
+    valueMax: safeMs,
+    now,
+    env,
+  });
+}
+
+async function recordVersionConflictAsync(now = Date.now(), { env = process.env } = {}) {
+  recordVersionConflict(now);
+  return persistDistributedMetricAsync({
+    metricType: 'conflict',
+    sampleCount: 1,
+    now,
+    env,
+  });
+}
+
+async function recordReconnectEventAsync(now = Date.now(), { env = process.env } = {}) {
+  recordReconnectEvent(now);
+  return persistDistributedMetricAsync({
+    metricType: 'reconnect',
+    sampleCount: 1,
+    now,
+    env,
+  });
+}
+
+async function recordDroppedEventAsync(reason = 'unknown', now = Date.now(), { env = process.env } = {}) {
+  const normalizedReason = String(reason || 'unknown').trim() || 'unknown';
+  recordDroppedEvent(normalizedReason, now);
+  return persistDistributedMetricAsync({
+    metricType: 'dropped',
+    reason: normalizedReason,
+    sampleCount: 1,
+    now,
+    env,
+  });
+}
+
+async function recordReadOnlyBlockAsync(now = Date.now(), { env = process.env } = {}) {
+  recordReadOnlyBlock(now);
+  return persistDistributedMetricAsync({
+    metricType: 'read_only_block',
+    sampleCount: 1,
+    now,
+    env,
+  });
 }
 
 module.exports = {
@@ -176,5 +422,11 @@ module.exports = {
   recordReconnectEvent,
   recordDroppedEvent,
   recordReadOnlyBlock,
+  recordCommitLatencyAsync,
+  recordVersionConflictAsync,
+  recordReconnectEventAsync,
+  recordDroppedEventAsync,
+  recordReadOnlyBlockAsync,
   getCoeditingHealthSnapshot,
+  getCoeditingHealthSnapshotAsync,
 };

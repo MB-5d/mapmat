@@ -17,11 +17,11 @@ const {
   broadcastRoomEventAsync,
   MESSAGE_TYPES,
 } = require('../utils/coeditingTransport');
-const { resolveCoeditingRollout } = require('../utils/coeditingRollout');
+const { resolveCoeditingRolloutAsync } = require('../utils/coeditingRollout');
 const {
-  recordCommitLatency,
-  recordVersionConflict,
-  recordReadOnlyBlock,
+  recordCommitLatencyAsync,
+  recordVersionConflictAsync,
+  recordReadOnlyBlockAsync,
 } = require('../utils/coeditingObservability');
 
 const router = express.Router();
@@ -97,7 +97,7 @@ async function resolveCoeditingContextAsync(req, res, mapId) {
     return null;
   }
 
-  const rollout = resolveCoeditingRollout({
+  const rollout = await resolveCoeditingRolloutAsync({
     mapId,
     actorId: req.user.id,
     role,
@@ -116,7 +116,7 @@ async function requireCoeditingAccessAsync(req, res, mapId, { allowReadOnly = fa
   }
 
   if (!allowReadOnly && effectiveContext.rollout.mode === 'read_only') {
-    recordReadOnlyBlock();
+    await recordReadOnlyBlockAsync();
     sendReadOnlyFallback(res, effectiveContext.rollout);
     return null;
   }
@@ -265,7 +265,7 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
 
     const startedAt = Date.now();
     const committed = await applyOperationAsync({ mapId, operation });
-    recordCommitLatency(Date.now() - startedAt);
+    await recordCommitLatencyAsync(Date.now() - startedAt);
 
     await broadcastRoomEventAsync(mapId, {
       type: MESSAGE_TYPES.OPERATION_COMMITTED,
@@ -291,7 +291,7 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
     }
     if (error instanceof CoeditingSyncError) {
       if (error.code === 'COEDITING_VERSION_CONFLICT') {
-        recordVersionConflict();
+        await recordVersionConflictAsync();
       }
       return res.status(error.statusCode).json({
         error: error.message,

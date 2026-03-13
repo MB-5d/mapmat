@@ -165,6 +165,7 @@ Optional:
 | `COEDITING_DEGRADE_CONFLICTS_PER_WINDOW` | Conflict threshold that flips live co-editing to read-only | 0 (disabled) |
 | `COEDITING_DEGRADE_RECONNECTS_PER_WINDOW` | Reconnect threshold that flips live co-editing to read-only | 0 (disabled) |
 | `COEDITING_DEGRADE_DROPPED_PER_WINDOW` | Dropped-event threshold that flips live co-editing to read-only | 0 (disabled) |
+| `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED` | Enables DB-backed shared co-editing health counters for multi-instance rollout decisions | false |
 | `COEDITING_WS_HEARTBEAT_SEC` | Client heartbeat cadence expected by Phase 10B WebSocket transport | 20 |
 | `COEDITING_WS_IDLE_TIMEOUT_SEC` | Idle timeout before a co-editing socket is closed | 90 |
 | `COEDITING_WS_JOIN_TIMEOUT_SEC` | Max time allowed before a socket must join a room session | 15 |
