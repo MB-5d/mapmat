@@ -77,6 +77,7 @@ Co-editing persisted load harness (repo root):
 
 ```bash
 npm run check:coediting:load
+npm run check:coediting:recovery
 npm run check:coediting:soak
 ```
 
