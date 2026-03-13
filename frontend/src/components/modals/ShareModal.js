@@ -9,6 +9,7 @@ const ShareModal = ({
   onChangePermission,
   linkCopied,
   onCopyLink,
+  canShareLinks = true,
   shareEmails,
   onShareEmailsChange,
   onSendEmail,
@@ -21,6 +22,7 @@ const ShareModal = ({
   collaborationInviteRole = 'viewer',
   onCollaborationInviteRoleChange,
   onSendCollaborationInvite,
+  canSendCollaborationInvites = true,
   collaborationMemberships = [],
   collaborationInvites = [],
   onRevokeCollaborationInvite,
@@ -90,10 +92,17 @@ const ShareModal = ({
           </div>
 
           <div className="share-section">
-            <button className={`share-link-btn ${linkCopied ? 'copied' : ''}`} onClick={onCopyLink}>
+            <button
+              className={`share-link-btn ${linkCopied ? 'copied' : ''}`}
+              onClick={onCopyLink}
+              disabled={!canShareLinks}
+            >
               {linkCopied ? <Check size={18} /> : <Copy size={18} />}
               <span>{linkCopied ? 'Link Copied!' : 'Copy Share Link'}</span>
             </button>
+            {!canShareLinks ? (
+              <div className="share-collab-empty">You do not have permission to create share links.</div>
+            ) : null}
           </div>
 
           <div className="share-section">
@@ -129,12 +138,14 @@ const ShareModal = ({
                         placeholder="Invite by email..."
                         value={collaborationInviteEmail}
                         onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
+                        disabled={!canSendCollaborationInvites}
                       />
                     </div>
                     <select
                       className="share-collab-role-select"
                       value={collaborationInviteRole}
                       onChange={(e) => onCollaborationInviteRoleChange?.(e.target.value)}
+                      disabled={!canSendCollaborationInvites}
                     >
                       <option value="viewer">Viewer</option>
                       <option value="commenter">Commenter</option>
@@ -143,12 +154,16 @@ const ShareModal = ({
                     <button
                       className="share-email-btn"
                       onClick={onSendCollaborationInvite}
-                      disabled={collaborationLoading}
+                      disabled={collaborationLoading || !canSendCollaborationInvites}
                     >
                       <Send size={14} />
                       <span>{collaborationLoading ? 'Sending...' : 'Invite'}</span>
                     </button>
                   </div>
+
+                  {!canSendCollaborationInvites ? (
+                    <div className="share-collab-empty">You can view collaborators but cannot manage invites.</div>
+                  ) : null}
 
                   {collaborationError ? (
                     <div className="share-collab-error">{collaborationError}</div>
@@ -196,7 +211,7 @@ const ShareModal = ({
                                 className="share-collab-revoke"
                                 onClick={() => onRevokeCollaborationInvite?.(invite.id)}
                                 aria-label="Revoke invite"
-                                disabled={collaborationLoading}
+                                disabled={collaborationLoading || !canSendCollaborationInvites}
                               >
                                 <Trash2 size={14} />
                               </button>

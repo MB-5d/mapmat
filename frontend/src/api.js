@@ -335,6 +335,10 @@ export async function removeMapMember(mapId, userId) {
   });
 }
 
+export async function getMapFeatureGates(mapId) {
+  return fetchApi(`/api/maps/${mapId}/feature-gates`);
+}
+
 // ============================================
 // REALTIME BASELINE (PRESENCE)
 // ============================================

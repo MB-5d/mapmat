@@ -50,6 +50,7 @@ Current Postgres runtime ops are in `docs/postgres-runtime-ops.md`.
 Historical migration log is in `docs/postgres-migration.md`.
 Collaboration backend foundation docs are in `docs/collaboration-backend.md`.
 Realtime collaboration baseline docs are in `docs/realtime-collaboration-baseline.md`.
+Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 
 Postgres runtime quick checks (repo root):
 
@@ -158,6 +159,7 @@ Optional:
 | `REACT_APP_COLLABORATION_UI_ENABLED` | Enables Phase 9C collaboration panel in Share modal | false |
 | `REACT_APP_REALTIME_BASELINE_ENABLED` | Enables Phase 9D presence/session awareness UI | false |
 | `REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC` | Frontend heartbeat cadence (seconds) for presence baseline | 20 |
+| `REACT_APP_PERMISSION_GATING_ENABLED` | Enables Phase 9E API-driven role/feature UI gating | false |
 
 Temporary testing note:
 - `TEST_AUTH_ENABLED=true` allows login with auto-created fake accounts and seeds the default test user above.

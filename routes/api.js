@@ -6,6 +6,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
+const collaborationStore = require('../stores/collaborationStore');
 const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
@@ -17,6 +18,31 @@ const router = express.Router();
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY || null;
+const COLLABORATION_BACKEND_ENABLED = parseEnvBool(
+  process.env.COLLABORATION_BACKEND_ENABLED,
+  false
+);
+
+const FEATURE_GATES = Object.freeze({
+  mapView: permissionPolicy.FEATURES.MAP_VIEW,
+  mapComment: permissionPolicy.FEATURES.MAP_COMMENT,
+  mapEdit: permissionPolicy.FEATURES.MAP_EDIT,
+  versionSave: permissionPolicy.FEATURES.VERSION_SAVE,
+  historyManage: permissionPolicy.FEATURES.HISTORY_MANAGE,
+  shareManage: permissionPolicy.FEATURES.SHARE_MANAGE,
+  discoveryRun: permissionPolicy.FEATURES.DISCOVERY_RUN,
+  collabPanelView: permissionPolicy.FEATURES.COLLAB_PANEL_VIEW,
+  collabInviteSend: permissionPolicy.FEATURES.COLLAB_INVITE_SEND,
+  presenceView: permissionPolicy.FEATURES.PRESENCE_VIEW,
+});
+
+function parseEnvBool(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
 
 function requireAdminKey(req, res, next) {
   if (!ADMIN_API_KEY) {
@@ -99,6 +125,41 @@ function ensureResourceAction({
   }
 
   return true;
+}
+
+function buildFeatureGatePayload(role) {
+  const features = {};
+  for (const [key, feature] of Object.entries(FEATURE_GATES)) {
+    features[key] = permissionPolicy.isFeatureAllowed(feature, role);
+  }
+  return {
+    role: permissionPolicy.normalizeRole(role),
+    features,
+  };
+}
+
+async function resolveMembershipRoleAsync(mapId, userId) {
+  if (!COLLABORATION_BACKEND_ENABLED || !mapId || !userId) return null;
+  try {
+    await collaborationStore.ensureCollaborationSchemaAsync();
+    const membership = await collaborationStore.getMembershipByMapAndUserAsync(mapId, userId);
+    return membership?.role || null;
+  } catch (error) {
+    console.error('Resolve membership role error:', error);
+    return null;
+  }
+}
+
+async function resolveMapPermissionContextAsync({ mapId, actorUserId }) {
+  const map = await mapStore.getMapByIdAsync(mapId);
+  if (!map) return { map: null, role: permissionPolicy.ROLES.NONE };
+  const membershipRole = await resolveMembershipRoleAsync(mapId, actorUserId);
+  const role = permissionPolicy.resolveResourceRole({
+    actorUserId,
+    resourceOwnerUserId: map.user_id,
+    membershipRole,
+  });
+  return { map, role };
 }
 
 // Apply auth middleware to all routes
@@ -283,6 +344,28 @@ router.get('/maps/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Get map error:', error);
     res.status(500).json({ error: 'Failed to get map' });
+  }
+});
+
+// GET /api/maps/:id/feature-gates - resolve role + feature access for current actor
+router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { map, role } = await resolveMapPermissionContextAsync({
+      mapId: id,
+      actorUserId: req.user.id,
+    });
+
+    if (!map || !permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, role)) {
+      return res.status(404).json({ error: 'Map not found' });
+    }
+
+    res.json({
+      permissions: buildFeatureGatePayload(role),
+    });
+  } catch (error) {
+    console.error('Get map feature gates error:', error);
+    res.status(500).json({ error: 'Failed to resolve map permissions' });
   }
 });
 
