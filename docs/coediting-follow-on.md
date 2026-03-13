@@ -96,7 +96,11 @@ Current repo coverage now includes deterministic multi-client convergence simula
 
 - `node scripts/check-coediting-simulation.js`
 
-Load and chaos testing remain follow-on work.
+Current repo coverage also includes a persisted single-room load harness via:
+
+- `node scripts/check-coediting-load.js`
+
+Chaos testing remains follow-on work.
 
 ## Runtime Verification Additions (When Implemented)
 

@@ -73,6 +73,12 @@ npm run verify:realtime:staging
 npm run verify:realtime:production
 ```
 
+Co-editing persisted load harness (repo root):
+
+```bash
+npm run check:coediting:load
+```
+
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.
 
 ### Option 1: Railway + Vercel (Recommended)
