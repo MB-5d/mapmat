@@ -9,6 +9,7 @@
  */
 
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 let helmet = null;
@@ -42,6 +43,7 @@ const apiRouter = require('./routes/api');
 const collaborationRouter = require('./routes/collaboration');
 const realtimeRouter = require('./routes/realtime');
 const coeditingRouter = require('./routes/coediting');
+const { attachCoeditingTransport } = require('./utils/coeditingTransport');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBLIC_DOMAIN;
@@ -2998,7 +3000,9 @@ process.on('SIGINT', async () => {
 });
 
 if (RUN_WEB) {
-  app.listen(PORT, () => {
+  const server = http.createServer(app);
+  attachCoeditingTransport({ server });
+  server.listen(PORT, () => {
     console.log(`Map Mat Backend running on http://localhost:${PORT}`);
   });
 }

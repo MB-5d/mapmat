@@ -52,6 +52,7 @@ Collaboration backend foundation docs are in `docs/collaboration-backend.md`.
 Realtime collaboration baseline docs are in `docs/realtime-collaboration-baseline.md`.
 True co-editing (CRDT/OT) follow-on plan is in `docs/coediting-follow-on.md`.
 Phase 10A co-editing event contract docs are in `docs/coediting-event-contract.md`.
+Phase 10B co-editing transport docs are in `docs/coediting-transport-layer.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
@@ -143,7 +144,13 @@ Optional:
 | `REALTIME_BASELINE_ENABLED` | Enables Phase 9D realtime baseline API endpoints | false |
 | `REALTIME_PRESENCE_TTL_SEC` | Presence session TTL window (seconds) | 90 |
 | `REALTIME_PRESENCE_HEARTBEAT_SEC` | Suggested heartbeat interval returned by API (seconds) | 20 |
-| `COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10A co-editing operation contract ingest endpoint | false |
+| `COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10A/10B co-editing experimental backend endpoints and WebSocket transport | false |
+| `COEDITING_WS_HEARTBEAT_SEC` | Client heartbeat cadence expected by Phase 10B WebSocket transport | 20 |
+| `COEDITING_WS_IDLE_TIMEOUT_SEC` | Idle timeout before a co-editing socket is closed | 90 |
+| `COEDITING_WS_JOIN_TIMEOUT_SEC` | Max time allowed before a socket must join a room session | 15 |
+| `COEDITING_WS_ROOM_RATE_LIMIT_PER_MIN` | Max non-heartbeat messages accepted per map room per minute | 240 |
+| `COEDITING_WS_MAX_MESSAGE_BYTES` | Max accepted WebSocket message size in bytes | 32768 |
+| `COEDITING_WS_MAX_BACKPRESSURE_BYTES` | Max pending per-socket write buffer before the socket is closed | 131072 |
 | `SCREENSHOT_CAPTURE_TIMEOUT_MS` | Per-attempt screenshot navigation timeout | 60000 |
 | `SCREENSHOT_CACHE_TTL_MS` | Screenshot cache TTL before recapture | 3600000 |
 | `SCREENSHOT_FULL_MAX_HEIGHT` | Max height for full screenshots (px) before truncation | 16000 |

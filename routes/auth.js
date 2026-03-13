@@ -201,38 +201,76 @@ function verifyToken(token) {
 }
 
 function extractBearerToken(req) {
-  const header = req.get('authorization') || '';
+  const header = typeof req.get === 'function'
+    ? (req.get('authorization') || '')
+    : String(req.headers?.authorization || '');
   if (!header.toLowerCase().startsWith('bearer ')) return null;
   const token = header.slice(7).trim();
   return token || null;
 }
 
-// Auth middleware - attaches user to request if authenticated
-async function authMiddleware(req, res, next) {
+function parseCookieHeader(rawHeader) {
+  const cookies = {};
+  const header = String(rawHeader || '');
+  if (!header) return cookies;
+
+  for (const part of header.split(';')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    const separatorIndex = trimmed.indexOf('=');
+    if (separatorIndex <= 0) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    if (!key) continue;
+
+    try {
+      cookies[key] = decodeURIComponent(value);
+    } catch {
+      cookies[key] = value;
+    }
+  }
+
+  return cookies;
+}
+
+function getCookieToken(req) {
+  if (req.cookies && typeof req.cookies === 'object') {
+    return req.cookies.auth_token || null;
+  }
+
+  const parsedCookies = parseCookieHeader(req.headers?.cookie);
+  return parsedCookies.auth_token || null;
+}
+
+async function authenticateRequestAsync(req) {
   const bearerToken = AUTH_HEADER_FALLBACK ? extractBearerToken(req) : null;
-  const cookieToken = req.cookies?.auth_token;
+  const cookieToken = getCookieToken(req);
   const token = bearerToken || cookieToken;
 
   if (!token) {
-    req.user = null;
-    return next();
+    return null;
   }
 
   const decoded = verifyToken(token);
   if (!decoded) {
-    req.user = null;
-    return next();
+    return null;
   }
 
   try {
     const user = await authStore.getPublicUserByIdAsync(decoded.userId);
-    req.user = user || null;
-    next();
+    return user || null;
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    req.user = null;
-    next();
+    console.error('Authenticate request error:', error);
+    return null;
   }
+}
+
+// Auth middleware - attaches user to request if authenticated
+async function authMiddleware(req, res, next) {
+  req.user = await authenticateRequestAsync(req);
+  next();
 }
 
 // Require auth middleware - returns 401 if not authenticated
@@ -449,4 +487,4 @@ router.delete('/me', authMiddleware, requireAuth, profileMutationLimiter, async 
   }
 });
 
-module.exports = { router, authMiddleware, requireAuth };
+module.exports = { router, authMiddleware, requireAuth, authenticateRequestAsync };
