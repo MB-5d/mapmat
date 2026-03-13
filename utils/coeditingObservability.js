@@ -1,6 +1,7 @@
 const coeditingStore = require('../stores/coeditingStore');
 
 const OBSERVABILITY_BUCKET_MS = 10000;
+const OBSERVABILITY_PRUNE_INTERVAL_MS = 3600000;
 const ERROR_LOG_THROTTLE_MS = 60000;
 
 function parseEnvBool(value, fallback = false) {
@@ -21,6 +22,11 @@ function createCoeditingObservabilityConfigFromEnv(env = process.env) {
   return {
     forceReadOnly: parseEnvBool(env.COEDITING_FORCE_READ_ONLY, false),
     distributedEnabled: parseEnvBool(env.COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED, false),
+    retentionDays: clampInt(
+      env.COEDITING_DISTRIBUTED_OBSERVABILITY_RETENTION_DAYS,
+      30,
+      { min: 1, max: 365 }
+    ),
     windowSec: clampInt(env.COEDITING_METRICS_WINDOW_SEC, 300, { min: 30, max: 3600 }),
     conflictLimit: clampInt(env.COEDITING_DEGRADE_CONFLICTS_PER_WINDOW, 0, { min: 0, max: 100000 }),
     reconnectLimit: clampInt(env.COEDITING_DEGRADE_RECONNECTS_PER_WINDOW, 0, { min: 0, max: 100000 }),
@@ -45,6 +51,7 @@ const metricState = {
 };
 
 const loggedErrors = new Map();
+let lastDistributedPruneAt = 0;
 
 function logObservabilityError(kind, error) {
   const now = Date.now();
@@ -231,6 +238,22 @@ function toBucketStart(now) {
   return new Date(Math.floor(now / OBSERVABILITY_BUCKET_MS) * OBSERVABILITY_BUCKET_MS).toISOString();
 }
 
+async function maybePruneDistributedBucketsAsync(env = process.env, now = Date.now()) {
+  const config = createCoeditingObservabilityConfigFromEnv(env);
+  if (!config.distributedEnabled) return false;
+  if (now - lastDistributedPruneAt < OBSERVABILITY_PRUNE_INTERVAL_MS) return false;
+  lastDistributedPruneAt = now;
+
+  const retentionCutoff = new Date(now - (config.retentionDays * 86400000)).toISOString();
+  try {
+    await coeditingStore.deleteObservabilityBucketsBeforeAsync(retentionCutoff);
+    return true;
+  } catch (error) {
+    logObservabilityError('prune', error);
+    return false;
+  }
+}
+
 async function persistDistributedMetricAsync({
   metricType,
   reason = '',
@@ -245,7 +268,8 @@ async function persistDistributedMetricAsync({
 
   try {
     await coeditingStore.ensureCoeditingSchemaAsync();
-    await coeditingStore.upsertObservabilityBucketAsync({
+    await maybePruneDistributedBucketsAsync(env, now);
+    await coeditingStore.recordObservabilityMetricAsync({
       bucketStart: toBucketStart(now),
       metricType,
       reason: normalizeBucketReason(reason),
@@ -323,9 +347,10 @@ async function getCoeditingHealthSnapshotAsync(env = process.env) {
     const bucketStart = toBucketStart(windowStart);
 
     await coeditingStore.ensureCoeditingSchemaAsync();
+    await maybePruneDistributedBucketsAsync(env, now);
     const [recentRows, totalRows] = await Promise.all([
       coeditingStore.listObservabilityBucketsAsync({ bucketStart }),
-      coeditingStore.listObservabilityBucketsAsync(),
+      coeditingStore.listObservabilityTotalsAsync(),
     ]);
 
     const recent = buildDistributedMetricSummary(recentRows);

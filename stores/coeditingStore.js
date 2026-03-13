@@ -89,6 +89,19 @@ async function ensureCoeditingSchemaAsync() {
       'CREATE INDEX IF NOT EXISTS idx_coediting_observability_metric_bucket ON coediting_observability_buckets(metric_type, bucket_start)'
     );
 
+    await adapter.executeAsync(`
+      CREATE TABLE IF NOT EXISTS coediting_observability_totals (
+        metric_type TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        sample_count INTEGER NOT NULL DEFAULT 0,
+        value_sum INTEGER NOT NULL DEFAULT 0,
+        value_max INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (metric_type, reason)
+      )
+    `);
+
     await ensureColumnAsync(
       'map_live_ops',
       'timestamp',
@@ -303,6 +316,66 @@ async function upsertObservabilityBucketAsync({
   ]);
 }
 
+async function upsertObservabilityTotalAsync({
+  metricType,
+  reason = '',
+  sampleCount = 0,
+  valueSum = 0,
+  valueMax = 0,
+}) {
+  await adapter.executeAsync(`
+    INSERT INTO coediting_observability_totals (
+      metric_type,
+      reason,
+      sample_count,
+      value_sum,
+      value_max
+    )
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (metric_type, reason)
+    DO UPDATE SET
+      sample_count = coediting_observability_totals.sample_count + excluded.sample_count,
+      value_sum = coediting_observability_totals.value_sum + excluded.value_sum,
+      value_max = CASE
+        WHEN coediting_observability_totals.value_max > excluded.value_max
+          THEN coediting_observability_totals.value_max
+        ELSE excluded.value_max
+      END,
+      updated_at = CURRENT_TIMESTAMP
+  `, [
+    metricType,
+    reason,
+    sampleCount,
+    valueSum,
+    valueMax,
+  ]);
+}
+
+const recordObservabilityMetricAsync = adapter.transactionAsync(async ({
+  bucketStart,
+  metricType,
+  reason = '',
+  sampleCount = 0,
+  valueSum = 0,
+  valueMax = 0,
+}) => {
+  await upsertObservabilityBucketAsync({
+    bucketStart,
+    metricType,
+    reason,
+    sampleCount,
+    valueSum,
+    valueMax,
+  });
+  await upsertObservabilityTotalAsync({
+    metricType,
+    reason,
+    sampleCount,
+    valueSum,
+    valueMax,
+  });
+});
+
 function listObservabilityBucketsAsync({ bucketStart = null } = {}) {
   if (bucketStart) {
     return adapter.queryAllAsync(`
@@ -330,6 +403,25 @@ function listObservabilityBucketsAsync({ bucketStart = null } = {}) {
   `);
 }
 
+function listObservabilityTotalsAsync() {
+  return adapter.queryAllAsync(`
+    SELECT
+      metric_type,
+      reason,
+      sample_count,
+      value_sum,
+      value_max
+    FROM coediting_observability_totals
+  `);
+}
+
+function deleteObservabilityBucketsBeforeAsync(bucketStart) {
+  return adapter.executeAsync(
+    'DELETE FROM coediting_observability_buckets WHERE bucket_start < ?',
+    [bucketStart]
+  );
+}
+
 module.exports = {
   ensureCoeditingSchemaAsync,
   getLiveSnapshotByMapIdAsync,
@@ -339,5 +431,8 @@ module.exports = {
   createLiveOpAsync,
   listLiveOpsByMapIdAfterVersionAsync,
   upsertObservabilityBucketAsync,
+  recordObservabilityMetricAsync,
   listObservabilityBucketsAsync,
+  listObservabilityTotalsAsync,
+  deleteObservabilityBucketsBeforeAsync,
 };

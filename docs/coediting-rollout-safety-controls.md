@@ -32,6 +32,7 @@ The rollout stays fail-closed:
 - `COEDITING_DEGRADE_RECONNECTS_PER_WINDOW=0`
 - `COEDITING_DEGRADE_DROPPED_PER_WINDOW=0`
 - `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=false`
+- `COEDITING_DISTRIBUTED_OBSERVABILITY_RETENTION_DAYS=30`
 
 When any enabled threshold is exceeded inside the rolling window, scoped live co-editing moves to `read_only`.
 
@@ -86,6 +87,7 @@ Implementation notes:
 - no extra worker is required
 - local in-memory counters remain as the fallback path
 - the shared aggregate is bucketed for low write amplification and coarse operational health, not tenant analytics
+- bucket retention is pruned opportunistically so long-running canaries do not grow the recent-window table without bound
 - public `GET /health/coediting` stays coarse; `GET /api/admin/coediting` remains the richer operational surface
 
 ## Frontend behavior
