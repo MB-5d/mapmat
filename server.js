@@ -41,6 +41,7 @@ const { router: authRouter, authMiddleware, requireAuth } = require('./routes/au
 const apiRouter = require('./routes/api');
 const collaborationRouter = require('./routes/collaboration');
 const realtimeRouter = require('./routes/realtime');
+const coeditingRouter = require('./routes/coediting');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBLIC_DOMAIN;
@@ -126,6 +127,7 @@ app.use('/auth', authRouter);
 app.use('/api', apiRouter);
 app.use('/api', collaborationRouter);
 app.use('/api', realtimeRouter);
+app.use('/api', coeditingRouter);
 
 const PORT = process.env.PORT || 4002;
 const DB_RUNTIME = db.runtime || {

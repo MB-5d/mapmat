@@ -51,6 +51,7 @@ Historical migration log is in `docs/postgres-migration.md`.
 Collaboration backend foundation docs are in `docs/collaboration-backend.md`.
 Realtime collaboration baseline docs are in `docs/realtime-collaboration-baseline.md`.
 True co-editing (CRDT/OT) follow-on plan is in `docs/coediting-follow-on.md`.
+Phase 10A co-editing event contract docs are in `docs/coediting-event-contract.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
@@ -142,6 +143,7 @@ Optional:
 | `REALTIME_BASELINE_ENABLED` | Enables Phase 9D realtime baseline API endpoints | false |
 | `REALTIME_PRESENCE_TTL_SEC` | Presence session TTL window (seconds) | 90 |
 | `REALTIME_PRESENCE_HEARTBEAT_SEC` | Suggested heartbeat interval returned by API (seconds) | 20 |
+| `COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10A co-editing operation contract ingest endpoint | false |
 | `SCREENSHOT_CAPTURE_TIMEOUT_MS` | Per-attempt screenshot navigation timeout | 60000 |
 | `SCREENSHOT_CACHE_TTL_MS` | Screenshot cache TTL before recapture | 3600000 |
 | `SCREENSHOT_FULL_MAX_HEIGHT` | Max height for full screenshots (px) before truncation | 16000 |
@@ -167,6 +169,7 @@ Optional:
 | `REACT_APP_COLLABORATION_UI_ENABLED` | Enables Phase 9C collaboration panel in Share modal | false |
 | `REACT_APP_REALTIME_BASELINE_ENABLED` | Enables Phase 9D presence/session awareness UI | false |
 | `REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC` | Frontend heartbeat cadence (seconds) for presence baseline | 20 |
+| `REACT_APP_COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10D co-editing live-editing UI mode (future phase) | false |
 | `REACT_APP_PERMISSION_GATING_ENABLED` | Enables Phase 9E API-driven role/feature UI gating | false |
 | `REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED` | Enables Phase 9F full screenshot job pipeline in UI | false |
 
