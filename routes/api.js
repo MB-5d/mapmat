@@ -346,7 +346,17 @@ router.post('/maps', requireAuth, async (req, res) => {
 router.put('/maps/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
+    const {
+      name,
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      project_id,
+      notes,
+      expected_updated_at,
+    } = req.body;
 
     // Verify ownership
     const map = await mapStore.getMapForUserAsync(id, req.user.id);
@@ -357,6 +367,31 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       action: permissionPolicy.ACTIONS.MAP_UPDATE,
       failureError: 'Map not found',
     })) return;
+
+    if (expected_updated_at !== undefined && expected_updated_at !== null && expected_updated_at !== '') {
+      const expectedMs = Date.parse(expected_updated_at);
+      if (!Number.isFinite(expectedMs)) {
+        return res.status(400).json({ error: 'Invalid expected_updated_at value' });
+      }
+
+      const actualMs = Date.parse(map.updated_at);
+      if (Number.isFinite(actualMs) && actualMs !== expectedMs) {
+        return res.status(409).json({
+          error: 'Map has changed since your last load',
+          code: 'MAP_UPDATE_CONFLICT',
+          conflict: {
+            expected_updated_at: new Date(expectedMs).toISOString(),
+            actual_updated_at: new Date(actualMs).toISOString(),
+          },
+          latest: {
+            id: map.id,
+            name: map.name,
+            project_id: map.project_id,
+            updated_at: map.updated_at,
+          },
+        });
+      }
+    }
 
     const patch = {};
 
