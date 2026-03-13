@@ -7,6 +7,7 @@ const STORE_MODULES = [
   'jobStore',
   'mapStore',
   'pageStore',
+  'presenceStore',
   'projectStore',
   'shareStore',
   'usageStore',

@@ -767,6 +767,18 @@ body {
   color: #dc2626;
 }
 
+.presence-banner {
+  top: 56px;
+  max-width: min(92vw, 720px);
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e3a8a;
+}
+
+.presence-banner svg {
+  color: #2563eb;
+}
+
 .map-conflict-actions {
   display: flex;
   align-items: center;
@@ -7470,6 +7482,16 @@ body {
 
 [data-theme="dark"] .map-conflict-banner svg {
   color: #f87171;
+}
+
+[data-theme="dark"] .presence-banner {
+  background: #0f1d3a;
+  border-color: #1d4ed8;
+  color: #bfdbfe;
+}
+
+[data-theme="dark"] .presence-banner svg {
+  color: #60a5fa;
 }
 
 [data-theme="dark"] .map-conflict-actions button {

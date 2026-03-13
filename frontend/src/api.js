@@ -336,6 +336,35 @@ export async function removeMapMember(mapId, userId) {
 }
 
 // ============================================
+// REALTIME BASELINE (PRESENCE)
+// ============================================
+
+export async function getMapPresence(mapId) {
+  return fetchApi(`/api/maps/${mapId}/presence`);
+}
+
+export async function sendMapPresenceHeartbeat(
+  mapId,
+  { sessionId, accessMode, clientName = 'web', metadata } = {}
+) {
+  return fetchApi(`/api/maps/${mapId}/presence/heartbeat`, {
+    method: 'POST',
+    body: JSON.stringify({
+      session_id: sessionId,
+      access_mode: accessMode,
+      client_name: clientName,
+      metadata,
+    }),
+  });
+}
+
+export async function leaveMapPresence(mapId, sessionId) {
+  return fetchApi(`/api/maps/${mapId}/presence/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ============================================
 // SHARES
 // ============================================
 
