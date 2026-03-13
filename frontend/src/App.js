@@ -116,6 +116,10 @@ const REALTIME_BASELINE_ENABLED = parseEnvBool(
   process.env.REACT_APP_REALTIME_BASELINE_ENABLED,
   false
 );
+const PERMISSION_GATING_UI_ENABLED = parseEnvBool(
+  process.env.REACT_APP_PERMISSION_GATING_ENABLED,
+  false
+);
 const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
   Number.parseInt(process.env.REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC || '20', 10) || 20,
   5,
@@ -765,6 +769,7 @@ export default function App() {
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
   const [presenceSessions, setPresenceSessions] = useState([]);
+  const [mapPermissions, setMapPermissions] = useState(null);
   const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return !!params.get('share');
@@ -1629,9 +1634,49 @@ export default function App() {
     }
   }, []);
 
+  const legacyFeatureGates = useMemo(() => {
+    const isEdit = accessLevel === ACCESS_LEVELS.EDIT;
+    const isComment = accessLevel === ACCESS_LEVELS.COMMENT;
+    return {
+      mapView: true,
+      mapComment: isEdit || isComment,
+      mapEdit: isEdit,
+      versionSave: isEdit,
+      historyManage: isEdit,
+      shareManage: isEdit,
+      discoveryRun: isEdit,
+      collabPanelView: isEdit,
+      collabInviteSend: isEdit,
+      presenceView: isEdit || isComment,
+    };
+  }, [accessLevel]);
+
+  const effectiveFeatureGates = useMemo(() => {
+    if (
+      PERMISSION_GATING_UI_ENABLED
+      && isLoggedIn
+      && currentMap?.id
+      && mapPermissions?.features
+    ) {
+      return { ...legacyFeatureGates, ...mapPermissions.features };
+    }
+    return legacyFeatureGates;
+  }, [currentMap?.id, isLoggedIn, legacyFeatureGates, mapPermissions?.features]);
+
+  const canEditValue = !!effectiveFeatureGates.mapEdit;
+  const canCommentValue = canEditValue || !!effectiveFeatureGates.mapComment;
+  const canManageSharesValue = !!effectiveFeatureGates.shareManage;
+  const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
+  const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
+  const canViewPresenceValue = !!effectiveFeatureGates.presenceView;
+
   // Permission helper functions
-  const canEdit = () => accessLevel === ACCESS_LEVELS.EDIT;
-  const canComment = () => accessLevel === ACCESS_LEVELS.COMMENT || accessLevel === ACCESS_LEVELS.EDIT;
+  const canEdit = () => canEditValue;
+  const canComment = () => canCommentValue;
+  const canManageShares = () => canManageSharesValue;
+  const canViewCollaborationPanel = () => canViewCollaborationPanelValue;
+  const canSendCollaborationInvites = () => canSendCollaborationInvitesValue;
+  const canViewPresence = () => canViewPresenceValue;
 
   // Theme toggle functions
   const toggleTheme = () => {
@@ -2168,8 +2213,35 @@ export default function App() {
     }
   }, [activeVersionId, showToast, serializeVersionSnapshot]);
 
+  const loadMapPermissions = useCallback(async () => {
+    if (!PERMISSION_GATING_UI_ENABLED || !isLoggedIn || !currentMap?.id) {
+      setMapPermissions(null);
+      return;
+    }
+
+    try {
+      const { permissions } = await api.getMapFeatureGates(currentMap.id);
+      setMapPermissions(permissions || null);
+    } catch (error) {
+      if (error?.status !== 404) {
+        console.warn('Failed to load map feature gates', error);
+      }
+      setMapPermissions(null);
+    }
+  }, [currentMap?.id, isLoggedIn]);
+
+  useEffect(() => {
+    loadMapPermissions();
+  }, [loadMapPermissions]);
+
   const loadCollaborationData = useCallback(async () => {
-    if (!COLLABORATION_UI_ENABLED || !showShareModal || !currentMap?.id || !isLoggedIn) return;
+    if (
+      !COLLABORATION_UI_ENABLED
+      || !canViewCollaborationPanelValue
+      || !showShareModal
+      || !currentMap?.id
+      || !isLoggedIn
+    ) return;
     setCollaborationLoading(true);
     setCollaborationError('');
     try {
@@ -2187,9 +2259,13 @@ export default function App() {
     } finally {
       setCollaborationLoading(false);
     }
-  }, [currentMap?.id, isLoggedIn, showShareModal]);
+  }, [canViewCollaborationPanelValue, currentMap?.id, isLoggedIn, showShareModal]);
 
   const sendCollaborationInvite = useCallback(async () => {
+    if (!canSendCollaborationInvitesValue) {
+      showToast('You do not have permission to send invites on this map.', 'warning');
+      return;
+    }
     if (!currentMap?.id) {
       showToast('Save this map before inviting collaborators.', 'warning');
       return;
@@ -2217,6 +2293,7 @@ export default function App() {
       setCollaborationLoading(false);
     }
   }, [
+    canSendCollaborationInvitesValue,
     collaborationInviteEmail,
     collaborationInviteRole,
     currentMap?.id,
@@ -2225,6 +2302,10 @@ export default function App() {
   ]);
 
   const revokeCollaborationInvite = useCallback(async (inviteId) => {
+    if (!canSendCollaborationInvitesValue) {
+      showToast('You do not have permission to revoke invites on this map.', 'warning');
+      return;
+    }
     if (!currentMap?.id || !inviteId) return;
     setCollaborationLoading(true);
     setCollaborationError('');
@@ -2238,13 +2319,21 @@ export default function App() {
     } finally {
       setCollaborationLoading(false);
     }
-  }, [currentMap?.id, loadCollaborationData, showToast]);
+  }, [canSendCollaborationInvitesValue, currentMap?.id, loadCollaborationData, showToast]);
 
   useEffect(() => {
     if (!showShareModal) return;
     if (!COLLABORATION_UI_ENABLED) return;
+    if (!canViewCollaborationPanelValue) return;
     loadCollaborationData();
-  }, [loadCollaborationData, showShareModal]);
+  }, [canViewCollaborationPanelValue, loadCollaborationData, showShareModal]);
+
+  useEffect(() => {
+    if (!showShareModal || !COLLABORATION_UI_ENABLED || canViewCollaborationPanelValue) return;
+    setCollaborationError('');
+    setCollaborationMemberships([]);
+    setCollaborationInvites([]);
+  }, [canViewCollaborationPanelValue, showShareModal]);
 
   useEffect(() => {
     if (showShareModal) return;
@@ -2254,10 +2343,10 @@ export default function App() {
   }, [showShareModal]);
 
   const resolvePresenceAccessMode = useCallback(() => {
-    if (accessLevel === ACCESS_LEVELS.EDIT) return 'edit';
-    if (accessLevel === ACCESS_LEVELS.COMMENT) return 'comment';
+    if (canEditValue) return 'edit';
+    if (canCommentValue) return 'comment';
     return 'view';
-  }, [accessLevel]);
+  }, [canCommentValue, canEditValue]);
 
   const leavePresenceSession = useCallback(async (mapId) => {
     const sessionId = presenceSessionIdRef.current;
@@ -2272,7 +2361,13 @@ export default function App() {
   }, [isLoggedIn]);
 
   useEffect(() => {
-    if (!REALTIME_BASELINE_ENABLED || !isLoggedIn || !currentMap?.id || !currentUser?.id) {
+    if (
+      !REALTIME_BASELINE_ENABLED
+      || !canViewPresenceValue
+      || !isLoggedIn
+      || !currentMap?.id
+      || !currentUser?.id
+    ) {
       setPresenceSessions([]);
       return;
     }
@@ -2314,7 +2409,7 @@ export default function App() {
       isActive = false;
       if (timerId) window.clearTimeout(timerId);
     };
-  }, [currentMap?.id, currentUser?.id, isLoggedIn, resolvePresenceAccessMode]);
+  }, [canViewPresenceValue, currentMap?.id, currentUser?.id, isLoggedIn, resolvePresenceAccessMode]);
 
   useEffect(() => {
     const mapId = currentMap?.id;
@@ -2328,7 +2423,7 @@ export default function App() {
     if (!REALTIME_BASELINE_ENABLED) return undefined;
 
     const handleBeforeUnload = () => {
-      if (!isLoggedIn || !currentMap?.id || !presenceSessionIdRef.current) return;
+      if (!isLoggedIn || !canViewPresenceValue || !currentMap?.id || !presenceSessionIdRef.current) return;
       const endpoint = `${API_BASE}/api/maps/${currentMap.id}/presence/${encodeURIComponent(
         presenceSessionIdRef.current
       )}`;
@@ -2341,7 +2436,7 @@ export default function App() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [currentMap?.id, isLoggedIn]);
+  }, [canViewPresenceValue, currentMap?.id, isLoggedIn]);
 
   useEffect(() => {
     if (!currentMap?.id) {
@@ -4994,6 +5089,10 @@ export default function App() {
   };
 
   const copyShareLink = async (permission = sharePermission) => {
+    if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canManageShares()) {
+      showToast('You do not have permission to create share links for this map.', 'warning');
+      return;
+    }
     try {
       // Create share via API
       const { share } = await api.createShare({
@@ -7394,6 +7493,7 @@ export default function App() {
         {REALTIME_BASELINE_ENABLED
           && !mapSaveConflict
           && isLoggedIn
+          && canViewPresence()
           && hasMap
           && currentMap?.id
           && presenceBannerText
@@ -8392,10 +8492,11 @@ export default function App() {
         onChangePermission={(permission) => setSharePermission(permission)}
         linkCopied={linkCopied}
         onCopyLink={() => copyShareLink(sharePermission)}
+        canShareLinks={canManageShares()}
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}
-        collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn}
+        collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn && canViewCollaborationPanel()}
         collaborationAvailable={Boolean(currentMap?.id)}
         collaborationLoading={collaborationLoading}
         collaborationError={collaborationError}
@@ -8404,6 +8505,7 @@ export default function App() {
         collaborationInviteRole={collaborationInviteRole}
         onCollaborationInviteRoleChange={setCollaborationInviteRole}
         onSendCollaborationInvite={sendCollaborationInvite}
+        canSendCollaborationInvites={canSendCollaborationInvites()}
         collaborationMemberships={collaborationMemberships}
         collaborationInvites={collaborationInvites}
         onRevokeCollaborationInvite={revokeCollaborationInvite}
