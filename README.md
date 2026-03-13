@@ -50,6 +50,7 @@ Current Postgres runtime ops are in `docs/postgres-runtime-ops.md`.
 Historical migration log is in `docs/postgres-migration.md`.
 Collaboration backend foundation docs are in `docs/collaboration-backend.md`.
 Realtime collaboration baseline docs are in `docs/realtime-collaboration-baseline.md`.
+True co-editing (CRDT/OT) follow-on plan is in `docs/coediting-follow-on.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
