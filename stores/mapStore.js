@@ -86,6 +86,10 @@ async function updateMapByIdAsync(mapId, patch) {
     updates.push('name = ?');
     params.push(patch.name);
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'url')) {
+    updates.push('url = ?');
+    params.push(patch.url);
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'notes')) {
     updates.push('notes = ?');
     params.push(patch.notes);

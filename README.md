@@ -53,6 +53,7 @@ Realtime collaboration baseline docs are in `docs/realtime-collaboration-baselin
 True co-editing (CRDT/OT) follow-on plan is in `docs/coediting-follow-on.md`.
 Phase 10A co-editing event contract docs are in `docs/coediting-event-contract.md`.
 Phase 10B co-editing transport docs are in `docs/coediting-transport-layer.md`.
+Phase 10C co-editing sync engine docs are in `docs/coediting-sync-engine.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
@@ -151,6 +152,7 @@ Optional:
 | `COEDITING_WS_ROOM_RATE_LIMIT_PER_MIN` | Max non-heartbeat messages accepted per map room per minute | 240 |
 | `COEDITING_WS_MAX_MESSAGE_BYTES` | Max accepted WebSocket message size in bytes | 32768 |
 | `COEDITING_WS_MAX_BACKPRESSURE_BYTES` | Max pending per-socket write buffer before the socket is closed | 131072 |
+| `COEDITING_SYNC_ENGINE_ENABLED` | Enables Phase 10C live snapshot/op-log persistence and replay endpoints | false |
 | `SCREENSHOT_CAPTURE_TIMEOUT_MS` | Per-attempt screenshot navigation timeout | 60000 |
 | `SCREENSHOT_CACHE_TTL_MS` | Screenshot cache TTL before recapture | 3600000 |
 | `SCREENSHOT_FULL_MAX_HEIGHT` | Max height for full screenshots (px) before truncation | 16000 |

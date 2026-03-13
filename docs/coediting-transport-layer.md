@@ -82,6 +82,7 @@ Leave:
 - `joined`
 - `heartbeat.ack`
 - `presence.sync`
+- `operation.committed`
 - `left`
 - `session.replaced`
 - `error`

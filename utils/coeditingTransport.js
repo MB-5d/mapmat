@@ -17,9 +17,12 @@ const MESSAGE_TYPES = Object.freeze({
   LEAVE: 'leave',
   LEFT: 'left',
   PRESENCE_SYNC: 'presence.sync',
+  OPERATION_COMMITTED: 'operation.committed',
   SESSION_REPLACED: 'session.replaced',
   ERROR: 'error',
 });
+
+let activeTransportController = null;
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -484,6 +487,19 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     }
   }
 
+  function broadcastRoomEvent(mapId, payload) {
+    const sessions = registry.listSessions(mapId);
+    if (sessions.length === 0) return 0;
+
+    let delivered = 0;
+    for (const session of sessions) {
+      if (sendJson(session.connection, payload)) {
+        delivered += 1;
+      }
+    }
+    return delivered;
+  }
+
   function handleJoin(connection, rawMessage) {
     if (connection.closed) return;
 
@@ -834,12 +850,24 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
 
   server.on('close', () => {
     clearInterval(sweepInterval);
+    if (activeTransportController?.server === server) {
+      activeTransportController = null;
+    }
   });
 
-  return {
+  const controller = {
+    server,
     config,
     registry,
+    broadcastRoomEvent,
   };
+  activeTransportController = controller;
+  return controller;
+}
+
+function broadcastRoomEventAsync(mapId, payload) {
+  if (!activeTransportController) return Promise.resolve(0);
+  return Promise.resolve(activeTransportController.broadcastRoomEvent(mapId, payload));
 }
 
 module.exports = {
@@ -847,4 +875,5 @@ module.exports = {
   createTransportConfigFromEnv,
   createCoeditingRoomRegistry,
   attachCoeditingTransport,
+  broadcastRoomEventAsync,
 };
