@@ -105,3 +105,12 @@ When Phase 10B transport is active for the same map room, committed ops are broa
 - Live snapshot drift versus an externally updated saved map returns `409`.
 - Root node deletion is rejected.
 - Link endpoints must reference existing nodes.
+
+## Validation
+
+Repo checks used for this phase now include:
+
+- `node scripts/check-coediting-sync-engine.js`
+- `node scripts/check-coediting-simulation.js`
+
+The simulation harness covers stale-client replay, rebase after version conflict, and out-of-order recovery via replay.

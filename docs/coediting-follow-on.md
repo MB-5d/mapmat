@@ -92,6 +92,12 @@ Do not enable in production by default until canary SLOs are met.
 - Load tests for high-frequency edits in a single room.
 - Chaos tests for disconnect/reconnect and server restarts.
 
+Current repo coverage now includes deterministic multi-client convergence simulation via:
+
+- `node scripts/check-coediting-simulation.js`
+
+Load and chaos testing remain follow-on work.
+
 ## Runtime Verification Additions (When Implemented)
 
 Add new scripts without replacing current runtime verification flow:
