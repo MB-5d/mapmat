@@ -20,6 +20,7 @@ Live mode only activates when all of the following are true:
 
 - the frontend flag is enabled
 - the current actor is allowed to edit the map
+- the backend `feature-gates` response resolves `permissions.coediting.mode === "enabled"`
 - the map is already saved (`currentMap.id` exists)
 - the user is not viewing a historical version
 - the current canvas is not an imported unsaved draft
@@ -37,6 +38,13 @@ When live mode is active:
   - `Connected`
   - `Reconnecting`
   - `Out of Sync`
+
+When the backend resolves `permissions.coediting.mode === "read_only"`:
+
+- live mode does not activate for that map
+- edit/comment flows pause for the active map
+- autosave and version-save paths pause for the active map
+- the UI shows a read-only fallback banner
 
 ## Supported live edits
 

@@ -17,6 +17,12 @@ const {
   broadcastRoomEventAsync,
   MESSAGE_TYPES,
 } = require('../utils/coeditingTransport');
+const { resolveCoeditingRollout } = require('../utils/coeditingRollout');
+const {
+  recordCommitLatency,
+  recordVersionConflict,
+  recordReadOnlyBlock,
+} = require('../utils/coeditingObservability');
 
 const router = express.Router();
 
@@ -59,7 +65,21 @@ async function resolveActorRoleAsync({ mapId, mapOwnerUserId, actorUserId }) {
   });
 }
 
-async function requireEditableMapAsync(req, res, mapId) {
+function sendReadOnlyFallback(res, rollout) {
+  return res.status(423).json({
+    error: 'Live editing is temporarily read-only for this map',
+    code: 'COEDITING_READ_ONLY_FALLBACK',
+    details: {
+      mode: rollout.mode,
+      reason: rollout.reason,
+      reasons: rollout.reasons,
+      readOnlyFallbackActive: !!rollout.health?.readOnlyFallbackActive,
+      healthStatus: rollout.health?.status || 'healthy',
+    },
+  });
+}
+
+async function resolveCoeditingContextAsync(req, res, mapId) {
   const map = await mapStore.getMapByIdAsync(mapId);
   if (!map) {
     res.status(404).json({ error: 'Map not found' });
@@ -72,12 +92,36 @@ async function requireEditableMapAsync(req, res, mapId) {
     actorUserId: req.user.id,
   });
 
-  if (!permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, role)) {
+  if (!permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, role)) {
     res.status(404).json({ error: 'Map not found' });
     return null;
   }
 
-  return map;
+  const rollout = resolveCoeditingRollout({
+    mapId,
+    actorId: req.user.id,
+    role,
+  });
+
+  return { map, role, rollout };
+}
+
+async function requireCoeditingAccessAsync(req, res, mapId, { allowReadOnly = false, context = null } = {}) {
+  const effectiveContext = context || await resolveCoeditingContextAsync(req, res, mapId);
+  if (!effectiveContext) return null;
+
+  if (effectiveContext.rollout.mode === 'disabled') {
+    notFound(res);
+    return null;
+  }
+
+  if (!allowReadOnly && effectiveContext.rollout.mode === 'read_only') {
+    recordReadOnlyBlock();
+    sendReadOnlyFallback(res, effectiveContext.rollout);
+    return null;
+  }
+
+  return effectiveContext;
 }
 
 router.use(authMiddleware);
@@ -103,8 +147,10 @@ router.get('/maps/:id/live-document', async (req, res) => {
     if (!COEDITING_SYNC_ENGINE_ENABLED) return notFound(res);
 
     const { id: mapId } = req.params;
-    const map = await requireEditableMapAsync(req, res, mapId);
-    if (!map) return;
+    const context = await requireCoeditingAccessAsync(req, res, mapId, {
+      allowReadOnly: true,
+    });
+    if (!context) return;
 
     const liveDocument = await getLiveDocumentAsync({ mapId });
     return res.json({
@@ -142,8 +188,10 @@ router.get('/maps/:id/ops/replay', async (req, res) => {
     if (!COEDITING_SYNC_ENGINE_ENABLED) return notFound(res);
 
     const { id: mapId } = req.params;
-    const map = await requireEditableMapAsync(req, res, mapId);
-    if (!map) return;
+    const context = await requireCoeditingAccessAsync(req, res, mapId, {
+      allowReadOnly: true,
+    });
+    if (!context) return;
 
     const afterVersionValue = req.query?.afterVersion;
     const afterVersionRaw = afterVersionValue === undefined
@@ -187,8 +235,13 @@ router.get('/maps/:id/ops/replay', async (req, res) => {
 router.post('/maps/:id/ops/ingest', async (req, res) => {
   try {
     const { id: mapId } = req.params;
-    const map = await requireEditableMapAsync(req, res, mapId);
-    if (!map) return;
+    const context = await resolveCoeditingContextAsync(req, res, mapId);
+    if (!context) return;
+
+    if (!permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, context.role)) {
+      res.status(404).json({ error: 'Map not found' });
+      return;
+    }
 
     const operationRaw = req.body?.operation && typeof req.body.operation === 'object'
       ? req.body.operation
@@ -207,7 +260,12 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
       });
     }
 
+    const access = await requireCoeditingAccessAsync(req, res, mapId, { context });
+    if (!access) return;
+
+    const startedAt = Date.now();
     const committed = await applyOperationAsync({ mapId, operation });
+    recordCommitLatency(Date.now() - startedAt);
 
     await broadcastRoomEventAsync(mapId, {
       type: MESSAGE_TYPES.OPERATION_COMMITTED,
@@ -232,6 +290,9 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
       });
     }
     if (error instanceof CoeditingSyncError) {
+      if (error.code === 'COEDITING_VERSION_CONFLICT') {
+        recordVersionConflict();
+      }
       return res.status(error.statusCode).json({
         error: error.message,
         code: error.code,

@@ -33,6 +33,11 @@ const mapStore = require('./stores/mapStore');
 const pageStore = require('./stores/pageStore');
 const usageStore = require('./stores/usageStore');
 const permissionPolicy = require('./policies/permissionPolicy');
+const { getCoeditingHealthSnapshot } = require('./utils/coeditingObservability');
+const {
+  summarizeCoeditingRolloutConfig,
+  resolveCoeditingSystemStatus,
+} = require('./utils/coeditingRollout');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -2563,6 +2568,26 @@ app.get('/health/db', async (_, res) => {
     runtimeFallback: DB_RUNTIME.fallback,
     supportedRuntimes: DB_RUNTIME.supportedProviders,
     postgres: pg,
+  });
+});
+
+app.get('/health/coediting', (_req, res) => {
+  const health = getCoeditingHealthSnapshot();
+  const rollout = summarizeCoeditingRolloutConfig();
+  const status = resolveCoeditingSystemStatus({ healthSnapshot: health });
+  return res.status(200).json({
+    ok: true,
+    status: status.status,
+    reason: status.reason,
+    reasons: status.reasons,
+    health: {
+      status: health.status,
+      readOnlyFallbackActive: health.readOnlyFallbackActive,
+      reasons: health.reasons,
+      windowSec: health.windowSec,
+      observedAt: health.observedAt,
+    },
+    rollout,
   });
 });
 

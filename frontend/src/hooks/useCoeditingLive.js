@@ -295,6 +295,11 @@ export function useCoeditingLive({
       }
     } catch (error) {
       inFlightOpIdRef.current = '';
+      if (error?.code === 'COEDITING_READ_ONLY_FALLBACK') {
+        markOutOfSync('Live editing is temporarily read-only');
+        onWarn?.('Live editing is temporarily read-only for this map.');
+        return;
+      }
       if (error?.status === 409) {
         try {
           await hydrateFromServer({ preferReplay: true });
@@ -402,15 +407,19 @@ export function useCoeditingLive({
             if (message.type === 'joined') {
               joiningRef.current = true;
               reconnectAttemptRef.current = 0;
-              setStatus(STATUS.CONNECTED);
-              setStatusDetail('Connected');
+              const roomMode = String(message.roomMode || '').trim().toLowerCase();
+              const isReadOnlyRoom = roomMode === 'read_only';
+              setStatus(isReadOnlyRoom ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED);
+              setStatusDetail(isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected');
               setParticipants(Array.isArray(message.participants) ? message.participants : []);
               resetHeartbeat();
               heartbeatTimerRef.current = window.setInterval(() => {
                 sendSocketJson({ type: 'heartbeat' });
               }, (message.heartbeatIntervalSec || DEFAULT_HEARTBEAT_SEC) * 1000);
               broadcastSelectionNow();
-              flushQueue();
+              if (!isReadOnlyRoom) {
+                flushQueue();
+              }
               return;
             }
 
@@ -431,6 +440,10 @@ export function useCoeditingLive({
             }
 
             if (message.type === 'error') {
+              if (message.code === 'COEDITING_READ_ONLY_FALLBACK') {
+                markOutOfSync('Live editing is temporarily read-only');
+                return;
+              }
               if (message.error) {
                 setStatusDetail(message.error);
               }

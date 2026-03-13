@@ -2,6 +2,8 @@ const crypto = require('crypto');
 const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
 const permissionPolicy = require('../policies/permissionPolicy');
+const { resolveCoeditingRollout } = require('./coeditingRollout');
+const { recordDroppedEvent, recordReconnectEvent } = require('./coeditingObservability');
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const SESSION_ID_PATTERN = /^[A-Za-z0-9._:-]{6,120}$/;
@@ -454,6 +456,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     const json = JSON.stringify(payload);
     const jsonBytes = Buffer.byteLength(json);
     if (jsonBytes > config.maxMessageBytes) {
+      recordDroppedEvent('message_too_large');
       closeConnection(connection, 1009, 'Message exceeds max size');
       return false;
     }
@@ -462,11 +465,13 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     try {
       frame = encodeTextFrame(json);
     } catch {
+      recordDroppedEvent('message_too_large');
       closeConnection(connection, 1009, 'Message exceeds max size');
       return false;
     }
 
     if (connection.socket.writableLength + frame.length > config.maxBackpressureBytes) {
+      recordDroppedEvent('backpressure_limit');
       closeConnection(connection, 1013, 'Backpressure limit exceeded');
       return false;
     }
@@ -545,6 +550,23 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
   function handleJoin(connection, rawMessage) {
     if (connection.closed) return;
 
+    const rollout = resolveCoeditingRollout({
+      mapId: connection.mapId,
+      actorId: connection.user.id,
+      role: connection.role,
+    });
+    connection.rollout = rollout;
+    const canWrite = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, connection.role);
+    if (rollout.mode === 'disabled' || (rollout.mode === 'read_only' && !canWrite)) {
+      sendJson(connection, {
+        type: MESSAGE_TYPES.ERROR,
+        error: 'Live editing is not enabled for this map',
+        code: 'COEDITING_ROLLOUT_DISABLED',
+      });
+      closeConnection(connection, 1008, 'Live editing is not enabled for this map');
+      return;
+    }
+
     const normalized = normalizeJoinMessage(rawMessage, connection.role);
     if (normalized.error) {
       sendJson(connection, {
@@ -576,6 +598,9 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     });
 
     connection.joinedSession = result.session;
+    if (result.resumed) {
+      recordReconnectEvent();
+    }
 
     if (result.replacedSession && result.replacedSession.connection !== connection) {
       sendJson(result.replacedSession.connection, {
@@ -594,6 +619,9 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       actorId: connection.user.id,
       sessionId: normalized.value.sessionId,
       resumed: result.resumed,
+      roomMode: rollout.mode,
+      roomReason: rollout.reason,
+      readOnlyFallbackActive: !!rollout.health?.readOnlyFallbackActive,
       participants: result.participants,
       heartbeatIntervalSec: config.heartbeatIntervalSec,
       idleTimeoutSec: config.idleTimeoutSec,
@@ -701,6 +729,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     if (type !== MESSAGE_TYPES.HEARTBEAT) {
       const rateLimit = registry.consumeRoomMessage(connection.mapId, Date.now());
       if (!rateLimit.allowed) {
+        recordDroppedEvent('room_rate_limit');
         sendJson(connection, {
           type: MESSAGE_TYPES.ERROR,
           error: 'Room rate limit exceeded',
@@ -782,8 +811,19 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       collaborationBackendEnabled: config.collaborationBackendEnabled,
     });
 
-    if (!permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, role)) {
+    if (!permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, role)) {
       writeHttpError(socket, 404, 'Not Found', { error: 'Map not found' });
+      return;
+    }
+
+    const rollout = resolveCoeditingRollout({
+      mapId: parsedPath.mapId,
+      actorId: user.id,
+      role,
+    });
+    const canWrite = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, role);
+    if (rollout.mode === 'disabled' || (rollout.mode === 'read_only' && !canWrite)) {
+      writeHttpError(socket, 404, 'Not Found', { error: 'Not found' });
       return;
     }
 
@@ -807,6 +847,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       mapId: parsedPath.mapId,
       user,
       role,
+      rollout,
       joinedSession: null,
       joinTimer: null,
     };
@@ -814,6 +855,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
 
     connection.joinTimer = setTimeout(() => {
       if (!connection.joinedSession) {
+        recordDroppedEvent('join_timeout');
         sendJson(connection, {
           type: MESSAGE_TYPES.ERROR,
           error: 'Join timed out',
@@ -832,6 +874,9 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       joinTimeoutSec: config.joinTimeoutSec,
       roomRateLimitPerMin: config.roomRateLimitPerMin,
       maxMessageBytes: config.maxMessageBytes,
+      roomMode: rollout.mode,
+      roomReason: rollout.reason,
+      readOnlyFallbackActive: !!rollout.health?.readOnlyFallbackActive,
       serverTime: new Date().toISOString(),
     });
 
@@ -843,6 +888,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       connection.buffer = decoded.remaining;
 
       if (decoded.errorCode) {
+        recordDroppedEvent('invalid_frame');
         sendJson(connection, {
           type: MESSAGE_TYPES.ERROR,
           error: decoded.errorReason,
@@ -895,6 +941,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
 
     socket.on('error', (error) => {
       logger.error?.('Coediting transport socket error:', error);
+      recordDroppedEvent('socket_error');
       closeConnection(connection, 1011, 'Socket error');
     });
   }
@@ -902,6 +949,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
   const sweepInterval = setInterval(() => {
     const expiredSessions = registry.getExpiredSessions(Date.now(), idleTimeoutMs);
     for (const session of expiredSessions) {
+      recordDroppedEvent('heartbeat_timeout');
       closeConnection(session.connection, 1008, 'Heartbeat timeout');
     }
   }, Math.max(heartbeatIntervalMs, 5000));

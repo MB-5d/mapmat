@@ -55,6 +55,7 @@ Phase 10A co-editing event contract docs are in `docs/coediting-event-contract.m
 Phase 10B co-editing transport docs are in `docs/coediting-transport-layer.md`.
 Phase 10C co-editing sync engine docs are in `docs/coediting-sync-engine.md`.
 Phase 10D co-editing frontend live-mode docs are in `docs/coediting-frontend-live-mode.md`.
+Phase 10E co-editing rollout and safety-control docs are in `docs/coediting-rollout-safety-controls.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
@@ -63,6 +64,13 @@ Postgres runtime quick checks (repo root):
 ```bash
 npm run verify:runtime:staging
 npm run verify:runtime:production
+```
+
+Co-editing rollout health checks (repo root):
+
+```bash
+npm run verify:realtime:staging
+npm run verify:realtime:production
 ```
 
 CI checks for PRs are in `.github/workflows/pr-checks.yml`.
@@ -147,6 +155,16 @@ Optional:
 | `REALTIME_PRESENCE_TTL_SEC` | Presence session TTL window (seconds) | 90 |
 | `REALTIME_PRESENCE_HEARTBEAT_SEC` | Suggested heartbeat interval returned by API (seconds) | 20 |
 | `COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10A/10B co-editing experimental backend endpoints and WebSocket transport | false |
+| `COEDITING_ROLLOUT_ENABLED` | Enables Phase 10E rollout gating for live co-editing features | false |
+| `COEDITING_ROLLOUT_USER_IDS` | Comma-separated user IDs allowed into the live rollout | (empty) |
+| `COEDITING_ROLLOUT_MAP_IDS` | Comma-separated map IDs allowed into the live rollout | (empty) |
+| `COEDITING_ROLLOUT_BLOCK_USER_IDS` | Comma-separated user IDs force-blocked from the live rollout | (empty) |
+| `COEDITING_ROLLOUT_BLOCK_MAP_IDS` | Comma-separated map IDs force-blocked from the live rollout | (empty) |
+| `COEDITING_FORCE_READ_ONLY` | Forces live co-editing into read-only fallback for all scoped traffic | false |
+| `COEDITING_METRICS_WINDOW_SEC` | Rolling window used for co-editing degraded-mode counters | 300 |
+| `COEDITING_DEGRADE_CONFLICTS_PER_WINDOW` | Conflict threshold that flips live co-editing to read-only | 0 (disabled) |
+| `COEDITING_DEGRADE_RECONNECTS_PER_WINDOW` | Reconnect threshold that flips live co-editing to read-only | 0 (disabled) |
+| `COEDITING_DEGRADE_DROPPED_PER_WINDOW` | Dropped-event threshold that flips live co-editing to read-only | 0 (disabled) |
 | `COEDITING_WS_HEARTBEAT_SEC` | Client heartbeat cadence expected by Phase 10B WebSocket transport | 20 |
 | `COEDITING_WS_IDLE_TIMEOUT_SEC` | Idle timeout before a co-editing socket is closed | 90 |
 | `COEDITING_WS_JOIN_TIMEOUT_SEC` | Max time allowed before a socket must join a room session | 15 |

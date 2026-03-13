@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "start:worker": "RUN_MODE=worker node server.js",
-    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node --check routes/collaboration.js && node --check routes/realtime.js && node --check routes/coediting.js && node --check stores/collaborationStore.js && node --check stores/coeditingStore.js && node --check stores/presenceStore.js && node --check policies/permissionPolicy.js && node --check utils/coeditingContract.js && node --check utils/coeditingTransport.js && node --check utils/coeditingSyncEngine.js && node scripts/check-permission-policy.js && node scripts/check-coediting-contract.js && node scripts/check-coediting-transport.js && node scripts/check-coediting-sync-engine.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js && node scripts/check-store-exports-async.js && node scripts/check-db-adapter-exports.js",
+    "check:backend": "node --check server.js && node --check db.js && node --check routes/auth.js && node --check routes/api.js && node --check routes/collaboration.js && node --check routes/realtime.js && node --check routes/coediting.js && node --check stores/collaborationStore.js && node --check stores/coeditingStore.js && node --check stores/presenceStore.js && node --check policies/permissionPolicy.js && node --check utils/coeditingContract.js && node --check utils/coeditingObservability.js && node --check utils/coeditingRollout.js && node --check utils/coeditingTransport.js && node --check utils/coeditingSyncEngine.js && node scripts/check-permission-policy.js && node scripts/check-coediting-contract.js && node scripts/check-coediting-rollout.js && node scripts/check-coediting-transport.js && node scripts/check-coediting-sync-engine.js && node scripts/check-db-boundary.js && node scripts/check-store-async-boundary.js && node scripts/check-store-exports-async.js && node scripts/check-db-adapter-exports.js",
     "check:backend:postgres": "DB_PROVIDER=postgres npm run check:backend",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:db-health": "node scripts/check-db-health.js",
@@ -24,6 +24,8 @@
     "verify:runtime:staging": "npm run check:db-health:staging && npm run test:smoke:staging",
     "verify:runtime:production": "npm run check:db-health:production && npm run test:smoke:production",
     "verify:runtime:all": "npm run verify:runtime:staging && npm run verify:runtime:production",
+    "verify:realtime:staging": "COEDITING_HEALTH_URL=\"https://mapmat-staging.up.railway.app/health/coediting\" node scripts/check-coediting-health.js",
+    "verify:realtime:production": "COEDITING_HEALTH_URL=\"https://mapmat-production.up.railway.app/health/coediting\" node scripts/check-coediting-health.js",
     "test:ia": "node scripts/ia-test.js",
     "verify:runtime:all:auto": "npm run verify:runtime:all"
   },

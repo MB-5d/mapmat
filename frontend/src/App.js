@@ -1311,8 +1311,29 @@ export default function App() {
     return activeVersionId !== latestVersionId;
   }, [activeVersionId, latestVersionId]);
 
+  const featureGatesEnabled = PERMISSION_GATING_UI_ENABLED || COEDITING_EXPERIMENT_UI_ENABLED;
+  const resolvedCoeditingMode = featureGatesEnabled && currentMap?.id
+    ? String(mapPermissions?.coediting?.mode || 'disabled').trim().toLowerCase()
+    : 'disabled';
+  const coeditingModeReason = String(mapPermissions?.coediting?.reason || '').trim().toLowerCase();
+  const isCoeditingReadOnlyMode = !!(
+    COEDITING_EXPERIMENT_UI_ENABLED
+    && currentMap?.id
+    && resolvedCoeditingMode === 'read_only'
+  );
+  const coeditingReadOnlyMessage = useMemo(() => {
+    if (!isCoeditingReadOnlyMode) return '';
+    if (coeditingModeReason === 'health_degraded') {
+      return 'Live editing is temporarily read-only while the realtime service recovers.';
+    }
+    if (coeditingModeReason === 'role_read_only') {
+      return 'Live editing is read-only for your current role on this map.';
+    }
+    return 'Live editing is currently read-only for this map.';
+  }, [coeditingModeReason, isCoeditingReadOnlyMode]);
+
   const liveModeCanEdit = (
-    PERMISSION_GATING_UI_ENABLED
+    featureGatesEnabled
     && isLoggedIn
     && currentMap?.id
     && mapPermissions?.features
@@ -1326,6 +1347,7 @@ export default function App() {
     && currentMap?.id
     && root
     && liveModeCanEdit
+    && resolvedCoeditingMode === 'enabled'
     && !isImportedMap
     && !isViewingHistoricalVersion
   );
@@ -1345,6 +1367,14 @@ export default function App() {
   }, []);
 
   const flushAutosave = useCallback(() => {
+    if (isCoeditingReadOnlyMode) {
+      autosavePendingRef.current = null;
+      if (autosaveRetryTimerRef.current) {
+        clearTimeout(autosaveRetryTimerRef.current);
+        autosaveRetryTimerRef.current = null;
+      }
+      return;
+    }
     if (autosaveInFlightRef.current) return;
     const pending = autosavePendingRef.current;
     if (!pending) return;
@@ -1393,7 +1423,7 @@ export default function App() {
           flushAutosave();
         }, delay);
       });
-  }, [isMapUpdateConflictError, registerMapConflict]);
+  }, [isCoeditingReadOnlyMode, isMapUpdateConflictError, registerMapConflict]);
 
   useEffect(() => {
     const handleOnline = () => flushAutosave();
@@ -1407,6 +1437,19 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isCoeditingReadOnlyMode) return;
+    autosavePendingRef.current = null;
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (autosaveRetryTimerRef.current) {
+      clearTimeout(autosaveRetryTimerRef.current);
+      autosaveRetryTimerRef.current = null;
+    }
+  }, [isCoeditingReadOnlyMode]);
+
   // Cleanup all timers and EventSource on unmount
   useEffect(() => {
     return () => {
@@ -1419,7 +1462,14 @@ export default function App() {
 
   // Autosave for existing maps (debounced)
   useEffect(() => {
-    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion || isLiveEditingModeActive) return;
+    if (
+      !currentMap?.id
+      || !root
+      || isImportedMap
+      || isViewingHistoricalVersion
+      || isLiveEditingModeActive
+      || isCoeditingReadOnlyMode
+    ) return;
 
     const snapshot = JSON.stringify({
       name: currentMap?.name || mapName,
@@ -1455,11 +1505,11 @@ export default function App() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCoeditingReadOnlyMode]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!currentMap?.id || !root || isViewingHistoricalVersion || isLiveEditingModeActive) return;
+      if (!currentMap?.id || !root || isViewingHistoricalVersion || isLiveEditingModeActive || isCoeditingReadOnlyMode) return;
       const snapshot = getVersionSnapshot();
       const serialized = serializeVersionSnapshot(snapshot);
       if (!serialized || serialized === lastVersionSnapshotRef.current) return;
@@ -1485,7 +1535,7 @@ export default function App() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [currentMap?.id, root, isViewingHistoricalVersion, getVersionSnapshot, serializeVersionSnapshot, isLiveEditingModeActive]);
+  }, [currentMap?.id, root, isViewingHistoricalVersion, getVersionSnapshot, serializeVersionSnapshot, isLiveEditingModeActive, isCoeditingReadOnlyMode]);
 
   const reportTitle = useMemo(() => {
     return root?.title || getHostname(root?.url) || 'Website';
@@ -1746,7 +1796,7 @@ export default function App() {
 
   const effectiveFeatureGates = useMemo(() => {
     if (
-      PERMISSION_GATING_UI_ENABLED
+      featureGatesEnabled
       && isLoggedIn
       && currentMap?.id
       && mapPermissions?.features
@@ -1754,10 +1804,10 @@ export default function App() {
       return { ...legacyFeatureGates, ...mapPermissions.features };
     }
     return legacyFeatureGates;
-  }, [currentMap?.id, isLoggedIn, legacyFeatureGates, mapPermissions?.features]);
+  }, [currentMap?.id, featureGatesEnabled, isLoggedIn, legacyFeatureGates, mapPermissions?.features]);
 
-  const canEditValue = !!effectiveFeatureGates.mapEdit;
-  const canCommentValue = canEditValue || !!effectiveFeatureGates.mapComment;
+  const canEditValue = !!effectiveFeatureGates.mapEdit && !isCoeditingReadOnlyMode;
+  const canCommentValue = !isCoeditingReadOnlyMode && (canEditValue || !!effectiveFeatureGates.mapComment);
   const canManageSharesValue = !!effectiveFeatureGates.shareManage;
   const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
@@ -2277,6 +2327,12 @@ export default function App() {
     showToast(message, 'info');
   }, [showToast]);
 
+  const warnCoeditingReadOnly = useCallback((subject = 'This map') => {
+    if (!isCoeditingReadOnlyMode || !currentMap?.id) return false;
+    showToast(`${subject} is currently read-only. ${coeditingReadOnlyMessage}`, 'warning');
+    return true;
+  }, [coeditingReadOnlyMessage, currentMap?.id, isCoeditingReadOnlyMode, showToast]);
+
   const {
     liveStatus,
     liveStatusDetail,
@@ -2393,7 +2449,7 @@ export default function App() {
   }, [activeVersionId, showToast, serializeVersionSnapshot]);
 
   const loadMapPermissions = useCallback(async () => {
-    if (!PERMISSION_GATING_UI_ENABLED || !isLoggedIn || !currentMap?.id) {
+    if (!featureGatesEnabled || !isLoggedIn || !currentMap?.id) {
       setMapPermissions(null);
       return;
     }
@@ -2407,7 +2463,7 @@ export default function App() {
       }
       setMapPermissions(null);
     }
-  }, [currentMap?.id, isLoggedIn]);
+  }, [currentMap?.id, featureGatesEnabled, isLoggedIn]);
 
   useEffect(() => {
     loadMapPermissions();
@@ -2653,6 +2709,7 @@ export default function App() {
   const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot } = {}) => {
     const targetMapId = mapId || currentMap?.id;
     if (!targetMapId || !root) return null;
+    if (targetMapId === currentMap?.id && warnCoeditingReadOnly('This map')) return null;
     const payload = snapshot || getVersionSnapshot();
     const serialized = serializeVersionSnapshot(payload);
     if (serialized && serialized === lastVersionSnapshotRef.current) return null;
@@ -2665,7 +2722,7 @@ export default function App() {
     setMapVersions((prev) => [version, ...(prev || [])].slice(0, 25));
     setLatestVersionId(version.id);
     return version;
-  }, [currentMap?.id, root, getVersionSnapshot, serializeVersionSnapshot]);
+  }, [currentMap?.id, root, getVersionSnapshot, serializeVersionSnapshot, warnCoeditingReadOnly]);
 
   useEffect(() => {
     if (!isViewingHistoricalVersion) return;
@@ -3454,6 +3511,10 @@ export default function App() {
 
   const moveMapToProject = async (mapId, targetProjectId) => {
     if (!mapId) return;
+    if (isCoeditingReadOnlyMode && currentMap?.id === mapId) {
+      warnCoeditingReadOnly('This map');
+      return;
+    }
     if (isLiveActive && currentMap?.id === mapId) {
       showToast('Move this map to another project after live editing is turned off.', 'info');
       return;
@@ -3510,6 +3571,7 @@ export default function App() {
       showToast('Save the map first', 'warning');
       return;
     }
+    if (warnCoeditingReadOnly('This map')) return;
     const nextNumber = (mapVersions[0]?.version_number || 0) + 1;
     setSaveVersionMeta({
       number: nextNumber,
@@ -3520,6 +3582,10 @@ export default function App() {
 
   const handleSaveVersion = async (name, notes) => {
     if (!currentMap?.id) return;
+    if (warnCoeditingReadOnly('This map')) {
+      setShowSaveVersionModal(false);
+      return;
+    }
     try {
       const version = await createVersionFromSnapshot({
         mapId: currentMap.id,
@@ -3644,6 +3710,7 @@ export default function App() {
     setActiveVersionId(null);
     versionBaselineRef.current = null;
     if (!currentMap?.id) return;
+    if (warnCoeditingReadOnly('This map')) return;
 
     const snapshot = getVersionSnapshot();
     try {
@@ -3740,6 +3807,10 @@ export default function App() {
   const saveMap = async (projectId, mapName, notes) => {
     if (!root) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
+    if (currentMap?.id && warnCoeditingReadOnly('This map')) {
+      setShowSaveMapModal(false);
+      return;
+    }
     if (isLiveActive && currentMap?.id) {
       showToast('Live editing already persists this saved map. Turn live editing off before using Save Map.', 'info');
       setShowSaveMapModal(false);
@@ -8044,6 +8115,16 @@ export default function App() {
               <button type="button" onClick={reloadMapAfterConflict}>Reload Latest</button>
               <button type="button" onClick={dismissMapConflict}>Dismiss</button>
             </div>
+          </div>
+        )}
+
+        {isCoeditingReadOnlyMode && hasMap && currentMap?.id && (
+          <div className="permission-banner live-edit-banner live-edit-banner-warning">
+            <AlertTriangle size={16} />
+            <span>
+              <strong>Live Editing Read-Only</strong>
+              {coeditingReadOnlyMessage ? ` • ${coeditingReadOnlyMessage}` : ''}
+            </span>
           </div>
         )}
 

@@ -28,6 +28,11 @@ When disabled, the WebSocket upgrade path returns `404 Not found`.
 - `COEDITING_WS_MAX_MESSAGE_BYTES=32768`
 - `COEDITING_WS_MAX_BACKPRESSURE_BYTES=131072`
 
+Phase 10E rollout/safety controls layer on top of this transport:
+
+- `COEDITING_ROLLOUT_ENABLED=false`
+- `COEDITING_FORCE_READ_ONLY=false`
+
 ## Message flow
 
 Server welcome:
@@ -39,7 +44,8 @@ Server welcome:
   "actorId": "<user-id>",
   "heartbeatIntervalSec": 20,
   "idleTimeoutSec": 90,
-  "joinTimeoutSec": 15
+  "joinTimeoutSec": 15,
+  "roomMode": "enabled"
 }
 ```
 
@@ -96,6 +102,12 @@ Leave:
 - `session.replaced`
 - `error`
 
+`welcome` and `joined` may also include:
+
+- `roomMode`: `enabled` or `read_only`
+- `roomReason`
+- `readOnlyFallbackActive`
+
 `presence.sync` includes the current room participant list after join, leave, resume, or selection changes.
 
 Each participant may also include:
@@ -118,5 +130,7 @@ The server echoes:
 
 - Join timeout closes sockets that never join a room session.
 - Idle timeout closes sockets that stop heartbeating.
+- Room upgrades stay fail-closed when rollout mode is `disabled`.
+- Scoped editors can still join rooms in `read_only` mode so presence and resync paths remain available.
 - Per-room message rate limit rejects bursts before sync-engine work is added.
 - Socket backpressure closes slow consumers before buffers grow unbounded.

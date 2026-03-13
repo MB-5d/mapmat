@@ -12,6 +12,12 @@ const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
 const { authMiddleware, requireAuth } = require('./auth');
 const permissionPolicy = require('../policies/permissionPolicy');
+const {
+  resolveCoeditingRollout,
+  resolveCoeditingSystemStatus,
+  summarizeCoeditingRolloutConfig,
+} = require('../utils/coeditingRollout');
+const { getCoeditingHealthSnapshot } = require('../utils/coeditingObservability');
 
 const router = express.Router();
 
@@ -127,14 +133,32 @@ function ensureResourceAction({
   return true;
 }
 
-function buildFeatureGatePayload(role) {
+function buildFeatureGatePayload(role, { coediting = null } = {}) {
   const features = {};
   for (const [key, feature] of Object.entries(FEATURE_GATES)) {
     features[key] = permissionPolicy.isFeatureAllowed(feature, role);
   }
+  if (coediting?.features) {
+    Object.assign(features, coediting.features);
+  }
   return {
     role: permissionPolicy.normalizeRole(role),
     features,
+    coediting: coediting
+      ? {
+        mode: coediting.mode,
+        reason: coediting.reason,
+        reasons: coediting.reasons,
+        readOnlyFallbackActive: !!coediting.health?.readOnlyFallbackActive,
+        healthStatus: coediting.health?.status || 'healthy',
+      }
+      : {
+        mode: 'disabled',
+        reason: 'unavailable',
+        reasons: ['unavailable'],
+        readOnlyFallbackActive: false,
+        healthStatus: 'healthy',
+      },
   };
 }
 
@@ -183,6 +207,25 @@ router.get('/admin/usage', requireAdminKey, async (req, res) => {
   } catch (error) {
     console.error('Get usage error:', error);
     res.status(500).json({ error: 'Failed to get usage' });
+  }
+});
+
+// GET /api/admin/coediting - rollout + health summary for operational checks
+router.get('/admin/coediting', requireAdminKey, async (_req, res) => {
+  try {
+    const health = getCoeditingHealthSnapshot();
+    const status = resolveCoeditingSystemStatus({ healthSnapshot: health });
+    res.json({
+      ok: true,
+      status: status.status,
+      reason: status.reason,
+      reasons: status.reasons,
+      rollout: summarizeCoeditingRolloutConfig(),
+      health,
+    });
+  } catch (error) {
+    console.error('Get admin coediting health error:', error);
+    res.status(500).json({ error: 'Failed to resolve coediting health' });
   }
 });
 
@@ -360,8 +403,14 @@ router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Map not found' });
     }
 
+    const coediting = resolveCoeditingRollout({
+      mapId: id,
+      actorId: req.user.id,
+      role,
+    });
+
     res.json({
-      permissions: buildFeatureGatePayload(role),
+      permissions: buildFeatureGatePayload(role, { coediting }),
     });
   } catch (error) {
     console.error('Get map feature gates error:', error);
