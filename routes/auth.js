@@ -209,6 +209,23 @@ function extractBearerToken(req) {
   return token || null;
 }
 
+function extractWebSocketProtocolToken(req) {
+  if (!AUTH_HEADER_FALLBACK) return null;
+  const rawHeader = typeof req.get === 'function'
+    ? (req.get('sec-websocket-protocol') || '')
+    : String(req.headers?.['sec-websocket-protocol'] || '');
+  if (!rawHeader) return null;
+
+  const protocols = rawHeader
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (protocols[0] !== 'mapmat-auth') return null;
+  const token = protocols[1] || '';
+  return token || null;
+}
+
 function parseCookieHeader(rawHeader) {
   const cookies = {};
   const header = String(rawHeader || '');
@@ -245,7 +262,9 @@ function getCookieToken(req) {
 }
 
 async function authenticateRequestAsync(req) {
-  const bearerToken = AUTH_HEADER_FALLBACK ? extractBearerToken(req) : null;
+  const bearerToken = AUTH_HEADER_FALLBACK
+    ? (extractBearerToken(req) || extractWebSocketProtocolToken(req))
+    : null;
   const cookieToken = getCookieToken(req);
   const token = bearerToken || cookieToken;
 

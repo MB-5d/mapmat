@@ -14,6 +14,7 @@ const MESSAGE_TYPES = Object.freeze({
   JOINED: 'joined',
   HEARTBEAT: 'heartbeat',
   HEARTBEAT_ACK: 'heartbeat.ack',
+  SELECTION_UPDATE: 'selection.update',
   LEAVE: 'leave',
   LEFT: 'left',
   PRESENCE_SYNC: 'presence.sync',
@@ -74,6 +75,7 @@ function serializeParticipant(session) {
     displayName: session.displayName || null,
     clientName: session.clientName || null,
     accessMode: session.accessMode,
+    selectedNodeIds: Array.isArray(session.selectedNodeIds) ? [...session.selectedNodeIds] : [],
     joinedAt: new Date(session.joinedAt).toISOString(),
     lastSeenAt: new Date(session.lastHeartbeatAt).toISOString(),
     resumedAt: session.resumedAt ? new Date(session.resumedAt).toISOString() : null,
@@ -149,6 +151,7 @@ function createCoeditingRoomRegistry({ roomRateLimitPerMin }) {
       displayName: displayName || null,
       clientName: clientName || null,
       accessMode,
+      selectedNodeIds: replacedSession?.selectedNodeIds || [],
       connection,
       joinedAt,
       lastHeartbeatAt: now,
@@ -168,6 +171,18 @@ function createCoeditingRoomRegistry({ roomRateLimitPerMin }) {
   function touchSession(session, now = Date.now()) {
     if (!session) return null;
     session.lastHeartbeatAt = now;
+    return session;
+  }
+
+  function updateSessionSelection(session, selectedNodeIds = []) {
+    if (!session) return null;
+    session.selectedNodeIds = Array.isArray(selectedNodeIds)
+      ? Array.from(new Set(
+        selectedNodeIds
+          .map((nodeId) => String(nodeId || '').trim())
+          .filter(Boolean)
+      )).slice(0, 12)
+      : [];
     return session;
   }
 
@@ -227,6 +242,7 @@ function createCoeditingRoomRegistry({ roomRateLimitPerMin }) {
   return {
     joinSession,
     touchSession,
+    updateSessionSelection,
     leaveSession,
     listParticipants,
     listSessions,
@@ -391,6 +407,32 @@ function normalizeJoinMessage(message, role) {
       accessMode: normalizeAccessMode(message.accessMode, role),
     },
   };
+}
+
+function normalizeSelectionMessage(message) {
+  const selectedNodeIds = Array.isArray(message?.selectedNodeIds)
+    ? Array.from(new Set(
+      message.selectedNodeIds
+        .map((nodeId) => String(nodeId || '').trim())
+        .filter(Boolean)
+    )).slice(0, 12)
+    : [];
+
+  return {
+    value: {
+      selectedNodeIds,
+    },
+  };
+}
+
+function shouldEchoAuthProtocol(req) {
+  const rawHeader = String(req.headers?.['sec-websocket-protocol'] || '');
+  if (!rawHeader) return false;
+  const protocols = rawHeader
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return protocols[0] === 'mapmat-auth';
 }
 
 function attachCoeditingTransport({ server, logger = console } = {}) {
@@ -620,6 +662,24 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     closeConnection(connection, 1000, 'Client left');
   }
 
+  function handleSelectionUpdate(connection, message) {
+    if (!connection.joinedSession) {
+      sendJson(connection, {
+        type: MESSAGE_TYPES.ERROR,
+        error: 'Join is required before selection updates',
+      });
+      return;
+    }
+
+    const normalized = normalizeSelectionMessage(message);
+    registry.updateSessionSelection(connection.joinedSession, normalized.value.selectedNodeIds);
+    broadcastPresence(connection.mapId, {
+      reason: 'selection',
+      actorId: connection.user.id,
+      sessionId: connection.joinedSession.sessionId,
+    });
+  }
+
   function handleMessage(connection, message) {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
       sendJson(connection, {
@@ -658,6 +718,11 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
 
     if (type === MESSAGE_TYPES.HEARTBEAT) {
       handleHeartbeat(connection);
+      return;
+    }
+
+    if (type === MESSAGE_TYPES.SELECTION_UPDATE) {
+      handleSelectionUpdate(connection, message);
       return;
     }
 
@@ -727,6 +792,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       + 'Upgrade: websocket\r\n'
       + 'Connection: Upgrade\r\n'
       + `Sec-WebSocket-Accept: ${createAcceptValue(websocketKey)}\r\n`
+      + (shouldEchoAuthProtocol(req) ? 'Sec-WebSocket-Protocol: mapmat-auth\r\n' : '')
       + '\r\n'
     );
 

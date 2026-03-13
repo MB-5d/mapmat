@@ -54,6 +54,15 @@ Client join or resume:
 }
 ```
 
+Selection presence update:
+
+```json
+{
+  "type": "selection.update",
+  "selectedNodeIds": ["node-123", "node-456"]
+}
+```
+
 Reconnect behavior:
 
 - Reconnect with the same `sessionId`.
@@ -87,7 +96,23 @@ Leave:
 - `session.replaced`
 - `error`
 
-`presence.sync` includes the current room participant list after join, leave, or resume.
+`presence.sync` includes the current room participant list after join, leave, resume, or selection changes.
+
+Each participant may also include:
+
+- `selectedNodeIds`
+
+## Browser auth fallback
+
+Cookie auth still works unchanged.
+
+When `AUTH_HEADER_FALLBACK=true`, browser clients can also authenticate WebSocket upgrades through:
+
+- `Sec-WebSocket-Protocol: mapmat-auth, <jwt-token>`
+
+The server echoes:
+
+- `Sec-WebSocket-Protocol: mapmat-auth`
 
 ## Safety controls
 

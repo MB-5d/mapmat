@@ -73,6 +73,12 @@ async function fetchApi(endpoint, options = {}) {
   return data;
 }
 
+function buildWebSocketUrl(endpoint) {
+  const baseUrl = new URL(API_BASE);
+  const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${baseUrl.host}${endpoint}`;
+}
+
 // ============================================
 // AUTH
 // ============================================
@@ -212,6 +218,33 @@ export async function createMapVersion(mapId, payload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function getCoeditingLiveDocument(mapId) {
+  return fetchApi(`/api/maps/${mapId}/live-document`);
+}
+
+export async function getCoeditingReplay(mapId, { afterVersion = 0, limit } = {}) {
+  const params = new URLSearchParams();
+  params.set('afterVersion', String(afterVersion));
+  if (limit !== undefined) params.set('limit', String(limit));
+  return fetchApi(`/api/maps/${mapId}/ops/replay?${params.toString()}`);
+}
+
+export async function ingestCoeditingOperation(mapId, operation) {
+  return fetchApi(`/api/maps/${mapId}/ops/ingest`, {
+    method: 'POST',
+    body: JSON.stringify({ operation }),
+  });
+}
+
+export function openCoeditingSocket(mapId) {
+  const url = buildWebSocketUrl(`/api/maps/${mapId}/realtime/socket`);
+  const token = getStoredAuthToken();
+  if (!token) {
+    return new WebSocket(url);
+  }
+  return new WebSocket(url, ['mapmat-auth', token]);
 }
 
 // ============================================

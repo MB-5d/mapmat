@@ -13,8 +13,11 @@ import {
   Loader2,
   MessageSquare,
   Moon,
+  RefreshCw,
   Sun,
   Trash2,
+  Wifi,
+  WifiOff,
   X,
   XCircle,
   XOctagon,
@@ -84,6 +87,7 @@ import {
 } from './utils/importParsers';
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
+import { useCoeditingLive, COEDITING_LIVE_STATUS } from './hooks/useCoeditingLive';
 
 const DEFAULT_CONNECTION_COLORS = {
   userFlows: '#14b8a6',
@@ -114,6 +118,10 @@ const COLLABORATION_UI_ENABLED = parseEnvBool(
 );
 const REALTIME_BASELINE_ENABLED = parseEnvBool(
   process.env.REACT_APP_REALTIME_BASELINE_ENABLED,
+  false
+);
+const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
+  process.env.REACT_APP_COEDITING_EXPERIMENT_ENABLED,
   false
 );
 const PERMISSION_GATING_UI_ENABLED = parseEnvBool(
@@ -800,6 +808,7 @@ export default function App() {
   const lastVersionSnapshotRef = useRef('');
   const versionInfoToastRef = useRef(false);
   const presenceSessionIdRef = useRef('');
+  const mapNameEditStartRef = useRef('');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -1219,6 +1228,67 @@ export default function App() {
     }
   }, []);
 
+  const applyLiveDocumentToCanvas = useCallback((document) => {
+    if (!document) return;
+    setRoot(document.root || null);
+    setOrphans(normalizeOrphans(document.orphans));
+    setConnections(document.connections || []);
+    setColors(document.colors || DEFAULT_COLORS);
+    setConnectionColors(document.connectionColors || DEFAULT_CONNECTION_COLORS);
+    setMapName(document.name || 'Untitled Map');
+    setProjects((prev) => prev.map((project) => ({
+      ...project,
+      maps: (project.maps || []).map((map) => (
+        map.id === document.mapId
+          ? {
+            ...map,
+            name: document.name || map.name || 'Untitled Map',
+            url: document.root?.url || map.url || '',
+            updated_at: document.mapUpdatedAt || map.updated_at || null,
+          }
+          : map
+      )),
+    })));
+    setCurrentMap((prev) => (
+      prev
+        ? {
+          ...prev,
+          name: document.name || prev.name || 'Untitled Map',
+          notes: document.notes ?? prev.notes ?? null,
+          url: document.root?.url || prev.url || '',
+          updated_at: document.mapUpdatedAt || prev.updated_at || null,
+        }
+        : prev
+    ));
+  }, []);
+
+  const getLocalLiveDocument = useCallback(() => ({
+    mapId: currentMap?.id || null,
+    version: 0,
+    name: (mapName || currentMap?.name || 'Untitled Map').trim() || 'Untitled Map',
+    notes: currentMap?.notes ?? null,
+    root,
+    orphans,
+    connections,
+    colors,
+    connectionColors,
+    mapUpdatedAt: currentMap?.updated_at || null,
+    lastOpId: null,
+    lastActorId: currentUser?.id || null,
+  }), [
+    colors,
+    connectionColors,
+    connections,
+    currentMap?.id,
+    currentMap?.name,
+    currentMap?.notes,
+    currentMap?.updated_at,
+    currentUser?.id,
+    mapName,
+    orphans,
+    root,
+  ]);
+
   const setDraftVersionFromSnapshot = useCallback((snapshot, label) => {
     if (!snapshot?.root) return;
     const id = `draft-${Date.now()}`;
@@ -1240,6 +1310,25 @@ export default function App() {
     if (!activeVersionId || !latestVersionId) return false;
     return activeVersionId !== latestVersionId;
   }, [activeVersionId, latestVersionId]);
+
+  const liveModeCanEdit = (
+    PERMISSION_GATING_UI_ENABLED
+    && isLoggedIn
+    && currentMap?.id
+    && mapPermissions?.features
+      ? !!mapPermissions.features.mapEdit
+      : accessLevel === ACCESS_LEVELS.EDIT
+  );
+
+  const isLiveEditingModeActive = !!(
+    COEDITING_EXPERIMENT_UI_ENABLED
+    && isLoggedIn
+    && currentMap?.id
+    && root
+    && liveModeCanEdit
+    && !isImportedMap
+    && !isViewingHistoricalVersion
+  );
 
   const isMapUpdateConflictError = useCallback((error) => {
     return error?.status === 409 && error?.code === 'MAP_UPDATE_CONFLICT';
@@ -1330,7 +1419,7 @@ export default function App() {
 
   // Autosave for existing maps (debounced)
   useEffect(() => {
-    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion) return;
+    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion || isLiveEditingModeActive) return;
 
     const snapshot = JSON.stringify({
       name: currentMap?.name || mapName,
@@ -1366,11 +1455,11 @@ export default function App() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!currentMap?.id || !root || isViewingHistoricalVersion) return;
+      if (!currentMap?.id || !root || isViewingHistoricalVersion || isLiveEditingModeActive) return;
       const snapshot = getVersionSnapshot();
       const serialized = serializeVersionSnapshot(snapshot);
       if (!serialized || serialized === lastVersionSnapshotRef.current) return;
@@ -1396,7 +1485,7 @@ export default function App() {
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [currentMap?.id, root, isViewingHistoricalVersion, getVersionSnapshot, serializeVersionSnapshot]);
+  }, [currentMap?.id, root, isViewingHistoricalVersion, getVersionSnapshot, serializeVersionSnapshot, isLiveEditingModeActive]);
 
   const reportTitle = useMemo(() => {
     return root?.title || getHostname(root?.url) || 'Website';
@@ -2184,6 +2273,92 @@ export default function App() {
     }
   };
 
+  const warnLiveModeUnsupported = useCallback((message) => {
+    showToast(message, 'info');
+  }, [showToast]);
+
+  const {
+    liveStatus,
+    liveStatusDetail,
+    liveVersion,
+    pendingCount: livePendingCount,
+    participants: liveParticipants,
+    remoteSelections,
+    isLiveActive,
+    submitDraft: submitLiveDraft,
+    updateSelection: updateLiveSelection,
+    resync: resyncLiveDocument,
+  } = useCoeditingLive({
+    enabled: isLiveEditingModeActive,
+    mapId: currentMap?.id || null,
+    actorId: currentUser?.id || null,
+    canEdit: canEditValue,
+    getLocalDocument: getLocalLiveDocument,
+    applyDocument: applyLiveDocumentToCanvas,
+    onWarn: warnLiveModeUnsupported,
+  });
+
+  const liveStatusLabel = useMemo(() => {
+    switch (liveStatus) {
+      case COEDITING_LIVE_STATUS.CONNECTED:
+        return 'Connected';
+      case COEDITING_LIVE_STATUS.RECONNECTING:
+        return 'Reconnecting';
+      case COEDITING_LIVE_STATUS.OUT_OF_SYNC:
+        return 'Out of Sync';
+      case COEDITING_LIVE_STATUS.CONNECTING:
+        return 'Connecting';
+      default:
+        return 'Live Off';
+    }
+  }, [liveStatus]);
+
+  const liveBannerTone = liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+    ? 'warning'
+    : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
+
+  useEffect(() => {
+    if (!isLiveActive) return;
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [isLiveActive]);
+
+  useEffect(() => {
+    if (!isLiveActive) return;
+    updateLiveSelection(Array.from(selectedNodeIds || []));
+  }, [isLiveActive, selectedNodeIds, updateLiveSelection]);
+
+  const liveSelectionBadges = useMemo(() => {
+    if (!mapLayout?.nodes || !remoteSelections?.length) return [];
+    const grouped = new Map();
+
+    remoteSelections.forEach((participant, participantIndex) => {
+      const nodeIds = Array.isArray(participant?.selectedNodeIds) ? participant.selectedNodeIds : [];
+      const label = String(participant?.displayName || participant?.clientName || 'Collaborator').trim();
+      nodeIds.forEach((nodeId) => {
+        const nodeData = mapLayout.nodes.get(nodeId);
+        if (!nodeData) return;
+        if (!grouped.has(nodeId)) {
+          grouped.set(nodeId, {
+            nodeId,
+            x: nodeData.x,
+            y: nodeData.y,
+            w: nodeData.w,
+            h: nodeData.h,
+            participants: [],
+          });
+        }
+        grouped.get(nodeId).participants.push({
+          sessionId: participant.sessionId,
+          label,
+          tone: participantIndex % 4,
+        });
+      });
+    });
+
+    return Array.from(grouped.values());
+  }, [mapLayout, remoteSelections]);
+
   const loadMapVersions = useCallback(async (mapId) => {
     if (!mapId) return;
     setIsLoadingVersions(true);
@@ -2716,6 +2891,41 @@ export default function App() {
     onShowSettings: handleShowSettings,
   }), [isLoggedIn, currentUser, handleLogin, handleLogout, handleShowProfile, handleShowSettings]);
 
+  const startMapNameEdit = useCallback(() => {
+    if (!canEdit()) return;
+    mapNameEditStartRef.current = mapName || currentMap?.name || 'Untitled Map';
+    setIsEditingMapName(true);
+  }, [canEdit, currentMap?.name, mapName]);
+
+  const cancelMapNameEdit = useCallback(() => {
+    setMapName(mapNameEditStartRef.current || currentMap?.name || mapName || 'Untitled Map');
+    setIsEditingMapName(false);
+  }, [currentMap?.name, mapName]);
+
+  const commitMapNameEdit = useCallback(() => {
+    const trimmedName = (mapName || '').trim() || 'Untitled Map';
+    setMapName(trimmedName);
+    setIsEditingMapName(false);
+
+    if (currentMap?.id) {
+      setCurrentMap((prev) => (prev ? { ...prev, name: trimmedName } : prev));
+    }
+
+    if (isLiveActive && currentMap?.id && trimmedName !== ((currentMap?.name || '').trim() || 'Untitled Map')) {
+      const result = submitLiveDraft({
+        type: 'metadata.update',
+        payload: {
+          changes: {
+            name: trimmedName,
+          },
+        },
+      });
+      if (!result.ok) {
+        showToast(result.error || 'Failed to queue map rename', 'error');
+      }
+    }
+  }, [currentMap?.id, currentMap?.name, isLiveActive, mapName, showToast, submitLiveDraft]);
+
   const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
     if (!nodeId || !thumbnailUrl) return;
     setRoot((prev) => {
@@ -2749,7 +2959,7 @@ export default function App() {
   }, []);
 
   const flushThumbnailAutosave = () => {
-    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion) return;
+    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion || isLiveEditingModeActive) return;
     const payload = {
       name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
       root,
@@ -3017,6 +3227,10 @@ export default function App() {
   };
 
   const handleThumbnailCapture = (scope) => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Thumbnail capture is disabled while live editing is active.');
+      return;
+    }
     if (!root) {
       showToast('Create or load a map before capturing thumbnails', 'info');
       return;
@@ -3162,7 +3376,7 @@ export default function App() {
       if (data?.url) {
         setFullImageUrl(data.url);
         setToast(null); // Clear the loading toast
-        if (nodeId) {
+        if (nodeId && !isLiveActive) {
           updateNodeThumbnail(nodeId, data.url);
         }
       } else {
@@ -3240,6 +3454,10 @@ export default function App() {
 
   const moveMapToProject = async (mapId, targetProjectId) => {
     if (!mapId) return;
+    if (isLiveActive && currentMap?.id === mapId) {
+      showToast('Move this map to another project after live editing is turned off.', 'info');
+      return;
+    }
     const mapRecord = projects.flatMap((project) => project.maps || []).find((map) => map.id === mapId);
     const currentProjectId = projects.find(p => (p.maps || []).some(m => m.id === mapId))?.id || null;
     if ((currentProjectId || null) === (targetProjectId || null)) {
@@ -3522,6 +3740,11 @@ export default function App() {
   const saveMap = async (projectId, mapName, notes) => {
     if (!root) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
+    if (isLiveActive && currentMap?.id) {
+      showToast('Live editing already persists this saved map. Turn live editing off before using Save Map.', 'info');
+      setShowSaveMapModal(false);
+      return;
+    }
     const wasNewMap = !currentMap?.id;
 
     try {
@@ -4480,6 +4703,10 @@ export default function App() {
   };
 
   const handleUndo = () => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Undo is temporarily disabled while live editing is active.');
+      return;
+    }
     console.log('UNDO CLICKED, stack:', undoStack.length);
     if (undoStack.length === 0) {
       console.log('Nothing to undo');
@@ -4516,6 +4743,10 @@ export default function App() {
   };
 
   const handleRedo = () => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Redo is temporarily disabled while live editing is active.');
+      return;
+    }
     console.log('REDO CLICKED, stack:', redoStack.length);
     if (redoStack.length === 0) {
       console.log('Nothing to redo');
@@ -5340,6 +5571,10 @@ export default function App() {
 
   // Add a comment to a node
   const addCommentToNode = (nodeId, commentText, parentCommentId = null) => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comments are not live-synced yet. Leave live editing before editing comments.');
+      return;
+    }
     if (!commentText.trim()) return;
 
     const newComment = {
@@ -5379,6 +5614,10 @@ export default function App() {
 
   // Toggle completed state on a comment
   const toggleCommentCompleted = (nodeId, commentId) => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment state changes are not live-synced yet.');
+      return;
+    }
     const toggleInComments = (comments) => {
       return comments.map(c => {
         if (c.id === commentId) {
@@ -5403,6 +5642,10 @@ export default function App() {
 
   // Delete a comment from a node
   const deleteComment = (nodeId, commentId) => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment deletion is not live-synced yet.');
+      return;
+    }
     const deleteFromComments = (comments) => {
       return comments.filter(c => {
         if (c.id === commentId) {
@@ -5438,6 +5681,10 @@ export default function App() {
   };
 
   const applyAnnotationStatus = (nodeIds, status, options = {}) => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Annotation markers are not live-synced yet.');
+      return;
+    }
     if (!nodeIds || nodeIds.length === 0) return;
     const idSet = new Set(nodeIds);
     const now = new Date().toISOString();
@@ -5844,9 +6091,26 @@ export default function App() {
         label: '',
       };
 
-      saveStateForUndo();
-      setConnections(prev => [...prev, newConnection]);
-      showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} created`, 'success');
+      if (isLiveActive && currentMap?.id) {
+        const result = submitLiveDraft({
+          type: 'link.add',
+          payload: {
+            linkId: newConnection.id,
+            sourceId: newConnection.sourceNodeId,
+            targetId: newConnection.targetNodeId,
+            link: newConnection,
+          },
+        });
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue connection', 'error');
+        } else {
+          showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} queued`, 'success');
+        }
+      } else {
+        saveStateForUndo();
+        setConnections(prev => [...prev, newConnection]);
+        showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} created`, 'success');
+      }
     }
 
     // Re-enable text selection
@@ -5856,6 +6120,19 @@ export default function App() {
 
   // Delete a connection
   const deleteConnection = (connectionId) => {
+    if (isLiveActive && currentMap?.id) {
+      const result = submitLiveDraft({
+        type: 'link.delete',
+        payload: { linkId: connectionId },
+      });
+      if (!result.ok) {
+        showToast(result.error || 'Failed to queue connection deletion', 'error');
+        return;
+      }
+      setConnectionMenu(null);
+      showToast('Connection deletion queued', 'success');
+      return;
+    }
     saveStateForUndo();
     setConnections(prev => prev.filter(c => c.id !== connectionId));
     setConnectionMenu(null);
@@ -5953,20 +6230,56 @@ export default function App() {
         const { connectionId: connId, endpoint: ep, snapTarget: snap } = prev;
 
         if (snap) {
-          saveStateForUndo();
-          setConnections(conns => conns.map(c => {
-            if (c.id !== connId) return c;
-            if (ep === 'source') {
-              return { ...c, sourceNodeId: snap.nodeId, sourceAnchor: snap.anchor };
-            } else {
-              return { ...c, targetNodeId: snap.nodeId, targetAnchor: snap.anchor };
+          if (isLiveActive && currentMap?.id) {
+            const existingConnection = connections.find((connection) => connection.id === connId);
+            const result = submitLiveDraft({
+              type: 'link.update',
+              payload: {
+                linkId: connId,
+                changes: ep === 'source'
+                  ? {
+                    sourceNodeId: snap.nodeId,
+                    sourceAnchor: snap.anchor,
+                  }
+                  : {
+                    targetNodeId: snap.nodeId,
+                    targetAnchor: snap.anchor,
+                  },
+              },
+            });
+            if (!result.ok) {
+              showToast(result.error || 'Failed to queue connection update', 'error');
+            } else if (existingConnection) {
+              showToast('Connection update queued', 'success');
             }
-          }));
-          showToast('Connection updated', 'success');
+          } else {
+            saveStateForUndo();
+            setConnections(conns => conns.map(c => {
+              if (c.id !== connId) return c;
+              if (ep === 'source') {
+                return { ...c, sourceNodeId: snap.nodeId, sourceAnchor: snap.anchor };
+              } else {
+                return { ...c, targetNodeId: snap.nodeId, targetAnchor: snap.anchor };
+              }
+            }));
+            showToast('Connection updated', 'success');
+          }
         } else {
-          saveStateForUndo();
-          setConnections(conns => conns.filter(c => c.id !== connId));
-          showToast('Connection deleted', 'success');
+          if (isLiveActive && currentMap?.id) {
+            const result = submitLiveDraft({
+              type: 'link.delete',
+              payload: { linkId: connId },
+            });
+            if (!result.ok) {
+              showToast(result.error || 'Failed to queue connection deletion', 'error');
+            } else {
+              showToast('Connection deletion queued', 'success');
+            }
+          } else {
+            saveStateForUndo();
+            setConnections(conns => conns.filter(c => c.id !== connId));
+            showToast('Connection deleted', 'success');
+          }
         }
 
         return null;
@@ -6009,29 +6322,64 @@ export default function App() {
     const { connectionId, endpoint, snapTarget } = draggingEndpoint;
 
     if (snapTarget) {
-      saveStateForUndo();
-      setConnections(prev => prev.map(conn => {
-        if (conn.id !== connectionId) return conn;
-
-        if (endpoint === 'source') {
-          return {
-            ...conn,
-            sourceNodeId: snapTarget.nodeId,
-            sourceAnchor: snapTarget.anchor,
-          };
+      if (isLiveActive && currentMap?.id) {
+        const result = submitLiveDraft({
+          type: 'link.update',
+          payload: {
+            linkId: connectionId,
+            changes: endpoint === 'source'
+              ? {
+                sourceNodeId: snapTarget.nodeId,
+                sourceAnchor: snapTarget.anchor,
+              }
+              : {
+                targetNodeId: snapTarget.nodeId,
+                targetAnchor: snapTarget.anchor,
+              },
+          },
+        });
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue connection update', 'error');
         } else {
-          return {
-            ...conn,
-            targetNodeId: snapTarget.nodeId,
-            targetAnchor: snapTarget.anchor,
-          };
+          showToast('Connection update queued', 'success');
         }
-      }));
-      showToast('Connection updated', 'success');
+      } else {
+        saveStateForUndo();
+        setConnections(prev => prev.map(conn => {
+          if (conn.id !== connectionId) return conn;
+
+          if (endpoint === 'source') {
+            return {
+              ...conn,
+              sourceNodeId: snapTarget.nodeId,
+              sourceAnchor: snapTarget.anchor,
+            };
+          } else {
+            return {
+              ...conn,
+              targetNodeId: snapTarget.nodeId,
+              targetAnchor: snapTarget.anchor,
+            };
+          }
+        }));
+        showToast('Connection updated', 'success');
+      }
     } else {
-      saveStateForUndo();
-      setConnections(prev => prev.filter(c => c.id !== connectionId));
-      showToast('Connection deleted', 'success');
+      if (isLiveActive && currentMap?.id) {
+        const result = submitLiveDraft({
+          type: 'link.delete',
+          payload: { linkId: connectionId },
+        });
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue connection deletion', 'error');
+        } else {
+          showToast('Connection deletion queued', 'success');
+        }
+      } else {
+        saveStateForUndo();
+        setConnections(prev => prev.filter(c => c.id !== connectionId));
+        showToast('Connection deleted', 'success');
+      }
     }
 
     document.body.style.userSelect = '';
@@ -6219,7 +6567,7 @@ export default function App() {
   }, [brokenAnchorPairs, getAnchorPosition, getBrokenLinkOffset]);
 
   useEffect(() => {
-    if (!mapLayout) return;
+    if (!mapLayout || isLiveActive) return;
     setConnections((prev) => {
       let changed = false;
       const next = prev.map((conn) => {
@@ -6234,7 +6582,7 @@ export default function App() {
       });
       return changed ? next : prev;
     });
-  }, [mapLayout, showThumbnails, getBestAnchorPair]);
+  }, [mapLayout, showThumbnails, getBestAnchorPair, isLiveActive]);
 
   // Opens delete confirmation modal
   const requestDeleteNode = (id) => {
@@ -6257,6 +6605,20 @@ export default function App() {
   const confirmDeleteNode = () => {
     if (!deleteConfirmNode) return;
     const id = deleteConfirmNode.id;
+
+    if (isLiveActive && currentMap?.id) {
+      const result = submitLiveDraft({
+        type: 'node.delete',
+        payload: { nodeId: id },
+      });
+      if (!result.ok) {
+        showToast(result.error || 'Failed to queue page deletion', 'error');
+        return;
+      }
+      setDeleteConfirmNode(null);
+      showToast('Page deletion queued', 'success');
+      return;
+    }
 
     // Check if it's an orphan
     if (orphans.some(o => o.id === id)) {
@@ -6434,6 +6796,135 @@ export default function App() {
     const isCurrentlyOrphan = !!findOrphanTreeRoot(updatedNode.id);
     const parentSelection = normalizeParentSelection(updatedNode.parentId);
     const newParentId = parentSelection.resolvedParentId;
+
+    if (isLiveActive && currentMap?.id) {
+      const submitLiveNodeChange = (draft, successMessage) => {
+        const result = submitLiveDraft(draft);
+        if (!result.ok) {
+          showToast(result.error || 'Failed to stage live edit', 'error');
+          return false;
+        }
+        setEditModalNode(null);
+        if (successMessage) {
+          showToast(successMessage, 'success');
+        }
+        return true;
+      };
+
+      const getAppendAfterNodeId = (parentId) => {
+        if (!parentId) {
+          return orphans.length > 0 ? orphans[orphans.length - 1].id : null;
+        }
+        const parent = findNodeById(root, parentId) || findNodeInOrphans(parentId);
+        const children = Array.isArray(parent?.children) ? parent.children : [];
+        return children.length > 0 ? children[children.length - 1].id : null;
+      };
+
+      if (editModalMode === 'edit') {
+        const currentNode = getNodeById(updatedNode.id);
+        if (!currentNode) {
+          showToast('Node not found', 'error');
+          return;
+        }
+
+        const orphanRoot = isCurrentlyOrphan ? findOrphanTreeRoot(updatedNode.id) : null;
+        const currentParent = findParent(root, updatedNode.id) || findParentInOrphans(updatedNode.id);
+        const currentParentId = currentParent?.id || '';
+        const currentRootType = orphanRoot?.subdomainRoot ? 'subdomain' : 'orphan';
+        const targetRootType = parentSelection.isSubdomainRoot
+          ? 'subdomain'
+          : (parentSelection.isOrphanRoot ? 'orphan' : currentRootType);
+        const isStructuralChange = (currentParentId !== newParentId)
+          || (isCurrentlyOrphan && (parentSelection.isSubdomainRoot || parentSelection.isOrphanRoot) && targetRootType !== currentRootType);
+
+        if (isStructuralChange) {
+          warnLiveModeUnsupported('Reparenting and orphan/subdomain moves are disabled while live editing is active.');
+          return;
+        }
+
+        const nextAnnotations = buildAnnotations(updatedNode.annotations, currentNode.annotations);
+        const changes = {};
+        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'description', 'metaTags'];
+        fields.forEach((field) => {
+          const nextValue = updatedNode[field];
+          const currentValue = currentNode[field];
+          if (JSON.stringify(nextValue ?? null) !== JSON.stringify(currentValue ?? null)) {
+            changes[field] = nextValue;
+          }
+        });
+
+        if (JSON.stringify(nextAnnotations || null) !== JSON.stringify(currentNode.annotations || null)) {
+          changes.annotations = nextAnnotations;
+        }
+
+        if (Object.keys(changes).length === 0) {
+          setEditModalNode(null);
+          return;
+        }
+
+        submitLiveNodeChange({
+          type: 'node.update',
+          payload: {
+            nodeId: updatedNode.id,
+            changes,
+          },
+        }, 'Page changes queued');
+        return;
+      }
+
+      if (editModalMode === 'duplicate' || editModalMode === 'add') {
+        if (!root && editModalMode === 'add') {
+          // Fall through to the existing first-node save flow for brand new maps.
+        } else {
+          const now = new Date().toISOString();
+          const nextNode = {
+            url: updatedNode.url || '',
+            title: updatedNode.title || 'New Page',
+            pageType: updatedNode.pageType || 'page',
+            thumbnailUrl: updatedNode.thumbnailUrl || '',
+            description: updatedNode.description || '',
+            metaTags: updatedNode.metaTags || {},
+            annotations: buildAnnotations(updatedNode.annotations, {
+              status: 'none',
+              tags: [],
+              note: '',
+              meta: { createdAt: now, updatedAt: now },
+            }),
+            children: [],
+            comments: [],
+            id: editModalMode === 'duplicate'
+              ? `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+              : `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          };
+
+          if (parentSelection.isSubdomainRoot) {
+            nextNode.orphanType = 'subdomain';
+            nextNode.subdomainRoot = true;
+          } else if (parentSelection.isOrphanRoot || newParentId === '') {
+            nextNode.orphanType = 'orphan';
+            nextNode.subdomainRoot = false;
+          } else {
+            const orphanParent = findNodeInOrphans(newParentId);
+            if (orphanParent) {
+              const orphanRoot = findOrphanTreeRoot(newParentId);
+              nextNode.orphanType = orphanRoot?.orphanType || 'orphan';
+              nextNode.subdomainRoot = !!orphanRoot?.subdomainRoot;
+            }
+          }
+
+          submitLiveNodeChange({
+            type: 'node.add',
+            payload: {
+              nodeId: nextNode.id,
+              parentId: newParentId || null,
+              afterNodeId: getAppendAfterNodeId(newParentId),
+              node: nextNode,
+            },
+          }, editModalMode === 'duplicate' ? 'Copy queued' : 'Page queued');
+          return;
+        }
+      }
+    }
 
     if (editModalMode === 'edit') {
       // Update existing node
@@ -6759,6 +7250,10 @@ export default function App() {
   // ========== DRAG & DROP ==========
 
   const moveNode = (nodeId, newParentId, insertIndex) => {
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Drag-to-reparent is disabled in live editing until structural moves are supported.');
+      return;
+    }
     if (!root || nodeId === root.id) return;
     if (nodeId === newParentId) return;
     const sourceMeta = forestIndex.nodes.get(nodeId);
@@ -7222,10 +7717,34 @@ export default function App() {
   const commitColorUndoIfChanged = useCallback(() => {
     const snapshot = colorEditSnapshotRef.current;
     if (snapshot && hasColorSnapshotChanged(snapshot)) {
-      saveStateForUndo(snapshot);
+      if (isLiveActive && currentMap?.id) {
+        const result = submitLiveDraft({
+          type: 'metadata.update',
+          payload: {
+            changes: {
+              colors: [...colors],
+              connectionColors: { ...connectionColors },
+            },
+          },
+        });
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue color changes', 'error');
+        }
+      } else {
+        saveStateForUndo(snapshot);
+      }
     }
     colorEditSnapshotRef.current = null;
-  }, [hasColorSnapshotChanged, saveStateForUndo]);
+  }, [
+    colors,
+    connectionColors,
+    currentMap?.id,
+    hasColorSnapshotChanged,
+    isLiveActive,
+    saveStateForUndo,
+    showToast,
+    submitLiveDraft,
+  ]);
 
   const beginColorEdit = useCallback(() => {
     commitColorUndoIfChanged();
@@ -7455,16 +7974,16 @@ export default function App() {
         mapName={mapName}
         isEditingMapName={isEditingMapName}
         onMapNameChange={(e) => setMapName(e.target.value)}
-        onMapNameBlur={() => setIsEditingMapName(false)}
+        onMapNameBlur={commitMapNameEdit}
         onMapNameKeyDown={(e) => {
           if (e.key === 'Enter') {
-            setIsEditingMapName(false);
+            commitMapNameEdit();
           }
           if (e.key === 'Escape') {
-            setIsEditingMapName(false);
+            cancelMapNameEdit();
           }
         }}
-        onMapNameClick={() => canEdit() && setIsEditingMapName(true)}
+        onMapNameClick={startMapNameEdit}
         sharedTitle={root?.title || 'Shared Sitemap'}
         onCreateMap={async () => {
           if (!currentUser) {
@@ -7528,7 +8047,30 @@ export default function App() {
           </div>
         )}
 
+        {isLiveActive && hasMap && currentMap?.id && (
+          <div className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}>
+            {liveStatus === COEDITING_LIVE_STATUS.CONNECTED
+              ? <Wifi size={16} />
+              : (liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
+                ? <WifiOff size={16} />
+                : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />)}
+            <span>
+              <strong>Live Editing {liveStatusLabel}</strong>
+              {` • v${liveVersion}`}
+              {livePendingCount > 0 ? ` • ${livePendingCount} queued` : ''}
+              {liveParticipants.length > 1 ? ` • ${liveParticipants.length - 1} collaborator${liveParticipants.length > 2 ? 's' : ''}` : ''}
+              {liveStatusDetail ? ` • ${liveStatusDetail}` : ''}
+            </span>
+            {liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC && (
+              <div className="map-conflict-actions">
+                <button type="button" onClick={resyncLiveDocument}>Resync</button>
+              </div>
+            )}
+          </div>
+        )}
+
         {REALTIME_BASELINE_ENABLED
+          && !isLiveActive
           && !mapSaveConflict
           && isLoggedIn
           && canViewPresence()
@@ -7608,6 +8150,35 @@ export default function App() {
                     }}
                   />
                 )}
+
+                {liveSelectionBadges.map((badge) => (
+                  <div
+                    key={badge.nodeId}
+                    className="live-selection-highlight"
+                    style={{
+                      left: badge.x - 6,
+                      top: badge.y - 6,
+                      width: badge.w + 12,
+                      height: badge.h + 12,
+                    }}
+                  >
+                    <div className="live-selection-pill-row">
+                      {badge.participants.slice(0, 3).map((participant) => (
+                        <span
+                          key={`${badge.nodeId}-${participant.sessionId}`}
+                          className={`live-selection-pill tone-${participant.tone}`}
+                        >
+                          {participant.label}
+                        </span>
+                      ))}
+                      {badge.participants.length > 3 && (
+                        <span className="live-selection-pill live-selection-pill-more">
+                          +{badge.participants.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
 
                 <SitemapTree
                   data={renderRoot}

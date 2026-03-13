@@ -58,6 +58,10 @@ function main() {
   const participantsAfterTouch = registry.listParticipants('map-1');
   assert.strictEqual(participantsAfterTouch[0].lastSeenAt, '1970-01-01T00:00:04.000Z');
 
+  registry.updateSessionSelection(resumedJoin.session, ['node-1', 'node-2', 'node-2']);
+  const participantsAfterSelection = registry.listParticipants('map-1');
+  assert.deepStrictEqual(participantsAfterSelection[0].selectedNodeIds, ['node-1', 'node-2']);
+
   const firstRate = registry.consumeRoomMessage('map-1', 5000);
   const secondRate = registry.consumeRoomMessage('map-1', 6000);
   const blockedRate = registry.consumeRoomMessage('map-1', 7000);

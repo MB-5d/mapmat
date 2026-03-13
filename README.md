@@ -54,6 +54,7 @@ True co-editing (CRDT/OT) follow-on plan is in `docs/coediting-follow-on.md`.
 Phase 10A co-editing event contract docs are in `docs/coediting-event-contract.md`.
 Phase 10B co-editing transport docs are in `docs/coediting-transport-layer.md`.
 Phase 10C co-editing sync engine docs are in `docs/coediting-sync-engine.md`.
+Phase 10D co-editing frontend live-mode docs are in `docs/coediting-frontend-live-mode.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
@@ -178,7 +179,8 @@ Optional:
 | `REACT_APP_COLLABORATION_UI_ENABLED` | Enables Phase 9C collaboration panel in Share modal | false |
 | `REACT_APP_REALTIME_BASELINE_ENABLED` | Enables Phase 9D presence/session awareness UI | false |
 | `REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC` | Frontend heartbeat cadence (seconds) for presence baseline | 20 |
-| `REACT_APP_COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10D co-editing live-editing UI mode (future phase) | false |
+| `REACT_APP_COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10D co-editing live-editing UI mode | false |
+| `REACT_APP_COEDITING_SELECTION_BROADCAST_MS` | Throttle window for live selection presence broadcasts (ms) | 200 |
 | `REACT_APP_PERMISSION_GATING_ENABLED` | Enables Phase 9E API-driven role/feature UI gating | false |
 | `REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED` | Enables Phase 9F full screenshot job pipeline in UI | false |
 
