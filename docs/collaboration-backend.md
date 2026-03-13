@@ -10,6 +10,10 @@ Set backend environment variable:
 
 If unset or `false`, collaboration endpoints return `404 Not found`.
 
+Frontend panel toggle:
+
+- `REACT_APP_COLLABORATION_UI_ENABLED=true`
+
 Optional invite tuning:
 
 - `COLLAB_INVITE_DEFAULT_DAYS` (default `7`)

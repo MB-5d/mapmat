@@ -151,6 +151,7 @@ Optional:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `REACT_APP_API_BASE` | Backend API URL | http://localhost:4002 |
+| `REACT_APP_COLLABORATION_UI_ENABLED` | Enables Phase 9C collaboration panel in Share modal | false |
 
 Temporary testing note:
 - `TEST_AUTH_ENABLED=true` allows login with auto-created fake accounts and seeds the default test user above.

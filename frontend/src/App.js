@@ -100,6 +100,19 @@ const MIN_SCALE = 0.05;
 const MAX_SCALE = 4;
 const INTERACTIVE_MIN_SCALE = 0.1;
 
+const parseEnvBool = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+};
+
+const COLLABORATION_UI_ENABLED = parseEnvBool(
+  process.env.REACT_APP_COLLABORATION_UI_ENABLED,
+  false
+);
+
 const SitemapTree = ({
   data,
   orphans = [],
@@ -728,6 +741,13 @@ export default function App() {
   const [shareEmails, setShareEmails] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [sharePermission, setSharePermission] = useState(ACCESS_LEVELS.VIEW); // Permission for shared link
+  const [mapSaveConflict, setMapSaveConflict] = useState(null);
+  const [collaborationLoading, setCollaborationLoading] = useState(false);
+  const [collaborationError, setCollaborationError] = useState('');
+  const [collaborationMemberships, setCollaborationMemberships] = useState([]);
+  const [collaborationInvites, setCollaborationInvites] = useState([]);
+  const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
+  const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
   const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return !!params.get('share');
@@ -1194,18 +1214,35 @@ export default function App() {
     return activeVersionId !== latestVersionId;
   }, [activeVersionId, latestVersionId]);
 
+  const isMapUpdateConflictError = useCallback((error) => {
+    return error?.status === 409 && error?.code === 'MAP_UPDATE_CONFLICT';
+  }, []);
+
+  const registerMapConflict = useCallback(({ error, mapId, source }) => {
+    setMapSaveConflict({
+      mapId,
+      source: source || 'update',
+      detectedAt: Date.now(),
+      expectedUpdatedAt: error?.payload?.conflict?.expected_updated_at || null,
+      actualUpdatedAt: error?.payload?.conflict?.actual_updated_at || null,
+    });
+  }, []);
+
   const flushAutosave = useCallback(() => {
     if (autosaveInFlightRef.current) return;
     const pending = autosavePendingRef.current;
     if (!pending) return;
 
     autosaveInFlightRef.current = true;
-    api.updateMap(pending.mapId, pending.payload)
+    api.updateMap(pending.mapId, pending.payload, {
+      expectedUpdatedAt: pending.expectedUpdatedAt,
+    })
       .then(({ map }) => {
         autosaveInFlightRef.current = false;
         autosaveRetryDelayRef.current = 1000;
         lastAutosaveSnapshotRef.current = pending.snapshot;
         setCurrentMap(map);
+        setMapSaveConflict(null);
         setProjects(prev => prev.map(p => ({
           ...p,
           maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
@@ -1219,8 +1256,19 @@ export default function App() {
           flushAutosave();
         }
       })
-      .catch(() => {
+      .catch((error) => {
         autosaveInFlightRef.current = false;
+        if (isMapUpdateConflictError(error)) {
+          if (autosavePendingRef.current?.snapshot === pending.snapshot) {
+            autosavePendingRef.current = null;
+          }
+          registerMapConflict({
+            error,
+            mapId: pending.mapId,
+            source: 'autosave',
+          });
+          return;
+        }
         if (autosaveRetryTimerRef.current) return;
         const delay = autosaveRetryDelayRef.current;
         autosaveRetryDelayRef.current = Math.min(delay * 2, 30000);
@@ -1229,7 +1277,7 @@ export default function App() {
           flushAutosave();
         }, delay);
       });
-  }, []);
+  }, [isMapUpdateConflictError, registerMapConflict]);
 
   useEffect(() => {
     const handleOnline = () => flushAutosave();
@@ -1273,6 +1321,7 @@ export default function App() {
     autosaveTimerRef.current = setTimeout(() => {
       autosavePendingRef.current = {
         mapId: currentMap.id,
+        expectedUpdatedAt: currentMap?.updated_at || null,
         payload: {
           name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
           root,
@@ -1290,7 +1339,7 @@ export default function App() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -2019,6 +2068,15 @@ export default function App() {
     setToast(null);
   };
 
+  useEffect(() => {
+    if (!mapSaveConflict) return;
+    const sourceLabel = mapSaveConflict.source === 'autosave' ? 'Autosave paused' : 'Save blocked';
+    showToast(
+      `${sourceLabel}: this map changed in another session. Reload latest before saving again.`,
+      'warning'
+    );
+  }, [mapSaveConflict, showToast]);
+
   const ToastIcon = ({ type }) => {
     switch (type) {
       case 'success': return <CheckCircle size={18} />;
@@ -2061,6 +2119,91 @@ export default function App() {
       setIsLoadingVersions(false);
     }
   }, [activeVersionId, showToast, serializeVersionSnapshot]);
+
+  const loadCollaborationData = useCallback(async () => {
+    if (!COLLABORATION_UI_ENABLED || !showShareModal || !currentMap?.id || !isLoggedIn) return;
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      const { collaboration } = await api.getMapCollaboration(currentMap.id);
+      setCollaborationMemberships(collaboration?.memberships || []);
+      setCollaborationInvites(collaboration?.invites || []);
+    } catch (error) {
+      setCollaborationMemberships([]);
+      setCollaborationInvites([]);
+      if (error?.status === 404) {
+        setCollaborationError('Collaboration backend is currently disabled.');
+      } else {
+        setCollaborationError(error.message || 'Failed to load collaboration data.');
+      }
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [currentMap?.id, isLoggedIn, showShareModal]);
+
+  const sendCollaborationInvite = useCallback(async () => {
+    if (!currentMap?.id) {
+      showToast('Save this map before inviting collaborators.', 'warning');
+      return;
+    }
+    const email = String(collaborationInviteEmail || '').trim();
+    if (!email) {
+      showToast('Enter an email address to invite.', 'warning');
+      return;
+    }
+
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.createMapInvite(currentMap.id, {
+        email,
+        role: collaborationInviteRole,
+      });
+      setCollaborationInviteEmail('');
+      showToast('Invite created', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationError(error.message || 'Failed to create invite.');
+      showToast(error.message || 'Failed to create invite.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [
+    collaborationInviteEmail,
+    collaborationInviteRole,
+    currentMap?.id,
+    loadCollaborationData,
+    showToast,
+  ]);
+
+  const revokeCollaborationInvite = useCallback(async (inviteId) => {
+    if (!currentMap?.id || !inviteId) return;
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.revokeMapInvite(currentMap.id, inviteId);
+      showToast('Invite revoked', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationError(error.message || 'Failed to revoke invite.');
+      showToast(error.message || 'Failed to revoke invite.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, showToast]);
+
+  useEffect(() => {
+    if (!showShareModal) return;
+    if (!COLLABORATION_UI_ENABLED) return;
+    loadCollaborationData();
+  }, [loadCollaborationData, showShareModal]);
+
+  useEffect(() => {
+    if (showShareModal) return;
+    setCollaborationError('');
+    setCollaborationMemberships([]);
+    setCollaborationInvites([]);
+  }, [showShareModal]);
 
   useEffect(() => {
     if (!currentMap?.id) {
@@ -2382,6 +2525,7 @@ export default function App() {
     const snapshot = JSON.stringify(payload);
     autosavePendingRef.current = {
       mapId: currentMap.id,
+      expectedUpdatedAt: currentMap?.updated_at || null,
       payload,
       snapshot,
     };
@@ -2825,12 +2969,17 @@ export default function App() {
 
   const moveMapToProject = async (mapId, targetProjectId) => {
     if (!mapId) return;
+    const mapRecord = projects.flatMap((project) => project.maps || []).find((map) => map.id === mapId);
     const currentProjectId = projects.find(p => (p.maps || []).some(m => m.id === mapId))?.id || null;
     if ((currentProjectId || null) === (targetProjectId || null)) {
       return;
     }
     try {
-      const { map } = await api.updateMap(mapId, { project_id: targetProjectId || null });
+      const { map } = await api.updateMap(
+        mapId,
+        { project_id: targetProjectId || null },
+        { expectedUpdatedAt: mapRecord?.updated_at || (currentMap?.id === mapId ? currentMap?.updated_at : null) }
+      );
       setProjects(prev => {
         let updated = prev.map(p => ({
           ...p,
@@ -2856,8 +3005,13 @@ export default function App() {
         setCurrentMap(map);
         setMapName(map.name || '');
       }
+      setMapSaveConflict(null);
       showToast('Map moved', 'success');
     } catch (e) {
+      if (isMapUpdateConflictError(e)) {
+        registerMapConflict({ error: e, mapId, source: 'move' });
+        return;
+      }
       showToast(e.message || 'Failed to move map', 'error');
     }
   };
@@ -3004,16 +3158,21 @@ export default function App() {
 
     const snapshot = getVersionSnapshot();
     try {
-      const { map } = await api.updateMap(currentMap.id, {
-        name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
-        root: snapshot.root,
-        orphans: snapshot.orphans,
-        connections: snapshot.connections,
-        colors: snapshot.colors,
-        connectionColors: snapshot.connectionColors,
-        project_id: currentMap?.project_id || null,
-      });
+      const { map } = await api.updateMap(
+        currentMap.id,
+        {
+          name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
+          root: snapshot.root,
+          orphans: snapshot.orphans,
+          connections: snapshot.connections,
+          colors: snapshot.colors,
+          connectionColors: snapshot.connectionColors,
+          project_id: currentMap?.project_id || null,
+        },
+        { expectedUpdatedAt: currentMap?.updated_at || null }
+      );
       setCurrentMap(map);
+      setMapSaveConflict(null);
       setMapName(map.name || '');
       setProjects(prev => prev.map(p => ({
         ...p,
@@ -3031,6 +3190,10 @@ export default function App() {
       await createVersionFromSnapshot({ mapId: map.id, snapshot, name: 'Updated' });
       showToast('Latest version updated', 'success');
     } catch (error) {
+      if (isMapUpdateConflictError(error)) {
+        registerMapConflict({ error, mapId: currentMap.id, source: 'override' });
+        return;
+      }
       showToast(error.message || 'Failed to override latest version', 'error');
     }
   };
@@ -3094,16 +3257,20 @@ export default function App() {
       let savedMap;
       if (currentMap?.id) {
         // Update existing map
-        const { map } = await api.updateMap(currentMap.id, {
-          name: mapName.trim(),
-          root,
-          orphans,
-          connections,
-          colors,
-          connectionColors,
-          notes: notes?.trim() || null,
-          project_id: projectId || null,
-        });
+        const { map } = await api.updateMap(
+          currentMap.id,
+          {
+            name: mapName.trim(),
+            root,
+            orphans,
+            connections,
+            colors,
+            connectionColors,
+            notes: notes?.trim() || null,
+            project_id: projectId || null,
+          },
+          { expectedUpdatedAt: currentMap?.updated_at || null }
+        );
         savedMap = map;
       } else {
         // Create new map
@@ -3148,6 +3315,7 @@ export default function App() {
       });
 
       setCurrentMap(savedMap);
+      setMapSaveConflict(null);
       setShowSaveMapModal(false);
       showToast(`Map "${mapName}" saved`, 'success');
 
@@ -3190,6 +3358,10 @@ export default function App() {
         setShowCreateMapModal(true);
       }
     } catch (e) {
+      if (isMapUpdateConflictError(e)) {
+        registerMapConflict({ error: e, mapId: currentMap?.id || null, source: 'save' });
+        return;
+      }
       showToast(e.message || 'Failed to save map', 'error');
     }
   };
@@ -3207,6 +3379,7 @@ export default function App() {
     setCurrentShareAccess(null);
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null, notes: notes?.trim() || '' });
+    setMapSaveConflict(null);
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
     setThumbnailScopeIds(null);
@@ -3232,6 +3405,7 @@ export default function App() {
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setCurrentMap(map);
+    setMapSaveConflict(null);
     setMapName(map.name || '');
     setActiveVersionId(null);
     setShowVersionEditPrompt(false);
@@ -3248,6 +3422,23 @@ export default function App() {
     setUrlInput(map.root?.url || '');
     showToast(`Loaded "${map.name}"`, 'success');
     scheduleResetView();
+  };
+
+  const reloadMapAfterConflict = async () => {
+    const mapId = mapSaveConflict?.mapId || currentMap?.id;
+    if (!mapId) return;
+    try {
+      const { map } = await api.getMap(mapId);
+      loadMap(map);
+      setMapSaveConflict(null);
+      showToast('Loaded latest map changes', 'success');
+    } catch (error) {
+      showToast(error.message || 'Failed to load latest map', 'error');
+    }
+  };
+
+  const dismissMapConflict = () => {
+    setMapSaveConflict(null);
   };
 
   const handleLoadMapRequest = (map) => {
@@ -7051,6 +7242,17 @@ export default function App() {
           </div>
         )}
 
+        {mapSaveConflict && hasMap && (
+          <div className="permission-banner map-conflict-banner">
+            <AlertTriangle size={16} />
+            <span>This map changed in another session. Your last update was blocked to avoid overwriting.</span>
+            <div className="map-conflict-actions">
+              <button type="button" onClick={reloadMapAfterConflict}>Reload Latest</button>
+              <button type="button" onClick={dismissMapConflict}>Dismiss</button>
+            </div>
+          </div>
+        )}
+
         {/* Theme toggle */}
         <button
           className="theme-toggle"
@@ -8025,7 +8227,15 @@ export default function App() {
 
       <ShareModal
         show={showShareModal}
-        onClose={() => { setShowShareModal(false); setShareEmails(''); setLinkCopied(false); setSharePermission(ACCESS_LEVELS.VIEW); }}
+        onClose={() => {
+          setShowShareModal(false);
+          setShareEmails('');
+          setLinkCopied(false);
+          setSharePermission(ACCESS_LEVELS.VIEW);
+          setCollaborationInviteEmail('');
+          setCollaborationInviteRole('viewer');
+          setCollaborationError('');
+        }}
         accessLevels={ACCESS_LEVELS}
         sharePermission={sharePermission}
         onChangePermission={(permission) => setSharePermission(permission)}
@@ -8034,6 +8244,18 @@ export default function App() {
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}
+        collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn}
+        collaborationAvailable={Boolean(currentMap?.id)}
+        collaborationLoading={collaborationLoading}
+        collaborationError={collaborationError}
+        collaborationInviteEmail={collaborationInviteEmail}
+        onCollaborationInviteEmailChange={setCollaborationInviteEmail}
+        collaborationInviteRole={collaborationInviteRole}
+        onCollaborationInviteRoleChange={setCollaborationInviteRole}
+        onSendCollaborationInvite={sendCollaborationInvite}
+        collaborationMemberships={collaborationMemberships}
+        collaborationInvites={collaborationInvites}
+        onRevokeCollaborationInvite={revokeCollaborationInvite}
       />
 
       <SaveMapModal

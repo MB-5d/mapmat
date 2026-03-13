@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Copy, Edit2, Eye, Mail, MessageSquare, X } from 'lucide-react';
+import { Check, Copy, Edit2, Eye, Mail, MessageSquare, Send, Trash2, Users, X } from 'lucide-react';
 
 const ShareModal = ({
   show,
@@ -12,8 +12,26 @@ const ShareModal = ({
   shareEmails,
   onShareEmailsChange,
   onSendEmail,
+  collaborationEnabled = false,
+  collaborationAvailable = false,
+  collaborationLoading = false,
+  collaborationError = '',
+  collaborationInviteEmail = '',
+  onCollaborationInviteEmailChange,
+  collaborationInviteRole = 'viewer',
+  onCollaborationInviteRoleChange,
+  onSendCollaborationInvite,
+  collaborationMemberships = [],
+  collaborationInvites = [],
+  onRevokeCollaborationInvite,
 }) => {
   if (!show) return null;
+
+  const formatRole = (role) => {
+    const value = String(role || '').trim();
+    if (!value) return 'Viewer';
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -95,6 +113,103 @@ const ShareModal = ({
               </button>
             </div>
           </div>
+
+          {collaborationEnabled && (
+            <div className="share-section">
+              <div className="share-section-title">Collaborators (Beta)</div>
+              {!collaborationAvailable ? (
+                <div className="share-collab-empty">Save this map first to invite collaborators.</div>
+              ) : (
+                <>
+                  <div className="share-collab-invite-row">
+                    <div className="share-email-input">
+                      <Mail size={18} />
+                      <input
+                        type="text"
+                        placeholder="Invite by email..."
+                        value={collaborationInviteEmail}
+                        onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
+                      />
+                    </div>
+                    <select
+                      className="share-collab-role-select"
+                      value={collaborationInviteRole}
+                      onChange={(e) => onCollaborationInviteRoleChange?.(e.target.value)}
+                    >
+                      <option value="viewer">Viewer</option>
+                      <option value="commenter">Commenter</option>
+                      <option value="editor">Editor</option>
+                    </select>
+                    <button
+                      className="share-email-btn"
+                      onClick={onSendCollaborationInvite}
+                      disabled={collaborationLoading}
+                    >
+                      <Send size={14} />
+                      <span>{collaborationLoading ? 'Sending...' : 'Invite'}</span>
+                    </button>
+                  </div>
+
+                  {collaborationError ? (
+                    <div className="share-collab-error">{collaborationError}</div>
+                  ) : null}
+
+                  <div className="share-collab-grid">
+                    <div>
+                      <div className="share-collab-subtitle">
+                        <Users size={14} />
+                        <span>Members</span>
+                      </div>
+                      <div className="share-collab-list">
+                        {collaborationMemberships.length === 0 ? (
+                          <div className="share-collab-empty">No collaborators yet.</div>
+                        ) : (
+                          collaborationMemberships.map((member) => (
+                            <div className="share-collab-item" key={member.id || `${member.userId}-${member.role}`}>
+                              <div className="share-collab-main">
+                                <div className="share-collab-name">{member.userName || member.userEmail || 'Member'}</div>
+                                <div className="share-collab-meta">{member.userEmail || ''}</div>
+                              </div>
+                              <div className="share-collab-role">{formatRole(member.role)}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="share-collab-subtitle">
+                        <Mail size={14} />
+                        <span>Pending Invites</span>
+                      </div>
+                      <div className="share-collab-list">
+                        {collaborationInvites.length === 0 ? (
+                          <div className="share-collab-empty">No pending invites.</div>
+                        ) : (
+                          collaborationInvites.map((invite) => (
+                            <div className="share-collab-item" key={invite.id}>
+                              <div className="share-collab-main">
+                                <div className="share-collab-name">{invite.inviteeEmail}</div>
+                                <div className="share-collab-meta">{formatRole(invite.role)}</div>
+                              </div>
+                              <button
+                                className="share-collab-revoke"
+                                onClick={() => onRevokeCollaborationInvite?.(invite.id)}
+                                aria-label="Revoke invite"
+                                disabled={collaborationLoading}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -63,7 +63,11 @@ async function fetchApi(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(data.error || 'Request failed');
+    const error = new Error(data.error || 'Request failed');
+    error.status = response.status;
+    error.code = data.code || null;
+    error.payload = data;
+    throw error;
   }
 
   return data;
@@ -182,10 +186,16 @@ export async function saveMap(data) {
   });
 }
 
-export async function updateMap(id, data) {
+export async function updateMap(id, data, { expectedUpdatedAt } = {}) {
+  const payload = {
+    ...(data || {}),
+  };
+  if (expectedUpdatedAt) {
+    payload.expected_updated_at = expectedUpdatedAt;
+  }
   return fetchApi(`/api/maps/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -279,6 +289,50 @@ export async function getScreenshotJob(id, { includeResult = true } = {}) {
 
 export async function cancelScreenshotJob(id) {
   return fetchApi(`/screenshot-jobs/${id}/cancel`, { method: 'POST' });
+}
+
+// ============================================
+// COLLABORATION
+// ============================================
+
+export async function getMapCollaboration(mapId) {
+  return fetchApi(`/api/maps/${mapId}/collaboration`);
+}
+
+export async function createMapInvite(mapId, { email, role, expiresInDays } = {}) {
+  return fetchApi(`/api/maps/${mapId}/invites`, {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      role,
+      expires_in_days: expiresInDays,
+    }),
+  });
+}
+
+export async function acceptMapInvite(token) {
+  return fetchApi(`/api/collaboration/invites/${token}/accept`, {
+    method: 'POST',
+  });
+}
+
+export async function revokeMapInvite(mapId, inviteId) {
+  return fetchApi(`/api/maps/${mapId}/invites/${inviteId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function updateMapMemberRole(mapId, userId, role) {
+  return fetchApi(`/api/maps/${mapId}/members/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function removeMapMember(mapId, userId) {
+  return fetchApi(`/api/maps/${mapId}/members/${userId}`, {
+    method: 'DELETE',
+  });
 }
 
 // ============================================
