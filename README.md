@@ -49,6 +49,7 @@ Release checklist and promotion steps are in `docs/release-sop.md`.
 Current Postgres runtime ops are in `docs/postgres-runtime-ops.md`.
 Historical migration log is in `docs/postgres-migration.md`.
 Collaboration backend foundation docs are in `docs/collaboration-backend.md`.
+Realtime collaboration baseline docs are in `docs/realtime-collaboration-baseline.md`.
 
 Postgres runtime quick checks (repo root):
 
@@ -135,6 +136,9 @@ Optional:
 | `COLLABORATION_BACKEND_ENABLED` | Enables Phase 9B collaboration API endpoints | false |
 | `COLLAB_INVITE_DEFAULT_DAYS` | Default invite expiration in days | 7 |
 | `COLLAB_INVITE_MAX_DAYS` | Max invite expiration accepted by API | 30 |
+| `REALTIME_BASELINE_ENABLED` | Enables Phase 9D realtime baseline API endpoints | false |
+| `REALTIME_PRESENCE_TTL_SEC` | Presence session TTL window (seconds) | 90 |
+| `REALTIME_PRESENCE_HEARTBEAT_SEC` | Suggested heartbeat interval returned by API (seconds) | 20 |
 | `DATABASE_URL` | Postgres runtime connection string | (unset) |
 | `RUN_MODE` | `web`, `worker`, or `both` | both |
 | `USAGE_WINDOW_HOURS` | Usage window for quotas | 24 |
@@ -152,6 +156,8 @@ Optional:
 |----------|-------------|---------|
 | `REACT_APP_API_BASE` | Backend API URL | http://localhost:4002 |
 | `REACT_APP_COLLABORATION_UI_ENABLED` | Enables Phase 9C collaboration panel in Share modal | false |
+| `REACT_APP_REALTIME_BASELINE_ENABLED` | Enables Phase 9D presence/session awareness UI | false |
+| `REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC` | Frontend heartbeat cadence (seconds) for presence baseline | 20 |
 
 Temporary testing note:
 - `TEST_AUTH_ENABLED=true` allows login with auto-created fake accounts and seeds the default test user above.

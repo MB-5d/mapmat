@@ -112,6 +112,22 @@ const COLLABORATION_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COLLABORATION_UI_ENABLED,
   false
 );
+const REALTIME_BASELINE_ENABLED = parseEnvBool(
+  process.env.REACT_APP_REALTIME_BASELINE_ENABLED,
+  false
+);
+const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
+  Number.parseInt(process.env.REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC || '20', 10) || 20,
+  5,
+  60
+);
+
+const createPresenceSessionId = () => {
+  if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
+    return `web-${window.crypto.randomUUID()}`;
+  }
+  return `web-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+};
 
 const SitemapTree = ({
   data,
@@ -748,6 +764,7 @@ export default function App() {
   const [collaborationInvites, setCollaborationInvites] = useState([]);
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
+  const [presenceSessions, setPresenceSessions] = useState([]);
   const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return !!params.get('share');
@@ -773,6 +790,7 @@ export default function App() {
   const versionBaselineRef = useRef(null);
   const lastVersionSnapshotRef = useRef('');
   const versionInfoToastRef = useRef(false);
+  const presenceSessionIdRef = useRef('');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -1374,6 +1392,36 @@ export default function App() {
   const reportTitle = useMemo(() => {
     return root?.title || getHostname(root?.url) || 'Website';
   }, [root]);
+
+  const otherPresenceSessions = useMemo(() => {
+    const currentSessionId = presenceSessionIdRef.current;
+    return (presenceSessions || []).filter(
+      (session) => session?.sessionId && session.sessionId !== currentSessionId
+    );
+  }, [presenceSessions]);
+
+  const presenceBannerText = useMemo(() => {
+    const count = otherPresenceSessions.length;
+    if (!count) return '';
+
+    const labels = [...new Set(
+      otherPresenceSessions
+        .map((session) => String(session.displayName || session.userEmail || '').trim())
+        .filter(Boolean)
+    )];
+
+    if (count === 1) {
+      return labels[0] ? `${labels[0]} is active on this map` : '1 other session is active on this map';
+    }
+
+    if (labels.length > 0) {
+      const preview = labels.slice(0, 2).join(', ');
+      const suffix = labels.length > 2 ? ', ...' : '';
+      return `${count} other sessions active (${preview}${suffix})`;
+    }
+
+    return `${count} other sessions are active on this map`;
+  }, [otherPresenceSessions]);
 
   const reportTimestamp = useMemo(() => {
     if (!lastScanAt) return '';
@@ -2204,6 +2252,96 @@ export default function App() {
     setCollaborationMemberships([]);
     setCollaborationInvites([]);
   }, [showShareModal]);
+
+  const resolvePresenceAccessMode = useCallback(() => {
+    if (accessLevel === ACCESS_LEVELS.EDIT) return 'edit';
+    if (accessLevel === ACCESS_LEVELS.COMMENT) return 'comment';
+    return 'view';
+  }, [accessLevel]);
+
+  const leavePresenceSession = useCallback(async (mapId) => {
+    const sessionId = presenceSessionIdRef.current;
+    if (!REALTIME_BASELINE_ENABLED || !mapId || !sessionId || !isLoggedIn) return;
+    try {
+      await api.leaveMapPresence(mapId, sessionId);
+    } catch (error) {
+      if (error?.status !== 404) {
+        console.warn('Failed to leave map presence session', error);
+      }
+    }
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!REALTIME_BASELINE_ENABLED || !isLoggedIn || !currentMap?.id || !currentUser?.id) {
+      setPresenceSessions([]);
+      return;
+    }
+
+    let isActive = true;
+    let timerId = null;
+
+    const sendHeartbeat = async () => {
+      if (!isActive) return;
+
+      if (!presenceSessionIdRef.current) {
+        presenceSessionIdRef.current = createPresenceSessionId();
+      }
+
+      try {
+        const { presence } = await api.sendMapPresenceHeartbeat(currentMap.id, {
+          sessionId: presenceSessionIdRef.current,
+          accessMode: resolvePresenceAccessMode(),
+          clientName: 'web',
+        });
+        if (!isActive) return;
+        setPresenceSessions(presence?.sessions || []);
+      } catch (error) {
+        if (!isActive) return;
+        if (error?.status === 404) {
+          setPresenceSessions([]);
+          return;
+        }
+        console.warn('Presence heartbeat failed', error);
+      }
+
+      if (!isActive) return;
+      timerId = window.setTimeout(sendHeartbeat, REALTIME_PRESENCE_HEARTBEAT_SEC * 1000);
+    };
+
+    sendHeartbeat();
+
+    return () => {
+      isActive = false;
+      if (timerId) window.clearTimeout(timerId);
+    };
+  }, [currentMap?.id, currentUser?.id, isLoggedIn, resolvePresenceAccessMode]);
+
+  useEffect(() => {
+    const mapId = currentMap?.id;
+    return () => {
+      if (!mapId) return;
+      leavePresenceSession(mapId);
+    };
+  }, [currentMap?.id, leavePresenceSession]);
+
+  useEffect(() => {
+    if (!REALTIME_BASELINE_ENABLED) return undefined;
+
+    const handleBeforeUnload = () => {
+      if (!isLoggedIn || !currentMap?.id || !presenceSessionIdRef.current) return;
+      const endpoint = `${API_BASE}/api/maps/${currentMap.id}/presence/${encodeURIComponent(
+        presenceSessionIdRef.current
+      )}`;
+      fetch(endpoint, {
+        method: 'DELETE',
+        credentials: 'include',
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [currentMap?.id, isLoggedIn]);
 
   useEffect(() => {
     if (!currentMap?.id) {
@@ -7252,6 +7390,19 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {REALTIME_BASELINE_ENABLED
+          && !mapSaveConflict
+          && isLoggedIn
+          && hasMap
+          && currentMap?.id
+          && presenceBannerText
+          && (
+            <div className="permission-banner presence-banner">
+              <MessageSquare size={16} />
+              <span>{presenceBannerText}</span>
+            </div>
+          )}
 
         {/* Theme toggle */}
         <button
