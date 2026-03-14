@@ -134,3 +134,12 @@ The server echoes:
 - Scoped editors can still join rooms in `read_only` mode so presence and resync paths remain available.
 - Per-room message rate limit rejects bursts before sync-engine work is added.
 - Socket backpressure closes slow consumers before buffers grow unbounded.
+
+## Validation
+
+Repo checks used for this phase now include:
+
+- `node scripts/check-coediting-transport.js`
+- `node scripts/check-coediting-transport-chaos.js`
+
+The transport chaos harness covers degraded read-only room state, session resume replacement, join timeout, and room rate-limit drop handling through the real local websocket upgrade path.

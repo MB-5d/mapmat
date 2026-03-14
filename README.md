@@ -73,10 +73,11 @@ npm run verify:realtime:staging
 npm run verify:realtime:production
 ```
 
-Co-editing persisted load harness (repo root):
+Co-editing validation harnesses (repo root):
 
 ```bash
 npm run check:coediting:load
+npm run check:coediting:transport-chaos
 npm run check:coediting:recovery
 npm run check:coediting:soak
 ```

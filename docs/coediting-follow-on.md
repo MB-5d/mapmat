@@ -104,6 +104,10 @@ Current repo coverage also includes a persisted single-room load harness via:
 
 Current chaos/recovery coverage now includes deterministic persisted reconnect replay, forced live-document fallback, and restart-like sync-engine reload validation.
 
+Transport chaos coverage now also includes degraded read-only room state, session resume replacement, join timeout, and room rate-limit close behavior via:
+
+- `node scripts/check-coediting-transport-chaos.js`
+
 Broader transport/runtime fault injection remains follow-on work.
 
 ## Runtime Verification Additions (When Implemented)
