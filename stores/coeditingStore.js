@@ -102,6 +102,23 @@ async function ensureCoeditingSchemaAsync() {
       )
     `);
 
+    await adapter.executeAsync(`
+      CREATE TABLE IF NOT EXISTS coediting_rollout_observations (
+        deployment_key TEXT NOT NULL,
+        instance_id TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        config_valid INTEGER NOT NULL DEFAULT 0,
+        observed_at TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (deployment_key, instance_id)
+      )
+    `);
+
+    await adapter.executeAsync(
+      'CREATE INDEX IF NOT EXISTS idx_coediting_rollout_observations_seen ON coediting_rollout_observations(deployment_key, observed_at)'
+    );
+
     await ensureColumnAsync(
       'map_live_ops',
       'timestamp',
@@ -422,6 +439,54 @@ function deleteObservabilityBucketsBeforeAsync(bucketStart) {
   );
 }
 
+async function upsertRolloutObservationAsync({
+  deploymentKey,
+  instanceId,
+  fingerprint,
+  configValid = false,
+  observedAt,
+}) {
+  await adapter.executeAsync(`
+    INSERT INTO coediting_rollout_observations (
+      deployment_key,
+      instance_id,
+      fingerprint,
+      config_valid,
+      observed_at
+    )
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (deployment_key, instance_id)
+    DO UPDATE SET
+      fingerprint = excluded.fingerprint,
+      config_valid = excluded.config_valid,
+      observed_at = excluded.observed_at,
+      updated_at = CURRENT_TIMESTAMP
+  `, [
+    deploymentKey,
+    instanceId,
+    fingerprint,
+    configValid ? 1 : 0,
+    observedAt,
+  ]);
+}
+
+function listRecentRolloutObservationsAsync({
+  deploymentKey,
+  observedSince,
+}) {
+  return adapter.queryAllAsync(`
+    SELECT
+      deployment_key,
+      instance_id,
+      fingerprint,
+      config_valid,
+      observed_at
+    FROM coediting_rollout_observations
+    WHERE deployment_key = ? AND observed_at >= ?
+    ORDER BY observed_at DESC
+  `, [deploymentKey, observedSince]);
+}
+
 module.exports = {
   ensureCoeditingSchemaAsync,
   getLiveSnapshotByMapIdAsync,
@@ -435,4 +500,6 @@ module.exports = {
   listObservabilityBucketsAsync,
   listObservabilityTotalsAsync,
   deleteObservabilityBucketsBeforeAsync,
+  upsertRolloutObservationAsync,
+  listRecentRolloutObservationsAsync,
 };

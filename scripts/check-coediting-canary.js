@@ -19,6 +19,7 @@ async function main() {
     publicStatus: publicSummary.status,
     adminStatus: adminSummary.status,
     configValid: adminSummary.configValid,
+    instanceAgreementStatus: adminSummary.instanceAgreementStatus,
     source: adminSummary.source,
     scopedEntities: adminSummary.scopedEntities,
     conflictsRecent: adminSummary.conflictsRecent,

@@ -108,7 +108,7 @@ Transport chaos coverage now also includes degraded read-only room state, sessio
 
 - `node scripts/check-coediting-transport-chaos.js`
 
-Broader transport/runtime fault injection remains follow-on work.
+Broader transport/runtime fault injection remains follow-on work. Cross-instance rollout drift detection is now covered through shared rollout fingerprint agreement in the Phase 11 rollout hardening path.
 
 ## Runtime Verification Additions (When Implemented)
 

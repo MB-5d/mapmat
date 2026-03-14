@@ -13,7 +13,10 @@ const {
   recordDroppedEventAsync,
   recordReadOnlyBlockAsync,
 } = require('../utils/coeditingObservability');
-const { resolveCoeditingRolloutAsync } = require('../utils/coeditingRollout');
+const {
+  resolveCoeditingRolloutAsync,
+  summarizeCoeditingRolloutConfigAsync,
+} = require('../utils/coeditingRollout');
 
 async function main() {
   if (db.runtime?.activeProvider === 'postgres' && !process.env.DATABASE_URL) {
@@ -73,6 +76,30 @@ async function main() {
   });
   assert.strictEqual(rollout.mode, 'read_only');
   assert.strictEqual(rollout.reason, 'health_degraded');
+
+  const agreementEnvBase = {
+    ...env,
+    ADMIN_API_KEY: 'admin-key',
+    COEDITING_ROLLOUT_HARDENING_ENABLED: 'true',
+    COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT: 'true',
+    COEDITING_ROLLOUT_OBSERVATION_GROUP: 'check-observability-agreement',
+  };
+  const agreementSummaryA = await summarizeCoeditingRolloutConfigAsync({
+    ...agreementEnvBase,
+    COEDITING_INSTANCE_ID: 'instance-a',
+  }, {
+    includeConfigErrors: true,
+    includeSensitive: true,
+  });
+  const agreementSummaryB = await summarizeCoeditingRolloutConfigAsync({
+    ...agreementEnvBase,
+    COEDITING_INSTANCE_ID: 'instance-b',
+  }, {
+    includeConfigErrors: true,
+    includeSensitive: true,
+  });
+  assert.strictEqual(agreementSummaryA.instanceAgreementStatus, 'consistent');
+  assert.strictEqual(agreementSummaryB.instanceAgreementStatus, 'consistent');
 
   console.log('[coediting-observability] Passed. Distributed health counters aggregate deterministically.');
 }

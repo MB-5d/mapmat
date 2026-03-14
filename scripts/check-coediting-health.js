@@ -26,6 +26,7 @@ async function main() {
     url: HEALTH_URL,
     status: summary.status,
     readOnlyFallbackActive: summary.readOnlyFallbackActive,
+    instanceAgreementStatus: summary.instanceAgreementStatus,
   });
 }
 

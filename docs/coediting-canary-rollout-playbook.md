@@ -14,6 +14,7 @@ This is the operator playbook for staging and production co-editing canary rollo
   - `COEDITING_ROLLOUT_ENABLED=true`
   - `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
   - `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`
+  - `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true`
   - `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=true`
   - `COEDITING_FORCE_READ_ONLY=false`
 - Keep rollout scoped during canary with at least one of:
@@ -31,6 +32,7 @@ This is the operator playbook for staging and production co-editing canary rollo
 - public `/health/coediting` status is `healthy`
 - admin `/api/admin/coediting` status is `healthy`
 - `rollout.configValid=true`
+- `rollout.instanceAgreementStatus="consistent"`
 - `readOnlyFallbackActive=false`
 - health source is `distributed`
 - rollout, experiment, and sync engine flags are all enabled
@@ -46,6 +48,7 @@ Recommended canary policy in Railway `Variables`:
 
 - keep `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
 - keep `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` until broad rollout is explicitly approved
+- keep `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` during canary and early production expansion
 
 `npm run verify:realtime:*:canary:window` uses the same gate limits but polls for a sustained observation window with:
 
@@ -123,6 +126,7 @@ If the canary gate fails:
    - set `COEDITING_FORCE_READ_ONLY=true`, or
    - clear `COEDITING_ROLLOUT_USER_IDS` / `COEDITING_ROLLOUT_MAP_IDS`, or
    - set `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`, or
+   - set `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=false` only as a deliberate temporary emergency bypass, or
    - set `COEDITING_ROLLOUT_ENABLED=false`
 3. Redeploy if Railway does not auto-restart the service.
 4. Re-run the public health check:

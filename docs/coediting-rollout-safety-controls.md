@@ -11,6 +11,7 @@ This phase is additive. Existing save/load/version endpoints and `verify:runtime
 - `COEDITING_ROLLOUT_ENABLED=false`
 - `COEDITING_ROLLOUT_HARDENING_ENABLED=false`
 - `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`
+- `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=false`
 
 Optional scope controls:
 
@@ -33,6 +34,8 @@ When `COEDITING_ROLLOUT_HARDENING_ENABLED=true` and rollout is enabled, config i
 - `ADMIN_API_KEY` is configured
 
 If those requirements are not met, runtime rollout resolution returns `disabled` with coarse reason `config_invalid`, and admin canary checks also fail.
+
+When `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true`, the hardened rollout also requires recent shared agreement on the rollout fingerprint across active instances. If different instances advertise different scopes, block lists, or hardening-critical flags inside the observability window, rollout again resolves `disabled` with coarse reason `config_invalid`.
 
 ## Read-only fallback controls
 
@@ -65,8 +68,10 @@ When any enabled threshold is exceeded inside the rolling window, scoped live co
     - `permissions.coediting.healthStatus`
 - `GET /health/coediting`
   - coarse public health summary for rollout verification
+  - rollout now also reports coarse `instanceAgreementStatus`
 - `GET /api/admin/coediting`
   - admin-key protected rollout + observability snapshot
+  - includes recent observed instance/fingerprint counts for drift diagnosis
 
 ## Transport and ingest behavior
 
@@ -91,6 +96,8 @@ When `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=false`, in-memory metrics trac
 - read-only blocks
 
 When `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=true`, those same counters are also written into the active runtime database and rollout/health resolution reads the shared aggregate instead of a single-process view.
+
+The same database also stores the most recent rollout fingerprint per active instance so canary/admin checks can detect cross-instance rollout drift without introducing a separate worker.
 
 Implementation notes:
 
@@ -128,11 +135,12 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - non-healthy public or admin status
 - `readOnlyFallbackActive=true`
 - `rollout.configValid=false`
+- `rollout.instanceAgreementStatus!="consistent"`
 - non-distributed health source
 - rollout, experiment, or sync engine flags unexpectedly off
 - unscoped rollout during canary
 - recent conflict/reconnect/dropped/read-only-block metrics above the configured gate limits
 
-`verify:realtime:*:canary:window` repeats the same admin/public validation over a configurable observation window and fails on any unhealthy sample or scoped-entity drift during that window.
+`verify:realtime:*:canary:window` repeats the same admin/public validation over a configurable observation window and fails on any unhealthy sample, scoped-entity drift, or instance-agreement drift during that window.
 
 The staged operator sequence is documented in `docs/coediting-canary-rollout-playbook.md`.

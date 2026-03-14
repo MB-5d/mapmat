@@ -36,6 +36,7 @@ function createCanaryGateConfigFromEnv(env = process.env) {
     requireRolloutEnabled: parseEnvBool(env.COEDITING_REQUIRE_ROLLOUT_ENABLED, true),
     requireDistributedSource: parseEnvBool(env.COEDITING_REQUIRE_DISTRIBUTED_SOURCE, true),
     requireConfigValid: parseEnvBool(env.COEDITING_REQUIRE_CONFIG_VALID, true),
+    requireInstanceAgreement: parseEnvBool(env.COEDITING_REQUIRE_INSTANCE_AGREEMENT, true),
     maxRecentConflicts: parseNonNegativeInt(env.COEDITING_MAX_RECENT_CONFLICTS, 20),
     maxRecentReconnects: parseNonNegativeInt(env.COEDITING_MAX_RECENT_RECONNECTS, 5),
     maxRecentDropped: parseNonNegativeInt(env.COEDITING_MAX_RECENT_DROPPED, 5),
@@ -106,6 +107,7 @@ function validatePublicHealthPayload(payload, {
     readOnlyFallbackActive: !!payload.health.readOnlyFallbackActive,
     source: payload.health.source || null,
     reason: payload.reason || null,
+    instanceAgreementStatus: payload.rollout.instanceAgreementStatus || null,
   };
 }
 
@@ -117,6 +119,7 @@ function validateAdminCanaryPayload(payload, {
   requireRolloutEnabled = true,
   requireDistributedSource = true,
   requireConfigValid = true,
+  requireInstanceAgreement = true,
   maxRecentConflicts = 20,
   maxRecentReconnects = 5,
   maxRecentDropped = 5,
@@ -151,6 +154,11 @@ function validateAdminCanaryPayload(payload, {
   if (requireDistributedSource && health.source !== 'distributed') {
     throw new Error(`Coediting canary gate requires distributed health source, received ${health.source || 'unknown'}`);
   }
+  if (requireInstanceAgreement && rollout.instanceAgreementStatus !== 'consistent') {
+    throw new Error(
+      `Coediting canary gate requires instanceAgreementStatus=consistent, received ${rollout.instanceAgreementStatus}`
+    );
+  }
   if (minScopedEntities > 0 && scopedEntities < minScopedEntities) {
     throw new Error(`Coediting canary gate requires at least ${minScopedEntities} scoped rollout entities`);
   }
@@ -184,6 +192,7 @@ function validateAdminCanaryPayload(payload, {
     experimentEnabled: !!rollout.experimentEnabled,
     syncEngineEnabled: !!rollout.syncEngineEnabled,
     configValid: rollout.configValid !== false,
+    instanceAgreementStatus: rollout.instanceAgreementStatus || null,
   };
 }
 
@@ -236,6 +245,7 @@ function validateCoeditingCanarySample({
     requireRolloutEnabled: gateConfig.requireRolloutEnabled,
     requireDistributedSource: gateConfig.requireDistributedSource,
     requireConfigValid: gateConfig.requireConfigValid,
+    requireInstanceAgreement: gateConfig.requireInstanceAgreement,
     maxRecentConflicts: gateConfig.maxRecentConflicts,
     maxRecentReconnects: gateConfig.maxRecentReconnects,
     maxRecentDropped: gateConfig.maxRecentDropped,
@@ -290,6 +300,7 @@ async function runCoeditingCanaryWindowCheckAsync({
         adminStatus: sample.adminSummary.status,
         source: sample.adminSummary.source,
         scopedEntities: sample.adminSummary.scopedEntities,
+        instanceAgreementStatus: sample.adminSummary.instanceAgreementStatus,
       };
     } else {
       if (sample.publicSummary.status !== baseline.publicStatus) {
@@ -305,6 +316,14 @@ async function runCoeditingCanaryWindowCheckAsync({
       if (sample.adminSummary.source !== baseline.source) {
         throw new Error(
           `Coediting canary source drifted from ${baseline.source} to ${sample.adminSummary.source}`
+        );
+      }
+      if (
+        gateConfig.requireInstanceAgreement
+        && sample.adminSummary.instanceAgreementStatus !== baseline.instanceAgreementStatus
+      ) {
+        throw new Error(
+          `Coediting canary instance agreement drifted from ${baseline.instanceAgreementStatus} to ${sample.adminSummary.instanceAgreementStatus}`
         );
       }
       if (

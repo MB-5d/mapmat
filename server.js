@@ -35,7 +35,7 @@ const usageStore = require('./stores/usageStore');
 const permissionPolicy = require('./policies/permissionPolicy');
 const { getCoeditingHealthSnapshotAsync } = require('./utils/coeditingObservability');
 const {
-  summarizeCoeditingRolloutConfig,
+  summarizeCoeditingRolloutConfigAsync,
   resolveCoeditingSystemStatusAsync,
 } = require('./utils/coeditingRollout');
 
@@ -2574,7 +2574,7 @@ app.get('/health/db', async (_, res) => {
 app.get('/health/coediting', async (_req, res) => {
   try {
     const health = await getCoeditingHealthSnapshotAsync();
-    const rollout = summarizeCoeditingRolloutConfig(process.env, {
+    const rollout = await summarizeCoeditingRolloutConfigAsync(process.env, {
       includeConfigErrors: false,
       includeSensitive: false,
     });

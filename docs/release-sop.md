@@ -20,6 +20,7 @@ This is the operational playbook for shipping safely from `staging` to `main`.
 - export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
 - confirm `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
 - confirm `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` unless broad rollout is explicitly intended
+- confirm `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` while rollout remains canary/scoped
 - run `npm run verify:realtime:staging:canary`
 - run `npm run verify:realtime:staging:canary:window`
 4. Smoke test on staging:
@@ -60,6 +61,7 @@ Notes:
 - export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
 - confirm `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
 - confirm `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` unless broad rollout is explicitly intended
+- confirm `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` while rollout remains canary/scoped
 - run `npm run verify:realtime:production:canary`
 - run `npm run verify:realtime:production:canary:window`
 4. Verify production auth policy:

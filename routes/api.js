@@ -15,7 +15,7 @@ const permissionPolicy = require('../policies/permissionPolicy');
 const {
   resolveCoeditingRolloutAsync,
   resolveCoeditingSystemStatusAsync,
-  summarizeCoeditingRolloutConfig,
+  summarizeCoeditingRolloutConfigAsync,
 } = require('../utils/coeditingRollout');
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
 
@@ -220,7 +220,7 @@ router.get('/admin/coediting', requireAdminKey, async (_req, res) => {
       status: status.status,
       reason: status.reason,
       reasons: status.reasons,
-      rollout: summarizeCoeditingRolloutConfig(process.env, {
+      rollout: await summarizeCoeditingRolloutConfigAsync(process.env, {
         includeConfigErrors: true,
         includeSensitive: true,
       }),

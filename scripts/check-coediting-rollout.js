@@ -3,7 +3,14 @@
 /* eslint-disable no-console */
 
 const assert = require('assert');
-const { resolveCoeditingRollout, resolveCoeditingSystemStatus } = require('../utils/coeditingRollout');
+const db = require('../db');
+const {
+  resolveCoeditingRollout,
+  resolveCoeditingRolloutAsync,
+  resolveCoeditingSystemStatus,
+  resolveCoeditingSystemStatusAsync,
+  summarizeCoeditingRolloutConfigAsync,
+} = require('../utils/coeditingRollout');
 const { recordVersionConflict, recordReconnectEvent, recordDroppedEvent, getCoeditingHealthSnapshot } = require('../utils/coeditingObservability');
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
@@ -17,6 +24,7 @@ function buildCanaryPayload({
   source = 'distributed',
   configValid = true,
   configErrors = [],
+  instanceAgreementStatus = 'consistent',
   scopedUsers = 1,
   scopedMaps = 0,
   conflictsRecent = 0,
@@ -34,6 +42,7 @@ function buildCanaryPayload({
       rolloutEnabled: true,
       configValid,
       configErrors,
+      instanceAgreementStatus,
       scopedUsers,
       scopedMaps,
       blockedUsers: 0,
@@ -199,6 +208,91 @@ async function main() {
   assert.strictEqual(hardenedStatus.status, 'disabled');
   assert.strictEqual(hardenedStatus.reason, 'config_invalid');
 
+  const canCheckDistributedAgreement = !(
+    db.runtime?.activeProvider === 'postgres' && !process.env.DATABASE_URL
+  );
+  if (canCheckDistributedAgreement) {
+    const agreementEnvBase = {
+      ...baseEnv,
+      ADMIN_API_KEY: 'admin-key',
+      COEDITING_ROLLOUT_HARDENING_ENABLED: 'true',
+      COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED: 'true',
+      COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT: 'true',
+      COEDITING_ROLLOUT_OBSERVATION_GROUP: 'check-rollout-agreement',
+    };
+    const agreementEnvA = {
+      ...agreementEnvBase,
+      COEDITING_INSTANCE_ID: 'instance-a',
+    };
+    const agreementEnvB = {
+      ...agreementEnvBase,
+      COEDITING_INSTANCE_ID: 'instance-b',
+    };
+
+    await summarizeCoeditingRolloutConfigAsync(agreementEnvA, {
+      includeConfigErrors: true,
+      includeSensitive: true,
+    });
+    await summarizeCoeditingRolloutConfigAsync(agreementEnvB, {
+      includeConfigErrors: true,
+      includeSensitive: true,
+    });
+
+    const agreementSummary = await summarizeCoeditingRolloutConfigAsync(agreementEnvA, {
+      includeConfigErrors: true,
+      includeSensitive: true,
+    });
+    assert.strictEqual(agreementSummary.instanceAgreementStatus, 'consistent');
+    assert.strictEqual(agreementSummary.configValid, true);
+    assert.ok(agreementSummary.observedInstanceCount >= 2);
+
+    const agreementEnabled = await resolveCoeditingRolloutAsync({
+      mapId: 'map-1',
+      actorId: 'user-1',
+      role: permissionPolicy.ROLES.EDITOR,
+      env: agreementEnvA,
+      healthSnapshot: getCoeditingHealthSnapshot(agreementEnvA),
+    });
+    assert.strictEqual(agreementEnabled.mode, 'enabled');
+    assert.strictEqual(agreementEnabled.scope.instanceAgreementStatus, 'consistent');
+
+    const driftEnvB = {
+      ...agreementEnvB,
+      COEDITING_ROLLOUT_USER_IDS: 'user-2',
+    };
+    await summarizeCoeditingRolloutConfigAsync(driftEnvB, {
+      includeConfigErrors: true,
+      includeSensitive: true,
+    });
+
+    const driftSummary = await summarizeCoeditingRolloutConfigAsync(agreementEnvA, {
+      includeConfigErrors: true,
+      includeSensitive: true,
+    });
+    assert.strictEqual(driftSummary.instanceAgreementStatus, 'drift_detected');
+    assert.strictEqual(driftSummary.configValid, false);
+    assert.ok(driftSummary.configErrors.includes('instance_agreement_required'));
+
+    const driftedRollout = await resolveCoeditingRolloutAsync({
+      mapId: 'map-1',
+      actorId: 'user-1',
+      role: permissionPolicy.ROLES.EDITOR,
+      env: agreementEnvA,
+      healthSnapshot: getCoeditingHealthSnapshot(agreementEnvA),
+    });
+    assert.strictEqual(driftedRollout.mode, 'disabled');
+    assert.strictEqual(driftedRollout.reason, 'config_invalid');
+
+    const driftedStatus = await resolveCoeditingSystemStatusAsync({
+      env: agreementEnvA,
+      healthSnapshot: getCoeditingHealthSnapshot(agreementEnvA),
+    });
+    assert.strictEqual(driftedStatus.status, 'disabled');
+    assert.strictEqual(driftedStatus.reason, 'config_invalid');
+  } else {
+    console.log('[coediting-rollout] Skipped distributed agreement assertions without DATABASE_URL.');
+  }
+
   const canarySummary = validateAdminCanaryPayload({
     ok: true,
     status: 'healthy',
@@ -207,6 +301,7 @@ async function main() {
       syncEngineEnabled: true,
       rolloutEnabled: true,
       configValid: true,
+      instanceAgreementStatus: 'consistent',
       scopedUsers: 1,
       scopedMaps: 0,
       blockedUsers: 0,
@@ -234,6 +329,7 @@ async function main() {
       syncEngineEnabled: true,
       rolloutEnabled: true,
       configValid: true,
+      instanceAgreementStatus: 'consistent',
       scopedUsers: 1,
       scopedMaps: 0,
     },
@@ -258,6 +354,7 @@ async function main() {
       rolloutEnabled: true,
       configValid: false,
       configErrors: ['scope_required'],
+      instanceAgreementStatus: 'consistent',
       scopedUsers: 0,
       scopedMaps: 0,
     },
@@ -272,6 +369,10 @@ async function main() {
       },
     },
   }), /configValid=true|distributed health source|scoped rollout entities|Recent conflict count/);
+
+  assert.throws(() => validateAdminCanaryPayload(buildCanaryPayload({
+    instanceAgreementStatus: 'drift_detected',
+  })), /instanceAgreementStatus=consistent/);
 
   const healthySamples = [
     {
