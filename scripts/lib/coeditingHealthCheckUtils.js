@@ -35,6 +35,7 @@ function createCanaryGateConfigFromEnv(env = process.env) {
     requireSyncEngineEnabled: parseEnvBool(env.COEDITING_REQUIRE_SYNC_ENGINE_ENABLED, true),
     requireRolloutEnabled: parseEnvBool(env.COEDITING_REQUIRE_ROLLOUT_ENABLED, true),
     requireDistributedSource: parseEnvBool(env.COEDITING_REQUIRE_DISTRIBUTED_SOURCE, true),
+    requireConfigValid: parseEnvBool(env.COEDITING_REQUIRE_CONFIG_VALID, true),
     maxRecentConflicts: parseNonNegativeInt(env.COEDITING_MAX_RECENT_CONFLICTS, 20),
     maxRecentReconnects: parseNonNegativeInt(env.COEDITING_MAX_RECENT_RECONNECTS, 5),
     maxRecentDropped: parseNonNegativeInt(env.COEDITING_MAX_RECENT_DROPPED, 5),
@@ -115,6 +116,7 @@ function validateAdminCanaryPayload(payload, {
   requireSyncEngineEnabled = true,
   requireRolloutEnabled = true,
   requireDistributedSource = true,
+  requireConfigValid = true,
   maxRecentConflicts = 20,
   maxRecentReconnects = 5,
   maxRecentDropped = 5,
@@ -138,6 +140,13 @@ function validateAdminCanaryPayload(payload, {
   }
   if (requireRolloutEnabled && rollout.rolloutEnabled !== true) {
     throw new Error('Coediting canary gate requires rolloutEnabled=true');
+  }
+  if (requireConfigValid && rollout.configValid === false) {
+    throw new Error(
+      `Coediting canary gate requires configValid=true${Array.isArray(rollout.configErrors) && rollout.configErrors.length > 0
+        ? ` (${rollout.configErrors.join(', ')})`
+        : ''}`
+    );
   }
   if (requireDistributedSource && health.source !== 'distributed') {
     throw new Error(`Coediting canary gate requires distributed health source, received ${health.source || 'unknown'}`);
@@ -174,6 +183,7 @@ function validateAdminCanaryPayload(payload, {
     rolloutEnabled: !!rollout.rolloutEnabled,
     experimentEnabled: !!rollout.experimentEnabled,
     syncEngineEnabled: !!rollout.syncEngineEnabled,
+    configValid: rollout.configValid !== false,
   };
 }
 
@@ -225,6 +235,7 @@ function validateCoeditingCanarySample({
     requireSyncEngineEnabled: gateConfig.requireSyncEngineEnabled,
     requireRolloutEnabled: gateConfig.requireRolloutEnabled,
     requireDistributedSource: gateConfig.requireDistributedSource,
+    requireConfigValid: gateConfig.requireConfigValid,
     maxRecentConflicts: gateConfig.maxRecentConflicts,
     maxRecentReconnects: gateConfig.maxRecentReconnects,
     maxRecentDropped: gateConfig.maxRecentDropped,

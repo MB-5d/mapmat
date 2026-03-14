@@ -9,6 +9,8 @@ This phase is additive. Existing save/load/version endpoints and `verify:runtime
 - `COEDITING_EXPERIMENT_ENABLED=false`
 - `COEDITING_SYNC_ENGINE_ENABLED=false`
 - `COEDITING_ROLLOUT_ENABLED=false`
+- `COEDITING_ROLLOUT_HARDENING_ENABLED=false`
+- `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`
 
 Optional scope controls:
 
@@ -23,6 +25,14 @@ The rollout stays fail-closed:
 - if the sync engine flag is off, Phase 10C/10D live mode remains unavailable
 - if rollout is off, live co-editing remains unavailable
 - block lists override allow lists
+
+When `COEDITING_ROLLOUT_HARDENING_ENABLED=true` and rollout is enabled, config is also fail-closed unless:
+
+- at least one rollout scope is configured, or `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`
+- `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=true`
+- `ADMIN_API_KEY` is configured
+
+If those requirements are not met, runtime rollout resolution returns `disabled` with coarse reason `config_invalid`, and admin canary checks also fail.
 
 ## Read-only fallback controls
 
@@ -117,6 +127,7 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 
 - non-healthy public or admin status
 - `readOnlyFallbackActive=true`
+- `rollout.configValid=false`
 - non-distributed health source
 - rollout, experiment, or sync engine flags unexpectedly off
 - unscoped rollout during canary

@@ -175,6 +175,8 @@ Optional:
 | `REALTIME_PRESENCE_HEARTBEAT_SEC` | Suggested heartbeat interval returned by API (seconds) | 20 |
 | `COEDITING_EXPERIMENT_ENABLED` | Enables Phase 10A/10B co-editing experimental backend endpoints and WebSocket transport | false |
 | `COEDITING_ROLLOUT_ENABLED` | Enables Phase 10E rollout gating for live co-editing features | false |
+| `COEDITING_ROLLOUT_HARDENING_ENABLED` | Enables fail-closed rollout config validation for scoped canaries, distributed observability, and admin-key-backed operations | false |
+| `COEDITING_ROLLOUT_ALLOW_GLOBAL` | Explicitly allows unscoped/global co-editing rollout when rollout hardening is enabled | false |
 | `COEDITING_ROLLOUT_USER_IDS` | Comma-separated user IDs allowed into the live rollout | (empty) |
 | `COEDITING_ROLLOUT_MAP_IDS` | Comma-separated map IDs allowed into the live rollout | (empty) |
 | `COEDITING_ROLLOUT_BLOCK_USER_IDS` | Comma-separated user IDs force-blocked from the live rollout | (empty) |

@@ -2574,7 +2574,10 @@ app.get('/health/db', async (_, res) => {
 app.get('/health/coediting', async (_req, res) => {
   try {
     const health = await getCoeditingHealthSnapshotAsync();
-    const rollout = summarizeCoeditingRolloutConfig();
+    const rollout = summarizeCoeditingRolloutConfig(process.env, {
+      includeConfigErrors: false,
+      includeSensitive: false,
+    });
     const status = await resolveCoeditingSystemStatusAsync({ healthSnapshot: health });
     return res.status(200).json({
       ok: true,

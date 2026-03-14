@@ -220,7 +220,10 @@ router.get('/admin/coediting', requireAdminKey, async (_req, res) => {
       status: status.status,
       reason: status.reason,
       reasons: status.reasons,
-      rollout: summarizeCoeditingRolloutConfig(),
+      rollout: summarizeCoeditingRolloutConfig(process.env, {
+        includeConfigErrors: true,
+        includeSensitive: true,
+      }),
       health,
     });
   } catch (error) {

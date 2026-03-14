@@ -18,6 +18,7 @@ async function main() {
     adminUrl: gateConfig.adminUrl,
     publicStatus: publicSummary.status,
     adminStatus: adminSummary.status,
+    configValid: adminSummary.configValid,
     source: adminSummary.source,
     scopedEntities: adminSummary.scopedEntities,
     conflictsRecent: adminSummary.conflictsRecent,

@@ -30,6 +30,13 @@ function createCoeditingRolloutConfigFromEnv(env = process.env) {
     experimentEnabled: parseEnvBool(env.COEDITING_EXPERIMENT_ENABLED, false),
     syncEngineEnabled: parseEnvBool(env.COEDITING_SYNC_ENGINE_ENABLED, false),
     rolloutEnabled: parseEnvBool(env.COEDITING_ROLLOUT_ENABLED, false),
+    hardeningEnabled: parseEnvBool(env.COEDITING_ROLLOUT_HARDENING_ENABLED, false),
+    allowGlobalRollout: parseEnvBool(env.COEDITING_ROLLOUT_ALLOW_GLOBAL, false),
+    distributedObservabilityEnabled: parseEnvBool(
+      env.COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED,
+      false
+    ),
+    adminApiKeyConfigured: Boolean(String(env.ADMIN_API_KEY || '').trim()),
     allowUserIds: parseCsvIdSet(env.COEDITING_ROLLOUT_USER_IDS),
     allowMapIds: parseCsvIdSet(env.COEDITING_ROLLOUT_MAP_IDS),
     blockUserIds: parseCsvIdSet(env.COEDITING_ROLLOUT_BLOCK_USER_IDS),
@@ -37,16 +44,53 @@ function createCoeditingRolloutConfigFromEnv(env = process.env) {
   };
 }
 
-function summarizeCoeditingRolloutConfig(env = process.env) {
+function evaluateCoeditingRolloutConfig(config) {
+  const hasScope = config.allowUserIds.size > 0 || config.allowMapIds.size > 0;
+  const configErrors = [];
+
+  if (config.hardeningEnabled && config.rolloutEnabled) {
+    if (!hasScope && !config.allowGlobalRollout) {
+      configErrors.push('scope_required');
+    }
+    if (!config.distributedObservabilityEnabled) {
+      configErrors.push('distributed_observability_required');
+    }
+    if (!config.adminApiKeyConfigured) {
+      configErrors.push('admin_api_key_required');
+    }
+  }
+
+  return {
+    hasScope,
+    configValid: configErrors.length === 0,
+    configErrors,
+  };
+}
+
+function summarizeCoeditingRolloutConfig(
+  env = process.env,
+  { includeConfigErrors = true, includeSensitive = true } = {}
+) {
   const config = createCoeditingRolloutConfigFromEnv(env);
+  const validation = evaluateCoeditingRolloutConfig(config);
   return {
     experimentEnabled: config.experimentEnabled,
     syncEngineEnabled: config.syncEngineEnabled,
     rolloutEnabled: config.rolloutEnabled,
+    hardeningEnabled: config.hardeningEnabled,
+    allowGlobalRollout: config.allowGlobalRollout,
+    configValid: validation.configValid,
     scopedUsers: config.allowUserIds.size,
     scopedMaps: config.allowMapIds.size,
     blockedUsers: config.blockUserIds.size,
     blockedMaps: config.blockMapIds.size,
+    ...(includeSensitive
+      ? {
+        distributedObservabilityEnabled: config.distributedObservabilityEnabled,
+        adminApiKeyConfigured: config.adminApiKeyConfigured,
+      }
+      : {}),
+    ...(includeConfigErrors ? { configErrors: validation.configErrors } : {}),
   };
 }
 
@@ -58,6 +102,7 @@ function resolveCoeditingRollout({
   healthSnapshot = null,
 } = {}) {
   const config = createCoeditingRolloutConfigFromEnv(env);
+  const validation = evaluateCoeditingRolloutConfig(config);
   const normalizedRole = permissionPolicy.normalizeRole(role);
   const normalizedMapId = normalizeId(mapId);
   const normalizedActorId = normalizeId(actorId);
@@ -86,6 +131,9 @@ function resolveCoeditingRollout({
     reasons.push(reason);
   } else if (!config.rolloutEnabled) {
     reason = 'rollout_disabled';
+    reasons.push(reason);
+  } else if (!validation.configValid) {
+    reason = 'config_invalid';
     reasons.push(reason);
   } else if (!hasReadAccess) {
     reason = 'map_access_denied';
@@ -127,6 +175,9 @@ function resolveCoeditingRollout({
     },
     scope: {
       rolloutEnabled: config.rolloutEnabled,
+      hardeningEnabled: config.hardeningEnabled,
+      allowGlobalRollout: config.allowGlobalRollout,
+      configValid: validation.configValid,
       scopedUsers: config.allowUserIds.size,
       scopedMaps: config.allowMapIds.size,
       blockedUsers: config.blockUserIds.size,
@@ -135,6 +186,7 @@ function resolveCoeditingRollout({
       matchesMapScope,
       blockedUser: !!blockedUser,
       blockedMap: !!blockedMap,
+      hasScope: validation.hasScope,
     },
   };
 }
@@ -161,6 +213,7 @@ function resolveCoeditingSystemStatus({
   healthSnapshot = null,
 } = {}) {
   const config = createCoeditingRolloutConfigFromEnv(env);
+  const validation = evaluateCoeditingRolloutConfig(config);
   const effectiveHealth = healthSnapshot || getCoeditingHealthSnapshot(env);
   const reasons = [];
   let status = 'disabled';
@@ -168,11 +221,14 @@ function resolveCoeditingSystemStatus({
 
   if (!config.experimentEnabled) {
     reasons.push('experiment_disabled');
+  } else if (!config.syncEngineEnabled) {
+    reason = 'sync_engine_disabled';
+    reasons.push(reason);
   } else if (!config.rolloutEnabled) {
     reason = 'rollout_disabled';
     reasons.push(reason);
-  } else if (!config.syncEngineEnabled) {
-    reason = 'sync_engine_disabled';
+  } else if (!validation.configValid) {
+    reason = 'config_invalid';
     reasons.push(reason);
   } else if (effectiveHealth.readOnlyFallbackActive) {
     status = 'read_only';
@@ -204,6 +260,7 @@ async function resolveCoeditingSystemStatusAsync({
 
 module.exports = {
   createCoeditingRolloutConfigFromEnv,
+  evaluateCoeditingRolloutConfig,
   summarizeCoeditingRolloutConfig,
   resolveCoeditingRollout,
   resolveCoeditingRolloutAsync,

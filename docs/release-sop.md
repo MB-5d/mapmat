@@ -18,6 +18,8 @@ This is the operational playbook for shipping safely from `staging` to `main`.
 3. Confirm co-editing canary gates if live rollout is being expanded:
 - Railway -> project `mapmat-staging` -> service `mapmat-staging` -> `Variables`
 - export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
+- confirm `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
+- confirm `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` unless broad rollout is explicitly intended
 - run `npm run verify:realtime:staging:canary`
 - run `npm run verify:realtime:staging:canary:window`
 4. Smoke test on staging:
@@ -56,6 +58,8 @@ Notes:
 3. Verify co-editing canary gates if live rollout is enabled:
 - Railway -> project `mapmat-production` -> service `mapmat-production` -> `Variables`
 - export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
+- confirm `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
+- confirm `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` unless broad rollout is explicitly intended
 - run `npm run verify:realtime:production:canary`
 - run `npm run verify:realtime:production:canary:window`
 4. Verify production auth policy:
