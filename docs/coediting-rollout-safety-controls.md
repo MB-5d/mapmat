@@ -32,6 +32,7 @@ When `COEDITING_ROLLOUT_HARDENING_ENABLED=true` and rollout is enabled, config i
 - at least one rollout scope is configured, or `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`
 - `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=true`
 - `ADMIN_API_KEY` is configured
+- `COEDITING_ROLLOUT_ALLOW_GLOBAL=true` is not combined with scoped allow lists
 
 If those requirements are not met, runtime rollout resolution returns `disabled` with coarse reason `config_invalid`, and admin canary checks also fail.
 
@@ -136,6 +137,7 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `readOnlyFallbackActive=true`
 - `rollout.configValid=false`
 - `rollout.instanceAgreementStatus!="consistent"`
+- `rollout.allowGlobalRollout=true`
 - non-distributed health source
 - rollout, experiment, or sync engine flags unexpectedly off
 - unscoped rollout during canary

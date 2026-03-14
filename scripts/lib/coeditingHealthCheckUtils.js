@@ -37,6 +37,10 @@ function createCanaryGateConfigFromEnv(env = process.env) {
     requireDistributedSource: parseEnvBool(env.COEDITING_REQUIRE_DISTRIBUTED_SOURCE, true),
     requireConfigValid: parseEnvBool(env.COEDITING_REQUIRE_CONFIG_VALID, true),
     requireInstanceAgreement: parseEnvBool(env.COEDITING_REQUIRE_INSTANCE_AGREEMENT, true),
+    requireAllowGlobalRolloutFalse: parseEnvBool(
+      env.COEDITING_REQUIRE_ALLOW_GLOBAL_ROLLOUT_FALSE,
+      true
+    ),
     maxRecentConflicts: parseNonNegativeInt(env.COEDITING_MAX_RECENT_CONFLICTS, 20),
     maxRecentReconnects: parseNonNegativeInt(env.COEDITING_MAX_RECENT_RECONNECTS, 5),
     maxRecentDropped: parseNonNegativeInt(env.COEDITING_MAX_RECENT_DROPPED, 5),
@@ -120,6 +124,7 @@ function validateAdminCanaryPayload(payload, {
   requireDistributedSource = true,
   requireConfigValid = true,
   requireInstanceAgreement = true,
+  requireAllowGlobalRolloutFalse = true,
   maxRecentConflicts = 20,
   maxRecentReconnects = 5,
   maxRecentDropped = 5,
@@ -143,6 +148,9 @@ function validateAdminCanaryPayload(payload, {
   }
   if (requireRolloutEnabled && rollout.rolloutEnabled !== true) {
     throw new Error('Coediting canary gate requires rolloutEnabled=true');
+  }
+  if (requireAllowGlobalRolloutFalse && rollout.allowGlobalRollout === true) {
+    throw new Error('Coediting canary gate requires allowGlobalRollout=false');
   }
   if (requireConfigValid && rollout.configValid === false) {
     throw new Error(
@@ -246,6 +254,7 @@ function validateCoeditingCanarySample({
     requireDistributedSource: gateConfig.requireDistributedSource,
     requireConfigValid: gateConfig.requireConfigValid,
     requireInstanceAgreement: gateConfig.requireInstanceAgreement,
+    requireAllowGlobalRolloutFalse: gateConfig.requireAllowGlobalRolloutFalse,
     maxRecentConflicts: gateConfig.maxRecentConflicts,
     maxRecentReconnects: gateConfig.maxRecentReconnects,
     maxRecentDropped: gateConfig.maxRecentDropped,

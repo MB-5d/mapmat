@@ -24,6 +24,7 @@ function buildCanaryPayload({
   source = 'distributed',
   configValid = true,
   configErrors = [],
+  allowGlobalRollout = false,
   instanceAgreementStatus = 'consistent',
   scopedUsers = 1,
   scopedMaps = 0,
@@ -40,6 +41,7 @@ function buildCanaryPayload({
       experimentEnabled: true,
       syncEngineEnabled: true,
       rolloutEnabled: true,
+      allowGlobalRollout,
       configValid,
       configErrors,
       instanceAgreementStatus,
@@ -162,6 +164,24 @@ async function main() {
   });
   assert.strictEqual(hardenedGlobal.mode, 'enabled');
   assert.strictEqual(hardenedGlobal.scope.allowGlobalRollout, true);
+
+  const hardenedConflictEnv = {
+    ...baseEnv,
+    ADMIN_API_KEY: 'admin-key',
+    COEDITING_ROLLOUT_HARDENING_ENABLED: 'true',
+    COEDITING_ROLLOUT_ALLOW_GLOBAL: 'true',
+    COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED: 'true',
+  };
+  const hardenedConflict = resolveCoeditingRollout({
+    mapId: 'map-1',
+    actorId: 'user-1',
+    role: permissionPolicy.ROLES.EDITOR,
+    env: hardenedConflictEnv,
+    healthSnapshot: getCoeditingHealthSnapshot(hardenedConflictEnv),
+  });
+  assert.strictEqual(hardenedConflict.mode, 'disabled');
+  assert.strictEqual(hardenedConflict.reason, 'config_invalid');
+  assert.ok(hardenedConflict.scope.configValid === false);
 
   const degradedEnv = {
     ...baseEnv,
@@ -373,6 +393,10 @@ async function main() {
   assert.throws(() => validateAdminCanaryPayload(buildCanaryPayload({
     instanceAgreementStatus: 'drift_detected',
   })), /instanceAgreementStatus=consistent/);
+
+  assert.throws(() => validateAdminCanaryPayload(buildCanaryPayload({
+    allowGlobalRollout: true,
+  })), /allowGlobalRollout=false/);
 
   const healthySamples = [
     {

@@ -87,6 +87,9 @@ function evaluateCoeditingRolloutConfig(config) {
     if (!hasScope && !config.allowGlobalRollout) {
       configErrors.push('scope_required');
     }
+    if (hasScope && config.allowGlobalRollout) {
+      configErrors.push('global_scope_conflict');
+    }
     if (!config.distributedObservabilityEnabled) {
       configErrors.push('distributed_observability_required');
     }
