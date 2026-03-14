@@ -116,6 +116,8 @@ Add new scripts without replacing current runtime verification flow:
 
 - `verify:realtime:staging`
 - `verify:realtime:production` (canary-safe checks only)
+- `verify:realtime:staging:canary`
+- `verify:realtime:production:canary`
 
 Existing `verify:runtime:*` commands remain required and unchanged.
 

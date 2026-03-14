@@ -108,3 +108,16 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `npm run check:frontend-build`
 - `npm run verify:realtime:staging`
 - `npm run verify:realtime:production`
+- `npm run verify:realtime:staging:canary`
+- `npm run verify:realtime:production:canary`
+
+`verify:realtime:*:canary` also queries `GET /api/admin/coediting` with `x-admin-key: <ADMIN_API_KEY>` and fails fast on:
+
+- non-healthy public or admin status
+- `readOnlyFallbackActive=true`
+- non-distributed health source
+- rollout, experiment, or sync engine flags unexpectedly off
+- unscoped rollout during canary
+- recent conflict/reconnect/dropped/read-only-block metrics above the configured gate limits
+
+The staged operator sequence is documented in `docs/coediting-canary-rollout-playbook.md`.

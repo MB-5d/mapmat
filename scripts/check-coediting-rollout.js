@@ -6,6 +6,7 @@ const assert = require('assert');
 const { resolveCoeditingRollout, resolveCoeditingSystemStatus } = require('../utils/coeditingRollout');
 const { recordVersionConflict, recordReconnectEvent, recordDroppedEvent, getCoeditingHealthSnapshot } = require('../utils/coeditingObservability');
 const permissionPolicy = require('../policies/permissionPolicy');
+const { validateAdminCanaryPayload } = require('./lib/coeditingHealthCheckUtils');
 
 function main() {
   const baseEnv = {
@@ -87,6 +88,76 @@ function main() {
     }),
   });
   assert.strictEqual(forcedReadOnlyStatus.status, 'read_only');
+
+  const canarySummary = validateAdminCanaryPayload({
+    ok: true,
+    status: 'healthy',
+    rollout: {
+      experimentEnabled: true,
+      syncEngineEnabled: true,
+      rolloutEnabled: true,
+      scopedUsers: 1,
+      scopedMaps: 0,
+      blockedUsers: 0,
+      blockedMaps: 0,
+    },
+    health: {
+      source: 'distributed',
+      readOnlyFallbackActive: false,
+      metrics: {
+        conflicts: { recent: 2, total: 10 },
+        reconnects: { recent: 1, total: 3 },
+        dropped: { recent: 1, total: 4, reasons: { heartbeat_timeout: 1 } },
+        readOnlyBlocks: { recent: 0, total: 0 },
+      },
+    },
+  });
+  assert.strictEqual(canarySummary.status, 'healthy');
+  assert.strictEqual(canarySummary.scopedEntities, 1);
+
+  assert.throws(() => validateAdminCanaryPayload({
+    ok: true,
+    status: 'read_only',
+    rollout: {
+      experimentEnabled: true,
+      syncEngineEnabled: true,
+      rolloutEnabled: true,
+      scopedUsers: 1,
+      scopedMaps: 0,
+    },
+    health: {
+      source: 'distributed',
+      readOnlyFallbackActive: true,
+      metrics: {
+        conflicts: { recent: 0, total: 0 },
+        reconnects: { recent: 0, total: 0 },
+        dropped: { recent: 0, total: 0, reasons: {} },
+        readOnlyBlocks: { recent: 1, total: 1 },
+      },
+    },
+  }), /Unexpected coediting status|read-only fallback active/);
+
+  assert.throws(() => validateAdminCanaryPayload({
+    ok: true,
+    status: 'healthy',
+    rollout: {
+      experimentEnabled: true,
+      syncEngineEnabled: true,
+      rolloutEnabled: true,
+      scopedUsers: 0,
+      scopedMaps: 0,
+    },
+    health: {
+      source: 'local_fallback',
+      readOnlyFallbackActive: false,
+      metrics: {
+        conflicts: { recent: 25, total: 25 },
+        reconnects: { recent: 0, total: 0 },
+        dropped: { recent: 0, total: 0, reasons: {} },
+        readOnlyBlocks: { recent: 0, total: 0 },
+      },
+    },
+  }), /distributed health source|scoped rollout entities|Recent conflict count/);
 
   console.log('[coediting-rollout] Passed. Rollout scope + degraded read-only resolution is consistent.');
 }

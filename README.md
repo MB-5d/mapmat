@@ -56,6 +56,7 @@ Phase 10B co-editing transport docs are in `docs/coediting-transport-layer.md`.
 Phase 10C co-editing sync engine docs are in `docs/coediting-sync-engine.md`.
 Phase 10D co-editing frontend live-mode docs are in `docs/coediting-frontend-live-mode.md`.
 Phase 10E co-editing rollout and safety-control docs are in `docs/coediting-rollout-safety-controls.md`.
+Co-editing canary rollout playbook is in `docs/coediting-canary-rollout-playbook.md`.
 Permission feature-gating docs are in `docs/permission-feature-gating.md`.
 Screenshot pipeline hardening docs are in `docs/screenshot-pipeline-hardening.md`.
 
@@ -71,6 +72,13 @@ Co-editing rollout health checks (repo root):
 ```bash
 npm run verify:realtime:staging
 npm run verify:realtime:production
+```
+
+Co-editing canary rollout gates (requires `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`):
+
+```bash
+npm run verify:realtime:staging:canary
+npm run verify:realtime:production:canary
 ```
 
 Co-editing validation harnesses (repo root):
