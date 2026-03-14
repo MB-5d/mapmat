@@ -14,6 +14,7 @@ This is the operator playbook for staging and production co-editing canary rollo
   - `COEDITING_ROLLOUT_ENABLED=true`
   - `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
   - `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`
+  - `COEDITING_ROLLOUT_GLOBAL_APPROVED=false`
   - `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true`
   - `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=true`
   - `COEDITING_FORCE_READ_ONLY=false`
@@ -34,6 +35,7 @@ This is the operator playbook for staging and production co-editing canary rollo
 - `rollout.configValid=true`
 - `rollout.instanceAgreementStatus="consistent"`
 - `rollout.allowGlobalRollout=false`
+- `rollout.globalRolloutApproved=false`
 - `readOnlyFallbackActive=false`
 - health source is `distributed`
 - rollout, experiment, and sync engine flags are all enabled
@@ -49,9 +51,12 @@ Recommended canary policy in Railway `Variables`:
 
 - keep `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
 - keep `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` until broad rollout is explicitly approved
+- keep `COEDITING_ROLLOUT_GLOBAL_APPROVED=false` until broad rollout is explicitly approved
 - keep `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` during canary and early production expansion
 
 If `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`, the canary gate now fails even when scoped entity counts are still present. Scoped canary must remain explicitly scoped, not globally armed.
+
+If broader rollout is explicitly approved later, set both `COEDITING_ROLLOUT_ALLOW_GLOBAL=true` and `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`. Hardened runtime now rejects global rollout when only the first flag is set.
 
 `npm run verify:realtime:*:canary:window` uses the same gate limits but polls for a sustained observation window with:
 

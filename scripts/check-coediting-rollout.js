@@ -25,6 +25,7 @@ function buildCanaryPayload({
   configValid = true,
   configErrors = [],
   allowGlobalRollout = false,
+  globalRolloutApproved = false,
   instanceAgreementStatus = 'consistent',
   scopedUsers = 1,
   scopedMaps = 0,
@@ -42,6 +43,7 @@ function buildCanaryPayload({
       syncEngineEnabled: true,
       rolloutEnabled: true,
       allowGlobalRollout,
+      globalRolloutApproved,
       configValid,
       configErrors,
       instanceAgreementStatus,
@@ -151,6 +153,7 @@ async function main() {
     ADMIN_API_KEY: 'admin-key',
     COEDITING_ROLLOUT_HARDENING_ENABLED: 'true',
     COEDITING_ROLLOUT_ALLOW_GLOBAL: 'true',
+    COEDITING_ROLLOUT_GLOBAL_APPROVED: 'true',
     COEDITING_ROLLOUT_USER_IDS: '',
     COEDITING_ROLLOUT_MAP_IDS: '',
     COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED: 'true',
@@ -164,6 +167,7 @@ async function main() {
   });
   assert.strictEqual(hardenedGlobal.mode, 'enabled');
   assert.strictEqual(hardenedGlobal.scope.allowGlobalRollout, true);
+  assert.strictEqual(hardenedGlobal.scope.globalRolloutApproved, true);
 
   const hardenedConflictEnv = {
     ...baseEnv,
@@ -182,6 +186,25 @@ async function main() {
   assert.strictEqual(hardenedConflict.mode, 'disabled');
   assert.strictEqual(hardenedConflict.reason, 'config_invalid');
   assert.ok(hardenedConflict.scope.configValid === false);
+
+  const hardenedGlobalApprovalMissingEnv = {
+    ...baseEnv,
+    ADMIN_API_KEY: 'admin-key',
+    COEDITING_ROLLOUT_HARDENING_ENABLED: 'true',
+    COEDITING_ROLLOUT_ALLOW_GLOBAL: 'true',
+    COEDITING_ROLLOUT_USER_IDS: '',
+    COEDITING_ROLLOUT_MAP_IDS: '',
+    COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED: 'true',
+  };
+  const hardenedGlobalApprovalMissing = resolveCoeditingRollout({
+    mapId: 'map-2',
+    actorId: 'user-2',
+    role: permissionPolicy.ROLES.EDITOR,
+    env: hardenedGlobalApprovalMissingEnv,
+    healthSnapshot: getCoeditingHealthSnapshot(hardenedGlobalApprovalMissingEnv),
+  });
+  assert.strictEqual(hardenedGlobalApprovalMissing.mode, 'disabled');
+  assert.strictEqual(hardenedGlobalApprovalMissing.reason, 'config_invalid');
 
   const degradedEnv = {
     ...baseEnv,
@@ -397,6 +420,10 @@ async function main() {
   assert.throws(() => validateAdminCanaryPayload(buildCanaryPayload({
     allowGlobalRollout: true,
   })), /allowGlobalRollout=false/);
+
+  assert.throws(() => validateAdminCanaryPayload(buildCanaryPayload({
+    globalRolloutApproved: true,
+  })), /globalRolloutApproved=false/);
 
   const healthySamples = [
     {

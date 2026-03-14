@@ -54,6 +54,7 @@ function createCoeditingRolloutConfigFromEnv(env = process.env) {
     rolloutEnabled: parseEnvBool(env.COEDITING_ROLLOUT_ENABLED, false),
     hardeningEnabled: parseEnvBool(env.COEDITING_ROLLOUT_HARDENING_ENABLED, false),
     allowGlobalRollout: parseEnvBool(env.COEDITING_ROLLOUT_ALLOW_GLOBAL, false),
+    globalRolloutApproved: parseEnvBool(env.COEDITING_ROLLOUT_GLOBAL_APPROVED, false),
     requireInstanceAgreement: parseEnvBool(
       env.COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT,
       false
@@ -89,6 +90,9 @@ function evaluateCoeditingRolloutConfig(config) {
     }
     if (hasScope && config.allowGlobalRollout) {
       configErrors.push('global_scope_conflict');
+    }
+    if (!hasScope && config.allowGlobalRollout && !config.globalRolloutApproved) {
+      configErrors.push('global_approval_required');
     }
     if (!config.distributedObservabilityEnabled) {
       configErrors.push('distributed_observability_required');
@@ -138,6 +142,7 @@ function createRolloutFingerprint(config, validation) {
     rolloutEnabled: config.rolloutEnabled,
     hardeningEnabled: config.hardeningEnabled,
     allowGlobalRollout: config.allowGlobalRollout,
+    globalRolloutApproved: config.globalRolloutApproved,
     requireInstanceAgreement: config.requireInstanceAgreement,
     distributedObservabilityEnabled: config.distributedObservabilityEnabled,
     adminApiKeyConfigured: config.adminApiKeyConfigured,
@@ -292,6 +297,7 @@ function buildRolloutSummary(config, validation, {
     rolloutEnabled: config.rolloutEnabled,
     hardeningEnabled: config.hardeningEnabled,
     allowGlobalRollout: config.allowGlobalRollout,
+    globalRolloutApproved: config.globalRolloutApproved,
     requireInstanceAgreement: config.requireInstanceAgreement,
     instanceAgreementStatus: validation.instanceAgreementStatus
       || (config.distributedObservabilityEnabled ? 'unknown' : 'local_only'),
@@ -441,6 +447,7 @@ function resolveCoeditingRollout({
       rolloutEnabled: effectiveConfig.rolloutEnabled,
       hardeningEnabled: effectiveConfig.hardeningEnabled,
       allowGlobalRollout: effectiveConfig.allowGlobalRollout,
+      globalRolloutApproved: effectiveConfig.globalRolloutApproved,
       requireInstanceAgreement: effectiveConfig.requireInstanceAgreement,
       instanceAgreementStatus: effectiveValidation.instanceAgreementStatus,
       configValid: effectiveValidation.configValid,

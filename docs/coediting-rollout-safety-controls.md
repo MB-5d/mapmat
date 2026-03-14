@@ -11,6 +11,7 @@ This phase is additive. Existing save/load/version endpoints and `verify:runtime
 - `COEDITING_ROLLOUT_ENABLED=false`
 - `COEDITING_ROLLOUT_HARDENING_ENABLED=false`
 - `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`
+- `COEDITING_ROLLOUT_GLOBAL_APPROVED=false`
 - `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=false`
 
 Optional scope controls:
@@ -33,6 +34,7 @@ When `COEDITING_ROLLOUT_HARDENING_ENABLED=true` and rollout is enabled, config i
 - `COEDITING_DISTRIBUTED_OBSERVABILITY_ENABLED=true`
 - `ADMIN_API_KEY` is configured
 - `COEDITING_ROLLOUT_ALLOW_GLOBAL=true` is not combined with scoped allow lists
+- unscoped/global rollout also sets `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`
 
 If those requirements are not met, runtime rollout resolution returns `disabled` with coarse reason `config_invalid`, and admin canary checks also fail.
 
@@ -138,6 +140,7 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `rollout.configValid=false`
 - `rollout.instanceAgreementStatus!="consistent"`
 - `rollout.allowGlobalRollout=true`
+- `rollout.globalRolloutApproved=true`
 - non-distributed health source
 - rollout, experiment, or sync engine flags unexpectedly off
 - unscoped rollout during canary
