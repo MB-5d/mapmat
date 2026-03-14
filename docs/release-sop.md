@@ -15,12 +15,17 @@ This is the operational playbook for shipping safely from `staging` to `main`.
 2. Confirm staging backend health:
 - `https://mapmat-staging.up.railway.app/health`
 - Expect: `{"ok":true}`
-3. Smoke test on staging:
+3. Confirm co-editing canary gates if live rollout is being expanded:
+- Railway -> project `mapmat-staging` -> service `mapmat-staging` -> `Variables`
+- export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
+- run `npm run verify:realtime:staging:canary`
+- run `npm run verify:realtime:staging:canary:window`
+4. Smoke test on staging:
 - Login/signup
 - Save map
 - Share link
 - Version history
-4. Confirm CI is passing on latest staging PR:
+5. Confirm CI is passing on latest staging PR:
 - `Backend Syntax`
 - `Frontend Build`
 
@@ -48,10 +53,15 @@ Notes:
 2. Verify production backend health:
 - `https://<production-railway-domain>/health`
 - Expect: `{"ok":true}`
-3. Verify production auth policy:
+3. Verify co-editing canary gates if live rollout is enabled:
+- Railway -> project `mapmat-production` -> service `mapmat-production` -> `Variables`
+- export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
+- run `npm run verify:realtime:production:canary`
+- run `npm run verify:realtime:production:canary:window`
+4. Verify production auth policy:
 - `TEST_AUTH_ENABLED=false`
 - fake account auto-creation should not happen in production
-4. Check deploy logs in Vercel and Railway for errors.
+5. Check deploy logs in Vercel and Railway for errors.
 
 ## 5) Sync Branches After Release
 
@@ -130,4 +140,3 @@ Remove temporary overrides if used:
 
 - `AUTH_LOGIN_RATE_LIMIT`
 - `AUTH_RATE_WINDOW_MS`
-

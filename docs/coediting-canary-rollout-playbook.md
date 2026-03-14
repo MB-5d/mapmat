@@ -39,6 +39,13 @@ This is the operator playbook for staging and production co-editing canary rollo
 
 Override those gates only with explicit environment variables in the terminal that runs the canary check.
 
+`npm run verify:realtime:*:canary:window` uses the same gate limits but polls for a sustained observation window with:
+
+- `COEDITING_CANARY_WINDOW_SEC=300`
+- `COEDITING_CANARY_POLL_INTERVAL_SEC=30`
+- `COEDITING_CANARY_MIN_SAMPLES=3`
+- `COEDITING_CANARY_REQUIRE_STABLE_SCOPE_COUNT=true`
+
 ## Staging Canary
 
 1. Railway -> project `mapmat-staging` -> service `mapmat-staging` -> `Variables`.
@@ -49,19 +56,25 @@ Override those gates only with explicit environment variables in the terminal th
 export COEDITING_ADMIN_KEY="<mapmat-staging ADMIN_API_KEY>"
 ```
 
-4. Run the realtime canary gate:
+4. Run the point-in-time realtime canary gate:
 
 ```bash
 npm run verify:realtime:staging:canary
 ```
 
-5. Run the standard runtime verification:
+5. Run the sustained canary window:
+
+```bash
+npm run verify:realtime:staging:canary:window
+```
+
+6. Run the standard runtime verification:
 
 ```bash
 npm run verify:runtime:staging
 ```
 
-Only move to production canary if both commands pass.
+Only move to production canary if all three commands pass.
 
 ## Production Canary
 
@@ -73,13 +86,19 @@ Only move to production canary if both commands pass.
 export COEDITING_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
 ```
 
-4. Run the realtime canary gate:
+4. Run the point-in-time realtime canary gate:
 
 ```bash
 npm run verify:realtime:production:canary
 ```
 
-5. Run the standard runtime verification:
+5. Run the sustained canary window:
+
+```bash
+npm run verify:realtime:production:canary:window
+```
+
+6. Run the standard runtime verification:
 
 ```bash
 npm run verify:runtime:production
@@ -108,3 +127,5 @@ or:
 ```bash
 npm run verify:realtime:production
 ```
+
+5. Do not resume rollout expansion until both `verify:realtime:*:canary` and `verify:realtime:*:canary:window` pass again.

@@ -20,6 +20,38 @@ function parseNonNegativeInt(value, fallback) {
   return parsed;
 }
 
+function createCanaryGateConfigFromEnv(env = process.env) {
+  return {
+    healthUrl: env.COEDITING_HEALTH_URL || 'http://localhost:4002/health/coediting',
+    adminUrl: env.COEDITING_ADMIN_URL || '',
+    adminKey: env.COEDITING_ADMIN_KEY || '',
+    expectedPublicStatuses: splitCsv(env.COEDITING_EXPECT_PUBLIC_STATUSES, ['healthy']),
+    expectedAdminStatuses: splitCsv(env.COEDITING_EXPECT_ADMIN_STATUSES, ['healthy']),
+    requireReadOnlyFallbackInactive: parseEnvBool(
+      env.COEDITING_REQUIRE_READ_ONLY_FALLBACK_INACTIVE,
+      true
+    ),
+    requireExperimentEnabled: parseEnvBool(env.COEDITING_REQUIRE_EXPERIMENT_ENABLED, true),
+    requireSyncEngineEnabled: parseEnvBool(env.COEDITING_REQUIRE_SYNC_ENGINE_ENABLED, true),
+    requireRolloutEnabled: parseEnvBool(env.COEDITING_REQUIRE_ROLLOUT_ENABLED, true),
+    requireDistributedSource: parseEnvBool(env.COEDITING_REQUIRE_DISTRIBUTED_SOURCE, true),
+    maxRecentConflicts: parseNonNegativeInt(env.COEDITING_MAX_RECENT_CONFLICTS, 20),
+    maxRecentReconnects: parseNonNegativeInt(env.COEDITING_MAX_RECENT_RECONNECTS, 5),
+    maxRecentDropped: parseNonNegativeInt(env.COEDITING_MAX_RECENT_DROPPED, 5),
+    maxRecentReadOnlyBlocks: parseNonNegativeInt(env.COEDITING_MAX_RECENT_READ_ONLY_BLOCKS, 0),
+    minScopedEntities: parseNonNegativeInt(env.COEDITING_MIN_SCOPED_ENTITIES, 1),
+  };
+}
+
+function createCanaryWindowConfigFromEnv(env = process.env) {
+  return {
+    windowSec: Math.max(1, parseNonNegativeInt(env.COEDITING_CANARY_WINDOW_SEC, 300)),
+    pollIntervalSec: Math.max(1, parseNonNegativeInt(env.COEDITING_CANARY_POLL_INTERVAL_SEC, 30)),
+    minSamples: Math.max(1, parseNonNegativeInt(env.COEDITING_CANARY_MIN_SAMPLES, 3)),
+    requireStableScopeCount: parseEnvBool(env.COEDITING_CANARY_REQUIRE_STABLE_SCOPE_COUNT, true),
+  };
+}
+
 async function fetchJsonWithRetries(url, {
   label = 'request',
   headers = {},
@@ -145,11 +177,178 @@ function validateAdminCanaryPayload(payload, {
   };
 }
 
+async function fetchCoeditingCanarySampleAsync({
+  healthUrl,
+  adminUrl,
+  adminKey,
+} = {}) {
+  if (!healthUrl) {
+    throw new Error('COEDITING_HEALTH_URL is required');
+  }
+  if (!adminUrl) {
+    throw new Error('COEDITING_ADMIN_URL is required');
+  }
+  if (!adminKey) {
+    throw new Error('COEDITING_ADMIN_KEY is required');
+  }
+
+  const [publicPayload, adminPayload] = await Promise.all([
+    fetchJsonWithRetries(healthUrl, {
+      label: 'coediting health request',
+    }),
+    fetchJsonWithRetries(adminUrl, {
+      label: 'coediting admin request',
+      headers: {
+        'x-admin-key': adminKey,
+      },
+    }),
+  ]);
+
+  return {
+    publicPayload,
+    adminPayload,
+  };
+}
+
+function validateCoeditingCanarySample({
+  publicPayload,
+  adminPayload,
+} = {}, gateConfig = {}) {
+  const publicSummary = validatePublicHealthPayload(publicPayload, {
+    expectedStatuses: gateConfig.expectedPublicStatuses,
+    requireReadOnlyFallbackInactive: gateConfig.requireReadOnlyFallbackInactive,
+  });
+  const adminSummary = validateAdminCanaryPayload(adminPayload, {
+    expectedStatuses: gateConfig.expectedAdminStatuses,
+    requireReadOnlyFallbackInactive: gateConfig.requireReadOnlyFallbackInactive,
+    requireExperimentEnabled: gateConfig.requireExperimentEnabled,
+    requireSyncEngineEnabled: gateConfig.requireSyncEngineEnabled,
+    requireRolloutEnabled: gateConfig.requireRolloutEnabled,
+    requireDistributedSource: gateConfig.requireDistributedSource,
+    maxRecentConflicts: gateConfig.maxRecentConflicts,
+    maxRecentReconnects: gateConfig.maxRecentReconnects,
+    maxRecentDropped: gateConfig.maxRecentDropped,
+    maxRecentReadOnlyBlocks: gateConfig.maxRecentReadOnlyBlocks,
+    minScopedEntities: gateConfig.minScopedEntities,
+  });
+
+  return {
+    publicSummary,
+    adminSummary,
+  };
+}
+
+function sleepAsync(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runCoeditingCanaryWindowCheckAsync({
+  fetchSampleAsync,
+  gateConfig = {},
+  windowMs,
+  pollIntervalMs,
+  minSamples = 1,
+  requireStableScopeCount = true,
+  onSample = null,
+} = {}) {
+  if (typeof fetchSampleAsync !== 'function') {
+    throw new Error('fetchSampleAsync is required');
+  }
+
+  const normalizedWindowMs = Math.max(0, Number.parseInt(windowMs, 10) || 0);
+  const normalizedPollIntervalMs = Math.max(0, Number.parseInt(pollIntervalMs, 10) || 0);
+  const normalizedMinSamples = Math.max(1, Number.parseInt(minSamples, 10) || 1);
+  const startedAt = Date.now();
+  const samples = [];
+  let baseline = null;
+
+  while (true) {
+    const rawSample = await fetchSampleAsync();
+    const validated = validateCoeditingCanarySample(rawSample, gateConfig);
+    const sample = {
+      index: samples.length + 1,
+      observedAt: new Date().toISOString(),
+      publicSummary: validated.publicSummary,
+      adminSummary: validated.adminSummary,
+    };
+
+    if (!baseline) {
+      baseline = {
+        publicStatus: sample.publicSummary.status,
+        adminStatus: sample.adminSummary.status,
+        source: sample.adminSummary.source,
+        scopedEntities: sample.adminSummary.scopedEntities,
+      };
+    } else {
+      if (sample.publicSummary.status !== baseline.publicStatus) {
+        throw new Error(
+          `Public canary status drifted from ${baseline.publicStatus} to ${sample.publicSummary.status}`
+        );
+      }
+      if (sample.adminSummary.status !== baseline.adminStatus) {
+        throw new Error(
+          `Admin canary status drifted from ${baseline.adminStatus} to ${sample.adminSummary.status}`
+        );
+      }
+      if (sample.adminSummary.source !== baseline.source) {
+        throw new Error(
+          `Coediting canary source drifted from ${baseline.source} to ${sample.adminSummary.source}`
+        );
+      }
+      if (
+        requireStableScopeCount
+        && sample.adminSummary.scopedEntities !== baseline.scopedEntities
+      ) {
+        throw new Error(
+          `Coediting canary scoped rollout entity count drifted from ${baseline.scopedEntities} to ${sample.adminSummary.scopedEntities}`
+        );
+      }
+    }
+
+    samples.push(sample);
+    if (typeof onSample === 'function') {
+      onSample(sample);
+    }
+
+    const elapsedMs = Date.now() - startedAt;
+    const remainingWindowMs = normalizedWindowMs - elapsedMs;
+    if (samples.length >= normalizedMinSamples && remainingWindowMs <= 0) {
+      break;
+    }
+
+    const sleepMs = samples.length >= normalizedMinSamples
+      ? Math.max(0, Math.min(normalizedPollIntervalMs, remainingWindowMs))
+      : normalizedPollIntervalMs;
+    if (sleepMs > 0) {
+      await sleepAsync(sleepMs);
+    }
+  }
+
+  return {
+    sampleCount: samples.length,
+    durationMs: Date.now() - startedAt,
+    baseline,
+    maxConflictsRecent: Math.max(...samples.map((sample) => sample.adminSummary.conflictsRecent)),
+    maxReconnectsRecent: Math.max(...samples.map((sample) => sample.adminSummary.reconnectsRecent)),
+    maxDroppedRecent: Math.max(...samples.map((sample) => sample.adminSummary.droppedRecent)),
+    maxReadOnlyBlocksRecent: Math.max(
+      ...samples.map((sample) => sample.adminSummary.readOnlyBlocksRecent)
+    ),
+    samples,
+  };
+}
+
 module.exports = {
   parseEnvBool,
   splitCsv,
   parseNonNegativeInt,
+  createCanaryGateConfigFromEnv,
+  createCanaryWindowConfigFromEnv,
   fetchJsonWithRetries,
+  fetchCoeditingCanarySampleAsync,
   validatePublicHealthPayload,
   validateAdminCanaryPayload,
+  validateCoeditingCanarySample,
+  runCoeditingCanaryWindowCheckAsync,
 };

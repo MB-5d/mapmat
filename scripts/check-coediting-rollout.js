@@ -6,9 +6,58 @@ const assert = require('assert');
 const { resolveCoeditingRollout, resolveCoeditingSystemStatus } = require('../utils/coeditingRollout');
 const { recordVersionConflict, recordReconnectEvent, recordDroppedEvent, getCoeditingHealthSnapshot } = require('../utils/coeditingObservability');
 const permissionPolicy = require('../policies/permissionPolicy');
-const { validateAdminCanaryPayload } = require('./lib/coeditingHealthCheckUtils');
+const {
+  validateAdminCanaryPayload,
+  runCoeditingCanaryWindowCheckAsync,
+} = require('./lib/coeditingHealthCheckUtils');
 
-function main() {
+function buildCanaryPayload({
+  status = 'healthy',
+  readOnlyFallbackActive = false,
+  source = 'distributed',
+  scopedUsers = 1,
+  scopedMaps = 0,
+  conflictsRecent = 0,
+  reconnectsRecent = 0,
+  droppedRecent = 0,
+  readOnlyBlocksRecent = 0,
+} = {}) {
+  return {
+    ok: true,
+    status,
+    reason: status === 'healthy' ? 'healthy' : 'health_degraded',
+    rollout: {
+      experimentEnabled: true,
+      syncEngineEnabled: true,
+      rolloutEnabled: true,
+      scopedUsers,
+      scopedMaps,
+      blockedUsers: 0,
+      blockedMaps: 0,
+    },
+    health: {
+      status,
+      readOnlyFallbackActive,
+      reasons: readOnlyFallbackActive ? ['health_degraded'] : [],
+      source,
+      metrics: {
+        conflicts: { recent: conflictsRecent, total: conflictsRecent + 10 },
+        reconnects: { recent: reconnectsRecent, total: reconnectsRecent + 5 },
+        dropped: {
+          recent: droppedRecent,
+          total: droppedRecent + 5,
+          reasons: droppedRecent > 0 ? { rate_limit: droppedRecent } : {},
+        },
+        readOnlyBlocks: {
+          recent: readOnlyBlocksRecent,
+          total: readOnlyBlocksRecent,
+        },
+      },
+    },
+  };
+}
+
+async function main() {
   const baseEnv = {
     COEDITING_EXPERIMENT_ENABLED: 'true',
     COEDITING_SYNC_ENGINE_ENABLED: 'true',
@@ -159,7 +208,84 @@ function main() {
     },
   }), /distributed health source|scoped rollout entities|Recent conflict count/);
 
+  const healthySamples = [
+    {
+      publicPayload: buildCanaryPayload({ conflictsRecent: 1, reconnectsRecent: 0, droppedRecent: 1 }),
+      adminPayload: buildCanaryPayload({ conflictsRecent: 1, reconnectsRecent: 0, droppedRecent: 1 }),
+    },
+    {
+      publicPayload: buildCanaryPayload({ conflictsRecent: 2, reconnectsRecent: 1, droppedRecent: 1 }),
+      adminPayload: buildCanaryPayload({ conflictsRecent: 2, reconnectsRecent: 1, droppedRecent: 1 }),
+    },
+    {
+      publicPayload: buildCanaryPayload({ conflictsRecent: 3, reconnectsRecent: 1, droppedRecent: 2 }),
+      adminPayload: buildCanaryPayload({ conflictsRecent: 3, reconnectsRecent: 1, droppedRecent: 2 }),
+    },
+  ];
+  let sampleIndex = 0;
+  const windowResult = await runCoeditingCanaryWindowCheckAsync({
+    fetchSampleAsync: async () => healthySamples[sampleIndex++],
+    gateConfig: {
+      expectedPublicStatuses: ['healthy'],
+      expectedAdminStatuses: ['healthy'],
+      requireReadOnlyFallbackInactive: true,
+      requireExperimentEnabled: true,
+      requireSyncEngineEnabled: true,
+      requireRolloutEnabled: true,
+      requireDistributedSource: true,
+      maxRecentConflicts: 20,
+      maxRecentReconnects: 5,
+      maxRecentDropped: 5,
+      maxRecentReadOnlyBlocks: 0,
+      minScopedEntities: 1,
+    },
+    windowMs: 0,
+    pollIntervalMs: 0,
+    minSamples: 3,
+    requireStableScopeCount: true,
+  });
+  assert.strictEqual(windowResult.sampleCount, 3);
+  assert.strictEqual(windowResult.baseline.scopedEntities, 1);
+  assert.strictEqual(windowResult.maxConflictsRecent, 3);
+  assert.strictEqual(windowResult.maxDroppedRecent, 2);
+
+  const driftSamples = [
+    {
+      publicPayload: buildCanaryPayload({ scopedUsers: 1 }),
+      adminPayload: buildCanaryPayload({ scopedUsers: 1 }),
+    },
+    {
+      publicPayload: buildCanaryPayload({ scopedUsers: 2 }),
+      adminPayload: buildCanaryPayload({ scopedUsers: 2 }),
+    },
+  ];
+  let driftIndex = 0;
+  await assert.rejects(async () => runCoeditingCanaryWindowCheckAsync({
+    fetchSampleAsync: async () => driftSamples[driftIndex++],
+    gateConfig: {
+      expectedPublicStatuses: ['healthy'],
+      expectedAdminStatuses: ['healthy'],
+      requireReadOnlyFallbackInactive: true,
+      requireExperimentEnabled: true,
+      requireSyncEngineEnabled: true,
+      requireRolloutEnabled: true,
+      requireDistributedSource: true,
+      maxRecentConflicts: 20,
+      maxRecentReconnects: 5,
+      maxRecentDropped: 5,
+      maxRecentReadOnlyBlocks: 0,
+      minScopedEntities: 1,
+    },
+    windowMs: 0,
+    pollIntervalMs: 0,
+    minSamples: 2,
+    requireStableScopeCount: true,
+  }), /scoped rollout entity count drifted/);
+
   console.log('[coediting-rollout] Passed. Rollout scope + degraded read-only resolution is consistent.');
 }
 
-main();
+main().catch((error) => {
+  console.error('[coediting-rollout] Failed:', error.message);
+  process.exit(1);
+});

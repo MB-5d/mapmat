@@ -79,6 +79,8 @@ Co-editing canary rollout gates (requires `COEDITING_ADMIN_KEY` from Railway `AD
 ```bash
 npm run verify:realtime:staging:canary
 npm run verify:realtime:production:canary
+npm run verify:realtime:staging:canary:window
+npm run verify:realtime:production:canary:window
 ```
 
 Co-editing validation harnesses (repo root):
