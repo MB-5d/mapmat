@@ -24,6 +24,8 @@ This is the operational playbook for shipping safely from `staging` to `main`.
 - confirm `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` while rollout remains canary/scoped
 - run `npm run verify:realtime:staging:canary`
 - run `npm run verify:realtime:staging:canary:window`
+- if broad rollout is explicitly intended, run `npm run verify:realtime:staging:broad`
+- if broad rollout is explicitly intended, run `npm run verify:realtime:staging:broad:window`
 4. Smoke test on staging:
 - Login/signup
 - Save map
@@ -66,6 +68,8 @@ Notes:
 - confirm `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` while rollout remains canary/scoped
 - run `npm run verify:realtime:production:canary`
 - run `npm run verify:realtime:production:canary:window`
+- if broad rollout is explicitly intended, run `npm run verify:realtime:production:broad`
+- if broad rollout is explicitly intended, run `npm run verify:realtime:production:broad:window`
 4. Verify production auth policy:
 - `TEST_AUTH_ENABLED=false`
 - fake account auto-creation should not happen in production

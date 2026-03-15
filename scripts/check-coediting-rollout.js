@@ -425,6 +425,36 @@ async function main() {
     globalRolloutApproved: true,
   })), /globalRolloutApproved=false/);
 
+  const broadSummary = validateAdminCanaryPayload(buildCanaryPayload({
+    allowGlobalRollout: true,
+    globalRolloutApproved: true,
+    scopedUsers: 0,
+    scopedMaps: 0,
+  }), {
+    requireAllowGlobalRolloutFalse: false,
+    requireGlobalRolloutApprovedFalse: false,
+    expectedAllowGlobalRollout: true,
+    expectedGlobalRolloutApproved: true,
+    minScopedEntities: 0,
+    maxScopedEntities: 0,
+  });
+  assert.strictEqual(broadSummary.allowGlobalRollout, true);
+  assert.strictEqual(broadSummary.globalRolloutApproved, true);
+  assert.strictEqual(broadSummary.scopedEntities, 0);
+
+  assert.throws(() => validateAdminCanaryPayload(buildCanaryPayload({
+    allowGlobalRollout: true,
+    globalRolloutApproved: true,
+    scopedUsers: 1,
+  }), {
+    requireAllowGlobalRolloutFalse: false,
+    requireGlobalRolloutApprovedFalse: false,
+    expectedAllowGlobalRollout: true,
+    expectedGlobalRolloutApproved: true,
+    minScopedEntities: 0,
+    maxScopedEntities: 0,
+  }), /at most 0 scoped rollout entities/);
+
   const healthySamples = [
     {
       publicPayload: buildCanaryPayload({ conflictsRecent: 1, reconnectsRecent: 0, droppedRecent: 1 }),

@@ -20,6 +20,14 @@ function parseNonNegativeInt(value, fallback) {
   return parsed;
 }
 
+function parseOptionalBool(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return null;
+}
+
 function createCanaryGateConfigFromEnv(env = process.env) {
   return {
     healthUrl: env.COEDITING_HEALTH_URL || 'http://localhost:4002/health/coediting',
@@ -45,11 +53,16 @@ function createCanaryGateConfigFromEnv(env = process.env) {
       env.COEDITING_REQUIRE_GLOBAL_ROLLOUT_APPROVED_FALSE,
       true
     ),
+    expectedAllowGlobalRollout: parseOptionalBool(env.COEDITING_EXPECT_ALLOW_GLOBAL_ROLLOUT),
+    expectedGlobalRolloutApproved: parseOptionalBool(
+      env.COEDITING_EXPECT_GLOBAL_ROLLOUT_APPROVED
+    ),
     maxRecentConflicts: parseNonNegativeInt(env.COEDITING_MAX_RECENT_CONFLICTS, 20),
     maxRecentReconnects: parseNonNegativeInt(env.COEDITING_MAX_RECENT_RECONNECTS, 5),
     maxRecentDropped: parseNonNegativeInt(env.COEDITING_MAX_RECENT_DROPPED, 5),
     maxRecentReadOnlyBlocks: parseNonNegativeInt(env.COEDITING_MAX_RECENT_READ_ONLY_BLOCKS, 0),
     minScopedEntities: parseNonNegativeInt(env.COEDITING_MIN_SCOPED_ENTITIES, 1),
+    maxScopedEntities: parseNonNegativeInt(env.COEDITING_MAX_SCOPED_ENTITIES, -1),
   };
 }
 
@@ -130,11 +143,14 @@ function validateAdminCanaryPayload(payload, {
   requireInstanceAgreement = true,
   requireAllowGlobalRolloutFalse = true,
   requireGlobalRolloutApprovedFalse = true,
+  expectedAllowGlobalRollout = null,
+  expectedGlobalRolloutApproved = null,
   maxRecentConflicts = 20,
   maxRecentReconnects = 5,
   maxRecentDropped = 5,
   maxRecentReadOnlyBlocks = 0,
   minScopedEntities = 1,
+  maxScopedEntities = -1,
 } = {}) {
   const summary = validatePublicHealthPayload(payload, {
     expectedStatuses,
@@ -160,6 +176,22 @@ function validateAdminCanaryPayload(payload, {
   if (requireGlobalRolloutApprovedFalse && rollout.globalRolloutApproved === true) {
     throw new Error('Coediting canary gate requires globalRolloutApproved=false');
   }
+  if (
+    expectedAllowGlobalRollout !== null
+    && rollout.allowGlobalRollout !== expectedAllowGlobalRollout
+  ) {
+    throw new Error(
+      `Coediting canary gate requires allowGlobalRollout=${expectedAllowGlobalRollout}`
+    );
+  }
+  if (
+    expectedGlobalRolloutApproved !== null
+    && rollout.globalRolloutApproved !== expectedGlobalRolloutApproved
+  ) {
+    throw new Error(
+      `Coediting canary gate requires globalRolloutApproved=${expectedGlobalRolloutApproved}`
+    );
+  }
   if (requireConfigValid && rollout.configValid === false) {
     throw new Error(
       `Coediting canary gate requires configValid=true${Array.isArray(rollout.configErrors) && rollout.configErrors.length > 0
@@ -177,6 +209,9 @@ function validateAdminCanaryPayload(payload, {
   }
   if (minScopedEntities > 0 && scopedEntities < minScopedEntities) {
     throw new Error(`Coediting canary gate requires at least ${minScopedEntities} scoped rollout entities`);
+  }
+  if (maxScopedEntities >= 0 && scopedEntities > maxScopedEntities) {
+    throw new Error(`Coediting canary gate requires at most ${maxScopedEntities} scoped rollout entities`);
   }
 
   const conflictsRecent = Number(metrics.conflicts?.recent || 0);
@@ -209,6 +244,8 @@ function validateAdminCanaryPayload(payload, {
     syncEngineEnabled: !!rollout.syncEngineEnabled,
     configValid: rollout.configValid !== false,
     instanceAgreementStatus: rollout.instanceAgreementStatus || null,
+    allowGlobalRollout: rollout.allowGlobalRollout === true,
+    globalRolloutApproved: rollout.globalRolloutApproved === true,
   };
 }
 
@@ -264,11 +301,14 @@ function validateCoeditingCanarySample({
     requireInstanceAgreement: gateConfig.requireInstanceAgreement,
     requireAllowGlobalRolloutFalse: gateConfig.requireAllowGlobalRolloutFalse,
     requireGlobalRolloutApprovedFalse: gateConfig.requireGlobalRolloutApprovedFalse,
+    expectedAllowGlobalRollout: gateConfig.expectedAllowGlobalRollout,
+    expectedGlobalRolloutApproved: gateConfig.expectedGlobalRolloutApproved,
     maxRecentConflicts: gateConfig.maxRecentConflicts,
     maxRecentReconnects: gateConfig.maxRecentReconnects,
     maxRecentDropped: gateConfig.maxRecentDropped,
     maxRecentReadOnlyBlocks: gateConfig.maxRecentReadOnlyBlocks,
     minScopedEntities: gateConfig.minScopedEntities,
+    maxScopedEntities: gateConfig.maxScopedEntities,
   });
 
   return {
@@ -391,6 +431,7 @@ module.exports = {
   parseEnvBool,
   splitCsv,
   parseNonNegativeInt,
+  parseOptionalBool,
   createCanaryGateConfigFromEnv,
   createCanaryWindowConfigFromEnv,
   fetchJsonWithRetries,

@@ -20,6 +20,8 @@ async function main() {
     adminStatus: adminSummary.status,
     configValid: adminSummary.configValid,
     instanceAgreementStatus: adminSummary.instanceAgreementStatus,
+    allowGlobalRollout: adminSummary.allowGlobalRollout,
+    globalRolloutApproved: adminSummary.globalRolloutApproved,
     source: adminSummary.source,
     scopedEntities: adminSummary.scopedEntities,
     conflictsRecent: adminSummary.conflictsRecent,

@@ -132,6 +132,10 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `npm run verify:realtime:production:canary`
 - `npm run verify:realtime:staging:canary:window`
 - `npm run verify:realtime:production:canary:window`
+- `npm run verify:realtime:staging:broad`
+- `npm run verify:realtime:production:broad`
+- `npm run verify:realtime:staging:broad:window`
+- `npm run verify:realtime:production:broad:window`
 
 `verify:realtime:*:canary` also queries `GET /api/admin/coediting` with `x-admin-key: <ADMIN_API_KEY>` and fails fast on:
 
@@ -147,5 +151,13 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - recent conflict/reconnect/dropped/read-only-block metrics above the configured gate limits
 
 `verify:realtime:*:canary:window` repeats the same admin/public validation over a configurable observation window and fails on any unhealthy sample, scoped-entity drift, or instance-agreement drift during that window.
+
+`verify:realtime:*:broad` and `verify:realtime:*:broad:window` are the additive post-canary checks for intentionally approved global rollout. They require:
+
+- `rollout.allowGlobalRollout=true`
+- `rollout.globalRolloutApproved=true`
+- `rollout.configValid=true`
+- `rollout.instanceAgreementStatus="consistent"`
+- zero scoped rollout entities
 
 The staged operator sequence is documented in `docs/coediting-canary-rollout-playbook.md`.

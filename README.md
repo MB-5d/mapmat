@@ -83,6 +83,15 @@ npm run verify:realtime:staging:canary:window
 npm run verify:realtime:production:canary:window
 ```
 
+Co-editing broad rollout gates for intentionally approved global rollout:
+
+```bash
+npm run verify:realtime:staging:broad
+npm run verify:realtime:production:broad
+npm run verify:realtime:staging:broad:window
+npm run verify:realtime:production:broad:window
+```
+
 Co-editing validation harnesses (repo root):
 
 ```bash

@@ -125,6 +125,39 @@ npm run verify:runtime:production
 
 Widen rollout scope only after the production canary gate stays green for the agreed observation window.
 
+## Broad Rollout
+
+Use this only after scoped canary is complete and broad rollout is explicitly approved.
+
+1. Railway -> service `Variables`.
+2. Set:
+   - `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`
+   - `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`
+   - clear `COEDITING_ROLLOUT_USER_IDS` and `COEDITING_ROLLOUT_MAP_IDS`
+3. Run the point-in-time broad rollout gate:
+
+```bash
+npm run verify:realtime:staging:broad
+```
+
+or:
+
+```bash
+npm run verify:realtime:production:broad
+```
+
+4. Run the sustained broad rollout window:
+
+```bash
+npm run verify:realtime:staging:broad:window
+```
+
+or:
+
+```bash
+npm run verify:realtime:production:broad:window
+```
+
 ## Rollback
 
 If the canary gate fails:
