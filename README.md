@@ -92,6 +92,14 @@ npm run verify:realtime:staging:broad:window
 npm run verify:realtime:production:broad:window
 ```
 
+Co-editing staging/production rollout-state summary:
+
+```bash
+export COEDITING_STAGING_ADMIN_KEY="<mapmat-staging ADMIN_API_KEY>"
+export COEDITING_PRODUCTION_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
+npm run verify:realtime:rollout-state
+```
+
 Co-editing validation harnesses (repo root):
 
 ```bash

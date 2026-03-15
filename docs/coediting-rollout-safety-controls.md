@@ -136,6 +136,7 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `npm run verify:realtime:production:broad`
 - `npm run verify:realtime:staging:broad:window`
 - `npm run verify:realtime:production:broad:window`
+- `npm run verify:realtime:rollout-state`
 
 `verify:realtime:*:canary` also queries `GET /api/admin/coediting` with `x-admin-key: <ADMIN_API_KEY>` and fails fast on:
 
@@ -159,5 +160,7 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `rollout.configValid=true`
 - `rollout.instanceAgreementStatus="consistent"`
 - zero scoped rollout entities
+
+`verify:realtime:rollout-state` prints the normalized rollout-policy summary for staging and production side-by-side, then lists exact field deltas. It is intended as the pre-change operator check before any scope expansion or broad-rollout flip.
 
 The staged operator sequence is documented in `docs/coediting-canary-rollout-playbook.md`.

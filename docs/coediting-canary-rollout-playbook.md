@@ -58,6 +58,14 @@ If `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`, the canary gate now fails even when sc
 
 If broader rollout is explicitly approved later, set both `COEDITING_ROLLOUT_ALLOW_GLOBAL=true` and `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`. Hardened runtime now rejects global rollout when only the first flag is set.
 
+Before changing rollout scope or broad-rollout flags, compare staging and production policy state:
+
+```bash
+export COEDITING_STAGING_ADMIN_KEY="<mapmat-staging ADMIN_API_KEY>"
+export COEDITING_PRODUCTION_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
+npm run verify:realtime:rollout-state
+```
+
 `npm run verify:realtime:*:canary:window` uses the same gate limits but polls for a sustained observation window with:
 
 - `COEDITING_CANARY_WINDOW_SEC=300`
@@ -134,7 +142,12 @@ Use this only after scoped canary is complete and broad rollout is explicitly ap
    - `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`
    - `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`
    - clear `COEDITING_ROLLOUT_USER_IDS` and `COEDITING_ROLLOUT_MAP_IDS`
-3. Run the point-in-time broad rollout gate:
+3. Compare staging and production rollout state before the change is applied broadly:
+
+```bash
+npm run verify:realtime:rollout-state
+```
+4. Run the point-in-time broad rollout gate:
 
 ```bash
 npm run verify:realtime:staging:broad
@@ -146,7 +159,7 @@ or:
 npm run verify:realtime:production:broad
 ```
 
-4. Run the sustained broad rollout window:
+5. Run the sustained broad rollout window:
 
 ```bash
 npm run verify:realtime:staging:broad:window

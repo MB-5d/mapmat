@@ -317,6 +317,112 @@ function validateCoeditingCanarySample({
   };
 }
 
+function ensureAdminRolloutPayloadShape(payload) {
+  if (!payload || payload.ok !== true) {
+    throw new Error('Coediting admin payload did not report ok=true');
+  }
+  if (!payload.rollout || !payload.health) {
+    throw new Error('Coediting admin payload is missing rollout/health sections');
+  }
+  return payload;
+}
+
+function normalizeComparableValue(value) {
+  if (Array.isArray(value)) {
+    return [...value].map((entry) => normalizeComparableValue(entry)).sort();
+  }
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((result, key) => {
+      result[key] = normalizeComparableValue(value[key]);
+      return result;
+    }, {});
+  }
+  return value ?? null;
+}
+
+function buildCoeditingRolloutStateSummary({
+  label = 'environment',
+  publicPayload,
+  adminPayload,
+} = {}) {
+  const publicSummary = validatePublicHealthPayload(publicPayload, {
+    expectedStatuses: ['disabled', 'healthy', 'read_only'],
+  });
+  const admin = ensureAdminRolloutPayloadShape(adminPayload);
+  const rollout = admin.rollout || {};
+  const health = admin.health || {};
+
+  return {
+    label,
+    publicStatus: publicSummary.status,
+    adminStatus: String(admin.status || publicSummary.status || 'unknown'),
+    reason: String(admin.reason || publicSummary.reason || ''),
+    readOnlyFallbackActive: !!health.readOnlyFallbackActive,
+    healthSource: String(health.source || publicSummary.source || 'unknown'),
+    experimentEnabled: rollout.experimentEnabled === true,
+    syncEngineEnabled: rollout.syncEngineEnabled === true,
+    rolloutEnabled: rollout.rolloutEnabled === true,
+    hardeningEnabled: rollout.hardeningEnabled === true,
+    allowGlobalRollout: rollout.allowGlobalRollout === true,
+    globalRolloutApproved: rollout.globalRolloutApproved === true,
+    requireInstanceAgreement: rollout.requireInstanceAgreement === true,
+    instanceAgreementStatus: String(rollout.instanceAgreementStatus || 'unknown'),
+    configValid: rollout.configValid !== false,
+    configErrors: Array.isArray(rollout.configErrors) ? [...rollout.configErrors].sort() : [],
+    scopedUsers: Number(rollout.scopedUsers || 0),
+    scopedMaps: Number(rollout.scopedMaps || 0),
+    blockedUsers: Number(rollout.blockedUsers || 0),
+    blockedMaps: Number(rollout.blockedMaps || 0),
+    distributedObservabilityEnabled: rollout.distributedObservabilityEnabled === true,
+    adminApiKeyConfigured: rollout.adminApiKeyConfigured === true,
+    observedInstanceCount: Number(rollout.observedInstanceCount || 0),
+    observedFingerprintCount: Number(rollout.observedFingerprintCount || 0),
+    observedInvalidInstances: Number(rollout.observedInvalidInstances || 0),
+  };
+}
+
+function diffCoeditingRolloutStateSummaries(leftSummary, rightSummary) {
+  const comparableKeys = [
+    'publicStatus',
+    'adminStatus',
+    'reason',
+    'readOnlyFallbackActive',
+    'healthSource',
+    'experimentEnabled',
+    'syncEngineEnabled',
+    'rolloutEnabled',
+    'hardeningEnabled',
+    'allowGlobalRollout',
+    'globalRolloutApproved',
+    'requireInstanceAgreement',
+    'instanceAgreementStatus',
+    'configValid',
+    'configErrors',
+    'scopedUsers',
+    'scopedMaps',
+    'blockedUsers',
+    'blockedMaps',
+    'distributedObservabilityEnabled',
+    'adminApiKeyConfigured',
+    'observedInstanceCount',
+    'observedFingerprintCount',
+    'observedInvalidInstances',
+  ];
+
+  const differences = [];
+  for (const key of comparableKeys) {
+    const leftValue = normalizeComparableValue(leftSummary?.[key]);
+    const rightValue = normalizeComparableValue(rightSummary?.[key]);
+    if (JSON.stringify(leftValue) === JSON.stringify(rightValue)) continue;
+    differences.push({
+      field: key,
+      left: leftValue,
+      right: rightValue,
+    });
+  }
+  return differences;
+}
+
 function sleepAsync(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -436,6 +542,8 @@ module.exports = {
   createCanaryWindowConfigFromEnv,
   fetchJsonWithRetries,
   fetchCoeditingCanarySampleAsync,
+  buildCoeditingRolloutStateSummary,
+  diffCoeditingRolloutStateSummaries,
   validatePublicHealthPayload,
   validateAdminCanaryPayload,
   validateCoeditingCanarySample,

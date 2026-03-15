@@ -15,6 +15,8 @@ const { recordVersionConflict, recordReconnectEvent, recordDroppedEvent, getCoed
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
   validateAdminCanaryPayload,
+  buildCoeditingRolloutStateSummary,
+  diffCoeditingRolloutStateSummaries,
   runCoeditingCanaryWindowCheckAsync,
 } = require('./lib/coeditingHealthCheckUtils');
 
@@ -454,6 +456,41 @@ async function main() {
     minScopedEntities: 0,
     maxScopedEntities: 0,
   }), /at most 0 scoped rollout entities/);
+
+  const stagingState = buildCoeditingRolloutStateSummary({
+    label: 'staging',
+    publicPayload: buildCanaryPayload({
+      allowGlobalRollout: false,
+      globalRolloutApproved: false,
+      scopedUsers: 1,
+      scopedMaps: 1,
+    }),
+    adminPayload: buildCanaryPayload({
+      allowGlobalRollout: false,
+      globalRolloutApproved: false,
+      scopedUsers: 1,
+      scopedMaps: 1,
+    }),
+  });
+  const productionState = buildCoeditingRolloutStateSummary({
+    label: 'production',
+    publicPayload: buildCanaryPayload({
+      allowGlobalRollout: true,
+      globalRolloutApproved: true,
+      scopedUsers: 0,
+      scopedMaps: 0,
+    }),
+    adminPayload: buildCanaryPayload({
+      allowGlobalRollout: true,
+      globalRolloutApproved: true,
+      scopedUsers: 0,
+      scopedMaps: 0,
+    }),
+  });
+  const policyDiff = diffCoeditingRolloutStateSummaries(stagingState, productionState);
+  assert.ok(policyDiff.some((entry) => entry.field === 'allowGlobalRollout'));
+  assert.ok(policyDiff.some((entry) => entry.field === 'globalRolloutApproved'));
+  assert.ok(policyDiff.some((entry) => entry.field === 'scopedUsers'));
 
   const healthySamples = [
     {
