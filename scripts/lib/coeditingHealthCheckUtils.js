@@ -340,6 +340,64 @@ function normalizeComparableValue(value) {
   return value ?? null;
 }
 
+function buildComparableCoeditingRolloutPolicySummary({
+  label = 'environment',
+  rollout = {},
+} = {}) {
+  return {
+    label,
+    experimentEnabled: rollout.experimentEnabled === true,
+    syncEngineEnabled: rollout.syncEngineEnabled === true,
+    rolloutEnabled: rollout.rolloutEnabled === true,
+    hardeningEnabled: rollout.hardeningEnabled === true,
+    allowGlobalRollout: rollout.allowGlobalRollout === true,
+    globalRolloutApproved: rollout.globalRolloutApproved === true,
+    requireInstanceAgreement: rollout.requireInstanceAgreement === true,
+    configValid: rollout.configValid !== false,
+    configErrors: Array.isArray(rollout.configErrors) ? [...rollout.configErrors].sort() : [],
+    scopedUsers: Number(rollout.scopedUsers || 0),
+    scopedMaps: Number(rollout.scopedMaps || 0),
+    blockedUsers: Number(rollout.blockedUsers || 0),
+    blockedMaps: Number(rollout.blockedMaps || 0),
+    distributedObservabilityEnabled: rollout.distributedObservabilityEnabled === true,
+    adminApiKeyConfigured: rollout.adminApiKeyConfigured === true,
+  };
+}
+
+function diffCoeditingRolloutPolicySummaries(leftSummary, rightSummary) {
+  const comparableKeys = [
+    'experimentEnabled',
+    'syncEngineEnabled',
+    'rolloutEnabled',
+    'hardeningEnabled',
+    'allowGlobalRollout',
+    'globalRolloutApproved',
+    'requireInstanceAgreement',
+    'configValid',
+    'configErrors',
+    'scopedUsers',
+    'scopedMaps',
+    'blockedUsers',
+    'blockedMaps',
+    'distributedObservabilityEnabled',
+    'adminApiKeyConfigured',
+  ];
+
+  const differences = [];
+  for (const key of comparableKeys) {
+    const leftValue = normalizeComparableValue(leftSummary?.[key]);
+    const rightValue = normalizeComparableValue(rightSummary?.[key]);
+    if (JSON.stringify(leftValue) === JSON.stringify(rightValue)) continue;
+    differences.push({
+      field: key,
+      left: leftValue,
+      right: rightValue,
+    });
+  }
+
+  return differences;
+}
+
 function buildCoeditingRolloutStateSummary({
   label = 'environment',
   publicPayload,
@@ -353,28 +411,17 @@ function buildCoeditingRolloutStateSummary({
   const health = admin.health || {};
 
   return {
+    ...buildComparableCoeditingRolloutPolicySummary({
+      label,
+      rollout,
+    }),
     label,
     publicStatus: publicSummary.status,
     adminStatus: String(admin.status || publicSummary.status || 'unknown'),
     reason: String(admin.reason || publicSummary.reason || ''),
     readOnlyFallbackActive: !!health.readOnlyFallbackActive,
     healthSource: String(health.source || publicSummary.source || 'unknown'),
-    experimentEnabled: rollout.experimentEnabled === true,
-    syncEngineEnabled: rollout.syncEngineEnabled === true,
-    rolloutEnabled: rollout.rolloutEnabled === true,
-    hardeningEnabled: rollout.hardeningEnabled === true,
-    allowGlobalRollout: rollout.allowGlobalRollout === true,
-    globalRolloutApproved: rollout.globalRolloutApproved === true,
-    requireInstanceAgreement: rollout.requireInstanceAgreement === true,
     instanceAgreementStatus: String(rollout.instanceAgreementStatus || 'unknown'),
-    configValid: rollout.configValid !== false,
-    configErrors: Array.isArray(rollout.configErrors) ? [...rollout.configErrors].sort() : [],
-    scopedUsers: Number(rollout.scopedUsers || 0),
-    scopedMaps: Number(rollout.scopedMaps || 0),
-    blockedUsers: Number(rollout.blockedUsers || 0),
-    blockedMaps: Number(rollout.blockedMaps || 0),
-    distributedObservabilityEnabled: rollout.distributedObservabilityEnabled === true,
-    adminApiKeyConfigured: rollout.adminApiKeyConfigured === true,
     observedInstanceCount: Number(rollout.observedInstanceCount || 0),
     observedFingerprintCount: Number(rollout.observedFingerprintCount || 0),
     observedInvalidInstances: Number(rollout.observedInvalidInstances || 0),
@@ -542,6 +589,8 @@ module.exports = {
   createCanaryWindowConfigFromEnv,
   fetchJsonWithRetries,
   fetchCoeditingCanarySampleAsync,
+  buildComparableCoeditingRolloutPolicySummary,
+  diffCoeditingRolloutPolicySummaries,
   buildCoeditingRolloutStateSummary,
   diffCoeditingRolloutStateSummaries,
   validatePublicHealthPayload,

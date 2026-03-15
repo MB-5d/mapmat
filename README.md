@@ -100,6 +100,18 @@ export COEDITING_PRODUCTION_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
 npm run verify:realtime:rollout-state
 ```
 
+Co-editing rollout preflight before changing Railway `Variables`:
+
+```bash
+export COEDITING_ADMIN_KEY="<target Railway ADMIN_API_KEY>"
+export COEDITING_PREFLIGHT_CHANGE_TYPE="scope"
+export COEDITING_ROLLOUT_USER_IDS="internal-user-1,internal-user-2"
+export COEDITING_ROLLOUT_MAP_IDS=""
+npm run verify:realtime:staging:preflight
+```
+
+For approved global rollout, set `COEDITING_PREFLIGHT_CHANGE_TYPE="broad"`, set both `COEDITING_ROLLOUT_ALLOW_GLOBAL=true` and `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`, and explicitly clear `COEDITING_ROLLOUT_USER_IDS` / `COEDITING_ROLLOUT_MAP_IDS` before running the same preflight command.
+
 Co-editing validation harnesses (repo root):
 
 ```bash

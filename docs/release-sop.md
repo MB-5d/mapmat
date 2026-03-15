@@ -23,6 +23,8 @@ This is the operational playbook for shipping safely from `staging` to `main`.
 - confirm `COEDITING_ROLLOUT_GLOBAL_APPROVED=false` unless broad rollout is explicitly intended
 - confirm `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` while rollout remains canary/scoped
 - export `COEDITING_STAGING_ADMIN_KEY` and `COEDITING_PRODUCTION_ADMIN_KEY`
+- export `COEDITING_PREFLIGHT_CHANGE_TYPE` plus the exact target rollout scope variables in the local terminal
+- run `npm run verify:realtime:staging:preflight` before editing Railway `Variables`
 - run `npm run verify:realtime:rollout-state` before scope or broad-rollout changes
 - run `npm run verify:realtime:staging:canary`
 - run `npm run verify:realtime:staging:canary:window`
@@ -69,6 +71,8 @@ Notes:
 - confirm `COEDITING_ROLLOUT_GLOBAL_APPROVED=false` unless broad rollout is explicitly intended
 - confirm `COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true` while rollout remains canary/scoped
 - export `COEDITING_STAGING_ADMIN_KEY` and `COEDITING_PRODUCTION_ADMIN_KEY`
+- export `COEDITING_PREFLIGHT_CHANGE_TYPE` plus the exact target rollout scope variables in the local terminal
+- run `npm run verify:realtime:production:preflight` before editing Railway `Variables`
 - run `npm run verify:realtime:rollout-state` before scope or broad-rollout changes
 - run `npm run verify:realtime:production:canary`
 - run `npm run verify:realtime:production:canary:window`

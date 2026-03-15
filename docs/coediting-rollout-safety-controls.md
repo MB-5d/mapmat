@@ -136,6 +136,8 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `npm run verify:realtime:production:broad`
 - `npm run verify:realtime:staging:broad:window`
 - `npm run verify:realtime:production:broad:window`
+- `npm run verify:realtime:staging:preflight`
+- `npm run verify:realtime:production:preflight`
 - `npm run verify:realtime:rollout-state`
 
 `verify:realtime:*:canary` also queries `GET /api/admin/coediting` with `x-admin-key: <ADMIN_API_KEY>` and fails fast on:
@@ -160,6 +162,20 @@ If the backend reports `permissions.coediting.mode === "read_only"`:
 - `rollout.configValid=true`
 - `rollout.instanceAgreementStatus="consistent"`
 - zero scoped rollout entities
+
+`verify:realtime:*:preflight` is the local fail-safe check before editing Railway `Variables`. It fetches the current environment policy, applies only the rollout variables exported in the local terminal, validates the planned target policy locally, and fails if the intended change shape is unsafe.
+
+Use:
+
+- `COEDITING_PREFLIGHT_CHANGE_TYPE=scope` for scoped canary enablement or scope changes
+- `COEDITING_PREFLIGHT_CHANGE_TYPE=broad` for explicitly approved global rollout
+
+For scoped preflight, export the exact target allow/block lists you intend to place in Railway `Variables`. For broad preflight, explicitly set:
+
+- `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`
+- `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`
+- `COEDITING_ROLLOUT_USER_IDS=""`
+- `COEDITING_ROLLOUT_MAP_IDS=""`
 
 `verify:realtime:rollout-state` prints the normalized rollout-policy summary for staging and production side-by-side, then lists exact field deltas. It is intended as the pre-change operator check before any scope expansion or broad-rollout flip.
 

@@ -15,19 +15,29 @@ const { recordVersionConflict, recordReconnectEvent, recordDroppedEvent, getCoed
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
   validateAdminCanaryPayload,
+  buildComparableCoeditingRolloutPolicySummary,
   buildCoeditingRolloutStateSummary,
   diffCoeditingRolloutStateSummaries,
   runCoeditingCanaryWindowCheckAsync,
 } = require('./lib/coeditingHealthCheckUtils');
+const {
+  buildTargetRolloutPreflightEnv,
+  buildPlannedTargetRolloutSummary,
+  validateRolloutPreflightPlan,
+} = require('./check-coediting-rollout-preflight');
 
 function buildCanaryPayload({
   status = 'healthy',
   readOnlyFallbackActive = false,
   source = 'distributed',
+  hardeningEnabled = true,
   configValid = true,
   configErrors = [],
   allowGlobalRollout = false,
   globalRolloutApproved = false,
+  requireInstanceAgreement = true,
+  distributedObservabilityEnabled = true,
+  adminApiKeyConfigured = true,
   instanceAgreementStatus = 'consistent',
   scopedUsers = 1,
   scopedMaps = 0,
@@ -44,8 +54,10 @@ function buildCanaryPayload({
       experimentEnabled: true,
       syncEngineEnabled: true,
       rolloutEnabled: true,
+      hardeningEnabled,
       allowGlobalRollout,
       globalRolloutApproved,
+      requireInstanceAgreement,
       configValid,
       configErrors,
       instanceAgreementStatus,
@@ -53,6 +65,8 @@ function buildCanaryPayload({
       scopedMaps,
       blockedUsers: 0,
       blockedMaps: 0,
+      distributedObservabilityEnabled,
+      adminApiKeyConfigured,
     },
     health: {
       status,
@@ -491,6 +505,53 @@ async function main() {
   assert.ok(policyDiff.some((entry) => entry.field === 'allowGlobalRollout'));
   assert.ok(policyDiff.some((entry) => entry.field === 'globalRolloutApproved'));
   assert.ok(policyDiff.some((entry) => entry.field === 'scopedUsers'));
+
+  const currentPolicySummary = buildComparableCoeditingRolloutPolicySummary({
+    label: 'current',
+    rollout: stagingState,
+  });
+  const scopeTargetEnv = buildTargetRolloutPreflightEnv(currentPolicySummary, {
+    COEDITING_ROLLOUT_USER_IDS: 'user-1,user-2,user-3',
+    COEDITING_ROLLOUT_MAP_IDS: 'map-1',
+    COEDITING_ROLLOUT_BLOCK_USER_IDS: 'blocked-user-1',
+  });
+  const scopeTargetSummary = buildPlannedTargetRolloutSummary(scopeTargetEnv);
+  const scopePreflight = validateRolloutPreflightPlan({
+    currentSummary: currentPolicySummary,
+    targetSummary: scopeTargetSummary,
+    changeType: 'scope',
+  });
+  assert.ok(scopePreflight.differences.some((entry) => entry.field === 'scopedUsers'));
+  assert.ok(scopePreflight.differences.some((entry) => entry.field === 'blockedUsers'));
+  assert.strictEqual(scopePreflight.unexpectedDifferences.length, 0);
+
+  const broadTargetEnv = buildTargetRolloutPreflightEnv(currentPolicySummary, {
+    COEDITING_ROLLOUT_ALLOW_GLOBAL: 'true',
+    COEDITING_ROLLOUT_GLOBAL_APPROVED: 'true',
+    COEDITING_ROLLOUT_USER_IDS: '',
+    COEDITING_ROLLOUT_MAP_IDS: '',
+  });
+  const broadTargetSummary = buildPlannedTargetRolloutSummary(broadTargetEnv);
+  const broadPreflight = validateRolloutPreflightPlan({
+    currentSummary: currentPolicySummary,
+    targetSummary: broadTargetSummary,
+    changeType: 'broad',
+  });
+  assert.ok(broadPreflight.differences.some((entry) => entry.field === 'allowGlobalRollout'));
+  assert.ok(broadPreflight.differences.some((entry) => entry.field === 'globalRolloutApproved'));
+  assert.ok(broadPreflight.differences.some((entry) => entry.field === 'scopedUsers'));
+  assert.strictEqual(broadPreflight.unexpectedDifferences.length, 0);
+
+  const invalidScopeTargetEnv = buildTargetRolloutPreflightEnv(currentPolicySummary, {
+    COEDITING_ROLLOUT_ALLOW_GLOBAL: 'true',
+    COEDITING_ROLLOUT_USER_IDS: 'user-1',
+  });
+  const invalidScopeTargetSummary = buildPlannedTargetRolloutSummary(invalidScopeTargetEnv);
+  assert.throws(() => validateRolloutPreflightPlan({
+    currentSummary: currentPolicySummary,
+    targetSummary: invalidScopeTargetSummary,
+    changeType: 'scope',
+  }), /Scoped rollout preflight requires COEDITING_ROLLOUT_ALLOW_GLOBAL=false|Planned rollout policy is invalid/);
 
   const healthySamples = [
     {

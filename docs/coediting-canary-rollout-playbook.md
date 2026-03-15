@@ -66,6 +66,16 @@ export COEDITING_PRODUCTION_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
 npm run verify:realtime:rollout-state
 ```
 
+Then run local preflight for the exact target Railway `Variables` change:
+
+```bash
+export COEDITING_ADMIN_KEY="<target service ADMIN_API_KEY>"
+export COEDITING_PREFLIGHT_CHANGE_TYPE="scope"
+export COEDITING_ROLLOUT_USER_IDS="internal-user-1,internal-user-2"
+export COEDITING_ROLLOUT_MAP_IDS=""
+npm run verify:realtime:staging:preflight
+```
+
 `npm run verify:realtime:*:canary:window` uses the same gate limits but polls for a sustained observation window with:
 
 - `COEDITING_CANARY_WINDOW_SEC=300`
@@ -83,19 +93,28 @@ npm run verify:realtime:rollout-state
 export COEDITING_ADMIN_KEY="<mapmat-staging ADMIN_API_KEY>"
 ```
 
-4. Run the point-in-time realtime canary gate:
+4. Preflight the exact scoped target before editing Railway `Variables`:
+
+```bash
+export COEDITING_PREFLIGHT_CHANGE_TYPE="scope"
+export COEDITING_ROLLOUT_USER_IDS="<exact target user ids or empty string>"
+export COEDITING_ROLLOUT_MAP_IDS="<exact target map ids or empty string>"
+npm run verify:realtime:staging:preflight
+```
+
+5. Run the point-in-time realtime canary gate:
 
 ```bash
 npm run verify:realtime:staging:canary
 ```
 
-5. Run the sustained canary window:
+6. Run the sustained canary window:
 
 ```bash
 npm run verify:realtime:staging:canary:window
 ```
 
-6. Run the standard runtime verification:
+7. Run the standard runtime verification:
 
 ```bash
 npm run verify:runtime:staging
@@ -113,19 +132,28 @@ Only move to production canary if all three commands pass.
 export COEDITING_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
 ```
 
-4. Run the point-in-time realtime canary gate:
+4. Preflight the exact scoped target before editing Railway `Variables`:
+
+```bash
+export COEDITING_PREFLIGHT_CHANGE_TYPE="scope"
+export COEDITING_ROLLOUT_USER_IDS="<exact target user ids or empty string>"
+export COEDITING_ROLLOUT_MAP_IDS="<exact target map ids or empty string>"
+npm run verify:realtime:production:preflight
+```
+
+5. Run the point-in-time realtime canary gate:
 
 ```bash
 npm run verify:realtime:production:canary
 ```
 
-5. Run the sustained canary window:
+6. Run the sustained canary window:
 
 ```bash
 npm run verify:realtime:production:canary:window
 ```
 
-6. Run the standard runtime verification:
+7. Run the standard runtime verification:
 
 ```bash
 npm run verify:runtime:production
@@ -147,7 +175,25 @@ Use this only after scoped canary is complete and broad rollout is explicitly ap
 ```bash
 npm run verify:realtime:rollout-state
 ```
-4. Run the point-in-time broad rollout gate:
+4. Preflight the exact broad target before editing Railway `Variables`:
+
+```bash
+export COEDITING_ADMIN_KEY="<target service ADMIN_API_KEY>"
+export COEDITING_PREFLIGHT_CHANGE_TYPE="broad"
+export COEDITING_ROLLOUT_ALLOW_GLOBAL="true"
+export COEDITING_ROLLOUT_GLOBAL_APPROVED="true"
+export COEDITING_ROLLOUT_USER_IDS=""
+export COEDITING_ROLLOUT_MAP_IDS=""
+npm run verify:realtime:staging:preflight
+```
+
+or:
+
+```bash
+npm run verify:realtime:production:preflight
+```
+
+5. Run the point-in-time broad rollout gate:
 
 ```bash
 npm run verify:realtime:staging:broad
@@ -159,7 +205,7 @@ or:
 npm run verify:realtime:production:broad
 ```
 
-5. Run the sustained broad rollout window:
+6. Run the sustained broad rollout window:
 
 ```bash
 npm run verify:realtime:staging:broad:window
