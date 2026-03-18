@@ -97,6 +97,7 @@ export function useCoeditingLive({
   const [pendingCount, setPendingCount] = useState(0);
   const [participants, setParticipants] = useState([]);
 
+  const statusRef = useRef(STATUS.DISABLED);
   const socketRef = useRef(null);
   const heartbeatTimerRef = useRef(null);
   const reconnectTimerRef = useRef(null);
@@ -113,6 +114,17 @@ export function useCoeditingLive({
   const selectionNodeIdsRef = useRef([]);
   const selectionTimerRef = useRef(null);
   const heartbeatIntervalSecRef = useRef(DEFAULT_HEARTBEAT_SEC);
+  const hydrateFromServerRef = useRef(null);
+  const scheduleReconnectRef = useRef(null);
+  const markOutOfSyncRef = useRef(null);
+
+  const setLiveStatus = useCallback((nextStatus, nextDetail) => {
+    statusRef.current = nextStatus;
+    setStatus(nextStatus);
+    if (nextDetail !== undefined) {
+      setStatusDetail(nextDetail);
+    }
+  }, []);
 
   const applyOptimisticDocument = useCallback(() => {
     const authoritative = authoritativeDocumentRef.current;
@@ -172,11 +184,10 @@ export function useCoeditingLive({
   }, [resetHeartbeat]);
 
   const markOutOfSync = useCallback((message) => {
-    setStatus(STATUS.OUT_OF_SYNC);
-    setStatusDetail(message || 'Live document needs a full resync.');
+    setLiveStatus(STATUS.OUT_OF_SYNC, message || 'Live document needs a full resync.');
     resetHeartbeat();
     clearReconnectTimer();
-  }, [clearReconnectTimer, resetHeartbeat]);
+  }, [clearReconnectTimer, resetHeartbeat, setLiveStatus]);
 
   const resetState = useCallback(() => {
     manualStopRef.current = true;
@@ -194,10 +205,9 @@ export function useCoeditingLive({
     setParticipants([]);
     setPendingCount(0);
     setLiveVersion(0);
-    setStatus(STATUS.DISABLED);
-    setStatusDetail('');
+    setLiveStatus(STATUS.DISABLED, '');
     reconnectAttemptRef.current = 0;
-  }, [cleanupSocket, clearReconnectTimer]);
+  }, [cleanupSocket, clearReconnectTimer, setLiveStatus]);
 
   const publishAuthoritativeDocument = useCallback((document) => {
     authoritativeDocumentRef.current = normalizeLiveDocument(document);
@@ -261,9 +271,34 @@ export function useCoeditingLive({
     return true;
   }, [applyOptimisticDocument, enabled, mapId, publishAuthoritativeDocument]);
 
+  const applyCommittedOperation = useCallback((operation, { fallbackActorId = null } = {}) => {
+    if (!operation?.opId) return false;
+
+    removePendingDraft(operation.opId);
+
+    // The same committed op can arrive over the socket before the ingest call resolves.
+    // Only fold it into the authoritative document once.
+    if (committedOpIdsRef.current.has(operation.opId)) {
+      applyOptimisticDocument();
+      return false;
+    }
+
+    const currentDocument = authoritativeDocumentRef.current || getLocalDocument();
+    const nextAuthoritative = applyOperationToDocument(currentDocument, operation);
+    nextAuthoritative.version = Number.isInteger(operation.version)
+      ? operation.version
+      : (currentDocument.version || 0) + 1;
+    nextAuthoritative.lastOpId = operation.opId;
+    nextAuthoritative.lastActorId = operation.actorId || fallbackActorId || currentDocument.lastActorId || null;
+    authoritativeDocumentRef.current = normalizeLiveDocument(nextAuthoritative);
+    limitCommittedIds(committedOpIdsRef, operation.opId);
+    applyOptimisticDocument();
+    return true;
+  }, [applyOptimisticDocument, getLocalDocument, removePendingDraft]);
+
   const flushQueue = useCallback(async () => {
     if (!enabled || !canEdit || !mapId || !actorId) return;
-    if (status !== STATUS.CONNECTED) return;
+    if (statusRef.current !== STATUS.CONNECTED) return;
     if (!authoritativeDocumentRef.current) return;
     if (flushInProgressRef.current) return;
     if (inFlightOpIdRef.current) return;
@@ -281,17 +316,7 @@ export function useCoeditingLive({
     try {
       const { operation: committedOperation } = await ingestCoeditingOperation(mapId, operation);
       if (committedOperation?.opId) {
-        limitCommittedIds(committedOpIdsRef, committedOperation.opId);
-        const currentDocument = authoritativeDocumentRef.current || getLocalDocument();
-        const nextAuthoritative = applyOperationToDocument(currentDocument, committedOperation);
-        nextAuthoritative.version = Number.isInteger(committedOperation.version)
-          ? committedOperation.version
-          : (currentDocument.version || 0) + 1;
-        nextAuthoritative.lastOpId = committedOperation.opId;
-        nextAuthoritative.lastActorId = committedOperation.actorId || actorId;
-        authoritativeDocumentRef.current = normalizeLiveDocument(nextAuthoritative);
-        removePendingDraft(committedOperation.opId);
-        applyOptimisticDocument();
+        applyCommittedOperation(committedOperation, { fallbackActorId: actorId });
       }
     } catch (error) {
       inFlightOpIdRef.current = '';
@@ -313,39 +338,29 @@ export function useCoeditingLive({
       onWarn?.(error?.message || 'Failed to commit live operation');
     } finally {
       flushInProgressRef.current = false;
-      if (enabled && status === STATUS.CONNECTED && pendingDraftsRef.current.length > 0 && !inFlightOpIdRef.current) {
+      if (
+        enabled
+        && statusRef.current === STATUS.CONNECTED
+        && pendingDraftsRef.current.length > 0
+        && !inFlightOpIdRef.current
+      ) {
         window.setTimeout(() => {
           flushQueue();
         }, 0);
       }
     }
-  }, [actorId, applyOptimisticDocument, canEdit, enabled, getLocalDocument, hydrateFromServer, mapId, markOutOfSync, onWarn, removePendingDraft, status]);
+  }, [actorId, applyCommittedOperation, canEdit, enabled, hydrateFromServer, mapId, markOutOfSync, onWarn]);
 
   const acceptCommittedOperation = useCallback((operation) => {
     if (!operation?.opId) return false;
-    removePendingDraft(operation.opId);
-    if (committedOpIdsRef.current.has(operation.opId)) {
-      applyOptimisticDocument();
-      return false;
-    }
 
     try {
-      const currentDocument = authoritativeDocumentRef.current || getLocalDocument();
-      const nextAuthoritative = applyOperationToDocument(currentDocument, operation);
-      nextAuthoritative.version = Number.isInteger(operation.version)
-        ? operation.version
-        : (currentDocument.version || 0) + 1;
-      nextAuthoritative.lastOpId = operation.opId;
-      nextAuthoritative.lastActorId = operation.actorId || currentDocument.lastActorId || null;
-      authoritativeDocumentRef.current = normalizeLiveDocument(nextAuthoritative);
-      limitCommittedIds(committedOpIdsRef, operation.opId);
-      applyOptimisticDocument();
-      return true;
+      return applyCommittedOperation(operation);
     } catch (error) {
       markOutOfSync(error?.message || 'Failed to apply a committed live operation');
       return false;
     }
-  }, [applyOptimisticDocument, getLocalDocument, markOutOfSync, removePendingDraft]);
+  }, [applyCommittedOperation, markOutOfSync]);
 
   const sendSocketJson = useCallback((payload) => {
     const socket = socketRef.current;
@@ -367,8 +382,7 @@ export function useCoeditingLive({
     if (!enabled || manualStopRef.current) return;
     clearReconnectTimer();
     resetHeartbeat();
-    setStatus(STATUS.RECONNECTING);
-    setStatusDetail('Reconnecting to live editing…');
+    setLiveStatus(STATUS.RECONNECTING, 'Reconnecting to live editing…');
     const attempt = Math.min(reconnectAttemptRef.current, RECONNECT_DELAYS_MS.length - 1);
     const delay = RECONNECT_DELAYS_MS[attempt];
     reconnectAttemptRef.current += 1;
@@ -384,8 +398,7 @@ export function useCoeditingLive({
         socketRef.current = socket;
 
         socket.onopen = () => {
-          setStatus(STATUS.CONNECTING);
-          setStatusDetail('Joining live room…');
+          setLiveStatus(STATUS.CONNECTING, 'Joining live room…');
         };
 
         socket.onmessage = (event) => {
@@ -409,8 +422,10 @@ export function useCoeditingLive({
               reconnectAttemptRef.current = 0;
               const roomMode = String(message.roomMode || '').trim().toLowerCase();
               const isReadOnlyRoom = roomMode === 'read_only';
-              setStatus(isReadOnlyRoom ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED);
-              setStatusDetail(isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected');
+              setLiveStatus(
+                isReadOnlyRoom ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED,
+                isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected'
+              );
               setParticipants(Array.isArray(message.participants) ? message.participants : []);
               resetHeartbeat();
               heartbeatTimerRef.current = window.setInterval(() => {
@@ -465,11 +480,23 @@ export function useCoeditingLive({
         markOutOfSync(error?.message || 'Failed to open live transport');
       }
     }, delay);
-  }, [acceptCommittedOperation, broadcastSelectionNow, cleanupSocket, clearReconnectTimer, enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, resetHeartbeat, sendSocketJson]);
+  }, [acceptCommittedOperation, broadcastSelectionNow, cleanupSocket, clearReconnectTimer, enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, resetHeartbeat, sendSocketJson, setLiveStatus]);
 
   useEffect(() => {
     currentMapIdRef.current = mapId || null;
   }, [mapId]);
+
+  useEffect(() => {
+    hydrateFromServerRef.current = hydrateFromServer;
+  }, [hydrateFromServer]);
+
+  useEffect(() => {
+    scheduleReconnectRef.current = scheduleReconnect;
+  }, [scheduleReconnect]);
+
+  useEffect(() => {
+    markOutOfSyncRef.current = markOutOfSync;
+  }, [markOutOfSync]);
 
   useEffect(() => {
     if (!enabled || !mapId || !actorId || !canEdit) {
@@ -477,23 +504,26 @@ export function useCoeditingLive({
       return undefined;
     }
 
+    let disposed = false;
     manualStopRef.current = false;
     if (!sessionIdRef.current) {
       sessionIdRef.current = createSessionId();
     }
 
-    setStatus(STATUS.CONNECTING);
-    setStatusDetail('Loading live document…');
+    setLiveStatus(STATUS.CONNECTING, 'Loading live document…');
 
-    hydrateFromServer()
+    hydrateFromServerRef.current()
       .then(() => {
-        scheduleReconnect();
+        if (disposed || manualStopRef.current || currentMapIdRef.current !== mapId) return;
+        scheduleReconnectRef.current?.();
       })
       .catch((error) => {
-        markOutOfSync(error?.message || 'Failed to load live document');
+        if (disposed || manualStopRef.current || currentMapIdRef.current !== mapId) return;
+        markOutOfSyncRef.current?.(error?.message || 'Failed to load live document');
       });
 
     return () => {
+      disposed = true;
       manualStopRef.current = true;
       clearReconnectTimer();
       cleanupSocket();
@@ -502,13 +532,13 @@ export function useCoeditingLive({
         selectionTimerRef.current = null;
       }
     };
-  }, [actorId, canEdit, cleanupSocket, clearReconnectTimer, enabled, hydrateFromServer, mapId, markOutOfSync, resetState, scheduleReconnect]);
+  }, [actorId, canEdit, cleanupSocket, clearReconnectTimer, enabled, mapId, resetState, setLiveStatus]);
 
   const submitDraft = useCallback(({ type, payload }) => {
     if (!enabled || !mapId || !actorId || !canEdit) {
       return { ok: false, error: 'Live editing is not available for this map.' };
     }
-    if (status === STATUS.OUT_OF_SYNC || !authoritativeDocumentRef.current) {
+    if (statusRef.current === STATUS.OUT_OF_SYNC || !authoritativeDocumentRef.current) {
       return { ok: false, error: 'Live document is not ready. Resync before editing again.' };
     }
 
@@ -534,14 +564,14 @@ export function useCoeditingLive({
       return { ok: false, error: message };
     }
 
-    if (status === STATUS.CONNECTED) {
+    if (statusRef.current === STATUS.CONNECTED) {
       window.setTimeout(() => {
         flushQueue();
       }, 0);
     }
 
     return { ok: true, opId: draft.opId };
-  }, [actorId, applyOptimisticDocument, canEdit, enabled, flushQueue, mapId, markOutOfSync, status]);
+  }, [actorId, applyOptimisticDocument, canEdit, enabled, flushQueue, mapId, markOutOfSync]);
 
   const updateSelection = useCallback((nodeIds) => {
     selectionNodeIdsRef.current = uniqueNodeIds(nodeIds);
@@ -553,11 +583,12 @@ export function useCoeditingLive({
   const resync = useCallback(async () => {
     if (!enabled || !mapId) return false;
     try {
-      setStatus(STATUS.RECONNECTING);
-      setStatusDetail('Resyncing live document…');
+      setLiveStatus(STATUS.RECONNECTING, 'Resyncing live document…');
       await hydrateFromServer();
-      setStatus(joiningRef.current ? STATUS.CONNECTED : STATUS.RECONNECTING);
-      setStatusDetail(joiningRef.current ? 'Connected' : 'Reconnecting to live editing…');
+      setLiveStatus(
+        joiningRef.current ? STATUS.CONNECTED : STATUS.RECONNECTING,
+        joiningRef.current ? 'Connected' : 'Reconnecting to live editing…'
+      );
       if (!socketRef.current || socketRef.current.readyState > WebSocket.OPEN) {
         scheduleReconnect();
       } else {
@@ -568,7 +599,7 @@ export function useCoeditingLive({
       markOutOfSync(error?.message || 'Failed to resync live document');
       return false;
     }
-  }, [enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, scheduleReconnect]);
+  }, [enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, scheduleReconnect, setLiveStatus]);
 
   const remoteSelections = useMemo(() => {
     const currentSessionId = sessionIdRef.current;
