@@ -198,6 +198,9 @@ const SitemapTree = ({
   showCommentBadges,
   canEdit,
   canComment,
+  showCommentAction,
+  commentActionLabel,
+  showExternalLinkAction,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -338,6 +341,9 @@ const SitemapTree = ({
             showCommentBadges={showCommentBadges}
             canEdit={canEdit}
             canComment={canComment}
+            showCommentAction={showCommentAction}
+            commentActionLabel={commentActionLabel}
+            showExternalLinkAction={showExternalLinkAction}
             connectionTool={connectionTool}
             snapTarget={snapTarget}
             onAnchorMouseDown={onAnchorMouseDown}
@@ -2400,6 +2406,11 @@ export default function App() {
   const liveBannerTone = liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
     ? 'warning'
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
+  const showCoeditingReadOnlyBanner = !!(isCoeditingReadOnlyMode && hasMap && currentMap?.id);
+  const commentPopoverReadOnlyMessage = useMemo(() => {
+    if (!showCoeditingReadOnlyBanner || !effectiveFeatureGates.mapComment) return '';
+    return 'Commenting on live shared maps is not available yet.';
+  }, [effectiveFeatureGates.mapComment, showCoeditingReadOnlyBanner]);
 
   useEffect(() => {
     if (!isLiveActive) return;
@@ -4459,7 +4470,7 @@ export default function App() {
     if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
     if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu)) return;
 
-    const canStartSelection = shiftActive;
+    const canStartSelection = shiftActive && canEdit();
     if (canStartSelection) {
       const start = getWorldPointFromClient(e.clientX, e.clientY);
       const startNodeId = nodeContainer?.getAttribute('data-node-id') || null;
@@ -5919,7 +5930,7 @@ export default function App() {
 
   const openNodeMenu = (nodeId, event) => {
     if (!nodeId || !event) return;
-    if (!canEdit() && !canComment()) return;
+    if (!canEdit()) return;
     if (!contentRef.current) return;
     event.preventDefault();
     event.stopPropagation();
@@ -5969,6 +5980,8 @@ export default function App() {
       'button, a, input, textarea, select, .anchor-point, .stack-toggle, .comment-badge, .thumb-fullsize-btn, .node-status-badge'
     );
     if (interactiveTarget) return;
+
+    if (!canEdit()) return;
 
     if (shiftActive) {
       setSelectedNodeIds((prev) => {
@@ -8106,7 +8119,7 @@ export default function App() {
        
       >
         {/* Permission banner for shared links with limited access */}
-        {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && (
+        {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && !showCoeditingReadOnlyBanner && (
           <div className="permission-banner">
             <Info size={16} />
             <span>
@@ -8128,7 +8141,7 @@ export default function App() {
           </div>
         )}
 
-        {isCoeditingReadOnlyMode && hasMap && currentMap?.id && (
+        {showCoeditingReadOnlyBanner && (
           <div className="permission-banner live-edit-banner live-edit-banner-warning">
             <AlertTriangle size={16} />
             <span>
@@ -8167,6 +8180,7 @@ export default function App() {
           && canViewPresence()
           && hasMap
           && currentMap?.id
+          && !showCoeditingReadOnlyBanner
           && presenceBannerText
           && (
             <div className="permission-banner presence-banner">
@@ -8279,6 +8293,9 @@ export default function App() {
                   showCommentBadges={activeTool === 'comments' || showCommentsPanel}
                   canEdit={canEdit()}
                   canComment={canComment()}
+                  showCommentAction={!!effectiveFeatureGates.mapComment}
+                  commentActionLabel={canComment() ? 'Comments' : 'View comments'}
+                  showExternalLinkAction={canEdit()}
                   connectionTool={connectionTool}
                   snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
                   onAnchorMouseDown={handleAnchorMouseDown}
@@ -8798,6 +8815,7 @@ export default function App() {
                     onDeleteComment={deleteComment}
                     collaborators={collaborators}
                     canComment={canComment()}
+                    readOnlyMessage={commentPopoverReadOnlyMessage}
                   />
                 </div>
                 );

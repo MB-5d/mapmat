@@ -5817,6 +5817,16 @@ body {
   padding: 20px;
 }
 
+.comment-readonly-note {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .comment-input-section {
   flex: 1;
   display: flex;
@@ -8643,6 +8653,12 @@ body {
 
 [data-theme="dark"] .comment-popover-footer {
   border-top-color: #301E3F;
+}
+
+[data-theme="dark"] .comment-readonly-note {
+  background: rgba(154, 52, 18, 0.2);
+  border-color: rgba(251, 146, 60, 0.35);
+  color: #fdba74;
 }
 
 /* ============================================

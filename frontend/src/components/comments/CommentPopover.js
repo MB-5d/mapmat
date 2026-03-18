@@ -20,6 +20,7 @@ const CommentPopover = ({
   onDeleteComment,
   collaborators,
   canComment,
+  readOnlyMessage = '',
 }) => {
   const [newComment, setNewComment] = useState('');
   const [showMentions, setShowMentions] = useState(false);
@@ -158,6 +159,10 @@ const CommentPopover = ({
               <CommentItem key={comment.id} comment={comment} />
             ))}
           </div>
+        )}
+
+        {!canComment && readOnlyMessage && (
+          <div className="comment-readonly-note">{readOnlyMessage}</div>
         )}
 
         {/* Main textarea area - only show if user can comment */}

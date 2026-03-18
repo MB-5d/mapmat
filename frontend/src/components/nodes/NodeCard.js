@@ -24,6 +24,9 @@ const NodeCard = ({
   showCommentBadges,
   canEdit,
   canComment,
+  showCommentAction = false,
+  commentActionLabel = 'Comments',
+  showExternalLinkAction = true,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -78,6 +81,7 @@ const NodeCard = ({
   const badgeTitle = badgeTitleParts.join('\n');
   const isDeleted = showAnnotations && status === 'deleted';
   const shouldGhost = isGhosted || isDeleted;
+  const showActionBar = canEdit || showCommentAction || (showExternalLinkAction && !!node.url);
 
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
@@ -142,7 +146,7 @@ const NodeCard = ({
     return () => {
       isActive = false;
     };
-  }, [showThumbnails, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError, canRequestThumbnail]);
+  }, [showThumbnails, node, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError, canRequestThumbnail]);
 
   useEffect(() => {
     if (!thumb || !thumbImgRef.current) return;
@@ -308,42 +312,44 @@ const NodeCard = ({
         {showPageNumbers && <span className="page-number">{number}</span>}
       </div>
 
-      <div className="card-actions">
-        <div className="card-actions-left">
-          {canEdit && (
-            <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
-              <Edit2 size={18} />
-            </button>
-          )}
-          {canEdit && !isRoot && (
-            <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
-              <Trash2 size={18} />
-            </button>
-          )}
-          {canEdit && (
-            <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
-              <Copy size={18} />
-            </button>
-          )}
-          {canComment && (
-            <button className="btn-icon-flat" title="Add Note" onClick={() => onAddNote?.(node)}>
-              <MessageSquare size={18} />
-            </button>
+      {showActionBar && (
+        <div className="card-actions">
+          <div className="card-actions-left">
+            {canEdit && (
+              <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
+                <Edit2 size={18} />
+              </button>
+            )}
+            {canEdit && !isRoot && (
+              <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
+                <Trash2 size={18} />
+              </button>
+            )}
+            {canEdit && (
+              <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
+                <Copy size={18} />
+              </button>
+            )}
+            {showCommentAction && (
+              <button className="btn-icon-flat" title={commentActionLabel} onClick={() => onAddNote?.(node)}>
+                <MessageSquare size={18} />
+              </button>
+            )}
+          </div>
+          {showExternalLinkAction && node.url && (
+            <a
+              href={node.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-icon-flat external-link-btn"
+              title="Open in new tab"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink size={18} />
+            </a>
           )}
         </div>
-        {node.url && (
-          <a
-            href={node.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-icon-flat external-link-btn"
-            title="Open in new tab"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink size={18} />
-          </a>
-        )}
-      </div>
+      )}
 
       {showStackToggle && (
         <button
@@ -383,6 +389,9 @@ const DraggableNodeCard = ({
   showCommentBadges,
   canEdit,
   canComment,
+  showCommentAction,
+  commentActionLabel,
+  showExternalLinkAction,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -425,6 +434,9 @@ const DraggableNodeCard = ({
         showCommentBadges={showCommentBadges}
         canEdit={canEdit}
         canComment={canComment}
+        showCommentAction={showCommentAction}
+        commentActionLabel={commentActionLabel}
+        showExternalLinkAction={showExternalLinkAction}
         connectionTool={connectionTool}
         snapTarget={snapTarget}
         onAnchorMouseDown={onAnchorMouseDown}
