@@ -64,14 +64,18 @@ const ProjectsModal = ({
                   </div>
                 ) : (
                   projects.map(project => {
-                    const isUncategorized = project.id === 'uncategorized' || project.name === 'Uncategorized';
+                    const isVirtualProject = !!project.isVirtual
+                      || project.id === 'uncategorized'
+                      || project.name === 'Uncategorized'
+                      || project.id === 'shared-with-me'
+                      || project.name === 'Shared With Me';
                     return (
                     <div key={project.id} className="project-folder">
                       <div className="project-folder-header" onClick={() => onToggleProjectExpanded(project.id)}>
                         <div className="project-folder-icon">
                           <Folder size={18} />
                         </div>
-                        {editingProjectId === project.id && !isUncategorized ? (
+                        {editingProjectId === project.id && !isVirtualProject ? (
                           <input
                             className="project-name-input"
                             value={editingProjectName}
@@ -91,7 +95,7 @@ const ProjectsModal = ({
                         <div className="project-chevron">
                           {expandedProjects[project.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </div>
-                        {!isUncategorized && (
+                        {!isVirtualProject && (
                           <div className="project-folder-actions" onClick={(e) => e.stopPropagation()}>
                             <button
                               className="project-action-btn"
@@ -115,30 +119,34 @@ const ProjectsModal = ({
                           {project.maps?.length === 0 ? (
                             <div className="project-maps-empty">No maps in this project</div>
                           ) : (
-                            project.maps?.map(map => (
+                            project.maps?.map(map => {
+                              const isSharedMap = !!map.membership_role;
+                              return (
                               <div key={map.id}>
                                 <div className="map-item" onClick={() => onLoadMap(map)}>
                                   <Network size={16} />
                                   <span className="map-name">{map.name}</span>
-                                  <div className="map-actions" onClick={(e) => e.stopPropagation()}>
-                                    <button
-                                      className="map-move"
-                                      title="Move Map"
-                                      onClick={() => {
-                                        setMovingMapId(map.id);
-                                        setMoveTarget(map.project_id || '');
-                                      }}
-                                    >
-                                      <FolderInput size={14} />
-                                    </button>
-                                    <button
-                                      className="map-delete"
-                                      title="Delete Map"
-                                      onClick={(e) => { e.stopPropagation(); onDeleteMap(project.id, map.id); }}
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                  </div>
+                                  {!isSharedMap && (
+                                    <div className="map-actions" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        className="map-move"
+                                        title="Move Map"
+                                        onClick={() => {
+                                          setMovingMapId(map.id);
+                                          setMoveTarget(map.project_id || '');
+                                        }}
+                                      >
+                                        <FolderInput size={14} />
+                                      </button>
+                                      <button
+                                        className="map-delete"
+                                        title="Delete Map"
+                                        onClick={(e) => { e.stopPropagation(); onDeleteMap(project.id, map.id); }}
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                                 {movingMapId === map.id && (
                                   <div className="map-move-row" onClick={(e) => e.stopPropagation()}>
@@ -148,7 +156,7 @@ const ProjectsModal = ({
                                     >
                                       <option value="">No project (Uncategorized)</option>
                                       {projects
-                                        .filter(p => p.id !== 'uncategorized' && p.name !== 'Uncategorized')
+                                        .filter(p => !p.isVirtual && p.id !== 'uncategorized' && p.name !== 'Uncategorized')
                                         .map(p => (
                                           <option key={p.id} value={p.id}>{p.name}</option>
                                         ))}
@@ -171,7 +179,8 @@ const ProjectsModal = ({
                                   </div>
                                 )}
                               </div>
-                            ))
+                            );
+                            })
                           )}
                         </div>
                       )}

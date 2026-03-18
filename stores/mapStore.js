@@ -20,6 +20,29 @@ function listMapsByUserAsync({ userId, projectId, limit, offset }) {
   return adapter.queryAllAsync(query, params);
 }
 
+function listMapsAccessibleToUserAsync({ userId, projectId, limit, offset }) {
+  let query = `
+    SELECT DISTINCT m.*, p.name as project_name, mm.role as membership_role
+    FROM maps m
+    LEFT JOIN projects p ON m.project_id = p.id
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE (m.user_id = ? OR mm.id IS NOT NULL)
+  `;
+  const params = [userId, userId];
+
+  if (projectId) {
+    query += ' AND m.project_id = ?';
+    params.push(projectId);
+  }
+
+  query += ' ORDER BY m.updated_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  return adapter.queryAllAsync(query, params);
+}
+
 async function countMapsByUserAsync({ userId, projectId }) {
   if (projectId) {
     return (await adapter.queryOneAsync(
@@ -28,6 +51,25 @@ async function countMapsByUserAsync({ userId, projectId }) {
     ))?.count || 0;
   }
   return (await adapter.queryOneAsync('SELECT COUNT(*) as count FROM maps WHERE user_id = ?', [userId]))?.count || 0;
+}
+
+async function countMapsAccessibleToUserAsync({ userId, projectId }) {
+  let query = `
+    SELECT COUNT(DISTINCT m.id) as count
+    FROM maps m
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE (m.user_id = ? OR mm.id IS NOT NULL)
+  `;
+  const params = [userId, userId];
+
+  if (projectId) {
+    query += ' AND m.project_id = ?';
+    params.push(projectId);
+  }
+
+  return (await adapter.queryOneAsync(query, params))?.count || 0;
 }
 
 function getMapWithProjectForUserAsync(mapId, userId) {
@@ -39,8 +81,33 @@ function getMapWithProjectForUserAsync(mapId, userId) {
   `, [mapId, userId]);
 }
 
+function getMapWithProjectAccessibleToUserAsync(mapId, userId) {
+  return adapter.queryOneAsync(`
+    SELECT DISTINCT m.*, p.name as project_name, mm.role as membership_role
+    FROM maps m
+    LEFT JOIN projects p ON m.project_id = p.id
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE m.id = ?
+      AND (m.user_id = ? OR mm.id IS NOT NULL)
+  `, [userId, mapId, userId]);
+}
+
 function getMapForUserAsync(mapId, userId) {
   return adapter.queryOneAsync('SELECT * FROM maps WHERE id = ? AND user_id = ?', [mapId, userId]);
+}
+
+function getMapAccessibleToUserAsync(mapId, userId) {
+  return adapter.queryOneAsync(`
+    SELECT DISTINCT m.*, mm.role as membership_role
+    FROM maps m
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE m.id = ?
+      AND (m.user_id = ? OR mm.id IS NOT NULL)
+  `, [userId, mapId, userId]);
 }
 
 function getMapByIdAsync(mapId) {
@@ -140,12 +207,30 @@ function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
   `, [mapId, userId, limit]);
 }
 
+function listMapVersionsByMapAsync(mapId, limit = 25) {
+  return adapter.queryAllAsync(`
+    SELECT * FROM map_versions
+    WHERE map_id = ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `, [mapId, limit]);
+}
+
 async function getNextMapVersionNumberAsync(mapId, userId) {
   const row = await adapter.queryOneAsync(`
     SELECT MAX(version_number) as "maxVersion"
     FROM map_versions
     WHERE map_id = ? AND user_id = ?
   `, [mapId, userId]);
+  return Number(row?.maxVersion || 0) + 1;
+}
+
+async function getNextMapVersionNumberByMapAsync(mapId) {
+  const row = await adapter.queryOneAsync(`
+    SELECT MAX(version_number) as "maxVersion"
+    FROM map_versions
+    WHERE map_id = ?
+  `, [mapId]);
   return Number(row?.maxVersion || 0) + 1;
 }
 
@@ -190,6 +275,14 @@ function listMapVersionIdsForUserMapAsync(mapId, userId) {
   `, [mapId, userId]);
 }
 
+function listMapVersionIdsByMapAsync(mapId) {
+  return adapter.queryAllAsync(`
+    SELECT id FROM map_versions
+    WHERE map_id = ?
+    ORDER BY created_at DESC
+  `, [mapId]);
+}
+
 async function deleteMapVersionsByIdsAsync(ids) {
   if (!ids || ids.length === 0) return 0;
   const placeholders = adapter.placeholders(ids.length);
@@ -202,17 +295,24 @@ function getMapVersionByIdAsync(versionId) {
 
 module.exports = {
   listMapsByUserAsync,
+  listMapsAccessibleToUserAsync,
   countMapsByUserAsync,
+  countMapsAccessibleToUserAsync,
   getMapWithProjectForUserAsync,
+  getMapWithProjectAccessibleToUserAsync,
   getMapForUserAsync,
+  getMapAccessibleToUserAsync,
   getMapByIdAsync,
   createMapAsync,
   updateMapByIdAsync,
   deleteMapByIdAsync,
   listMapVersionsForUserMapAsync,
+  listMapVersionsByMapAsync,
   getNextMapVersionNumberAsync,
+  getNextMapVersionNumberByMapAsync,
   createMapVersionAsync,
   listMapVersionIdsForUserMapAsync,
+  listMapVersionIdsByMapAsync,
   deleteMapVersionsByIdsAsync,
   getMapVersionByIdAsync,
 };

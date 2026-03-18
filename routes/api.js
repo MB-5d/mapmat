@@ -124,12 +124,19 @@ function ensureResourceAction({
   const role = permissionPolicy.resolveResourceRole({
     actorUserId: req.user?.id || null,
     resourceOwnerUserId: resource.user_id || null,
+    membershipRole: resource.membership_role || resource.membershipRole || null,
   });
 
   if (!permissionPolicy.can(action, role)) {
     return denyResource(res, { status: failureStatus, error: failureError });
   }
 
+  return true;
+}
+
+async function ensureCollaborationSchemaIfEnabledAsync() {
+  if (!COLLABORATION_BACKEND_ENABLED) return false;
+  await collaborationStore.ensureCollaborationSchemaAsync();
   return true;
 }
 
@@ -165,7 +172,7 @@ function buildFeatureGatePayload(role, { coediting = null } = {}) {
 async function resolveMembershipRoleAsync(mapId, userId) {
   if (!COLLABORATION_BACKEND_ENABLED || !mapId || !userId) return null;
   try {
-    await collaborationStore.ensureCollaborationSchemaAsync();
+    await ensureCollaborationSchemaIfEnabledAsync();
     const membership = await collaborationStore.getMembershipByMapAndUserAsync(mapId, userId);
     return membership?.role || null;
   } catch (error) {
@@ -341,17 +348,30 @@ router.get('/maps', requireAuth, async (req, res) => {
   try {
     const { project_id } = req.query;
     const { limit, offset } = parsePagination(req.query);
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
 
-    const maps = await mapStore.listMapsByUserAsync({
-      userId: req.user.id,
-      projectId: project_id || null,
-      limit,
-      offset,
-    });
-    const total = await mapStore.countMapsByUserAsync({
-      userId: req.user.id,
-      projectId: project_id || null,
-    });
+    const maps = collaborationEnabled
+      ? await mapStore.listMapsAccessibleToUserAsync({
+        userId: req.user.id,
+        projectId: project_id || null,
+        limit,
+        offset,
+      })
+      : await mapStore.listMapsByUserAsync({
+        userId: req.user.id,
+        projectId: project_id || null,
+        limit,
+        offset,
+      });
+    const total = collaborationEnabled
+      ? await mapStore.countMapsAccessibleToUserAsync({
+        userId: req.user.id,
+        projectId: project_id || null,
+      })
+      : await mapStore.countMapsByUserAsync({
+        userId: req.user.id,
+        projectId: project_id || null,
+      });
 
     // Parse JSON fields
     const parsed = maps.map(m => ({
@@ -370,8 +390,10 @@ router.get('/maps', requireAuth, async (req, res) => {
 router.get('/maps/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-
-    const map = await mapStore.getMapWithProjectForUserAsync(id, req.user.id);
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapWithProjectAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapWithProjectForUserAsync(id, req.user.id);
 
     if (!ensureResourceAction({
       req,
@@ -493,8 +515,10 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       expected_updated_at,
     } = req.body;
 
-    // Verify ownership
-    const map = await mapStore.getMapForUserAsync(id, req.user.id);
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
     if (!ensureResourceAction({
       req,
       res,
@@ -587,9 +611,10 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
 router.delete('/maps/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Verify ownership
-    const map = await mapStore.getMapForUserAsync(id, req.user.id);
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
     if (!ensureResourceAction({
       req,
       res,
@@ -611,8 +636,10 @@ router.delete('/maps/:id', requireAuth, async (req, res) => {
 router.get('/maps/:id/versions', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-
-    const map = await mapStore.getMapForUserAsync(id, req.user.id);
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
     if (!ensureResourceAction({
       req,
       res,
@@ -621,7 +648,9 @@ router.get('/maps/:id/versions', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const versions = await mapStore.listMapVersionsForUserMapAsync(id, req.user.id, 25);
+    const versions = collaborationEnabled
+      ? await mapStore.listMapVersionsByMapAsync(id, 25)
+      : await mapStore.listMapVersionsForUserMapAsync(id, req.user.id, 25);
 
     const parsed = versions.map((v) => ({
       ...v,
@@ -645,7 +674,10 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
-    const map = await mapStore.getMapForUserAsync(id, req.user.id);
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
     if (!ensureResourceAction({
       req,
       res,
@@ -654,7 +686,9 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const nextVersion = await mapStore.getNextMapVersionNumberAsync(id, req.user.id);
+    const nextVersion = collaborationEnabled
+      ? await mapStore.getNextMapVersionNumberByMapAsync(id)
+      : await mapStore.getNextMapVersionNumberAsync(id, req.user.id);
 
     const versionId = uuidv4();
     const title = name?.trim() || 'Updated';
@@ -673,7 +707,9 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
     });
 
-    const allVersions = await mapStore.listMapVersionIdsForUserMapAsync(id, req.user.id);
+    const allVersions = collaborationEnabled
+      ? await mapStore.listMapVersionIdsByMapAsync(id)
+      : await mapStore.listMapVersionIdsForUserMapAsync(id, req.user.id);
 
     if (allVersions.length > 25) {
       const toDelete = allVersions.slice(25).map((row) => row.id);
@@ -817,7 +853,10 @@ router.post('/shares', requireAuth, async (req, res) => {
 
     // If map_id provided, verify ownership
     if (map_id) {
-      const map = await mapStore.getMapForUserAsync(map_id, req.user.id);
+      const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+      const map = collaborationEnabled
+        ? await mapStore.getMapAccessibleToUserAsync(map_id, req.user.id)
+        : await mapStore.getMapForUserAsync(map_id, req.user.id);
       if (!ensureResourceAction({
         req,
         res,

@@ -137,6 +137,8 @@ const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
   5,
   60
 );
+const UNCATEGORIZED_PROJECT_ID = 'uncategorized';
+const SHARED_PROJECT_ID = 'shared-with-me';
 
 const createPresenceSessionId = () => {
   if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
@@ -144,6 +146,50 @@ const createPresenceSessionId = () => {
   }
   return `web-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
 };
+
+function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
+  const projectsById = new Map();
+  const orderedProjects = (projectRows || []).map((project) => {
+    const nextProject = { ...project, maps: [] };
+    projectsById.set(project.id, nextProject);
+    return nextProject;
+  });
+
+  const sharedMaps = [];
+  const uncategorizedMaps = [];
+
+  (mapRows || []).forEach((map) => {
+    if (map?.project_id && projectsById.has(map.project_id)) {
+      projectsById.get(map.project_id).maps.push(map);
+      return;
+    }
+    if (map?.membership_role) {
+      sharedMaps.push(map);
+      return;
+    }
+    uncategorizedMaps.push(map);
+  });
+
+  if (sharedMaps.length > 0) {
+    orderedProjects.push({
+      id: SHARED_PROJECT_ID,
+      name: 'Shared With Me',
+      maps: sharedMaps,
+      isVirtual: true,
+    });
+  }
+
+  if (uncategorizedMaps.length > 0) {
+    orderedProjects.push({
+      id: UNCATEGORIZED_PROJECT_ID,
+      name: 'Uncategorized',
+      maps: uncategorizedMaps,
+      isVirtual: true,
+    });
+  }
+
+  return orderedProjects;
+}
 
 const SitemapTree = ({
   data,
@@ -2182,28 +2228,10 @@ export default function App() {
               api.getHistory(),
             ]);
 
-            // Organize maps into projects
-            const projectsWithMaps = (projectsData.projects || []).map(project => ({
-              ...project,
-              maps: (mapsData.maps || []).filter(m => m.project_id === project.id),
-            }));
-
-            // Add uncategorized maps (those without a project)
-            const uncategorizedMaps = (mapsData.maps || []).filter(m => !m.project_id);
-            if (uncategorizedMaps.length > 0) {
-              const uncategorized = projectsWithMaps.find(p => p.name === 'Uncategorized');
-              if (uncategorized) {
-                uncategorized.maps = [...uncategorized.maps, ...uncategorizedMaps];
-              } else {
-                projectsWithMaps.push({
-                  id: 'uncategorized',
-                  name: 'Uncategorized',
-                  maps: uncategorizedMaps,
-                });
-              }
-            }
-
-            setProjects(projectsWithMaps);
+            setProjects(organizeProjectsWithMaps(
+              projectsData.projects || [],
+              mapsData.maps || []
+            ));
             setScanHistory(historyData.history || []);
           } catch (e) {
             console.error('Failed to load user data:', e);
@@ -2767,28 +2795,10 @@ export default function App() {
         api.getHistory(),
       ]);
 
-      // Organize maps into projects
-      const projectsWithMaps = (projectsData.projects || []).map(project => ({
-        ...project,
-        maps: (mapsData.maps || []).filter(m => m.project_id === project.id),
-      }));
-
-      // Add uncategorized maps (those without a project)
-      const uncategorizedMaps = (mapsData.maps || []).filter(m => !m.project_id);
-      if (uncategorizedMaps.length > 0) {
-        const uncategorized = projectsWithMaps.find(p => p.name === 'Uncategorized');
-        if (uncategorized) {
-          uncategorized.maps = [...uncategorized.maps, ...uncategorizedMaps];
-        } else {
-          projectsWithMaps.push({
-            id: 'uncategorized',
-            name: 'Uncategorized',
-            maps: uncategorizedMaps,
-          });
-        }
-      }
-
-      setProjects(projectsWithMaps);
+      setProjects(organizeProjectsWithMaps(
+        projectsData.projects || [],
+        mapsData.maps || []
+      ));
       setScanHistory(historyData.history || []);
     } catch (e) {
       console.error('Failed to load user data:', e);
@@ -3461,7 +3471,7 @@ export default function App() {
   };
 
   const renameProject = async (projectId, newName) => {
-    if (projectId === 'uncategorized') {
+    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
       setEditingProjectId(null);
       return;
     }
@@ -3489,8 +3499,8 @@ export default function App() {
   };
 
   const deleteProject = async (projectId) => {
-    if (projectId === 'uncategorized') {
-      showToast('Cannot delete Uncategorized', 'warning');
+    if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
+      showToast('Cannot delete a virtual folder', 'warning');
       return;
     }
     const confirmed = await showConfirm({
