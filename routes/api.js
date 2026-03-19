@@ -7,11 +7,18 @@ const { v4: uuidv4 } = require('uuid');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
+const mapCommentStore = require('../stores/mapCommentStore');
 const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
 const { authMiddleware, requireAuth } = require('./auth');
 const permissionPolicy = require('../policies/permissionPolicy');
+const {
+  ACTIVITY_SCOPES,
+  ACTIVITY_TYPES,
+  ensureCollaborationActivitySchemaAsync,
+  recordMapActivityBestEffortAsync,
+} = require('../utils/collaborationActivity');
 const {
   resolveCoeditingRolloutAsync,
   resolveCoeditingSystemStatusAsync,
@@ -31,6 +38,7 @@ const COLLABORATION_BACKEND_ENABLED = parseEnvBool(
 
 const FEATURE_GATES = Object.freeze({
   mapView: permissionPolicy.FEATURES.MAP_VIEW,
+  activityView: permissionPolicy.FEATURES.ACTIVITY_VIEW,
   mapComment: permissionPolicy.FEATURES.MAP_COMMENT,
   mapEdit: permissionPolicy.FEATURES.MAP_EDIT,
   versionSave: permissionPolicy.FEATURES.VERSION_SAVE,
@@ -39,6 +47,9 @@ const FEATURE_GATES = Object.freeze({
   discoveryRun: permissionPolicy.FEATURES.DISCOVERY_RUN,
   collabPanelView: permissionPolicy.FEATURES.COLLAB_PANEL_VIEW,
   collabInviteSend: permissionPolicy.FEATURES.COLLAB_INVITE_SEND,
+  collabSettingsManage: permissionPolicy.FEATURES.COLLAB_SETTINGS_MANAGE,
+  accessRequestsView: permissionPolicy.FEATURES.ACCESS_REQUESTS_VIEW,
+  accessRequestsCreate: permissionPolicy.FEATURES.ACCESS_REQUESTS_CREATE,
   presenceView: permissionPolicy.FEATURES.PRESENCE_VIEW,
 });
 
@@ -75,6 +86,12 @@ function parsePagination(query, { defaultLimit = DEFAULT_PAGE_SIZE, maxLimit = M
   return { limit, offset };
 }
 
+function parseCommentMentions(text) {
+  return Array.from(
+    new Set((String(text || '').match(/@(\w+)/g) || []).map((mention) => mention.slice(1)))
+  );
+}
+
 // Safe JSON.parse wrapper — returns fallback for null/undefined,
 // throws descriptive error if parsing fails.
 function safeParse(raw, fieldName, fallback = undefined) {
@@ -102,6 +119,141 @@ function parseMapFields(row) {
     connections_data: undefined,
     connection_colors: undefined,
   };
+}
+
+function parseJsonArray(raw, fallback = []) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function serializeMapComment(row) {
+  return {
+    id: row.id,
+    mapId: row.map_id,
+    nodeId: row.node_id,
+    parentCommentId: row.parent_comment_id || null,
+    author: row.author_name || row.author_email || 'Anonymous',
+    authorUserId: row.author_user_id || null,
+    authorEmail: row.author_email || null,
+    text: row.text,
+    mentions: parseJsonArray(row.mentions, []),
+    completed: !!row.completed,
+    completedBy: row.completed_by_name || null,
+    completedByUserId: row.completed_by_user_id || null,
+    completedAt: row.completed_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    replies: [],
+  };
+}
+
+function buildCommentsByNode(rows) {
+  const serialized = rows.map((row) => serializeMapComment(row));
+  const byId = new Map(serialized.map((comment) => [comment.id, comment]));
+  const byNode = new Map();
+
+  serialized.forEach((comment) => {
+    if (comment.parentCommentId && byId.has(comment.parentCommentId)) {
+      byId.get(comment.parentCommentId).replies.push(comment);
+      return;
+    }
+
+    if (!byNode.has(comment.nodeId)) {
+      byNode.set(comment.nodeId, []);
+    }
+    byNode.get(comment.nodeId).push(comment);
+  });
+
+  return Object.fromEntries(byNode.entries());
+}
+
+function collectNodeIds(node, out = new Set()) {
+  if (!node?.id) return out;
+  out.add(node.id);
+  (node.children || []).forEach((child) => collectNodeIds(child, out));
+  return out;
+}
+
+function getMapNodeIdSet(mapRow) {
+  const parsed = parseMapFields(mapRow);
+  const nodeIds = new Set();
+  if (parsed.root) collectNodeIds(parsed.root, nodeIds);
+  (parsed.orphans || []).forEach((orphan) => collectNodeIds(orphan, nodeIds));
+  return nodeIds;
+}
+
+function normalizeIsoTimestamp(raw, fallback = null) {
+  const value = String(raw || '').trim();
+  if (!value) return fallback;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return fallback;
+  return new Date(timestamp).toISOString();
+}
+
+function collectLegacyCommentsFromNode(node, mapId, out = []) {
+  if (!node?.id) return out;
+
+  const walkComment = (comment, parentCommentId = null) => {
+    if (!comment || typeof comment !== 'object') return;
+    const commentId = String(comment.id || '').trim() || uuidv4();
+    out.push({
+      id: commentId,
+      mapId,
+      nodeId: node.id,
+      parentCommentId,
+      authorName: String(comment.author || '').trim() || 'Anonymous',
+      authorEmail: null,
+      text: String(comment.text || '').trim(),
+      mentions: Array.isArray(comment.mentions) ? comment.mentions : [],
+      completed: !!comment.completed,
+      completedByName: comment.completed ? (String(comment.completedBy || '').trim() || null) : null,
+      completedAt: comment.completed ? normalizeIsoTimestamp(comment.completedAt, null) : null,
+      createdAt: normalizeIsoTimestamp(comment.createdAt, new Date().toISOString()),
+      updatedAt: normalizeIsoTimestamp(comment.completedAt || comment.createdAt, new Date().toISOString()),
+    });
+    (comment.replies || []).forEach((reply) => walkComment(reply, commentId));
+  };
+
+  (node.comments || []).forEach((comment) => walkComment(comment));
+  (node.children || []).forEach((child) => collectLegacyCommentsFromNode(child, mapId, out));
+  return out;
+}
+
+async function ensureLegacyMapCommentsImportedAsync(mapRow) {
+  const existingCount = await mapCommentStore.countCommentsByMapAsync(mapRow.id);
+  if (existingCount > 0) return;
+
+  let parsed;
+  try {
+    parsed = parseMapFields(mapRow);
+  } catch {
+    return;
+  }
+
+  const legacyComments = [];
+  if (parsed.root) {
+    collectLegacyCommentsFromNode(parsed.root, mapRow.id, legacyComments);
+  }
+  (parsed.orphans || []).forEach((orphan) => collectLegacyCommentsFromNode(orphan, mapRow.id, legacyComments));
+
+  const validComments = legacyComments.filter((comment) => comment.text);
+  if (validComments.length === 0) return;
+
+  await mapCommentStore.importLegacyCommentsAsync({
+    mapId: mapRow.id,
+    comments: validComments,
+  });
+}
+
+async function getCommentAccessibleMapAsync(mapId, userId, collaborationEnabled) {
+  return collaborationEnabled
+    ? mapStore.getMapAccessibleToUserAsync(mapId, userId)
+    : mapStore.getMapForUserAsync(mapId, userId);
 }
 
 function denyResource(res, { status = 404, error = 'Resource not found' } = {}) {
@@ -136,7 +288,10 @@ function ensureResourceAction({
 
 async function ensureCollaborationSchemaIfEnabledAsync() {
   if (!COLLABORATION_BACKEND_ENABLED) return false;
-  await collaborationStore.ensureCollaborationSchemaAsync();
+  await Promise.all([
+    collaborationStore.ensureCollaborationSchemaAsync(),
+    ensureCollaborationActivitySchemaAsync(),
+  ]);
   return true;
 }
 
@@ -718,6 +873,28 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
 
     const saved = await mapStore.getMapVersionByIdAsync(versionId);
 
+    const actorRole = permissionPolicy.resolveResourceRole({
+      actorUserId: req.user?.id || null,
+      resourceOwnerUserId: map.user_id || null,
+      membershipRole: map.membership_role || map.membershipRole || null,
+    });
+    await recordMapActivityBestEffortAsync({
+      mapId: id,
+      actorUserId: req.user.id,
+      actorRole,
+      eventType: ACTIVITY_TYPES.VERSION_SAVED,
+      eventScope: ACTIVITY_SCOPES.VERSION,
+      entityType: 'version',
+      entityId: versionId,
+      summary: `Saved version ${nextVersion}: ${title}`,
+      payload: {
+        versionId,
+        versionNumber: nextVersion,
+        name: title,
+        notes: notes?.trim() || null,
+      },
+    }, { label: 'map version save' });
+
     res.json({
       version: {
         ...saved,
@@ -727,6 +904,265 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Create map version error:', error);
     res.status(500).json({ error: 'Failed to create map version' });
+  }
+});
+
+// GET /api/maps/:id/comments - list comments for a saved map
+router.get('/maps/:id/comments', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await mapCommentStore.ensureMapCommentSchemaAsync();
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = await getCommentAccessibleMapAsync(id, req.user.id, collaborationEnabled);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_READ,
+      failureError: 'Map not found',
+    })) return;
+
+    await ensureLegacyMapCommentsImportedAsync(map);
+    const rows = await mapCommentStore.listCommentsByMapAsync(id);
+
+    res.json({
+      commentsByNode: buildCommentsByNode(rows),
+      totalComments: rows.length,
+    });
+  } catch (error) {
+    console.error('Get map comments error:', error);
+    res.status(500).json({ error: 'Failed to load map comments' });
+  }
+});
+
+// POST /api/maps/:id/comments - create a comment or reply on a node
+router.post('/maps/:id/comments', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { node_id, parent_comment_id, text } = req.body || {};
+    const trimmedText = String(text || '').trim();
+    const nodeId = String(node_id || '').trim();
+    const parentCommentId = parent_comment_id ? String(parent_comment_id).trim() : null;
+
+    if (!nodeId) {
+      return res.status(400).json({ error: 'node_id is required' });
+    }
+    if (!trimmedText) {
+      return res.status(400).json({ error: 'Comment text is required' });
+    }
+
+    await mapCommentStore.ensureMapCommentSchemaAsync();
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = await getCommentAccessibleMapAsync(id, req.user.id, collaborationEnabled);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_COMMENT,
+      failureError: 'Map not found',
+    })) return;
+
+    await ensureLegacyMapCommentsImportedAsync(map);
+    const nodeIds = getMapNodeIdSet(map);
+    if (!nodeIds.has(nodeId)) {
+      return res.status(400).json({ error: 'Target node was not found in the map' });
+    }
+
+    if (parentCommentId) {
+      const parentComment = await mapCommentStore.getCommentByIdAsync(parentCommentId);
+      if (!parentComment || parentComment.map_id !== id || parentComment.node_id !== nodeId) {
+        return res.status(404).json({ error: 'Parent comment not found' });
+      }
+    }
+
+    const createdComment = await mapCommentStore.createCommentAsync({
+      mapId: id,
+      nodeId,
+      parentCommentId,
+      authorUserId: req.user.id,
+      authorName: req.user?.name || 'Anonymous',
+      authorEmail: req.user?.email || null,
+      text: trimmedText,
+      mentions: parseCommentMentions(trimmedText),
+    });
+
+    const actorRole = permissionPolicy.resolveResourceRole({
+      actorUserId: req.user?.id || null,
+      resourceOwnerUserId: map.user_id || null,
+      membershipRole: map.membership_role || map.membershipRole || null,
+    });
+    await recordMapActivityBestEffortAsync({
+      mapId: id,
+      actorUserId: req.user.id,
+      actorRole,
+      eventType: ACTIVITY_TYPES.COMMENT_CREATED,
+      eventScope: ACTIVITY_SCOPES.COMMENT,
+      entityType: 'comment',
+      entityId: createdComment.id,
+      summary: parentCommentId ? 'Replied to comment' : 'Added comment',
+      payload: {
+        commentId: createdComment.id,
+        nodeId,
+        parentCommentId,
+        text: trimmedText,
+      },
+    }, { label: 'map comment create' });
+
+    res.status(201).json({ comment: serializeMapComment(createdComment) });
+  } catch (error) {
+    console.error('Create map comment error:', error);
+    res.status(500).json({ error: 'Failed to create comment' });
+  }
+});
+
+// PATCH /api/maps/:id/comments/:commentId - update comment text or completion state
+router.patch('/maps/:id/comments/:commentId', requireAuth, async (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+    const hasText = Object.prototype.hasOwnProperty.call(req.body || {}, 'text');
+    const hasCompleted = Object.prototype.hasOwnProperty.call(req.body || {}, 'completed');
+    if (!hasText && !hasCompleted) {
+      return res.status(400).json({ error: 'No comment changes provided' });
+    }
+
+    await mapCommentStore.ensureMapCommentSchemaAsync();
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = await getCommentAccessibleMapAsync(id, req.user.id, collaborationEnabled);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_COMMENT,
+      failureError: 'Map not found',
+    })) return;
+
+    await ensureLegacyMapCommentsImportedAsync(map);
+    const existingComment = await mapCommentStore.getCommentByIdAsync(commentId);
+    if (!existingComment || existingComment.map_id !== id) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    let updatedComment = existingComment;
+    const actorRole = permissionPolicy.resolveResourceRole({
+      actorUserId: req.user?.id || null,
+      resourceOwnerUserId: map.user_id || null,
+      membershipRole: map.membership_role || map.membershipRole || null,
+    });
+
+    if (hasText) {
+      const trimmedText = String(req.body?.text || '').trim();
+      if (!trimmedText) {
+        return res.status(400).json({ error: 'Comment text is required' });
+      }
+      updatedComment = await mapCommentStore.replaceCommentTextAsync({
+        commentId,
+        text: trimmedText,
+        mentions: parseCommentMentions(trimmedText),
+      });
+      await recordMapActivityBestEffortAsync({
+        mapId: id,
+        actorUserId: req.user.id,
+        actorRole,
+        eventType: ACTIVITY_TYPES.COMMENT_UPDATED,
+        eventScope: ACTIVITY_SCOPES.COMMENT,
+        entityType: 'comment',
+        entityId: commentId,
+        summary: 'Updated comment',
+        payload: {
+          commentId,
+          nodeId: existingComment.node_id,
+          text: trimmedText,
+        },
+      }, { label: 'map comment update text' });
+    }
+
+    if (hasCompleted) {
+      const completed = !!req.body?.completed;
+      updatedComment = await mapCommentStore.setCommentCompletedAsync({
+        commentId,
+        completed,
+        completedByUserId: completed ? req.user.id : null,
+        completedByName: completed ? (req.user?.name || 'Anonymous') : null,
+        completedAt: completed ? new Date().toISOString() : null,
+      });
+      await recordMapActivityBestEffortAsync({
+        mapId: id,
+        actorUserId: req.user.id,
+        actorRole,
+        eventType: completed ? ACTIVITY_TYPES.COMMENT_RESOLVED : ACTIVITY_TYPES.COMMENT_REOPENED,
+        eventScope: ACTIVITY_SCOPES.COMMENT,
+        entityType: 'comment',
+        entityId: commentId,
+        summary: completed ? 'Resolved comment' : 'Reopened comment',
+        payload: {
+          commentId,
+          nodeId: existingComment.node_id,
+          completed,
+        },
+      }, { label: 'map comment update status' });
+    }
+
+    res.json({ comment: serializeMapComment(updatedComment) });
+  } catch (error) {
+    console.error('Update map comment error:', error);
+    res.status(500).json({ error: 'Failed to update comment' });
+  }
+});
+
+// DELETE /api/maps/:id/comments/:commentId - delete a comment thread
+router.delete('/maps/:id/comments/:commentId', requireAuth, async (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+    await mapCommentStore.ensureMapCommentSchemaAsync();
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = await getCommentAccessibleMapAsync(id, req.user.id, collaborationEnabled);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_COMMENT,
+      failureError: 'Map not found',
+    })) return;
+
+    await ensureLegacyMapCommentsImportedAsync(map);
+    const existingComment = await mapCommentStore.getCommentByIdAsync(commentId);
+    if (!existingComment || existingComment.map_id !== id) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    const deleted = await mapCommentStore.deleteCommentThreadAsync(commentId, id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    const actorRole = permissionPolicy.resolveResourceRole({
+      actorUserId: req.user?.id || null,
+      resourceOwnerUserId: map.user_id || null,
+      membershipRole: map.membership_role || map.membershipRole || null,
+    });
+    await recordMapActivityBestEffortAsync({
+      mapId: id,
+      actorUserId: req.user.id,
+      actorRole,
+      eventType: ACTIVITY_TYPES.COMMENT_DELETED,
+      eventScope: ACTIVITY_SCOPES.COMMENT,
+      entityType: 'comment',
+      entityId: commentId,
+      summary: 'Deleted comment',
+      payload: {
+        commentId,
+        nodeId: existingComment.node_id,
+      },
+    }, { label: 'map comment delete' });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete map comment error:', error);
+    res.status(500).json({ error: 'Failed to delete comment' });
   }
 });
 

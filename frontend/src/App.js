@@ -120,6 +120,32 @@ const REALTIME_BASELINE_ENABLED = parseEnvBool(
   process.env.REACT_APP_REALTIME_BASELINE_ENABLED,
   false
 );
+
+const extractCommentMentions = (text) => (
+  Array.from(
+    new Set((String(text || '').match(/@(\w+)/g) || []).map((mention) => mention.slice(1)))
+  )
+);
+
+const attachCommentsToNodeTree = (node, commentsByNode) => {
+  if (!node) return node;
+  return {
+    ...node,
+    comments: Array.isArray(commentsByNode?.[node.id]) ? commentsByNode[node.id] : [],
+    children: Array.isArray(node.children)
+      ? node.children.map((child) => attachCommentsToNodeTree(child, commentsByNode))
+      : [],
+  };
+};
+
+const findCommentInThread = (comments, commentId) => {
+  for (const comment of comments || []) {
+    if (comment?.id === commentId) return comment;
+    const replyMatch = findCommentInThread(comment?.replies, commentId);
+    if (replyMatch) return replyMatch;
+  }
+  return null;
+};
 const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COEDITING_EXPERIMENT_ENABLED,
   false
@@ -163,7 +189,7 @@ function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
       projectsById.get(map.project_id).maps.push(map);
       return;
     }
-    if (map?.membership_role) {
+    if (map?.membership_role && map.membership_role !== 'owner') {
       sharedMaps.push(map);
       return;
     }
@@ -894,6 +920,7 @@ export default function App() {
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
   const [commentingNodeSnapshot, setCommentingNodeSnapshot] = useState(null);
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
+  const [savedMapCommentsByNode, setSavedMapCommentsByNode] = useState({});
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
@@ -1634,11 +1661,40 @@ export default function App() {
     : (draftLatestVersionId || draftVersions[0]?.id || null);
   const activeVersionForDrawer = currentMap?.id ? activeVersionId : latestVersionForDrawer;
   const isVersionLoading = currentMap?.id ? isLoadingVersions : false;
+  const useBackendComments = !!(isLoggedIn && currentMap?.id);
 
+  const loadSavedMapComments = useCallback(async (mapId = currentMap?.id) => {
+    if (!mapId || !isLoggedIn) {
+      setSavedMapCommentsByNode({});
+      return;
+    }
+    try {
+      const response = await api.getMapComments(mapId);
+      setSavedMapCommentsByNode(response.commentsByNode || {});
+    } catch (error) {
+      console.error('Load map comments error:', error);
+      setSavedMapCommentsByNode({});
+    }
+  }, [currentMap?.id, isLoggedIn]);
 
-  const visibleOrphans = useMemo(() => (orphans || []).filter(Boolean), [orphans]);
+  useEffect(() => {
+    if (!useBackendComments) {
+      setSavedMapCommentsByNode({});
+      return;
+    }
+    loadSavedMapComments(currentMap?.id);
+  }, [currentMap?.id, loadSavedMapComments, useBackendComments]);
 
-  const renderRoot = useMemo(() => root, [root]);
+  const visibleOrphans = useMemo(() => {
+    const nextOrphans = (orphans || []).filter(Boolean);
+    if (!useBackendComments) return nextOrphans;
+    return nextOrphans.map((orphan) => attachCommentsToNodeTree(orphan, savedMapCommentsByNode));
+  }, [orphans, savedMapCommentsByNode, useBackendComments]);
+
+  const renderRoot = useMemo(() => {
+    if (!useBackendComments) return root;
+    return attachCommentsToNodeTree(root, savedMapCommentsByNode);
+  }, [root, savedMapCommentsByNode, useBackendComments]);
 
   // Build a unified index for root + orphan + subdomain trees
   const forestIndex = useMemo(() => buildForestIndex(root, orphans), [root, orphans]);
@@ -1761,10 +1817,10 @@ export default function App() {
       if (node.comments?.length > 0) return true;
       return node.children?.some(checkComments) || false;
     };
-    const rootHasComments = root ? checkComments(root) : false;
-    const orphansHaveComments = orphans.some(o => o.comments?.length > 0);
+    const rootHasComments = renderRoot ? checkComments(renderRoot) : false;
+    const orphansHaveComments = visibleOrphans.some(o => o.comments?.length > 0);
     return rootHasComments || orphansHaveComments;
-  }, [root, orphans]);
+  }, [renderRoot, visibleOrphans]);
 
   const markerStatusUsage = useMemo(() => {
     const usedStatuses = new Set();
@@ -1834,6 +1890,7 @@ export default function App() {
     const isComment = accessLevel === ACCESS_LEVELS.COMMENT;
     return {
       mapView: true,
+      activityView: true,
       mapComment: isEdit || isComment,
       mapEdit: isEdit,
       versionSave: isEdit,
@@ -1842,6 +1899,9 @@ export default function App() {
       discoveryRun: isEdit,
       collabPanelView: isEdit,
       collabInviteSend: isEdit,
+      collabSettingsManage: isEdit,
+      accessRequestsView: isEdit,
+      accessRequestsCreate: false,
       presenceView: isEdit || isComment,
     };
   }, [accessLevel]);
@@ -1859,7 +1919,7 @@ export default function App() {
   }, [currentMap?.id, featureGatesEnabled, isLoggedIn, legacyFeatureGates, mapPermissions?.features]);
 
   const canEditValue = !!effectiveFeatureGates.mapEdit && !isCoeditingReadOnlyMode;
-  const canCommentValue = !isCoeditingReadOnlyMode && (canEditValue || !!effectiveFeatureGates.mapComment);
+  const canCommentValue = canEditValue || !!effectiveFeatureGates.mapComment;
   const canManageSharesValue = !!effectiveFeatureGates.shareManage;
   const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
@@ -2408,8 +2468,11 @@ export default function App() {
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
   const showCoeditingReadOnlyBanner = !!(isCoeditingReadOnlyMode && hasMap && currentMap?.id);
   const commentPopoverReadOnlyMessage = useMemo(() => {
-    if (!showCoeditingReadOnlyBanner || !effectiveFeatureGates.mapComment) return '';
-    return 'Commenting on live shared maps is not available yet.';
+    if (effectiveFeatureGates.mapComment) return '';
+    if (showCoeditingReadOnlyBanner) {
+      return 'You can view comments on this map, but you cannot add or edit them.';
+    }
+    return '';
   }, [effectiveFeatureGates.mapComment, showCoeditingReadOnlyBanner]);
 
   useEffect(() => {
@@ -5662,19 +5725,35 @@ export default function App() {
   };
 
   // Add a comment to a node
-  const addCommentToNode = (nodeId, commentText, parentCommentId = null) => {
+  const addCommentToNode = async (nodeId, commentText, parentCommentId = null) => {
+    if (!commentText.trim()) return;
+
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await api.createMapComment(currentMap.id, {
+          nodeId,
+          parentCommentId,
+          text: commentText.trim(),
+        });
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Create map comment error:', error);
+        showToast(error.message || 'Failed to add comment', 'error');
+      }
+      return;
+    }
+
     if (isLiveActive) {
       warnLiveModeUnsupported('Comments are not live-synced yet. Leave live editing before editing comments.');
       return;
     }
-    if (!commentText.trim()) return;
 
     const newComment = {
       id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       text: commentText.trim(),
       author: currentUser?.name || 'Anonymous',
       createdAt: new Date().toISOString(),
-      mentions: (commentText.match(/@(\w+)/g) || []).map(m => m.slice(1)),
+      mentions: extractCommentMentions(commentText),
       completed: false,
       completedBy: null,
       completedAt: null,
@@ -5705,7 +5784,22 @@ export default function App() {
   };
 
   // Toggle completed state on a comment
-  const toggleCommentCompleted = (nodeId, commentId) => {
+  const toggleCommentCompleted = async (nodeId, commentId) => {
+    if (useBackendComments && currentMap?.id) {
+      const currentComment = findCommentInThread(savedMapCommentsByNode[nodeId] || [], commentId);
+      if (!currentComment) return;
+      try {
+        await api.updateMapComment(currentMap.id, commentId, {
+          completed: !currentComment.completed,
+        });
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Toggle map comment error:', error);
+        showToast(error.message || 'Failed to update comment', 'error');
+      }
+      return;
+    }
+
     if (isLiveActive) {
       warnLiveModeUnsupported('Comment state changes are not live-synced yet.');
       return;
@@ -5733,7 +5827,18 @@ export default function App() {
   };
 
   // Delete a comment from a node
-  const deleteComment = (nodeId, commentId) => {
+  const deleteComment = async (nodeId, commentId) => {
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await api.deleteMapComment(currentMap.id, commentId);
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Delete map comment error:', error);
+        showToast(error.message || 'Failed to delete comment', 'error');
+      }
+      return;
+    }
+
     if (isLiveActive) {
       warnLiveModeUnsupported('Comment deletion is not live-synced yet.');
       return;
@@ -5824,9 +5929,9 @@ export default function App() {
     if (!nodeId) return null;
     const layoutNode = layoutRef.current?.nodes?.get(nodeId);
     if (layoutNode?.node) return layoutNode.node;
-    const rootMatch = findNodeById(root, nodeId);
+    const rootMatch = findNodeById(renderRoot, nodeId);
     if (rootMatch) return rootMatch;
-    for (const orphan of orphans) {
+    for (const orphan of visibleOrphans) {
       const match = findNodeById(orphan, nodeId);
       if (match) return match;
     }
@@ -9150,8 +9255,8 @@ export default function App() {
       {/* Comments Panel - Right Rail */}
       {showCommentsPanel && (
         <CommentsPanel
-          root={root}
-          orphans={orphans}
+          root={renderRoot}
+          orphans={visibleOrphans}
           onClose={() => setShowCommentsPanel(false)}
           onCommentClick={(nodeId) => {
             // Small delay to let animated pan complete before calculating popover position

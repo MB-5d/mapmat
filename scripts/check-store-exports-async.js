@@ -3,9 +3,11 @@ const path = require('path');
 const STORE_MODULES = [
   'authStore',
   'coeditingStore',
+  'collaborationActivityStore',
   'collaborationStore',
   'historyStore',
   'jobStore',
+  'mapCommentStore',
   'mapStore',
   'pageStore',
   'presenceStore',

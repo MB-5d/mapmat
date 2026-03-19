@@ -220,6 +220,34 @@ export async function createMapVersion(mapId, payload) {
   });
 }
 
+export async function getMapComments(mapId) {
+  return fetchApi(`/api/maps/${mapId}/comments`);
+}
+
+export async function createMapComment(mapId, { nodeId, parentCommentId = null, text } = {}) {
+  return fetchApi(`/api/maps/${mapId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({
+      node_id: nodeId,
+      parent_comment_id: parentCommentId,
+      text,
+    }),
+  });
+}
+
+export async function updateMapComment(mapId, commentId, payload = {}) {
+  return fetchApi(`/api/maps/${mapId}/comments/${commentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMapComment(mapId, commentId) {
+  return fetchApi(`/api/maps/${mapId}/comments/${commentId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getCoeditingLiveDocument(mapId) {
   return fetchApi(`/api/maps/${mapId}/live-document`);
 }

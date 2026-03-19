@@ -306,8 +306,9 @@ async function main() {
   const editor = new ApiSession('editor', runId);
   const viewer = new ApiSession('viewer', runId);
   const commenter = new ApiSession('commenter', runId);
+  const guest = new ApiSession('guest', runId);
 
-  const cleanupSessions = [commenter, viewer, editor, owner];
+  const cleanupSessions = [guest, commenter, viewer, editor, owner];
   const cleanupSockets = [];
   let mapId = '';
 
@@ -317,6 +318,7 @@ async function main() {
     await editor.signup();
     await viewer.signup();
     await commenter.signup();
+    await guest.signup();
 
     const { data: projectPayload } = await owner.request('/api/projects', {
       method: 'POST',
@@ -392,7 +394,13 @@ async function main() {
     const { data: ownerCollab } = await owner.request(`/api/maps/${mapId}/collaboration`, {
       expectedStatus: 200,
     });
-    assert.strictEqual(ownerCollab.collaboration.memberships.length, 3);
+    assert.strictEqual(ownerCollab.collaboration.memberships.length, 4);
+    assert.ok(
+      ownerCollab.collaboration.memberships.some(
+        (membership) => membership.userId === owner.user.id && membership.role === 'owner'
+      ),
+      'collaboration list should include the creator owner'
+    );
     assert.strictEqual(ownerCollab.collaboration.invites.length, 0);
 
     await editor.request(`/api/maps/${mapId}/collaboration`, { expectedStatus: 200 });
@@ -424,17 +432,85 @@ async function main() {
     assert.strictEqual(editorFeatureGates.permissions.role, 'editor');
     assert.strictEqual(editorFeatureGates.permissions.features.mapEdit, true);
     assert.strictEqual(editorFeatureGates.permissions.features.collabInviteSend, true);
+    assert.strictEqual(editorFeatureGates.permissions.features.activityView, true);
     assert.strictEqual(viewerFeatureGates.permissions.role, 'viewer');
     assert.strictEqual(viewerFeatureGates.permissions.features.mapEdit, false);
+    assert.strictEqual(viewerFeatureGates.permissions.features.activityView, true);
     assert.strictEqual(viewerFeatureGates.permissions.features.mapComment, false);
     assert.strictEqual(commenterFeatureGates.permissions.role, 'commenter');
     assert.strictEqual(commenterFeatureGates.permissions.features.mapEdit, false);
+    assert.strictEqual(commenterFeatureGates.permissions.features.activityView, true);
     assert.strictEqual(commenterFeatureGates.permissions.features.mapComment, true);
     logStep('Verified role-based feature gates', {
       editor: editorFeatureGates.permissions.coediting.mode,
       viewer: viewerFeatureGates.permissions.coediting.mode,
       commenter: commenterFeatureGates.permissions.coediting.mode,
     });
+
+    const { data: settingsPayload } = await owner.request(`/api/maps/${mapId}/collaboration/settings`, {
+      method: 'PATCH',
+      body: {
+        access_policy: 'viewer_invites_open',
+        non_viewer_invites_require_owner: true,
+        access_requests_enabled: true,
+        presence_identity_mode: 'anonymous',
+      },
+      expectedStatus: 200,
+    });
+    assert.strictEqual(settingsPayload.settings.accessPolicy, 'viewer_invites_open');
+    assert.strictEqual(settingsPayload.settings.nonViewerInvitesRequireOwner, true);
+    assert.strictEqual(settingsPayload.settings.accessRequestsEnabled, true);
+    assert.strictEqual(settingsPayload.settings.presenceIdentityMode, 'anonymous');
+
+    await editor.request(`/api/maps/${mapId}/collaboration/settings`, {
+      method: 'PATCH',
+      body: { access_policy: 'private' },
+      expectedStatus: 404,
+    });
+
+    const { data: ownerCollabWithSettings } = await owner.request(`/api/maps/${mapId}/collaboration`, {
+      expectedStatus: 200,
+    });
+    assert.strictEqual(ownerCollabWithSettings.collaboration.settings.accessPolicy, 'viewer_invites_open');
+    assert.strictEqual(ownerCollabWithSettings.collaboration.accessRequests.length, 0);
+
+    const { data: editorCollabWithSettings } = await editor.request(`/api/maps/${mapId}/collaboration`, {
+      expectedStatus: 200,
+    });
+    assert.strictEqual(editorCollabWithSettings.collaboration.settings.nonViewerInvitesRequireOwner, true);
+    assert.strictEqual(editorCollabWithSettings.collaboration.accessRequests.length, 0);
+    logStep('Verified owner-only settings updates and collaboration settings visibility');
+
+    await editor.request(`/api/maps/${mapId}/invites`, {
+      method: 'POST',
+      body: { email: guest.email, role: 'commenter' },
+      expectedStatus: 404,
+    });
+
+    const { data: guestInvitePayload } = await commenter.request(`/api/maps/${mapId}/invites`, {
+      method: 'POST',
+      body: { email: guest.email, role: 'viewer' },
+      expectedStatus: 200,
+    });
+    await guest.request(`/api/collaboration/invites/${guestInvitePayload.invite.token}/accept`, {
+      method: 'POST',
+      expectedStatus: 200,
+    });
+    await guest.request(`/api/maps/${mapId}`, { expectedStatus: 200 });
+    logStep('Verified open viewer invite policy for non-manager collaborators');
+
+    const { data: promotedOwnerMembership } = await owner.request(`/api/maps/${mapId}/members/${editor.user.id}`, {
+      method: 'PATCH',
+      body: { role: 'owner' },
+      expectedStatus: 200,
+    });
+    assert.strictEqual(promotedOwnerMembership.membership.role, 'owner');
+
+    const { data: editorOwnerFeatureGates } = await editor.request(`/api/maps/${mapId}/feature-gates`, {
+      expectedStatus: 200,
+    });
+    assert.strictEqual(editorOwnerFeatureGates.permissions.role, 'owner');
+    logStep('Verified owner promotion and owner feature-gate resolution');
 
     await owner.request(`/api/maps/${mapId}/presence/heartbeat`, {
       method: 'POST',
@@ -537,6 +613,25 @@ async function main() {
     const ownerCommit = await ownerCommitPromise;
     assert.strictEqual(ownerCommit.operation.opId, editorOp.opId);
 
+    const { data: currentMapForVersion } = await editor.request(`/api/maps/${mapId}`, {
+      expectedStatus: 200,
+    });
+    const { data: savedVersionPayload } = await editor.request(`/api/maps/${mapId}/versions`, {
+      method: 'POST',
+      body: {
+        root: currentMapForVersion.map.root,
+        orphans: currentMapForVersion.map.orphans,
+        connections: currentMapForVersion.map.connections,
+        colors: currentMapForVersion.map.colors,
+        connectionColors: currentMapForVersion.map.connectionColors,
+        name: `Checkpoint ${runId}`,
+        notes: 'Saved during collaboration activity verification',
+      },
+      expectedStatus: 200,
+    });
+    assert.strictEqual(savedVersionPayload.version.version_number, 1);
+    logStep('Verified shared version save for editor');
+
     await viewer.request(`/api/maps/${mapId}/ops/ingest`, {
       method: 'POST',
       body: { operation: createOperation({
@@ -562,6 +657,77 @@ async function main() {
       expectedStatus: 404,
     });
     logStep('Verified live ingest writes for owner/editor and read-only denial for viewer/commenter');
+
+    const commentNodeId = editorOp.payload.nodeId;
+    const { data: commenterCreatedComment } = await commenter.request(`/api/maps/${mapId}/comments`, {
+      method: 'POST',
+      body: {
+        node_id: commentNodeId,
+        text: `Comment from commenter ${runId} @owner`,
+      },
+      expectedStatus: 201,
+    });
+    assert.strictEqual(commenterCreatedComment.comment.nodeId, commentNodeId);
+    assert.strictEqual(commenterCreatedComment.comment.authorUserId, commenter.user.id);
+
+    const { data: viewerComments } = await viewer.request(`/api/maps/${mapId}/comments`, {
+      expectedStatus: 200,
+    });
+    assert.strictEqual(viewerComments.commentsByNode[commentNodeId].length, 1);
+
+    await viewer.request(`/api/maps/${mapId}/comments`, {
+      method: 'POST',
+      body: {
+        node_id: commentNodeId,
+        text: 'viewer should not be able to comment',
+      },
+      expectedStatus: 404,
+    });
+
+    const { data: commenterResolvedComment } = await commenter.request(
+      `/api/maps/${mapId}/comments/${commenterCreatedComment.comment.id}`,
+      {
+        method: 'PATCH',
+        body: { completed: true },
+        expectedStatus: 200,
+      }
+    );
+    assert.strictEqual(commenterResolvedComment.comment.completed, true);
+
+    await owner.request(`/api/maps/${mapId}/comments/${commenterCreatedComment.comment.id}`, {
+      method: 'DELETE',
+      expectedStatus: 200,
+    });
+    logStep('Verified commenter comment create/update and viewer read-only access');
+
+    const { data: ownerActivityInitial } = await owner.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 200,
+    });
+    const { data: viewerActivityInitial } = await viewer.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 200,
+    });
+    const { data: commenterActivityInitial } = await commenter.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 200,
+    });
+    assert.ok(ownerActivityInitial.pagination.total >= 10, 'owner activity feed should contain recorded events');
+    assert.ok(viewerActivityInitial.activity.length > 0, 'viewer should be able to read activity');
+    assert.ok(commenterActivityInitial.activity.length > 0, 'commenter should be able to read activity');
+    const initialEventTypes = new Set(ownerActivityInitial.activity.map((event) => event.eventType));
+    for (const eventType of [
+      'collab.invite.created',
+      'collab.invite.accepted',
+      'collab.settings.updated',
+      'collab.membership.role_changed',
+      'comment.created',
+      'comment.resolved',
+      'comment.deleted',
+      'content.metadata.updated',
+      'content.node.added',
+      'map.version.saved',
+    ]) {
+      assert.ok(initialEventTypes.has(eventType), `activity feed should include ${eventType}`);
+    }
+    logStep('Verified activity feed read access and initial event coverage');
 
     const { data: updatedViewerMembership } = await owner.request(`/api/maps/${mapId}/members/${viewer.user.id}`, {
       method: 'PATCH',
@@ -592,11 +758,78 @@ async function main() {
       expectedStatus: 404,
     });
     await viewer.request(`/api/maps/${mapId}/live-document`, { expectedStatus: 404 });
+    await viewer.request(`/api/maps/${mapId}/activity`, { expectedStatus: 404 });
     logStep('Verified membership role updates and access removal');
+
+    const { data: createdAccessRequest } = await viewer.request(`/api/maps/${mapId}/access-requests`, {
+      method: 'POST',
+      body: { requested_role: 'viewer', message: 'Need access back for QA' },
+      expectedStatus: 201,
+    });
+    assert.strictEqual(createdAccessRequest.accessRequest.status, 'pending');
+
+    const { data: reusedAccessRequest } = await viewer.request(`/api/maps/${mapId}/access-requests`, {
+      method: 'POST',
+      body: { requested_role: 'viewer' },
+      expectedStatus: 200,
+    });
+    assert.strictEqual(reusedAccessRequest.reused, true);
+
+    await commenter.request(`/api/maps/${mapId}/access-requests`, {
+      expectedStatus: 404,
+    });
+
+    const { data: ownerAccessRequests } = await owner.request(`/api/maps/${mapId}/access-requests`, {
+      expectedStatus: 200,
+    });
+    assert.strictEqual(ownerAccessRequests.accessRequests.length, 1);
+    assert.strictEqual(ownerAccessRequests.accessRequests[0].requesterUserId, viewer.user.id);
+
+    const { data: approvedAccessRequest } = await editor.request(
+      `/api/maps/${mapId}/access-requests/${createdAccessRequest.accessRequest.id}`,
+      {
+        method: 'PATCH',
+        body: { status: 'approved', role: 'viewer' },
+        expectedStatus: 200,
+      }
+    );
+    assert.strictEqual(approvedAccessRequest.accessRequest.status, 'approved');
+    assert.strictEqual(approvedAccessRequest.membership.role, 'viewer');
+
+    const { data: restoredViewerFeatureGates } = await viewer.request(`/api/maps/${mapId}/feature-gates`, {
+      expectedStatus: 200,
+    });
+    assert.strictEqual(restoredViewerFeatureGates.permissions.role, 'viewer');
+    await viewer.request(`/api/maps/${mapId}`, { expectedStatus: 200 });
+    const { data: ownerActivityFinal } = await owner.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 200,
+    });
+    const { data: viewerActivityFinal } = await viewer.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 200,
+    });
+    const finalEventTypes = new Set(ownerActivityFinal.activity.map((event) => event.eventType));
+    for (const eventType of [
+      'collab.membership.removed',
+      'collab.access_request.created',
+      'collab.access_request.approved',
+    ]) {
+      assert.ok(finalEventTypes.has(eventType), `final activity feed should include ${eventType}`);
+    }
+    assert.ok(viewerActivityFinal.activity.length > 0, 'restored viewer should regain activity access');
+    logStep('Verified owner-only access request review and re-approval flow');
+
+    await owner.request(`/api/maps/${mapId}`, { expectedStatus: 200 });
+    await editor.request(`/api/maps/${mapId}`, {
+      method: 'DELETE',
+      expectedStatus: 200,
+    });
+    mapId = '';
+    await owner.request(`/api/maps/${mapPayload.map.id}`, { expectedStatus: 404 });
+    logStep('Verified secondary owner delete access');
 
     console.log('[collab-check] Passed.', {
       apiBase: API_BASE,
-      mapId,
+      mapId: mapPayload.map.id,
       ownerId: owner.user.id,
       editorId: editor.user.id,
       commenterId: commenter.user.id,

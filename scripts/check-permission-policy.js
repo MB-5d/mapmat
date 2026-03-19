@@ -53,10 +53,33 @@ if (!publicRoles.includes(policy.ROLES.ANONYMOUS)) {
   console.error('[permission-policy] share.readPublic must include anonymous role.');
 }
 
+const activityRoles = policy.ACTION_ROLE_MATRIX[policy.ACTIONS.MAP_ACTIVITY_LIST] || [];
+for (const requiredRole of [
+  policy.ROLES.OWNER,
+  policy.ROLES.EDITOR,
+  policy.ROLES.COMMENTER,
+  policy.ROLES.VIEWER,
+]) {
+  if (!activityRoles.includes(requiredRole)) {
+    hasError = true;
+    console.error(`[permission-policy] mapActivity.list must include ${requiredRole}.`);
+  }
+}
+
 const ownerCanDoEverything = actionValues.every((action) => policy.can(action, policy.ROLES.OWNER));
 if (!ownerCanDoEverything) {
   hasError = true;
   console.error('[permission-policy] Owner role must be allowed for all actions.');
+}
+
+const membershipOwnerRole = policy.resolveResourceRole({
+  actorUserId: 'user-2',
+  resourceOwnerUserId: 'user-1',
+  membershipRole: policy.ROLES.OWNER,
+});
+if (membershipOwnerRole !== policy.ROLES.OWNER) {
+  hasError = true;
+  console.error('[permission-policy] Owner membership role must resolve to owner.');
 }
 
 if (hasError) {

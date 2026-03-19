@@ -120,7 +120,7 @@ const ProjectsModal = ({
                             <div className="project-maps-empty">No maps in this project</div>
                           ) : (
                             project.maps?.map(map => {
-                              const isSharedMap = !!map.membership_role;
+                              const isSharedMap = !!map.membership_role && map.membership_role !== 'owner';
                               return (
                               <div key={map.id}>
                                 <div className="map-item" onClick={() => onLoadMap(map)}>
