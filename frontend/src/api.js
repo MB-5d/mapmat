@@ -248,6 +248,13 @@ export async function deleteMapComment(mapId, commentId) {
   });
 }
 
+export async function getMapActivity(mapId, { limit = 25, offset = 0 } = {}) {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (offset !== undefined) params.set('offset', String(offset));
+  return fetchApi(`/api/maps/${mapId}/activity?${params.toString()}`);
+}
+
 export async function getCoeditingLiveDocument(mapId) {
   return fetchApi(`/api/maps/${mapId}/live-document`);
 }

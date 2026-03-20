@@ -146,6 +146,67 @@ const findCommentInThread = (comments, commentId) => {
   }
   return null;
 };
+
+const ACTIVITY_POLL_INTERVAL_MS = 5000;
+const MAX_TRACKED_ACTIVITY_IDS = 80;
+
+const trimActivityText = (value, maxLength = 72) => {
+  const normalized = String(value || '').trim();
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}...`;
+};
+
+const formatActivityActorLabel = (actor = {}, fallback = 'Collaborator') => {
+  const name = trimActivityText(actor?.name, 40);
+  if (name) return name;
+  const email = trimActivityText(actor?.email, 60);
+  if (email) return email.split('@')[0];
+  const role = trimActivityText(actor?.role, 24);
+  if (role) return role.charAt(0).toUpperCase() + role.slice(1);
+  return fallback;
+};
+
+const buildActivityToastMessage = (event) => {
+  if (!event?.summary || event.eventScope === 'content') return null;
+  return `${formatActivityActorLabel(event.actor)}: ${event.summary}`;
+};
+
+const buildLiveOperationToastMessage = (operation, participant = null) => {
+  if (!operation?.type) return null;
+  const actorLabel = trimActivityText(participant?.displayName, 40) || 'Collaborator';
+  const operationType = String(operation.type || '').trim();
+  const changes = operation.payload?.changes || {};
+  switch (operationType) {
+    case 'metadata.update': {
+      const nextName = trimActivityText(changes.name, 60);
+      return nextName
+        ? `${actorLabel} renamed the map to "${nextName}"`
+        : `${actorLabel} updated the map details`;
+    }
+    case 'node.add': {
+      const nodeTitle = trimActivityText(operation.payload?.node?.title, 60) || 'a node';
+      return `${actorLabel} added "${nodeTitle}"`;
+    }
+    case 'node.update': {
+      const title = trimActivityText(changes.title, 60);
+      return title
+        ? `${actorLabel} renamed a node to "${title}"`
+        : `${actorLabel} updated a node`;
+    }
+    case 'node.delete':
+      return `${actorLabel} deleted a node`;
+    case 'link.add':
+      return `${actorLabel} added a link`;
+    case 'link.update':
+      return `${actorLabel} updated a link`;
+    case 'link.delete':
+      return `${actorLabel} removed a link`;
+    default:
+      return `${actorLabel} updated the map`;
+  }
+};
+
 const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COEDITING_EXPERIMENT_ENABLED,
   false
@@ -832,9 +893,11 @@ export default function App() {
   const [showVersionHistoryDrawer, setShowVersionHistoryDrawer] = useState(false);
   const [showSaveVersionModal, setShowSaveVersionModal] = useState(false);
   const [mapVersions, setMapVersions] = useState([]);
+  const [mapActivity, setMapActivity] = useState([]);
   const [draftVersions, setDraftVersions] = useState([]);
   const [draftLatestVersionId, setDraftLatestVersionId] = useState(null);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [latestVersionId, setLatestVersionId] = useState(null);
   const [showVersionEditPrompt, setShowVersionEditPrompt] = useState(false);
@@ -885,6 +948,8 @@ export default function App() {
   const versionBaselineRef = useRef(null);
   const lastVersionSnapshotRef = useRef('');
   const versionInfoToastRef = useRef(false);
+  const seenActivityIdsRef = useRef(new Set());
+  const primedActivityMapIdRef = useRef(null);
   const presenceSessionIdRef = useRef('');
   const mapNameEditStartRef = useRef('');
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -1374,6 +1439,7 @@ export default function App() {
     setDraftVersions([{
       id,
       version_number: 1,
+      created_at: new Date().toISOString(),
       name: (label || 'Updated').trim() || 'Updated',
       notes: '',
       root: snapshot.root,
@@ -1665,12 +1731,45 @@ export default function App() {
     return new Date(lastScanAt).toLocaleString();
   }, [lastScanAt]);
 
+  const toastTimeoutRef = useRef(null);
+
+  const showToast = useCallback((msg, type = 'info', persistent = false) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToast({ message: msg, type, persistent });
+    if (!persistent) {
+      toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
+    }
+  }, []);
+
+  const dismissToast = () => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToast(null);
+  };
+
+  const ToastIcon = ({ type }) => {
+    switch (type) {
+      case 'success': return <CheckCircle size={18} />;
+      case 'error': return <XCircle size={18} />;
+      case 'warning': return <AlertTriangle size={18} />;
+      case 'loading': return <Loader2 size={18} className="toast-spinner" />;
+      default: return <Info size={18} />;
+    }
+  };
+
   const versionsForDrawer = currentMap?.id ? mapVersions : (root ? draftVersions : []);
   const latestVersionForDrawer = currentMap?.id
     ? latestVersionId
     : (draftLatestVersionId || draftVersions[0]?.id || null);
   const activeVersionForDrawer = currentMap?.id ? activeVersionId : latestVersionForDrawer;
   const isVersionLoading = currentMap?.id ? isLoadingVersions : false;
+  const activityForDrawer = currentMap?.id ? mapActivity : [];
+  const isActivityDrawerLoading = currentMap?.id ? isLoadingActivity : false;
   const useBackendComments = !!(isLoggedIn && currentMap?.id);
 
   const loadSavedMapComments = useCallback(async (mapId = currentMap?.id) => {
@@ -1688,6 +1787,58 @@ export default function App() {
       }
     }
   }, [currentMap?.id, isLoggedIn]);
+
+  const loadMapActivity = useCallback(async (
+    mapId = currentMap?.id,
+    { silent = false, allowToast = false } = {}
+  ) => {
+    if (!mapId || !isLoggedIn || !currentUser) {
+      setMapActivity([]);
+      seenActivityIdsRef.current = new Set();
+      primedActivityMapIdRef.current = null;
+      return;
+    }
+
+    if (!silent) {
+      setIsLoadingActivity(true);
+    }
+
+    try {
+      const response = await api.getMapActivity(mapId, { limit: 30, offset: 0 });
+      const activity = Array.isArray(response.activity) ? response.activity : [];
+      const previousIds = seenActivityIdsRef.current;
+      const isPrimed = primedActivityMapIdRef.current === mapId;
+
+      if (allowToast && isPrimed) {
+        const nextToastEvent = activity.find((event) => (
+          event?.id
+          && !previousIds.has(event.id)
+          && event?.actor?.userId
+          && event.actor.userId !== currentUser.id
+          && event.eventScope !== 'content'
+        ));
+        const toastMessage = buildActivityToastMessage(nextToastEvent);
+        if (toastMessage) {
+          showToast(toastMessage, 'info');
+        }
+      }
+
+      seenActivityIdsRef.current = new Set(
+        activity.slice(0, MAX_TRACKED_ACTIVITY_IDS).map((event) => event.id).filter(Boolean)
+      );
+      primedActivityMapIdRef.current = mapId;
+      setMapActivity(activity);
+    } catch (error) {
+      console.error('Load map activity error:', error);
+      if (error?.status === 404) {
+        setMapActivity([]);
+      }
+    } finally {
+      if (!silent) {
+        setIsLoadingActivity(false);
+      }
+    }
+  }, [currentMap?.id, currentUser, isLoggedIn, showToast]);
 
   useEffect(() => {
     if (!useBackendComments) {
@@ -1957,6 +2108,11 @@ export default function App() {
   const canEditValue = !!effectiveFeatureGates.mapEdit && !isCoeditingReadOnlyMode;
   const canCommentValue = canEditValue || !!effectiveFeatureGates.mapComment;
   const canViewCommentsValue = (!!currentMap?.id && !!effectiveFeatureGates.mapView) || canCommentValue;
+  const canViewVersionHistoryValue = currentMap?.id
+    ? !!effectiveFeatureGates.mapView
+    : (!!root && canEditValue);
+  const canSaveVersionValue = !!effectiveFeatureGates.versionSave && !isCoeditingReadOnlyMode;
+  const canViewActivityValue = !!currentMap?.id && !!effectiveFeatureGates.activityView;
   const canManageSharesValue = !!effectiveFeatureGates.shareManage;
   const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
@@ -1966,10 +2122,50 @@ export default function App() {
   const canEdit = () => canEditValue;
   const canComment = () => canCommentValue;
   const canViewComments = () => canViewCommentsValue;
+  const canViewVersionHistory = () => canViewVersionHistoryValue;
+  const canSaveVersion = () => canSaveVersionValue;
+  const canViewActivity = () => canViewActivityValue;
   const canManageShares = () => canManageSharesValue;
   const canViewCollaborationPanel = () => canViewCollaborationPanelValue;
   const canSendCollaborationInvites = () => canSendCollaborationInvitesValue;
   const canViewPresence = () => canViewPresenceValue;
+
+  useEffect(() => {
+    seenActivityIdsRef.current = new Set();
+    primedActivityMapIdRef.current = null;
+    if (!currentMap?.id || !isLoggedIn || !currentUser || !canViewActivityValue) {
+      setIsLoadingActivity(false);
+      setMapActivity([]);
+      return;
+    }
+    loadMapActivity(currentMap.id, { silent: false, allowToast: false });
+  }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity]);
+
+  useEffect(() => {
+    if (!currentMap?.id || !isLoggedIn || !currentUser || !canViewActivityValue) {
+      return undefined;
+    }
+
+    const refreshActivity = () => {
+      loadMapActivity(currentMap.id, { silent: true, allowToast: true });
+    };
+
+    const intervalId = window.setInterval(refreshActivity, ACTIVITY_POLL_INTERVAL_MS);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshActivity();
+      }
+    };
+
+    window.addEventListener('focus', refreshActivity);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshActivity);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity]);
 
   // Theme toggle functions
   const toggleTheme = () => {
@@ -2415,27 +2611,6 @@ export default function App() {
 
   // (gesture handlers removed; zoom handled via wheel listener on canvas)
 
-  const toastTimeoutRef = useRef(null);
-
-  const showToast = useCallback((msg, type = 'info', persistent = false) => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
-    }
-    setToast({ message: msg, type, persistent });
-    if (!persistent) {
-      toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
-    }
-  }, []);
-
-  const dismissToast = () => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
-    }
-    setToast(null);
-  };
-
   useEffect(() => {
     if (!mapSaveConflict) return;
     const sourceLabel = mapSaveConflict.source === 'autosave' ? 'Autosave paused' : 'Save blocked';
@@ -2444,16 +2619,6 @@ export default function App() {
       'warning'
     );
   }, [mapSaveConflict, showToast]);
-
-  const ToastIcon = ({ type }) => {
-    switch (type) {
-      case 'success': return <CheckCircle size={18} />;
-      case 'error': return <XCircle size={18} />;
-      case 'warning': return <AlertTriangle size={18} />;
-      case 'loading': return <Loader2 size={18} className="toast-spinner" />;
-      default: return <Info size={18} />;
-    }
-  };
 
   const warnLiveModeUnsupported = useCallback((message) => {
     showToast(message, 'info');
@@ -2464,6 +2629,14 @@ export default function App() {
     showToast(`${subject} is currently read-only. ${coeditingReadOnlyMessage}`, 'warning');
     return true;
   }, [coeditingReadOnlyMessage, currentMap?.id, isCoeditingReadOnlyMode, showToast]);
+
+  const handleRemoteCommittedOperation = useCallback((operation, { participant } = {}) => {
+    if (!operation?.type || !currentUser?.id || operation.actorId === currentUser.id) return;
+    const message = buildLiveOperationToastMessage(operation, participant);
+    if (message) {
+      showToast(message, 'info');
+    }
+  }, [currentUser?.id, showToast]);
 
   const {
     liveStatus,
@@ -2484,6 +2657,7 @@ export default function App() {
     accessMode: canEditValue ? 'edit' : (canCommentValue ? 'comment' : 'view'),
     getLocalDocument: getLocalLiveDocument,
     applyDocument: applyLiveDocumentToCanvas,
+    onCommittedOperation: handleRemoteCommittedOperation,
     onWarn: warnLiveModeUnsupported,
   });
 
@@ -2853,6 +3027,30 @@ export default function App() {
     if (!showVersionHistoryDrawer || !currentMap?.id) return;
     loadMapVersions(currentMap.id);
   }, [showVersionHistoryDrawer, currentMap?.id, loadMapVersions]);
+
+  useEffect(() => {
+    if (!showVersionHistoryDrawer || !currentMap?.id) return undefined;
+
+    const refreshVersions = () => {
+      loadMapVersions(currentMap.id);
+    };
+
+    const intervalId = window.setInterval(refreshVersions, ACTIVITY_POLL_INTERVAL_MS);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshVersions();
+      }
+    };
+
+    window.addEventListener('focus', refreshVersions);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshVersions);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentMap?.id, loadMapVersions, showVersionHistoryDrawer]);
 
   const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot } = {}) => {
     const targetMapId = mapId || currentMap?.id;
@@ -3701,6 +3899,10 @@ export default function App() {
       showToast('Save the map first', 'warning');
       return;
     }
+    if (!canSaveVersion()) {
+      showToast('You can view version history on this map, but only owners and editors can save versions.', 'info');
+      return;
+    }
     if (warnCoeditingReadOnly('This map')) return;
     const nextNumber = (mapVersions[0]?.version_number || 0) + 1;
     setSaveVersionMeta({
@@ -3712,6 +3914,11 @@ export default function App() {
 
   const handleSaveVersion = async (name, notes) => {
     if (!currentMap?.id) return;
+    if (!canSaveVersion()) {
+      setShowSaveVersionModal(false);
+      showToast('Only owners and editors can save versions on this map.', 'info');
+      return;
+    }
     if (warnCoeditingReadOnly('This map')) {
       setShowSaveVersionModal(false);
       return;
@@ -3832,7 +4039,7 @@ export default function App() {
       connectionColors: version.connectionColors || DEFAULT_CONNECTION_COLORS,
     });
     versionBaselineRef.current = snapshot;
-    showToast('Version restored', 'success');
+    showToast(canSaveVersion() ? 'Version restored' : 'Version preview loaded', 'success');
   };
 
   const handleOverrideVersion = async () => {
@@ -9122,6 +9329,7 @@ export default function App() {
               toolbarProps={{
                 canEdit: canEdit(),
                 canViewComments: canViewComments(),
+                canViewVersionHistory: canViewVersionHistory(),
                 activeTool,
                 connectionTool,
                 onSelectTool: () => {
@@ -9537,6 +9745,10 @@ export default function App() {
         latestVersionId={latestVersionForDrawer}
         isLoading={isVersionLoading}
         onAddVersion={openSaveVersionModal}
+        canAddVersion={canSaveVersion()}
+        canViewActivity={canViewActivity()}
+        activity={activityForDrawer}
+        isActivityLoading={isActivityDrawerLoading}
       />
 
       <VersionEditPromptModal

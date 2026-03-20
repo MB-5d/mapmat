@@ -90,6 +90,7 @@ export function useCoeditingLive({
   accessMode = 'edit',
   getLocalDocument,
   applyDocument,
+  onCommittedOperation,
   onWarn,
 }) {
   const [status, setStatus] = useState(STATUS.DISABLED);
@@ -118,6 +119,8 @@ export function useCoeditingLive({
   const hydrateFromServerRef = useRef(null);
   const scheduleReconnectRef = useRef(null);
   const markOutOfSyncRef = useRef(null);
+  const onCommittedOperationRef = useRef(onCommittedOperation);
+  const participantsRef = useRef([]);
 
   const setLiveStatus = useCallback((nextStatus, nextDetail) => {
     statusRef.current = nextStatus;
@@ -203,6 +206,7 @@ export function useCoeditingLive({
       window.clearTimeout(selectionTimerRef.current);
       selectionTimerRef.current = null;
     }
+    participantsRef.current = [];
     setParticipants([]);
     setPendingCount(0);
     setLiveVersion(0);
@@ -424,13 +428,14 @@ export function useCoeditingLive({
               const roomMode = String(message.roomMode || '').trim().toLowerCase();
               const isReadOnlyRoom = roomMode === 'read_only';
               const isReadOnlyViewer = isReadOnlyRoom && !canEdit;
+              participantsRef.current = Array.isArray(message.participants) ? message.participants : [];
               setLiveStatus(
                 isReadOnlyRoom && canEdit ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED,
                 isReadOnlyViewer
                   ? 'Read-only live updates'
                   : (isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected')
               );
-              setParticipants(Array.isArray(message.participants) ? message.participants : []);
+              setParticipants(participantsRef.current);
               resetHeartbeat();
               heartbeatTimerRef.current = window.setInterval(() => {
                 sendSocketJson({ type: 'heartbeat' });
@@ -443,12 +448,20 @@ export function useCoeditingLive({
             }
 
             if (message.type === 'presence.sync') {
-              setParticipants(Array.isArray(message.participants) ? message.participants : []);
+              participantsRef.current = Array.isArray(message.participants) ? message.participants : [];
+              setParticipants(participantsRef.current);
               return;
             }
 
             if (message.type === 'operation.committed') {
-              acceptCommittedOperation(message.operation);
+              const applied = acceptCommittedOperation(message.operation);
+              if (applied) {
+                onCommittedOperationRef.current?.(message.operation, {
+                  participant: participantsRef.current.find(
+                    (participant) => participant?.actorId && participant.actorId === message.operation?.actorId
+                  ) || null,
+                });
+              }
               return;
             }
 
@@ -501,6 +514,10 @@ export function useCoeditingLive({
   useEffect(() => {
     markOutOfSyncRef.current = markOutOfSync;
   }, [markOutOfSync]);
+
+  useEffect(() => {
+    onCommittedOperationRef.current = onCommittedOperation;
+  }, [onCommittedOperation]);
 
   useEffect(() => {
     if (!enabled || !mapId || !actorId) {

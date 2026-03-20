@@ -22,6 +22,7 @@ import {
 const CanvasToolbar = ({
   canEdit,
   canViewComments,
+  canViewVersionHistory,
   activeTool,
   connectionTool,
   onSelectTool,
@@ -230,11 +231,11 @@ const CanvasToolbar = ({
 
     <div className="canvas-toolbar-divider" />
 
-    {canEdit && hasMap && (
+    {canViewVersionHistory && hasMap && (
       <button
         className={`canvas-tool-btn ${showVersionHistory ? 'active' : ''}`}
         onClick={onShowVersionHistory}
-        title={hasSavedMap ? 'Version History (H)' : 'Version History (draft, save map to persist)'}
+        title={hasSavedMap ? 'Version History (H)' : 'Version History'}
       >
         <History size={20} />
       </button>

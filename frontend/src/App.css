@@ -3308,6 +3308,39 @@ body {
   gap: 48px;
 }
 
+.version-history-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  align-self: flex-start;
+}
+
+.version-history-tab {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.version-history-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.version-history-tab.active {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
 .version-history-add {
   width: 32px;
   height: 32px;
@@ -3330,6 +3363,102 @@ body {
   color: var(--color-text-secondary);
   text-align: center;
   padding: 16px 0;
+}
+
+.activity-history-list::before {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.activity-history-item {
+  cursor: default;
+  align-items: flex-start;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.activity-history-item:hover {
+  background: transparent;
+}
+
+.activity-history-marker {
+  left: -24px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+}
+
+.activity-history-marker.scope-content {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.activity-history-marker.scope-comment {
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.12);
+}
+
+.activity-history-marker.scope-version {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.14);
+}
+
+.activity-history-marker.scope-collaboration {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.14);
+}
+
+.activity-history-notes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.activity-history-actor {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.activity-history-separator {
+  color: var(--color-text-muted);
+}
+
+.activity-history-scope {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.activity-history-scope.scope-comment {
+  color: #6d28d9;
+  background: rgba(109, 40, 217, 0.1);
+}
+
+.activity-history-scope.scope-version {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.12);
+}
+
+.activity-history-scope.scope-collaboration {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.12);
+}
+
+.activity-history-scope.scope-content {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.activity-history-meta {
+  min-width: 44px;
 }
 
 .drawer-back-to-top {
