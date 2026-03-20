@@ -367,6 +367,13 @@ export async function getMapCollaboration(mapId) {
   return fetchApi(`/api/maps/${mapId}/collaboration`);
 }
 
+export async function updateMapCollaborationSettings(mapId, payload = {}) {
+  return fetchApi(`/api/maps/${mapId}/collaboration/settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function createMapInvite(mapId, { email, role, expiresInDays } = {}) {
   return fetchApi(`/api/maps/${mapId}/invites`, {
     method: 'POST',
@@ -400,6 +407,13 @@ export async function updateMapMemberRole(mapId, userId, role) {
 export async function removeMapMember(mapId, userId) {
   return fetchApi(`/api/maps/${mapId}/members/${userId}`, {
     method: 'DELETE',
+  });
+}
+
+export async function reviewMapAccessRequest(mapId, requestId, { status, role } = {}) {
+  return fetchApi(`/api/maps/${mapId}/access-requests/${requestId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, role }),
   });
 }
 

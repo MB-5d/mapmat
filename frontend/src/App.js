@@ -919,6 +919,8 @@ export default function App() {
   const [collaborationError, setCollaborationError] = useState('');
   const [collaborationMemberships, setCollaborationMemberships] = useState([]);
   const [collaborationInvites, setCollaborationInvites] = useState([]);
+  const [collaborationSettings, setCollaborationSettings] = useState(null);
+  const [collaborationAccessRequests, setCollaborationAccessRequests] = useState([]);
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
   const [presenceSessions, setPresenceSessions] = useState([]);
@@ -2116,7 +2118,15 @@ export default function App() {
   const canManageSharesValue = !!effectiveFeatureGates.shareManage;
   const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
+  const canManageCollaborationSettingsValue = !!effectiveFeatureGates.collabSettingsManage;
+  const canViewAccessRequestsValue = !!effectiveFeatureGates.accessRequestsView;
   const canViewPresenceValue = !!effectiveFeatureGates.presenceView;
+  const currentCollaborationRole = useMemo(() => {
+    if (!currentUser?.id) return 'viewer';
+    if (currentMap?.user_id && currentMap.user_id === currentUser.id) return 'owner';
+    return collaborationMemberships.find((member) => member.userId === currentUser.id)?.role || 'viewer';
+  }, [collaborationMemberships, currentMap?.user_id, currentUser?.id]);
+  const canManageCollaborationMembersValue = ['owner', 'editor'].includes(currentCollaborationRole);
 
   // Permission helper functions
   const canEdit = () => canEditValue;
@@ -2128,6 +2138,8 @@ export default function App() {
   const canManageShares = () => canManageSharesValue;
   const canViewCollaborationPanel = () => canViewCollaborationPanelValue;
   const canSendCollaborationInvites = () => canSendCollaborationInvitesValue;
+  const canManageCollaborationSettings = () => canManageCollaborationSettingsValue;
+  const canViewAccessRequests = () => canViewAccessRequestsValue;
   const canViewPresence = () => canViewPresenceValue;
 
   useEffect(() => {
@@ -2805,9 +2817,13 @@ export default function App() {
       const { collaboration } = await api.getMapCollaboration(currentMap.id);
       setCollaborationMemberships(collaboration?.memberships || []);
       setCollaborationInvites(collaboration?.invites || []);
+      setCollaborationSettings(collaboration?.settings || null);
+      setCollaborationAccessRequests(collaboration?.accessRequests || []);
     } catch (error) {
       setCollaborationMemberships([]);
       setCollaborationInvites([]);
+      setCollaborationSettings(null);
+      setCollaborationAccessRequests([]);
       if (error?.status === 404) {
         setCollaborationError('Collaboration backend is currently disabled.');
       } else {
@@ -2877,6 +2893,116 @@ export default function App() {
       setCollaborationLoading(false);
     }
   }, [canSendCollaborationInvitesValue, currentMap?.id, loadCollaborationData, showToast]);
+
+  const updateCollaborationSettings = useCallback(async (patch) => {
+    if (!canManageCollaborationSettingsValue) {
+      showToast('Only owners can update collaboration settings on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id) return;
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.updateMapCollaborationSettings(currentMap.id, patch);
+      showToast('Collaboration settings updated', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationError(error.message || 'Failed to update collaboration settings.');
+      showToast(error.message || 'Failed to update collaboration settings.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [canManageCollaborationSettingsValue, currentMap?.id, loadCollaborationData, showToast]);
+
+  const updateCollaborationMemberRole = useCallback(async (userId, role) => {
+    if (!canManageCollaborationMembersValue) {
+      showToast('You do not have permission to manage members on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id || !userId || !role) return;
+    if (userId === currentUser?.id) {
+      showToast('Manage your own access from another owner account instead.', 'info');
+      return;
+    }
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.updateMapMemberRole(currentMap.id, userId, role);
+      showToast('Member role updated', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationError(error.message || 'Failed to update member role.');
+      showToast(error.message || 'Failed to update member role.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [
+    canManageCollaborationMembersValue,
+    currentMap?.id,
+    currentUser?.id,
+    loadCollaborationData,
+    showToast,
+  ]);
+
+  const removeCollaborationMember = useCallback(async (member) => {
+    if (!canManageCollaborationMembersValue) {
+      showToast('You do not have permission to remove members on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id || !member?.userId) return;
+    if (member.userId === currentUser?.id) {
+      showToast('Manage your own access from another owner account instead.', 'info');
+      return;
+    }
+
+    const confirmed = await showConfirm({
+      title: 'Remove Access',
+      message: `Remove ${member.userName || member.userEmail || 'this member'} from this map?`,
+      confirmText: 'Remove',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.removeMapMember(currentMap.id, member.userId);
+      showToast('Member removed', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationError(error.message || 'Failed to remove member.');
+      showToast(error.message || 'Failed to remove member.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [
+    canManageCollaborationMembersValue,
+    currentMap?.id,
+    currentUser?.id,
+    loadCollaborationData,
+    showConfirm,
+    showToast,
+  ]);
+
+  const reviewCollaborationAccessRequest = useCallback(async (requestId, status, role) => {
+    if (!canViewAccessRequestsValue) {
+      showToast('Only owners can review access requests on this map.', 'warning');
+      return;
+    }
+    if (!currentMap?.id || !requestId || !status) return;
+    setCollaborationLoading(true);
+    setCollaborationError('');
+    try {
+      await api.reviewMapAccessRequest(currentMap.id, requestId, { status, role });
+      showToast(status === 'approved' ? 'Access request approved' : 'Access request denied', 'success');
+      await loadCollaborationData();
+    } catch (error) {
+      setCollaborationError(error.message || 'Failed to review access request.');
+      showToast(error.message || 'Failed to review access request.', 'error');
+    } finally {
+      setCollaborationLoading(false);
+    }
+  }, [canViewAccessRequestsValue, currentMap?.id, loadCollaborationData, showToast]);
 
   useEffect(() => {
     if (!showShareModal) return;
@@ -9575,6 +9701,8 @@ export default function App() {
           setCollaborationInviteEmail('');
           setCollaborationInviteRole('viewer');
           setCollaborationError('');
+          setCollaborationSettings(null);
+          setCollaborationAccessRequests([]);
         }}
         accessLevels={ACCESS_LEVELS}
         sharePermission={sharePermission}
@@ -9595,9 +9723,20 @@ export default function App() {
         onCollaborationInviteRoleChange={setCollaborationInviteRole}
         onSendCollaborationInvite={sendCollaborationInvite}
         canSendCollaborationInvites={canSendCollaborationInvites()}
+        currentCollaborationRole={currentCollaborationRole}
+        currentUserId={currentUser?.id || null}
         collaborationMemberships={collaborationMemberships}
         collaborationInvites={collaborationInvites}
+        collaborationSettings={collaborationSettings}
+        collaborationAccessRequests={collaborationAccessRequests}
+        canManageCollaborationSettings={canManageCollaborationSettings()}
+        canManageCollaborationMembers={canManageCollaborationMembersValue}
+        canViewAccessRequests={canViewAccessRequests()}
+        onUpdateCollaborationSettings={updateCollaborationSettings}
+        onUpdateCollaborationMemberRole={updateCollaborationMemberRole}
+        onRemoveCollaborationMember={removeCollaborationMember}
         onRevokeCollaborationInvite={revokeCollaborationInvite}
+        onReviewCollaborationAccessRequest={reviewCollaborationAccessRequest}
       />
 
       <SaveMapModal

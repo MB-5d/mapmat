@@ -6649,6 +6649,47 @@ body {
   background: #f8fafc;
 }
 
+.share-collab-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.share-collab-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.share-collab-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.share-collab-setting-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.share-collab-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.share-collab-checkbox input {
+  margin: 0;
+}
+
 .share-collab-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6682,6 +6723,14 @@ body {
   background: #f8fafc;
 }
 
+.share-collab-item-wide {
+  align-items: center;
+}
+
+.share-collab-item-stack {
+  align-items: flex-start;
+}
+
 .share-collab-main {
   min-width: 0;
 }
@@ -6695,9 +6744,30 @@ body {
   text-overflow: ellipsis;
 }
 
+.share-collab-inline-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.12);
+  color: #4f46e5;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
 .share-collab-meta {
   font-size: 12px;
   color: #64748b;
+}
+
+.share-collab-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .share-collab-role {
@@ -6721,6 +6791,34 @@ body {
   cursor: pointer;
 }
 
+.share-collab-deny {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #be123c;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.share-collab-deny:hover {
+  background: #ffe4e6;
+}
+
+.share-collab-request-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.share-collab-access-requests {
+  margin-top: 14px;
+}
+
 .share-collab-revoke:hover {
   background: #fef2f2;
   border-color: #fecaca;
@@ -6738,12 +6836,18 @@ body {
 }
 
 @media (max-width: 720px) {
+  .share-collab-settings-grid,
   .share-collab-invite-row {
     grid-template-columns: 1fr;
   }
 
   .share-collab-grid {
     grid-template-columns: 1fr;
+  }
+
+  .share-collab-request-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 
@@ -7808,13 +7912,28 @@ body {
   color: #e2e0e8;
 }
 
+[data-theme="dark"] .share-collab-settings {
+  background: #0d0812;
+  border-color: #301E3F;
+}
+
+[data-theme="dark"] .share-collab-setting-label,
 [data-theme="dark"] .share-collab-subtitle {
   color: #e2e0e8;
+}
+
+[data-theme="dark"] .share-collab-checkbox {
+  color: #cbd5e1;
 }
 
 [data-theme="dark"] .share-collab-item {
   background: #0d0812;
   border-color: #301E3F;
+}
+
+[data-theme="dark"] .share-collab-inline-badge {
+  background: rgba(167, 139, 250, 0.16);
+  color: #c4b5fd;
 }
 
 [data-theme="dark"] .share-collab-name {
@@ -7839,6 +7958,16 @@ body {
 [data-theme="dark"] .share-collab-revoke:hover {
   background: #2c1221;
   border-color: #7f1d1d;
+}
+
+[data-theme="dark"] .share-collab-deny {
+  background: #2c1221;
+  border-color: #7f1d1d;
+  color: #fecdd3;
+}
+
+[data-theme="dark"] .share-collab-deny:hover {
+  background: #3e1727;
 }
 
 /* Comments Panel - Dark Mode */

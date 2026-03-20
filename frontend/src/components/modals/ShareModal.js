@@ -1,5 +1,25 @@
-import React from 'react';
-import { Check, Copy, Edit2, Eye, Mail, MessageSquare, Send, Trash2, Users, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  Check,
+  Copy,
+  Edit2,
+  Eye,
+  Mail,
+  MessageSquare,
+  Send,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
+
+const ROLE_OPTIONS = [
+  { value: 'viewer', label: 'Viewer' },
+  { value: 'commenter', label: 'Commenter' },
+  { value: 'editor', label: 'Editor' },
+  { value: 'owner', label: 'Owner' },
+];
+
+const APPROVAL_ROLE_OPTIONS = ROLE_OPTIONS.filter((option) => option.value !== 'owner');
 
 const ShareModal = ({
   show,
@@ -23,16 +43,109 @@ const ShareModal = ({
   onCollaborationInviteRoleChange,
   onSendCollaborationInvite,
   canSendCollaborationInvites = true,
+  currentCollaborationRole = 'viewer',
+  currentUserId = null,
   collaborationMemberships = [],
   collaborationInvites = [],
+  collaborationSettings = null,
+  collaborationAccessRequests = [],
+  canManageCollaborationSettings = false,
+  canManageCollaborationMembers = false,
+  canViewAccessRequests = false,
+  onUpdateCollaborationSettings,
+  onUpdateCollaborationMemberRole,
+  onRemoveCollaborationMember,
   onRevokeCollaborationInvite,
+  onReviewCollaborationAccessRequest,
 }) => {
+  const [requestRoleSelections, setRequestRoleSelections] = useState({});
+
+  useEffect(() => {
+    const nextSelections = {};
+    (collaborationAccessRequests || []).forEach((request) => {
+      nextSelections[request.id] = request.requestedRole || 'viewer';
+    });
+    setRequestRoleSelections(nextSelections);
+  }, [collaborationAccessRequests]);
+
   if (!show) return null;
 
   const formatRole = (role) => {
     const value = String(role || '').trim();
     if (!value) return 'Viewer';
     return value.charAt(0).toUpperCase() + value.slice(1);
+  };
+
+  const settings = collaborationSettings || {
+    accessPolicy: 'private',
+    nonViewerInvitesRequireOwner: true,
+    accessRequestsEnabled: true,
+    presenceIdentityMode: 'named',
+  };
+
+  const isOwner = currentCollaborationRole === 'owner';
+  const canGrantOwner = isOwner;
+  const inviteRoleOptions = isOwner
+    ? ROLE_OPTIONS.filter((option) => option.value !== 'owner')
+    : APPROVAL_ROLE_OPTIONS;
+
+  const memberRoleOptions = canGrantOwner ? ROLE_OPTIONS : APPROVAL_ROLE_OPTIONS;
+
+  const handleSettingToggle = (key, value) => {
+    onUpdateCollaborationSettings?.({ [key]: value });
+  };
+
+  const renderMembershipRow = (member) => {
+    const isSelf = !!currentUserId && member.userId === currentUserId;
+    const isImplicitOwner = !!member.implicitOwner;
+    const isOwnerMember = member.role === 'owner';
+    const canEditMember = canManageCollaborationMembers
+      && !isSelf
+      && !isImplicitOwner
+      && (!isOwnerMember || isOwner);
+
+    const canRemoveMember = canEditMember;
+
+    return (
+      <div className="share-collab-item share-collab-item-wide" key={member.id || `${member.userId}-${member.role}`}>
+        <div className="share-collab-main">
+          <div className="share-collab-name">
+            {member.userName || member.userEmail || 'Member'}
+            {isSelf ? <span className="share-collab-inline-badge">You</span> : null}
+            {isImplicitOwner ? <span className="share-collab-inline-badge">Primary owner</span> : null}
+          </div>
+          <div className="share-collab-meta">{member.userEmail || ''}</div>
+        </div>
+        <div className="share-collab-controls">
+          {canManageCollaborationMembers ? (
+            <select
+              className="share-collab-role-select"
+              value={member.role}
+              disabled={!canEditMember || collaborationLoading}
+              onChange={(event) => onUpdateCollaborationMemberRole?.(member.userId, event.target.value)}
+            >
+              {memberRoleOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="share-collab-role">{formatRole(member.role)}</div>
+          )}
+          {canManageCollaborationMembers ? (
+            <button
+              className="share-collab-revoke"
+              onClick={() => onRemoveCollaborationMember?.(member)}
+              aria-label="Remove member"
+              disabled={!canRemoveMember || collaborationLoading}
+            >
+              <Trash2 size={14} />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -125,11 +238,65 @@ const ShareModal = ({
 
           {collaborationEnabled && (
             <div className="share-section">
-              <div className="share-section-title">Collaborators (Beta)</div>
+              <div className="share-section-title">Collaborators</div>
               {!collaborationAvailable ? (
                 <div className="share-collab-empty">Save this map first to invite collaborators.</div>
               ) : (
                 <>
+                  <div className="share-collab-settings">
+                    <div className="share-collab-subtitle">
+                      <Users size={14} />
+                      <span>Access Policy</span>
+                    </div>
+                    <div className="share-collab-settings-grid">
+                      <label className="share-collab-setting">
+                        <span className="share-collab-setting-label">Access mode</span>
+                        <select
+                          className="share-collab-role-select"
+                          value={settings.accessPolicy}
+                          disabled={!canManageCollaborationSettings || collaborationLoading}
+                          onChange={(event) => handleSettingToggle('access_policy', event.target.value)}
+                        >
+                          <option value="private">Private</option>
+                          <option value="viewer_invites_open">Open viewer invites</option>
+                        </select>
+                      </label>
+                      <label className="share-collab-setting">
+                        <span className="share-collab-setting-label">Presence names</span>
+                        <select
+                          className="share-collab-role-select"
+                          value={settings.presenceIdentityMode}
+                          disabled={!canManageCollaborationSettings || collaborationLoading}
+                          onChange={(event) => handleSettingToggle('presence_identity_mode', event.target.value)}
+                        >
+                          <option value="named">Named</option>
+                          <option value="anonymous">Anonymous</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label className="share-collab-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={!!settings.nonViewerInvitesRequireOwner}
+                        disabled={!canManageCollaborationSettings || collaborationLoading}
+                        onChange={(event) => handleSettingToggle('non_viewer_invites_require_owner', event.target.checked)}
+                      />
+                      <span>Require owner approval for editor and commenter invites</span>
+                    </label>
+                    <label className="share-collab-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={!!settings.accessRequestsEnabled}
+                        disabled={!canManageCollaborationSettings || collaborationLoading}
+                        onChange={(event) => handleSettingToggle('access_requests_enabled', event.target.checked)}
+                      />
+                      <span>Allow access requests from removed or outside users</span>
+                    </label>
+                    {!canManageCollaborationSettings ? (
+                      <div className="share-collab-empty">Only owners can change collaboration settings.</div>
+                    ) : null}
+                  </div>
+
                   <div className="share-collab-invite-row">
                     <div className="share-email-input">
                       <Mail size={18} />
@@ -147,9 +314,11 @@ const ShareModal = ({
                       onChange={(e) => onCollaborationInviteRoleChange?.(e.target.value)}
                       disabled={!canSendCollaborationInvites}
                     >
-                      <option value="viewer">Viewer</option>
-                      <option value="commenter">Commenter</option>
-                      <option value="editor">Editor</option>
+                      {inviteRoleOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
                     <button
                       className="share-email-btn"
@@ -179,15 +348,7 @@ const ShareModal = ({
                         {collaborationMemberships.length === 0 ? (
                           <div className="share-collab-empty">No collaborators yet.</div>
                         ) : (
-                          collaborationMemberships.map((member) => (
-                            <div className="share-collab-item" key={member.id || `${member.userId}-${member.role}`}>
-                              <div className="share-collab-main">
-                                <div className="share-collab-name">{member.userName || member.userEmail || 'Member'}</div>
-                                <div className="share-collab-meta">{member.userEmail || ''}</div>
-                              </div>
-                              <div className="share-collab-role">{formatRole(member.role)}</div>
-                            </div>
-                          ))
+                          collaborationMemberships.map(renderMembershipRow)
                         )}
                       </div>
                     </div>
@@ -221,6 +382,69 @@ const ShareModal = ({
                       </div>
                     </div>
                   </div>
+
+                  {canViewAccessRequests ? (
+                    <div className="share-collab-access-requests">
+                      <div className="share-collab-subtitle">
+                        <Mail size={14} />
+                        <span>Access Requests</span>
+                      </div>
+                      <div className="share-collab-list">
+                        {collaborationAccessRequests.length === 0 ? (
+                          <div className="share-collab-empty">No pending access requests.</div>
+                        ) : (
+                          collaborationAccessRequests.map((request) => (
+                            <div className="share-collab-item share-collab-item-stack" key={request.id}>
+                              <div className="share-collab-main">
+                                <div className="share-collab-name">
+                                  {request.requesterName || request.requesterEmail || 'Requester'}
+                                </div>
+                                <div className="share-collab-meta">
+                                  Requested {formatRole(request.requestedRole)}
+                                  {request.message ? ` • ${request.message}` : ''}
+                                </div>
+                              </div>
+                              <div className="share-collab-request-actions">
+                                <select
+                                  className="share-collab-role-select"
+                                  value={requestRoleSelections[request.id] || request.requestedRole || 'viewer'}
+                                  onChange={(event) => setRequestRoleSelections((prev) => ({
+                                    ...prev,
+                                    [request.id]: event.target.value,
+                                  }))}
+                                  disabled={collaborationLoading}
+                                >
+                                  {APPROVAL_ROLE_OPTIONS.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  className="share-email-btn"
+                                  onClick={() => onReviewCollaborationAccessRequest?.(
+                                    request.id,
+                                    'approved',
+                                    requestRoleSelections[request.id] || request.requestedRole || 'viewer'
+                                  )}
+                                  disabled={collaborationLoading}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="share-collab-deny"
+                                  onClick={() => onReviewCollaborationAccessRequest?.(request.id, 'denied')}
+                                  disabled={collaborationLoading}
+                                >
+                                  Deny
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>
