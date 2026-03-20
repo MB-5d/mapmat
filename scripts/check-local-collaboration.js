@@ -549,13 +549,14 @@ async function main() {
 
     const ownerSocket = await openJoinedSocket(owner, mapId, 'edit');
     const editorSocket = await openJoinedSocket(editor, mapId, 'edit');
-    cleanupSockets.push(ownerSocket, editorSocket);
+    const viewerSocket = await openJoinedSocket(viewer, mapId, 'view');
+    const commenterSocket = await openJoinedSocket(commenter, mapId, 'comment');
+    cleanupSockets.push(ownerSocket, editorSocket, viewerSocket, commenterSocket);
     assert.strictEqual(ownerSocket.joined.roomMode, 'enabled');
     assert.strictEqual(editorSocket.joined.roomMode, 'enabled');
-
-    await expectSocketDenied(viewer, mapId);
-    await expectSocketDenied(commenter, mapId);
-    logStep('Verified WebSocket room access for writer vs read-only roles');
+    assert.strictEqual(viewerSocket.joined.roomMode, 'read_only');
+    assert.strictEqual(commenterSocket.joined.roomMode, 'read_only');
+    logStep('Verified WebSocket room access for writer and read-only roles');
 
     const ownerOp = createOperation({
       mapId,
@@ -573,6 +574,14 @@ async function main() {
       editorSocket,
       (message) => message.type === 'operation.committed' && message.operation?.opId === ownerOp.opId
     );
+    const viewerCommitPromise = waitForMessage(
+      viewerSocket,
+      (message) => message.type === 'operation.committed' && message.operation?.opId === ownerOp.opId
+    );
+    const commenterCommitPromise = waitForMessage(
+      commenterSocket,
+      (message) => message.type === 'operation.committed' && message.operation?.opId === ownerOp.opId
+    );
     const { data: ownerIngest } = await owner.request(`/api/maps/${mapId}/ops/ingest`, {
       method: 'POST',
       body: { operation: ownerOp },
@@ -580,7 +589,11 @@ async function main() {
     });
     assert.strictEqual(ownerIngest.operation.version, 1);
     const editorCommit = await editorCommitPromise;
+    const viewerCommit = await viewerCommitPromise;
+    const commenterCommit = await commenterCommitPromise;
     assert.strictEqual(editorCommit.operation.opId, ownerOp.opId);
+    assert.strictEqual(viewerCommit.operation.opId, ownerOp.opId);
+    assert.strictEqual(commenterCommit.operation.opId, ownerOp.opId);
 
     const editorOp = createOperation({
       mapId,
@@ -604,6 +617,14 @@ async function main() {
       ownerSocket,
       (message) => message.type === 'operation.committed' && message.operation?.opId === editorOp.opId
     );
+    const viewerEditorCommitPromise = waitForMessage(
+      viewerSocket,
+      (message) => message.type === 'operation.committed' && message.operation?.opId === editorOp.opId
+    );
+    const commenterEditorCommitPromise = waitForMessage(
+      commenterSocket,
+      (message) => message.type === 'operation.committed' && message.operation?.opId === editorOp.opId
+    );
     const { data: editorIngest } = await editor.request(`/api/maps/${mapId}/ops/ingest`, {
       method: 'POST',
       body: { operation: editorOp },
@@ -611,7 +632,11 @@ async function main() {
     });
     assert.strictEqual(editorIngest.operation.version, 2);
     const ownerCommit = await ownerCommitPromise;
+    const viewerEditorCommit = await viewerEditorCommitPromise;
+    const commenterEditorCommit = await commenterEditorCommitPromise;
     assert.strictEqual(ownerCommit.operation.opId, editorOp.opId);
+    assert.strictEqual(viewerEditorCommit.operation.opId, editorOp.opId);
+    assert.strictEqual(commenterEditorCommit.operation.opId, editorOp.opId);
 
     const { data: currentMapForVersion } = await editor.request(`/api/maps/${mapId}`, {
       expectedStatus: 200,

@@ -87,6 +87,7 @@ export function useCoeditingLive({
   mapId,
   actorId,
   canEdit,
+  accessMode = 'edit',
   getLocalDocument,
   applyDocument,
   onWarn,
@@ -412,7 +413,7 @@ export function useCoeditingLive({
                 type: 'join',
                 sessionId: sessionIdRef.current,
                 clientName: CLIENT_NAME,
-                accessMode: 'edit',
+                accessMode,
               });
               return;
             }
@@ -422,9 +423,12 @@ export function useCoeditingLive({
               reconnectAttemptRef.current = 0;
               const roomMode = String(message.roomMode || '').trim().toLowerCase();
               const isReadOnlyRoom = roomMode === 'read_only';
+              const isReadOnlyViewer = isReadOnlyRoom && !canEdit;
               setLiveStatus(
-                isReadOnlyRoom ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED,
-                isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected'
+                isReadOnlyRoom && canEdit ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED,
+                isReadOnlyViewer
+                  ? 'Read-only live updates'
+                  : (isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected')
               );
               setParticipants(Array.isArray(message.participants) ? message.participants : []);
               resetHeartbeat();
@@ -477,10 +481,10 @@ export function useCoeditingLive({
           scheduleReconnect();
         };
       } catch (error) {
-        markOutOfSync(error?.message || 'Failed to open live transport');
+    markOutOfSync(error?.message || 'Failed to open live transport');
       }
     }, delay);
-  }, [acceptCommittedOperation, broadcastSelectionNow, cleanupSocket, clearReconnectTimer, enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, resetHeartbeat, sendSocketJson, setLiveStatus]);
+  }, [acceptCommittedOperation, accessMode, broadcastSelectionNow, canEdit, cleanupSocket, clearReconnectTimer, enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, resetHeartbeat, sendSocketJson, setLiveStatus]);
 
   useEffect(() => {
     currentMapIdRef.current = mapId || null;
@@ -499,7 +503,7 @@ export function useCoeditingLive({
   }, [markOutOfSync]);
 
   useEffect(() => {
-    if (!enabled || !mapId || !actorId || !canEdit) {
+    if (!enabled || !mapId || !actorId) {
       resetState();
       return undefined;
     }
@@ -532,7 +536,7 @@ export function useCoeditingLive({
         selectionTimerRef.current = null;
       }
     };
-  }, [actorId, canEdit, cleanupSocket, clearReconnectTimer, enabled, mapId, resetState, setLiveStatus]);
+  }, [accessMode, actorId, canEdit, cleanupSocket, clearReconnectTimer, enabled, mapId, resetState, setLiveStatus]);
 
   const submitDraft = useCallback(({ type, payload }) => {
     if (!enabled || !mapId || !actorId || !canEdit) {

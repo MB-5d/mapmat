@@ -21,7 +21,7 @@ import {
 
 const CanvasToolbar = ({
   canEdit,
-  canComment,
+  canViewComments,
   activeTool,
   connectionTool,
   onSelectTool,
@@ -145,13 +145,13 @@ const CanvasToolbar = ({
     </div>
 
     <button
-      className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''} ${!canComment ? 'disabled' : ''}`}
+      className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''} ${!canViewComments ? 'disabled' : ''}`}
       onClick={onToggleCommentsPanel}
       title="Comments (C)"
-      disabled={!canComment}
+      disabled={!canViewComments}
     >
       <MessageSquare size={20} />
-      {hasAnyComments && canComment && <span className="notification-dot" />}
+      {hasAnyComments && canViewComments && <span className="notification-dot" />}
     </button>
     <button
       className={`canvas-tool-btn ${showReportDrawer ? 'active' : ''}`}

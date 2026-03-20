@@ -3,6 +3,7 @@ const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
 const permissionPolicy = require('../policies/permissionPolicy');
 const { resolveCoeditingRolloutAsync } = require('./coeditingRollout');
+const { buildPresenceIdentity } = require('./presenceIdentity');
 const {
   recordDroppedEventAsync,
   recordReconnectEventAsync,
@@ -78,6 +79,9 @@ function serializeParticipant(session) {
     actorId: session.actorId,
     sessionId: session.sessionId,
     displayName: session.displayName || null,
+    identityMode: session.identityMode || 'named',
+    tone: Number.isInteger(session.tone) ? session.tone : null,
+    avatarLabel: session.avatarLabel || null,
     clientName: session.clientName || null,
     accessMode: session.accessMode,
     selectedNodeIds: Array.isArray(session.selectedNodeIds) ? [...session.selectedNodeIds] : [],
@@ -138,6 +142,9 @@ function createCoeditingRoomRegistry({ roomRateLimitPerMin }) {
     actorId,
     sessionId,
     displayName,
+    identityMode,
+    tone,
+    avatarLabel,
     clientName,
     accessMode,
     connection,
@@ -154,6 +161,9 @@ function createCoeditingRoomRegistry({ roomRateLimitPerMin }) {
       sessionId,
       sessionKey,
       displayName: displayName || null,
+      identityMode: identityMode || 'named',
+      tone: Number.isInteger(tone) ? tone : null,
+      avatarLabel: avatarLabel || null,
       clientName: clientName || null,
       accessMode,
       selectedNodeIds: replacedSession?.selectedNodeIds || [],
@@ -575,8 +585,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       role: connection.role,
     });
     connection.rollout = rollout;
-    const canWrite = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, connection.role);
-    if (rollout.mode === 'disabled' || (rollout.mode === 'read_only' && !canWrite)) {
+    if (rollout.mode === 'disabled') {
       sendJson(connection, {
         type: MESSAGE_TYPES.ERROR,
         error: 'Live editing is not enabled for this map',
@@ -605,11 +614,23 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
     }
 
     const now = Date.now();
+    const identity = buildPresenceIdentity({
+      actorId: connection.user.id,
+      sessionId: normalized.value.sessionId,
+      role: connection.role,
+      accessMode: normalized.value.accessMode,
+      user: connection.user,
+      presenceIdentityMode: connection.presenceIdentityMode,
+    });
+
     const result = registry.joinSession({
       mapId: connection.mapId,
       actorId: connection.user.id,
       sessionId: normalized.value.sessionId,
-      displayName: connection.user.name || connection.user.email || null,
+      displayName: identity.displayName,
+      identityMode: identity.identityMode,
+      tone: identity.tone,
+      avatarLabel: identity.avatarLabel,
       clientName: normalized.value.clientName,
       accessMode: normalized.value.accessMode,
       connection,
@@ -840,10 +861,15 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       actorId: user.id,
       role,
     });
-    const canWrite = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, role);
-    if (rollout.mode === 'disabled' || (rollout.mode === 'read_only' && !canWrite)) {
+    if (rollout.mode === 'disabled') {
       writeHttpError(socket, 404, 'Not Found', { error: 'Not found' });
       return;
+    }
+
+    let presenceIdentityMode = 'named';
+    if (config.collaborationBackendEnabled) {
+      const settings = await collaborationStore.getCollaborationSettingsByMapAsync(parsedPath.mapId);
+      presenceIdentityMode = settings?.presence_identity_mode || 'named';
     }
 
     socket.write(
@@ -867,6 +893,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       user,
       role,
       rollout,
+      presenceIdentityMode,
       joinedSession: null,
       joinTimer: null,
       messageChain: Promise.resolve(),

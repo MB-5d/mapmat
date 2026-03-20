@@ -1431,6 +1431,16 @@ export default function App() {
     && !isViewingHistoricalVersion
   );
 
+  const isLiveRealtimeModeActive = !!(
+    COEDITING_EXPERIMENT_UI_ENABLED
+    && isLoggedIn
+    && currentMap?.id
+    && root
+    && resolvedCoeditingMode !== 'disabled'
+    && !isImportedMap
+    && !isViewingHistoricalVersion
+  );
+
   const isMapUpdateConflictError = useCallback((error) => {
     return error?.status === 409 && error?.code === 'MAP_UPDATE_CONFLICT';
   }, []);
@@ -1673,7 +1683,9 @@ export default function App() {
       setSavedMapCommentsByNode(response.commentsByNode || {});
     } catch (error) {
       console.error('Load map comments error:', error);
-      setSavedMapCommentsByNode({});
+      if (error?.status === 404) {
+        setSavedMapCommentsByNode({});
+      }
     }
   }, [currentMap?.id, isLoggedIn]);
 
@@ -1683,6 +1695,30 @@ export default function App() {
       return;
     }
     loadSavedMapComments(currentMap?.id);
+  }, [currentMap?.id, loadSavedMapComments, useBackendComments]);
+
+  useEffect(() => {
+    if (!useBackendComments || !currentMap?.id) return undefined;
+
+    const refreshComments = () => {
+      loadSavedMapComments(currentMap.id);
+    };
+
+    const intervalId = window.setInterval(refreshComments, 4000);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshComments();
+      }
+    };
+
+    window.addEventListener('focus', refreshComments);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshComments);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [currentMap?.id, loadSavedMapComments, useBackendComments]);
 
   const visibleOrphans = useMemo(() => {
@@ -1818,7 +1854,7 @@ export default function App() {
       return node.children?.some(checkComments) || false;
     };
     const rootHasComments = renderRoot ? checkComments(renderRoot) : false;
-    const orphansHaveComments = visibleOrphans.some(o => o.comments?.length > 0);
+    const orphansHaveComments = visibleOrphans.some(checkComments);
     return rootHasComments || orphansHaveComments;
   }, [renderRoot, visibleOrphans]);
 
@@ -1920,6 +1956,7 @@ export default function App() {
 
   const canEditValue = !!effectiveFeatureGates.mapEdit && !isCoeditingReadOnlyMode;
   const canCommentValue = canEditValue || !!effectiveFeatureGates.mapComment;
+  const canViewCommentsValue = (!!currentMap?.id && !!effectiveFeatureGates.mapView) || canCommentValue;
   const canManageSharesValue = !!effectiveFeatureGates.shareManage;
   const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
@@ -1928,6 +1965,7 @@ export default function App() {
   // Permission helper functions
   const canEdit = () => canEditValue;
   const canComment = () => canCommentValue;
+  const canViewComments = () => canViewCommentsValue;
   const canManageShares = () => canManageSharesValue;
   const canViewCollaborationPanel = () => canViewCollaborationPanelValue;
   const canSendCollaborationInvites = () => canSendCollaborationInvitesValue;
@@ -2439,10 +2477,11 @@ export default function App() {
     updateSelection: updateLiveSelection,
     resync: resyncLiveDocument,
   } = useCoeditingLive({
-    enabled: isLiveEditingModeActive,
+    enabled: isLiveRealtimeModeActive,
     mapId: currentMap?.id || null,
     actorId: currentUser?.id || null,
     canEdit: canEditValue,
+    accessMode: canEditValue ? 'edit' : (canCommentValue ? 'comment' : 'view'),
     getLocalDocument: getLocalLiveDocument,
     applyDocument: applyLiveDocumentToCanvas,
     onWarn: warnLiveModeUnsupported,
@@ -2462,18 +2501,24 @@ export default function App() {
         return 'Live Off';
     }
   }, [liveStatus]);
+  const liveBannerTitle = isCoeditingReadOnlyMode && !canEditValue ? 'Live View' : 'Live Editing';
 
   const liveBannerTone = liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
     ? 'warning'
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
-  const showCoeditingReadOnlyBanner = !!(isCoeditingReadOnlyMode && hasMap && currentMap?.id);
+  const showCoeditingReadOnlyBanner = !!(
+    isCoeditingReadOnlyMode
+    && hasMap
+    && currentMap?.id
+    && !isLiveActive
+  );
   const commentPopoverReadOnlyMessage = useMemo(() => {
     if (effectiveFeatureGates.mapComment) return '';
-    if (showCoeditingReadOnlyBanner) {
+    if (showCoeditingReadOnlyBanner || canViewCommentsValue) {
       return 'You can view comments on this map, but you cannot add or edit them.';
     }
     return '';
-  }, [effectiveFeatureGates.mapComment, showCoeditingReadOnlyBanner]);
+  }, [canViewCommentsValue, effectiveFeatureGates.mapComment, showCoeditingReadOnlyBanner]);
 
   useEffect(() => {
     if (!isLiveActive) return;
@@ -2493,6 +2538,7 @@ export default function App() {
     remoteSelections.forEach((participant, participantIndex) => {
       const nodeIds = Array.isArray(participant?.selectedNodeIds) ? participant.selectedNodeIds : [];
       const label = String(participant?.displayName || participant?.clientName || 'Collaborator').trim();
+      const tone = Number.isInteger(participant?.tone) ? participant.tone : (participantIndex % 4);
       nodeIds.forEach((nodeId) => {
         const nodeData = mapLayout.nodes.get(nodeId);
         if (!nodeData) return;
@@ -2509,7 +2555,7 @@ export default function App() {
         grouped.get(nodeId).participants.push({
           sessionId: participant.sessionId,
           label,
-          tone: participantIndex % 4,
+          tone,
         });
       });
     });
@@ -5118,6 +5164,14 @@ export default function App() {
     };
 
     const handleWheel = (e) => {
+      const wheelTarget = e.target;
+      if (
+        wheelTarget instanceof Element
+        && wheelTarget.closest('.comment-popover, .comments-panel, .mention-dropdown')
+      ) {
+        return;
+      }
+
       // Always preventDefault — the canvas handles all wheel input (zoom + pan).
       // Letting non-zoom events through causes macOS elastic overscroll, which
       // shifts getBoundingClientRect() and corrupts subsequent zoom anchors.
@@ -5973,6 +6027,9 @@ export default function App() {
     if (!canvasRef.current) return;
     const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
     if (!nodeId) return;
+    if (useBackendComments && currentMap?.id) {
+      loadSavedMapComments(currentMap.id);
+    }
     if (typeof nodeOrId === 'object') {
       setCommentingNodeSnapshot(nodeOrId);
     } else {
@@ -8264,7 +8321,7 @@ export default function App() {
                 ? <WifiOff size={16} />
                 : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />)}
             <span>
-              <strong>Live Editing {liveStatusLabel}</strong>
+              <strong>{liveBannerTitle} {liveStatusLabel}</strong>
               {` • v${liveVersion}`}
               {livePendingCount > 0 ? ` • ${livePendingCount} queued` : ''}
               {liveParticipants.length > 1 ? ` • ${liveParticipants.length - 1} collaborator${liveParticipants.length > 2 ? 's' : ''}` : ''}
@@ -8395,7 +8452,7 @@ export default function App() {
                   orphans={visibleOrphans}
                   layout={mapLayout}
                   showThumbnails={showThumbnails}
-                  showCommentBadges={activeTool === 'comments' || showCommentsPanel}
+                  showCommentBadges={canViewComments()}
                   canEdit={canEdit()}
                   canComment={canComment()}
                   showCommentAction={!!effectiveFeatureGates.mapComment}
@@ -9064,6 +9121,7 @@ export default function App() {
               }}
               toolbarProps={{
                 canEdit: canEdit(),
+                canViewComments: canViewComments(),
                 activeTool,
                 connectionTool,
                 onSelectTool: () => {

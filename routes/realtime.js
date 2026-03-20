@@ -4,6 +4,7 @@ const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
 const presenceStore = require('../stores/presenceStore');
 const permissionPolicy = require('../policies/permissionPolicy');
+const { buildPresenceIdentity } = require('../utils/presenceIdentity');
 
 const router = express.Router();
 
@@ -55,6 +56,7 @@ function safeParseJson(raw, fallback = null) {
 }
 
 function serializePresenceSession(row) {
+  const metadata = safeParseJson(row.metadata, null);
   return {
     id: row.id,
     mapId: row.map_id,
@@ -64,7 +66,10 @@ function serializePresenceSession(row) {
     userEmail: row.user_email || null,
     accessMode: row.access_mode || 'view',
     clientName: row.client_name || null,
-    metadata: safeParseJson(row.metadata, null),
+    metadata,
+    identityMode: metadata?.identityMode || 'named',
+    tone: Number.isInteger(metadata?.tone) ? metadata.tone : null,
+    avatarLabel: metadata?.avatarLabel || null,
     lastSeenAt: row.last_seen_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -165,9 +170,22 @@ router.post('/maps/:id/presence/heartbeat', async (req, res) => {
 
     const accessMode = normalizeAccessMode(req.body?.access_mode, role);
     const clientName = String(req.body?.client_name || '').trim() || 'web';
-    const metadata = req.body?.metadata && typeof req.body.metadata === 'object'
-      ? JSON.stringify(req.body.metadata)
-      : null;
+    const settings = await collaborationStore.getCollaborationSettingsByMapAsync(id);
+    const identity = buildPresenceIdentity({
+      actorId: req.user.id,
+      sessionId,
+      role,
+      accessMode,
+      user: req.user,
+      presenceIdentityMode: settings?.presence_identity_mode,
+    });
+    const metadataPayload = req.body?.metadata && typeof req.body.metadata === 'object'
+      ? { ...req.body.metadata }
+      : {};
+    metadataPayload.identityMode = identity.identityMode;
+    metadataPayload.tone = identity.tone;
+    metadataPayload.avatarLabel = identity.avatarLabel;
+    const metadata = JSON.stringify(metadataPayload);
     const nowIso = new Date().toISOString();
     const cutoffIso = getCutoffIso();
 
@@ -176,8 +194,8 @@ router.post('/maps/:id/presence/heartbeat', async (req, res) => {
       mapId: id,
       userId: req.user.id,
       sessionId,
-      displayName: req.user.name || null,
-      userEmail: req.user.email || null,
+      displayName: identity.displayName,
+      userEmail: identity.userEmail,
       accessMode,
       clientName,
       metadata,
