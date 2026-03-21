@@ -21,6 +21,11 @@ const ROLE_OPTIONS = [
 
 const APPROVAL_ROLE_OPTIONS = ROLE_OPTIONS.filter((option) => option.value !== 'owner');
 
+const sameId = (left, right) => {
+  if (left === undefined || left === null || right === undefined || right === null) return false;
+  return String(left) === String(right);
+};
+
 const ShareModal = ({
   show,
   onClose,
@@ -96,7 +101,7 @@ const ShareModal = ({
   };
 
   const renderMembershipRow = (member) => {
-    const isSelf = !!currentUserId && member.userId === currentUserId;
+    const isSelf = sameId(member.userId, currentUserId);
     const isImplicitOwner = !!member.implicitOwner;
     const isOwnerMember = member.role === 'owner';
     const canEditMember = canManageCollaborationMembers
@@ -117,11 +122,11 @@ const ShareModal = ({
           <div className="share-collab-meta">{member.userEmail || ''}</div>
         </div>
         <div className="share-collab-controls">
-          {canManageCollaborationMembers ? (
+          {canEditMember ? (
             <select
               className="share-collab-role-select"
               value={member.role}
-              disabled={!canEditMember || collaborationLoading}
+              disabled={collaborationLoading}
               onChange={(event) => onUpdateCollaborationMemberRole?.(member.userId, event.target.value)}
             >
               {memberRoleOptions.map((option) => (
@@ -133,12 +138,12 @@ const ShareModal = ({
           ) : (
             <div className="share-collab-role">{formatRole(member.role)}</div>
           )}
-          {canManageCollaborationMembers ? (
+          {canRemoveMember ? (
             <button
               className="share-collab-revoke"
               onClick={() => onRemoveCollaborationMember?.(member)}
               aria-label="Remove member"
-              disabled={!canRemoveMember || collaborationLoading}
+              disabled={collaborationLoading}
             >
               <Trash2 size={14} />
             </button>

@@ -149,6 +149,17 @@ const findCommentInThread = (comments, commentId) => {
 
 const ACTIVITY_POLL_INTERVAL_MS = 5000;
 const MAX_TRACKED_ACTIVITY_IDS = 80;
+const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
+  accessPolicy: 'private',
+  nonViewerInvitesRequireOwner: true,
+  accessRequestsEnabled: true,
+  presenceIdentityMode: 'named',
+});
+
+const sameId = (left, right) => {
+  if (left === undefined || left === null || right === undefined || right === null) return false;
+  return String(left) === String(right);
+};
 
 const trimActivityText = (value, maxLength = 72) => {
   const normalized = String(value || '').trim();
@@ -205,6 +216,40 @@ const buildLiveOperationToastMessage = (operation, participant = null) => {
     default:
       return `${actorLabel} updated the map`;
   }
+};
+
+const mergeCollaborationSettingsPatch = (currentSettings, patch = {}) => {
+  const nextSettings = {
+    ...DEFAULT_COLLABORATION_SETTINGS,
+    ...(currentSettings || {}),
+  };
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'access_policy')) {
+    nextSettings.accessPolicy = patch.access_policy;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'accessPolicy')) {
+    nextSettings.accessPolicy = patch.accessPolicy;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'non_viewer_invites_require_owner')) {
+    nextSettings.nonViewerInvitesRequireOwner = !!patch.non_viewer_invites_require_owner;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'nonViewerInvitesRequireOwner')) {
+    nextSettings.nonViewerInvitesRequireOwner = !!patch.nonViewerInvitesRequireOwner;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'access_requests_enabled')) {
+    nextSettings.accessRequestsEnabled = !!patch.access_requests_enabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'accessRequestsEnabled')) {
+    nextSettings.accessRequestsEnabled = !!patch.accessRequestsEnabled;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'presence_identity_mode')) {
+    nextSettings.presenceIdentityMode = patch.presence_identity_mode;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'presenceIdentityMode')) {
+    nextSettings.presenceIdentityMode = patch.presenceIdentityMode;
+  }
+
+  return nextSettings;
 };
 
 const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
@@ -2121,12 +2166,22 @@ export default function App() {
   const canManageCollaborationSettingsValue = !!effectiveFeatureGates.collabSettingsManage;
   const canViewAccessRequestsValue = !!effectiveFeatureGates.accessRequestsView;
   const canViewPresenceValue = !!effectiveFeatureGates.presenceView;
-  const currentCollaborationRole = useMemo(() => {
+  const inferredCollaborationRole = useMemo(() => {
     if (!currentUser?.id) return 'viewer';
-    if (currentMap?.user_id && currentMap.user_id === currentUser.id) return 'owner';
-    return collaborationMemberships.find((member) => member.userId === currentUser.id)?.role || 'viewer';
+    if (currentMap?.user_id && sameId(currentMap.user_id, currentUser.id)) return 'owner';
+    return collaborationMemberships.find((member) => sameId(member.userId, currentUser.id))?.role || 'viewer';
   }, [collaborationMemberships, currentMap?.user_id, currentUser?.id]);
-  const canManageCollaborationMembersValue = ['owner', 'editor'].includes(currentCollaborationRole);
+  const currentCollaborationRole = useMemo(
+    () => String(mapPermissions?.role || inferredCollaborationRole || 'viewer').trim().toLowerCase() || 'viewer',
+    [inferredCollaborationRole, mapPermissions?.role],
+  );
+  const canManageCollaborationMembersValue = (
+    ['owner', 'editor'].includes(currentCollaborationRole)
+    || (canManageSharesValue && canViewCollaborationPanelValue)
+  );
+  const canSendCollaborationInvitesResolvedValue = canSendCollaborationInvitesValue || canManageCollaborationMembersValue;
+  const canManageCollaborationSettingsResolvedValue = canManageCollaborationSettingsValue || currentCollaborationRole === 'owner';
+  const canViewAccessRequestsResolvedValue = canViewAccessRequestsValue || currentCollaborationRole === 'owner';
 
   // Permission helper functions
   const canEdit = () => canEditValue;
@@ -2137,9 +2192,9 @@ export default function App() {
   const canViewActivity = () => canViewActivityValue;
   const canManageShares = () => canManageSharesValue;
   const canViewCollaborationPanel = () => canViewCollaborationPanelValue;
-  const canSendCollaborationInvites = () => canSendCollaborationInvitesValue;
-  const canManageCollaborationSettings = () => canManageCollaborationSettingsValue;
-  const canViewAccessRequests = () => canViewAccessRequestsValue;
+  const canSendCollaborationInvites = () => canSendCollaborationInvitesResolvedValue;
+  const canManageCollaborationSettings = () => canManageCollaborationSettingsResolvedValue;
+  const canViewAccessRequests = () => canViewAccessRequestsResolvedValue;
   const canViewPresence = () => canViewPresenceValue;
 
   useEffect(() => {
@@ -2835,7 +2890,7 @@ export default function App() {
   }, [canViewCollaborationPanelValue, currentMap?.id, isLoggedIn, showShareModal]);
 
   const sendCollaborationInvite = useCallback(async () => {
-    if (!canSendCollaborationInvitesValue) {
+    if (!canSendCollaborationInvitesResolvedValue) {
       showToast('You do not have permission to send invites on this map.', 'warning');
       return;
     }
@@ -2866,7 +2921,7 @@ export default function App() {
       setCollaborationLoading(false);
     }
   }, [
-    canSendCollaborationInvitesValue,
+    canSendCollaborationInvitesResolvedValue,
     collaborationInviteEmail,
     collaborationInviteRole,
     currentMap?.id,
@@ -2875,7 +2930,7 @@ export default function App() {
   ]);
 
   const revokeCollaborationInvite = useCallback(async (inviteId) => {
-    if (!canSendCollaborationInvitesValue) {
+    if (!canSendCollaborationInvitesResolvedValue) {
       showToast('You do not have permission to revoke invites on this map.', 'warning');
       return;
     }
@@ -2892,27 +2947,38 @@ export default function App() {
     } finally {
       setCollaborationLoading(false);
     }
-  }, [canSendCollaborationInvitesValue, currentMap?.id, loadCollaborationData, showToast]);
+  }, [canSendCollaborationInvitesResolvedValue, currentMap?.id, loadCollaborationData, showToast]);
 
   const updateCollaborationSettings = useCallback(async (patch) => {
-    if (!canManageCollaborationSettingsValue) {
+    if (!canManageCollaborationSettingsResolvedValue) {
       showToast('Only owners can update collaboration settings on this map.', 'warning');
       return;
     }
     if (!currentMap?.id) return;
+    const previousSettings = collaborationSettings || DEFAULT_COLLABORATION_SETTINGS;
+    const nextSettings = mergeCollaborationSettingsPatch(previousSettings, patch);
+    setCollaborationSettings(nextSettings);
     setCollaborationLoading(true);
     setCollaborationError('');
     try {
-      await api.updateMapCollaborationSettings(currentMap.id, patch);
+      const { settings } = await api.updateMapCollaborationSettings(currentMap.id, patch);
+      setCollaborationSettings(settings || nextSettings);
       showToast('Collaboration settings updated', 'success');
       await loadCollaborationData();
     } catch (error) {
+      setCollaborationSettings(previousSettings);
       setCollaborationError(error.message || 'Failed to update collaboration settings.');
       showToast(error.message || 'Failed to update collaboration settings.', 'error');
     } finally {
       setCollaborationLoading(false);
     }
-  }, [canManageCollaborationSettingsValue, currentMap?.id, loadCollaborationData, showToast]);
+  }, [
+    canManageCollaborationSettingsResolvedValue,
+    collaborationSettings,
+    currentMap?.id,
+    loadCollaborationData,
+    showToast,
+  ]);
 
   const updateCollaborationMemberRole = useCallback(async (userId, role) => {
     if (!canManageCollaborationMembersValue) {
@@ -2920,17 +2986,31 @@ export default function App() {
       return;
     }
     if (!currentMap?.id || !userId || !role) return;
-    if (userId === currentUser?.id) {
+    if (sameId(userId, currentUser?.id)) {
       showToast('Manage your own access from another owner account instead.', 'info');
       return;
     }
+    const previousMemberships = collaborationMemberships;
+    setCollaborationMemberships((prev) => prev.map((member) => (
+      sameId(member.userId, userId)
+        ? { ...member, role }
+        : member
+    )));
     setCollaborationLoading(true);
     setCollaborationError('');
     try {
-      await api.updateMapMemberRole(currentMap.id, userId, role);
+      const { membership } = await api.updateMapMemberRole(currentMap.id, userId, role);
+      if (membership) {
+        setCollaborationMemberships((prev) => prev.map((member) => (
+          sameId(member.userId, userId)
+            ? { ...member, ...membership }
+            : member
+        )));
+      }
       showToast('Member role updated', 'success');
       await loadCollaborationData();
     } catch (error) {
+      setCollaborationMemberships(previousMemberships);
       setCollaborationError(error.message || 'Failed to update member role.');
       showToast(error.message || 'Failed to update member role.', 'error');
     } finally {
@@ -2938,6 +3018,7 @@ export default function App() {
     }
   }, [
     canManageCollaborationMembersValue,
+    collaborationMemberships,
     currentMap?.id,
     currentUser?.id,
     loadCollaborationData,
@@ -2950,7 +3031,7 @@ export default function App() {
       return;
     }
     if (!currentMap?.id || !member?.userId) return;
-    if (member.userId === currentUser?.id) {
+    if (sameId(member.userId, currentUser?.id)) {
       showToast('Manage your own access from another owner account instead.', 'info');
       return;
     }
@@ -2963,6 +3044,8 @@ export default function App() {
     });
     if (!confirmed) return;
 
+    const previousMemberships = collaborationMemberships;
+    setCollaborationMemberships((prev) => prev.filter((entry) => !sameId(entry.userId, member.userId)));
     setCollaborationLoading(true);
     setCollaborationError('');
     try {
@@ -2970,6 +3053,7 @@ export default function App() {
       showToast('Member removed', 'success');
       await loadCollaborationData();
     } catch (error) {
+      setCollaborationMemberships(previousMemberships);
       setCollaborationError(error.message || 'Failed to remove member.');
       showToast(error.message || 'Failed to remove member.', 'error');
     } finally {
@@ -2977,6 +3061,7 @@ export default function App() {
     }
   }, [
     canManageCollaborationMembersValue,
+    collaborationMemberships,
     currentMap?.id,
     currentUser?.id,
     loadCollaborationData,
@@ -2985,11 +3070,13 @@ export default function App() {
   ]);
 
   const reviewCollaborationAccessRequest = useCallback(async (requestId, status, role) => {
-    if (!canViewAccessRequestsValue) {
+    if (!canViewAccessRequestsResolvedValue) {
       showToast('Only owners can review access requests on this map.', 'warning');
       return;
     }
     if (!currentMap?.id || !requestId || !status) return;
+    const previousRequests = collaborationAccessRequests;
+    setCollaborationAccessRequests((prev) => prev.filter((request) => request.id !== requestId));
     setCollaborationLoading(true);
     setCollaborationError('');
     try {
@@ -2997,12 +3084,19 @@ export default function App() {
       showToast(status === 'approved' ? 'Access request approved' : 'Access request denied', 'success');
       await loadCollaborationData();
     } catch (error) {
+      setCollaborationAccessRequests(previousRequests);
       setCollaborationError(error.message || 'Failed to review access request.');
       showToast(error.message || 'Failed to review access request.', 'error');
     } finally {
       setCollaborationLoading(false);
     }
-  }, [canViewAccessRequestsValue, currentMap?.id, loadCollaborationData, showToast]);
+  }, [
+    canViewAccessRequestsResolvedValue,
+    collaborationAccessRequests,
+    currentMap?.id,
+    loadCollaborationData,
+    showToast,
+  ]);
 
   useEffect(() => {
     if (!showShareModal) return;
