@@ -21,6 +21,24 @@ function parseJsonSafe(raw) {
   }
 }
 
+function normalizeRecipients(recipients) {
+  const seen = new Set();
+  return (Array.isArray(recipients) ? recipients : [])
+    .map((recipient) => {
+      const email = String(recipient?.email || '').trim().toLowerCase();
+      if (!email || seen.has(email)) return null;
+      seen.add(email);
+      return {
+        email,
+        userId: recipient?.userId || null,
+        mapId: recipient?.mapId || null,
+        inviteId: recipient?.inviteId || null,
+        payload: recipient?.payload || {},
+      };
+    })
+    .filter(Boolean);
+}
+
 async function queueTemplatedEmailAsync({
   templateKey,
   toEmail,
@@ -92,6 +110,133 @@ async function queueCollaborationInviteEmailAsync({
     userId: inviter?.id || invite.inviter_user_id || null,
     mapId: map.id,
     inviteId: invite.id,
+  });
+}
+
+async function queueTemplatedEmailsAsync({
+  templateKey,
+  recipients,
+}) {
+  const normalizedRecipients = normalizeRecipients(recipients);
+  const results = await Promise.all(normalizedRecipients.map((recipient) => queueTemplatedEmailAsync({
+    templateKey,
+    toEmail: recipient.email,
+    payload: recipient.payload,
+    userId: recipient.userId,
+    mapId: recipient.mapId,
+    inviteId: recipient.inviteId,
+  })));
+  return results;
+}
+
+async function queueAccessRequestCreatedEmailsAsync({
+  map,
+  request,
+  requester,
+  ownerRecipients,
+}) {
+  return queueTemplatedEmailsAsync({
+    templateKey: EMAIL_TEMPLATE_KEYS.COLLABORATION_ACCESS_REQUEST_CREATED,
+    recipients: ownerRecipients.map((owner) => ({
+      email: owner.email,
+      userId: owner.userId || null,
+      mapId: map.id,
+      payload: {
+        appBaseUrl: getDefaultAppBaseUrl(),
+        mapId: map.id,
+        mapName: map.name || 'Untitled map',
+        requesterEmail: requester?.email || request.requester_email || null,
+        requesterName: requester?.name || request.requester_name || null,
+        requestedRole: request.requested_role || 'viewer',
+        message: request.message || null,
+      },
+    })),
+  });
+}
+
+async function queueAccessRequestDecisionEmailAsync({
+  map,
+  request,
+  decisionUser,
+  approved,
+}) {
+  const requesterEmail = String(request?.requester_email || '').trim().toLowerCase();
+  if (!requesterEmail) return [];
+
+  return queueTemplatedEmailsAsync({
+    templateKey: approved
+      ? EMAIL_TEMPLATE_KEYS.COLLABORATION_ACCESS_REQUEST_APPROVED
+      : EMAIL_TEMPLATE_KEYS.COLLABORATION_ACCESS_REQUEST_DENIED,
+    recipients: [{
+      email: requesterEmail,
+      userId: request.requester_user_id || null,
+      mapId: map.id,
+      payload: {
+        appBaseUrl: getDefaultAppBaseUrl(),
+        mapId: map.id,
+        mapName: map.name || 'Untitled map',
+        requestedRole: request.requested_role || 'viewer',
+        decisionRole: request.decision_role || request.requested_role || null,
+        decisionUserEmail: decisionUser?.email || null,
+        decisionUserName: decisionUser?.name || null,
+      },
+    }],
+  });
+}
+
+async function queueMembershipRoleChangedEmailAsync({
+  map,
+  membershipUser,
+  actorUser,
+  previousRole,
+  nextRole,
+}) {
+  const userEmail = String(membershipUser?.email || '').trim().toLowerCase();
+  if (!userEmail) return [];
+
+  return queueTemplatedEmailsAsync({
+    templateKey: EMAIL_TEMPLATE_KEYS.COLLABORATION_ROLE_CHANGED,
+    recipients: [{
+      email: userEmail,
+      userId: membershipUser.id || null,
+      mapId: map.id,
+      payload: {
+        appBaseUrl: getDefaultAppBaseUrl(),
+        mapId: map.id,
+        mapName: map.name || 'Untitled map',
+        actorEmail: actorUser?.email || null,
+        actorName: actorUser?.name || null,
+        previousRole: previousRole || null,
+        role: nextRole || null,
+      },
+    }],
+  });
+}
+
+async function queueMembershipRemovedEmailAsync({
+  map,
+  membershipUser,
+  actorUser,
+  previousRole,
+}) {
+  const userEmail = String(membershipUser?.email || '').trim().toLowerCase();
+  if (!userEmail) return [];
+
+  return queueTemplatedEmailsAsync({
+    templateKey: EMAIL_TEMPLATE_KEYS.COLLABORATION_ACCESS_REMOVED,
+    recipients: [{
+      email: userEmail,
+      userId: membershipUser.id || null,
+      mapId: map.id,
+      payload: {
+        appBaseUrl: getDefaultAppBaseUrl(),
+        mapId: map.id,
+        mapName: map.name || 'Untitled map',
+        actorEmail: actorUser?.email || null,
+        actorName: actorUser?.name || null,
+        previousRole: previousRole || null,
+      },
+    }],
   });
 }
 
@@ -173,6 +318,11 @@ async function processEmailDeliveryJobAsync(job) {
 module.exports = {
   JOB_TYPES,
   queueTemplatedEmailAsync,
+  queueTemplatedEmailsAsync,
   queueCollaborationInviteEmailAsync,
+  queueAccessRequestCreatedEmailsAsync,
+  queueAccessRequestDecisionEmailAsync,
+  queueMembershipRoleChangedEmailAsync,
+  queueMembershipRemovedEmailAsync,
   processEmailDeliveryJobAsync,
 };

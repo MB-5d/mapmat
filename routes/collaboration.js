@@ -14,7 +14,13 @@ const {
   recordMapActivityBestEffortAsync,
   serializeActivityEvent,
 } = require('../utils/collaborationActivity');
-const { queueCollaborationInviteEmailAsync } = require('../utils/emailDelivery');
+const {
+  queueCollaborationInviteEmailAsync,
+  queueAccessRequestCreatedEmailsAsync,
+  queueAccessRequestDecisionEmailAsync,
+  queueMembershipRoleChangedEmailAsync,
+  queueMembershipRemovedEmailAsync,
+} = require('../utils/emailDelivery');
 
 const router = express.Router();
 
@@ -343,6 +349,42 @@ async function listCollaborationMembersAsync(mapRow) {
 
 async function getCollaborationSettingsAsync(mapId) {
   return collaborationStore.getCollaborationSettingsByMapAsync(mapId);
+}
+
+function serializeQueuedDeliverySummary(result) {
+  if (!result?.delivery || !result?.jobId) return null;
+  return {
+    id: result.delivery.id,
+    jobId: result.jobId,
+    status: result.delivery.status,
+  };
+}
+
+async function queueEmailsBestEffortAsync(queueFn, label) {
+  try {
+    return await queueFn();
+  } catch (error) {
+    console.error(`${label} email queue error:`, error);
+    return [];
+  }
+}
+
+async function listOwnerNotificationRecipientsAsync(mapRow, {
+  excludeUserId = null,
+  excludeEmail = null,
+} = {}) {
+  const members = await listCollaborationMembersAsync(mapRow);
+  const excludedEmail = normalizeEmail(excludeEmail);
+  return members
+    .filter((member) => isOwnerRole(member.role))
+    .filter((member) => member.user_id && member.user_email)
+    .filter((member) => !excludeUserId || member.user_id !== excludeUserId)
+    .filter((member) => !excludedEmail || normalizeEmail(member.user_email) !== excludedEmail)
+    .map((member) => ({
+      userId: member.user_id,
+      email: member.user_email,
+      name: member.user_name || null,
+    }));
 }
 
 async function canCreateInviteAsync({ req, mapRow, inviteRole, settings }) {
@@ -705,8 +747,20 @@ router.post('/maps/:id/access-requests', async (req, res) => {
       },
     }, { label: 'access request create' });
 
+    const ownerRecipients = await listOwnerNotificationRecipientsAsync(map);
+    const emailDeliveries = await queueEmailsBestEffortAsync(
+      () => queueAccessRequestCreatedEmailsAsync({
+        map,
+        request,
+        requester: req.user,
+        ownerRecipients,
+      }),
+      'access request create'
+    );
+
     res.status(201).json({
       accessRequest: serializeAccessRequest(request),
+      emailDeliveries: emailDeliveries.map(serializeQueuedDeliverySummary).filter(Boolean),
     });
   } catch (error) {
     console.error('Create access request error:', error);
@@ -802,9 +856,20 @@ router.patch('/maps/:id/access-requests/:requestId', async (req, res) => {
       },
     }, { label: 'access request review' });
 
+    const decisionEmailDeliveries = await queueEmailsBestEffortAsync(
+      () => queueAccessRequestDecisionEmailAsync({
+        map,
+        request: decidedRequest,
+        decisionUser: req.user,
+        approved: decisionStatus === 'approved',
+      }),
+      'access request review'
+    );
+
     res.json({
       accessRequest: serializeAccessRequest(decidedRequest),
       membership: membership ? serializeMembership(membership) : null,
+      emailDeliveries: decisionEmailDeliveries.map(serializeQueuedDeliverySummary).filter(Boolean),
     });
   } catch (error) {
     console.error('Review access request error:', error);
@@ -1223,7 +1288,23 @@ router.patch('/maps/:id/members/:userId', async (req, res) => {
       }, { label: 'membership upsert' });
     }
 
-    res.json({ membership: serializeMembership(membership) });
+    const membershipEmailDeliveries = (!existingMembership || existingMembership.role !== normalizedRole)
+      ? await queueEmailsBestEffortAsync(
+        () => queueMembershipRoleChangedEmailAsync({
+          map,
+          membershipUser: user,
+          actorUser: req.user,
+          previousRole: existingMembership?.role || null,
+          nextRole: normalizedRole,
+        }),
+        'membership role change'
+      )
+      : [];
+
+    res.json({
+      membership: serializeMembership(membership),
+      emailDeliveries: membershipEmailDeliveries.map(serializeQueuedDeliverySummary).filter(Boolean),
+    });
   } catch (error) {
     console.error('Update member role error:', error);
     res.status(500).json({ error: 'Failed to update member role' });
@@ -1280,7 +1361,20 @@ router.delete('/maps/:id/members/:userId', async (req, res) => {
       },
     }, { label: 'membership delete' });
 
-    res.json({ success: true });
+    const removalEmailDeliveries = await queueEmailsBestEffortAsync(
+      () => queueMembershipRemovedEmailAsync({
+        map,
+        membershipUser: user,
+        actorUser: req.user,
+        previousRole: membership.role,
+      }),
+      'membership delete'
+    );
+
+    res.json({
+      success: true,
+      emailDeliveries: removalEmailDeliveries.map(serializeQueuedDeliverySummary).filter(Boolean),
+    });
   } catch (error) {
     console.error('Delete member error:', error);
     res.status(500).json({ error: 'Failed to remove member access' });

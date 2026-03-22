@@ -12,6 +12,9 @@ This document describes the first email platform slice added for collaboration f
   - `postmark`
 - Delivery audit records in `email_deliveries`.
 - Collaboration invite email queued automatically when a new invite is created.
+- Owner notification email queued when a user requests access.
+- Requester notification email queued when an access request is approved or denied.
+- Member notification email queued when their role changes or their access is removed.
 - Local/in-dev default is `log`.
 - Production default is `disabled` until a real provider is configured.
 
@@ -54,6 +57,7 @@ Provider-specific:
 
 1. Add owner access-request notification emails.
 2. Add approval / denial notification emails.
-3. Add invite email deep links once app routing is durable.
-4. Add provider webhook ingestion for delivery/bounce visibility.
-5. Add admin/support tooling for delivery inspection if needed.
+3. Add role-change and removal notifications.
+4. Add invite email deep links once app routing is durable.
+5. Add provider webhook ingestion for delivery/bounce visibility.
+6. Add admin/support tooling for delivery inspection if needed.

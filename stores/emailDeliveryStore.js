@@ -85,6 +85,16 @@ function listEmailDeliveriesByInviteAsync(inviteId, { limit = 20, offset = 0 } =
   `, [inviteId, limit, offset]);
 }
 
+function listEmailDeliveriesByMapAsync(mapId, { limit = 100, offset = 0 } = {}) {
+  return adapter.queryAllAsync(`
+    SELECT *
+    FROM email_deliveries
+    WHERE map_id = ?
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `, [mapId, limit, offset]);
+}
+
 async function createEmailDeliveryAsync({
   id = null,
   jobId = null,
@@ -221,6 +231,7 @@ module.exports = {
   ensureEmailDeliverySchemaAsync,
   getEmailDeliveryByIdAsync,
   listEmailDeliveriesByInviteAsync,
+  listEmailDeliveriesByMapAsync,
   createEmailDeliveryAsync,
   setEmailDeliveryJobIdAsync,
   markEmailDeliveryAttemptAsync,
