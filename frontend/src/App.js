@@ -26,7 +26,6 @@ import {
 
 import './App.css';
 import * as api from './api';
-import LandingPage from './LandingPage';
 import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
 import CommentPopover from './components/comments/CommentPopover';
 import CommentsPanel from './components/comments/CommentsPanel';
@@ -90,6 +89,14 @@ import {
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
 import { useCoeditingLive, COEDITING_LIVE_STATUS } from './hooks/useCoeditingLive';
+import {
+  ROUTE_SURFACES,
+  buildRouteUrl,
+  createAppHomeRoute,
+  createInviteInboxRoute,
+  createMapRoute,
+  createShareRoute,
+} from './utils/appRoutes';
 
 const DEFAULT_CONNECTION_COLORS = {
   userFlows: '#14b8a6',
@@ -947,7 +954,7 @@ const normalizeOrphans = (list) => (list || [])
     orphanType: orphan.orphanType || 'orphan',
   }));
 
-export default function App() {
+export default function App({ currentRoute, navigateToRoute }) {
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
@@ -1063,12 +1070,10 @@ export default function App() {
   const [presenceSessions, setPresenceSessions] = useState([]);
   const [mapPermissions, setMapPermissions] = useState(null);
   const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return !!params.get('share');
+    return currentRoute?.surface === ROUTE_SURFACES.SHARE;
   });
   const [currentShareAccess, setCurrentShareAccess] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    const access = params.get('access');
+    const access = currentRoute?.surface === ROUTE_SURFACES.SHARE ? currentRoute?.accessLevel : null;
     return Object.values(ACCESS_LEVELS).includes(access) ? access : null;
   });
   const [scanMessage, setScanMessage] = useState('');
@@ -1091,16 +1096,13 @@ export default function App() {
   const primedActivityMapIdRef = useRef(null);
   const presenceSessionIdRef = useRef('');
   const mapNameEditStartRef = useRef('');
+  const scheduleResetViewRef = useRef(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
-  const [, setAuthLoading] = useState(true);
-  const [showLanding, setShowLanding] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return !params.get('share');
-  });
+  const [authLoading, setAuthLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [editModalNode, setEditModalNode] = useState(null);
@@ -1231,7 +1233,7 @@ export default function App() {
     const observer = new ResizeObserver(updateSize);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [showLanding]);
+  }, []);
 
   // Close view dropdown when clicking outside
   useEffect(() => {
@@ -2183,21 +2185,23 @@ export default function App() {
     return changeFilters?.statuses?.[status] !== false;
   }, [changeFilters]);
 
-  // Read access level from URL on load
+  // Read access level from the current share route.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const shareId = params.get('share');
-    const access = params.get('access');
-
-    if (shareId) {
+    const access = currentRoute?.surface === ROUTE_SURFACES.SHARE ? currentRoute?.accessLevel : null;
+    if (currentRoute?.surface === ROUTE_SURFACES.SHARE) {
       setHasCreatedShareLink(true);
     }
     if (access && Object.values(ACCESS_LEVELS).includes(access)) {
       setAccessLevel(access);
       setSharePermission(access);
       setCurrentShareAccess(access);
+      return;
     }
-  }, []);
+    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
+      setAccessLevel(ACCESS_LEVELS.EDIT);
+      setCurrentShareAccess(null);
+    }
+  }, [currentRoute?.accessLevel, currentRoute?.surface]);
 
   const legacyFeatureGates = useMemo(() => {
     const isEdit = accessLevel === ACCESS_LEVELS.EDIT;
@@ -2413,6 +2417,7 @@ export default function App() {
       setRoot(null);
       setOrphans([]);
       setCurrentMap(null);
+      navigateToRoute(createAppHomeRoute());
       setIsImportedMap(false);
       setShowThumbnails(false);
       setHasCreatedShareLink(false);
@@ -2440,6 +2445,7 @@ export default function App() {
     setRoot(null);
     setOrphans([]);
     setCurrentMap(null);
+    navigateToRoute(createAppHomeRoute());
     setIsImportedMap(false);
     setShowThumbnails(false);
     setHasCreatedShareLink(false);
@@ -2708,6 +2714,26 @@ export default function App() {
     }
   }, []);
 
+  const applySharedMapPayload = useCallback((share) => {
+    if (!share?.root) return;
+    resetScanLayers();
+    setRoot(share.root);
+    setOrphans(normalizeOrphans(share.orphans));
+    setConnections(share.connections || []);
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    setColors(share.colors || DEFAULT_COLORS);
+    setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
+    setUrlInput(share.root.url || '');
+    setCurrentMap(null);
+    setMapName(share.name || share.root.title || '');
+    setHasCreatedShareLink(true);
+    setIsImportedMap(false);
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+    showToast('Shared map loaded!', 'success');
+    scheduleResetViewRef.current?.();
+  }, [applyTransform, resetScanLayers, showToast]);
+
   // Check auth and load data on mount
   React.useEffect(() => {
     const initAuth = async () => {
@@ -2735,68 +2761,43 @@ export default function App() {
     };
 
     initAuth();
-
-    // Check for shared map in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const shareId = urlParams.get('share');
-    if (shareId) {
-      setShowLanding(false);
-      // Try to load from API first
-      api.getShare(shareId)
-        .then(({ share }) => {
-          if (share?.root) {
-            resetScanLayers();
-            setRoot(share.root);
-            setOrphans(normalizeOrphans(share.orphans));
-            setConnections(share.connections || []);
-            applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-            setColors(share.colors || DEFAULT_COLORS);
-            setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
-            setUrlInput(share.root.url || '');
-            setHasCreatedShareLink(true);
-            showToast('Shared map loaded!', 'success');
-            window.history.replaceState({}, '', window.location.pathname);
-            scheduleResetView();
-          }
-        })
-        .catch((e) => {
-          // Fallback to localStorage for legacy shares
-          const sharedData = localStorage.getItem(shareId);
-          if (sharedData) {
-            try {
-              const {
-                root: sharedRoot,
-                colors: sharedColors,
-                connectionColors: sharedConnectionColors,
-                orphans: sharedOrphans,
-                connections: sharedConnections
-              } = JSON.parse(sharedData);
-              if (sharedRoot) {
-                resetScanLayers();
-                setRoot(sharedRoot);
-                setOrphans(normalizeOrphans(sharedOrphans));
-                setConnections(sharedConnections || []);
-                applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-                setColors(sharedColors || DEFAULT_COLORS);
-                setConnectionColors(sharedConnectionColors || DEFAULT_CONNECTION_COLORS);
-                setUrlInput(sharedRoot.url || '');
-                setHasCreatedShareLink(true);
-                showToast('Shared map loaded!', 'success');
-                window.history.replaceState({}, '', window.location.pathname);
-                scheduleResetView();
-              }
-            } catch (parseError) {
-              console.error('Failed to parse shared map:', parseError);
-              showToast('Failed to load shared map', 'error');
-            }
-          } else {
-            showToast(e.message || 'Shared map not found or expired', 'error');
-          }
-        });
-    }
     // Intentionally run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadAuthenticatedWorkspace, loadPendingMapInvites]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) return undefined;
+
+    let cancelled = false;
+    api.getShare(currentRoute.shareId)
+      .then(({ share }) => {
+        if (cancelled || !share?.root) return;
+        applySharedMapPayload(share);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        const sharedData = localStorage.getItem(currentRoute.shareId);
+        if (sharedData) {
+          try {
+            const parsed = JSON.parse(sharedData);
+            applySharedMapPayload({
+              ...parsed,
+              name: parsed?.name || null,
+            });
+            return;
+          } catch (parseError) {
+            console.error('Failed to parse shared map:', parseError);
+            showToast('Failed to load shared map', 'error');
+            return;
+          }
+        }
+        showToast(error.message || 'Shared map not found or expired', 'error');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applySharedMapPayload, currentRoute?.shareId, currentRoute?.surface, showToast]);
 
   // (gesture handlers removed; zoom handled via wheel listener on canvas)
 
@@ -3512,6 +3513,9 @@ export default function App() {
         setShowProfileDrawer(false);
         setShowSettingsDrawer(false);
         setShowVersionHistoryDrawer(false);
+        if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
+          navigateToRoute(createAppHomeRoute(), { replace: true });
+        }
         showToast('Logged out. Map is now view-only.', 'info');
         return;
       }
@@ -3538,6 +3542,9 @@ export default function App() {
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
       setShowVersionHistoryDrawer(false);
+      if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
+        navigateToRoute(createAppHomeRoute(), { replace: true });
+      }
       showToast('Logged out', 'info');
     } finally {
       setPendingLogoutAfterSave(false);
@@ -3546,7 +3553,7 @@ export default function App() {
       setHasCreatedShareLink(false);
       setCurrentShareAccess(null);
     }
-  }, [applyTransform, resetScanLayers, root, showToast]);
+  }, [applyTransform, currentRoute?.surface, navigateToRoute, resetScanLayers, root, showToast]);
 
   const performLogout = useCallback(async ({ preserveViewOnlyMap = false } = {}) => {
     try {
@@ -3595,10 +3602,33 @@ export default function App() {
     showConfirm,
   ]);
 
+  const getActiveAppRoute = useCallback(() => {
+    if (currentMap?.id) return createMapRoute(currentMap.id);
+    return createAppHomeRoute();
+  }, [currentMap?.id]);
+
   const handleShowInviteInbox = useCallback(async () => {
+    navigateToRoute(createInviteInboxRoute());
     setShowInviteInboxModal(true);
     await loadPendingMapInvites();
-  }, [loadPendingMapInvites]);
+  }, [loadPendingMapInvites, navigateToRoute]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invites') return;
+    if (authLoading) return;
+    if (!isLoggedIn) {
+      setShowAuthModal(true);
+      return;
+    }
+    setShowInviteInboxModal(true);
+    loadPendingMapInvites();
+  }, [
+    authLoading,
+    currentRoute?.section,
+    currentRoute?.surface,
+    isLoggedIn,
+    loadPendingMapInvites,
+  ]);
 
   const handleAcceptPendingInvite = useCallback(async (invite) => {
     if (!invite?.id) return;
@@ -4408,6 +4438,7 @@ export default function App() {
         return updated;
       });
       setCurrentMap(map);
+      navigateToRoute(createMapRoute(map.id));
       setMapName(map.name);
       setIsImportedMap(false);
       setActiveVersionId(null);
@@ -4625,6 +4656,7 @@ export default function App() {
       });
 
       setCurrentMap(savedMap);
+      navigateToRoute(createMapRoute(savedMap.id));
       setMapSaveConflict(null);
       setShowSaveMapModal(false);
       showToast(`Map "${mapName}" saved`, 'success');
@@ -4689,6 +4721,7 @@ export default function App() {
     setCurrentShareAccess(null);
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null, notes: notes?.trim() || '' });
+    navigateToRoute(createAppHomeRoute());
     setMapSaveConflict(null);
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
@@ -4704,7 +4737,7 @@ export default function App() {
     setEditModalMode('add');
   };
 
-  const loadMap = (map) => {
+  const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
     resetScanLayers();
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
@@ -4715,6 +4748,9 @@ export default function App() {
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setCurrentMap(map);
+    if (!skipNavigation) {
+      navigateToRoute(createMapRoute(map.id));
+    }
     setMapSaveConflict(null);
     setMapName(map.name || '');
     setActiveVersionId(null);
@@ -4730,9 +4766,48 @@ export default function App() {
     setShowProjectsModal(false);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput(map.root?.url || '');
-    showToast(`Loaded "${map.name}"`, 'success');
-    scheduleResetView();
-  };
+    if (!silent) {
+      showToast(`Loaded "${map.name}"`, 'success');
+    }
+    scheduleResetViewRef.current?.();
+  }, [applyTransform, loadMapVersions, navigateToRoute, resetScanLayers, showToast]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || !currentRoute?.mapId) return undefined;
+    if (currentMap?.id && sameId(currentMap.id, currentRoute.mapId)) return undefined;
+    if (authLoading) return undefined;
+
+    if (!isLoggedIn) {
+      setShowAuthModal(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    api.getMap(currentRoute.mapId)
+      .then(({ map }) => {
+        if (cancelled || !map) return;
+        loadMap(map, { skipNavigation: true, silent: true });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        showToast(error.message || 'Failed to load map', 'error');
+        navigateToRoute(getActiveAppRoute(), { replace: true });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authLoading,
+    currentMap?.id,
+    currentRoute?.mapId,
+    currentRoute?.surface,
+    getActiveAppRoute,
+    isLoggedIn,
+    loadMap,
+    navigateToRoute,
+    showToast,
+  ]);
 
   const reloadMapAfterConflict = async () => {
     const mapId = mapSaveConflict?.mapId || currentMap?.id;
@@ -4777,7 +4852,10 @@ export default function App() {
         if (p.id !== projectId) return p;
         return { ...p, maps: (p.maps || []).filter(m => m.id !== mapId) };
       }));
-      if (currentMap?.id === mapId) setCurrentMap(null);
+      if (currentMap?.id === mapId) {
+        setCurrentMap(null);
+        navigateToRoute(createAppHomeRoute());
+      }
       showToast('Map deleted', 'success');
     } catch (e) {
       showToast(e.message || 'Failed to delete map', 'error');
@@ -5100,6 +5178,7 @@ export default function App() {
         statusDuplicate: duplicateCount > 0,
       });
       setCurrentMap(null);
+      navigateToRoute(createAppHomeRoute());
       setDraftVersionFromSnapshot({
         root: merged.root,
         orphans: merged.orphans,
@@ -5463,20 +5542,24 @@ export default function App() {
     });
   }, [applyTransform, centerHome]);
 
-  const scheduleResetView = (attempts = 8) => {
+  const scheduleResetView = useCallback((attempts = 8) => {
     if (attempts <= 0) return;
     setTimeout(() => {
       if (!layoutRef.current || !canvasRef.current) {
-        scheduleResetView(attempts - 1);
+        scheduleResetViewRef.current?.(attempts - 1);
         return;
       }
       if (!layoutRef.current.nodes || layoutRef.current.nodes.size === 0) {
-        scheduleResetView(attempts - 1);
+        scheduleResetViewRef.current?.(attempts - 1);
         return;
       }
       centerHome();
     }, 80);
-  };
+  }, [centerHome]);
+
+  useEffect(() => {
+    scheduleResetViewRef.current = scheduleResetView;
+  }, [scheduleResetView]);
 
   const fitToScreen = () => {
     if (!canvasRef.current) return;
@@ -6198,10 +6281,10 @@ export default function App() {
         expires_in_days: 30, // Share links expire in 30 days
       });
 
-      // Create shareable URL with access level (preserve current pathname)
-      const shareUrl = new URL(window.location.href);
-      shareUrl.searchParams.set('share', share.id);
-      shareUrl.searchParams.set('access', permission);
+      const shareUrl = new URL(
+        buildRouteUrl(createShareRoute(share.id, permission)),
+        window.location.origin
+      );
 
       await navigator.clipboard.writeText(shareUrl.toString());
       setLinkCopied(true);
@@ -6218,9 +6301,10 @@ export default function App() {
         const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const shareData = { root, orphans, connections, colors, connectionColors, createdAt: Date.now() };
         localStorage.setItem(shareId, JSON.stringify(shareData));
-        const shareUrl = new URL(window.location.href);
-        shareUrl.searchParams.set('share', shareId);
-        shareUrl.searchParams.set('access', permission);
+        const shareUrl = new URL(
+          buildRouteUrl(createShareRoute(shareId, permission)),
+          window.location.origin
+        );
         await navigator.clipboard.writeText(shareUrl.toString());
         setLinkCopied(true);
         setTimeout(() => setLinkCopied(false), 2000);
@@ -8748,6 +8832,7 @@ export default function App() {
         setRoot(tree);
         setOrphans([]); // Clear orphans when importing new URLs
         setCurrentMap(null);
+        navigateToRoute(createAppHomeRoute());
         setIsImportedMap(true); // Mark as imported - scanning won't work
         setDraftVersionFromSnapshot({
           root: tree,
@@ -8803,11 +8888,6 @@ export default function App() {
   };
 
   const zoomBounds = getZoomBounds();
-
-  // Show landing page or app
-  if (showLanding) {
-    return <LandingPage onLaunchApp={() => setShowLanding(false)} />;
-  }
 
   return (
     <AuthProvider value={authValue}>
@@ -10043,6 +10123,9 @@ export default function App() {
         onClose={() => {
           setShowInviteInboxModal(false);
           setPendingMapInvitesError('');
+          if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'invites') {
+            navigateToRoute(getActiveAppRoute(), { replace: true });
+          }
         }}
         onRefresh={() => loadPendingMapInvites()}
         onAccept={handleAcceptPendingInvite}
