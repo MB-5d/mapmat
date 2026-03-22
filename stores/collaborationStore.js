@@ -400,6 +400,33 @@ function listAccessRequestsByMapAsync(mapId, { status = null, limit = 100, offse
   return adapter.queryAllAsync(query, params);
 }
 
+function listReviewableAccessRequestsForUserAsync(userId, { status = 'pending', limit = 100, offset = 0 } = {}) {
+  return adapter.queryAllAsync(`
+    SELECT ar.*,
+      maps.name as map_name,
+      maps.url as map_url,
+      requester.email as requester_email,
+      requester.name as requester_name,
+      decision.email as decision_user_email,
+      decision.name as decision_user_name
+    FROM map_access_requests ar
+    INNER JOIN maps ON maps.id = ar.map_id
+    LEFT JOIN users requester ON ar.requester_user_id = requester.id
+    LEFT JOIN users decision ON ar.decision_user_id = decision.id
+    LEFT JOIN map_memberships owner_membership
+      ON owner_membership.map_id = ar.map_id
+      AND owner_membership.user_id = ?
+      AND owner_membership.role = 'owner'
+    WHERE ar.status = ?
+      AND (
+        maps.user_id = ?
+        OR owner_membership.user_id IS NOT NULL
+      )
+    ORDER BY ar.created_at DESC
+    LIMIT ? OFFSET ?
+  `, [userId, normalizeStatus(status || 'pending'), userId, limit, offset]);
+}
+
 function getAccessRequestByIdAsync(requestId) {
   return adapter.queryOneAsync(`
     SELECT ar.*,
@@ -480,6 +507,7 @@ module.exports = {
   getCollaborationSettingsByMapAsync,
   upsertCollaborationSettingsAsync,
   listAccessRequestsByMapAsync,
+  listReviewableAccessRequestsForUserAsync,
   getAccessRequestByIdAsync,
   getPendingAccessRequestByMapAndUserAsync,
   createAccessRequestAsync,

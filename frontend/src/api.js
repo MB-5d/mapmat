@@ -395,6 +395,10 @@ export async function getPendingMapInvites() {
   return fetchApi('/api/collaboration/invites');
 }
 
+export async function getPendingAccessRequests() {
+  return fetchApi('/api/collaboration/access-requests');
+}
+
 export async function acceptMapInviteById(inviteId) {
   return fetchApi(`/api/collaboration/invites/id/${inviteId}/accept`, {
     method: 'POST',
@@ -430,6 +434,16 @@ export async function reviewMapAccessRequest(mapId, requestId, { status, role } 
   return fetchApi(`/api/maps/${mapId}/access-requests/${requestId}`, {
     method: 'PATCH',
     body: JSON.stringify({ status, role }),
+  });
+}
+
+export async function createMapAccessRequest(mapId, { requestedRole = 'viewer', message } = {}) {
+  return fetchApi(`/api/maps/${mapId}/access-requests`, {
+    method: 'POST',
+    body: JSON.stringify({
+      requested_role: requestedRole,
+      message,
+    }),
   });
 }
 

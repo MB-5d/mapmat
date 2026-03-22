@@ -7,6 +7,7 @@ import {
   Mail,
   Plus,
   Settings2,
+  ShieldCheck,
   Upload,
   UserCircle,
   User,
@@ -50,7 +51,9 @@ const Topbar = ({
   onShowProjects,
   onShowHistory,
   onShowInvites,
+  onShowAccessRequests,
   pendingInviteCount = 0,
+  pendingAccessRequestCount = 0,
 }) => {
   const { isLoggedIn, currentUser, onShowProfile, onShowSettings, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -70,6 +73,8 @@ const Topbar = ({
 
   const handleAccountToggle = () => setShowAccountMenu((prev) => !prev);
   const closeMenu = () => setShowAccountMenu(false);
+
+  const totalPendingCount = pendingInviteCount + pendingAccessRequestCount;
 
   return (
     <div className="topbar">
@@ -165,9 +170,9 @@ const Topbar = ({
           >
             <User size={18} />
             <span>{currentUser?.name}</span>
-            {pendingInviteCount > 0 ? (
-              <span className="account-menu-badge" aria-label={`${pendingInviteCount} pending invite${pendingInviteCount === 1 ? '' : 's'}`}>
-                {pendingInviteCount > 9 ? '9+' : pendingInviteCount}
+            {totalPendingCount > 0 ? (
+              <span className="account-menu-badge" aria-label={`${totalPendingCount} pending collaboration items`}>
+                {totalPendingCount > 9 ? '9+' : totalPendingCount}
               </span>
             ) : null}
           </button>
@@ -185,6 +190,20 @@ const Topbar = ({
                 <span>Invites</span>
                 {pendingInviteCount > 0 ? (
                   <span className="account-menu-item-badge">{pendingInviteCount > 9 ? '9+' : pendingInviteCount}</span>
+                ) : null}
+              </button>
+              <button
+                className="account-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  onShowAccessRequests?.();
+                }}
+              >
+                <ShieldCheck size={16} />
+                <span>Requests</span>
+                {pendingAccessRequestCount > 0 ? (
+                  <span className="account-menu-item-badge">{pendingAccessRequestCount > 9 ? '9+' : pendingAccessRequestCount}</span>
                 ) : null}
               </button>
               <div className="account-menu-divider" />

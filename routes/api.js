@@ -1416,6 +1416,25 @@ router.get('/shares/:id', async (req, res) => {
       return res.status(410).json({ error: 'This share link has expired' });
     }
 
+    if (share.map_id) {
+      const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+      if (collaborationEnabled) {
+        const actorUserId = req.user?.id || null;
+        const { map, role } = await resolveMapPermissionContextAsync({
+          mapId: share.map_id,
+          actorUserId,
+        });
+
+        if (!map || !permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, role)) {
+          return res.status(403).json({
+            error: 'This shared map now requires app access',
+            code: 'SHARE_ACCESS_REQUIRED',
+            mapId: share.map_id,
+          });
+        }
+      }
+    }
+
     // Increment view count
     await shareStore.incrementShareViewCountAsync(id);
 

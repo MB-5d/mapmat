@@ -29,6 +29,8 @@ import * as api from './api';
 import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
 import CommentPopover from './components/comments/CommentPopover';
 import CommentsPanel from './components/comments/CommentsPanel';
+import InviteAcceptGate from './components/routes/InviteAcceptGate';
+import MapAccessGate from './components/routes/MapAccessGate';
 import AuthModal from './components/modals/AuthModal';
 import CreateMapModal from './components/modals/CreateMapModal';
 import DeleteConfirmModal from './components/modals/DeleteConfirmModal';
@@ -38,6 +40,7 @@ import ExportModal from './components/modals/ExportModal';
 import HistoryModal from './components/modals/HistoryModal';
 import ImageOverlay from './components/modals/ImageOverlay';
 import ImportModal from './components/modals/ImportModal';
+import AccessRequestInboxModal from './components/modals/AccessRequestInboxModal';
 import InviteInboxModal from './components/modals/InviteInboxModal';
 import ProfileDrawer from './components/drawers/ProfileDrawer';
 import SettingsDrawer from './components/drawers/SettingsDrawer';
@@ -93,6 +96,7 @@ import {
   ROUTE_SURFACES,
   buildRouteUrl,
   createAppHomeRoute,
+  createAccessRequestsRoute,
   createInviteInboxRoute,
   createMapRoute,
   createShareRoute,
@@ -1064,9 +1068,16 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
   const [showInviteInboxModal, setShowInviteInboxModal] = useState(false);
+  const [showAccessRequestsInboxModal, setShowAccessRequestsInboxModal] = useState(false);
   const [pendingMapInvites, setPendingMapInvites] = useState([]);
   const [pendingMapInvitesLoading, setPendingMapInvitesLoading] = useState(false);
   const [pendingMapInvitesError, setPendingMapInvitesError] = useState('');
+  const [pendingAccessRequests, setPendingAccessRequests] = useState([]);
+  const [pendingAccessRequestsLoading, setPendingAccessRequestsLoading] = useState(false);
+  const [pendingAccessRequestsError, setPendingAccessRequestsError] = useState('');
+  const [routeMapGateState, setRouteMapGateState] = useState(null);
+  const [routeAccessRequestMessage, setRouteAccessRequestMessage] = useState('');
+  const [inviteAcceptState, setInviteAcceptState] = useState(null);
   const [presenceSessions, setPresenceSessions] = useState([]);
   const [mapPermissions, setMapPermissions] = useState(null);
   const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
@@ -1091,6 +1102,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const autosaveRetryDelayRef = useRef(1000);
   const versionBaselineRef = useRef(null);
   const lastVersionSnapshotRef = useRef('');
+  const clearLoadedMapViewRef = useRef(null);
+  const loadSavedMapByIdRef = useRef(null);
   const versionInfoToastRef = useRef(false);
   const seenActivityIdsRef = useRef(new Set());
   const primedActivityMapIdRef = useRef(null);
@@ -2268,6 +2281,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     () => String(mapPermissions?.role || inferredCollaborationRole || 'viewer').trim().toLowerCase() || 'viewer',
     [inferredCollaborationRole, mapPermissions?.role],
   );
+  const pendingInviteForCurrentRoute = useMemo(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'map' || !currentRoute?.mapId) {
+      return null;
+    }
+    return (pendingMapInvites || []).find((invite) => sameId(invite.mapId, currentRoute.mapId)) || null;
+  }, [currentRoute?.mapId, currentRoute?.section, currentRoute?.surface, pendingMapInvites]);
   const canManageCollaborationMembersValue = (
     ['owner', 'editor'].includes(currentCollaborationRole)
     || (canManageSharesValue && canViewCollaborationPanelValue)
@@ -2714,6 +2733,23 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, []);
 
+  const loadPendingAccessRequests = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setPendingAccessRequestsLoading(true);
+    }
+    setPendingAccessRequestsError('');
+
+    try {
+      const { accessRequests } = await api.getPendingAccessRequests();
+      setPendingAccessRequests(accessRequests || []);
+    } catch (error) {
+      setPendingAccessRequests([]);
+      setPendingAccessRequestsError(error.message || 'Failed to load pending access requests.');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, []);
+
   const applySharedMapPayload = useCallback((share) => {
     if (!share?.root) return;
     resetScanLayers();
@@ -2748,6 +2784,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           try {
             await loadAuthenticatedWorkspace();
             await loadPendingMapInvites({ silent: true });
+            await loadPendingAccessRequests({ silent: true });
           } catch (e) {
             console.error('Failed to load user data:', e);
           }
@@ -2763,7 +2800,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     initAuth();
     // Intentionally run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadAuthenticatedWorkspace, loadPendingMapInvites]);
+  }, [loadAuthenticatedWorkspace, loadPendingAccessRequests, loadPendingMapInvites]);
 
   useEffect(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) return undefined;
@@ -2772,10 +2809,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     api.getShare(currentRoute.shareId)
       .then(({ share }) => {
         if (cancelled || !share?.root) return;
+        if (share?.map_id) {
+          clearLoadedMapViewRef.current?.();
+          navigateToRoute(createMapRoute(share.map_id), { replace: true });
+          return;
+        }
         applySharedMapPayload(share);
       })
       .catch((error) => {
         if (cancelled) return;
+        if (error?.code === 'SHARE_ACCESS_REQUIRED' && error?.payload?.mapId) {
+          clearLoadedMapViewRef.current?.();
+          navigateToRoute(createMapRoute(error.payload.mapId), { replace: true });
+          return;
+        }
         const sharedData = localStorage.getItem(currentRoute.shareId);
         if (sharedData) {
           try {
@@ -2797,7 +2844,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       cancelled = true;
     };
-  }, [applySharedMapPayload, currentRoute?.shareId, currentRoute?.surface, showToast]);
+  }, [
+    applySharedMapPayload,
+    currentRoute?.shareId,
+    currentRoute?.surface,
+    navigateToRoute,
+    showToast,
+  ]);
 
   // (gesture handlers removed; zoom handled via wheel listener on canvas)
 
@@ -2991,18 +3044,26 @@ export default function App({ currentRoute, navigateToRoute }) {
     setPendingMapInvites([]);
     setPendingMapInvitesError('');
     setPendingMapInvitesLoading(false);
+    setPendingAccessRequests([]);
+    setPendingAccessRequestsError('');
+    setPendingAccessRequestsLoading(false);
   }, [isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn) return undefined;
 
-    const handleWindowFocus = () => {
+    const refreshPendingCollaborationItems = () => {
       loadPendingMapInvites({ silent: true });
+      loadPendingAccessRequests({ silent: true });
     };
 
-    window.addEventListener('focus', handleWindowFocus);
-    return () => window.removeEventListener('focus', handleWindowFocus);
-  }, [isLoggedIn, loadPendingMapInvites]);
+    const intervalId = window.setInterval(refreshPendingCollaborationItems, 30000);
+    window.addEventListener('focus', refreshPendingCollaborationItems);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshPendingCollaborationItems);
+    };
+  }, [isLoggedIn, loadPendingAccessRequests, loadPendingMapInvites]);
 
   const loadCollaborationData = useCallback(async () => {
     if (
@@ -3236,7 +3297,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     try {
       await api.reviewMapAccessRequest(currentMap.id, requestId, { status, role });
       showToast(status === 'approved' ? 'Access request approved' : 'Access request denied', 'success');
-      await loadCollaborationData();
+      await Promise.all([
+        loadCollaborationData(),
+        loadPendingAccessRequests({ silent: true }),
+      ]);
     } catch (error) {
       setCollaborationAccessRequests(previousRequests);
       setCollaborationError(error.message || 'Failed to review access request.');
@@ -3249,6 +3313,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     collaborationAccessRequests,
     currentMap?.id,
     loadCollaborationData,
+    loadPendingAccessRequests,
     showToast,
   ]);
 
@@ -3482,7 +3547,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     // Load user's projects, maps, and history
     try {
       await loadAuthenticatedWorkspace();
-      await loadPendingMapInvites({ silent: true });
+      await Promise.all([
+        loadPendingMapInvites({ silent: true }),
+        loadPendingAccessRequests({ silent: true }),
+      ]);
     } catch (e) {
       console.error('Failed to load user data:', e);
     }
@@ -3496,6 +3564,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setScanHistory([]);
     setPendingMapInvites([]);
     setPendingMapInvitesError('');
+    setPendingAccessRequests([]);
+    setPendingAccessRequestsError('');
   }, []);
 
 
@@ -3510,6 +3580,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setAccessLevel(ACCESS_LEVELS.VIEW);
         setShowSaveMapModal(false);
         setShowInviteInboxModal(false);
+        setShowAccessRequestsInboxModal(false);
         setShowProfileDrawer(false);
         setShowSettingsDrawer(false);
         setShowVersionHistoryDrawer(false);
@@ -3539,6 +3610,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       resetScanLayers();
       setShowSaveMapModal(false);
       setShowInviteInboxModal(false);
+      setShowAccessRequestsInboxModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
       setShowVersionHistoryDrawer(false);
@@ -3613,6 +3685,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     await loadPendingMapInvites();
   }, [loadPendingMapInvites, navigateToRoute]);
 
+  const handleShowAccessRequestsInbox = useCallback(async () => {
+    navigateToRoute(createAccessRequestsRoute());
+    setShowAccessRequestsInboxModal(true);
+    await loadPendingAccessRequests();
+  }, [loadPendingAccessRequests, navigateToRoute]);
+
   useEffect(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invites') return;
     if (authLoading) return;
@@ -3630,6 +3708,23 @@ export default function App({ currentRoute, navigateToRoute }) {
     loadPendingMapInvites,
   ]);
 
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'access_requests') return;
+    if (authLoading) return;
+    if (!isLoggedIn) {
+      setShowAuthModal(true);
+      return;
+    }
+    setShowAccessRequestsInboxModal(true);
+    loadPendingAccessRequests();
+  }, [
+    authLoading,
+    currentRoute?.section,
+    currentRoute?.surface,
+    isLoggedIn,
+    loadPendingAccessRequests,
+  ]);
+
   const handleAcceptPendingInvite = useCallback(async (invite) => {
     if (!invite?.id) return;
     setPendingMapInvitesLoading(true);
@@ -3640,14 +3735,34 @@ export default function App({ currentRoute, navigateToRoute }) {
       await Promise.all([
         loadAuthenticatedWorkspace(),
         loadPendingMapInvites({ silent: true }),
+        loadPendingAccessRequests({ silent: true }),
       ]);
+      if (invite.mapId && loadSavedMapByIdRef.current) {
+        try {
+          await loadSavedMapByIdRef.current(invite.mapId, { silent: true });
+          setRouteMapGateState(null);
+          setRouteAccessRequestMessage('');
+        } catch {
+          if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map' && sameId(currentRoute?.mapId, invite.mapId)) {
+            setRouteMapGateState((previous) => previous ? { ...previous, loading: false } : previous);
+          }
+        }
+      }
     } catch (error) {
       setPendingMapInvitesError(error.message || 'Failed to accept invite.');
       showToast(error.message || 'Failed to accept invite.', 'error');
     } finally {
       setPendingMapInvitesLoading(false);
     }
-  }, [loadAuthenticatedWorkspace, loadPendingMapInvites, showToast]);
+  }, [
+    currentRoute?.mapId,
+    currentRoute?.section,
+    currentRoute?.surface,
+    loadAuthenticatedWorkspace,
+    loadPendingAccessRequests,
+    loadPendingMapInvites,
+    showToast,
+  ]);
 
   const handleDeclinePendingInvite = useCallback(async (invite) => {
     if (!invite?.id) return;
@@ -3657,13 +3772,125 @@ export default function App({ currentRoute, navigateToRoute }) {
       await api.declineMapInviteById(invite.id);
       showToast(`Invite declined for ${invite.mapName || 'shared map'}`, 'info');
       await loadPendingMapInvites({ silent: true });
+      if (invite.mapId && currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map' && sameId(currentRoute?.mapId, invite.mapId)) {
+        setRouteMapGateState((previous) => previous ? { ...previous, loading: false } : previous);
+      }
     } catch (error) {
       setPendingMapInvitesError(error.message || 'Failed to decline invite.');
       showToast(error.message || 'Failed to decline invite.', 'error');
     } finally {
       setPendingMapInvitesLoading(false);
     }
-  }, [loadPendingMapInvites, showToast]);
+  }, [currentRoute?.mapId, currentRoute?.section, currentRoute?.surface, loadPendingMapInvites, showToast]);
+
+  const handleApprovePendingAccessRequest = useCallback(async (request, role) => {
+    if (!request?.id || !request?.mapId) return;
+    setPendingAccessRequestsLoading(true);
+    setPendingAccessRequestsError('');
+    try {
+      await api.reviewMapAccessRequest(request.mapId, request.id, {
+        status: 'approved',
+        role: role || request.requestedRole || 'viewer',
+      });
+      showToast(`Approved access for ${request.requesterName || request.requesterEmail || 'user'}`, 'success');
+      await Promise.all([
+        loadPendingAccessRequests({ silent: true }),
+        currentMap?.id && sameId(currentMap.id, request.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingAccessRequestsError(error.message || 'Failed to approve access request.');
+      showToast(error.message || 'Failed to approve access request.', 'error');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
+
+  const handleDenyPendingAccessRequest = useCallback(async (request) => {
+    if (!request?.id || !request?.mapId) return;
+    setPendingAccessRequestsLoading(true);
+    setPendingAccessRequestsError('');
+    try {
+      await api.reviewMapAccessRequest(request.mapId, request.id, {
+        status: 'denied',
+      });
+      showToast(`Denied access for ${request.requesterName || request.requesterEmail || 'user'}`, 'info');
+      await Promise.all([
+        loadPendingAccessRequests({ silent: true }),
+        currentMap?.id && sameId(currentMap.id, request.mapId) ? loadCollaborationData() : Promise.resolve(),
+      ]);
+    } catch (error) {
+      setPendingAccessRequestsError(error.message || 'Failed to deny access request.');
+      showToast(error.message || 'Failed to deny access request.', 'error');
+    } finally {
+      setPendingAccessRequestsLoading(false);
+    }
+  }, [currentMap?.id, loadCollaborationData, loadPendingAccessRequests, showToast]);
+
+  const handleRequestRouteMapAccess = useCallback(async () => {
+    const mapId = currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map'
+      ? currentRoute.mapId
+      : null;
+    if (!mapId) return;
+    if (!isLoggedIn) {
+      setShowAuthModal(true);
+      return;
+    }
+
+    setRouteMapGateState((previous) => ({
+      mapId,
+      loading: false,
+      errorStatus: previous?.errorStatus || null,
+      errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
+      requestStatus: 'submitting',
+      requestError: '',
+    }));
+
+    try {
+      const response = await api.createMapAccessRequest(mapId, {
+        requestedRole: 'viewer',
+        message: routeAccessRequestMessage.trim() || undefined,
+      });
+      setRouteMapGateState((previous) => ({
+        mapId,
+        loading: false,
+        errorStatus: previous?.errorStatus || 403,
+        errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
+        requestStatus: 'submitted',
+        requestError: '',
+        requestId: response?.accessRequest?.id || null,
+      }));
+      showToast(
+        response?.reused
+          ? 'Your access request is already pending review.'
+          : 'Access request sent to the map owners.',
+        'success'
+      );
+    } catch (error) {
+      if (error?.status === 409 && /pending invite/i.test(error.message || '')) {
+        await loadPendingMapInvites({ silent: true });
+      }
+      setRouteMapGateState((previous) => ({
+        mapId,
+        loading: false,
+        errorStatus: previous?.errorStatus || error?.status || null,
+        errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
+        requestStatus: error?.status === 403 ? 'disabled' : 'idle',
+        requestError: error?.message || 'Failed to send access request.',
+      }));
+      showToast(
+        error?.message || 'Failed to send access request.',
+        error?.status === 403 ? 'warning' : 'error'
+      );
+    }
+  }, [
+    currentRoute?.mapId,
+    currentRoute?.section,
+    currentRoute?.surface,
+    isLoggedIn,
+    loadPendingMapInvites,
+    routeAccessRequestMessage,
+    showToast,
+  ]);
 
   const handleShowProfile = useCallback(() => {
     setShowProfileDrawer(true);
@@ -4737,6 +4964,41 @@ export default function App({ currentRoute, navigateToRoute }) {
     setEditModalMode('add');
   };
 
+  const clearLoadedMapView = useCallback(() => {
+    resetScanLayers();
+    setHasCreatedShareLink(false);
+    setCurrentShareAccess(null);
+    setRoot(null);
+    setOrphans([]);
+    setConnections([]);
+    setColors(DEFAULT_COLORS);
+    setConnectionColors(DEFAULT_CONNECTION_COLORS);
+    setCurrentMap(null);
+    setMapName('');
+    setSavedMapCommentsByNode({});
+    setMapActivity([]);
+    setMapVersions([]);
+    setDraftVersions([]);
+    setDraftLatestVersionId(null);
+    setActiveVersionId(null);
+    setLatestVersionId(null);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowVersionHistoryDrawer(false);
+    setShowShareModal(false);
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+    setThumbnailScopeIds(null);
+    setShowImageMenu(false);
+    setShowThumbnails(false);
+    setUrlInput('');
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+  }, [applyTransform, resetScanLayers]);
+
+  useEffect(() => {
+    clearLoadedMapViewRef.current = clearLoadedMapView;
+  }, [clearLoadedMapView]);
+
   const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
     resetScanLayers();
     setHasCreatedShareLink(false);
@@ -4772,26 +5034,82 @@ export default function App({ currentRoute, navigateToRoute }) {
     scheduleResetViewRef.current?.();
   }, [applyTransform, loadMapVersions, navigateToRoute, resetScanLayers, showToast]);
 
+  const loadSavedMapById = useCallback(async (mapId, options = {}) => {
+    const { map } = await api.getMap(mapId);
+    if (!map) {
+      const error = new Error('Map not found');
+      error.status = 404;
+      throw error;
+    }
+    loadMap(map, options);
+    return map;
+  }, [loadMap]);
+
+  useEffect(() => {
+    loadSavedMapByIdRef.current = loadSavedMapById;
+  }, [loadSavedMapById]);
+
+  useEffect(() => {
+    if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map') return;
+    setRouteMapGateState(null);
+    setRouteAccessRequestMessage('');
+  }, [currentRoute?.section, currentRoute?.surface]);
+
+  useEffect(() => {
+    if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'invite_accept') return;
+    setInviteAcceptState(null);
+  }, [currentRoute?.section, currentRoute?.surface]);
+
   useEffect(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || !currentRoute?.mapId) return undefined;
     if (currentMap?.id && sameId(currentMap.id, currentRoute.mapId)) return undefined;
     if (authLoading) return undefined;
 
     if (!isLoggedIn) {
+      setRouteMapGateState({
+        mapId: currentRoute.mapId,
+        loading: false,
+        errorStatus: null,
+        errorMessage: '',
+        requestStatus: 'idle',
+        requestError: '',
+      });
       setShowAuthModal(true);
       return undefined;
     }
 
     let cancelled = false;
-    api.getMap(currentRoute.mapId)
-      .then(({ map }) => {
-        if (cancelled || !map) return;
-        loadMap(map, { skipNavigation: true, silent: true });
+    setRouteMapGateState((previous) => ({
+      mapId: currentRoute.mapId,
+      loading: true,
+      errorStatus: null,
+      errorMessage: '',
+      requestStatus: previous?.mapId === currentRoute.mapId ? previous.requestStatus || 'idle' : 'idle',
+      requestError: '',
+    }));
+
+    loadSavedMapById(currentRoute.mapId, { skipNavigation: true, silent: true })
+      .then(() => {
+        if (cancelled) return;
+        setRouteMapGateState(null);
+        setRouteAccessRequestMessage('');
       })
       .catch((error) => {
         if (cancelled) return;
+        clearLoadedMapView();
+        setRouteMapGateState({
+          mapId: currentRoute.mapId,
+          loading: false,
+          errorStatus: error?.status || null,
+          errorMessage: error?.message || 'Failed to load map',
+          requestStatus: 'idle',
+          requestError: '',
+        });
+        if (error?.status === 404 || error?.status === 403) {
+          loadPendingMapInvites({ silent: true });
+          return;
+        }
         showToast(error.message || 'Failed to load map', 'error');
-        navigateToRoute(getActiveAppRoute(), { replace: true });
       });
 
     return () => {
@@ -4799,12 +5117,79 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [
     authLoading,
+    clearLoadedMapView,
     currentMap?.id,
     currentRoute?.mapId,
     currentRoute?.surface,
-    getActiveAppRoute,
     isLoggedIn,
-    loadMap,
+    loadPendingMapInvites,
+    loadSavedMapById,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invite_accept' || !currentRoute?.inviteToken) {
+      return undefined;
+    }
+    if (authLoading) return undefined;
+
+    if (!isLoggedIn) {
+      setInviteAcceptState({
+        token: currentRoute.inviteToken,
+        status: 'auth_required',
+        error: '',
+      });
+      setShowAuthModal(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setInviteAcceptState({
+      token: currentRoute.inviteToken,
+      status: 'processing',
+      error: '',
+    });
+
+    api.acceptMapInvite(currentRoute.inviteToken)
+      .then(async ({ invite }) => {
+        if (cancelled) return;
+        await Promise.all([
+          loadAuthenticatedWorkspace(),
+          loadPendingMapInvites({ silent: true }),
+        ]);
+        if (cancelled) return;
+        showToast(`Invite accepted for ${invite?.mapName || 'shared map'}`, 'success');
+        if (invite?.mapId) {
+          try {
+            await loadSavedMapById(invite.mapId, { silent: true });
+          } catch {
+            navigateToRoute(createMapRoute(invite.mapId), { replace: true });
+          }
+          return;
+        }
+        navigateToRoute(createInviteInboxRoute(), { replace: true });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setInviteAcceptState({
+          token: currentRoute.inviteToken,
+          status: 'error',
+          error: error?.message || 'Failed to accept invite.',
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authLoading,
+    currentRoute?.inviteToken,
+    currentRoute?.section,
+    currentRoute?.surface,
+    isLoggedIn,
+    loadAuthenticatedWorkspace,
+    loadPendingMapInvites,
+    loadSavedMapById,
     navigateToRoute,
     showToast,
   ]);
@@ -8888,6 +9273,17 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const zoomBounds = getZoomBounds();
+  const showInviteAcceptGate = currentRoute?.surface === ROUTE_SURFACES.APP
+    && currentRoute?.section === 'invite_accept';
+  const showMapAccessGate = currentRoute?.surface === ROUTE_SURFACES.APP
+    && currentRoute?.section === 'map'
+    && (!currentMap?.id || !sameId(currentMap.id, currentRoute?.mapId))
+    && (
+      !!routeMapGateState
+      || !isLoggedIn
+      || authLoading
+      || !!pendingInviteForCurrentRoute
+    );
 
   return (
     <AuthProvider value={authValue}>
@@ -8964,9 +9360,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         }}
         onImportFile={() => setShowImportModal(true)}
         onShowInvites={handleShowInviteInbox}
+        onShowAccessRequests={handleShowAccessRequestsInbox}
         onShowProjects={handleShowProjects}
         onShowHistory={handleShowHistory}
         pendingInviteCount={pendingMapInvites.length}
+        pendingAccessRequestCount={pendingAccessRequests.length}
       />
 
       <div
@@ -8977,6 +9375,34 @@ export default function App({ currentRoute, navigateToRoute }) {
         onPointerUp={onPointerUp}
        
       >
+        {showInviteAcceptGate && (
+          <InviteAcceptGate
+            status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
+            error={inviteAcceptState?.error || ''}
+            onLogin={() => setShowAuthModal(true)}
+            onGoHome={() => navigateToRoute(createAppHomeRoute(), { replace: true })}
+            onShowInvites={handleShowInviteInbox}
+          />
+        )}
+
+        {showMapAccessGate && !showInviteAcceptGate && (
+          <MapAccessGate
+            isLoggedIn={isLoggedIn}
+            authLoading={authLoading}
+            invite={pendingInviteForCurrentRoute}
+            loading={!!routeMapGateState?.loading || (!!pendingInviteForCurrentRoute && pendingMapInvitesLoading)}
+            requestStatus={routeMapGateState?.requestStatus || 'idle'}
+            requestError={routeMapGateState?.requestError || ''}
+            requestMessage={routeAccessRequestMessage}
+            onLogin={() => setShowAuthModal(true)}
+            onGoHome={() => navigateToRoute(createAppHomeRoute(), { replace: true })}
+            onRequestMessageChange={setRouteAccessRequestMessage}
+            onRequestAccess={handleRequestRouteMapAccess}
+            onAcceptInvite={handleAcceptPendingInvite}
+            onDeclineInvite={handleDeclinePendingInvite}
+          />
+        )}
+
         {/* Permission banner for shared links with limited access */}
         {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && !showCoeditingReadOnlyBanner && (
           <div className="permission-banner">
@@ -10130,6 +10556,23 @@ export default function App({ currentRoute, navigateToRoute }) {
         onRefresh={() => loadPendingMapInvites()}
         onAccept={handleAcceptPendingInvite}
         onDecline={handleDeclinePendingInvite}
+      />
+
+      <AccessRequestInboxModal
+        show={showAccessRequestsInboxModal}
+        requests={pendingAccessRequests}
+        loading={pendingAccessRequestsLoading}
+        error={pendingAccessRequestsError}
+        onClose={() => {
+          setShowAccessRequestsInboxModal(false);
+          setPendingAccessRequestsError('');
+          if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'access_requests') {
+            navigateToRoute(getActiveAppRoute(), { replace: true });
+          }
+        }}
+        onRefresh={() => loadPendingAccessRequests()}
+        onApprove={handleApprovePendingAccessRequest}
+        onDeny={handleDenyPendingAccessRequest}
       />
 
       <SaveMapModal

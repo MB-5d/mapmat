@@ -199,6 +199,8 @@ function serializeAccessRequest(row) {
   return {
     id: row.id,
     mapId: row.map_id,
+    mapName: row.map_name || null,
+    mapUrl: row.map_url || null,
     requesterUserId: row.requester_user_id,
     requesterName: row.requester_name || null,
     requesterEmail: row.requester_email || null,
@@ -1102,6 +1104,24 @@ router.get('/collaboration/invites', async (req, res) => {
   } catch (error) {
     console.error('List pending invites error:', error);
     res.status(500).json({ error: 'Failed to list pending invites' });
+  }
+});
+
+// GET /api/collaboration/access-requests - list pending requests reviewable by current owner
+router.get('/collaboration/access-requests', async (req, res) => {
+  try {
+    const requests = await collaborationStore.listReviewableAccessRequestsForUserAsync(req.user.id, {
+      status: 'pending',
+      limit: 100,
+      offset: 0,
+    });
+
+    res.json({
+      accessRequests: requests.map((request) => serializeAccessRequest(request)),
+    });
+  } catch (error) {
+    console.error('List pending access requests error:', error);
+    res.status(500).json({ error: 'Failed to list pending access requests' });
   }
 });
 

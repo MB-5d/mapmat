@@ -101,6 +101,7 @@ async function queueCollaborationInviteEmailAsync({
       mapName: map.name || 'Untitled map',
       mapUrl: map.url || null,
       inviteId: invite.id,
+      inviteToken: invite.token || null,
       inviteeEmail: invite.invitee_email,
       inviterEmail: inviter?.email || null,
       inviterName: inviter?.name || null,

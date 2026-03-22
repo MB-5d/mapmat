@@ -75,6 +75,30 @@ export function parseCurrentRoute(locationLike = window.location) {
     };
   }
 
+  if (pathname === '/app/access-requests') {
+    return {
+      surface: ROUTE_SURFACES.APP,
+      pathname,
+      search,
+      searchParams,
+      section: 'access_requests',
+      mapId: null,
+    };
+  }
+
+  const inviteAcceptMatch = pathname.match(/^\/app\/invites\/accept\/([^/]+)$/);
+  if (inviteAcceptMatch) {
+    return {
+      surface: ROUTE_SURFACES.APP,
+      pathname,
+      search,
+      searchParams,
+      section: 'invite_accept',
+      mapId: null,
+      inviteToken: decodeSegment(inviteAcceptMatch[1]),
+    };
+  }
+
   const mapMatch = pathname.match(/^\/app\/maps\/([^/]+)$/);
   if (mapMatch) {
     return {
@@ -114,6 +138,10 @@ export function buildRouteUrl(route) {
 
   if (route.surface === ROUTE_SURFACES.APP) {
     if (route.section === 'invites') return '/app/invites';
+    if (route.section === 'access_requests') return '/app/access-requests';
+    if (route.section === 'invite_accept' && route.inviteToken) {
+      return `/app/invites/accept/${encodeURIComponent(route.inviteToken)}`;
+    }
     if (route.section === 'map' && route.mapId) {
       return `/app/maps/${encodeURIComponent(route.mapId)}`;
     }
@@ -135,7 +163,14 @@ export function createInviteInboxRoute() {
   return { surface: ROUTE_SURFACES.APP, section: 'invites', mapId: null };
 }
 
+export function createAccessRequestsRoute() {
+  return { surface: ROUTE_SURFACES.APP, section: 'access_requests', mapId: null };
+}
+
+export function createInviteAcceptRoute(inviteToken) {
+  return { surface: ROUTE_SURFACES.APP, section: 'invite_accept', mapId: null, inviteToken };
+}
+
 export function createShareRoute(shareId, accessLevel = null) {
   return { surface: ROUTE_SURFACES.SHARE, shareId, accessLevel };
 }
-

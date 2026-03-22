@@ -12,6 +12,16 @@ function normalizeBaseUrl(value) {
   return normalized || null;
 }
 
+function buildAppUrl(baseUrl, path = '/') {
+  const normalizedBase = normalizeBaseUrl(baseUrl) || getDefaultAppBaseUrl();
+  const normalizedPath = String(path || '/').startsWith('/') ? String(path || '/') : `/${String(path || '')}`;
+  try {
+    return new URL(normalizedPath, `${normalizedBase}/`).toString();
+  } catch {
+    return `${normalizedBase}${normalizedPath}`;
+  }
+}
+
 function getDefaultAppBaseUrl() {
   const explicit = normalizeBaseUrl(process.env.APP_BASE_URL);
   if (explicit) return explicit;
@@ -72,12 +82,16 @@ function renderActionEmail({
   detailPairs = [],
   instructions,
   appBaseUrl,
+  actionUrl = null,
+  actionLabel = 'Open Map Mat',
   footer = 'If you were not expecting this email, you can safely ignore it.',
 }) {
   const safeSubject = escapeHtml(subject);
   const safeIntro = escapeHtml(intro);
   const safeInstructions = instructions ? escapeHtml(instructions) : null;
   const safeAppBaseUrl = escapeHtml(appBaseUrl);
+  const safeActionUrl = escapeHtml(actionUrl || appBaseUrl);
+  const safeActionLabel = escapeHtml(actionLabel);
   const safeFooter = footer ? escapeHtml(footer) : null;
   const safePairs = detailPairs
     .filter((pair) => pair && pair.label && pair.value)
@@ -94,7 +108,7 @@ function renderActionEmail({
     textLines.push('');
     textLines.push(instructions);
   }
-  textLines.push(appBaseUrl);
+  textLines.push(actionUrl || appBaseUrl);
   if (footer) {
     textLines.push('');
     textLines.push(footer);
@@ -107,7 +121,7 @@ function renderActionEmail({
       ${safePairs.map((pair) => `<p style="margin: 0 0 8px;"><strong>${pair.label}:</strong> ${pair.value}</p>`).join('')}
       ${safeInstructions ? `<p style="margin: 12px 0 16px;">${safeInstructions}</p>` : ''}
       <p style="margin: 0 0 20px;">
-        <a href="${safeAppBaseUrl}" style="display: inline-block; padding: 10px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px;">Open Map Mat</a>
+        <a href="${safeActionUrl}" style="display: inline-block; padding: 10px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px;">${safeActionLabel}</a>
       </p>
       ${safeFooter ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${safeFooter}</p>` : ''}
     </div>
@@ -129,6 +143,7 @@ function renderCollaborationInviteEmail(payload = {}) {
   const mapUrlLabel = trimText(payload.mapUrl, 160);
   const inviteeEmail = trimText(payload.inviteeEmail, 160);
   const subject = `${inviterLabel} invited you to ${mapName} on Map Mat`;
+  const actionUrl = buildAppUrl(appBaseUrl, `/app/invites/accept/${encodeURIComponent(String(payload.inviteToken || ''))}`);
 
   const textLines = [
     `${inviterLabel} invited you to collaborate on "${mapName}" as ${roleLabel} in Map Mat.`,
@@ -145,8 +160,8 @@ function renderCollaborationInviteEmail(payload = {}) {
   }
 
   textLines.push('');
-  textLines.push('To accept or decline this invite, sign in to Map Mat and open Account > Invites.');
-  textLines.push(appBaseUrl);
+  textLines.push('Use the link below to sign in and accept this invite.');
+  textLines.push(actionUrl);
   textLines.push('');
   textLines.push('If you were not expecting this invite, you can safely ignore this email.');
 
@@ -158,8 +173,10 @@ function renderCollaborationInviteEmail(payload = {}) {
       expiresLabel ? { label: 'Invite expires', value: expiresLabel } : null,
       inviteeEmail ? { label: 'Invite email', value: inviteeEmail } : null,
     ],
-    instructions: 'To accept or decline this invite, sign in to Map Mat and open Account > Invites.',
+    instructions: 'Use the button below to sign in and accept or review this invite.',
     appBaseUrl,
+    actionUrl,
+    actionLabel: 'Open Invite',
   });
 }
 
@@ -181,6 +198,8 @@ function renderAccessRequestCreatedEmail(payload = {}) {
     ],
     instructions: 'To approve or deny this request, open the map Share panel and review Access Requests.',
     appBaseUrl: normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(),
+    actionUrl: buildAppUrl(normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(), `/app/maps/${encodeURIComponent(String(payload.mapId || ''))}`),
+    actionLabel: 'Review Request',
   });
 }
 
@@ -205,6 +224,8 @@ function renderAccessRequestDecisionEmail(payload = {}, approved) {
       ? 'Open Map Mat to access the shared map.'
       : 'If you still need access, you can request it again from Map Mat.',
     appBaseUrl: normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(),
+    actionUrl: buildAppUrl(normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(), `/app/maps/${encodeURIComponent(String(payload.mapId || ''))}`),
+    actionLabel: approved ? 'Open Shared Map' : 'Open Map Mat',
   });
 }
 
@@ -223,6 +244,8 @@ function renderRoleChangedEmail(payload = {}) {
     intro: `${actorLabel} changed your access on "${mapName}" from ${previousRole} to ${nextRole}.`,
     instructions: 'Open Map Mat to review your updated access.',
     appBaseUrl: normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(),
+    actionUrl: buildAppUrl(normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(), `/app/maps/${encodeURIComponent(String(payload.mapId || ''))}`),
+    actionLabel: 'Open Shared Map',
   });
 }
 
@@ -240,6 +263,8 @@ function renderAccessRemovedEmail(payload = {}) {
     intro: `${actorLabel} removed your ${previousRole} access to "${mapName}".`,
     instructions: 'If you still need access, open Map Mat and submit an access request if the map allows it.',
     appBaseUrl: normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(),
+    actionUrl: buildAppUrl(normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(), `/app/maps/${encodeURIComponent(String(payload.mapId || ''))}`),
+    actionLabel: 'Open Map Access',
   });
 }
 
