@@ -3,6 +3,11 @@ const adapter = require('./dbAdapter');
 
 let ensureSchemaPromise = null;
 
+const DEFAULT_LIST_LIMIT = 50;
+const MAX_LIST_LIMIT = 200;
+const DEFAULT_SUMMARY_DAYS = 30;
+const MAX_SUMMARY_DAYS = 365;
+
 function normalizeNullableText(value) {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim();
@@ -12,6 +17,84 @@ function normalizeNullableText(value) {
 function serializeJson(value) {
   if (value === null || value === undefined) return null;
   return JSON.stringify(value);
+}
+
+function normalizeLimit(value, {
+  fallback = DEFAULT_LIST_LIMIT,
+  max = MAX_LIST_LIMIT,
+} = {}) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, 1), max);
+}
+
+function normalizeOffset(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
+function normalizeDayWindow(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_SUMMARY_DAYS;
+  return Math.min(Math.max(parsed, 1), MAX_SUMMARY_DAYS);
+}
+
+function toCount(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildFilterQuery(filters = {}) {
+  const clauses = [];
+  const params = [];
+
+  const normalizedStatus = normalizeNullableText(filters.status);
+  if (normalizedStatus) {
+    clauses.push('status = ?');
+    params.push(normalizedStatus);
+  }
+
+  const normalizedProvider = normalizeNullableText(filters.provider);
+  if (normalizedProvider) {
+    clauses.push('provider = ?');
+    params.push(normalizedProvider);
+  }
+
+  const normalizedTemplateKey = normalizeNullableText(filters.templateKey);
+  if (normalizedTemplateKey) {
+    clauses.push('template_key = ?');
+    params.push(normalizedTemplateKey);
+  }
+
+  const normalizedToEmail = normalizeNullableText(filters.toEmail);
+  if (normalizedToEmail) {
+    clauses.push('to_email = ?');
+    params.push(String(normalizedToEmail).toLowerCase());
+  }
+
+  const normalizedJobId = normalizeNullableText(filters.jobId);
+  if (normalizedJobId) {
+    clauses.push('job_id = ?');
+    params.push(normalizedJobId);
+  }
+
+  const normalizedMapId = normalizeNullableText(filters.mapId);
+  if (normalizedMapId) {
+    clauses.push('map_id = ?');
+    params.push(normalizedMapId);
+  }
+
+  const normalizedInviteId = normalizeNullableText(filters.inviteId);
+  if (normalizedInviteId) {
+    clauses.push('invite_id = ?');
+    params.push(normalizedInviteId);
+  }
+
+  return {
+    whereSql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
+    params,
+  };
 }
 
 async function ensureEmailDeliverySchemaAsync() {
@@ -71,11 +154,13 @@ async function ensureEmailDeliverySchemaAsync() {
   }
 }
 
-function getEmailDeliveryByIdAsync(deliveryId) {
+async function getEmailDeliveryByIdAsync(deliveryId) {
+  await ensureEmailDeliverySchemaAsync();
   return adapter.queryOneAsync('SELECT * FROM email_deliveries WHERE id = ?', [deliveryId]);
 }
 
-function listEmailDeliveriesByInviteAsync(inviteId, { limit = 20, offset = 0 } = {}) {
+async function listEmailDeliveriesByInviteAsync(inviteId, { limit = 20, offset = 0 } = {}) {
+  await ensureEmailDeliverySchemaAsync();
   return adapter.queryAllAsync(`
     SELECT *
     FROM email_deliveries
@@ -85,7 +170,8 @@ function listEmailDeliveriesByInviteAsync(inviteId, { limit = 20, offset = 0 } =
   `, [inviteId, limit, offset]);
 }
 
-function listEmailDeliveriesByMapAsync(mapId, { limit = 100, offset = 0 } = {}) {
+async function listEmailDeliveriesByMapAsync(mapId, { limit = 100, offset = 0 } = {}) {
+  await ensureEmailDeliverySchemaAsync();
   return adapter.queryAllAsync(`
     SELECT *
     FROM email_deliveries
@@ -93,6 +179,147 @@ function listEmailDeliveriesByMapAsync(mapId, { limit = 100, offset = 0 } = {}) 
     ORDER BY created_at DESC
     LIMIT ? OFFSET ?
   `, [mapId, limit, offset]);
+}
+
+async function listEmailDeliveriesAsync(filters = {}, { limit = DEFAULT_LIST_LIMIT, offset = 0 } = {}) {
+  await ensureEmailDeliverySchemaAsync();
+
+  const { whereSql, params } = buildFilterQuery(filters);
+  return adapter.queryAllAsync(`
+    SELECT
+      id,
+      job_id,
+      map_id,
+      invite_id,
+      template_key,
+      to_email,
+      from_email,
+      reply_to_email,
+      subject,
+      provider,
+      status,
+      attempts,
+      last_attempt_at,
+      sent_at,
+      failed_at,
+      provider_message_id,
+      error,
+      created_at,
+      updated_at
+    FROM email_deliveries
+    ${whereSql}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `, [...params, normalizeLimit(limit), normalizeOffset(offset)]);
+}
+
+async function countEmailDeliveriesAsync(filters = {}) {
+  await ensureEmailDeliverySchemaAsync();
+
+  const { whereSql, params } = buildFilterQuery(filters);
+  const row = await adapter.queryOneAsync(`
+    SELECT COUNT(*) AS total
+    FROM email_deliveries
+    ${whereSql}
+  `, params);
+  return toCount(row?.total);
+}
+
+async function summarizeEmailDeliveriesAsync({
+  days = DEFAULT_SUMMARY_DAYS,
+  recentFailureLimit = 10,
+} = {}) {
+  await ensureEmailDeliverySchemaAsync();
+
+  const safeDays = normalizeDayWindow(days);
+  const safeFailureLimit = normalizeLimit(recentFailureLimit, {
+    fallback: 10,
+    max: 50,
+  });
+  const since = new Date(Date.now() - (safeDays * 24 * 60 * 60 * 1000)).toISOString();
+
+  const [totalsRow, statusRows, providerRows, templateRows, recentFailures] = await Promise.all([
+    adapter.queryOneAsync(`
+      SELECT
+        COUNT(*) AS total,
+        MAX(created_at) AS latest_created_at,
+        SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
+        SUM(CASE WHEN status = 'sending' THEN 1 ELSE 0 END) AS sending,
+        SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+        SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+      FROM email_deliveries
+      WHERE created_at >= ?
+    `, [since]),
+    adapter.queryAllAsync(`
+      SELECT status, COUNT(*) AS count
+      FROM email_deliveries
+      WHERE created_at >= ?
+      GROUP BY status
+      ORDER BY count DESC, status ASC
+    `, [since]),
+    adapter.queryAllAsync(`
+      SELECT COALESCE(provider, 'unknown') AS provider, COUNT(*) AS count
+      FROM email_deliveries
+      WHERE created_at >= ?
+      GROUP BY COALESCE(provider, 'unknown')
+      ORDER BY count DESC, provider ASC
+    `, [since]),
+    adapter.queryAllAsync(`
+      SELECT template_key, COUNT(*) AS count
+      FROM email_deliveries
+      WHERE created_at >= ?
+      GROUP BY template_key
+      ORDER BY count DESC, template_key ASC
+    `, [since]),
+    adapter.queryAllAsync(`
+      SELECT
+        id,
+        job_id,
+        map_id,
+        invite_id,
+        template_key,
+        to_email,
+        provider,
+        status,
+        attempts,
+        last_attempt_at,
+        failed_at,
+        error,
+        created_at
+      FROM email_deliveries
+      WHERE status = 'failed' AND created_at >= ?
+      ORDER BY COALESCE(failed_at, last_attempt_at, created_at) DESC, created_at DESC
+      LIMIT ?
+    `, [since, safeFailureLimit]),
+  ]);
+
+  return {
+    days: safeDays,
+    since,
+    totals: {
+      total: toCount(totalsRow?.total),
+      queued: toCount(totalsRow?.queued),
+      sending: toCount(totalsRow?.sending),
+      sent: toCount(totalsRow?.sent),
+      skipped: toCount(totalsRow?.skipped),
+      failed: toCount(totalsRow?.failed),
+      latestCreatedAt: totalsRow?.latest_created_at || null,
+    },
+    byStatus: statusRows.map((row) => ({
+      status: row.status || 'unknown',
+      count: toCount(row.count),
+    })),
+    byProvider: providerRows.map((row) => ({
+      provider: row.provider || 'unknown',
+      count: toCount(row.count),
+    })),
+    byTemplate: templateRows.map((row) => ({
+      templateKey: row.template_key || 'unknown',
+      count: toCount(row.count),
+    })),
+    recentFailures,
+  };
 }
 
 async function createEmailDeliveryAsync({
@@ -232,6 +459,9 @@ module.exports = {
   getEmailDeliveryByIdAsync,
   listEmailDeliveriesByInviteAsync,
   listEmailDeliveriesByMapAsync,
+  listEmailDeliveriesAsync,
+  countEmailDeliveriesAsync,
+  summarizeEmailDeliveriesAsync,
   createEmailDeliveryAsync,
   setEmailDeliveryJobIdAsync,
   markEmailDeliveryAttemptAsync,

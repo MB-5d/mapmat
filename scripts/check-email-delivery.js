@@ -111,6 +111,40 @@ async function main() {
     });
   }
 
+  const recentDeliveries = await emailDeliveryStore.listEmailDeliveriesAsync({}, {
+    limit: 3,
+    offset: 0,
+  });
+  if (!Array.isArray(recentDeliveries) || recentDeliveries.length === 0) {
+    throw new Error('Expected recent email deliveries to be queryable.');
+  }
+
+  const inviteDeliveries = await emailDeliveryStore.listEmailDeliveriesAsync({
+    templateKey: EMAIL_TEMPLATE_KEYS.COLLABORATION_INVITE,
+  }, {
+    limit: 10,
+    offset: 0,
+  });
+  if (!inviteDeliveries.some((delivery) => delivery.template_key === EMAIL_TEMPLATE_KEYS.COLLABORATION_INVITE)) {
+    throw new Error('Expected template filtering to return invite deliveries.');
+  }
+
+  const totalDeliveries = await emailDeliveryStore.countEmailDeliveriesAsync({});
+  if (!Number.isFinite(totalDeliveries) || totalDeliveries < scenarios.length) {
+    throw new Error(`Unexpected email delivery total: ${totalDeliveries}`);
+  }
+
+  const summary = await emailDeliveryStore.summarizeEmailDeliveriesAsync({
+    days: 30,
+    recentFailureLimit: 5,
+  });
+  if (!summary || !summary.totals || summary.totals.total < scenarios.length) {
+    throw new Error('Expected email delivery summary totals to include the queued deliveries.');
+  }
+  if (!Array.isArray(summary.byTemplate) || summary.byTemplate.length === 0) {
+    throw new Error('Expected email delivery summary to include template counts.');
+  }
+
   console.log('[email-delivery-check] Passed.', JSON.stringify(results));
 }
 

@@ -11,6 +11,7 @@ const mapCommentStore = require('../stores/mapCommentStore');
 const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
+const emailDeliveryStore = require('../stores/emailDeliveryStore');
 const { authMiddleware, requireAuth } = require('./auth');
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
@@ -25,6 +26,7 @@ const {
   summarizeCoeditingRolloutConfigAsync,
 } = require('../utils/coeditingRollout');
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
+const { buildHealthSnapshot: getEmailHealthSnapshot } = require('../utils/emailProvider');
 
 const router = express.Router();
 
@@ -84,6 +86,85 @@ function parsePagination(query, { defaultLimit = DEFAULT_PAGE_SIZE, maxLimit = M
   const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
   return { limit, offset };
+}
+
+function parseWindowDays(raw, fallback = 30, max = 365) {
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, 1), max);
+}
+
+function parseJsonObject(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function redactSensitiveFields(value) {
+  const sensitiveKeys = new Set([
+    'inviteToken',
+    'token',
+    'acceptToken',
+    'authorization',
+    'apiKey',
+    'api_key',
+  ]);
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactSensitiveFields(entry));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, fieldValue]) => {
+      if (sensitiveKeys.has(key)) {
+        return [key, '[redacted]'];
+      }
+      return [key, redactSensitiveFields(fieldValue)];
+    })
+  );
+}
+
+function serializeEmailDeliveryAdmin(row, { includeDebug = false } = {}) {
+  if (!row) return null;
+
+  const base = {
+    id: row.id,
+    jobId: row.job_id || null,
+    mapId: row.map_id || null,
+    inviteId: row.invite_id || null,
+    templateKey: row.template_key,
+    toEmail: row.to_email,
+    fromEmail: row.from_email || null,
+    replyToEmail: row.reply_to_email || null,
+    subject: row.subject || null,
+    provider: row.provider || null,
+    status: row.status,
+    attempts: Number(row.attempts || 0),
+    lastAttemptAt: row.last_attempt_at || null,
+    sentAt: row.sent_at || null,
+    failedAt: row.failed_at || null,
+    providerMessageId: row.provider_message_id || null,
+    error: row.error || null,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+
+  if (!includeDebug) {
+    return base;
+  }
+
+  return {
+    ...base,
+    payload: redactSensitiveFields(parseJsonObject(row.payload)),
+    providerResponse: redactSensitiveFields(parseJsonObject(row.provider_response)),
+  };
 }
 
 function parseCommentMentions(text) {
@@ -456,6 +537,82 @@ router.get('/admin/coediting', requireAdminKey, async (_req, res) => {
   } catch (error) {
     console.error('Get admin coediting health error:', error);
     res.status(500).json({ error: 'Failed to resolve coediting health' });
+  }
+});
+
+// GET /api/admin/email-deliveries/summary - email health + recent aggregate delivery stats
+router.get('/admin/email-deliveries/summary', requireAdminKey, async (req, res) => {
+  try {
+    const days = parseWindowDays(req.query?.days, 30, 365);
+    const summary = await emailDeliveryStore.summarizeEmailDeliveriesAsync({
+      days,
+      recentFailureLimit: 10,
+    });
+
+    res.json({
+      ok: true,
+      days,
+      health: getEmailHealthSnapshot(),
+      summary: {
+        ...summary,
+        recentFailures: (summary.recentFailures || []).map((row) => serializeEmailDeliveryAdmin(row)),
+      },
+    });
+  } catch (error) {
+    console.error('Get admin email delivery summary error:', error);
+    res.status(500).json({ error: 'Failed to summarize email deliveries' });
+  }
+});
+
+// GET /api/admin/email-deliveries - list recent email delivery rows with filters
+router.get('/admin/email-deliveries', requireAdminKey, async (req, res) => {
+  try {
+    const { limit, offset } = parsePagination(req.query, {
+      defaultLimit: 50,
+      maxLimit: 200,
+    });
+
+    const filters = {
+      status: req.query?.status || null,
+      provider: req.query?.provider || null,
+      templateKey: req.query?.template_key || req.query?.templateKey || null,
+      toEmail: req.query?.to_email || req.query?.toEmail || null,
+      jobId: req.query?.job_id || req.query?.jobId || null,
+      mapId: req.query?.map_id || req.query?.mapId || null,
+      inviteId: req.query?.invite_id || req.query?.inviteId || null,
+    };
+
+    const [deliveries, total] = await Promise.all([
+      emailDeliveryStore.listEmailDeliveriesAsync(filters, { limit, offset }),
+      emailDeliveryStore.countEmailDeliveriesAsync(filters),
+    ]);
+
+    res.json({
+      filters,
+      pagination: { limit, offset, total },
+      deliveries: deliveries.map((row) => serializeEmailDeliveryAdmin(row)),
+    });
+  } catch (error) {
+    console.error('List admin email deliveries error:', error);
+    res.status(500).json({ error: 'Failed to list email deliveries' });
+  }
+});
+
+// GET /api/admin/email-deliveries/:deliveryId - inspect a single delivery row
+router.get('/admin/email-deliveries/:deliveryId', requireAdminKey, async (req, res) => {
+  try {
+    const { deliveryId } = req.params;
+    const delivery = await emailDeliveryStore.getEmailDeliveryByIdAsync(deliveryId);
+    if (!delivery) {
+      return res.status(404).json({ error: 'Email delivery not found' });
+    }
+
+    return res.json({
+      delivery: serializeEmailDeliveryAdmin(delivery, { includeDebug: true }),
+    });
+  } catch (error) {
+    console.error('Get admin email delivery detail error:', error);
+    res.status(500).json({ error: 'Failed to get email delivery detail' });
   }
 });
 
