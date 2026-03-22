@@ -33,11 +33,14 @@ const mapStore = require('./stores/mapStore');
 const pageStore = require('./stores/pageStore');
 const usageStore = require('./stores/usageStore');
 const permissionPolicy = require('./policies/permissionPolicy');
+const emailDeliveryStore = require('./stores/emailDeliveryStore');
 const { getCoeditingHealthSnapshotAsync } = require('./utils/coeditingObservability');
 const {
   summarizeCoeditingRolloutConfigAsync,
   resolveCoeditingSystemStatusAsync,
 } = require('./utils/coeditingRollout');
+const { buildHealthSnapshot: getEmailHealthSnapshot } = require('./utils/emailProvider');
+const { JOB_TYPES: EMAIL_JOB_TYPES, processEmailDeliveryJobAsync } = require('./utils/emailDelivery');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -144,6 +147,8 @@ const DB_RUNTIME = db.runtime || {
   fallback: false,
 };
 const DB_PROVIDER = DB_RUNTIME.activeProvider;
+const EMAIL_HEALTH = getEmailHealthSnapshot();
+console.log(`[email] provider=${EMAIL_HEALTH.provider} configured=${EMAIL_HEALTH.providerConfigured ? 'yes' : 'no'} appBaseUrl=${EMAIL_HEALTH.appBaseUrl}`);
 
 // Browser instance for screenshots
 let browser = null;
@@ -597,6 +602,7 @@ const JOB_TYPES = {
   scan: 'scan',
   screenshot: 'screenshot',
   discovery: 'discovery',
+  email: EMAIL_JOB_TYPES.EMAIL,
 };
 const JOB_STATUS = {
   queued: 'queued',
@@ -2507,6 +2513,13 @@ async function processJob(job) {
       return;
     }
 
+    if (job.type === JOB_TYPES.email) {
+      const result = await processEmailDeliveryJobAsync(job);
+      if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+      await markJobComplete(jobId, result);
+      return;
+    }
+
     throw new Error(`Unknown job type: ${job.type}`);
   } catch (error) {
     if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
@@ -2569,6 +2582,11 @@ app.get('/health/db', async (_, res) => {
     supportedRuntimes: DB_RUNTIME.supportedProviders,
     postgres: pg,
   });
+});
+
+app.get('/health/email', async (_req, res) => {
+  await emailDeliveryStore.ensureEmailDeliverySchemaAsync();
+  return res.status(200).json(getEmailHealthSnapshot());
 });
 
 app.get('/health/coediting', async (_req, res) => {

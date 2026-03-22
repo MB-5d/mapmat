@@ -14,6 +14,7 @@ const {
   recordMapActivityBestEffortAsync,
   serializeActivityEvent,
 } = require('../utils/collaborationActivity');
+const { queueCollaborationInviteEmailAsync } = require('../utils/emailDelivery');
 
 const router = express.Router();
 
@@ -988,8 +989,27 @@ router.post('/maps/:id/invites', async (req, res) => {
       },
     }, { label: 'invite create' });
 
+    let emailDelivery = null;
+    try {
+      const queuedEmail = await queueCollaborationInviteEmailAsync({
+        map,
+        invite,
+        inviter: req.user,
+      });
+      emailDelivery = queuedEmail.delivery
+        ? {
+          id: queuedEmail.delivery.id,
+          jobId: queuedEmail.jobId,
+          status: queuedEmail.delivery.status,
+        }
+        : null;
+    } catch (emailError) {
+      console.error('Queue invite email error:', emailError);
+    }
+
     res.json({
       invite: serializeInvite(invite, { includeToken: true }),
+      emailDelivery,
     });
   } catch (error) {
     console.error('Create invite error:', error);

@@ -5,6 +5,7 @@ const STORE_MODULES = [
   'coeditingStore',
   'collaborationActivityStore',
   'collaborationStore',
+  'emailDeliveryStore',
   'historyStore',
   'jobStore',
   'mapCommentStore',

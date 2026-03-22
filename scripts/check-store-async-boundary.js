@@ -11,7 +11,7 @@ const TARGET_PATHS = [
   path.join(ROOT, 'routes'),
 ];
 
-const STORE_CALL_PATTERN = /\b(authStore|projectStore|mapCommentStore|mapStore|historyStore|shareStore|usageStore|jobStore|pageStore|collaborationActivityStore|collaborationStore|presenceStore|coeditingStore)\.([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+const STORE_CALL_PATTERN = /\b(authStore|projectStore|mapCommentStore|mapStore|historyStore|shareStore|usageStore|jobStore|pageStore|collaborationActivityStore|collaborationStore|emailDeliveryStore|presenceStore|coeditingStore)\.([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
 
 function collectFiles(target, out = []) {
   if (!fs.existsSync(target)) return out;
