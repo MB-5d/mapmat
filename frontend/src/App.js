@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Sun,
   Trash2,
+  Users,
   Wifi,
   WifiOff,
   X,
@@ -38,6 +39,7 @@ import ExportModal from './components/modals/ExportModal';
 import HistoryModal from './components/modals/HistoryModal';
 import ImageOverlay from './components/modals/ImageOverlay';
 import ImportModal from './components/modals/ImportModal';
+import InviteInboxModal from './components/modals/InviteInboxModal';
 import ProfileDrawer from './components/drawers/ProfileDrawer';
 import SettingsDrawer from './components/drawers/SettingsDrawer';
 import VersionHistoryDrawer from './components/drawers/VersionHistoryDrawer';
@@ -271,12 +273,98 @@ const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
 );
 const UNCATEGORIZED_PROJECT_ID = 'uncategorized';
 const SHARED_PROJECT_ID = 'shared-with-me';
+const PRESENCE_PREVIEW_LIMIT = 4;
 
 const createPresenceSessionId = () => {
   if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
     return `web-${window.crypto.randomUUID()}`;
   }
   return `web-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+};
+
+const formatPresenceAccessLabel = (accessMode) => {
+  switch (String(accessMode || '').trim().toLowerCase()) {
+    case 'edit':
+      return 'Editing';
+    case 'comment':
+      return 'Commenting';
+    default:
+      return 'Viewing';
+  }
+};
+
+const buildPresenceCollaborators = (entries = [], { excludeSessionId = null } = {}) => {
+  const seen = new Set();
+
+  return (entries || []).reduce((collaborators, entry) => {
+    if (!entry || (excludeSessionId && entry.sessionId && entry.sessionId === excludeSessionId)) {
+      return collaborators;
+    }
+
+    const dedupeKey = entry.sessionId
+      ? `session:${entry.sessionId}`
+      : (entry.actorId ? `actor:${entry.actorId}` : null);
+
+    if (!dedupeKey || seen.has(dedupeKey)) {
+      return collaborators;
+    }
+
+    seen.add(dedupeKey);
+
+    const label = trimActivityText(
+      entry.displayName || entry.userEmail || entry.clientName,
+      40,
+    ) || 'Collaborator';
+    const avatarLabel = trimActivityText(entry.avatarLabel, 4)
+      || label.slice(0, 2).toUpperCase();
+    const tone = Number.isFinite(Number(entry.tone))
+      ? Math.abs(Number(entry.tone)) % 4
+      : 0;
+
+    collaborators.push({
+      id: dedupeKey,
+      label,
+      avatarLabel,
+      tone,
+      accessMode: String(entry.accessMode || '').trim().toLowerCase() || 'view',
+    });
+
+    return collaborators;
+  }, []);
+};
+
+const PresenceChipList = ({ collaborators = [] }) => {
+  if (!collaborators.length) return null;
+
+  const visibleCollaborators = collaborators.slice(0, PRESENCE_PREVIEW_LIMIT);
+  const overflowCount = Math.max(0, collaborators.length - visibleCollaborators.length);
+
+  return (
+    <div
+      className="presence-chip-list"
+      role="list"
+      aria-label={`${collaborators.length} active collaborator${collaborators.length === 1 ? '' : 's'}`}
+    >
+      {visibleCollaborators.map((collaborator) => (
+        <div
+          key={collaborator.id}
+          className={`presence-chip tone-${collaborator.tone}`}
+          role="listitem"
+          title={`${collaborator.label} • ${formatPresenceAccessLabel(collaborator.accessMode)}`}
+        >
+          <span className="presence-chip-avatar" aria-hidden="true">
+            {collaborator.avatarLabel}
+          </span>
+          <span className="presence-chip-label">{collaborator.label}</span>
+        </div>
+      ))}
+      {overflowCount > 0 && (
+        <span className="presence-chip presence-chip-more" role="listitem">
+          +{overflowCount}
+        </span>
+      )}
+    </div>
+  );
 };
 
 function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
@@ -968,6 +1056,10 @@ export default function App() {
   const [collaborationAccessRequests, setCollaborationAccessRequests] = useState([]);
   const [collaborationInviteEmail, setCollaborationInviteEmail] = useState('');
   const [collaborationInviteRole, setCollaborationInviteRole] = useState('viewer');
+  const [showInviteInboxModal, setShowInviteInboxModal] = useState(false);
+  const [pendingMapInvites, setPendingMapInvites] = useState([]);
+  const [pendingMapInvitesLoading, setPendingMapInvitesLoading] = useState(false);
+  const [pendingMapInvitesError, setPendingMapInvitesError] = useState('');
   const [presenceSessions, setPresenceSessions] = useState([]);
   const [mapPermissions, setMapPermissions] = useState(null);
   const [hasCreatedShareLink, setHasCreatedShareLink] = useState(() => {
@@ -1750,28 +1842,16 @@ export default function App() {
     );
   }, [presenceSessions]);
 
+  const presenceCollaborators = useMemo(
+    () => buildPresenceCollaborators(otherPresenceSessions),
+    [otherPresenceSessions],
+  );
+
   const presenceBannerText = useMemo(() => {
-    const count = otherPresenceSessions.length;
+    const count = presenceCollaborators.length;
     if (!count) return '';
-
-    const labels = [...new Set(
-      otherPresenceSessions
-        .map((session) => String(session.displayName || session.userEmail || '').trim())
-        .filter(Boolean)
-    )];
-
-    if (count === 1) {
-      return labels[0] ? `${labels[0]} is active on this map` : '1 other session is active on this map';
-    }
-
-    if (labels.length > 0) {
-      const preview = labels.slice(0, 2).join(', ');
-      const suffix = labels.length > 2 ? ', ...' : '';
-      return `${count} other sessions active (${preview}${suffix})`;
-    }
-
-    return `${count} other sessions are active on this map`;
-  }, [otherPresenceSessions]);
+    return `${count} collaborator${count === 1 ? '' : 's'} active on this map`;
+  }, [presenceCollaborators]);
 
   const reportTimestamp = useMemo(() => {
     if (!lastScanAt) return '';
@@ -2163,6 +2243,15 @@ export default function App() {
   const canManageSharesValue = !!effectiveFeatureGates.shareManage;
   const canViewCollaborationPanelValue = !!effectiveFeatureGates.collabPanelView;
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
+  const collaborationCapabilities = mapPermissions?.collaboration || null;
+  const collaborationInviteRoleOptionsValue = useMemo(() => {
+    const roles = Array.isArray(collaborationCapabilities?.inviteRoles)
+      ? collaborationCapabilities.inviteRoles
+      : [];
+    return roles.filter((role) => ['viewer', 'commenter', 'editor'].includes(String(role || '').trim().toLowerCase()));
+  }, [collaborationCapabilities?.inviteRoles]);
+  const canSelfServeCollaborationInviteValue = collaborationInviteRoleOptionsValue.length > 0;
+  const canSelfServeCollaborationValue = canSelfServeCollaborationInviteValue || !!collaborationCapabilities?.canRequestAccess;
   const canManageCollaborationSettingsValue = !!effectiveFeatureGates.collabSettingsManage;
   const canViewAccessRequestsValue = !!effectiveFeatureGates.accessRequestsView;
   const canViewPresenceValue = !!effectiveFeatureGates.presenceView;
@@ -2179,9 +2268,14 @@ export default function App() {
     ['owner', 'editor'].includes(currentCollaborationRole)
     || (canManageSharesValue && canViewCollaborationPanelValue)
   );
-  const canSendCollaborationInvitesResolvedValue = canSendCollaborationInvitesValue || canManageCollaborationMembersValue;
+  const canSendCollaborationInvitesResolvedValue = (
+    canSendCollaborationInvitesValue
+    || canManageCollaborationMembersValue
+    || canSelfServeCollaborationInviteValue
+  );
   const canManageCollaborationSettingsResolvedValue = canManageCollaborationSettingsValue || currentCollaborationRole === 'owner';
   const canViewAccessRequestsResolvedValue = canViewAccessRequestsValue || currentCollaborationRole === 'owner';
+  const canOpenShareModalValue = canEditValue || canSelfServeCollaborationValue;
 
   // Permission helper functions
   const canEdit = () => canEditValue;
@@ -2196,6 +2290,12 @@ export default function App() {
   const canManageCollaborationSettings = () => canManageCollaborationSettingsResolvedValue;
   const canViewAccessRequests = () => canViewAccessRequestsResolvedValue;
   const canViewPresence = () => canViewPresenceValue;
+
+  useEffect(() => {
+    if (!collaborationInviteRoleOptionsValue.length) return;
+    if (collaborationInviteRoleOptionsValue.includes(collaborationInviteRole)) return;
+    setCollaborationInviteRole(collaborationInviteRoleOptionsValue[0]);
+  }, [collaborationInviteRole, collaborationInviteRoleOptionsValue]);
 
   useEffect(() => {
     seenActivityIdsRef.current = new Set();
@@ -2577,6 +2677,37 @@ export default function App() {
     applyTransform({ scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y });
   }, [layerVisibility, root, orphans, mapLayout, applyTransform]);
 
+  const loadAuthenticatedWorkspace = useCallback(async () => {
+    const [projectsData, mapsData, historyData] = await Promise.all([
+      api.getProjects(),
+      api.getMaps(),
+      api.getHistory(),
+    ]);
+
+    setProjects(organizeProjectsWithMaps(
+      projectsData.projects || [],
+      mapsData.maps || []
+    ));
+    setScanHistory(historyData.history || []);
+  }, []);
+
+  const loadPendingMapInvites = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setPendingMapInvitesLoading(true);
+    }
+    setPendingMapInvitesError('');
+
+    try {
+      const { invites } = await api.getPendingMapInvites();
+      setPendingMapInvites(invites || []);
+    } catch (error) {
+      setPendingMapInvites([]);
+      setPendingMapInvitesError(error.message || 'Failed to load pending invites.');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, []);
+
   // Check auth and load data on mount
   React.useEffect(() => {
     const initAuth = async () => {
@@ -2589,17 +2720,8 @@ export default function App() {
 
           // Load user's projects, maps, and history from API
           try {
-            const [projectsData, mapsData, historyData] = await Promise.all([
-              api.getProjects(),
-              api.getMaps(),
-              api.getHistory(),
-            ]);
-
-            setProjects(organizeProjectsWithMaps(
-              projectsData.projects || [],
-              mapsData.maps || []
-            ));
-            setScanHistory(historyData.history || []);
+            await loadAuthenticatedWorkspace();
+            await loadPendingMapInvites({ silent: true });
           } catch (e) {
             console.error('Failed to load user data:', e);
           }
@@ -2674,7 +2796,7 @@ export default function App() {
     }
     // Intentionally run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadAuthenticatedWorkspace, loadPendingMapInvites]);
 
   // (gesture handlers removed; zoom handled via wheel listener on canvas)
 
@@ -2712,6 +2834,7 @@ export default function App() {
     pendingCount: livePendingCount,
     participants: liveParticipants,
     remoteSelections,
+    sessionId: liveSessionId,
     isLiveActive,
     submitDraft: submitLiveDraft,
     updateSelection: updateLiveSelection,
@@ -2747,6 +2870,10 @@ export default function App() {
   const liveBannerTone = liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
     ? 'warning'
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
+  const liveCollaborators = useMemo(
+    () => buildPresenceCollaborators(liveParticipants, { excludeSessionId: liveSessionId }),
+    [liveParticipants, liveSessionId],
+  );
   const showCoeditingReadOnlyBanner = !!(
     isCoeditingReadOnlyMode
     && hasMap
@@ -2858,6 +2985,24 @@ export default function App() {
     loadMapPermissions();
   }, [loadMapPermissions]);
 
+  useEffect(() => {
+    if (isLoggedIn) return;
+    setPendingMapInvites([]);
+    setPendingMapInvitesError('');
+    setPendingMapInvitesLoading(false);
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return undefined;
+
+    const handleWindowFocus = () => {
+      loadPendingMapInvites({ silent: true });
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
+  }, [isLoggedIn, loadPendingMapInvites]);
+
   const loadCollaborationData = useCallback(async () => {
     if (
       !COLLABORATION_UI_ENABLED
@@ -2903,6 +3048,13 @@ export default function App() {
       showToast('Enter an email address to invite.', 'warning');
       return;
     }
+    if (
+      collaborationInviteRoleOptionsValue.length > 0
+      && !collaborationInviteRoleOptionsValue.includes(collaborationInviteRole)
+    ) {
+      showToast('That invite role is not available for your access level on this map.', 'warning');
+      return;
+    }
 
     setCollaborationLoading(true);
     setCollaborationError('');
@@ -2924,6 +3076,7 @@ export default function App() {
     canSendCollaborationInvitesResolvedValue,
     collaborationInviteEmail,
     collaborationInviteRole,
+    collaborationInviteRoleOptionsValue,
     currentMap?.id,
     loadCollaborationData,
     showToast,
@@ -3327,17 +3480,8 @@ export default function App() {
 
     // Load user's projects, maps, and history
     try {
-      const [projectsData, mapsData, historyData] = await Promise.all([
-        api.getProjects(),
-        api.getMaps(),
-        api.getHistory(),
-      ]);
-
-      setProjects(organizeProjectsWithMaps(
-        projectsData.projects || [],
-        mapsData.maps || []
-      ));
-      setScanHistory(historyData.history || []);
+      await loadAuthenticatedWorkspace();
+      await loadPendingMapInvites({ silent: true });
     } catch (e) {
       console.error('Failed to load user data:', e);
     }
@@ -3349,6 +3493,8 @@ export default function App() {
     setAccessLevel(ACCESS_LEVELS.EDIT);
     setProjects([]);
     setScanHistory([]);
+    setPendingMapInvites([]);
+    setPendingMapInvitesError('');
   }, []);
 
 
@@ -3362,6 +3508,7 @@ export default function App() {
         setCurrentMap(null);
         setAccessLevel(ACCESS_LEVELS.VIEW);
         setShowSaveMapModal(false);
+        setShowInviteInboxModal(false);
         setShowProfileDrawer(false);
         setShowSettingsDrawer(false);
         setShowVersionHistoryDrawer(false);
@@ -3387,6 +3534,7 @@ export default function App() {
       setUrlInput('');
       resetScanLayers();
       setShowSaveMapModal(false);
+      setShowInviteInboxModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
       setShowVersionHistoryDrawer(false);
@@ -3446,6 +3594,46 @@ export default function App() {
     performLogout,
     showConfirm,
   ]);
+
+  const handleShowInviteInbox = useCallback(async () => {
+    setShowInviteInboxModal(true);
+    await loadPendingMapInvites();
+  }, [loadPendingMapInvites]);
+
+  const handleAcceptPendingInvite = useCallback(async (invite) => {
+    if (!invite?.id) return;
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.acceptMapInviteById(invite.id);
+      showToast(`Invite accepted for ${invite.mapName || 'shared map'}`, 'success');
+      await Promise.all([
+        loadAuthenticatedWorkspace(),
+        loadPendingMapInvites({ silent: true }),
+      ]);
+    } catch (error) {
+      setPendingMapInvitesError(error.message || 'Failed to accept invite.');
+      showToast(error.message || 'Failed to accept invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [loadAuthenticatedWorkspace, loadPendingMapInvites, showToast]);
+
+  const handleDeclinePendingInvite = useCallback(async (invite) => {
+    if (!invite?.id) return;
+    setPendingMapInvitesLoading(true);
+    setPendingMapInvitesError('');
+    try {
+      await api.declineMapInviteById(invite.id);
+      showToast(`Invite declined for ${invite.mapName || 'shared map'}`, 'info');
+      await loadPendingMapInvites({ silent: true });
+    } catch (error) {
+      setPendingMapInvitesError(error.message || 'Failed to decline invite.');
+      showToast(error.message || 'Failed to decline invite.', 'error');
+    } finally {
+      setPendingMapInvitesLoading(false);
+    }
+  }, [loadPendingMapInvites, showToast]);
 
   const handleShowProfile = useCallback(() => {
     setShowProfileDrawer(true);
@@ -8695,8 +8883,10 @@ export default function App() {
           setShowCreateMapModal(true);
         }}
         onImportFile={() => setShowImportModal(true)}
+        onShowInvites={handleShowInviteInbox}
         onShowProjects={handleShowProjects}
         onShowHistory={handleShowHistory}
+        pendingInviteCount={pendingMapInvites.length}
       />
 
       <div
@@ -8747,13 +8937,16 @@ export default function App() {
               : (liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
                 ? <WifiOff size={16} />
                 : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />)}
-            <span>
-              <strong>{liveBannerTitle} {liveStatusLabel}</strong>
-              {` • v${liveVersion}`}
-              {livePendingCount > 0 ? ` • ${livePendingCount} queued` : ''}
-              {liveParticipants.length > 1 ? ` • ${liveParticipants.length - 1} collaborator${liveParticipants.length > 2 ? 's' : ''}` : ''}
-              {liveStatusDetail ? ` • ${liveStatusDetail}` : ''}
-            </span>
+            <div className="permission-banner-main">
+              <span className="permission-banner-summary">
+                <strong>{liveBannerTitle} {liveStatusLabel}</strong>
+                {` • v${liveVersion}`}
+                {livePendingCount > 0 ? ` • ${livePendingCount} queued` : ''}
+                {liveCollaborators.length > 0 ? ` • ${liveCollaborators.length} collaborator${liveCollaborators.length === 1 ? '' : 's'}` : ''}
+                {liveStatusDetail ? ` • ${liveStatusDetail}` : ''}
+              </span>
+              <PresenceChipList collaborators={liveCollaborators} />
+            </div>
             {liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC && (
               <div className="map-conflict-actions">
                 <button type="button" onClick={resyncLiveDocument}>Resync</button>
@@ -8773,8 +8966,11 @@ export default function App() {
           && presenceBannerText
           && (
             <div className="permission-banner presence-banner">
-              <MessageSquare size={16} />
-              <span>{presenceBannerText}</span>
+              <Users size={16} />
+              <div className="permission-banner-main">
+                <span className="permission-banner-summary">{presenceBannerText}</span>
+                <PresenceChipList collaborators={presenceCollaborators} />
+              </div>
             </div>
           )}
 
@@ -9639,6 +9835,7 @@ export default function App() {
                 },
                 onExport: () => setShowExportModal(true),
                 onShare: () => setShowShareModal(true),
+                canOpenShare: canOpenShareModalValue,
                 hasMap,
                 hasSavedMap: !!currentMap?.id,
                 showVersionHistory: showVersionHistoryDrawer,
@@ -9807,7 +10004,10 @@ export default function App() {
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}
-        collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn && canViewCollaborationPanel()}
+        collaborationEnabled={COLLABORATION_UI_ENABLED && isLoggedIn && currentMap?.id && (
+          canViewCollaborationPanel()
+          || canSelfServeCollaborationValue
+        )}
         collaborationAvailable={Boolean(currentMap?.id)}
         collaborationLoading={collaborationLoading}
         collaborationError={collaborationError}
@@ -9815,6 +10015,8 @@ export default function App() {
         onCollaborationInviteEmailChange={setCollaborationInviteEmail}
         collaborationInviteRole={collaborationInviteRole}
         onCollaborationInviteRoleChange={setCollaborationInviteRole}
+        collaborationCapabilities={collaborationCapabilities}
+        collaborationInviteRoleOptions={collaborationInviteRoleOptionsValue}
         onSendCollaborationInvite={sendCollaborationInvite}
         canSendCollaborationInvites={canSendCollaborationInvites()}
         currentCollaborationRole={currentCollaborationRole}
@@ -9831,6 +10033,20 @@ export default function App() {
         onRemoveCollaborationMember={removeCollaborationMember}
         onRevokeCollaborationInvite={revokeCollaborationInvite}
         onReviewCollaborationAccessRequest={reviewCollaborationAccessRequest}
+      />
+
+      <InviteInboxModal
+        show={showInviteInboxModal}
+        invites={pendingMapInvites}
+        loading={pendingMapInvitesLoading}
+        error={pendingMapInvitesError}
+        onClose={() => {
+          setShowInviteInboxModal(false);
+          setPendingMapInvitesError('');
+        }}
+        onRefresh={() => loadPendingMapInvites()}
+        onAccept={handleAcceptPendingInvite}
+        onDecline={handleDeclinePendingInvite}
       />
 
       <SaveMapModal

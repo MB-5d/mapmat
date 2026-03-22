@@ -11,6 +11,7 @@ const ACTIVITY_TYPES = Object.freeze({
   COLLAB_SETTINGS_UPDATED: 'collab.settings.updated',
   COLLAB_INVITE_CREATED: 'collab.invite.created',
   COLLAB_INVITE_ACCEPTED: 'collab.invite.accepted',
+  COLLAB_INVITE_DECLINED: 'collab.invite.declined',
   COLLAB_INVITE_REVOKED: 'collab.invite.revoked',
   COLLAB_MEMBERSHIP_ROLE_CHANGED: 'collab.membership.role_changed',
   COLLAB_MEMBERSHIP_REMOVED: 'collab.membership.removed',

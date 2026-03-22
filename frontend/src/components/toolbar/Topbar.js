@@ -4,6 +4,7 @@ import {
   History,
   LogIn,
   LogOut,
+  Mail,
   Plus,
   Settings2,
   Upload,
@@ -48,6 +49,8 @@ const Topbar = ({
   onImportFile,
   onShowProjects,
   onShowHistory,
+  onShowInvites,
+  pendingInviteCount = 0,
 }) => {
   const { isLoggedIn, currentUser, onShowProfile, onShowSettings, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -162,9 +165,29 @@ const Topbar = ({
           >
             <User size={18} />
             <span>{currentUser?.name}</span>
+            {pendingInviteCount > 0 ? (
+              <span className="account-menu-badge" aria-label={`${pendingInviteCount} pending invite${pendingInviteCount === 1 ? '' : 's'}`}>
+                {pendingInviteCount > 9 ? '9+' : pendingInviteCount}
+              </span>
+            ) : null}
           </button>
           {showAccountMenu && (
             <div className="account-menu" role="menu">
+              <button
+                className="account-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  onShowInvites?.();
+                }}
+              >
+                <Mail size={16} />
+                <span>Invites</span>
+                {pendingInviteCount > 0 ? (
+                  <span className="account-menu-item-badge">{pendingInviteCount > 9 ? '9+' : pendingInviteCount}</span>
+                ) : null}
+              </button>
+              <div className="account-menu-divider" />
               <button
                 className="account-menu-item"
                 role="menuitem"

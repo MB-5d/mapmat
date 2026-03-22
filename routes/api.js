@@ -295,7 +295,7 @@ async function ensureCollaborationSchemaIfEnabledAsync() {
   return true;
 }
 
-function buildFeatureGatePayload(role, { coediting = null } = {}) {
+function buildFeatureGatePayload(role, { coediting = null, collaboration = null } = {}) {
   const features = {};
   for (const [key, feature] of Object.entries(FEATURE_GATES)) {
     features[key] = permissionPolicy.isFeatureAllowed(feature, role);
@@ -306,6 +306,7 @@ function buildFeatureGatePayload(role, { coediting = null } = {}) {
   return {
     role: permissionPolicy.normalizeRole(role),
     features,
+    collaboration: collaboration || getDefaultCollaborationCapabilityPayload(),
     coediting: coediting
       ? {
         mode: coediting.mode,
@@ -321,6 +322,70 @@ function buildFeatureGatePayload(role, { coediting = null } = {}) {
         readOnlyFallbackActive: false,
         healthStatus: 'healthy',
       },
+  };
+}
+
+function getDefaultCollaborationCapabilityPayload() {
+  return {
+    accessPolicy: 'private',
+    accessRequestsEnabled: false,
+    nonViewerInvitesRequireOwner: true,
+    canSendInvites: false,
+    inviteRoles: [],
+    canRequestAccess: false,
+  };
+}
+
+function resolveInviteRolesForActor(role, settings = {}) {
+  const normalizedRole = permissionPolicy.normalizeRole(role);
+  const accessPolicy = String(settings.access_policy || settings.accessPolicy || 'private')
+    .trim()
+    .toLowerCase();
+  const requireOwnerForNonViewer = !!(
+    settings.non_viewer_invites_require_owner
+    ?? settings.nonViewerInvitesRequireOwner
+  );
+
+  if (normalizedRole === permissionPolicy.ROLES.OWNER) {
+    return ['viewer', 'commenter', 'editor'];
+  }
+
+  if (normalizedRole === permissionPolicy.ROLES.EDITOR) {
+    return requireOwnerForNonViewer
+      ? ['viewer']
+      : ['viewer', 'commenter', 'editor'];
+  }
+
+  if (
+    accessPolicy === 'viewer_invites_open'
+    && permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, normalizedRole)
+  ) {
+    return ['viewer'];
+  }
+
+  return [];
+}
+
+async function buildCollaborationCapabilityPayload(mapId, role) {
+  if (!COLLABORATION_BACKEND_ENABLED || !mapId) {
+    return getDefaultCollaborationCapabilityPayload();
+  }
+
+  await ensureCollaborationSchemaIfEnabledAsync();
+  const settings = await collaborationStore.getCollaborationSettingsByMapAsync(mapId);
+  const inviteRoles = resolveInviteRolesForActor(role, settings);
+  const normalizedRole = permissionPolicy.normalizeRole(role);
+  const canReadMap = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, normalizedRole);
+
+  return {
+    accessPolicy: String(settings?.access_policy || 'private').trim().toLowerCase() || 'private',
+    accessRequestsEnabled: !!settings?.access_requests_enabled,
+    nonViewerInvitesRequireOwner: !!settings?.non_viewer_invites_require_owner,
+    canSendInvites: inviteRoles.length > 0,
+    inviteRoles,
+    canRequestAccess: !!settings?.access_requests_enabled
+      && !canReadMap
+      && permissionPolicy.can(permissionPolicy.ACTIONS.ACCESS_REQUEST_CREATE, normalizedRole),
   };
 }
 
@@ -583,14 +648,17 @@ router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Map not found' });
     }
 
-    const coediting = await resolveCoeditingRolloutAsync({
-      mapId: id,
-      actorId: req.user.id,
-      role,
-    });
+    const [coediting, collaboration] = await Promise.all([
+      resolveCoeditingRolloutAsync({
+        mapId: id,
+        actorId: req.user.id,
+        role,
+      }),
+      buildCollaborationCapabilityPayload(id, role),
+    ]);
 
     res.json({
-      permissions: buildFeatureGatePayload(role, { coediting }),
+      permissions: buildFeatureGatePayload(role, { coediting, collaboration }),
     });
   } catch (error) {
     console.error('Get map feature gates error:', error);

@@ -391,6 +391,22 @@ export async function acceptMapInvite(token) {
   });
 }
 
+export async function getPendingMapInvites() {
+  return fetchApi('/api/collaboration/invites');
+}
+
+export async function acceptMapInviteById(inviteId) {
+  return fetchApi(`/api/collaboration/invites/id/${inviteId}/accept`, {
+    method: 'POST',
+  });
+}
+
+export async function declineMapInviteById(inviteId) {
+  return fetchApi(`/api/collaboration/invites/id/${inviteId}/decline`, {
+    method: 'POST',
+  });
+}
+
 export async function revokeMapInvite(mapId, inviteId) {
   return fetchApi(`/api/maps/${mapId}/invites/${inviteId}`, {
     method: 'DELETE',

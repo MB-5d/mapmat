@@ -54,6 +54,7 @@ const CanvasToolbar = ({
   onShowVersionHistory,
   onExport,
   onShare,
+  canOpenShare = false,
   hasMap,
   hasSavedMap,
   showVersionHistory,
@@ -250,7 +251,7 @@ const CanvasToolbar = ({
       <Download size={20} />
     </button>
 
-    {canEdit && (
+    {canOpenShare && (
       <button
         className="canvas-tool-btn"
         onClick={onShare}

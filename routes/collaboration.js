@@ -150,6 +150,8 @@ function serializeInvite(row, { includeToken = false } = {}) {
   const payload = {
     id: row.id,
     mapId: row.map_id,
+    mapName: row.map_name || null,
+    mapUrl: row.map_url || null,
     inviterUserId: row.inviter_user_id,
     inviterName: row.inviter_name || null,
     inviterEmail: row.inviter_email || null,
@@ -389,6 +391,139 @@ router.use(async (req, res, next) => {
     res.status(500).json({ error: 'Failed to initialize collaboration backend' });
   }
 });
+
+async function acceptInviteForUserAsync(invite, user) {
+  if (!invite) {
+    const error = new Error('Invite not found');
+    error.status = 404;
+    throw error;
+  }
+
+  if (invite.status !== 'pending') {
+    const error = new Error('Invite is no longer pending');
+    error.status = 409;
+    throw error;
+  }
+
+  if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+    await collaborationStore.markInviteExpiredAsync(invite.id);
+    const error = new Error('Invite has expired');
+    error.status = 410;
+    throw error;
+  }
+
+  const actorEmail = normalizeEmail(user?.email);
+  if (!actorEmail || actorEmail !== normalizeEmail(invite.invitee_email)) {
+    const error = new Error('Invite email does not match your account');
+    error.status = 403;
+    throw error;
+  }
+
+  const map = await mapStore.getMapByIdAsync(invite.map_id);
+  if (!map) {
+    const error = new Error('Map not found');
+    error.status = 404;
+    throw error;
+  }
+  if (user.id === map.user_id) {
+    const error = new Error('Map owner already has access');
+    error.status = 400;
+    throw error;
+  }
+
+  const existingMembership = await collaborationStore.getMembershipByMapAndUserAsync(
+    invite.map_id,
+    user.id
+  );
+  if (existingMembership) {
+    const error = new Error('User already has access');
+    error.status = 409;
+    throw error;
+  }
+
+  await collaborationStore.setMembershipRoleAsync({
+    mapId: invite.map_id,
+    userId: user.id,
+    role: invite.role,
+    invitedByUserId: invite.inviter_user_id,
+  });
+
+  const [acceptedInvite, membership] = await Promise.all([
+    collaborationStore.markInviteAcceptedAsync({
+      inviteId: invite.id,
+      acceptedByUserId: user.id,
+    }),
+    collaborationStore.getMembershipByMapAndUserAsync(invite.map_id, user.id),
+  ]);
+
+  await recordMapActivityBestEffortAsync({
+    mapId: invite.map_id,
+    actorUserId: user.id,
+    actorRole: membership?.role || invite.role || null,
+    eventType: ACTIVITY_TYPES.COLLAB_INVITE_ACCEPTED,
+    eventScope: ACTIVITY_SCOPES.COLLABORATION,
+    entityType: 'invite',
+    entityId: invite.id,
+    summary: `Accepted ${invite.role} invite`,
+    payload: {
+      inviteId: invite.id,
+      role: invite.role,
+      inviterUserId: invite.inviter_user_id,
+      inviteeEmail: invite.invitee_email,
+    },
+  }, { label: 'invite accept' });
+
+  return {
+    invite: acceptedInvite,
+    membership,
+  };
+}
+
+async function declineInviteForUserAsync(invite, user) {
+  if (!invite) {
+    const error = new Error('Invite not found');
+    error.status = 404;
+    throw error;
+  }
+
+  if (invite.status !== 'pending') {
+    const error = new Error('Invite is no longer pending');
+    error.status = 409;
+    throw error;
+  }
+
+  const actorEmail = normalizeEmail(user?.email);
+  if (!actorEmail || actorEmail !== normalizeEmail(invite.invitee_email)) {
+    const error = new Error('Invite email does not match your account');
+    error.status = 403;
+    throw error;
+  }
+
+  const declinedInvite = await collaborationStore.markInviteDeclinedAsync({
+    inviteId: invite.id,
+  });
+
+  await recordMapActivityBestEffortAsync({
+    mapId: invite.map_id,
+    actorUserId: user.id,
+    actorRole: permissionPolicy.ROLES.NONE,
+    eventType: ACTIVITY_TYPES.COLLAB_INVITE_DECLINED,
+    eventScope: ACTIVITY_SCOPES.COLLABORATION,
+    entityType: 'invite',
+    entityId: invite.id,
+    summary: `Declined ${invite.role} invite`,
+    payload: {
+      inviteId: invite.id,
+      role: invite.role,
+      inviterUserId: invite.inviter_user_id,
+      inviteeEmail: invite.invitee_email,
+    },
+  }, { label: 'invite decline' });
+
+  return {
+    invite: declinedInvite,
+  };
+}
 
 // PATCH /api/maps/:id/collaboration/settings - update collaboration settings
 router.patch('/maps/:id/collaboration/settings', async (req, res) => {
@@ -862,6 +997,70 @@ router.post('/maps/:id/invites', async (req, res) => {
   }
 });
 
+// GET /api/collaboration/invites - list pending invites for the logged-in user
+router.get('/collaboration/invites', async (req, res) => {
+  try {
+    const actorEmail = normalizeEmail(req.user?.email);
+    if (!actorEmail) {
+      return res.json({ invites: [] });
+    }
+
+    const invites = await collaborationStore.listPendingInvitesForEmailAsync(actorEmail, {
+      status: 'pending',
+      limit: 100,
+      offset: 0,
+    });
+
+    res.json({
+      invites: invites.map((invite) => serializeInvite(invite)),
+    });
+  } catch (error) {
+    console.error('List pending invites error:', error);
+    res.status(500).json({ error: 'Failed to list pending invites' });
+  }
+});
+
+// POST /api/collaboration/invites/:inviteId/accept - accept invite from inbox
+router.post('/collaboration/invites/id/:inviteId/accept', async (req, res) => {
+  try {
+    const { inviteId } = req.params;
+    const invite = await collaborationStore.getInviteByIdAsync(inviteId);
+    const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
+
+    res.json({
+      success: true,
+      invite: serializeInvite(acceptedInvite),
+      membership: serializeMembership(membership),
+    });
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    console.error('Accept invite by id error:', error);
+    res.status(500).json({ error: 'Failed to accept invite' });
+  }
+});
+
+// POST /api/collaboration/invites/:inviteId/decline - decline invite from inbox
+router.post('/collaboration/invites/id/:inviteId/decline', async (req, res) => {
+  try {
+    const { inviteId } = req.params;
+    const invite = await collaborationStore.getInviteByIdAsync(inviteId);
+    const result = await declineInviteForUserAsync(invite, req.user);
+
+    res.json({
+      success: true,
+      invite: serializeInvite(result.invite),
+    });
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    console.error('Decline invite error:', error);
+    res.status(500).json({ error: 'Failed to decline invite' });
+  }
+});
+
 // POST /api/collaboration/invites/:token/accept - accept invite as logged-in user
 router.post('/collaboration/invites/:token/accept', async (req, res) => {
   try {
@@ -873,64 +1072,7 @@ router.post('/collaboration/invites/:token/accept', async (req, res) => {
     const invite = await collaborationStore.getInviteByTokenAsync(token);
     if (!invite) return res.status(404).json({ error: 'Invite not found' });
 
-    if (invite.status !== 'pending') {
-      return res.status(409).json({ error: 'Invite is no longer pending' });
-    }
-
-    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-      await collaborationStore.markInviteExpiredAsync(invite.id);
-      return res.status(410).json({ error: 'Invite has expired' });
-    }
-
-    const actorEmail = normalizeEmail(req.user?.email);
-    if (!actorEmail || actorEmail !== normalizeEmail(invite.invitee_email)) {
-      return res.status(403).json({ error: 'Invite email does not match your account' });
-    }
-
-    const map = await mapStore.getMapByIdAsync(invite.map_id);
-    if (!map) return res.status(404).json({ error: 'Map not found' });
-    if (req.user.id === map.user_id) {
-      return res.status(400).json({ error: 'Map owner already has access' });
-    }
-    const existingMembership = await collaborationStore.getMembershipByMapAndUserAsync(
-      invite.map_id,
-      req.user.id
-    );
-    if (existingMembership) {
-      return res.status(409).json({ error: 'User already has access' });
-    }
-
-    await collaborationStore.setMembershipRoleAsync({
-      mapId: invite.map_id,
-      userId: req.user.id,
-      role: invite.role,
-      invitedByUserId: invite.inviter_user_id,
-    });
-
-    const [acceptedInvite, membership] = await Promise.all([
-      collaborationStore.markInviteAcceptedAsync({
-        inviteId: invite.id,
-        acceptedByUserId: req.user.id,
-      }),
-      collaborationStore.getMembershipByMapAndUserAsync(invite.map_id, req.user.id),
-    ]);
-
-    await recordMapActivityBestEffortAsync({
-      mapId: invite.map_id,
-      actorUserId: req.user.id,
-      actorRole: membership?.role || invite.role || null,
-      eventType: ACTIVITY_TYPES.COLLAB_INVITE_ACCEPTED,
-      eventScope: ACTIVITY_SCOPES.COLLABORATION,
-      entityType: 'invite',
-      entityId: invite.id,
-      summary: `Accepted ${invite.role} invite`,
-      payload: {
-        inviteId: invite.id,
-        role: invite.role,
-        inviterUserId: invite.inviter_user_id,
-        inviteeEmail: invite.invitee_email,
-      },
-    }, { label: 'invite accept' });
+    const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
 
     res.json({
       success: true,
@@ -938,6 +1080,9 @@ router.post('/collaboration/invites/:token/accept', async (req, res) => {
       membership: serializeMembership(membership),
     });
   } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Accept invite error:', error);
     res.status(500).json({ error: 'Failed to accept invite' });
   }

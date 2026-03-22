@@ -207,6 +207,22 @@ function listInvitesByMapAsync(mapId, { status = null, limit = 100, offset = 0 }
   return adapter.queryAllAsync(query, params);
 }
 
+function listPendingInvitesForEmailAsync(inviteeEmail, { limit = 100, offset = 0 } = {}) {
+  return adapter.queryAllAsync(`
+    SELECT i.*,
+      maps.name as map_name,
+      maps.url as map_url,
+      inviter.email as inviter_email,
+      inviter.name as inviter_name
+    FROM map_invites i
+    INNER JOIN maps ON maps.id = i.map_id
+    LEFT JOIN users inviter ON i.inviter_user_id = inviter.id
+    WHERE i.invitee_email = ? AND i.status = 'pending'
+    ORDER BY i.created_at DESC
+    LIMIT ? OFFSET ?
+  `, [String(inviteeEmail || '').trim().toLowerCase(), limit, offset]);
+}
+
 function getInviteByIdAsync(inviteId) {
   return adapter.queryOneAsync('SELECT * FROM map_invites WHERE id = ?', [inviteId]);
 }
@@ -263,6 +279,19 @@ async function markInviteAcceptedAsync({
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND status = 'pending'
   `, [acceptedByUserId, inviteId]);
+  return getInviteByIdAsync(inviteId);
+}
+
+async function markInviteDeclinedAsync({
+  inviteId,
+}) {
+  await adapter.executeAsync(`
+    UPDATE map_invites
+    SET status = 'declined',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `, [inviteId]);
+
   return getInviteByIdAsync(inviteId);
 }
 
@@ -439,11 +468,13 @@ module.exports = {
   setMembershipRoleAsync,
   deleteMembershipByMapAndUserAsync,
   listInvitesByMapAsync,
+  listPendingInvitesForEmailAsync,
   getInviteByIdAsync,
   getInviteByTokenAsync,
   getPendingInviteByMapAndEmailAsync,
   createInviteAsync,
   markInviteAcceptedAsync,
+  markInviteDeclinedAsync,
   revokeInviteAsync,
   markInviteExpiredAsync,
   getCollaborationSettingsByMapAsync,
