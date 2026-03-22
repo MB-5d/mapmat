@@ -24,6 +24,12 @@ function getEmailConfigSnapshot() {
   const fromName = normalizeOptionalText(process.env.EMAIL_FROM_NAME || 'Map Mat');
   const replyToAddress = normalizeEmailAddress(process.env.EMAIL_REPLY_TO_ADDRESS || '');
   const appBaseUrl = getDefaultAppBaseUrl();
+  const resendWebhookSecret = normalizeOptionalText(process.env.RESEND_WEBHOOK_SECRET);
+  const postmarkWebhookBasicUsername = normalizeOptionalText(process.env.POSTMARK_WEBHOOK_BASIC_USERNAME);
+  const postmarkWebhookBasicPassword = normalizeOptionalText(process.env.POSTMARK_WEBHOOK_BASIC_PASSWORD);
+  const postmarkWebhookToken = normalizeOptionalText(process.env.POSTMARK_WEBHOOK_TOKEN);
+  const postmarkWebhookTokenHeader = normalizeOptionalText(process.env.POSTMARK_WEBHOOK_TOKEN_HEADER)
+    || 'x-postmark-webhook-token';
 
   return {
     provider,
@@ -33,6 +39,10 @@ function getEmailConfigSnapshot() {
     appBaseUrl,
     resendApiKeyConfigured: !!normalizeOptionalText(process.env.RESEND_API_KEY),
     postmarkServerTokenConfigured: !!normalizeOptionalText(process.env.POSTMARK_SERVER_TOKEN),
+    resendWebhookSecretConfigured: !!resendWebhookSecret,
+    postmarkWebhookBasicAuthConfigured: !!(postmarkWebhookBasicUsername && postmarkWebhookBasicPassword),
+    postmarkWebhookTokenConfigured: !!postmarkWebhookToken,
+    postmarkWebhookTokenHeader,
   };
 }
 
@@ -53,11 +63,23 @@ function buildHealthSnapshot() {
     fromAddressConfigured: !!config.fromAddress,
     replyToConfigured: !!config.replyToAddress,
     appBaseUrl: config.appBaseUrl,
+    resendWebhookSecretConfigured: config.resendWebhookSecretConfigured,
+    postmarkWebhookBasicAuthConfigured: config.postmarkWebhookBasicAuthConfigured,
+    postmarkWebhookTokenConfigured: config.postmarkWebhookTokenConfigured,
+    postmarkWebhookTokenHeader: config.postmarkWebhookTokenHeader,
     providerConfigured:
       config.provider === 'log'
       || config.provider === 'disabled'
       || (config.provider === 'resend' && config.resendApiKeyConfigured)
       || (config.provider === 'postmark' && config.postmarkServerTokenConfigured),
+    providerWebhookConfigured:
+      config.provider === 'log'
+      || config.provider === 'disabled'
+      || (config.provider === 'resend' && config.resendWebhookSecretConfigured)
+      || (
+        config.provider === 'postmark'
+        && (config.postmarkWebhookBasicAuthConfigured || config.postmarkWebhookTokenConfigured)
+      ),
   };
 }
 

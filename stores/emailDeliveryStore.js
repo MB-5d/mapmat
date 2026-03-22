@@ -7,6 +7,8 @@ const DEFAULT_LIST_LIMIT = 50;
 const MAX_LIST_LIMIT = 200;
 const DEFAULT_SUMMARY_DAYS = 30;
 const MAX_SUMMARY_DAYS = 365;
+const DEFAULT_EVENT_LIST_LIMIT = 100;
+const MAX_EVENT_LIST_LIMIT = 500;
 
 function normalizeNullableText(value) {
   if (value === null || value === undefined) return null;
@@ -17,6 +19,25 @@ function normalizeNullableText(value) {
 function serializeJson(value) {
   if (value === null || value === undefined) return null;
   return JSON.stringify(value);
+}
+
+async function ensureColumnAsync(table, column, type) {
+  let rows = [];
+
+  if (adapter.runtime?.activeProvider === 'postgres') {
+    rows = await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ?
+    `, [table]);
+  } else {
+    rows = await adapter.queryAllAsync(`PRAGMA table_info(${table})`);
+  }
+
+  const columns = rows.map((row) => row.column_name || row.name).filter(Boolean);
+  if (!columns.includes(column)) {
+    await adapter.executeAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }
 
 function normalizeLimit(value, {
@@ -91,6 +112,12 @@ function buildFilterQuery(filters = {}) {
     params.push(normalizedInviteId);
   }
 
+  const normalizedProviderMessageId = normalizeNullableText(filters.providerMessageId);
+  if (normalizedProviderMessageId) {
+    clauses.push('provider_message_id = ?');
+    params.push(normalizedProviderMessageId);
+  }
+
   return {
     whereSql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
     params,
@@ -129,6 +156,9 @@ async function ensureEmailDeliverySchemaAsync() {
       )
     `);
 
+    await ensureColumnAsync('email_deliveries', 'last_webhook_event_type', 'TEXT');
+    await ensureColumnAsync('email_deliveries', 'last_webhook_event_at', 'TIMESTAMP');
+
     await adapter.executeAsync(
       'CREATE INDEX IF NOT EXISTS idx_email_deliveries_status_created ON email_deliveries(status, created_at)'
     );
@@ -143,6 +173,37 @@ async function ensureEmailDeliverySchemaAsync() {
     );
     await adapter.executeAsync(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_email_deliveries_job ON email_deliveries(job_id) WHERE job_id IS NOT NULL'
+    );
+    await adapter.executeAsync(
+      'CREATE INDEX IF NOT EXISTS idx_email_deliveries_provider_message_id ON email_deliveries(provider_message_id)'
+    );
+
+    await adapter.executeAsync(`
+      CREATE TABLE IF NOT EXISTS email_delivery_events (
+        id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        dedupe_key TEXT NOT NULL,
+        event_source_id TEXT,
+        delivery_id TEXT,
+        provider_message_id TEXT,
+        event_type TEXT NOT NULL,
+        delivery_status TEXT,
+        recipient_email TEXT,
+        occurred_at TIMESTAMP,
+        payload TEXT,
+        headers TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await adapter.executeAsync(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_email_delivery_events_dedupe ON email_delivery_events(dedupe_key)'
+    );
+    await adapter.executeAsync(
+      'CREATE INDEX IF NOT EXISTS idx_email_delivery_events_delivery_created ON email_delivery_events(delivery_id, created_at)'
+    );
+    await adapter.executeAsync(
+      'CREATE INDEX IF NOT EXISTS idx_email_delivery_events_provider_message ON email_delivery_events(provider_message_id, created_at)'
     );
   })();
 
@@ -203,6 +264,8 @@ async function listEmailDeliveriesAsync(filters = {}, { limit = DEFAULT_LIST_LIM
       sent_at,
       failed_at,
       provider_message_id,
+      last_webhook_event_type,
+      last_webhook_event_at,
       error,
       created_at,
       updated_at
@@ -246,8 +309,13 @@ async function summarizeEmailDeliveriesAsync({
         SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS queued,
         SUM(CASE WHEN status = 'sending' THEN 1 ELSE 0 END) AS sending,
         SUM(CASE WHEN status = 'sent' THEN 1 ELSE 0 END) AS sent,
+        SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
         SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+        SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN status = 'bounced' THEN 1 ELSE 0 END) AS bounced,
+        SUM(CASE WHEN status = 'complained' THEN 1 ELSE 0 END) AS complained,
+        SUM(CASE WHEN status = 'delayed' THEN 1 ELSE 0 END) AS delayed,
+        SUM(CASE WHEN status = 'suppressed' THEN 1 ELSE 0 END) AS suppressed
       FROM email_deliveries
       WHERE created_at >= ?
     `, [since]),
@@ -302,8 +370,13 @@ async function summarizeEmailDeliveriesAsync({
       queued: toCount(totalsRow?.queued),
       sending: toCount(totalsRow?.sending),
       sent: toCount(totalsRow?.sent),
+      delivered: toCount(totalsRow?.delivered),
       skipped: toCount(totalsRow?.skipped),
       failed: toCount(totalsRow?.failed),
+      bounced: toCount(totalsRow?.bounced),
+      complained: toCount(totalsRow?.complained),
+      delayed: toCount(totalsRow?.delayed),
+      suppressed: toCount(totalsRow?.suppressed),
       latestCreatedAt: totalsRow?.latest_created_at || null,
     },
     byStatus: statusRows.map((row) => ({
@@ -335,6 +408,7 @@ async function createEmailDeliveryAsync({
   provider = null,
   payload = null,
 }) {
+  await ensureEmailDeliverySchemaAsync();
   const deliveryId = id || uuidv4();
   await adapter.executeAsync(`
     INSERT INTO email_deliveries (
@@ -359,7 +433,21 @@ async function createEmailDeliveryAsync({
   return getEmailDeliveryByIdAsync(deliveryId);
 }
 
+async function getEmailDeliveryByProviderMessageIdAsync(providerMessageId) {
+  await ensureEmailDeliverySchemaAsync();
+  const normalized = normalizeNullableText(providerMessageId);
+  if (!normalized) return null;
+  return adapter.queryOneAsync(`
+    SELECT *
+    FROM email_deliveries
+    WHERE provider_message_id = ?
+    ORDER BY updated_at DESC, created_at DESC
+    LIMIT 1
+  `, [normalized]);
+}
+
 async function setEmailDeliveryJobIdAsync(deliveryId, jobId) {
+  await ensureEmailDeliverySchemaAsync();
   await adapter.executeAsync(`
     UPDATE email_deliveries
     SET job_id = ?, updated_at = CURRENT_TIMESTAMP
@@ -369,6 +457,7 @@ async function setEmailDeliveryJobIdAsync(deliveryId, jobId) {
 }
 
 async function markEmailDeliveryAttemptAsync({ deliveryId, provider = null }) {
+  await ensureEmailDeliverySchemaAsync();
   await adapter.executeAsync(`
     UPDATE email_deliveries
     SET status = 'sending',
@@ -388,12 +477,15 @@ async function markEmailDeliverySentAsync({
   providerMessageId = null,
   providerResponse = null,
 }) {
+  await ensureEmailDeliverySchemaAsync();
   await adapter.executeAsync(`
     UPDATE email_deliveries
     SET status = 'sent',
       provider = COALESCE(?, provider),
       provider_message_id = ?,
       provider_response = ?,
+      last_webhook_event_type = NULL,
+      last_webhook_event_at = NULL,
       error = NULL,
       sent_at = CURRENT_TIMESTAMP,
       failed_at = NULL,
@@ -413,6 +505,7 @@ async function markEmailDeliverySkippedAsync({
   provider = null,
   providerResponse = null,
 }) {
+  await ensureEmailDeliverySchemaAsync();
   await adapter.executeAsync(`
     UPDATE email_deliveries
     SET status = 'skipped',
@@ -436,12 +529,15 @@ async function markEmailDeliveryFailedAsync({
   errorText,
   providerResponse = null,
 }) {
+  await ensureEmailDeliverySchemaAsync();
   await adapter.executeAsync(`
     UPDATE email_deliveries
     SET status = 'failed',
       provider = COALESCE(?, provider),
       provider_response = ?,
       error = ?,
+      last_webhook_event_type = NULL,
+      last_webhook_event_at = NULL,
       failed_at = CURRENT_TIMESTAMP,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
@@ -454,18 +550,179 @@ async function markEmailDeliveryFailedAsync({
   return getEmailDeliveryByIdAsync(deliveryId);
 }
 
+async function markEmailDeliveryWebhookStatusAsync({
+  deliveryId,
+  provider = null,
+  providerMessageId = null,
+  status = null,
+  eventType = null,
+  occurredAt = null,
+}) {
+  await ensureEmailDeliverySchemaAsync();
+
+  const normalizedStatus = normalizeNullableText(status);
+  const normalizedEventType = normalizeNullableText(eventType);
+  const normalizedOccurredAt = normalizeNullableText(occurredAt);
+
+  await adapter.executeAsync(`
+    UPDATE email_deliveries
+    SET status = COALESCE(?, status),
+      provider = COALESCE(?, provider),
+      provider_message_id = COALESCE(?, provider_message_id),
+      last_webhook_event_type = COALESCE(?, last_webhook_event_type),
+      last_webhook_event_at = COALESCE(?, last_webhook_event_at),
+      failed_at = CASE
+        WHEN ? IN ('failed', 'bounced', 'complained', 'suppressed') THEN COALESCE(?, CURRENT_TIMESTAMP)
+        ELSE failed_at
+      END,
+      sent_at = CASE
+        WHEN ? IN ('sent', 'delivered') AND sent_at IS NULL THEN COALESCE(?, CURRENT_TIMESTAMP)
+        ELSE sent_at
+      END,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `, [
+    normalizedStatus,
+    normalizeNullableText(provider),
+    normalizeNullableText(providerMessageId),
+    normalizedEventType,
+    normalizedOccurredAt,
+    normalizedStatus,
+    normalizedOccurredAt,
+    normalizedStatus,
+    normalizedOccurredAt,
+    deliveryId,
+  ]);
+  return getEmailDeliveryByIdAsync(deliveryId);
+}
+
+const recordEmailDeliveryEventTransactionAsync = adapter.transactionAsync(async ({
+  id,
+  provider,
+  dedupeKey,
+  eventSourceId = null,
+  deliveryId = null,
+  providerMessageId = null,
+  eventType,
+  deliveryStatus = null,
+  recipientEmail = null,
+  occurredAt = null,
+  payload = null,
+  headers = null,
+}) => {
+  const existing = await adapter.queryOneAsync(
+    'SELECT * FROM email_delivery_events WHERE dedupe_key = ?',
+    [dedupeKey]
+  );
+  if (existing) {
+    return { event: existing, created: false };
+  }
+
+  await adapter.executeAsync(`
+    INSERT INTO email_delivery_events (
+      id,
+      provider,
+      dedupe_key,
+      event_source_id,
+      delivery_id,
+      provider_message_id,
+      event_type,
+      delivery_status,
+      recipient_email,
+      occurred_at,
+      payload,
+      headers
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `, [
+    id,
+    String(provider || '').trim(),
+    String(dedupeKey || '').trim(),
+    normalizeNullableText(eventSourceId),
+    normalizeNullableText(deliveryId),
+    normalizeNullableText(providerMessageId),
+    String(eventType || '').trim(),
+    normalizeNullableText(deliveryStatus),
+    normalizeNullableText(recipientEmail),
+    normalizeNullableText(occurredAt),
+    serializeJson(payload),
+    serializeJson(headers),
+  ]);
+
+  const event = await adapter.queryOneAsync(
+    'SELECT * FROM email_delivery_events WHERE id = ?',
+    [id]
+  );
+  return { event, created: true };
+});
+
+async function recordEmailDeliveryEventAsync({
+  provider,
+  dedupeKey,
+  eventSourceId = null,
+  deliveryId = null,
+  providerMessageId = null,
+  eventType,
+  deliveryStatus = null,
+  recipientEmail = null,
+  occurredAt = null,
+  payload = null,
+  headers = null,
+}) {
+  await ensureEmailDeliverySchemaAsync();
+  return recordEmailDeliveryEventTransactionAsync({
+    id: uuidv4(),
+    provider,
+    dedupeKey,
+    eventSourceId,
+    deliveryId,
+    providerMessageId,
+    eventType,
+    deliveryStatus,
+    recipientEmail,
+    occurredAt,
+    payload,
+    headers,
+  });
+}
+
+async function listEmailDeliveryEventsByDeliveryAsync(
+  deliveryId,
+  { limit = DEFAULT_EVENT_LIST_LIMIT, offset = 0 } = {}
+) {
+  await ensureEmailDeliverySchemaAsync();
+  return adapter.queryAllAsync(`
+    SELECT *
+    FROM email_delivery_events
+    WHERE delivery_id = ?
+    ORDER BY COALESCE(occurred_at, created_at) DESC, created_at DESC
+    LIMIT ? OFFSET ?
+  `, [
+    deliveryId,
+    normalizeLimit(limit, {
+      fallback: DEFAULT_EVENT_LIST_LIMIT,
+      max: MAX_EVENT_LIST_LIMIT,
+    }),
+    normalizeOffset(offset),
+  ]);
+}
+
 module.exports = {
   ensureEmailDeliverySchemaAsync,
   getEmailDeliveryByIdAsync,
+  getEmailDeliveryByProviderMessageIdAsync,
   listEmailDeliveriesByInviteAsync,
   listEmailDeliveriesByMapAsync,
   listEmailDeliveriesAsync,
   countEmailDeliveriesAsync,
   summarizeEmailDeliveriesAsync,
+  listEmailDeliveryEventsByDeliveryAsync,
+  recordEmailDeliveryEventAsync,
   createEmailDeliveryAsync,
   setEmailDeliveryJobIdAsync,
   markEmailDeliveryAttemptAsync,
   markEmailDeliverySentAsync,
   markEmailDeliverySkippedAsync,
   markEmailDeliveryFailedAsync,
+  markEmailDeliveryWebhookStatusAsync,
 };

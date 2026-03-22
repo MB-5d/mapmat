@@ -16,6 +16,7 @@ This document describes the first email platform slice added for collaboration f
 - Requester notification email queued when an access request is approved or denied.
 - Member notification email queued when their role changes or their access is removed.
 - Admin diagnostics endpoints for delivery summary, recent deliveries, and single-delivery inspection.
+- Provider webhook ingestion endpoints for Resend and Postmark delivery-state callbacks.
 - Local/in-dev default is `log`.
 - Production default is `disabled` until a real provider is configured.
 
@@ -35,6 +36,11 @@ This document describes the first email platform slice added for collaboration f
 - `EMAIL_FROM_NAME`
 - `EMAIL_REPLY_TO_ADDRESS`
 - `APP_BASE_URL`
+- `RESEND_WEBHOOK_SECRET`
+- `POSTMARK_WEBHOOK_BASIC_USERNAME`
+- `POSTMARK_WEBHOOK_BASIC_PASSWORD`
+- `POSTMARK_WEBHOOK_TOKEN`
+- `POSTMARK_WEBHOOK_TOKEN_HEADER`
 
 Provider-specific:
 
@@ -44,6 +50,9 @@ Provider-specific:
 ## Operational Notes
 
 - Health endpoint: `GET /health/email`
+- Provider webhook endpoints:
+  - `POST /api/email/webhooks/resend`
+  - `POST /api/email/webhooks/postmark`
 - Admin diagnostics:
   - `GET /api/admin/email-deliveries/summary`
   - `GET /api/admin/email-deliveries`
@@ -57,7 +66,10 @@ Provider-specific:
   - final status
   - provider message id when available
   - provider response/error metadata
+- Webhook events are stored separately in `email_delivery_events` with idempotent dedupe keys.
 - Admin detail responses redact invite-token-like fields before returning payload metadata.
+- Resend webhooks use signed raw-body verification with timestamp tolerance.
+- Postmark webhooks should be protected with configured basic auth or a shared custom header token.
 
 ## Non-Goals For This Slice
 
@@ -71,8 +83,8 @@ Those belong in a separate marketing-email track so transactional collaboration 
 
 ## Next Email Steps
 
-1. Add provider webhook ingestion for delivery / bounce / complaint visibility.
-2. Add provider-message-id lookup helpers and webhook reconciliation.
-3. Add admin resend / retry tooling only after webhook state is trustworthy.
-4. Add production monitoring / alerting on failed delivery spikes.
+1. Add richer provider-event mapping if open/click/subscription states become product-relevant.
+2. Add admin resend / retry tooling only after webhook state is trustworthy in production.
+3. Add production monitoring / alerting on failed delivery or bounce spikes.
+4. Add provider-specific delivery suppression handling where appropriate.
 5. Build marketing email as a separate platform track with its own compliance rules.

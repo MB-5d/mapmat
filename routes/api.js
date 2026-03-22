@@ -151,6 +151,8 @@ function serializeEmailDeliveryAdmin(row, { includeDebug = false } = {}) {
     sentAt: row.sent_at || null,
     failedAt: row.failed_at || null,
     providerMessageId: row.provider_message_id || null,
+    lastWebhookEventType: row.last_webhook_event_type || null,
+    lastWebhookEventAt: row.last_webhook_event_at || null,
     error: row.error || null,
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
@@ -164,6 +166,25 @@ function serializeEmailDeliveryAdmin(row, { includeDebug = false } = {}) {
     ...base,
     payload: redactSensitiveFields(parseJsonObject(row.payload)),
     providerResponse: redactSensitiveFields(parseJsonObject(row.provider_response)),
+  };
+}
+
+function serializeEmailDeliveryEventAdmin(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    provider: row.provider,
+    eventSourceId: row.event_source_id || null,
+    deliveryId: row.delivery_id || null,
+    providerMessageId: row.provider_message_id || null,
+    eventType: row.event_type,
+    deliveryStatus: row.delivery_status || null,
+    recipientEmail: row.recipient_email || null,
+    occurredAt: row.occurred_at || null,
+    payload: redactSensitiveFields(parseJsonObject(row.payload)),
+    headers: redactSensitiveFields(parseJsonObject(row.headers)),
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
   };
 }
 
@@ -580,6 +601,7 @@ router.get('/admin/email-deliveries', requireAdminKey, async (req, res) => {
       jobId: req.query?.job_id || req.query?.jobId || null,
       mapId: req.query?.map_id || req.query?.mapId || null,
       inviteId: req.query?.invite_id || req.query?.inviteId || null,
+      providerMessageId: req.query?.provider_message_id || req.query?.providerMessageId || null,
     };
 
     const [deliveries, total] = await Promise.all([
@@ -602,13 +624,20 @@ router.get('/admin/email-deliveries', requireAdminKey, async (req, res) => {
 router.get('/admin/email-deliveries/:deliveryId', requireAdminKey, async (req, res) => {
   try {
     const { deliveryId } = req.params;
-    const delivery = await emailDeliveryStore.getEmailDeliveryByIdAsync(deliveryId);
+    const [delivery, events] = await Promise.all([
+      emailDeliveryStore.getEmailDeliveryByIdAsync(deliveryId),
+      emailDeliveryStore.listEmailDeliveryEventsByDeliveryAsync(deliveryId, {
+        limit: 100,
+        offset: 0,
+      }),
+    ]);
     if (!delivery) {
       return res.status(404).json({ error: 'Email delivery not found' });
     }
 
     return res.json({
       delivery: serializeEmailDeliveryAdmin(delivery, { includeDebug: true }),
+      events: events.map((event) => serializeEmailDeliveryEventAdmin(event)),
     });
   } catch (error) {
     console.error('Get admin email delivery detail error:', error);

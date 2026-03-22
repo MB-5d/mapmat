@@ -51,6 +51,7 @@ const apiRouter = require('./routes/api');
 const collaborationRouter = require('./routes/collaboration');
 const realtimeRouter = require('./routes/realtime');
 const coeditingRouter = require('./routes/coediting');
+const emailWebhookRouter = require('./routes/emailWebhooks');
 const { attachCoeditingTransport } = require('./utils/coeditingTransport');
 
 const app = express();
@@ -123,6 +124,7 @@ app.use(cors({
 }));
 
 app.use(cookieParser());
+app.use('/api/email/webhooks', emailWebhookRouter);
 app.use(express.json({ limit: '5mb' }));
 
 // Serve static screenshots

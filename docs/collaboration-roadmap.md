@@ -44,8 +44,13 @@ These tracks should be planned alongside Phase 1, but they do not need to block 
 
 Current state:
 
-- Collaboration invites currently work through backend tokens and manual acceptance flows.
-- There is no real email delivery provider wired into the repo yet.
+- Transactional collaboration email now has:
+  - provider abstraction (`log`, `disabled`, `resend`, `postmark`)
+  - async queue delivery
+  - delivery audit rows
+  - admin diagnostics
+  - provider webhook ingestion for Resend and Postmark
+- Marketing / promotional email is still out of scope.
 
 Recommended direction:
 
