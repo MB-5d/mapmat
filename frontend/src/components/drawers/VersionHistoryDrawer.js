@@ -70,6 +70,7 @@ const VersionHistoryDrawer = ({
   onClose,
   versions,
   onRestoreVersion,
+  onSelectActivity,
   activeVersionId,
   latestVersionId,
   isLoading,
@@ -155,31 +156,46 @@ const VersionHistoryDrawer = ({
     }
     return (
       <div className="version-history-list activity-history-list">
-        {activity.map((event) => (
-          <div key={event.id} className="version-history-item activity-history-item">
-            <span className={`version-history-marker activity-history-marker scope-${event.eventScope || 'content'}`}>
-              {getActivityIcon(event.eventScope)}
-            </span>
-            <div className="version-history-main">
-              <div className="version-history-title-row">
-                <span className="version-history-title">{event.summary || 'Updated the map'}</span>
-                <span className={`activity-history-scope scope-${event.eventScope || 'content'}`}>
-                  {getActivityScopeLabel(event.eventScope)}
-                </span>
+        {activity.map((event) => {
+          const hasAction = !!onSelectActivity && (
+            !!event?.payload?.versionId
+            || !!event?.payload?.nodeId
+            || event?.entityType === 'node'
+            || event?.entityType === 'version'
+          );
+          const ItemTag = hasAction ? 'button' : 'div';
+          return (
+            <ItemTag
+              key={event.id}
+              type={hasAction ? 'button' : undefined}
+              className={`version-history-item activity-history-item${hasAction ? ' clickable' : ''}`}
+              onClick={hasAction ? () => onSelectActivity(event) : undefined}
+              title={hasAction ? 'Open related item' : undefined}
+            >
+              <span className={`version-history-marker activity-history-marker scope-${event.eventScope || 'content'}`}>
+                {getActivityIcon(event.eventScope)}
+              </span>
+              <div className="version-history-main">
+                <div className="version-history-title-row">
+                  <span className="version-history-title">{event.summary || 'Updated the map'}</span>
+                  <span className={`activity-history-scope scope-${event.eventScope || 'content'}`}>
+                    {getActivityScopeLabel(event.eventScope)}
+                  </span>
+                </div>
+                <div className="version-history-notes activity-history-notes">
+                  <span className="activity-history-actor">{formatActorLabel(event.actor)}</span>
+                  <span className="activity-history-separator">•</span>
+                  <span>{formatTimeAgo(event.createdAt)}</span>
+                </div>
               </div>
-              <div className="version-history-notes activity-history-notes">
-                <span className="activity-history-actor">{formatActorLabel(event.actor)}</span>
-                <span className="activity-history-separator">•</span>
-                <span>{formatTimeAgo(event.createdAt)}</span>
+              <div className="version-history-meta activity-history-meta">
+                {event.payload?.versionNumber ? (
+                  <div className="version-history-number">v{event.payload.versionNumber}</div>
+                ) : null}
               </div>
-            </div>
-            <div className="version-history-meta activity-history-meta">
-              {event.payload?.versionNumber ? (
-                <div className="version-history-number">v{event.payload.versionNumber}</div>
-              ) : null}
-            </div>
-          </div>
-        ))}
+            </ItemTag>
+          );
+        })}
       </div>
     );
   };

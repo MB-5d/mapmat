@@ -158,8 +158,11 @@ const NodeCard = ({
   }, [thumb, node.id, onThumbnailLoad]);
 
   const handleViewFull = () => {
-    // Use uploaded thumbnail if available, otherwise use URL for mshots
-    onViewImage(node.thumbnailUrl || node.url, !!node.thumbnailUrl, node.id);
+    const directAssetUrl = node.fullScreenshotUrl || node.thumbnailUrl;
+    const hasDirectImage = !!directAssetUrl;
+    const source = directAssetUrl || node.url;
+    if (!source) return;
+    onViewImage(source, hasDirectImage, node.id);
     if (!node.thumbnailUrl && thumbError) {
       setThumbError(false);
       setThumbLoading(true);

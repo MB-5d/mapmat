@@ -162,6 +162,7 @@ const findCommentInThread = (comments, commentId) => {
 
 const ACTIVITY_POLL_INTERVAL_MS = 5000;
 const MAX_TRACKED_ACTIVITY_IDS = 80;
+const AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS = 15000;
 const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
   accessPolicy: 'private',
   nonViewerInvitesRequireOwner: true,
@@ -271,10 +272,6 @@ const COEDITING_EXPERIMENT_UI_ENABLED = parseEnvBool(
 );
 const PERMISSION_GATING_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_PERMISSION_GATING_ENABLED,
-  false
-);
-const SCREENSHOT_JOB_PIPELINE_ENABLED = parseEnvBool(
-  process.env.REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED,
   false
 );
 const REALTIME_PRESENCE_HEARTBEAT_SEC = clamp(
@@ -845,6 +842,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             referrerUrl: node.referrerUrl || existing.referrerUrl,
             authRequired: node.authRequired ?? existing.authRequired,
             thumbnailUrl: node.thumbnailUrl || existing.thumbnailUrl,
+            fullScreenshotUrl: node.fullScreenshotUrl || existing.fullScreenshotUrl,
             isMissing: false,
           });
         }
@@ -1094,12 +1092,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanHistory, setScanHistory] = useState([]);
   const [lastHistoryId, setLastHistoryId] = useState(null);
   const [lastScanUrl, setLastScanUrl] = useState('');
+  const [autosaveCheckpointRequest, setAutosaveCheckpointRequest] = useState(null);
   const autosaveTimerRef = useRef(null);
   const lastAutosaveSnapshotRef = useRef('');
   const autosavePendingRef = useRef(null);
   const autosaveInFlightRef = useRef(false);
   const autosaveRetryTimerRef = useRef(null);
   const autosaveRetryDelayRef = useRef(1000);
+  const lastAutosaveVersionAtRef = useRef(0);
   const versionBaselineRef = useRef(null);
   const lastVersionSnapshotRef = useRef('');
   const clearLoadedMapViewRef = useRef(null);
@@ -1217,7 +1217,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailSessionRef = useRef(0);
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
-  const MAX_THUMBNAIL_CONCURRENCY = 4;
+  const MAX_THUMBNAIL_CONCURRENCY = 6;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
   const [thumbnailSessionId, setThumbnailSessionId] = useState(0);
   const [, setThumbnailQueueSize] = useState(0);
@@ -1353,6 +1353,32 @@ export default function App({ currentRoute, navigateToRoute }) {
     const nodes = collectAllNodesWithOrphans(root, orphans);
     return nodes.some((node) => !!node.thumbnailUrl);
   }, [root, orphans]);
+
+  const hasAnyDownloadableThumbnails = useMemo(() => {
+    if (!root) return false;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => node.thumbnailUrl?.includes('/screenshots/'));
+  }, [root, orphans]);
+
+  const hasAnyFullScreenshotAssets = useMemo(() => {
+    if (!root) return false;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => node.fullScreenshotUrl?.includes('/screenshots/'));
+  }, [root, orphans]);
+
+  const hasSelectedDownloadableThumbnails = useMemo(() => {
+    if (!root || selectedNodeIds.size === 0) return false;
+    const selectedIds = selectedNodeIds;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => selectedIds.has(node.id) && node.thumbnailUrl?.includes('/screenshots/'));
+  }, [orphans, root, selectedNodeIds]);
+
+  const hasSelectedFullScreenshotAssets = useMemo(() => {
+    if (!root || selectedNodeIds.size === 0) return false;
+    const selectedIds = selectedNodeIds;
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    return nodes.some((node) => selectedIds.has(node.id) && node.fullScreenshotUrl?.includes('/screenshots/'));
+  }, [orphans, root, selectedNodeIds]);
 
   const allThumbnailsCaptured = useMemo(() => {
     if (!root) return false;
@@ -1702,6 +1728,17 @@ export default function App({ currentRoute, navigateToRoute }) {
           ...p,
           maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
         })));
+        setAutosaveCheckpointRequest({
+          mapId: map.id,
+          changedAt: Date.now(),
+          snapshot: {
+            root: pending.payload.root,
+            orphans: pending.payload.orphans,
+            connections: pending.payload.connections,
+            colors: pending.payload.colors,
+            connectionColors: pending.payload.connectionColors,
+          },
+        });
 
         if (autosavePendingRef.current?.snapshot === pending.snapshot) {
           autosavePendingRef.current = null;
@@ -3010,9 +3047,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       } else {
         lastVersionSnapshotRef.current = '';
       }
+      return list;
     } catch (error) {
       console.error('Failed to load map versions', error);
       showToast('Failed to load versions', 'error');
+      return [];
     } finally {
       setIsLoadingVersions(false);
     }
@@ -3446,6 +3485,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     loadMapVersions(currentMap.id);
+    lastAutosaveVersionAtRef.current = 0;
   }, [currentMap?.id, loadMapVersions]);
 
   useEffect(() => {
@@ -3508,6 +3548,37 @@ export default function App({ currentRoute, navigateToRoute }) {
     setLatestVersionId(version.id);
     return version;
   }, [currentMap?.id, root, getVersionSnapshot, serializeVersionSnapshot, warnCoeditingReadOnly]);
+
+  useEffect(() => {
+    const request = autosaveCheckpointRequest;
+    if (!request?.mapId || !request?.snapshot?.root) return;
+    if (currentMap?.id && !sameId(currentMap.id, request.mapId)) return;
+    if ((request.changedAt || 0) - lastAutosaveVersionAtRef.current < AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS) return;
+    const serialized = serializeVersionSnapshot(request.snapshot);
+    if (!serialized || serialized === lastVersionSnapshotRef.current) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const version = await createVersionFromSnapshot({
+          mapId: request.mapId,
+          snapshot: request.snapshot,
+          name: 'Autosaved',
+        });
+        if (!cancelled && version) {
+          lastAutosaveVersionAtRef.current = request.changedAt || Date.now();
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to create autosave checkpoint', error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autosaveCheckpointRequest, createVersionFromSnapshot, currentMap?.id, serializeVersionSnapshot]);
 
   useEffect(() => {
     if (!isViewingHistoricalVersion) return;
@@ -3976,14 +4047,34 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [currentMap?.id, currentMap?.name, isLiveActive, mapName, showToast, submitLiveDraft]);
 
-  const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
-    if (!nodeId || !thumbnailUrl) return;
+  const updateNodeScreenshotAssets = (nodeId, assetUpdates = {}) => {
+    if (!nodeId) return;
+    const nextAssets = Object.entries(assetUpdates).filter(([, value]) => typeof value === 'string' && value.trim());
+    if (nextAssets.length === 0) return false;
+    if (isLiveActive && currentMap?.id) {
+      const result = submitLiveDraft({
+        type: 'node.update',
+        payload: {
+          nodeId,
+          changes: Object.fromEntries(nextAssets),
+        },
+      });
+      if (!result.ok) {
+        showToast(result.error || 'Failed to queue screenshot update', 'error');
+        return false;
+      }
+      return true;
+    }
     setRoot((prev) => {
       if (!prev) return prev;
       if (!findNodeById(prev, nodeId)) return prev;
       const copy = structuredClone(prev);
       const target = findNodeById(copy, nodeId);
-      if (target) target.thumbnailUrl = thumbnailUrl;
+      if (target) {
+        nextAssets.forEach(([key, value]) => {
+          target[key] = value;
+        });
+      }
       return copy;
     });
     setOrphans((prev) => {
@@ -3992,12 +4083,21 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (!findNodeById(orphan, nodeId)) return orphan;
         const copy = structuredClone(orphan);
         const target = findNodeById(copy, nodeId);
-        if (target) target.thumbnailUrl = thumbnailUrl;
+        if (target) {
+          nextAssets.forEach(([key, value]) => {
+            target[key] = value;
+          });
+        }
         updated = true;
         return copy;
       });
       return updated ? next : prev;
     });
+    return true;
+  };
+
+  const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
+    updateNodeScreenshotAssets(nodeId, { thumbnailUrl });
   };
 
   const bumpThumbnailReload = useCallback((nodeId) => {
@@ -4277,8 +4377,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const handleThumbnailCapture = (scope) => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Thumbnail capture is disabled while live editing is active.');
+    if (warnCoeditingReadOnly('Thumbnail capture')) {
       return;
     }
     if (!root) {
@@ -4367,10 +4466,135 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.stopped, thumbnailStats.total]);
 
-  // Fetch full page screenshot from backend (or display direct image URL)
+  const waitForScreenshotJobResult = useCallback(async (jobId, { timeoutMs = 120000 } = {}) => {
+    if (!jobId) throw new Error('Failed to start screenshot job');
+    const startedAt = Date.now();
+    while (true) {
+      const { job } = await api.getScreenshotJob(jobId, { includeResult: true });
+      if (!job) throw new Error('Screenshot job not found');
+      if (job.status === 'complete') {
+        return job.result || {};
+      }
+      if (job.status === 'failed') {
+        throw new Error(job.error || 'Screenshot job failed');
+      }
+      if (job.status === 'canceled') {
+        throw new Error('Screenshot job canceled');
+      }
+      if (Date.now() - startedAt > timeoutMs) {
+        try {
+          await api.cancelScreenshotJob(jobId);
+        } catch {
+          // no-op
+        }
+        throw new Error('Screenshot job timed out');
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }, []);
+
+  const getFullScreenshotTargets = (scope) => {
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const scopedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = scope === 'selected'
+      ? allNodes.filter((node) => scopedIds.has(node.id))
+      : allNodes;
+    return orderThumbnailNodes(scopedNodes.filter((node) => node?.url));
+  };
+
+  const getDownloadableScreenshotTargets = useCallback((scope, assetType) => {
+    const assetKey = assetType === 'thumb' ? 'thumbnailUrl' : 'fullScreenshotUrl';
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const scopedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = scope === 'selected'
+      ? allNodes.filter((node) => scopedIds.has(node.id))
+      : allNodes;
+    return orderThumbnailNodes(
+      scopedNodes.filter((node) => node?.[assetKey] && String(node[assetKey]).includes('/screenshots/'))
+    );
+  }, [orphans, root, selectedNodeIds]);
+
+  const sanitizeAssetFilenamePart = (value, fallback = 'asset') => {
+    const cleaned = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return cleaned || fallback;
+  };
+
+  const getAssetExtension = (url, fallback = 'png') => {
+    try {
+      const pathname = new URL(url, window.location.origin).pathname || '';
+      const match = pathname.match(/\.([a-z0-9]+)$/i);
+      return match?.[1]?.toLowerCase() || fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const triggerBlobDownload = (blob, filename) => {
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  };
+
+  const downloadScreenshotAssets = async (scope, assetType) => {
+    const targets = getDownloadableScreenshotTargets(scope, assetType);
+    if (targets.length === 0) {
+      showToast(
+        assetType === 'thumb'
+          ? 'No saved thumbnail assets to download'
+          : 'No saved full screenshot assets to download',
+        'info',
+      );
+      return;
+    }
+
+    setShowImageMenu(false);
+    showToast(
+      `Downloading ${targets.length} ${assetType === 'thumb' ? 'thumbnail' : 'full screenshot'} asset${targets.length === 1 ? '' : 's'}...`,
+      'loading',
+      true,
+    );
+
+    try {
+      for (let index = 0; index < targets.length; index += 1) {
+        const node = targets[index];
+        const assetUrl = assetType === 'thumb' ? node.thumbnailUrl : node.fullScreenshotUrl;
+        const response = await fetch(assetUrl, { credentials: 'include' });
+        if (!response.ok) {
+          throw new Error(`Failed to download asset for "${node.title || node.url || node.id}"`);
+        }
+        const blob = await response.blob();
+        const ext = getAssetExtension(assetUrl);
+        const filename = [
+          sanitizeAssetFilenamePart(mapName || currentMap?.name, 'map'),
+          sanitizeAssetFilenamePart(node.title || getHostname(node.url) || node.id, 'page'),
+          assetType === 'thumb' ? 'thumb' : 'full',
+        ].join('-') + `.${ext}`;
+        triggerBlobDownload(blob, filename);
+      }
+      showToast(
+        `Downloaded ${targets.length} ${assetType === 'thumb' ? 'thumbnail' : 'full screenshot'} asset${targets.length === 1 ? '' : 's'}`,
+        'success',
+      );
+    } catch (error) {
+      console.error('Screenshot asset download error:', error);
+      showToast(error.message || 'Failed to download screenshot assets', 'error');
+    }
+  };
+
+  // Fetch full page screenshot from backend (or display direct image URL).
+  // When a node id is provided, persist the generated backend asset URLs onto that node.
   const viewFullScreenshot = async (urlOrImage, isDirectImage = false, nodeId = null) => {
-    // If it's a direct image URL (uploaded thumbnail), just display it
     if (isDirectImage) {
+      setImageLoading(true);
       setFullImageUrl(urlOrImage);
       return;
     }
@@ -4380,58 +4604,42 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast('Loading full page screenshot...', 'loading', true);
 
     try {
-      let data = null;
-
-      if (SCREENSHOT_JOB_PIPELINE_ENABLED) {
-        const { jobId } = await api.createScreenshotJob({ url: urlOrImage, type: 'full' });
-        if (!jobId) throw new Error('Failed to start screenshot job');
-
-        const startedAt = Date.now();
-        const timeoutMs = 120000;
-        while (true) {
-          const { job } = await api.getScreenshotJob(jobId, { includeResult: true });
-          if (!job) throw new Error('Screenshot job not found');
-
-          if (job.status === 'complete') {
-            data = job.result || {};
-            break;
-          }
-          if (job.status === 'failed') {
-            throw new Error(job.error || 'Screenshot job failed');
-          }
-          if (job.status === 'canceled') {
-            throw new Error('Screenshot job canceled');
-          }
-          if (Date.now() - startedAt > timeoutMs) {
-            try {
-              await api.cancelScreenshotJob(jobId);
-            } catch {
-              // no-op
-            }
-            throw new Error('Screenshot job timed out');
-          }
-          await new Promise((resolve) => setTimeout(resolve, 1200));
-        }
-      } else {
-        const res = await fetch(
-          `${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=full`
-        );
-        data = await res.json();
-      }
-
+      const { jobId } = await api.createScreenshotJob({ url: urlOrImage, type: 'full' });
+      const data = await waitForScreenshotJobResult(jobId);
       if (data?.error) {
         throw new Error(data.error);
       }
-
-      if (data?.url) {
-        setFullImageUrl(data.url);
-        setToast(null); // Clear the loading toast
-        if (nodeId && !isLiveActive) {
-          updateNodeThumbnail(nodeId, data.url);
-        }
-      } else {
+      if (!data?.url) {
         throw new Error('No screenshot URL returned');
       }
+      if (nodeId) {
+        const sourceNode = collectAllNodesWithOrphans(root, orphans).find((node) => node.id === nodeId);
+        const assetUpdates = { fullScreenshotUrl: data.url };
+        if (!sourceNode?.thumbnailUrl) {
+          const thumbResponse = await fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=thumb`, {
+            credentials: 'include',
+          });
+          const thumbData = await thumbResponse.json().catch(() => ({}));
+          if (thumbResponse.ok && thumbData?.url) {
+            assetUpdates.thumbnailUrl = thumbData.url;
+          }
+        }
+        const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
+        if (!persisted) {
+          throw new Error('Failed to save screenshot assets on this page');
+        }
+        if (assetUpdates.thumbnailUrl) {
+          setThumbnailScopeIds((prev) => {
+            const next = new Set(prev || []);
+            next.add(nodeId);
+            return next;
+          });
+          bumpThumbnailReload(nodeId);
+          setShowThumbnails(true);
+        }
+      }
+      setFullImageUrl(data.url);
+      setToast(null);
     } catch (e) {
       console.error('Screenshot error:', e);
       showToast(`Screenshot failed: ${e.message}`, 'error');
@@ -4439,19 +4647,108 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
+  const handleFullScreenshotCapture = async (scope) => {
+    if (warnCoeditingReadOnly('Full screenshot capture')) {
+      return;
+    }
+    if (!root) {
+      showToast('Create or load a map before capturing screenshots', 'info');
+      return;
+    }
+    if (scope === 'selected' && selectedNodeIds.size === 0) {
+      showToast('Select pages to capture full screenshots', 'info');
+      return;
+    }
+
+    const targets = getFullScreenshotTargets(scope);
+    if (targets.length === 0) {
+      setShowImageMenu(false);
+      showToast('No pages with URLs to capture', 'info');
+      return;
+    }
+
+    if (targets.length > 10) {
+      const confirmed = await showConfirm({
+        title: 'Capture full screenshots?',
+        message: `This will generate ${targets.length} full-page screenshots and attach them to the selected pages.`,
+        confirmText: 'Capture',
+        cancelText: 'Cancel',
+      });
+      if (!confirmed) return;
+    }
+
+    setShowImageMenu(false);
+    try {
+      for (let index = 0; index < targets.length; index += 1) {
+        const node = targets[index];
+        showToast(`Capturing full screenshot ${index + 1} of ${targets.length}...`, 'loading', true);
+        const { jobId } = await api.createScreenshotJob({ url: node.url, type: 'full' });
+        const data = await waitForScreenshotJobResult(jobId);
+        if (data?.error) {
+          throw new Error(data.error);
+        }
+        if (!data?.url) {
+          throw new Error('No screenshot URL returned');
+        }
+        const assetUpdates = { fullScreenshotUrl: data.url };
+        if (!node.thumbnailUrl) {
+          const thumbResponse = await fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(node.url)}&type=thumb`, {
+            credentials: 'include',
+          });
+          const thumbData = await thumbResponse.json().catch(() => ({}));
+          if (thumbResponse.ok && thumbData?.url) {
+            assetUpdates.thumbnailUrl = thumbData.url;
+          }
+        }
+        const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
+        if (!persisted) {
+          throw new Error('Failed to save screenshot assets on the selected page');
+        }
+        if (assetUpdates.thumbnailUrl) {
+          setThumbnailScopeIds((prev) => {
+            const next = new Set(prev || []);
+            next.add(node.id);
+            return next;
+          });
+          bumpThumbnailReload(node.id);
+          setShowThumbnails(true);
+        }
+      }
+      showToast(
+        `Captured ${targets.length} full screenshot${targets.length === 1 ? '' : 's'}`,
+        'success',
+      );
+    } catch (error) {
+      console.error('Full screenshot batch error:', error);
+      showToast(error.message || 'Failed to capture full screenshots', 'error');
+    }
+  };
+
+  const insertCreatedProject = useCallback((projectList, project) => {
+    const nextProject = { ...project, maps: [] };
+    const realProjects = (projectList || []).filter(
+      (entry) => !entry?.isVirtual && entry?.id !== UNCATEGORIZED_PROJECT_ID && entry?.id !== SHARED_PROJECT_ID
+    );
+    const virtualProjects = (projectList || []).filter(
+      (entry) => entry?.isVirtual || entry?.id === UNCATEGORIZED_PROJECT_ID || entry?.id === SHARED_PROJECT_ID
+    );
+    return [nextProject, ...realProjects.filter((entry) => entry.id !== project.id), ...virtualProjects];
+  }, []);
+
   // Project folder functions
-  const createProject = async (name) => {
+  const createProject = useCallback(async (name) => {
     if (!name?.trim()) return;
     try {
       const { project } = await api.createProject(name.trim());
-      setProjects(prev => [...prev, { ...project, maps: [] }]);
+      setProjects((prev) => insertCreatedProject(prev, project));
+      setExpandedProjects((prev) => ({ ...prev, [project.id]: true }));
       showToast(`Project "${name}" created`, 'success');
       return project;
     } catch (e) {
       showToast(e.message || 'Failed to create project', 'error');
       return null;
     }
-  };
+  }, [insertCreatedProject, showToast]);
 
   const renameProject = async (projectId, newName) => {
     if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
@@ -7174,6 +7471,34 @@ export default function App({ currentRoute, navigateToRoute }) {
     setCommentingNodeId(nodeId);
   };
 
+  const handleActivitySelect = async (event) => {
+    if (!event) return;
+
+    const versionId = event.payload?.versionId || (event.entityType === 'version' ? event.entityId : null);
+    if (versionId && currentMap?.id) {
+      let version = mapVersions.find((entry) => sameId(entry.id, versionId));
+      if (!version) {
+        const reloaded = await loadMapVersions(currentMap.id);
+        version = (reloaded || []).find((entry) => sameId(entry.id, versionId));
+      }
+      if (version) {
+        restoreVersion(version);
+        return;
+      }
+    }
+
+    const nodeId = event.payload?.nodeId || (event.entityType === 'node' ? event.entityId : null);
+    if (nodeId) {
+      focusNodeById(nodeId);
+      if (event.eventScope === 'comment') {
+        setTimeout(() => openCommentPopover(nodeId), 220);
+      }
+      return;
+    }
+
+    showToast('No linked snapshot is available for this activity item yet.', 'info');
+  };
+
   const openNodeMenu = (nodeId, event) => {
     if (!nodeId || !event) return;
     if (!canEdit()) return;
@@ -8184,7 +8509,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         const nextAnnotations = buildAnnotations(updatedNode.annotations, currentNode.annotations);
         const changes = {};
-        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'description', 'metaTags'];
+        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'fullScreenshotUrl', 'description', 'metaTags'];
         fields.forEach((field) => {
           const nextValue = updatedNode[field];
           const currentValue = currentNode[field];
@@ -8222,6 +8547,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             title: updatedNode.title || 'New Page',
             pageType: updatedNode.pageType || 'page',
             thumbnailUrl: updatedNode.thumbnailUrl || '',
+            fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
             description: updatedNode.description || '',
             metaTags: updatedNode.metaTags || {},
             annotations: buildAnnotations(updatedNode.annotations, {
@@ -8289,6 +8615,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             url: updatedNode.url,
             pageType: updatedNode.pageType,
             thumbnailUrl: updatedNode.thumbnailUrl,
+            fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
             annotations: buildAnnotations(updatedNode.annotations, removedNode.annotations),
@@ -8330,6 +8657,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               url: updatedNode.url,
               pageType: updatedNode.pageType,
               thumbnailUrl: updatedNode.thumbnailUrl,
+              fullScreenshotUrl: updatedNode.fullScreenshotUrl,
               description: updatedNode.description,
               metaTags: updatedNode.metaTags,
               annotations: buildAnnotations(updatedNode.annotations, target.annotations),
@@ -8380,6 +8708,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             url: updatedNode.url,
             pageType: updatedNode.pageType,
             thumbnailUrl: updatedNode.thumbnailUrl,
+            fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
             annotations: buildAnnotations(updatedNode.annotations, target.annotations),
@@ -8472,7 +8801,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         url: updatedNode.url || '',
         title: updatedNode.title || 'New Page',
         pageType: updatedNode.pageType || 'page',
-        thumbnailUrl: updatedNode.thumbnailUrl || '',
+            thumbnailUrl: updatedNode.thumbnailUrl || '',
+            fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
         description: updatedNode.description || '',
         metaTags: updatedNode.metaTags || {},
         annotations: buildAnnotations(updatedNode.annotations, {
@@ -9503,6 +9833,33 @@ export default function App({ currentRoute, navigateToRoute }) {
             </div>
             <div className="blank-title">Ready to Map</div>
             <div className="blank-subtitle">Enter a URL above to get started</div>
+            {isLoggedIn && (
+              <div className="blank-actions">
+                <button
+                  type="button"
+                  className="blank-action-btn"
+                  onClick={async () => {
+                    const name = await showPrompt({
+                      title: 'New Project',
+                      message: 'Enter a name for the new project:',
+                      placeholder: 'Project name',
+                    });
+                    if (name) {
+                      await createProject(name);
+                    }
+                  }}
+                >
+                  Create Project
+                </button>
+                <button
+                  type="button"
+                  className="blank-action-btn secondary"
+                  onClick={() => setShowProjectsModal(true)}
+                >
+                  Open Projects
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -10306,11 +10663,21 @@ export default function App({ currentRoute, navigateToRoute }) {
                 },
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
+                onDownloadThumbnailsAll: () => downloadScreenshotAssets('all', 'thumb'),
+                onDownloadThumbnailsSelected: () => downloadScreenshotAssets('selected', 'thumb'),
+                onGetFullScreenshotsAll: () => handleFullScreenshotCapture('all'),
+                onGetFullScreenshotsSelected: () => handleFullScreenshotCapture('selected'),
+                onDownloadFullScreenshotsAll: () => downloadScreenshotAssets('all', 'full'),
+                onDownloadFullScreenshotsSelected: () => downloadScreenshotAssets('selected', 'full'),
                 onToggleThumbnails: () => {
                   setShowThumbnails((prev) => !prev);
                 },
                 showThumbnails,
                 hasAnyThumbnails,
+                hasDownloadableThumbnails: hasAnyDownloadableThumbnails,
+                hasDownloadableSelectedThumbnails: hasSelectedDownloadableThumbnails,
+                hasFullScreenshotAssets: hasAnyFullScreenshotAssets,
+                hasSelectedFullScreenshotAssets: hasSelectedFullScreenshotAssets,
                 allThumbnailsCaptured,
                 showImageMenu,
                 imageMenuRef,
@@ -10645,7 +11012,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             message: 'Enter a name for the new project:',
             placeholder: 'Project name'
           });
-          if (name) createProject(name);
+          if (name) await createProject(name);
         }}
       />
 
@@ -10716,6 +11083,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onClose={() => setShowVersionHistoryDrawer(false)}
         versions={versionsForDrawer}
         onRestoreVersion={restoreVersion}
+        onSelectActivity={handleActivitySelect}
         activeVersionId={activeVersionForDrawer}
         latestVersionId={latestVersionForDrawer}
         isLoading={isVersionLoading}

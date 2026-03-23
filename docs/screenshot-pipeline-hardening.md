@@ -29,10 +29,40 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
   - `blocked`
   - `truncated`
 
-## Frontend rollout flag
+## Frontend behavior
 
-- `REACT_APP_SCREENSHOT_JOB_PIPELINE_ENABLED=false` (default)
+- Full-size screenshot viewing now uses `screenshot-jobs` polling in the UI by default.
+- The legacy direct `/screenshot?type=full` frontend path is no longer used for full-size viewing.
+- Expanding a node thumbnail keeps showing the current thumbnail asset until an explicit full-page asset has been captured for that node.
+- Explicit full-page screenshots are requested from the toolbar image menu and their backend-generated asset URLs are saved onto the node data.
+- Thumbnail generation still uses the direct `thumb` endpoint and remains a separate follow-on pipeline concern.
 
-When enabled, full-size screenshot viewing uses `screenshot-jobs` polling in the UI.  
-When disabled, UI retains the legacy direct `/screenshot?type=full` call.
+## Next asset lifecycle controls
 
+These should be added after the current screenshot stabilization pass, not mixed into the low-level capture fixes.
+
+### Phase 9G: Download controls in the image menu
+
+- Download thumbnails:
+  - `Selected`
+  - `All`
+- Download full screenshots:
+  - `Selected`
+  - `All`
+
+### Implementation notes
+
+- Download actions should use the backend-stored asset URLs that are already attached to node data.
+- `Selected` and `All` should follow the same scope rules already used by thumbnail/full capture.
+- These controls should stay separate for `thumbnail` vs `full` so the user can manage cost and speed explicitly.
+
+### Deferred until after testing
+
+- Remove thumbnails / full screenshots
+- Rescan thumbnails / full screenshots
+- File reclamation for deleted asset references
+
+### Why this order
+
+- Download is relatively light once asset persistence is stable.
+- Remove and rescan still depend on the backend asset model being trustworthy, otherwise the UI can orphan files or reintroduce cache confusion.

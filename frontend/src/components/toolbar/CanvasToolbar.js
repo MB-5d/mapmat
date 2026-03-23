@@ -37,9 +37,19 @@ const CanvasToolbar = ({
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
+  onDownloadThumbnailsAll,
+  onDownloadThumbnailsSelected,
+  onGetFullScreenshotsAll,
+  onGetFullScreenshotsSelected,
+  onDownloadFullScreenshotsAll,
+  onDownloadFullScreenshotsSelected,
   onToggleThumbnails,
   showThumbnails,
   hasAnyThumbnails,
+  hasDownloadableThumbnails,
+  hasDownloadableSelectedThumbnails,
+  hasFullScreenshotAssets,
+  hasSelectedFullScreenshotAssets,
   allThumbnailsCaptured,
   showImageMenu,
   imageMenuRef,
@@ -130,17 +140,53 @@ const CanvasToolbar = ({
             >
               Get thumbnails (Selected)
             </button>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onDownloadThumbnailsAll}
+              disabled={!hasMap || !hasDownloadableThumbnails}
+            >
+              Download thumbnails (All)
+            </button>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onDownloadThumbnailsSelected}
+              disabled={!hasSelection || !hasDownloadableSelectedThumbnails}
+            >
+              Download thumbnails (Selected)
+            </button>
           </div>
           <div className="canvas-tool-menu-divider" />
           <div className="canvas-tool-menu-section">
             <div className="canvas-tool-menu-label">Full screenshots</div>
-            <button className="canvas-tool-menu-item disabled" disabled>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onGetFullScreenshotsAll}
+              disabled={!hasMap}
+            >
               Get full screenshots (All)
             </button>
-            <button className="canvas-tool-menu-item disabled" disabled>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onGetFullScreenshotsSelected}
+              disabled={!hasSelection || !hasMap}
+            >
               Get full screenshots (Selected)
             </button>
-            <div className="canvas-tool-menu-hint">Coming soon</div>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onDownloadFullScreenshotsAll}
+              disabled={!hasMap || !hasFullScreenshotAssets}
+            >
+              Download full screenshots (All)
+            </button>
+            <button
+              className="canvas-tool-menu-item"
+              onClick={onDownloadFullScreenshotsSelected}
+              disabled={!hasSelection || !hasSelectedFullScreenshotAssets}
+            >
+              Download full screenshots (Selected)
+            </button>
+            <div className="canvas-tool-menu-hint">Saves a full-page asset per page</div>
           </div>
         </div>
       )}

@@ -43,9 +43,12 @@ const SaveMapForm = ({
     onSave(selectedProject || null, mapName, notes);
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
-    onCreateProject(newProjectName);
+    const project = await onCreateProject(newProjectName);
+    if (project?.id) {
+      setSelectedProject(project.id);
+    }
     setShowNewProject(false);
     setNewProjectName('');
   };

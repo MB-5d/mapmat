@@ -169,11 +169,11 @@ const SCREENSHOT_RATE_WINDOW_MS = Number(process.env.SCREENSHOT_RATE_WINDOW_MS ?
 const SCREENSHOT_RATE_LIMIT = Number(process.env.SCREENSHOT_RATE_LIMIT ?? (isProd ? 30 : 60));
 const SCREENSHOT_QUEUE_MAX = Number(process.env.SCREENSHOT_QUEUE_MAX ?? (isProd ? 25 : 100));
 const SCREENSHOT_MIN_GAP_MS = Number(
-  process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 2000 : 300)
+  process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 2000 : 150)
 );
 const SCREENSHOT_MAX_CONCURRENCY = Math.max(
   1,
-  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 1 : 4))
+  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 1 : 6))
 );
 const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
@@ -191,6 +191,14 @@ const SCREENSHOT_FULL_MAX_WIDTH = Math.max(
   320,
   Number(process.env.SCREENSHOT_FULL_MAX_WIDTH ?? 1920)
 );
+const SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR = Math.max(
+  1,
+  Number(process.env.SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR ?? 1)
+);
+const SCREENSHOT_FULL_DEVICE_SCALE_FACTOR = Math.max(
+  1,
+  Number(process.env.SCREENSHOT_FULL_DEVICE_SCALE_FACTOR ?? 2)
+);
 const SCREENSHOT_CLEANUP_INTERVAL_MS = Math.max(
   10000,
   Number(process.env.SCREENSHOT_CLEANUP_INTERVAL_MS ?? 300000)
@@ -203,6 +211,8 @@ const screenshotQueue = [];
 let screenshotActive = 0;
 const lastScreenshotByHost = new Map();
 let screenshotLastCleanupAt = 0;
+let screenshotProtectedFilenames = new Set();
+let screenshotProtectedFilenamesLoadedAt = 0;
 
 const SCREENSHOT_TYPES = Object.freeze({
   full: 'full',
@@ -568,10 +578,26 @@ const isJobVisibleToRequest = (row, req) => {
   return false;
 };
 
-const cleanupStaleScreenshots = () => {
+const refreshProtectedScreenshotFilenames = async ({ force = false } = {}) => {
+  const now = Date.now();
+  if (!force && now - screenshotProtectedFilenamesLoadedAt < SCREENSHOT_CLEANUP_INTERVAL_MS) {
+    return screenshotProtectedFilenames;
+  }
+  try {
+    const filenames = await mapStore.listPersistedScreenshotFilenamesAsync();
+    screenshotProtectedFilenames = new Set(filenames || []);
+    screenshotProtectedFilenamesLoadedAt = now;
+  } catch (error) {
+    console.warn('Screenshot reference refresh error:', error.message);
+  }
+  return screenshotProtectedFilenames;
+};
+
+const cleanupStaleScreenshots = async () => {
   const now = Date.now();
   if (now - screenshotLastCleanupAt < SCREENSHOT_CLEANUP_INTERVAL_MS) return;
   screenshotLastCleanupAt = now;
+  const protectedFilenames = await refreshProtectedScreenshotFilenames();
 
   let entries = [];
   try {
@@ -586,6 +612,7 @@ const cleanupStaleScreenshots = () => {
     if (deleted >= SCREENSHOT_CLEANUP_MAX_FILES) break;
     if (!entry.isFile()) continue;
     if (!entry.name.endsWith('.png')) continue;
+    if (protectedFilenames.has(entry.name)) continue;
 
     const filepath = path.join(SCREENSHOT_DIR, entry.name);
     try {
@@ -2335,13 +2362,37 @@ const getBaseUrl = () => (
     : `http://localhost:${PORT}`
 );
 
+const SCREENSHOT_CAPTURE_STABILIZE_STYLE = `
+  html, body {
+    scroll-behavior: auto !important;
+    overscroll-behavior: auto !important;
+  }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    caret-color: transparent !important;
+    scroll-behavior: auto !important;
+  }
+  [class*="parallax"],
+  [class*="Parallax"],
+  [data-parallax],
+  [data-scroll],
+  [data-scroll-speed],
+  [data-scroll-container],
+  [data-scroll-section],
+  [style*="background-attachment: fixed"] {
+    background-attachment: scroll !important;
+    will-change: auto !important;
+  }
+`;
+
 async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
   const normalizedType = normalizeScreenshotType(type);
   if (!normalizedType) {
     throw new Error('Invalid screenshot type. Use full or thumb.');
   }
 
-  cleanupStaleScreenshots();
+  await cleanupStaleScreenshots();
 
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
   const filename = `${urlHash}_${normalizedType}.png`;
@@ -2372,6 +2423,10 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
     const context = await b.newContext({
       userAgent: ua,
       viewport: { width: 1280, height: 720 },
+      deviceScaleFactor: normalizedType === SCREENSHOT_TYPES.full
+        ? SCREENSHOT_FULL_DEVICE_SCALE_FACTOR
+        : SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR,
+      reducedMotion: 'reduce',
       extraHTTPHeaders: {
         'Accept-Language': 'en-US,en;q=0.9',
         DNT: '1',
@@ -2392,7 +2447,85 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
             waitUntil: 'domcontentloaded',
             timeout: SCREENSHOT_CAPTURE_TIMEOUT_MS,
           });
-          await page.waitForTimeout(1200);
+          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 350 : 1200);
+          if (normalizedType === SCREENSHOT_TYPES.full) {
+            await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
+            await page.evaluate(async () => {
+              const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const images = Array.from(document.images || []);
+              images.forEach((image) => {
+                try {
+                  image.loading = 'eager';
+                  image.decoding = 'sync';
+                  const src = image.getAttribute('data-src') || image.getAttribute('data-lazy-src') || image.getAttribute('data-original');
+                  const srcset = image.getAttribute('data-srcset') || image.getAttribute('data-lazy-srcset');
+                  if (src && !image.getAttribute('src')) {
+                    image.setAttribute('src', src);
+                  }
+                  if (srcset && !image.getAttribute('srcset')) {
+                    image.setAttribute('srcset', srcset);
+                  }
+                } catch {
+                  // Ignore per-image mutations for screenshot warmup.
+                }
+              });
+
+              const nodes = Array.from(document.querySelectorAll('*'));
+              nodes.forEach((node) => {
+                try {
+                  const el = node;
+                  const style = window.getComputedStyle(el);
+                  const classes = `${el.className || ''}`.toLowerCase();
+                  const dataFlags = [
+                    el.getAttribute('data-parallax'),
+                    el.getAttribute('data-scroll'),
+                    el.getAttribute('data-scroll-speed'),
+                    el.getAttribute('data-scroll-container'),
+                    el.getAttribute('data-scroll-section'),
+                  ].filter(Boolean).join(' ').toLowerCase();
+                  const looksParallax = classes.includes('parallax')
+                    || dataFlags.includes('parallax')
+                    || dataFlags.includes('scroll');
+
+                  if (style.backgroundAttachment === 'fixed') {
+                    el.style.setProperty('background-attachment', 'scroll', 'important');
+                  }
+                  if (looksParallax) {
+                    el.style.setProperty('transform', 'none', 'important');
+                    el.style.setProperty('will-change', 'auto', 'important');
+                    el.style.setProperty('background-attachment', 'scroll', 'important');
+                  }
+                  if (style.animationName && style.animationName !== 'none') {
+                    el.style.setProperty('animation', 'none', 'important');
+                  }
+                  if (style.transitionProperty && style.transitionProperty !== 'none') {
+                    el.style.setProperty('transition', 'none', 'important');
+                  }
+                } catch {
+                  // Ignore capture stabilization edge cases per element.
+                }
+              });
+
+              const root = document.scrollingElement || document.documentElement || document.body;
+              const viewportHeight = Math.max(window.innerHeight || 720, 320);
+              const maxScrollTop = Math.max((root?.scrollHeight || 0) - viewportHeight, 0);
+              const step = Math.max(Math.floor(viewportHeight * 0.85), 320);
+
+              for (let y = 0; y <= maxScrollTop; y += step) {
+                window.scrollTo(0, y);
+                await wait(180);
+              }
+              if (maxScrollTop > 0) {
+                window.scrollTo(0, maxScrollTop);
+                await wait(260);
+              }
+              window.scrollTo(0, 0);
+              await wait(220);
+              await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+            });
+            await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+            await page.waitForTimeout(500);
+          }
 
           const title = await page.title();
           const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');

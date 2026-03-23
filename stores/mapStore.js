@@ -198,6 +198,30 @@ function deleteMapByIdAsync(mapId) {
   return adapter.executeAsync('DELETE FROM maps WHERE id = ?', [mapId]);
 }
 
+async function listPersistedScreenshotFilenamesAsync() {
+  const rows = await adapter.queryAllAsync(`
+    SELECT root_data, orphans_data FROM maps
+    UNION ALL
+    SELECT root_data, orphans_data FROM map_versions
+  `);
+  const pattern = /\/screenshots\/([a-f0-9_]+\.png)/gi;
+  const filenames = new Set();
+
+  (rows || []).forEach((row) => {
+    [row?.root_data, row?.orphans_data].forEach((value) => {
+      const raw = String(value || '');
+      if (!raw) return;
+      let match = null;
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(raw)) !== null) {
+        if (match[1]) filenames.add(match[1]);
+      }
+    });
+  });
+
+  return Array.from(filenames);
+}
+
 function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
   return adapter.queryAllAsync(`
     SELECT * FROM map_versions
@@ -306,6 +330,7 @@ module.exports = {
   createMapAsync,
   updateMapByIdAsync,
   deleteMapByIdAsync,
+  listPersistedScreenshotFilenamesAsync,
   listMapVersionsForUserMapAsync,
   listMapVersionsByMapAsync,
   getNextMapVersionNumberAsync,
