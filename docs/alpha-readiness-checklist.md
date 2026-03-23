@@ -4,6 +4,10 @@ This is the next gate after the recent collaboration and screenshot stabilizatio
 
 The goal is not broad public testing yet. The goal is a controlled alpha with guided tasks and a short blocker list.
 
+Manual browser execution guide:
+
+- See [alpha-manual-runbook.md](./alpha-manual-runbook.md)
+
 ## Current target
 
 Use this checklist before inviting outside testers into the app.
