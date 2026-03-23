@@ -26,6 +26,26 @@ Manual QA notes captured on 2026-03-18 after validating the multi-user collabora
 - Revisit commenter behavior on coediting-enabled maps. Current manual QA shows commenter hover behavior matches viewer behavior, which does not align with the intended role distinction.
 - Revisit read-only participant update visibility. If viewer/commenter users should see live updates without edit access, add a non-writable real-time subscription path and corresponding UI treatment.
 
+## Additional Deferred UX Follow-Ups
+
+Captured on 2026-03-23 after screenshot stabilization and broader collaboration/manual QA.
+
+- Undo / redo currently appears unavailable during live editing sessions.
+  - This is currently enforced in the product code, not just a UI glitch.
+  - Decide later whether live maps get:
+    - no undo/redo until live operation history is modeled explicitly, or
+    - a session-local staged undo model with clear safety rules.
+- Legend colors are not currently changeable from the visible UI, even though the legend suggests editable color controls.
+- Layers menu is only surfacing `Primary` in current testing.
+  - Revisit layer availability and visibility logic so placement, status, and connection layers appear whenever the underlying scan/map data supports them.
+- Replace the in-canvas live editing toast/banner with a quieter presence treatment near the map title.
+  - Preferred direction:
+    - show participant avatar/initial stack next to the map title
+    - if more than two users, collapse into a stack
+    - hover shows total participant count
+    - click expands a participant list
+  - Keep disruptive live status banners only for actual warnings/errors, not steady-state collaboration.
+
 ## Clarification For Future QA
 
 - If owner/editor tabs fail to reflect each other's edits without a page refresh, that is still a bug.
