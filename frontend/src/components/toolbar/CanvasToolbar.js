@@ -56,6 +56,7 @@ const CanvasToolbar = ({
   hasSelection,
   canUndo,
   canRedo,
+  undoRedoDisabledReason = '',
   onUndo,
   onRedo,
   onClearCanvas,
@@ -216,7 +217,7 @@ const CanvasToolbar = ({
         className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
         onClick={onUndo}
         disabled={!canUndo}
-        title="Undo (⌘Z)"
+        title={!canUndo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Undo (⌘Z)'}
       >
         <Undo2 size={20} />
       </button>
@@ -226,7 +227,7 @@ const CanvasToolbar = ({
         className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
         onClick={onRedo}
         disabled={!canRedo}
-        title="Redo (⇧⌘Z)"
+        title={!canRedo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Redo (⇧⌘Z)'}
       >
         <Redo2 size={20} />
       </button>

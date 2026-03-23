@@ -10669,6 +10669,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasSelection: selectedNodeIds.size > 0,
                 canUndo,
                 canRedo,
+                undoRedoDisabledReason: isLiveActive
+                  ? 'Undo/redo is unavailable during live editing.'
+                  : '',
                 onUndo: handleUndo,
                 onRedo: handleRedo,
                 onClearCanvas: clearCanvas,
