@@ -16,7 +16,6 @@ import {
   RefreshCw,
   Sun,
   Trash2,
-  Users,
   Wifi,
   WifiOff,
   X,
@@ -1899,12 +1898,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     [otherPresenceSessions],
   );
 
-  const presenceBannerText = useMemo(() => {
-    const count = presenceCollaborators.length;
-    if (!count) return '';
-    return `${count} collaborator${count === 1 ? '' : 's'} active on this map`;
-  }, [presenceCollaborators]);
-
   const reportTimestamp = useMemo(() => {
     if (!lastScanAt) return '';
     return new Date(lastScanAt).toLocaleString();
@@ -2349,7 +2342,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canSendCollaborationInvites = () => canSendCollaborationInvitesResolvedValue;
   const canManageCollaborationSettings = () => canManageCollaborationSettingsResolvedValue;
   const canViewAccessRequests = () => canViewAccessRequestsResolvedValue;
-  const canViewPresence = () => canViewPresenceValue;
 
   useEffect(() => {
     if (!collaborationInviteRoleOptionsValue.length) return;
@@ -2965,11 +2957,21 @@ export default function App({ currentRoute, navigateToRoute }) {
     () => buildPresenceCollaborators(liveParticipants, { excludeSessionId: liveSessionId }),
     [liveParticipants, liveSessionId],
   );
+  const titleCollaborators = useMemo(() => {
+    if (!hasMap || !currentMap?.id || !canViewPresenceValue) return [];
+    return isLiveActive ? liveCollaborators : presenceCollaborators;
+  }, [canViewPresenceValue, currentMap?.id, hasMap, isLiveActive, liveCollaborators, presenceCollaborators]);
   const showCoeditingReadOnlyBanner = !!(
     isCoeditingReadOnlyMode
     && hasMap
     && currentMap?.id
     && !isLiveActive
+  );
+  const showLiveStatusBanner = !!(
+    isLiveActive
+    && hasMap
+    && currentMap?.id
+    && liveStatus !== COEDITING_LIVE_STATUS.CONNECTED
   );
   const commentPopoverReadOnlyMessage = useMemo(() => {
     if (effectiveFeatureGates.mapComment) return '';
@@ -9695,6 +9697,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onShowHistory={handleShowHistory}
         pendingInviteCount={pendingMapInvites.length}
         pendingAccessRequestCount={pendingAccessRequests.length}
+        titleCollaborators={titleCollaborators}
       />
 
       <div
@@ -9766,7 +9769,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           </div>
         )}
 
-        {isLiveActive && hasMap && currentMap?.id && (
+        {showLiveStatusBanner && (
           <div className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}>
             {liveStatus === COEDITING_LIVE_STATUS.CONNECTED
               ? <Wifi size={16} />
@@ -9790,25 +9793,6 @@ export default function App({ currentRoute, navigateToRoute }) {
             )}
           </div>
         )}
-
-        {REALTIME_BASELINE_ENABLED
-          && !isLiveActive
-          && !mapSaveConflict
-          && isLoggedIn
-          && canViewPresence()
-          && hasMap
-          && currentMap?.id
-          && !showCoeditingReadOnlyBanner
-          && presenceBannerText
-          && (
-            <div className="permission-banner presence-banner">
-              <Users size={16} />
-              <div className="permission-banner-main">
-                <span className="permission-banner-summary">{presenceBannerText}</span>
-                <PresenceChipList collaborators={presenceCollaborators} />
-              </div>
-            </div>
-          )}
 
         {/* Theme toggle */}
         <button

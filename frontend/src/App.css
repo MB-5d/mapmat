@@ -360,10 +360,12 @@ body {
 .map-name-container {
   display: flex;
   align-items: center;
+  gap: 0;
   margin-left: 0;
-  width: 224px;
-  max-width: 224px;
-  flex: 0 0 224px;
+  width: min(420px, calc(50vw - 40px));
+  max-width: min(420px, calc(50vw - 40px));
+  flex: 0 0 min(420px, calc(50vw - 40px));
+  min-width: 0;
   position: absolute;
   left: calc(50% + 248px + 16px);
 }
@@ -379,7 +381,10 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  width: 100%;
+  width: auto;
+  min-width: 0;
+  max-width: min(300px, calc(50vw - 180px));
+  flex: 0 1 auto;
 }
 
 .map-name-display:hover {
@@ -395,8 +400,145 @@ body {
   background: transparent;
   padding: 4px 8px;
   border-radius: 4px;
-  width: 100%;
+  width: auto;
+  min-width: 0;
+  max-width: min(300px, calc(50vw - 180px));
+  flex: 0 1 auto;
   box-shadow: 0 0 0 2px #6366f1;
+}
+
+.topbar-collaborators {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.topbar-collaborator-stack {
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+}
+
+.topbar-collaborator-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.14);
+}
+
+.topbar-collaborator-avatar + .topbar-collaborator-avatar {
+  margin-left: -14px;
+}
+
+.topbar-collaborator-avatar.tone-0 {
+  background: #f59e0b;
+}
+
+.topbar-collaborator-avatar.tone-1 {
+  background: #3b82f6;
+}
+
+.topbar-collaborator-avatar.tone-2 {
+  background: #16a34a;
+}
+
+.topbar-collaborator-avatar.tone-3 {
+  background: #c026d3;
+}
+
+.topbar-collaborator-hover-count {
+  position: absolute;
+  top: -9px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
+  opacity: 0;
+  transform: translateY(2px);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.topbar-collaborator-stack:hover .topbar-collaborator-hover-count,
+.topbar-collaborator-stack:focus-visible .topbar-collaborator-hover-count {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.topbar-collaborator-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 240px;
+  max-width: min(320px, 42vw);
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  z-index: 2200;
+}
+
+.topbar-collaborator-menu-header {
+  padding: 2px 4px 10px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.topbar-collaborator-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: 10px;
+}
+
+.topbar-collaborator-item:hover {
+  background: #f8fafc;
+}
+
+.topbar-collaborator-item-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar-collaborator-item-name {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-collaborator-item-role {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
 }
 
 /* Thumbnail Toggle (pill-style like theme toggle) */
@@ -7742,6 +7884,34 @@ body {
 
 [data-theme="dark"] .map-name-input {
   color: #e2e0e8;
+}
+
+[data-theme="dark"] .topbar-collaborator-avatar {
+  border-color: #1a1022;
+}
+
+[data-theme="dark"] .topbar-collaborator-hover-count {
+  background: #301e3f;
+  color: #e2e0e8;
+}
+
+[data-theme="dark"] .topbar-collaborator-menu {
+  background: #1a1022;
+  border-color: #301e3f;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .topbar-collaborator-menu-header,
+[data-theme="dark"] .topbar-collaborator-item-role {
+  color: #a48ebb;
+}
+
+[data-theme="dark"] .topbar-collaborator-item:hover {
+  background: #251531;
+}
+
+[data-theme="dark"] .topbar-collaborator-item-name {
+  color: #f5ebff;
 }
 
 /* Dark mode thumbnail toggle */
