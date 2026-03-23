@@ -24,9 +24,7 @@ const LayersPanel = ({
   const showTypeLayers = false;
   const showConnectionLayers = connectionAvailability
     && Object.values(connectionAvailability).some(Boolean);
-  const hasPlacementLayers = !!scanLayerAvailability?.placementPrimary
-    || !!scanLayerAvailability?.placementSubdomain
-    || !!scanLayerAvailability?.placementOrphan;
+  const hasPlacementLayers = !!scanLayerAvailability;
   const hasStatusLayers = !!scanLayerAvailability?.statusBroken
     || !!scanLayerAvailability?.statusError
     || !!scanLayerAvailability?.statusInactive
@@ -69,27 +67,24 @@ const LayersPanel = ({
               {hasPlacementLayers && (
                 <>
                   <div className="layers-panel-section">Placement</div>
-                  {scanLayerAvailability?.placementPrimary && (
-                    <LayerToggle
-                      label="Primary"
-                      active={scanLayerVisibility.placementPrimary}
-                      onToggle={() => onToggleScanLayer('placementPrimary')}
-                    />
-                  )}
-                  {scanLayerAvailability?.placementSubdomain && (
-                    <LayerToggle
-                      label="Subdomain"
-                      active={scanLayerVisibility.placementSubdomain}
-                      onToggle={() => onToggleScanLayer('placementSubdomain')}
-                    />
-                  )}
-                  {scanLayerAvailability?.placementOrphan && (
-                    <LayerToggle
-                      label="Orphan"
-                      active={scanLayerVisibility.placementOrphan}
-                      onToggle={() => onToggleScanLayer('placementOrphan')}
-                    />
-                  )}
+                  <LayerToggle
+                    label="Primary"
+                    active={scanLayerVisibility.placementPrimary}
+                    onToggle={() => onToggleScanLayer('placementPrimary')}
+                    disabled={!scanLayerAvailability?.placementPrimary}
+                  />
+                  <LayerToggle
+                    label="Subdomain"
+                    active={scanLayerVisibility.placementSubdomain}
+                    onToggle={() => onToggleScanLayer('placementSubdomain')}
+                    disabled={!scanLayerAvailability?.placementSubdomain}
+                  />
+                  <LayerToggle
+                    label="Orphan"
+                    active={scanLayerVisibility.placementOrphan}
+                    onToggle={() => onToggleScanLayer('placementOrphan')}
+                    disabled={!scanLayerAvailability?.placementOrphan}
+                  />
                 </>
               )}
 

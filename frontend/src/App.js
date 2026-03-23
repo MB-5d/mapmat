@@ -10573,6 +10573,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 colors,
                 connectionColors,
                 maxDepth,
+                canEdit: canEdit(),
                 editingDepth: editingColorDepth,
                 editingConnectionKey,
                 connectionLegend,
