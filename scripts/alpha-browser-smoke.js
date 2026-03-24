@@ -151,15 +151,20 @@ async function createComment(owner, mapId, nodeId, text) {
 }
 
 async function createViewerInvite(owner, mapId, inviteeEmail) {
+  return createInvite(owner, mapId, inviteeEmail, 'viewer');
+}
+
+async function createInvite(owner, mapId, inviteeEmail, role) {
   const result = await requestJson(`${API_BASE}/api/maps/${mapId}/invites`, {
     method: 'POST',
     token: owner.token,
     body: {
       email: inviteeEmail,
-      role: 'viewer',
+      role,
     },
   });
   assert.ok(result?.invite?.id, 'create invite should return an invite id');
+  return result.invite;
 }
 
 async function getVersions(owner, mapId) {
@@ -214,6 +219,24 @@ async function waitForAutosavedVersion(page) {
   await waitForText(page, 'Autosaved', { exact: true, timeout: 30000 });
 }
 
+async function openNodeComments(page, nodeId, actionLabel = 'Comments') {
+  const node = page.locator(`[data-node-id="${nodeId}"]`).first();
+  await node.waitFor({ state: 'visible', timeout: DEFAULT_TIMEOUT_MS });
+  await node.hover();
+  const actionButton = node.getByTitle(actionLabel).first();
+  if (await actionButton.count()) {
+    try {
+      await actionButton.click({ timeout: 3000 });
+      await waitForText(page, 'Comments on', { exact: false });
+      return;
+    } catch {
+      // Fall back to the badge path used by read-only roles.
+    }
+  }
+  await node.locator('.comment-badge').first().click();
+  await waitForText(page, 'Comments on', { exact: false });
+}
+
 async function runOwnerRouteChecks(browser, owner, map, nodeId, commentText) {
   const context = await createContext(browser, owner.token);
   const page = await context.newPage();
@@ -242,11 +265,7 @@ async function runOwnerRouteChecks(browser, owner, map, nodeId, commentText) {
   await context.close();
 }
 
-async function runInviteRouteChecks(browser, viewer, map, commentText) {
-  const context = await createContext(browser, viewer.token);
-  const page = await context.newPage();
-  page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
-
+async function acceptInviteAndOpenMap(page, account, map) {
   await page.goto(`${APP_BASE}/app/invites`, { waitUntil: 'domcontentloaded' });
   await waitForText(page, 'Pending Invites', { exact: true });
   await waitForText(page, map.name, { exact: true });
@@ -260,10 +279,67 @@ async function runInviteRouteChecks(browser, viewer, map, commentText) {
   await waitForText(page, map.name, { exact: true });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForText(page, map.name, { exact: true });
+}
+
+async function runViewerRouteChecks(browser, viewer, map, nodeId, commentText) {
+  const context = await createContext(browser, viewer.token);
+  const page = await context.newPage();
+  page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
+
+  await acceptInviteAndOpenMap(page, viewer, map);
 
   await page.getByTitle('Comments (C)').click();
   await waitForText(page, 'All Comments', { exact: true });
   await waitForText(page, commentText, { exact: false });
+  await openNodeComments(page, nodeId, 'View comments');
+  await waitForText(page, commentText, { exact: false });
+  await page.getByPlaceholder(/Add a comment/i).waitFor({ state: 'hidden', timeout: DEFAULT_TIMEOUT_MS });
+
+  await context.close();
+}
+
+async function runCommenterRouteChecks(browser, commenter, map, nodeId, commentText) {
+  const context = await createContext(browser, commenter.token);
+  const page = await context.newPage();
+  page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
+
+  await acceptInviteAndOpenMap(page, commenter, map);
+  await openNodeComments(page, nodeId, 'Comments');
+  await waitForText(page, commentText, { exact: false });
+
+  const replyText = `Commenter smoke ${Date.now().toString(36)}`;
+  const input = page.getByPlaceholder(/Add a comment/i);
+  await input.fill(replyText);
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByText('Comments on', { exact: false }).waitFor({ state: 'hidden', timeout: DEFAULT_TIMEOUT_MS });
+
+  await openNodeComments(page, nodeId, 'Comments');
+  await waitForText(page, replyText, { exact: false });
+
+  await page.getByTitle('Mark as complete').last().click();
+  await waitForText(page, 'Completed by', { exact: false });
+
+  await context.close();
+  return replyText;
+}
+
+async function runOwnerCommentVerification(browser, owner, map, nodeId, replyText) {
+  const context = await createContext(browser, owner.token);
+  const page = await context.newPage();
+  page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
+
+  await page.goto(`${APP_BASE}/app/maps/${encodeURIComponent(map.id)}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await waitForText(page, map.name, { exact: true });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForText(page, map.name, { exact: true });
+
+  await openNodeComments(page, nodeId, 'Comments');
+  await waitForText(page, replyText, { exact: false });
+  await page.getByTitle('Delete').last().click();
+  await waitForText(page, replyText, { exact: false }).catch(() => {});
+  await page.getByText(replyText, { exact: false }).waitFor({ state: 'hidden', timeout: DEFAULT_TIMEOUT_MS });
 
   await context.close();
 }
@@ -271,6 +347,7 @@ async function runInviteRouteChecks(browser, viewer, map, commentText) {
 async function run() {
   const owner = await signup('owner');
   const viewer = await signup('viewer');
+  const commenter = await signup('commenter');
   let browser;
 
   try {
@@ -286,19 +363,27 @@ async function run() {
 
     await createComment(owner, map.id, rootId, commentText);
     await createViewerInvite(owner, map.id, viewer.email);
+    await createInvite(owner, map.id, commenter.email, 'commenter');
 
     browser = await chromium.launch({ headless: true });
 
     await runOwnerRouteChecks(browser, owner, map, childId, commentText);
     console.log('[alpha-browser-smoke] owner direct route + timeline + comments ok');
 
-    await runInviteRouteChecks(browser, viewer, map, commentText);
-    console.log('[alpha-browser-smoke] invite route + shared map reopen ok');
+    await runViewerRouteChecks(browser, viewer, map, rootId, commentText);
+    console.log('[alpha-browser-smoke] viewer invite route + read-only comments ok');
+
+    const commenterReply = await runCommenterRouteChecks(browser, commenter, map, rootId, commentText);
+    console.log('[alpha-browser-smoke] commenter invite route + comment actions ok');
+
+    await runOwnerCommentVerification(browser, owner, map, rootId, commenterReply);
+    console.log('[alpha-browser-smoke] owner comment verification ok');
 
     console.log('[alpha-browser-smoke] passed');
   } finally {
     if (browser) await browser.close();
     if (CLEANUP) {
+      await deleteAccount(commenter);
       await deleteAccount(viewer);
       await deleteAccount(owner);
     }
