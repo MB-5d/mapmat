@@ -28,6 +28,7 @@ Run these first:
 - `npm run check:frontend-build`
 - `npm run check:backend`
 - `API_BASE=http://localhost:4002 node scripts/check-local-collaboration.js`
+- `API_BASE=http://localhost:4002 APP_BASE=http://localhost:3001 npm run test:smoke:browser`
 
 Expected outcome:
 

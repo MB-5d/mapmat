@@ -23,6 +23,7 @@
     "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.js",
     "verify:postgres": "node scripts/verify-postgres-migration.js",
     "test:smoke": "node scripts/smoke-test.js",
+    "test:smoke:browser": "node scripts/alpha-browser-smoke.js",
     "test:smoke:staging": "API_BASE=\"https://mapmat-staging.up.railway.app\" node scripts/smoke-test.js",
     "test:smoke:production": "API_BASE=\"https://mapmat-production.up.railway.app\" node scripts/smoke-test.js",
     "verify:runtime:staging": "npm run check:db-health:staging && npm run test:smoke:staging",
