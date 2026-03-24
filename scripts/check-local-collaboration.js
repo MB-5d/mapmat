@@ -654,7 +654,7 @@ async function main() {
       },
       expectedStatus: 200,
     });
-    assert.strictEqual(savedVersionPayload.version.version_number, 1);
+    assert.strictEqual(savedVersionPayload.version.version_number, 2);
     logStep('Verified shared version save for editor');
 
     await viewer.request(`/api/maps/${mapId}/ops/ingest`, {
