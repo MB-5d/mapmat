@@ -157,3 +157,17 @@ Use templates committed in repo:
 - Frontend local: `frontend/.env.example`
 - Frontend staging: `frontend/.env.staging.example`
 - Frontend production: `frontend/.env.production.example`
+
+Before applying staging values, you can validate the env matrix locally:
+
+```bash
+set -a
+source .env.staging.example
+source frontend/.env.staging.example
+npm run check:staging:readiness
+```
+
+This should pass with only the expected warnings for:
+
+- `EMAIL_PROVIDER=log`
+- filesystem-backed screenshot storage on a small single-instance staging environment
