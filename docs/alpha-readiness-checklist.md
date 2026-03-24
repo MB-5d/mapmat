@@ -124,3 +124,7 @@ If the checklist passes with no alpha blockers:
 1. Do a short internal guided testing round.
 2. Fix only real blockers, not polish-by-default.
 3. Then open controlled user testing.
+
+For the staging handoff and shared-environment setup, use:
+
+- [multi-user-staging-checklist.md](./multi-user-staging-checklist.md)
