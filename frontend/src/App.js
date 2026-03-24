@@ -1816,53 +1816,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, []);
 
-  // Autosave for existing maps (debounced)
-  useEffect(() => {
-    if (
-      !currentMap?.id
-      || !root
-      || isImportedMap
-      || isViewingHistoricalVersion
-      || isLiveEditingModeActive
-      || isCoeditingReadOnlyMode
-    ) return;
-
-    const snapshot = JSON.stringify({
-      name: currentMap?.name || mapName,
-      root,
-      orphans,
-      connections,
-      colors,
-      connectionColors,
-      project_id: currentMap?.project_id || null,
-    });
-
-    if (snapshot === lastAutosaveSnapshotRef.current) return;
-
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      autosavePendingRef.current = {
-        mapId: currentMap.id,
-        expectedUpdatedAt: currentMap?.updated_at || null,
-        payload: {
-          name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
-          root,
-          orphans,
-          connections,
-          colors,
-          connectionColors,
-          project_id: currentMap?.project_id || null,
-        },
-        snapshot,
-      };
-      flushAutosave();
-    }, 800);
-
-    return () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCoeditingReadOnlyMode]);
-
   useEffect(() => {
     const handleBeforeUnload = () => {
       if (!currentMap?.id || !root || isViewingHistoricalVersion || isLiveEditingModeActive || isCoeditingReadOnlyMode) return;
@@ -3006,6 +2959,71 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     return '';
   }, [canViewCommentsValue, effectiveFeatureGates.mapComment, showCoeditingReadOnlyBanner]);
+
+  // Autosave for existing maps (debounced)
+  useEffect(() => {
+    if (
+      !currentMap?.id
+      || !root
+      || isImportedMap
+      || isViewingHistoricalVersion
+      || isCollaborativeLiveEditingRestricted
+      || isCoeditingReadOnlyMode
+    ) return;
+
+    const snapshot = JSON.stringify({
+      name: currentMap?.name || mapName,
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      project_id: currentMap?.project_id || null,
+    });
+
+    if (snapshot === lastAutosaveSnapshotRef.current) return;
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      const checkpointRequest = {
+        mapId: currentMap.id,
+        changedAt: Date.now(),
+        snapshot: {
+          root,
+          orphans,
+          connections,
+          colors,
+          connectionColors,
+        },
+      };
+
+      if (isLiveEditingModeActive) {
+        lastAutosaveSnapshotRef.current = snapshot;
+        setAutosaveCheckpointRequest(checkpointRequest);
+        return;
+      }
+
+      autosavePendingRef.current = {
+        mapId: currentMap.id,
+        expectedUpdatedAt: currentMap?.updated_at || null,
+        payload: {
+          name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
+          root,
+          orphans,
+          connections,
+          colors,
+          connectionColors,
+          project_id: currentMap?.project_id || null,
+        },
+        snapshot,
+      };
+      flushAutosave();
+    }, 800);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode]);
 
   useEffect(() => {
     if (!isCollaborativeLiveEditingRestricted) return;

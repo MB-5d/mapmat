@@ -196,7 +196,25 @@ async function waitForText(page, text, options = {}) {
   });
 }
 
-async function runOwnerRouteChecks(browser, owner, map, commentText) {
+async function editNodeTitle(page, nodeId, nextTitle) {
+  const node = page.locator(`[data-node-id="${nodeId}"]`).first();
+  await node.waitFor({ state: 'visible', timeout: DEFAULT_TIMEOUT_MS });
+  await node.hover();
+  await node.getByTitle('Edit').click();
+  await waitForText(page, 'Edit Page', { exact: true });
+  const titleInput = page.getByPlaceholder('Enter page title');
+  await titleInput.fill(nextTitle);
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+  await page.getByText('Edit Page', { exact: true }).waitFor({ state: 'hidden', timeout: DEFAULT_TIMEOUT_MS });
+}
+
+async function waitForAutosavedVersion(page) {
+  await page.getByTitle('Version History (H)').click();
+  await waitForText(page, 'Map Timeline', { exact: true });
+  await waitForText(page, 'Autosaved', { exact: true, timeout: 30000 });
+}
+
+async function runOwnerRouteChecks(browser, owner, map, nodeId, commentText) {
   const context = await createContext(browser, owner.token);
   const page = await context.newPage();
   page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
@@ -212,7 +230,9 @@ async function runOwnerRouteChecks(browser, owner, map, commentText) {
   await waitForText(page, 'All Comments', { exact: true });
   await waitForText(page, commentText, { exact: false });
 
-  await page.getByTitle('Version History (H)').click();
+  const editedTitle = `About updated ${Date.now().toString(36)}`;
+  await editNodeTitle(page, nodeId, editedTitle);
+  await waitForAutosavedVersion(page);
   await waitForText(page, 'Map Timeline', { exact: true });
   await waitForText(page, 'Initial', { exact: true });
   await page.getByRole('tab', { name: 'Activity' }).click();
@@ -256,7 +276,7 @@ async function run() {
   try {
     const mapName = `Alpha Browser Smoke ${Date.now().toString(36)}`;
     const commentText = `Smoke comment ${Date.now().toString(36)}`;
-    const { map, rootId } = await saveMap(owner, mapName);
+    const { map, rootId, childId } = await saveMap(owner, mapName);
 
     const versions = await getVersions(owner, map.id);
     assert.ok(Array.isArray(versions?.versions) && versions.versions.length > 0, 'versions API should return the initial version');
@@ -269,7 +289,7 @@ async function run() {
 
     browser = await chromium.launch({ headless: true });
 
-    await runOwnerRouteChecks(browser, owner, map, commentText);
+    await runOwnerRouteChecks(browser, owner, map, childId, commentText);
     console.log('[alpha-browser-smoke] owner direct route + timeline + comments ok');
 
     await runInviteRouteChecks(browser, viewer, map, commentText);
