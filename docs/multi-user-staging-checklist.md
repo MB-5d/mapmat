@@ -39,6 +39,13 @@ Recommended local preflight:
 - `API_BASE=http://localhost:4002 node scripts/check-local-collaboration.js`
 - `API_BASE=http://localhost:4002 APP_BASE=http://localhost:3001 npm run test:smoke:browser`
 
+Staging env/config preflight:
+
+- `npm run check:staging:backend`
+- `npm run check:staging:frontend`
+
+Run those with the intended staging environment variables loaded before deployment.
+
 ## Phase 1: Decide the Staging Shape
 
 Use the existing deployment split already assumed in the repo:
@@ -87,6 +94,7 @@ Follow [deployment-workflow.md](./deployment-workflow.md), but use this order:
 Recommended first staging stance:
 
 - do not start with broad unscoped rollout if you have not run the coediting preflight checks yet
+- use `npm run check:staging:backend` before entering the values into Railway
 
 ## Phase 3: Provision the Frontend
 
@@ -108,6 +116,10 @@ Expected staging UX:
 - `/app/maps/:mapId` works directly
 - `/app/invites` works directly
 - `/share/:shareId` works directly
+
+Before promoting the frontend settings, run:
+
+- `npm run check:staging:frontend`
 
 ## Phase 4: Real Auth and Account Policy
 
