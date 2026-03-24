@@ -282,6 +282,15 @@ const UNCATEGORIZED_PROJECT_ID = 'uncategorized';
 const SHARED_PROJECT_ID = 'shared-with-me';
 const PRESENCE_PREVIEW_LIMIT = 4;
 
+const normalizeProjectSelection = (projectId) => {
+  const normalized = String(projectId || '').trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === UNCATEGORIZED_PROJECT_ID || normalized === SHARED_PROJECT_ID) {
+    return null;
+  }
+  return String(projectId).trim();
+};
+
 const createPresenceSessionId = () => {
   if (typeof window !== 'undefined' && window.crypto?.randomUUID) {
     return `web-${window.crypto.randomUUID()}`;
@@ -1216,6 +1225,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailSessionRef = useRef(0);
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
+  const thumbnailAuthToastShownRef = useRef(false);
   const MAX_THUMBNAIL_CONCURRENCY = 6;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
   const [thumbnailSessionId, setThumbnailSessionId] = useState(0);
@@ -1338,6 +1348,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [theme]);
 
   const hasMap = !!root;
+  const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap;
   useEffect(() => {
     if (!hasMap) {
       setSelectedNodeIds(new Set());
@@ -3521,8 +3532,17 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (!showVersionHistoryDrawer || !currentMap?.id) return;
-    loadMapVersions(currentMap.id);
-  }, [showVersionHistoryDrawer, currentMap?.id, loadMapVersions]);
+    let canceled = false;
+    (async () => {
+      await loadMapVersions(currentMap.id);
+      if (!canceled && canViewActivityValue) {
+        await loadMapActivity(currentMap.id, { silent: false, allowToast: false });
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [canViewActivityValue, currentMap?.id, loadMapActivity, loadMapVersions, showVersionHistoryDrawer]);
 
   useEffect(() => {
     if (!showVersionHistoryDrawer || !currentMap?.id) return undefined;
@@ -4066,7 +4086,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const updateNodeScreenshotAssets = (nodeId, assetUpdates = {}) => {
     if (!nodeId) return;
-    const nextAssets = Object.entries(assetUpdates).filter(([, value]) => typeof value === 'string' && value.trim());
+    const nextAssets = Object.entries(assetUpdates).filter(([, value]) => {
+      if (value === undefined) return false;
+      if (typeof value === 'string') return value.trim().length > 0;
+      return true;
+    });
     if (nextAssets.length === 0) return false;
     if (isLiveActive && currentMap?.id) {
       const result = submitLiveDraft({
@@ -4114,8 +4138,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
-    updateNodeScreenshotAssets(nodeId, { thumbnailUrl });
+    updateNodeScreenshotAssets(nodeId, { thumbnailUrl, authRequired: false });
   };
+
+  const isScreenshotAuthError = useCallback((message) => (
+    String(message || '').toLowerCase().includes('requires authentication')
+    || String(message || '').toLowerCase().includes('requires login')
+  ), []);
 
   const bumpThumbnailReload = useCallback((nodeId) => {
     if (!nodeId) return;
@@ -4208,6 +4237,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailLoadStartRef.current.set(next.id, Date.now());
     thumbnailInFlightRef.current.add(next.id);
     let success = false;
+    let shouldRetry = true;
     const controller = new AbortController();
     thumbnailAbortControllersRef.current.set(next.id, controller);
     const timeoutId = setTimeout(() => {
@@ -4224,6 +4254,19 @@ export default function App({ currentRoute, navigateToRoute }) {
           bumpThumbnailReload(next.id);
           updateThumbnailErrorState(next.id, false);
           success = true;
+          return;
+        }
+        if (isScreenshotAuthError(data?.error)) {
+          shouldRetry = false;
+          updateNodeScreenshotAssets(next.id, {
+            authRequired: true,
+            thumbnailUrl: null,
+            fullScreenshotUrl: null,
+          });
+          if (!thumbnailAuthToastShownRef.current) {
+            thumbnailAuthToastShownRef.current = true;
+            showToast('Screenshot capture for this page requires login. Prompted credentials are not supported yet.', 'info');
+          }
         }
       })
       .catch(() => {})
@@ -4250,7 +4293,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         if (!success) {
           updateThumbnailErrorState(next.id, true);
-          scheduleThumbnailRetry(next.id, next.url, attempt);
+          if (shouldRetry) {
+            scheduleThumbnailRetry(next.id, next.url, attempt);
+          }
         }
         processThumbnailQueue();
       });
@@ -4276,6 +4321,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailErrorRef.current = new Set();
     thumbnailCompletedRef.current = false;
     thumbnailStopRequestedRef.current = false;
+    thumbnailAuthToastShownRef.current = false;
     setThumbnailQueueSize(0);
     setThumbnailActiveCount(0);
     setThumbnailReloadMap({});
@@ -4384,12 +4430,15 @@ export default function App({ currentRoute, navigateToRoute }) {
       : allNodes;
     const targetNodes = scopedNodes.filter((node) => node?.url);
     const orderedTargets = orderThumbnailNodes(targetNodes);
-    const candidates = orderedTargets.filter((node) => {
-      const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
-      return !(node.thumbnailUrl && isScreenshotThumb);
-    });
+    const forceRecapture = scope === 'selected';
+    const candidates = forceRecapture
+      ? orderedTargets
+      : orderedTargets.filter((node) => {
+          const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
+          return !(node.thumbnailUrl && isScreenshotThumb);
+        });
     const targetIds = new Set(candidates.map((node) => node.id));
-    const cachedCount = orderedTargets.length - candidates.length;
+    const cachedCount = forceRecapture ? 0 : (orderedTargets.length - candidates.length);
     return { targetIds, candidates, total: orderedTargets.length, cachedCount };
   };
 
@@ -4631,7 +4680,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
       if (nodeId) {
         const sourceNode = collectAllNodesWithOrphans(root, orphans).find((node) => node.id === nodeId);
-        const assetUpdates = { fullScreenshotUrl: data.url };
+        const assetUpdates = {
+          fullScreenshotUrl: data.url,
+          authRequired: false,
+        };
         if (!sourceNode?.thumbnailUrl) {
           const thumbResponse = await fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=thumb`, {
             credentials: 'include',
@@ -4639,6 +4691,8 @@ export default function App({ currentRoute, navigateToRoute }) {
           const thumbData = await thumbResponse.json().catch(() => ({}));
           if (thumbResponse.ok && thumbData?.url) {
             assetUpdates.thumbnailUrl = thumbData.url;
+          } else if (isScreenshotAuthError(thumbData?.error)) {
+            throw new Error(thumbData.error);
           }
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
@@ -4659,6 +4713,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       setToast(null);
     } catch (e) {
       console.error('Screenshot error:', e);
+      if (nodeId && isScreenshotAuthError(e?.message)) {
+        updateNodeScreenshotAssets(nodeId, {
+          authRequired: true,
+          thumbnailUrl: null,
+          fullScreenshotUrl: null,
+        });
+      }
       showToast(`Screenshot failed: ${e.message}`, 'error');
       setImageLoading(false);
     }
@@ -4699,36 +4760,52 @@ export default function App({ currentRoute, navigateToRoute }) {
       for (let index = 0; index < targets.length; index += 1) {
         const node = targets[index];
         showToast(`Capturing full screenshot ${index + 1} of ${targets.length}...`, 'loading', true);
-        const { jobId } = await api.createScreenshotJob({ url: node.url, type: 'full' });
-        const data = await waitForScreenshotJobResult(jobId);
-        if (data?.error) {
-          throw new Error(data.error);
-        }
-        if (!data?.url) {
-          throw new Error('No screenshot URL returned');
-        }
-        const assetUpdates = { fullScreenshotUrl: data.url };
-        if (!node.thumbnailUrl) {
-          const thumbResponse = await fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(node.url)}&type=thumb`, {
-            credentials: 'include',
-          });
-          const thumbData = await thumbResponse.json().catch(() => ({}));
-          if (thumbResponse.ok && thumbData?.url) {
-            assetUpdates.thumbnailUrl = thumbData.url;
+        try {
+          const { jobId } = await api.createScreenshotJob({ url: node.url, type: 'full' });
+          const data = await waitForScreenshotJobResult(jobId);
+          if (data?.error) {
+            throw new Error(data.error);
           }
-        }
-        const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
-        if (!persisted) {
-          throw new Error('Failed to save screenshot assets on the selected page');
-        }
-        if (assetUpdates.thumbnailUrl) {
-          setThumbnailScopeIds((prev) => {
-            const next = new Set(prev || []);
-            next.add(node.id);
-            return next;
-          });
-          bumpThumbnailReload(node.id);
-          setShowThumbnails(true);
+          if (!data?.url) {
+            throw new Error('No screenshot URL returned');
+          }
+          const assetUpdates = {
+            fullScreenshotUrl: data.url,
+            authRequired: false,
+          };
+          if (!node.thumbnailUrl) {
+            const thumbResponse = await fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(node.url)}&type=thumb`, {
+              credentials: 'include',
+            });
+            const thumbData = await thumbResponse.json().catch(() => ({}));
+            if (thumbResponse.ok && thumbData?.url) {
+              assetUpdates.thumbnailUrl = thumbData.url;
+            } else if (isScreenshotAuthError(thumbData?.error)) {
+              throw new Error(thumbData.error);
+            }
+          }
+          const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
+          if (!persisted) {
+            throw new Error('Failed to save screenshot assets on the selected page');
+          }
+          if (assetUpdates.thumbnailUrl) {
+            setThumbnailScopeIds((prev) => {
+              const next = new Set(prev || []);
+              next.add(node.id);
+              return next;
+            });
+            bumpThumbnailReload(node.id);
+            setShowThumbnails(true);
+          }
+        } catch (error) {
+          if (isScreenshotAuthError(error?.message)) {
+            updateNodeScreenshotAssets(node.id, {
+              authRequired: true,
+              thumbnailUrl: null,
+              fullScreenshotUrl: null,
+            });
+          }
+          throw error;
         }
       }
       showToast(
@@ -4737,35 +4814,31 @@ export default function App({ currentRoute, navigateToRoute }) {
       );
     } catch (error) {
       console.error('Full screenshot batch error:', error);
+      if (isScreenshotAuthError(error?.message)) {
+        showToast(error.message, 'info');
+        return;
+      }
       showToast(error.message || 'Failed to capture full screenshots', 'error');
     }
   };
-
-  const insertCreatedProject = useCallback((projectList, project) => {
-    const nextProject = { ...project, maps: [] };
-    const realProjects = (projectList || []).filter(
-      (entry) => !entry?.isVirtual && entry?.id !== UNCATEGORIZED_PROJECT_ID && entry?.id !== SHARED_PROJECT_ID
-    );
-    const virtualProjects = (projectList || []).filter(
-      (entry) => entry?.isVirtual || entry?.id === UNCATEGORIZED_PROJECT_ID || entry?.id === SHARED_PROJECT_ID
-    );
-    return [nextProject, ...realProjects.filter((entry) => entry.id !== project.id), ...virtualProjects];
-  }, []);
 
   // Project folder functions
   const createProject = useCallback(async (name) => {
     if (!name?.trim()) return;
     try {
       const { project } = await api.createProject(name.trim());
-      setProjects((prev) => insertCreatedProject(prev, project));
+      await loadAuthenticatedWorkspace();
       setExpandedProjects((prev) => ({ ...prev, [project.id]: true }));
+      if (!root) {
+        setShowProjectsModal(true);
+      }
       showToast(`Project "${name}" created`, 'success');
       return project;
     } catch (e) {
       showToast(e.message || 'Failed to create project', 'error');
       return null;
     }
-  }, [insertCreatedProject, showToast]);
+  }, [loadAuthenticatedWorkspace, root, showToast]);
 
   const renameProject = async (projectId, newName) => {
     if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
@@ -4945,8 +5018,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleDuplicateMapSave = async (projectId, name, notes) => {
     const snapshot = getVersionSnapshot();
     if (!snapshot?.root) return;
+    const targetProjectId = normalizeProjectSelection(projectId);
     try {
-      const { map } = await api.saveMap({
+      const { map, initialVersion } = await api.saveMap({
         name: name.trim(),
         url: snapshot.root?.url || '',
         root: snapshot.root,
@@ -4955,7 +5029,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         colors: snapshot.colors,
         connectionColors: snapshot.connectionColors,
         notes: notes?.trim() || null,
-        project_id: projectId || null,
+        project_id: targetProjectId,
       });
       setProjects(prev => {
         let updated = prev.map(p => ({
@@ -4986,8 +5060,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowVersionEditPrompt(false);
       versionBaselineRef.current = null;
       lastAutosaveSnapshotRef.current = '';
+      if (initialVersion) {
+        setMapVersions([initialVersion]);
+        setLatestVersionId(initialVersion.id);
+      }
       await loadMapVersions(map.id);
-      await createVersionFromSnapshot({ mapId: map.id, snapshot });
+      await loadMapActivity(map.id, { silent: true, allowToast: false });
       showToast('Map duplicated', 'success');
       setDuplicateMapConfig(null);
     } catch (error) {
@@ -5079,6 +5157,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     const baseName = (currentMap?.name || mapName || 'Untitled Map').trim();
     const copyName = `${baseName} (Copy)`;
+    const targetProjectId = normalizeProjectSelection(currentMap?.project_id || null);
     try {
       const { map } = await api.saveMap({
         name: copyName,
@@ -5088,7 +5167,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         connections: snapshot.connections,
         colors: snapshot.colors,
         connectionColors: snapshot.connectionColors,
-        project_id: currentMap?.project_id || null,
+        project_id: targetProjectId,
       });
       setProjects(prev => {
         let updated = prev.map(p => ({
@@ -5113,7 +5192,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       setShowVersionEditPrompt(false);
       versionBaselineRef.current = serializeVersionSnapshot(snapshot);
-      await createVersionFromSnapshot({ mapId: map.id, snapshot });
       showToast('Saved as a copy', 'success');
     } catch (error) {
       showToast(error.message || 'Failed to save copy', 'error');
@@ -5134,9 +5212,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     const wasNewMap = !currentMap?.id;
+    const targetProjectId = normalizeProjectSelection(projectId);
 
     try {
       let savedMap;
+      let initialVersion = null;
       if (currentMap?.id) {
         // Update existing map
         const { map } = await api.updateMap(
@@ -5149,14 +5229,14 @@ export default function App({ currentRoute, navigateToRoute }) {
             colors,
             connectionColors,
             notes: notes?.trim() || null,
-            project_id: projectId || null,
+            project_id: targetProjectId,
           },
           { expectedUpdatedAt: currentMap?.updated_at || null }
         );
         savedMap = map;
       } else {
         // Create new map
-        const { map } = await api.saveMap({
+        const response = await api.saveMap({
           name: mapName.trim(),
           url: root.url,
           root,
@@ -5165,9 +5245,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           colors,
           connectionColors,
           notes: notes?.trim() || null,
-          project_id: projectId || null,
+          project_id: targetProjectId,
         });
-        savedMap = map;
+        savedMap = response.map;
+        initialVersion = response.initialVersion || null;
       }
 
       // Update local projects list
@@ -5179,9 +5260,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         }));
 
         // Add to new project
-        if (projectId) {
+        if (targetProjectId) {
           updated = updated.map(p =>
-            p.id === projectId
+            p.id === targetProjectId
               ? { ...p, maps: [savedMap, ...(p.maps || [])] }
               : p
           );
@@ -5213,11 +5294,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
 
       if (wasNewMap) {
+        if (initialVersion) {
+          setMapVersions([initialVersion]);
+          setLatestVersionId(initialVersion.id);
+        }
         await loadMapVersions(savedMap.id);
-        await createVersionFromSnapshot({
-          mapId: savedMap.id,
-          snapshot: getVersionSnapshot(),
-        });
+        await loadMapActivity(savedMap.id, { silent: true, allowToast: false });
       }
       if (pendingLoadMap) {
         const mapToLoad = pendingLoadMap;
@@ -6486,6 +6568,20 @@ export default function App({ currentRoute, navigateToRoute }) {
           return next;
         });
       }
+      if (e.key === 'p' || e.key === 'P') {
+        setShowProjectsModal(prev => {
+          const next = !prev;
+          if (next) {
+            setShowCommentsPanel(false);
+            setShowReportDrawer(false);
+            setShowProfileDrawer(false);
+            setShowSettingsDrawer(false);
+            setShowVersionHistoryDrawer(false);
+            setShowHistoryModal(false);
+          }
+          return next;
+        });
+      }
       // Select tool with "V"
       if (e.key === 'v' || e.key === 'V') {
         setActiveTool('select');
@@ -6545,7 +6641,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -8858,7 +8954,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!root) { // This is the first page, so it becomes the root.
         const newRoot = { ...newNodeData, id: 'root' };
         const mapNameToUse = pendingMapCreation?.name || currentMap?.name || mapName || 'Untitled Map';
-        const projectIdToUse = pendingMapCreation?.projectId || currentMap?.project_id || null;
+        const projectIdToUse = normalizeProjectSelection(
+          pendingMapCreation?.projectId || currentMap?.project_id || null
+        );
         const mapNotesToUse = pendingMapCreation?.notes || currentMap?.notes || '';
 
         const mapToSave = {
@@ -8872,11 +8970,15 @@ export default function App({ currentRoute, navigateToRoute }) {
         };
 
         api.saveMap(mapToSave)
-          .then(({ map }) => {
+          .then(async ({ map, initialVersion }) => {
             setRoot(newRoot);
             setCurrentMap(map);
             setMapName(map.name);
             setPendingMapCreation(null);
+            if (initialVersion) {
+              setMapVersions([initialVersion]);
+              setLatestVersionId(initialVersion.id);
+            }
 
             setProjects(prev => {
               let updated = prev.map(p => ({
@@ -8911,6 +9013,8 @@ export default function App({ currentRoute, navigateToRoute }) {
               return updated;
             });
 
+            await loadMapVersions(map.id);
+            await loadMapActivity(map.id, { silent: true, allowToast: false });
             showToast('Map created and first page added!', 'success');
           })
           .catch(e => {
@@ -9683,9 +9787,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           setScanDepth(String(nextValue));
         }}
         onScan={scan}
+        scanLabel={isUnsavedScannedMap ? 'Rescan' : 'Scan'}
         scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
-        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
-        optionsDisabled={!urlInput.trim() || hasMap}
+        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : isUnsavedScannedMap ? "Rescan URL" : "Scan URL"}
+        optionsDisabled={!urlInput.trim() || isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
         showClearUrl={!hasMap && !!urlInput.trim()}
         mapName={mapName}

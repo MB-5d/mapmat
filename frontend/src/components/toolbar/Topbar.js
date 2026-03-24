@@ -34,6 +34,7 @@ const Topbar = ({
   scanDepth,
   onScanDepthChange,
   onScan,
+  scanLabel,
   scanDisabled,
   scanTitle,
   optionsDisabled,
@@ -109,6 +110,7 @@ const Topbar = ({
             scanDepth={scanDepth}
             onScanDepthChange={onScanDepthChange}
             onScan={onScan}
+            scanLabel={scanLabel}
             scanDisabled={scanDisabled}
             scanTitle={scanTitle}
             optionsDisabled={optionsDisabled}

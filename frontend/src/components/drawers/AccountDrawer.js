@@ -33,6 +33,17 @@ const AccountDrawer = ({
     }
   }, [isOpen, shouldRender]);
 
+  useEffect(() => {
+    if (!shouldRender) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose?.();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, shouldRender]);
+
   if (!shouldRender) return null;
 
   return (

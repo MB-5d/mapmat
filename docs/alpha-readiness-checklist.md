@@ -41,6 +41,10 @@ Expected outcome:
 - Open `http://localhost:3001/app`
 - Create a project from the blank app state without first opening a map
 - Scan a URL and create a new map
+- On an unsaved scanned map:
+  - `Options` stays available
+  - primary CTA changes to `Rescan`
+  - changing scan options and rescanning replaces the unsaved result
 - Save the map into a project
 - Confirm the saved map route is `/app/maps/:mapId`
 - Refresh the browser and confirm the same map reopens
@@ -73,6 +77,8 @@ Expected outcome:
 - Owner/editor changes sync both directions
 - Viewer/commenter receive read-only live updates
 - Presence count stays correct as users join/leave
+- Undo/redo works on solo saved maps and shared maps with no other active editor
+- Undo/redo shows the helper state only when another edit-capable user is actively connected
 
 ### 5. Comments
 
@@ -96,10 +102,7 @@ Expected outcome:
 These should not block the current alpha unless they break core flows:
 
 - Parallax-heavy pages may still need more screenshot stabilization
-- Undo / redo behavior in live editing needs a product decision
-- Legend color editing needs a follow-up UI/logic pass
-- Layers menu completeness needs a follow-up UI/logic pass
-- Steady-state live presence should move from a canvas banner to a map-title avatar stack
+- True multi-user undo/redo parity with tools like Figma/Miro/Google is still deferred
 - Remove / rescan image asset controls are intentionally deferred until after testing
 
 ## Alpha blocker rule

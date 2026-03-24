@@ -15,18 +15,16 @@ const VIEW_TABS = Object.freeze({
   ACTIVITY: 'activity',
 });
 
-function formatTimeAgo(dateString) {
+function formatTimestamp(dateString) {
   const timestamp = new Date(dateString);
   if (Number.isNaN(timestamp.getTime())) return '';
-  const seconds = Math.floor((Date.now() - timestamp.getTime()) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return timestamp.toLocaleDateString();
+  return timestamp.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function formatActorLabel(actor) {
@@ -138,7 +136,7 @@ const VersionHistoryDrawer = ({
               </div>
               <div className="version-history-meta">
                 <div className="version-history-number">v{version.version_number}</div>
-                <div>{formatTimeAgo(version.created_at)}</div>
+                <div>{formatTimestamp(version.created_at)}</div>
               </div>
             </button>
           );
@@ -185,7 +183,7 @@ const VersionHistoryDrawer = ({
                 <div className="version-history-notes activity-history-notes">
                   <span className="activity-history-actor">{formatActorLabel(event.actor)}</span>
                   <span className="activity-history-separator">•</span>
-                  <span>{formatTimeAgo(event.createdAt)}</span>
+                  <span>{formatTimestamp(event.createdAt)}</span>
                 </div>
               </div>
               <div className="version-history-meta activity-history-meta">

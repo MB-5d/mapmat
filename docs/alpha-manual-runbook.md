@@ -119,11 +119,14 @@ Expected:
 6. Confirm the change appears in `Owner`.
 7. Open the same map in `Viewer` and `Commenter`.
 8. Confirm they receive the updates without being able to edit structure.
+9. With both `Owner` and `Editor` connected, confirm `Undo` / `Redo` explains that it is unavailable during active multi-writer live editing.
+10. Close the extra editor window, make a fresh edit in a solo owner window, and confirm `Undo` works again.
 
 Expected:
 
 - owner/editor live editing works in both directions
 - viewer/commenter receive read-only live updates
+- undo/redo is only blocked while another edit-capable user is actively connected
 
 ## 7. Timeline and versions
 
@@ -153,8 +156,5 @@ Treat it as an alpha blocker if any of these fail:
 
 Do not treat these as immediate blockers unless they break core flows:
 
-- undo/redo in live editing
-- legend color editing
-- incomplete layers menu
-- moving live presence from banner to title avatar stack
 - stronger parallax capture handling
+- true multi-user undo/redo parity with tools like Figma/Miro/Google

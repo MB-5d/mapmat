@@ -1,6 +1,14 @@
 import React, { useState } from 'react';
 import { Edit2, Eye, FolderPlus, MessageSquare, X } from 'lucide-react';
 
+const isVirtualProject = (project) => (
+  !!project?.isVirtual
+  || project?.id === 'uncategorized'
+  || project?.name === 'Uncategorized'
+  || project?.id === 'shared-with-me'
+  || project?.name === 'Shared With Me'
+);
+
 const SaveMapForm = ({
   projects,
   currentMap,
@@ -33,10 +41,11 @@ const SaveMapForm = ({
   };
 
   const [mapName, setMapName] = useState(getDefaultName());
-  const [selectedProject, setSelectedProject] = useState(defaultProjectId || '');
+  const [selectedProject, setSelectedProject] = useState(isVirtualProject({ id: defaultProjectId }) ? '' : (defaultProjectId || ''));
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [notes, setNotes] = useState(defaultNotes || currentMap?.notes || '');
+  const selectableProjects = (projects || []).filter((project) => !isVirtualProject(project));
 
   const handleSave = () => {
     if (!mapName.trim()) return;
@@ -72,7 +81,7 @@ const SaveMapForm = ({
           onChange={(e) => setSelectedProject(e.target.value)}
         >
           <option value="">No project (Uncategorized)</option>
-          {projects.map(p => (
+          {selectableProjects.map(p => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>

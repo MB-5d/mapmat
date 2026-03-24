@@ -7101,6 +7101,11 @@ body {
   margin-bottom: 12px;
 }
 
+.share-collab-send {
+  min-width: 108px;
+  white-space: nowrap;
+}
+
 .share-collab-role-select {
   border: 1px solid #e2e8f0;
   border-radius: 8px;

@@ -218,6 +218,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   full: 'full',
   thumb: 'thumb',
 });
+const SCREENSHOT_META_SUFFIX = '.meta.json';
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -620,12 +621,34 @@ const cleanupStaleScreenshots = async () => {
       const ageMs = now - stats.mtimeMs;
       if (ageMs <= SCREENSHOT_CACHE_TTL_MS) continue;
       fs.unlinkSync(filepath);
+      const metaPath = path.join(SCREENSHOT_DIR, `${entry.name}${SCREENSHOT_META_SUFFIX}`);
+      if (fs.existsSync(metaPath)) {
+        fs.unlinkSync(metaPath);
+      }
       deleted += 1;
     } catch {
       // Ignore stale file races and permission edge-cases.
     }
   }
 };
+
+function readScreenshotMeta(metaPath) {
+  try {
+    if (!fs.existsSync(metaPath)) return null;
+    const raw = fs.readFileSync(metaPath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeScreenshotMeta(metaPath, value) {
+  try {
+    fs.writeFileSync(metaPath, JSON.stringify(value, null, 2), 'utf8');
+  } catch (error) {
+    console.warn('Screenshot metadata write error:', error.message);
+  }
+}
 
 const JOB_TYPES = {
   scan: 'scan',
@@ -2397,18 +2420,24 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
   const filename = `${urlHash}_${normalizedType}.png`;
   const filepath = path.join(SCREENSHOT_DIR, filename);
+  const metaPath = path.join(SCREENSHOT_DIR, `${filename}${SCREENSHOT_META_SUFFIX}`);
   const baseUrl = getBaseUrl();
 
   if (fs.existsSync(filepath)) {
     const stats = fs.statSync(filepath);
     const ageMs = Date.now() - stats.mtimeMs;
-    if (ageMs < SCREENSHOT_CACHE_TTL_MS) {
+    const meta = readScreenshotMeta(metaPath);
+    if (
+      ageMs < SCREENSHOT_CACHE_TTL_MS
+      && meta
+      && meta.url === safeUrl
+    ) {
       return {
         url: `${baseUrl}/screenshots/${filename}`,
         cached: true,
         type: normalizedType,
         blocked: false,
-        truncated: false,
+        truncated: !!meta.truncated,
       };
     }
   }
@@ -2447,65 +2476,68 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
             waitUntil: 'domcontentloaded',
             timeout: SCREENSHOT_CAPTURE_TIMEOUT_MS,
           });
-          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 350 : 1200);
-          if (normalizedType === SCREENSHOT_TYPES.full) {
-            await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
-            await page.evaluate(async () => {
-              const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-              const images = Array.from(document.images || []);
-              images.forEach((image) => {
-                try {
-                  image.loading = 'eager';
-                  image.decoding = 'sync';
-                  const src = image.getAttribute('data-src') || image.getAttribute('data-lazy-src') || image.getAttribute('data-original');
-                  const srcset = image.getAttribute('data-srcset') || image.getAttribute('data-lazy-srcset');
-                  if (src && !image.getAttribute('src')) {
-                    image.setAttribute('src', src);
-                  }
-                  if (srcset && !image.getAttribute('srcset')) {
-                    image.setAttribute('srcset', srcset);
-                  }
-                } catch {
-                  // Ignore per-image mutations for screenshot warmup.
+          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 1200);
+          await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
+          await page.evaluate(async (shouldWarmFull) => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const images = Array.from(document.images || []);
+            images.forEach((image) => {
+              try {
+                image.loading = 'eager';
+                image.decoding = 'sync';
+                const src = image.getAttribute('data-src') || image.getAttribute('data-lazy-src') || image.getAttribute('data-original');
+                const srcset = image.getAttribute('data-srcset') || image.getAttribute('data-lazy-srcset');
+                if (src && !image.getAttribute('src')) {
+                  image.setAttribute('src', src);
                 }
-              });
-
-              const nodes = Array.from(document.querySelectorAll('*'));
-              nodes.forEach((node) => {
-                try {
-                  const el = node;
-                  const style = window.getComputedStyle(el);
-                  const classes = `${el.className || ''}`.toLowerCase();
-                  const dataFlags = [
-                    el.getAttribute('data-parallax'),
-                    el.getAttribute('data-scroll'),
-                    el.getAttribute('data-scroll-speed'),
-                    el.getAttribute('data-scroll-container'),
-                    el.getAttribute('data-scroll-section'),
-                  ].filter(Boolean).join(' ').toLowerCase();
-                  const looksParallax = classes.includes('parallax')
-                    || dataFlags.includes('parallax')
-                    || dataFlags.includes('scroll');
-
-                  if (style.backgroundAttachment === 'fixed') {
-                    el.style.setProperty('background-attachment', 'scroll', 'important');
-                  }
-                  if (looksParallax) {
-                    el.style.setProperty('transform', 'none', 'important');
-                    el.style.setProperty('will-change', 'auto', 'important');
-                    el.style.setProperty('background-attachment', 'scroll', 'important');
-                  }
-                  if (style.animationName && style.animationName !== 'none') {
-                    el.style.setProperty('animation', 'none', 'important');
-                  }
-                  if (style.transitionProperty && style.transitionProperty !== 'none') {
-                    el.style.setProperty('transition', 'none', 'important');
-                  }
-                } catch {
-                  // Ignore capture stabilization edge cases per element.
+                if (srcset && !image.getAttribute('srcset')) {
+                  image.setAttribute('srcset', srcset);
                 }
-              });
+              } catch {
+                // Ignore per-image mutations for screenshot warmup.
+              }
+            });
 
+            const nodes = Array.from(document.querySelectorAll('*'));
+            nodes.forEach((node) => {
+              try {
+                const el = node;
+                const style = window.getComputedStyle(el);
+                const classes = `${el.className || ''}`.toLowerCase();
+                const dataFlags = [
+                  el.getAttribute('data-parallax'),
+                  el.getAttribute('data-scroll'),
+                  el.getAttribute('data-scroll-speed'),
+                  el.getAttribute('data-scroll-container'),
+                  el.getAttribute('data-scroll-section'),
+                ].filter(Boolean).join(' ').toLowerCase();
+                const looksParallax = classes.includes('parallax')
+                  || dataFlags.includes('parallax')
+                  || dataFlags.includes('scroll');
+
+                if (style.backgroundAttachment === 'fixed') {
+                  el.style.setProperty('background-attachment', 'scroll', 'important');
+                }
+                if (looksParallax) {
+                  el.style.setProperty('transform', 'none', 'important');
+                  el.style.setProperty('will-change', 'auto', 'important');
+                  el.style.setProperty('background-attachment', 'scroll', 'important');
+                }
+                if (style.animationName && style.animationName !== 'none') {
+                  el.style.setProperty('animation', 'none', 'important');
+                }
+                if (style.transitionProperty && style.transitionProperty !== 'none') {
+                  el.style.setProperty('transition', 'none', 'important');
+                }
+              } catch {
+                // Ignore capture stabilization edge cases per element.
+              }
+            });
+
+            await document.fonts?.ready?.catch?.(() => {});
+            await wait(shouldWarmFull ? 260 : 500);
+
+            if (shouldWarmFull) {
               const root = document.scrollingElement || document.documentElement || document.body;
               const viewportHeight = Math.max(window.innerHeight || 720, 320);
               const maxScrollTop = Math.max((root?.scrollHeight || 0) - viewportHeight, 0);
@@ -2519,13 +2551,15 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
                 window.scrollTo(0, maxScrollTop);
                 await wait(260);
               }
-              window.scrollTo(0, 0);
-              await wait(220);
-              await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
-            });
-            await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-            await page.waitForTimeout(500);
-          }
+            }
+
+            window.scrollTo(0, 0);
+            await wait(shouldWarmFull ? 220 : 420);
+            await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+          }, normalizedType === SCREENSHOT_TYPES.full);
+          await page.waitForLoadState('load', { timeout: 5000 }).catch(() => {});
+          await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 500);
 
           const title = await page.title();
           const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
@@ -2574,6 +2608,14 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
               type: 'png',
             });
           }
+
+          writeScreenshotMeta(metaPath, {
+            url: safeUrl,
+            type: normalizedType,
+            blocked,
+            truncated,
+            capturedAt: new Date().toISOString(),
+          });
 
           return { blocked, truncated };
         } catch (err) {
@@ -3077,6 +3119,9 @@ app.get('/screenshot', authMiddleware, screenshotLimiter, requireApiKey, enforce
   } catch (e) {
     console.error('Screenshot error:', e.message);
     // Return a short, user-friendly error
+    if (e.code === 'SCREENSHOT_AUTH_REQUIRED' || e.message?.includes('requires authentication')) {
+      return res.status(409).json({ error: 'Screenshot capture requires authentication. Prompted credentials are not supported yet.' });
+    }
     if (e.message?.includes('Screenshot queue full')) {
       return res.status(429).json({ error: 'Screenshot queue full' });
     }

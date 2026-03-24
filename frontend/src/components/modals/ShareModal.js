@@ -92,9 +92,7 @@ const ShareModal = ({
 
   const isOwner = currentCollaborationRole === 'owner';
   const canGrantOwner = isOwner;
-  const inviteRoleOptions = isOwner
-    ? ROLE_OPTIONS.filter((option) => option.value !== 'owner')
-    : APPROVAL_ROLE_OPTIONS;
+  const inviteRoleOptions = isOwner ? ROLE_OPTIONS : APPROVAL_ROLE_OPTIONS;
   const inviteRoleOptionValues = Array.isArray(collaborationInviteRoleOptions) && collaborationInviteRoleOptions.length > 0
     ? collaborationInviteRoleOptions
     : inviteRoleOptions.map((option) => option.value);
@@ -358,7 +356,7 @@ const ShareModal = ({
                         ))}
                       </select>
                       <button
-                        className="share-email-btn"
+                        className="modal-btn secondary share-collab-send"
                         onClick={onSendCollaborationInvite}
                         disabled={collaborationLoading || !canSendCollaborationInvites}
                       >

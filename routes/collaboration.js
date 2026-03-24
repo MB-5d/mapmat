@@ -981,7 +981,7 @@ router.post('/maps/:id/invites', async (req, res) => {
 
     const inviteRole = normalizeInviteRole(role || permissionPolicy.ROLES.VIEWER);
     if (!inviteRole) {
-      return res.status(400).json({ error: 'Invalid role. Use viewer, commenter, or editor.' });
+      return res.status(400).json({ error: 'Invalid role. Use owner, viewer, commenter, or editor.' });
     }
     const settings = await getCollaborationSettingsAsync(id);
     const canInvite = await canCreateInviteAsync({

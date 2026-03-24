@@ -17,6 +17,7 @@ const ScanBar = ({
   scanDepth,
   onScanDepthChange,
   onScan,
+  scanLabel = 'Scan',
   scanDisabled,
   scanTitle,
   sharedTitle,
@@ -184,7 +185,7 @@ const ScanBar = ({
         disabled={scanDisabled}
         title={scanTitle}
       >
-        Scan
+        {scanLabel}
       </button>
     </>
   );

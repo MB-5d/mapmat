@@ -445,6 +445,15 @@ function normalizeIdKey(value) {
   return String(value).trim();
 }
 
+function normalizeProjectSelectionValue(value) {
+  const normalized = normalizeIdKey(value).toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'uncategorized' || normalized === 'shared-with-me' || normalized === 'shared') {
+    return null;
+  }
+  return String(value).trim();
+}
+
 function resolveInviteRolesForActor(role, settings = {}) {
   const normalizedRole = permissionPolicy.normalizeRole(role);
   const accessPolicy = String(settings.access_policy || settings.accessPolicy || 'private')
@@ -456,7 +465,7 @@ function resolveInviteRolesForActor(role, settings = {}) {
   );
 
   if (normalizedRole === permissionPolicy.ROLES.OWNER) {
-    return ['viewer', 'commenter', 'editor'];
+    return ['viewer', 'commenter', 'editor', 'owner'];
   }
 
   if (normalizedRole === permissionPolicy.ROLES.EDITOR) {
@@ -473,6 +482,85 @@ function resolveInviteRolesForActor(role, settings = {}) {
   }
 
   return [];
+}
+
+async function createInitialMapVersionAsync({
+  mapId,
+  userId,
+  notes,
+  root,
+  orphans,
+  connections,
+  colors,
+  connectionColors,
+}) {
+  const versionId = uuidv4();
+  const versionNumber = await mapStore.getNextMapVersionNumberByMapAsync(mapId);
+  const versionName = 'Initial';
+  const versionNotes = notes ? String(notes).trim() : null;
+
+  await mapStore.createMapVersionAsync({
+    id: versionId,
+    mapId,
+    userId,
+    versionNumber,
+    name: versionName,
+    notes: versionNotes,
+    rootData: JSON.stringify(root),
+    orphansData: orphans ? JSON.stringify(orphans) : null,
+    connectionsData: connections ? JSON.stringify(connections) : null,
+    colors: colors ? JSON.stringify(colors) : null,
+    connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+  });
+
+  return {
+    id: versionId,
+    versionNumber,
+    name: versionName,
+    notes: versionNotes,
+  };
+}
+
+async function ensureInitialMapVersionForMapAsync(mapRow) {
+  if (!mapRow?.id) return null;
+  const existingVersionIds = await mapStore.listMapVersionIdsByMapAsync(mapRow.id);
+  if ((existingVersionIds || []).length > 0) {
+    return null;
+  }
+
+  const parsed = parseMapFields(mapRow);
+  const initialVersion = await createInitialMapVersionAsync({
+    mapId: mapRow.id,
+    userId: mapRow.user_id,
+    notes: mapRow.notes || null,
+    root: parsed.root,
+    orphans: parsed.orphans,
+    connections: parsed.connections,
+    colors: parsed.colors,
+    connectionColors: parsed.connectionColors,
+  });
+
+  await ensureCollaborationActivitySchemaAsync();
+  await recordMapActivityBestEffortAsync({
+    mapId: mapRow.id,
+    actorUserId: mapRow.user_id,
+    actorRole: permissionPolicy.ROLES.OWNER,
+    eventType: ACTIVITY_TYPES.VERSION_SAVED,
+    eventScope: ACTIVITY_SCOPES.VERSION,
+    entityType: 'version',
+    entityId: initialVersion.id,
+    summary: `Saved version ${initialVersion.versionNumber}: ${initialVersion.name}`,
+    payload: {
+      versionId: initialVersion.id,
+      versionNumber: initialVersion.versionNumber,
+      name: initialVersion.name,
+      notes: initialVersion.notes,
+      initial: true,
+      repaired: true,
+    },
+  }, { label: 'initial map version backfill' });
+
+  return initialVersion;
 }
 
 async function buildCollaborationCapabilityPayload(
@@ -903,6 +991,7 @@ router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
 router.post('/maps', requireAuth, async (req, res) => {
   try {
     const { name, url, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
+    const normalizedProjectId = normalizeProjectSelectionValue(project_id);
 
     if (!name?.trim()) {
       return res.status(400).json({ error: 'Map name is required' });
@@ -913,8 +1002,8 @@ router.post('/maps', requireAuth, async (req, res) => {
     }
 
     // If project_id provided, verify ownership
-    if (project_id) {
-      const project = await projectStore.getProjectForUserAsync(project_id, req.user.id);
+    if (normalizedProjectId) {
+      const project = await projectStore.getProjectForUserAsync(normalizedProjectId, req.user.id);
       if (!ensureResourceAction({
         req,
         res,
@@ -930,7 +1019,7 @@ router.post('/maps', requireAuth, async (req, res) => {
     await mapStore.createMapAsync({
       id: mapId,
       userId: req.user.id,
-      projectId: project_id || null,
+      projectId: normalizedProjectId,
       name: name.trim(),
       notes: notes ? notes.trim() : null,
       url: url || root.url || '',
@@ -942,12 +1031,22 @@ router.post('/maps', requireAuth, async (req, res) => {
     });
 
     const map = await mapStore.getMapByIdAsync(mapId);
+    const initialVersion = await ensureInitialMapVersionForMapAsync(map);
+    const savedInitialVersion = initialVersion
+      ? await mapStore.getMapVersionByIdAsync(initialVersion.id)
+      : null;
 
     res.json({
       map: {
         ...map,
         ...parseMapFields(map),
       },
+      initialVersion: savedInitialVersion
+        ? {
+          ...savedInitialVersion,
+          ...parseMapFields(savedInitialVersion),
+        }
+        : null,
     });
   } catch (error) {
     console.error('Create map error:', error);
@@ -970,6 +1069,7 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       notes,
       expected_updated_at,
     } = req.body;
+    const normalizedProjectId = normalizeProjectSelectionValue(project_id);
 
     const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
     const map = collaborationEnabled
@@ -1033,8 +1133,8 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
     if (project_id !== undefined) {
       // Verify project ownership if setting a project
-      if (project_id) {
-        const project = await projectStore.getProjectForUserAsync(project_id, req.user.id);
+      if (normalizedProjectId) {
+        const project = await projectStore.getProjectForUserAsync(normalizedProjectId, req.user.id);
         if (!ensureResourceAction({
           req,
           res,
@@ -1044,7 +1144,7 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
           failureError: 'Project not found',
         })) return;
       }
-      patch.projectId = project_id || null;
+      patch.projectId = normalizedProjectId;
     }
 
     await mapStore.updateMapByIdAsync(id, patch);
@@ -1103,6 +1203,8 @@ router.get('/maps/:id/versions', requireAuth, async (req, res) => {
       action: permissionPolicy.ACTIONS.MAP_VERSION_LIST,
       failureError: 'Map not found',
     })) return;
+
+    await ensureInitialMapVersionForMapAsync(map);
 
     const versions = collaborationEnabled
       ? await mapStore.listMapVersionsByMapAsync(id, 25)
@@ -1173,6 +1275,8 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
     }
 
     const saved = await mapStore.getMapVersionByIdAsync(versionId);
+
+    await ensureCollaborationActivitySchemaAsync();
 
     const actorRole = permissionPolicy.resolveResourceRole({
       actorUserId: req.user?.id || null,
