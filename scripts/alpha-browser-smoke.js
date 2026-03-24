@@ -217,11 +217,12 @@ async function runOwnerRouteChecks(browser, owner, map, commentText) {
   await waitForText(page, 'Initial', { exact: true });
   await page.getByRole('tab', { name: 'Activity' }).click();
   await waitForVisible(page, '.activity-history-item');
+  await waitForText(page, 'Added comment', { exact: true });
 
   await context.close();
 }
 
-async function runInviteRouteChecks(browser, viewer, map) {
+async function runInviteRouteChecks(browser, viewer, map, commentText) {
   const context = await createContext(browser, viewer.token);
   const page = await context.newPage();
   page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
@@ -242,6 +243,7 @@ async function runInviteRouteChecks(browser, viewer, map) {
 
   await page.getByTitle('Comments (C)').click();
   await waitForText(page, 'All Comments', { exact: true });
+  await waitForText(page, commentText, { exact: false });
 
   await context.close();
 }
@@ -270,7 +272,7 @@ async function run() {
     await runOwnerRouteChecks(browser, owner, map, commentText);
     console.log('[alpha-browser-smoke] owner direct route + timeline + comments ok');
 
-    await runInviteRouteChecks(browser, viewer, map);
+    await runInviteRouteChecks(browser, viewer, map, commentText);
     console.log('[alpha-browser-smoke] invite route + shared map reopen ok');
 
     console.log('[alpha-browser-smoke] passed');
