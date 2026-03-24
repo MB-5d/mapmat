@@ -5,6 +5,7 @@ Use this after the local alpha gate is mostly green.
 For the exact execution order once you start setting up Railway and Vercel, use:
 
 - [staging-setup-runbook.md](./staging-setup-runbook.md)
+- [staging-live-operator-checklist.md](./staging-live-operator-checklist.md)
 
 This checklist is specifically for getting from:
 

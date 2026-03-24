@@ -2,6 +2,10 @@
 
 Use this when you are ready to turn the current local alpha into a shared staging environment.
 
+For the short “do this now, in order” version, use:
+
+- [staging-live-operator-checklist.md](./staging-live-operator-checklist.md)
+
 This is the exact execution order for:
 
 - Railway staging backend
