@@ -2933,6 +2933,21 @@ export default function App({ currentRoute, navigateToRoute }) {
     onCommittedOperation: handleRemoteCommittedOperation,
     onWarn: warnLiveModeUnsupported,
   });
+  const activeRemoteWriterCount = useMemo(() => {
+    return (liveParticipants || []).filter((participant) => {
+      if (!participant?.sessionId || participant.sessionId === liveSessionId) return false;
+      if (currentUser?.id && sameId(participant.actorId, currentUser.id)) return false;
+      return String(participant.accessMode || '').trim().toLowerCase() === 'edit';
+    }).length;
+  }, [currentUser?.id, liveParticipants, liveSessionId]);
+  const isCollaborativeLiveEditingRestricted = !!(isLiveActive && activeRemoteWriterCount > 0);
+  const liveUndoRedoDisabledReason = isCollaborativeLiveEditingRestricted
+    ? (
+      activeRemoteWriterCount === 1
+        ? 'Undo/redo is unavailable while another owner or editor is actively in this map.'
+        : 'Undo/redo is unavailable while other owners or editors are actively in this map.'
+    )
+    : '';
 
   const liveStatusLabel = useMemo(() => {
     switch (liveStatus) {
@@ -2982,10 +2997,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [canViewCommentsValue, effectiveFeatureGates.mapComment, showCoeditingReadOnlyBanner]);
 
   useEffect(() => {
-    if (!isLiveActive) return;
+    if (!isCollaborativeLiveEditingRestricted) return;
     setUndoStack([]);
     setRedoStack([]);
-  }, [isLiveActive]);
+  }, [isCollaborativeLiveEditingRestricted]);
 
   useEffect(() => {
     if (!isLiveActive) return;
@@ -6278,16 +6293,39 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   // Undo/Redo implementation
-  const saveStateForUndo = (overrideState = null) => {
+  const saveStateForUndo = useCallback((overrideState = null) => {
     console.log('SAVING STATE FOR UNDO');
     const snapshot = overrideState || { root, orphans, connections, colors, connectionColors };
     setUndoStack(prev => [...prev, JSON.stringify(snapshot)]);
     setRedoStack([]); // Clear redo on new action
-  };
+  }, [colors, connectionColors, connections, orphans, root]);
+
+  const queueLiveDraftWithUndo = useCallback((draft, overrideState = null) => {
+    if (!isLiveActive || !currentMap?.id) {
+      return { ok: false, error: 'Live editing is not available for this map.' };
+    }
+    const snapshot = overrideState || { root, orphans, connections, colors, connectionColors };
+    const result = submitLiveDraft(draft);
+    if (result.ok && !isCollaborativeLiveEditingRestricted) {
+      saveStateForUndo(snapshot);
+    }
+    return result;
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    currentMap?.id,
+    isCollaborativeLiveEditingRestricted,
+    isLiveActive,
+    orphans,
+    root,
+    saveStateForUndo,
+    submitLiveDraft,
+  ]);
 
   const handleUndo = () => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Undo is temporarily disabled while live editing is active.');
+    if (isCollaborativeLiveEditingRestricted) {
+      warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
     }
     console.log('UNDO CLICKED, stack:', undoStack.length);
@@ -6326,8 +6364,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const handleRedo = () => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Redo is temporarily disabled while live editing is active.');
+    if (isCollaborativeLiveEditingRestricted) {
+      warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
     }
     console.log('REDO CLICKED, stack:', redoStack.length);
@@ -7759,7 +7797,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
 
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'link.add',
           payload: {
             linkId: newConnection.id,
@@ -7788,7 +7826,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   // Delete a connection
   const deleteConnection = (connectionId) => {
     if (isLiveActive && currentMap?.id) {
-      const result = submitLiveDraft({
+      const result = queueLiveDraftWithUndo({
         type: 'link.delete',
         payload: { linkId: connectionId },
       });
@@ -7899,7 +7937,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (snap) {
           if (isLiveActive && currentMap?.id) {
             const existingConnection = connections.find((connection) => connection.id === connId);
-            const result = submitLiveDraft({
+            const result = queueLiveDraftWithUndo({
               type: 'link.update',
               payload: {
                 linkId: connId,
@@ -7933,7 +7971,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
         } else {
           if (isLiveActive && currentMap?.id) {
-            const result = submitLiveDraft({
+            const result = queueLiveDraftWithUndo({
               type: 'link.delete',
               payload: { linkId: connId },
             });
@@ -7990,7 +8028,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     if (snapTarget) {
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'link.update',
           payload: {
             linkId: connectionId,
@@ -8033,7 +8071,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     } else {
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'link.delete',
           payload: { linkId: connectionId },
         });
@@ -8274,7 +8312,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const id = deleteConfirmNode.id;
 
     if (isLiveActive && currentMap?.id) {
-      const result = submitLiveDraft({
+      const result = queueLiveDraftWithUndo({
         type: 'node.delete',
         payload: { nodeId: id },
       });
@@ -8465,8 +8503,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     const newParentId = parentSelection.resolvedParentId;
 
     if (isLiveActive && currentMap?.id) {
-      const submitLiveNodeChange = (draft, successMessage) => {
-        const result = submitLiveDraft(draft);
+      const submitLiveNodeChange = (draft, successMessage, snapshot = null) => {
+        const result = queueLiveDraftWithUndo(draft, snapshot);
         if (!result.ok) {
           showToast(result.error || 'Failed to stage live edit', 'error');
           return false;
@@ -9390,7 +9428,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const snapshot = colorEditSnapshotRef.current;
     if (snapshot && hasColorSnapshotChanged(snapshot)) {
       if (isLiveActive && currentMap?.id) {
-        const result = submitLiveDraft({
+        const result = queueLiveDraftWithUndo({
           type: 'metadata.update',
           payload: {
             changes: {
@@ -9398,7 +9436,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               connectionColors: { ...connectionColors },
             },
           },
-        });
+        }, snapshot);
         if (!result.ok) {
           showToast(result.error || 'Failed to queue color changes', 'error');
         }
@@ -9413,9 +9451,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentMap?.id,
     hasColorSnapshotChanged,
     isLiveActive,
+    queueLiveDraftWithUndo,
     saveStateForUndo,
     showToast,
-    submitLiveDraft,
   ]);
 
   const beginColorEdit = useCallback(() => {
@@ -10669,9 +10707,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasSelection: selectedNodeIds.size > 0,
                 canUndo,
                 canRedo,
-                undoRedoDisabledReason: isLiveActive
-                  ? 'Undo/redo is unavailable during live editing.'
-                  : '',
+                undoRedoDisabledReason: liveUndoRedoDisabledReason,
                 onUndo: handleUndo,
                 onRedo: handleRedo,
                 onClearCanvas: clearCanvas,

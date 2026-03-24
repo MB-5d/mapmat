@@ -69,7 +69,11 @@ const CanvasToolbar = ({
   hasMap,
   hasSavedMap,
   showVersionHistory,
-}) => (
+}) => {
+  const undoBlockedByLive = !canUndo && !!undoRedoDisabledReason;
+  const redoBlockedByLive = !canRedo && !!undoRedoDisabledReason;
+
+  return (
   <div className="canvas-toolbar">
     <button
       className={`canvas-tool-btn ${activeTool === 'select' && !connectionTool ? 'active' : ''}`}
@@ -215,8 +219,9 @@ const CanvasToolbar = ({
     {canEdit && (
       <button
         className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-        onClick={onUndo}
-        disabled={!canUndo}
+        onClick={canUndo || undoBlockedByLive ? onUndo : undefined}
+        disabled={!canUndo && !undoBlockedByLive}
+        aria-disabled={!canUndo}
         title={!canUndo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Undo (⌘Z)'}
       >
         <Undo2 size={20} />
@@ -225,8 +230,9 @@ const CanvasToolbar = ({
     {canEdit && (
       <button
         className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-        onClick={onRedo}
-        disabled={!canRedo}
+        onClick={canRedo || redoBlockedByLive ? onRedo : undefined}
+        disabled={!canRedo && !redoBlockedByLive}
+        aria-disabled={!canRedo}
         title={!canRedo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Redo (⇧⌘Z)'}
       >
         <Redo2 size={20} />
@@ -309,6 +315,7 @@ const CanvasToolbar = ({
       </button>
     )}
   </div>
-);
+  );
+};
 
 export default CanvasToolbar;

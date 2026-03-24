@@ -435,7 +435,14 @@ function getDefaultCollaborationCapabilityPayload() {
     canSendInvites: false,
     inviteRoles: [],
     canRequestAccess: false,
+    hasOtherWritableCollaborators: false,
+    otherWritableCollaboratorCount: 0,
   };
+}
+
+function normalizeIdKey(value) {
+  if (value === undefined || value === null) return '';
+  return String(value).trim();
 }
 
 function resolveInviteRolesForActor(role, settings = {}) {
@@ -468,16 +475,51 @@ function resolveInviteRolesForActor(role, settings = {}) {
   return [];
 }
 
-async function buildCollaborationCapabilityPayload(mapId, role) {
+async function buildCollaborationCapabilityPayload(
+  mapId,
+  role,
+  {
+    actorUserId = null,
+    ownerUserId = null,
+  } = {},
+) {
   if (!COLLABORATION_BACKEND_ENABLED || !mapId) {
     return getDefaultCollaborationCapabilityPayload();
   }
 
   await ensureCollaborationSchemaIfEnabledAsync();
-  const settings = await collaborationStore.getCollaborationSettingsByMapAsync(mapId);
+  const [settings, memberships] = await Promise.all([
+    collaborationStore.getCollaborationSettingsByMapAsync(mapId),
+    collaborationStore.listMembershipsByMapAsync(mapId),
+  ]);
   const inviteRoles = resolveInviteRolesForActor(role, settings);
   const normalizedRole = permissionPolicy.normalizeRole(role);
   const canReadMap = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, normalizedRole);
+  const actorKey = normalizeIdKey(actorUserId);
+  const ownerKey = normalizeIdKey(ownerUserId);
+  const writerKeys = new Set();
+
+  if (ownerKey) {
+    writerKeys.add(ownerKey);
+  }
+
+  for (const membership of memberships || []) {
+    const membershipRole = permissionPolicy.normalizeRole(membership?.role);
+    if (
+      membershipRole !== permissionPolicy.ROLES.OWNER
+      && membershipRole !== permissionPolicy.ROLES.EDITOR
+    ) {
+      continue;
+    }
+    const userKey = normalizeIdKey(membership?.user_id);
+    if (userKey) {
+      writerKeys.add(userKey);
+    }
+  }
+
+  const otherWritableCollaboratorCount = Array.from(writerKeys).filter(
+    (userKey) => userKey && userKey !== actorKey
+  ).length;
 
   return {
     accessPolicy: String(settings?.access_policy || 'private').trim().toLowerCase() || 'private',
@@ -488,6 +530,8 @@ async function buildCollaborationCapabilityPayload(mapId, role) {
     canRequestAccess: !!settings?.access_requests_enabled
       && !canReadMap
       && permissionPolicy.can(permissionPolicy.ACTIONS.ACCESS_REQUEST_CREATE, normalizedRole),
+    hasOtherWritableCollaborators: otherWritableCollaboratorCount > 0,
+    otherWritableCollaboratorCount,
   };
 }
 
@@ -840,7 +884,10 @@ router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
         actorId: req.user.id,
         role,
       }),
-      buildCollaborationCapabilityPayload(id, role),
+      buildCollaborationCapabilityPayload(id, role, {
+        actorUserId: req.user.id,
+        ownerUserId: map.user_id,
+      }),
     ]);
 
     res.json({
