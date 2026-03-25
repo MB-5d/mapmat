@@ -353,6 +353,64 @@ async function runViewerRouteChecks(browser, viewer, map, nodeId, commentText) {
   await context.close();
 }
 
+async function runRequesterAccessRequest(browser, requester, map) {
+  const context = await createContext(browser, requester.token);
+  const page = await context.newPage();
+  page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
+
+  await page.goto(`${APP_BASE}/app/maps/${encodeURIComponent(map.id)}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await waitForText(page, 'You do not currently have access to this map', { exact: true });
+
+  const requestMessage = `Requester smoke ${Date.now().toString(36)}`;
+  await page.getByLabel('Message to owners (optional)').fill(requestMessage);
+  await page.getByRole('button', { name: 'Request Viewer Access' }).click();
+  await waitForText(page, 'Access request sent', { exact: true });
+  await waitForText(page, 'Your request is pending owner review.', { exact: false });
+
+  await context.close();
+  return requestMessage;
+}
+
+async function runOwnerAccessRequestApproval(browser, owner, map, requester, requestMessage) {
+  const context = await createContext(browser, owner.token);
+  const page = await context.newPage();
+  page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
+
+  await page.goto(`${APP_BASE}/app/access-requests`, { waitUntil: 'domcontentloaded' });
+  await waitForText(page, 'Access Requests', { exact: true });
+  await waitForText(page, map.name, { exact: true });
+  await waitForText(page, requester.name, { exact: false });
+  await waitForText(page, requestMessage, { exact: false });
+
+  const requestItem = page.locator('.invite-inbox-item').filter({
+    has: page.getByText(requester.name, { exact: false }),
+  }).first();
+  await requestItem.getByRole('button', { name: 'Approve' }).click();
+  await page.getByText(requester.name, { exact: false }).waitFor({
+    state: 'hidden',
+    timeout: DEFAULT_TIMEOUT_MS,
+  });
+
+  await context.close();
+}
+
+async function runRequesterApprovedRouteCheck(browser, requester, map) {
+  const context = await createContext(browser, requester.token);
+  const page = await context.newPage();
+  page.setDefaultTimeout(DEFAULT_TIMEOUT_MS);
+
+  await page.goto(`${APP_BASE}/app/maps/${encodeURIComponent(map.id)}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await waitForText(page, map.name, { exact: true });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForText(page, map.name, { exact: true });
+
+  await context.close();
+}
+
 async function runCommenterRouteChecks(browser, commenter, map, nodeId, commentText) {
   const context = await createContext(browser, commenter.token);
   const page = await context.newPage();
@@ -403,6 +461,7 @@ async function run() {
   const owner = await signup('owner');
   const viewer = await signup('viewer');
   const commenter = await signup('commenter');
+  const requester = await signup('requester');
   let browser;
 
   try {
@@ -425,6 +484,15 @@ async function run() {
     await runOwnerRouteChecks(browser, owner, map, childId, commentText);
     console.log('[alpha-browser-smoke] owner direct route + screenshots + timeline + comments ok');
 
+    const accessRequestMessage = await runRequesterAccessRequest(browser, requester, map);
+    console.log('[alpha-browser-smoke] requester no-access route + access request ok');
+
+    await runOwnerAccessRequestApproval(browser, owner, map, requester, accessRequestMessage);
+    console.log('[alpha-browser-smoke] owner access request inbox approval ok');
+
+    await runRequesterApprovedRouteCheck(browser, requester, map);
+    console.log('[alpha-browser-smoke] requester direct reopen after approval ok');
+
     await runViewerRouteChecks(browser, viewer, map, rootId, commentText);
     console.log('[alpha-browser-smoke] viewer invite route + read-only comments ok');
 
@@ -438,6 +506,7 @@ async function run() {
   } finally {
     if (browser) await browser.close();
     if (CLEANUP) {
+      await deleteAccount(requester);
       await deleteAccount(commenter);
       await deleteAccount(viewer);
       await deleteAccount(owner);

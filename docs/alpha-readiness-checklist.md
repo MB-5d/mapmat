@@ -39,6 +39,7 @@ Expected outcome:
   - screenshot asset capture persistence on a selected node
   - timeline initial/autosaved coverage
   - invite accept and shared-map reopen
+  - no-access route -> access request -> owner approval -> reopen
   - cross-role comment visibility/actions
 
 ## Manual gate
