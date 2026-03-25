@@ -64,6 +64,40 @@ async function requestJson(url, { method = 'GET', token = '', body } = {}) {
   return data;
 }
 
+function findNodeById(node, nodeId) {
+  if (!node) return null;
+  if (node.id === nodeId) return node;
+  for (const child of node.children || []) {
+    const match = findNodeById(child, nodeId);
+    if (match) return match;
+  }
+  return null;
+}
+
+async function getMap(owner, mapId) {
+  const result = await requestJson(`${API_BASE}/api/maps/${mapId}`, {
+    token: owner.token,
+  });
+  assert.ok(result?.map, 'get map should return a map');
+  return result.map;
+}
+
+async function waitForNodeAssets(owner, mapId, nodeId, { requireThumbnail = false, requireFull = false } = {}) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 120000) {
+    const map = await getMap(owner, mapId);
+    const node = findNodeById(map.root, nodeId);
+    assert.ok(node, `node ${nodeId} should exist on map ${mapId}`);
+    const hasThumbnail = !!node.thumbnailUrl;
+    const hasFull = !!node.fullScreenshotUrl;
+    if ((!requireThumbnail || hasThumbnail) && (!requireFull || hasFull)) {
+      return node;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
+  throw new Error(`Timed out waiting for screenshot assets on node ${nodeId}`);
+}
+
 async function signup(label) {
   const email = createEmail(label);
   const password = 'Admin123!';
@@ -213,6 +247,18 @@ async function editNodeTitle(page, nodeId, nextTitle) {
   await page.getByText('Edit Page', { exact: true }).waitFor({ state: 'hidden', timeout: DEFAULT_TIMEOUT_MS });
 }
 
+async function captureSelectedScreenshotAssets(page, nodeId) {
+  const node = page.locator(`[data-node-id="${nodeId}"]`).first();
+  await node.waitFor({ state: 'visible', timeout: DEFAULT_TIMEOUT_MS });
+  await node.click();
+
+  await page.getByTitle('Images').click();
+  await page.getByRole('button', { name: 'Get thumbnails (Selected)' }).click();
+
+  await page.getByTitle('Images').click();
+  await page.getByRole('button', { name: 'Get full screenshots (Selected)' }).click();
+}
+
 async function waitForAutosavedVersion(page) {
   await page.getByTitle('Version History (H)').click();
   await waitForText(page, 'Map Timeline', { exact: true });
@@ -248,6 +294,15 @@ async function runOwnerRouteChecks(browser, owner, map, nodeId, commentText) {
   await waitForText(page, map.name, { exact: true });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForText(page, map.name, { exact: true });
+
+  await captureSelectedScreenshotAssets(page, nodeId);
+  await waitForNodeAssets(owner, map.id, nodeId, { requireThumbnail: true, requireFull: true });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForText(page, map.name, { exact: true });
+  await page.locator(`[data-node-id="${nodeId}"] img.thumb-img`).first().waitFor({
+    state: 'visible',
+    timeout: DEFAULT_TIMEOUT_MS,
+  });
 
   await page.getByTitle('Comments (C)').click();
   await waitForText(page, 'All Comments', { exact: true });
@@ -368,7 +423,7 @@ async function run() {
     browser = await chromium.launch({ headless: true });
 
     await runOwnerRouteChecks(browser, owner, map, childId, commentText);
-    console.log('[alpha-browser-smoke] owner direct route + timeline + comments ok');
+    console.log('[alpha-browser-smoke] owner direct route + screenshots + timeline + comments ok');
 
     await runViewerRouteChecks(browser, viewer, map, rootId, commentText);
     console.log('[alpha-browser-smoke] viewer invite route + read-only comments ok');

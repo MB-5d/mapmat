@@ -34,6 +34,12 @@ Expected outcome:
 
 - all commands pass
 - only existing non-blocking frontend lint warnings remain
+- browser smoke now covers:
+  - direct map reopen
+  - screenshot asset capture persistence on a selected node
+  - timeline initial/autosaved coverage
+  - invite accept and shared-map reopen
+  - cross-role comment visibility/actions
 
 ## Manual gate
 
