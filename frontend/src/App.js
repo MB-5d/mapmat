@@ -1233,6 +1233,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [, setThumbnailActiveCount] = useState(0);
   const [thumbnailReloadMap, setThumbnailReloadMap] = useState({});
   const [thumbnailElapsedMs, setThumbnailElapsedMs] = useState(0);
+  const [thumbnailDisplayErrorIds, setThumbnailDisplayErrorIds] = useState(() => new Set());
   const [thumbnailStats, setThumbnailStats] = useState({
     total: 0,
     loaded: 0,
@@ -1354,6 +1355,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setSelectedNodeIds(new Set());
       setSelectionBox(null);
       setThumbnailScopeIds(null);
+      setThumbnailDisplayErrorIds(new Set());
       setShowImageMenu(false);
     }
   }, [hasMap]);
@@ -1394,8 +1396,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
     if (nodes.length === 0) return false;
-    return nodes.every((node) => node.thumbnailUrl?.includes('/screenshots/'));
-  }, [root, orphans]);
+    return nodes.every(
+      (node) => node.thumbnailUrl?.includes('/screenshots/') && !thumbnailDisplayErrorIds.has(node.id)
+    );
+  }, [root, orphans, thumbnailDisplayErrorIds]);
 
   const maxDepth = useMemo(() => {
     const orphanDepth = (orphans || []).reduce((max, orphan) => {
@@ -4375,6 +4379,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const handleThumbnailImageLoad = useCallback((nodeId) => {
+    if (nodeId) {
+      setThumbnailDisplayErrorIds((prev) => {
+        if (!prev.has(nodeId)) return prev;
+        const next = new Set(prev);
+        next.delete(nodeId);
+        return next;
+      });
+    }
     if (thumbnailStopRequestedRef.current) return;
     if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
     if (thumbnailLoadedRef.current.has(nodeId)) return;
@@ -4400,6 +4412,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [flushThumbnailAutosave, updateThumbnailErrorState]);
 
   const handleThumbnailImageError = useCallback((nodeId, url) => {
+    if (nodeId) {
+      setThumbnailDisplayErrorIds((prev) => {
+        if (prev.has(nodeId)) return prev;
+        const next = new Set(prev);
+        next.add(nodeId);
+        return next;
+      });
+    }
     if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
     if (thumbnailStopRequestedRef.current) return;
     thumbnailLoadStartRef.current.delete(nodeId);
@@ -4453,7 +4473,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? orderedTargets
       : orderedTargets.filter((node) => {
           const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
-          return !(node.thumbnailUrl && isScreenshotThumb);
+          const hasRenderableThumb = node.thumbnailUrl && isScreenshotThumb && !thumbnailDisplayErrorIds.has(node.id);
+          return !hasRenderableThumb;
         });
     const targetIds = new Set(candidates.map((node) => node.id));
     const cachedCount = forceRecapture ? 0 : (orderedTargets.length - candidates.length);
