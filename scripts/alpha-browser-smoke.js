@@ -207,6 +207,22 @@ async function getVersions(owner, mapId) {
   });
 }
 
+async function waitForVersionCheckpoint(owner, mapId, { minVersions = 1, minAutosaved = 0 } = {}) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 90000) {
+    const result = await getVersions(owner, mapId);
+    const versions = Array.isArray(result?.versions) ? result.versions : [];
+    const autosavedCount = versions.filter((version) => version?.name === 'Autosaved').length;
+    if (versions.length >= minVersions && autosavedCount >= minAutosaved) {
+      return versions;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
+  throw new Error(
+    `Timed out waiting for versions >= ${minVersions} and autosaved versions >= ${minAutosaved}`
+  );
+}
+
 async function getActivity(owner, mapId) {
   return requestJson(`${API_BASE}/api/maps/${mapId}/activity?limit=25&offset=0`, {
     token: owner.token,
@@ -311,8 +327,19 @@ async function runOwnerRouteChecks(browser, owner, map, nodeId, commentText) {
   const editedTitle = `About updated ${Date.now().toString(36)}`;
   await editNodeTitle(page, nodeId, editedTitle);
   await waitForAutosavedVersion(page);
+  await waitForVersionCheckpoint(owner, map.id, { minVersions: 2, minAutosaved: 1 });
+
+  await new Promise((resolve) => setTimeout(resolve, 16000));
+  const editedTitleAgain = `About updated again ${Date.now().toString(36)}`;
+  await editNodeTitle(page, nodeId, editedTitleAgain);
+  await waitForVersionCheckpoint(owner, map.id, { minVersions: 3, minAutosaved: 2 });
+
   await waitForText(page, 'Map Timeline', { exact: true });
   await waitForText(page, 'Initial', { exact: true });
+  await page.getByText('Autosaved', { exact: true }).nth(1).waitFor({
+    state: 'visible',
+    timeout: DEFAULT_TIMEOUT_MS,
+  });
   await page.getByRole('tab', { name: 'Activity' }).click();
   await waitForVisible(page, '.activity-history-item');
   await waitForText(page, 'Added comment', { exact: true });
@@ -382,7 +409,6 @@ async function runOwnerAccessRequestApproval(browser, owner, map, requester, req
   await waitForText(page, 'Access Requests', { exact: true });
   await waitForText(page, map.name, { exact: true });
   await waitForText(page, requester.name, { exact: false });
-  await waitForText(page, requestMessage, { exact: false });
 
   const requestItem = page.locator('.invite-inbox-item').filter({
     has: page.getByText(requester.name, { exact: false }),

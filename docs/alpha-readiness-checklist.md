@@ -37,7 +37,7 @@ Expected outcome:
 - browser smoke now covers:
   - direct map reopen
   - screenshot asset capture persistence on a selected node
-  - timeline initial/autosaved coverage
+  - timeline initial plus repeated autosaved checkpoint coverage
   - invite accept and shared-map reopen
   - no-access route -> access request -> owner approval -> reopen
   - cross-role comment visibility/actions
