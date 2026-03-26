@@ -309,17 +309,23 @@ const formatPresenceAccessLabel = (accessMode) => {
   }
 };
 
-const buildPresenceCollaborators = (entries = [], { excludeSessionId = null } = {}) => {
+const buildPresenceCollaborators = (
+  entries = [],
+  { excludeSessionId = null, excludeActorId = null } = {}
+) => {
   const seen = new Set();
 
   return (entries || []).reduce((collaborators, entry) => {
     if (!entry || (excludeSessionId && entry.sessionId && entry.sessionId === excludeSessionId)) {
       return collaborators;
     }
+    if (excludeActorId && entry.actorId && sameId(entry.actorId, excludeActorId)) {
+      return collaborators;
+    }
 
-    const dedupeKey = entry.sessionId
-      ? `session:${entry.sessionId}`
-      : (entry.actorId ? `actor:${entry.actorId}` : null);
+    const dedupeKey = entry.actorId
+      ? `actor:${entry.actorId}`
+      : (entry.sessionId ? `session:${entry.sessionId}` : null);
 
     if (!dedupeKey || seen.has(dedupeKey)) {
       return collaborators;
@@ -382,6 +388,24 @@ const PresenceChipList = ({ collaborators = [] }) => {
     </div>
   );
 };
+
+const serializeMapAutosaveSnapshot = ({
+  name,
+  root,
+  orphans,
+  connections,
+  colors,
+  connectionColors,
+  project_id,
+} = {}) => JSON.stringify({
+  name: (name || '').trim(),
+  root: root || null,
+  orphans: Array.isArray(orphans) ? orphans : [],
+  connections: Array.isArray(connections) ? connections : [],
+  colors: colors || DEFAULT_COLORS,
+  connectionColors: connectionColors || DEFAULT_CONNECTION_COLORS,
+  project_id: project_id || null,
+});
 
 function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
   const projectsById = new Map();
@@ -1118,6 +1142,20 @@ export default function App({ currentRoute, navigateToRoute }) {
   const presenceSessionIdRef = useRef('');
   const mapNameEditStartRef = useRef('');
   const scheduleResetViewRef = useRef(null);
+
+  const resetAutosaveTracking = useCallback(({ snapshot = '' } = {}) => {
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (autosaveRetryTimerRef.current) {
+      clearTimeout(autosaveRetryTimerRef.current);
+      autosaveRetryTimerRef.current = null;
+    }
+    autosavePendingRef.current = null;
+    autosaveRetryDelayRef.current = 1000;
+    lastAutosaveSnapshotRef.current = snapshot;
+  }, []);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -1862,8 +1900,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [presenceSessions]);
 
   const presenceCollaborators = useMemo(
-    () => buildPresenceCollaborators(otherPresenceSessions),
-    [otherPresenceSessions],
+    () => buildPresenceCollaborators(otherPresenceSessions, { excludeActorId: currentUser?.id || null }),
+    [currentUser?.id, otherPresenceSessions],
   );
 
   const reportTimestamp = useMemo(() => {
@@ -2937,8 +2975,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? 'warning'
     : (liveStatus === COEDITING_LIVE_STATUS.CONNECTED ? 'connected' : 'muted');
   const liveCollaborators = useMemo(
-    () => buildPresenceCollaborators(liveParticipants, { excludeSessionId: liveSessionId }),
-    [liveParticipants, liveSessionId],
+    () => buildPresenceCollaborators(liveParticipants, {
+      excludeSessionId: liveSessionId,
+      excludeActorId: currentUser?.id || null,
+    }),
+    [currentUser?.id, liveParticipants, liveSessionId],
   );
   const titleCollaborators = useMemo(() => {
     if (!hasMap || !currentMap?.id || !canViewPresenceValue) return [];
@@ -5318,6 +5359,17 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       setCurrentMap(savedMap);
       navigateToRoute(createMapRoute(savedMap.id));
+      resetAutosaveTracking({
+        snapshot: serializeMapAutosaveSnapshot({
+          name: mapName.trim(),
+          root,
+          orphans,
+          connections,
+          colors,
+          connectionColors,
+          project_id: savedMap?.project_id || null,
+        }),
+      });
       setMapSaveConflict(null);
       setShowSaveMapModal(false);
       showToast(`Map "${mapName}" saved`, 'success');
@@ -5400,6 +5452,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const clearLoadedMapView = useCallback(() => {
+    resetAutosaveTracking();
     resetScanLayers();
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
@@ -5428,13 +5481,24 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowThumbnails(false);
     setUrlInput('');
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-  }, [applyTransform, resetScanLayers]);
+  }, [applyTransform, resetAutosaveTracking, resetScanLayers]);
 
   useEffect(() => {
     clearLoadedMapViewRef.current = clearLoadedMapView;
   }, [clearLoadedMapView]);
 
   const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    resetAutosaveTracking({
+      snapshot: serializeMapAutosaveSnapshot({
+        name: map?.name || '',
+        root: map?.root,
+        orphans: map?.orphans,
+        connections: map?.connections,
+        colors: map?.colors,
+        connectionColors: map?.connectionColors,
+        project_id: map?.project_id || null,
+      }),
+    });
     resetScanLayers();
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
@@ -5467,7 +5531,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`Loaded "${map.name}"`, 'success');
     }
     scheduleResetViewRef.current?.();
-  }, [applyTransform, loadMapVersions, navigateToRoute, resetScanLayers, showToast]);
+  }, [applyTransform, loadMapVersions, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
   const loadSavedMapById = useCallback(async (mapId, options = {}) => {
     const { map } = await api.getMap(mapId);
@@ -9013,6 +9077,17 @@ export default function App({ currentRoute, navigateToRoute }) {
             setRoot(newRoot);
             setCurrentMap(map);
             setMapName(map.name);
+            resetAutosaveTracking({
+              snapshot: serializeMapAutosaveSnapshot({
+                name: map.name,
+                root: newRoot,
+                orphans: [],
+                connections: [],
+                colors: DEFAULT_COLORS,
+                connectionColors: DEFAULT_CONNECTION_COLORS,
+                project_id: map?.project_id || null,
+              }),
+            });
             setPendingMapCreation(null);
             if (initialVersion) {
               setMapVersions([initialVersion]);
