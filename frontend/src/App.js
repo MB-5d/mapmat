@@ -319,12 +319,13 @@ const buildPresenceCollaborators = (
     if (!entry || (excludeSessionId && entry.sessionId && entry.sessionId === excludeSessionId)) {
       return collaborators;
     }
-    if (excludeActorId && entry.actorId && sameId(entry.actorId, excludeActorId)) {
+    const actorOrUserId = entry.actorId || entry.userId || null;
+    if (excludeActorId && actorOrUserId && sameId(actorOrUserId, excludeActorId)) {
       return collaborators;
     }
 
-    const dedupeKey = entry.actorId
-      ? `actor:${entry.actorId}`
+    const dedupeKey = actorOrUserId
+      ? `actor:${actorOrUserId}`
       : (entry.sessionId ? `session:${entry.sessionId}` : null);
 
     if (!dedupeKey || seen.has(dedupeKey)) {
@@ -1738,6 +1739,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     && !isImportedMap
     && !isViewingHistoricalVersion
   );
+  const areMapPermissionsPending = !!(
+    featureGatesEnabled
+    && isLoggedIn
+    && currentMap?.id
+    && !mapPermissions
+  );
 
   const isMapUpdateConflictError = useCallback((error) => {
     return error?.status === 409 && error?.code === 'MAP_UPDATE_CONFLICT';
@@ -3014,6 +3021,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       || isViewingHistoricalVersion
       || isCollaborativeLiveEditingRestricted
       || isCoeditingReadOnlyMode
+      || areMapPermissionsPending
     ) return;
 
     const snapshot = JSON.stringify({
@@ -3068,7 +3076,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode]);
+  }, [areMapPermissionsPending, currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode]);
 
   useEffect(() => {
     if (!isCollaborativeLiveEditingRestricted) return;
@@ -5453,6 +5461,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const clearLoadedMapView = useCallback(() => {
     resetAutosaveTracking();
+    setMapPermissions(null);
     resetScanLayers();
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
@@ -5499,6 +5508,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         project_id: map?.project_id || null,
       }),
     });
+    setMapPermissions(null);
     resetScanLayers();
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);

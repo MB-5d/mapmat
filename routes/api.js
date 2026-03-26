@@ -1032,14 +1032,15 @@ router.post('/maps', requireAuth, async (req, res) => {
 
     const map = await mapStore.getMapByIdAsync(mapId);
     const initialVersion = await ensureInitialMapVersionForMapAsync(map);
+    const refreshedMap = await mapStore.getMapByIdAsync(mapId);
     const savedInitialVersion = initialVersion
       ? await mapStore.getMapVersionByIdAsync(initialVersion.id)
       : null;
 
     res.json({
       map: {
-        ...map,
-        ...parseMapFields(map),
+        ...refreshedMap,
+        ...parseMapFields(refreshedMap),
       },
       initialVersion: savedInitialVersion
         ? {
