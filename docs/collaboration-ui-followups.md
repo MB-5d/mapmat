@@ -45,6 +45,9 @@ Captured on 2026-03-23 after screenshot stabilization and broader collaboration/
     - hover shows total participant count
     - click expands a participant list
   - Keep disruptive live status banners only for actual warnings/errors, not steady-state collaboration.
+- Refreshing a direct `/app/maps/:id` route can briefly flash access/opening map gate modals before the owned-map permissions finish resolving.
+  - Treat this as non-blocking for alpha.
+  - Later refinement should suppress the access-request UI until the route permission check is definitively resolved.
 
 ## Clarification For Future QA
 
