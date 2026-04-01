@@ -98,7 +98,7 @@ Follow [deployment-workflow.md](./deployment-workflow.md), but use this order:
 
 Recommended first staging stance:
 
-- do not start with broad unscoped rollout if you have not run the coediting preflight checks yet
+- for the current shared internal alpha, prefer approved broad rollout after preflight so writable live editing is actually enabled
 - use `npm run check:staging:backend` before entering the values into Railway
 
 ## Phase 3: Provision the Frontend

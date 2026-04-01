@@ -105,8 +105,8 @@ REALTIME_PRESENCE_HEARTBEAT_SEC=20
 COEDITING_EXPERIMENT_ENABLED=true
 COEDITING_ROLLOUT_ENABLED=true
 COEDITING_ROLLOUT_HARDENING_ENABLED=true
-COEDITING_ROLLOUT_ALLOW_GLOBAL=false
-COEDITING_ROLLOUT_GLOBAL_APPROVED=false
+COEDITING_ROLLOUT_ALLOW_GLOBAL=true
+COEDITING_ROLLOUT_GLOBAL_APPROVED=true
 COEDITING_ROLLOUT_REQUIRE_INSTANCE_AGREEMENT=true
 COEDITING_ROLLOUT_USER_IDS=
 COEDITING_ROLLOUT_MAP_IDS=
@@ -252,26 +252,24 @@ npm run verify:realtime:staging:preflight
 
 Important:
 
-- keep rollout scoped first
-- do not open broad coediting rollout until preflight is clean
+- for this internal staging workflow, use approved broad rollout unless you are
+  deliberately testing a scoped canary
+- still run the realtime preflight first
 
 ## 8. Coediting Rollout Decision
 
-Recommended first staging stance:
+Recommended first staging stance for the current internal alpha:
 
-- scoped canary first
+- approved broad rollout
 
 That means:
 
-- keep `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`
-- keep `COEDITING_ROLLOUT_GLOBAL_APPROVED=false`
-- explicitly set test user IDs or map IDs when needed
+- set `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`
+- set `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`
+- keep the scope lists blank unless you intentionally want a limited canary
 
-Only move to broader internal staging access after:
-
-- health checks pass
-- canary checks pass
-- manual collaboration checks pass
+If you want a stricter scoped canary later, flip both broad-rollout flags back
+to `false` and explicitly set the user/map scope lists before testing.
 
 ## 9. Browser Smoke Against Staging
 

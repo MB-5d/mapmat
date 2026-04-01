@@ -276,7 +276,10 @@ export function useCoeditingLive({
     return true;
   }, [applyOptimisticDocument, enabled, mapId, publishAuthoritativeDocument]);
 
-  const applyCommittedOperation = useCallback((operation, { fallbackActorId = null } = {}) => {
+  const applyCommittedOperation = useCallback((operation, {
+    fallbackActorId = null,
+    liveDocumentSummary = null,
+  } = {}) => {
     if (!operation?.opId) return false;
 
     removePendingDraft(operation.opId);
@@ -295,6 +298,26 @@ export function useCoeditingLive({
       : (currentDocument.version || 0) + 1;
     nextAuthoritative.lastOpId = operation.opId;
     nextAuthoritative.lastActorId = operation.actorId || fallbackActorId || currentDocument.lastActorId || null;
+    if (liveDocumentSummary && typeof liveDocumentSummary === 'object') {
+      if (Number.isInteger(liveDocumentSummary.version)) {
+        nextAuthoritative.version = liveDocumentSummary.version;
+      }
+      if (Object.prototype.hasOwnProperty.call(liveDocumentSummary, 'mapUpdatedAt')) {
+        nextAuthoritative.mapUpdatedAt = liveDocumentSummary.mapUpdatedAt || null;
+      }
+      if (typeof liveDocumentSummary.name === 'string' && liveDocumentSummary.name.trim()) {
+        nextAuthoritative.name = liveDocumentSummary.name;
+      }
+      if (Object.prototype.hasOwnProperty.call(liveDocumentSummary, 'notes')) {
+        nextAuthoritative.notes = liveDocumentSummary.notes ?? null;
+      }
+      if (liveDocumentSummary.lastOpId) {
+        nextAuthoritative.lastOpId = liveDocumentSummary.lastOpId;
+      }
+      if (liveDocumentSummary.lastActorId) {
+        nextAuthoritative.lastActorId = liveDocumentSummary.lastActorId;
+      }
+    }
     authoritativeDocumentRef.current = normalizeLiveDocument(nextAuthoritative);
     limitCommittedIds(committedOpIdsRef, operation.opId);
     applyOptimisticDocument();
@@ -319,9 +342,12 @@ export function useCoeditingLive({
     inFlightOpIdRef.current = draft.opId;
 
     try {
-      const { operation: committedOperation } = await ingestCoeditingOperation(mapId, operation);
+      const { operation: committedOperation, liveDocument } = await ingestCoeditingOperation(mapId, operation);
       if (committedOperation?.opId) {
-        applyCommittedOperation(committedOperation, { fallbackActorId: actorId });
+        applyCommittedOperation(committedOperation, {
+          fallbackActorId: actorId,
+          liveDocumentSummary: liveDocument,
+        });
       }
     } catch (error) {
       inFlightOpIdRef.current = '';
@@ -356,11 +382,11 @@ export function useCoeditingLive({
     }
   }, [actorId, applyCommittedOperation, canEdit, enabled, hydrateFromServer, mapId, markOutOfSync, onWarn]);
 
-  const acceptCommittedOperation = useCallback((operation) => {
+  const acceptCommittedOperation = useCallback((operation, options = {}) => {
     if (!operation?.opId) return false;
 
     try {
-      return applyCommittedOperation(operation);
+      return applyCommittedOperation(operation, options);
     } catch (error) {
       markOutOfSync(error?.message || 'Failed to apply a committed live operation');
       return false;
@@ -454,7 +480,9 @@ export function useCoeditingLive({
             }
 
             if (message.type === 'operation.committed') {
-              const applied = acceptCommittedOperation(message.operation);
+              const applied = acceptCommittedOperation(message.operation, {
+                liveDocumentSummary: message.liveDocument,
+              });
               if (applied) {
                 onCommittedOperationRef.current?.(message.operation, {
                   participant: participantsRef.current.find(

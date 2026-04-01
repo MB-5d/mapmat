@@ -119,19 +119,22 @@ API_BASE=https://<staging-backend-domain> APP_BASE=https://<staging-frontend-dom
 
 Do not continue if these fail.
 
-## 8. Keep Coediting Rollout Safe at First
+## 8. Enable Shared Live Editing for Internal Staging
 
-Initial staging recommendation:
+For a real internal multi-user staging test, the backend must allow writable
+coediting. There are 2 valid ways to do that:
 
-- keep rollout scoped first
-- do not immediately go broad/global
+- easiest: approved broad internal-alpha rollout
+- stricter: scoped rollout by specific user IDs or map IDs
 
-That means:
+For the current staging setup, use the easy internal-alpha option:
 
-- `COEDITING_ROLLOUT_ALLOW_GLOBAL=false`
-- `COEDITING_ROLLOUT_GLOBAL_APPROVED=false`
+- `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`
+- `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`
 
-Only widen rollout after staging checks are green.
+If both of those stay `false` while the scope lists are blank, presence may work
+but writable live editing will stay disabled and edits will fall back to the old
+save/conflict path.
 
 ## 9. Run Manual QA on Staging
 
