@@ -41,6 +41,38 @@ function normalizeNullableString(value) {
   return normalized || null;
 }
 
+function normalizeTimestampMarker(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? null : value.toISOString();
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Date.parse(trimmed);
+    return Number.isNaN(parsed) ? trimmed : new Date(parsed).toISOString();
+  }
+
+  if (typeof value?.toISOString === 'function') {
+    try {
+      const iso = value.toISOString();
+      return normalizeNullableString(iso);
+    } catch {
+      // Fall through to string normalization.
+    }
+  }
+
+  return normalizeNullableString(value);
+}
+
 function cloneDocument(document) {
   return structuredClone(document);
 }
@@ -56,7 +88,7 @@ function parseMapRowToDocument(mapRow) {
     connections: normalizeConnections(parseJsonSafe(mapRow.connections_data, [])),
     colors: parseJsonSafe(mapRow.colors, null),
     connectionColors: parseJsonSafe(mapRow.connection_colors, null),
-    mapUpdatedAt: mapRow.updated_at || null,
+    mapUpdatedAt: normalizeTimestampMarker(mapRow.updated_at),
     lastOpId: null,
     lastActorId: null,
   };
@@ -73,7 +105,7 @@ function parseSnapshotRowToDocument(snapshotRow) {
     connections: normalizeConnections(parseJsonSafe(snapshotRow.connections_data, [])),
     colors: parseJsonSafe(snapshotRow.colors, null),
     connectionColors: parseJsonSafe(snapshotRow.connection_colors, null),
-    mapUpdatedAt: snapshotRow.map_updated_at || null,
+    mapUpdatedAt: normalizeTimestampMarker(snapshotRow.map_updated_at),
     lastOpId: snapshotRow.last_op_id || null,
     lastActorId: snapshotRow.last_actor_id || null,
   };
@@ -118,7 +150,7 @@ function serializeDocument(document) {
     connectionColors: document.connectionColors === null || document.connectionColors === undefined
       ? null
       : JSON.stringify(document.connectionColors),
-    mapUpdatedAt: document.mapUpdatedAt || null,
+    mapUpdatedAt: normalizeTimestampMarker(document.mapUpdatedAt),
     lastOpId: document.lastOpId || null,
     lastActorId: document.lastActorId || null,
   };
@@ -130,7 +162,7 @@ function summarizeDocument(document) {
     version: Number(document.version || 0),
     name: document.name,
     notes: document.notes,
-    mapUpdatedAt: document.mapUpdatedAt || null,
+    mapUpdatedAt: normalizeTimestampMarker(document.mapUpdatedAt),
     lastOpId: document.lastOpId || null,
     lastActorId: document.lastActorId || null,
   };
@@ -674,7 +706,10 @@ async function ensureLiveDocumentCurrentAsync(mapId) {
 
   const document = parseSnapshotRowToDocument(snapshotRow);
 
-  if (document.mapUpdatedAt && mapRow.updated_at && document.mapUpdatedAt !== mapRow.updated_at) {
+  const liveMapUpdatedAt = normalizeTimestampMarker(document.mapUpdatedAt);
+  const savedMapUpdatedAt = normalizeTimestampMarker(mapRow.updated_at);
+
+  if (liveMapUpdatedAt && savedMapUpdatedAt && liveMapUpdatedAt !== savedMapUpdatedAt) {
     if (document.version === 0 && !document.lastOpId) {
       const refreshedDocument = await refreshSnapshotFromMapRowAsync(mapRow);
       return { mapRow, document: refreshedDocument };
@@ -686,8 +721,8 @@ async function ensureLiveDocumentCurrentAsync(mapId) {
       409,
       {
         mapId,
-        liveMapUpdatedAt: document.mapUpdatedAt,
-        savedMapUpdatedAt: mapRow.updated_at,
+        liveMapUpdatedAt,
+        savedMapUpdatedAt,
         version: document.version,
       }
     );
@@ -804,7 +839,7 @@ const applyOperationTransactionAsync = adapter.transactionAsync(async ({ mapId, 
     );
   }
 
-  storedNextDocument.mapUpdatedAt = updatedMapRow.updated_at || null;
+  storedNextDocument.mapUpdatedAt = normalizeTimestampMarker(updatedMapRow.updated_at);
 
   await coeditingStore.updateLiveSnapshotAsync({
     mapId,
