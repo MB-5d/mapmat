@@ -18,6 +18,7 @@ const LayersPanel = ({
   showViewDropdown,
   onToggleDropdown,
   viewDropdownRef,
+  embedded = false,
 }) => {
   const showScanLayers = scanLayerAvailability
     && Object.values(scanLayerAvailability).some(Boolean);
@@ -46,22 +47,8 @@ const LayersPanel = ({
     </button>
   );
 
-  return (
-    <div className={`layers-panel ${showViewDropdown ? 'expanded' : ''}`} ref={viewDropdownRef}>
-      <div
-        className="layers-panel-header"
-        onClick={onToggleDropdown}
-      >
-        <div className="layers-panel-title">
-          <Layers size={16} />
-          <span>Layers</span>
-        </div>
-        <button className="key-toggle">
-          {showViewDropdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-      </div>
-      {showViewDropdown && (
-        <div className="layers-panel-list">
+  const panelList = (
+    <div className="layers-panel-list">
           {showScanLayers && (
             <>
               {hasPlacementLayers && (
@@ -192,7 +179,31 @@ const LayersPanel = ({
             </>
           )}
         </div>
-      )}
+  );
+
+  if (embedded) {
+    return (
+      <div className="layers-panel layers-panel-embedded">
+        {panelList}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`layers-panel ${showViewDropdown ? 'expanded' : ''}`} ref={viewDropdownRef}>
+      <div
+        className="layers-panel-header"
+        onClick={onToggleDropdown}
+      >
+        <div className="layers-panel-title">
+          <Layers size={16} />
+          <span>Layers</span>
+        </div>
+        <button className="key-toggle">
+          {showViewDropdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+      </div>
+      {showViewDropdown && panelList}
     </div>
   );
 };

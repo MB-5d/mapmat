@@ -40,13 +40,8 @@ const Topbar = ({
   optionsDisabled,
   onClearUrl,
   showClearUrl,
-  mapName,
-  isEditingMapName,
-  onMapNameChange,
-  onMapNameBlur,
-  onMapNameKeyDown,
-  onMapNameClick,
   sharedTitle,
+  showScanBar = true,
   onCreateMap,
   onImportFile,
   onShowProjects,
@@ -55,34 +50,27 @@ const Topbar = ({
   onShowAccessRequests,
   pendingInviteCount = 0,
   pendingAccessRequestCount = 0,
-  titleCollaborators = [],
 }) => {
   const { isLoggedIn, currentUser, onShowProfile, onShowSettings, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const [showCollaboratorMenu, setShowCollaboratorMenu] = useState(false);
   const accountMenuRef = useRef(null);
-  const collaboratorMenuRef = useRef(null);
 
   useEffect(() => {
-    if (!showAccountMenu && !showCollaboratorMenu) return;
+    if (!showAccountMenu) return;
     const handleClickOutside = (event) => {
       if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) {
         setShowAccountMenu(false);
       }
-      if (collaboratorMenuRef.current && !collaboratorMenuRef.current.contains(event.target)) {
-        setShowCollaboratorMenu(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showAccountMenu, showCollaboratorMenu]);
+  }, [showAccountMenu]);
 
   const handleAccountToggle = () => setShowAccountMenu((prev) => !prev);
   const closeMenu = () => setShowAccountMenu(false);
 
   const totalPendingCount = pendingInviteCount + pendingAccessRequestCount;
-  const visibleCollaborators = titleCollaborators.slice(0, 2);
-  const hiddenCollaboratorCount = Math.max(0, titleCollaborators.length - visibleCollaborators.length);
+  const showMapCreationActions = !hasMap && (isLoggedIn ? canEdit : true);
 
   return (
     <div className="topbar">
@@ -93,105 +81,40 @@ const Topbar = ({
       </div>
 
       <div className="topbar-center">
-        <div className="search-container">
-          <ScanBar
-            canEdit={canEdit}
-            urlInput={urlInput}
-            onUrlInputChange={onUrlInputChange}
-            onUrlKeyDown={onUrlKeyDown}
-            options={scanOptions}
-            showOptions={showScanOptions}
-            optionsRef={scanOptionsRef}
-            onToggleOptions={onToggleScanOptions}
-            onOptionChange={onScanOptionChange}
-            scanLayerAvailability={scanLayerAvailability}
-            scanLayerVisibility={scanLayerVisibility}
-            onToggleScanLayer={onToggleScanLayer}
-            scanDepth={scanDepth}
-            onScanDepthChange={onScanDepthChange}
-            onScan={onScan}
-            scanLabel={scanLabel}
-            scanDisabled={scanDisabled}
-            scanTitle={scanTitle}
-            optionsDisabled={optionsDisabled}
-            onClearUrl={onClearUrl}
-            showClearUrl={showClearUrl}
-            sharedTitle={sharedTitle}
-          />
-        </div>
-
-        {hasMap && (
-          <div className="map-name-container">
-            {isEditingMapName ? (
-              <input
-                className="map-name-input"
-                value={mapName}
-                onChange={onMapNameChange}
-                onBlur={onMapNameBlur}
-                onKeyDown={onMapNameKeyDown}
-                autoFocus
-                spellCheck={false}
-              />
-            ) : (
-              <span
-                className="map-name-display"
-                onClick={onMapNameClick}
-                title={canEdit ? "Click to rename" : mapName}
-              >
-                {mapName || 'Untitled Map'}
-              </span>
-            )}
+        {showScanBar ? (
+          <div className="search-container">
+            <ScanBar
+              canEdit={canEdit}
+              urlInput={urlInput}
+              onUrlInputChange={onUrlInputChange}
+              onUrlKeyDown={onUrlKeyDown}
+              options={scanOptions}
+              showOptions={showScanOptions}
+              optionsRef={scanOptionsRef}
+              onToggleOptions={onToggleScanOptions}
+              onOptionChange={onScanOptionChange}
+              scanLayerAvailability={scanLayerAvailability}
+              scanLayerVisibility={scanLayerVisibility}
+              onToggleScanLayer={onToggleScanLayer}
+              scanDepth={scanDepth}
+              onScanDepthChange={onScanDepthChange}
+              onScan={onScan}
+              scanLabel={scanLabel}
+              scanDisabled={scanDisabled}
+              scanTitle={scanTitle}
+              optionsDisabled={optionsDisabled}
+              onClearUrl={onClearUrl}
+              showClearUrl={showClearUrl}
+              sharedTitle={sharedTitle}
+            />
           </div>
+        ) : (
+          <div className="topbar-center-spacer" aria-hidden="true" />
         )}
       </div>
 
       <div className="topbar-right">
-        {titleCollaborators.length > 0 && (
-          <div className="topbar-collaborators" ref={collaboratorMenuRef}>
-            <button
-              type="button"
-              className="topbar-collaborator-stack"
-              title={`${titleCollaborators.length} active collaborator${titleCollaborators.length === 1 ? '' : 's'}`}
-              aria-haspopup="menu"
-              aria-expanded={showCollaboratorMenu}
-              onClick={() => setShowCollaboratorMenu((prev) => !prev)}
-            >
-              {visibleCollaborators.map((collaborator) => (
-                <span
-                  key={collaborator.id}
-                  className={`topbar-collaborator-avatar tone-${collaborator.tone}`}
-                  aria-hidden="true"
-                >
-                  {collaborator.avatarLabel}
-                </span>
-              ))}
-              {hiddenCollaboratorCount > 0 && (
-                <span className="topbar-collaborator-hover-count" aria-hidden="true">
-                  {titleCollaborators.length}
-                </span>
-              )}
-            </button>
-            {showCollaboratorMenu && (
-              <div className="topbar-collaborator-menu" role="menu">
-                <div className="topbar-collaborator-menu-header">
-                  {titleCollaborators.length} active collaborator{titleCollaborators.length === 1 ? '' : 's'}
-                </div>
-                {titleCollaborators.map((collaborator) => (
-                  <div key={collaborator.id} className="topbar-collaborator-item" role="menuitem">
-                    <span className={`topbar-collaborator-avatar tone-${collaborator.tone}`} aria-hidden="true">
-                      {collaborator.avatarLabel}
-                    </span>
-                    <div className="topbar-collaborator-item-copy">
-                      <span className="topbar-collaborator-item-name">{collaborator.label}</span>
-                      <span className="topbar-collaborator-item-role">{String(collaborator.accessMode || 'view')}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {(isLoggedIn ? canEdit : true) && (
+        {showMapCreationActions && (
           <button
             className="icon-btn"
             title="Create New Map"
@@ -201,7 +124,7 @@ const Topbar = ({
           </button>
         )}
 
-        {(isLoggedIn ? canEdit : true) && (
+        {showMapCreationActions && (
           <button
             className="icon-btn"
             title="Import File"
@@ -211,7 +134,7 @@ const Topbar = ({
           </button>
         )}
 
-        <div className="divider" />
+        {showMapCreationActions && <div className="divider" />}
 
         {isLoggedIn ? (
           <div className="account-menu-wrapper" ref={accountMenuRef}>

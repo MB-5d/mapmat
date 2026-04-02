@@ -13,18 +13,21 @@ const ColorKey = ({
   editingConnectionKey,
   onEditConnectionColor,
   connectionLegend,
+  embedded = false,
 }) => (
-  <div className="color-key">
-    <div className="color-key-header" onClick={onToggle}>
-      <div className="color-key-title">
-        <Palette size={16} />
-        <span>Legend</span>
+  <div className={`color-key${embedded ? ' color-key-embedded' : ''}`}>
+    {!embedded && (
+      <div className="color-key-header" onClick={onToggle}>
+        <div className="color-key-title">
+          <Palette size={16} />
+          <span>Legend</span>
+        </div>
+        <button className="key-toggle">
+          {showColorKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
       </div>
-      <button className="key-toggle">
-        {showColorKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-      </button>
-    </div>
-    {showColorKey && (
+    )}
+    {(embedded || showColorKey) && (
       <div className="color-key-list">
         <div className="color-key-section">Pages</div>
         {Array.from({ length: Math.max(maxDepth + 1, colors.length) }).map((_, idx) => {

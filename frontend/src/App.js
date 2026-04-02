@@ -12,9 +12,7 @@ import {
   Info,
   Loader2,
   MessageSquare,
-  Moon,
   RefreshCw,
-  Sun,
   Trash2,
   Wifi,
   WifiOff,
@@ -52,7 +50,10 @@ import SaveVersionModal from './components/modals/SaveVersionModal';
 import ShareModal from './components/modals/ShareModal';
 import ScanProgressModal from './components/scan/ScanProgressModal';
 import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
+import ColorKey from './components/toolbar/ColorKey';
+import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
+import CanvasMapHeader from './components/toolbar/CanvasMapHeader';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname } from './utils/url';
 import {
@@ -138,6 +139,55 @@ const extractCommentMentions = (text) => (
     new Set((String(text || '').match(/@(\w+)/g) || []).map((mention) => mention.slice(1)))
   )
 );
+
+const COMMENT_MENTION_READ_STORAGE_PREFIX = 'mapmat-comment-mentions';
+
+const flattenCommentsForNode = (comments = [], nodeId, entries = []) => {
+  (comments || []).forEach((comment) => {
+    if (!comment?.id) return;
+    entries.push({ comment, nodeId });
+    if (Array.isArray(comment.replies) && comment.replies.length > 0) {
+      flattenCommentsForNode(comment.replies, nodeId, entries);
+    }
+  });
+  return entries;
+};
+
+const collectCommentEntriesFromTree = (node, entries = []) => {
+  if (!node) return entries;
+  flattenCommentsForNode(node.comments || [], node.id, entries);
+  (node.children || []).forEach((child) => collectCommentEntriesFromTree(child, entries));
+  return entries;
+};
+
+const buildUserMentionKeys = (user) => {
+  const tokens = new Set();
+  const addTokens = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return;
+    tokens.add(normalized);
+    normalized
+      .split(/[^a-z0-9_]+/i)
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean)
+      .forEach((token) => tokens.add(token));
+  };
+
+  addTokens(user?.name);
+  addTokens(user?.email ? String(user.email).split('@')[0] : '');
+  addTokens(user?.username);
+  addTokens(user?.id);
+
+  return tokens;
+};
+
+const getCommentMentionReadStorageKey = (user, mapKey) => {
+  const userKey = String(user?.id || user?.email || user?.name || 'anonymous')
+    .trim()
+    .toLowerCase();
+  const normalizedMapKey = String(mapKey || 'draft').trim().toLowerCase();
+  return `${COMMENT_MENTION_READ_STORAGE_PREFIX}:${userKey}:${normalizedMapKey}`;
+};
 
 const attachCommentsToNodeTree = (node, commentsByNode) => {
   if (!node) return node;
@@ -1188,6 +1238,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
   const [savedMapCommentsByNode, setSavedMapCommentsByNode] = useState({});
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
+  const [readMentionCommentIds, setReadMentionCommentIds] = useState(() => new Set());
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
@@ -1246,6 +1297,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const selectionStartedOnNodeRef = useRef(false);
   const suppressNodeClickRef = useRef(false);
   const viewDropdownRef = useRef(null);
+  const colorKeyRef = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
   const thumbnailQueueRef = useRef([]);
@@ -1309,6 +1361,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showViewDropdown]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (colorKeyRef.current && !colorKeyRef.current.contains(e.target)) {
+        setShowColorKey(false);
+      }
+    };
+    if (showColorKey) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showColorKey]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -2182,17 +2246,81 @@ export default function App({ currentRoute, navigateToRoute }) {
     return isPlacementHidden(sourceMeta) || isPlacementHidden(targetMeta);
   }, [forestIndex, layerVisibility]);
 
-  // Check if there are any comments in the map (for notification dot)
-  const hasAnyComments = useMemo(() => {
-    const checkComments = (node) => {
-      if (!node) return false;
-      if (node.comments?.length > 0) return true;
-      return node.children?.some(checkComments) || false;
-    };
-    const rootHasComments = renderRoot ? checkComments(renderRoot) : false;
-    const orphansHaveComments = visibleOrphans.some(checkComments);
-    return rootHasComments || orphansHaveComments;
+  const currentCommentMentionMapKey = useMemo(() => {
+    if (currentMap?.id) return currentMap.id;
+    return root?.url || currentMap?.name || 'draft';
+  }, [currentMap?.id, currentMap?.name, root?.url]);
+
+  const currentCommentMentionStorageKey = useMemo(
+    () => getCommentMentionReadStorageKey(currentUser, currentCommentMentionMapKey),
+    [currentCommentMentionMapKey, currentUser],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(currentCommentMentionStorageKey);
+      if (!raw) {
+        setReadMentionCommentIds(new Set());
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const nextIds = Array.isArray(parsed?.commentIds) ? parsed.commentIds : [];
+      setReadMentionCommentIds(new Set(nextIds.map((id) => String(id))));
+    } catch (error) {
+      console.warn('Failed to load comment mention read state', error);
+      setReadMentionCommentIds(new Set());
+    }
+  }, [currentCommentMentionStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        currentCommentMentionStorageKey,
+        JSON.stringify({ commentIds: Array.from(readMentionCommentIds) }),
+      );
+    } catch (error) {
+      console.warn('Failed to persist comment mention read state', error);
+    }
+  }, [currentCommentMentionStorageKey, readMentionCommentIds]);
+
+  const commentEntries = useMemo(() => {
+    const entries = [];
+    if (renderRoot) {
+      collectCommentEntriesFromTree(renderRoot, entries);
+    }
+    visibleOrphans.forEach((orphan) => collectCommentEntriesFromTree(orphan, entries));
+    return entries;
   }, [renderRoot, visibleOrphans]);
+
+  const unreadMentionCommentIds = useMemo(() => {
+    const mentionKeys = buildUserMentionKeys(currentUser);
+    if (!mentionKeys.size) return [];
+    return commentEntries
+      .filter(({ comment }) => (comment.mentions || []).some((mention) => mentionKeys.has(String(mention || '').trim().toLowerCase())))
+      .map(({ comment }) => String(comment.id));
+  }, [commentEntries, currentUser]);
+
+  const hasUnreadCommentMentions = useMemo(
+    () => unreadMentionCommentIds.some((commentId) => !readMentionCommentIds.has(commentId)),
+    [readMentionCommentIds, unreadMentionCommentIds],
+  );
+
+  const markMentionCommentsRead = useCallback((filterFn = null) => {
+    if (!unreadMentionCommentIds.length) return;
+    const idsToRead = unreadMentionCommentIds.filter((commentId) => {
+      if (!filterFn) return true;
+      const entry = commentEntries.find(({ comment }) => String(comment.id) === commentId);
+      return entry ? filterFn(entry) : false;
+    });
+    if (!idsToRead.length) return;
+    setReadMentionCommentIds((prev) => {
+      const next = new Set(prev);
+      idsToRead.forEach((commentId) => next.add(String(commentId)));
+      return next;
+    });
+  }, [commentEntries, unreadMentionCommentIds]);
 
   const markerStatusUsage = useMemo(() => {
     const usedStatuses = new Set();
@@ -2398,26 +2526,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity]);
-
-  // Theme toggle functions
-  const toggleTheme = () => {
-    setTheme(prev => {
-      if (prev === 'auto') {
-        // Check current actual appearance
-        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        return isDark ? 'light' : 'dark';
-      }
-      return prev === 'dark' ? 'light' : 'dark';
-    });
-  };
-
-  // Helper to get current visual theme
-  const getCurrentTheme = () => {
-    if (theme === 'auto') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return theme;
-  };
 
   // Show confirmation modal and return promise
   const showConfirm = useCallback(({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
@@ -2992,6 +3100,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!hasMap || !currentMap?.id || !canViewPresenceValue) return [];
     return isLiveActive ? liveCollaborators : presenceCollaborators;
   }, [canViewPresenceValue, currentMap?.id, hasMap, isLiveActive, liveCollaborators, presenceCollaborators]);
+  const showTopbarScanBar = !hasMap || isUnsavedScannedMap;
   const showCoeditingReadOnlyBanner = !!(
     isCoeditingReadOnlyMode
     && hasMap
@@ -6142,7 +6251,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .theme-toggle, .thumbnail-progress-toast, .minimap-navigator');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .thumbnail-progress-toast, .minimap-navigator');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isInsideNodeMenu = e.target.closest('.node-menu');
@@ -6749,12 +6858,18 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (showHistoryModal) {
           setShowHistoryModal(false);
         }
+        if (showViewDropdown) {
+          setShowViewDropdown(false);
+        }
+        if (showColorKey) {
+          setShowColorKey(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -7657,6 +7772,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!canvasRef.current) return;
     const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
     if (!nodeId) return;
+    markMentionCommentsRead((entry) => sameId(entry.nodeId, nodeId));
     if (useBackendComments && currentMap?.id) {
       loadSavedMapComments(currentMap.id);
     }
@@ -9892,6 +10008,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
+        showScanBar={showTopbarScanBar}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
         scanOptionsRef={scanOptionsRef}
@@ -9916,20 +10033,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : isUnsavedScannedMap ? "Rescan URL" : "Scan URL"}
         optionsDisabled={!urlInput.trim() || isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
-        showClearUrl={!hasMap && !!urlInput.trim()}
-        mapName={mapName}
-        isEditingMapName={isEditingMapName}
-        onMapNameChange={(e) => setMapName(e.target.value)}
-        onMapNameBlur={commitMapNameEdit}
-        onMapNameKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            commitMapNameEdit();
-          }
-          if (e.key === 'Escape') {
-            cancelMapNameEdit();
-          }
-        }}
-        onMapNameClick={startMapNameEdit}
+        showClearUrl={showTopbarScanBar && !!urlInput.trim()}
         sharedTitle={root?.title || 'Shared Sitemap'}
         onCreateMap={async () => {
           if (!currentUser) {
@@ -9964,7 +10068,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         onShowHistory={handleShowHistory}
         pendingInviteCount={pendingMapInvites.length}
         pendingAccessRequestCount={pendingAccessRequests.length}
-        titleCollaborators={titleCollaborators}
       />
 
       <div
@@ -10061,18 +10164,25 @@ export default function App({ currentRoute, navigateToRoute }) {
           </div>
         )}
 
-        {/* Theme toggle */}
-        <button
-          className="theme-toggle"
-          onClick={toggleTheme}
-          title={`Switch to ${getCurrentTheme() === 'dark' ? 'light' : 'dark'} mode`}
-        >
-          <div className={`theme-toggle-track ${getCurrentTheme()}`}>
-            <Sun size={14} className="theme-icon sun" />
-            <Moon size={14} className="theme-icon moon" />
-            <div className="theme-toggle-thumb" />
-          </div>
-        </button>
+        {hasMap && !showInviteAcceptGate && !showMapAccessGate && (
+          <CanvasMapHeader
+            canEdit={canEdit()}
+            mapName={mapName}
+            isEditingMapName={isEditingMapName}
+            onMapNameChange={(e) => setMapName(e.target.value)}
+            onMapNameBlur={commitMapNameEdit}
+            onMapNameKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                commitMapNameEdit();
+              }
+              if (e.key === 'Escape') {
+                cancelMapNameEdit();
+              }
+            }}
+            onMapNameClick={startMapNameEdit}
+            collaborators={titleCollaborators}
+          />
+        )}
 
         {!hasMap && (
           <div className="blank">
@@ -10791,72 +10901,6 @@ export default function App({ currentRoute, navigateToRoute }) {
               })}
 
             <RightRail
-              layersPanelProps={{
-                layers,
-                connectionTool,
-                onToggleUserFlows: () => {
-                  setLayers(l => ({ ...l, userFlows: !l.userFlows }));
-                  if (layers.userFlows && connectionTool === 'userflow') {
-                    setConnectionTool(null);
-                  }
-                },
-                onToggleCrossLinks: () => {
-                  setLayers(l => ({ ...l, crossLinks: !l.crossLinks }));
-                  if (layers.crossLinks && connectionTool === 'crosslink') {
-                    setConnectionTool(null);
-                  }
-                },
-                onToggleBrokenLinks: () => setLayers(l => ({ ...l, brokenLinks: !l.brokenLinks })),
-                showPageNumbers: layers.pageNumbers,
-                onTogglePageNumbers: () => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers })),
-                connectionAvailability,
-                scanLayerAvailability,
-                scanLayerVisibility,
-                onToggleScanLayer: (layerKey) => {
-                  setScanLayerVisibility(prev => ({
-                    ...prev,
-                    [layerKey]: !prev[layerKey],
-                  }));
-                },
-                changeFilters,
-                onToggleChangeStatus: (status) => {
-                  setChangeFilters(prev => ({
-                    ...prev,
-                    statuses: {
-                      ...prev.statuses,
-                      [status]: !prev.statuses?.[status],
-                    },
-                  }));
-                },
-                changeStatusOptions: markerStatusOptions,
-                showChangeSection: showMarkerSection,
-                showViewDropdown,
-                onToggleDropdown: () => setShowViewDropdown(!showViewDropdown),
-                viewDropdownRef,
-              }}
-              colorKeyProps={{
-                showColorKey,
-                onToggle: () => setShowColorKey(v => !v),
-                colors,
-                connectionColors,
-                maxDepth,
-                canEdit: canEdit(),
-                editingDepth: editingColorDepth,
-                editingConnectionKey,
-                connectionLegend,
-                onEditDepth: (depth, position) => {
-                  beginColorEdit();
-                  setEditingColorDepth(depth);
-                  setEditingConnectionKey(null);
-                  setColorPickerPosition(position);
-                },
-                onEditConnectionColor: (key, position) => {
-                  beginColorEdit();
-                  setEditingConnectionKey(key);
-                  setEditingColorDepth(null);
-                  setColorPickerPosition(position);
-                },
-              }}
               toolbarProps={{
                 canEdit: canEdit(),
                 canViewComments: canViewComments(),
@@ -10884,6 +10928,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowCommentsPanel((prev) => {
                     const next = !prev;
                     if (next) {
+                      markMentionCommentsRead();
+                      setShowViewDropdown(false);
+                      setShowColorKey(false);
                       setShowReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
@@ -10894,12 +10941,14 @@ export default function App({ currentRoute, navigateToRoute }) {
                     return next;
                   });
                 },
-                hasAnyComments,
+                hasUnreadCommentMentions,
                 showReportDrawer,
                 onToggleReportDrawer: () => {
                   setShowReportDrawer((prev) => {
                     const next = !prev;
                     if (next) {
+                      setShowViewDropdown(false);
+                      setShowColorKey(false);
                       setShowCommentsPanel(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
@@ -10910,6 +10959,98 @@ export default function App({ currentRoute, navigateToRoute }) {
                     return next;
                   });
                 },
+                showLayersMenu: showViewDropdown,
+                onToggleLayersMenu: () => {
+                  setShowViewDropdown((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setShowColorKey(false);
+                    }
+                    return next;
+                  });
+                },
+                layersMenuRef: viewDropdownRef,
+                layersPanel: (
+                  <LayersPanel
+                    embedded
+                    layers={layers}
+                    connectionTool={connectionTool}
+                    onToggleUserFlows={() => {
+                      setLayers((currentLayers) => ({ ...currentLayers, userFlows: !currentLayers.userFlows }));
+                      if (layers.userFlows && connectionTool === 'userflow') {
+                        setConnectionTool(null);
+                      }
+                    }}
+                    onToggleCrossLinks={() => {
+                      setLayers((currentLayers) => ({ ...currentLayers, crossLinks: !currentLayers.crossLinks }));
+                      if (layers.crossLinks && connectionTool === 'crosslink') {
+                        setConnectionTool(null);
+                      }
+                    }}
+                    onToggleBrokenLinks={() => setLayers((currentLayers) => ({ ...currentLayers, brokenLinks: !currentLayers.brokenLinks }))}
+                    connectionAvailability={connectionAvailability}
+                    scanLayerAvailability={scanLayerAvailability}
+                    scanLayerVisibility={scanLayerVisibility}
+                    onToggleScanLayer={(layerKey) => {
+                      setScanLayerVisibility((prev) => ({
+                        ...prev,
+                        [layerKey]: !prev[layerKey],
+                      }));
+                    }}
+                    changeFilters={changeFilters}
+                    onToggleChangeStatus={(status) => {
+                      setChangeFilters((prev) => ({
+                        ...prev,
+                        statuses: {
+                          ...prev.statuses,
+                          [status]: !prev.statuses?.[status],
+                        },
+                      }));
+                    }}
+                    changeStatusOptions={markerStatusOptions}
+                    showChangeSection={showMarkerSection}
+                    showViewDropdown={showViewDropdown}
+                    onToggleDropdown={() => setShowViewDropdown((prev) => !prev)}
+                    viewDropdownRef={viewDropdownRef}
+                  />
+                ),
+                showLegendMenu: showColorKey,
+                onToggleLegendMenu: () => {
+                  setShowColorKey((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setShowViewDropdown(false);
+                    }
+                    return next;
+                  });
+                },
+                legendMenuRef: colorKeyRef,
+                legendPanel: (
+                  <ColorKey
+                    embedded
+                    showColorKey={showColorKey}
+                    onToggle={() => setShowColorKey((currentValue) => !currentValue)}
+                    colors={colors}
+                    connectionColors={connectionColors}
+                    maxDepth={maxDepth}
+                    canEdit={canEdit()}
+                    editingDepth={editingColorDepth}
+                    editingConnectionKey={editingConnectionKey}
+                    connectionLegend={connectionLegend}
+                    onEditDepth={(depth, position) => {
+                      beginColorEdit();
+                      setEditingColorDepth(depth);
+                      setEditingConnectionKey(null);
+                      setColorPickerPosition(position);
+                    }}
+                    onEditConnectionColor={(key, position) => {
+                      beginColorEdit();
+                      setEditingConnectionKey(key);
+                      setEditingColorDepth(null);
+                      setColorPickerPosition(position);
+                    }}
+                  />
+                ),
                 onToggleImageMenu: () => {
                   setShowImageMenu((prev) => !prev);
                 },
@@ -10949,6 +11090,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowVersionHistoryDrawer((prev) => {
                     const next = !prev;
                     if (next) {
+                      setShowViewDropdown(false);
+                      setShowColorKey(false);
                       setShowCommentsPanel(false);
                       setShowReportDrawer(false);
                       setShowProfileDrawer(false);
@@ -10959,12 +11102,22 @@ export default function App({ currentRoute, navigateToRoute }) {
                     return next;
                   });
                 },
-                onExport: () => setShowExportModal(true),
-                onShare: () => setShowShareModal(true),
+                onExport: () => {
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowExportModal(true);
+                },
+                onShare: () => {
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowShareModal(true);
+                },
                 canOpenShare: canOpenShareModalValue,
                 hasMap,
                 hasSavedMap: !!currentMap?.id,
                 showVersionHistory: showVersionHistoryDrawer,
+                shareDisabledReason: 'Save this map before sharing',
+                onBlockedShareAttempt: () => showToast('Save this map before sharing', 'info'),
               }}
               zoomProps={{
                 scale,
@@ -11221,9 +11374,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         defaultProjectId={duplicateMapConfig?.projectId || null}
         defaultName={duplicateMapConfig?.name || ''}
         defaultNotes={currentMap?.notes || ''}
-        accessLevels={ACCESS_LEVELS}
-        sharePermission={sharePermission}
-        onChangePermission={setSharePermission}
         onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
         title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}

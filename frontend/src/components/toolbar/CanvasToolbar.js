@@ -9,9 +9,11 @@ import {
   Image,
   Eye,
   EyeOff,
+  Layers,
   Link2,
   MessageSquare,
   MousePointer2,
+  Palette,
   RefreshCcw,
   Redo2,
   Share2,
@@ -31,9 +33,17 @@ const CanvasToolbar = ({
   onToggleCrosslink,
   showCommentsPanel,
   onToggleCommentsPanel,
-  hasAnyComments,
+  hasUnreadCommentMentions,
   showReportDrawer,
   onToggleReportDrawer,
+  showLayersMenu,
+  onToggleLayersMenu,
+  layersMenuRef,
+  layersPanel,
+  showLegendMenu,
+  onToggleLegendMenu,
+  legendMenuRef,
+  legendPanel,
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
@@ -69,9 +79,12 @@ const CanvasToolbar = ({
   hasMap,
   hasSavedMap,
   showVersionHistory,
+  shareDisabledReason = '',
+  onBlockedShareAttempt,
 }) => {
   const undoBlockedByLive = !canUndo && !!undoRedoDisabledReason;
   const redoBlockedByLive = !canRedo && !!undoRedoDisabledReason;
+  const shareUnavailable = !hasSavedMap;
 
   return (
   <div className="canvas-toolbar">
@@ -204,7 +217,7 @@ const CanvasToolbar = ({
       disabled={!canViewComments}
     >
       <MessageSquare size={20} />
-      {hasAnyComments && canViewComments && <span className="notification-dot" />}
+      {hasUnreadCommentMentions && canViewComments && <span className="notification-dot" />}
     </button>
     <button
       className={`canvas-tool-btn ${showReportDrawer ? 'active' : ''}`}
@@ -213,6 +226,36 @@ const CanvasToolbar = ({
     >
       <GanttChartSquare size={20} />
     </button>
+    <div className="canvas-tool-menu-wrapper" ref={layersMenuRef}>
+      <button
+        className={`canvas-tool-btn ${showLayersMenu ? 'active' : ''}`}
+        onClick={onToggleLayersMenu}
+        title="Layers"
+        disabled={!hasMap}
+      >
+        <Layers size={20} />
+      </button>
+      {showLayersMenu && (
+        <div className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+          {layersPanel}
+        </div>
+      )}
+    </div>
+    <div className="canvas-tool-menu-wrapper" ref={legendMenuRef}>
+      <button
+        className={`canvas-tool-btn ${showLegendMenu ? 'active' : ''}`}
+        onClick={onToggleLegendMenu}
+        title="Legend"
+        disabled={!hasMap}
+      >
+        <Palette size={20} />
+      </button>
+      {showLegendMenu && (
+        <div className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+          {legendPanel}
+        </div>
+      )}
+    </div>
 
     {canEdit && <div className="canvas-toolbar-divider" />}
 
@@ -306,10 +349,10 @@ const CanvasToolbar = ({
 
     {canOpenShare && (
       <button
-        className="canvas-tool-btn"
-        onClick={onShare}
-        disabled={!hasMap}
-        title="Share"
+        className={`canvas-tool-btn ${shareUnavailable ? 'disabled' : ''}`}
+        onClick={shareUnavailable ? onBlockedShareAttempt : onShare}
+        title={shareUnavailable ? shareDisabledReason : 'Share'}
+        aria-disabled={shareUnavailable}
       >
         <Share2 size={20} />
       </button>
