@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import { resolveApiAssetUrl } from '../../utils/assets';
+
 const CanvasMapHeader = ({
   canEdit,
   mapName,
@@ -67,7 +69,11 @@ const CanvasMapHeader = ({
                   className={`topbar-collaborator-avatar tone-${collaborator.tone}`}
                   aria-hidden="true"
                 >
-                  {collaborator.avatarLabel}
+                  {resolveApiAssetUrl(collaborator.avatarUrl) ? (
+                    <img src={resolveApiAssetUrl(collaborator.avatarUrl)} alt="" />
+                  ) : (
+                    collaborator.avatarLabel
+                  )}
                 </span>
               ))}
               {hiddenCollaboratorCount > 0 && (
@@ -84,7 +90,11 @@ const CanvasMapHeader = ({
                 {collaborators.map((collaborator) => (
                   <div key={collaborator.id} className="topbar-collaborator-item" role="menuitem">
                     <span className={`topbar-collaborator-avatar tone-${collaborator.tone}`} aria-hidden="true">
-                      {collaborator.avatarLabel}
+                      {resolveApiAssetUrl(collaborator.avatarUrl) ? (
+                        <img src={resolveApiAssetUrl(collaborator.avatarUrl)} alt="" />
+                      ) : (
+                        collaborator.avatarLabel
+                      )}
                     </span>
                     <div className="topbar-collaborator-item-copy">
                       <span className="topbar-collaborator-item-name">{collaborator.label}</span>

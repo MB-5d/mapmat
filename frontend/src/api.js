@@ -120,6 +120,19 @@ export async function updateProfile(data) {
   });
 }
 
+export async function uploadMyAvatar({ imageDataUrl }) {
+  return fetchApi('/auth/me/avatar', {
+    method: 'POST',
+    body: JSON.stringify({ imageDataUrl }),
+  });
+}
+
+export async function removeMyAvatar() {
+  return fetchApi('/auth/me/avatar', {
+    method: 'DELETE',
+  });
+}
+
 export async function deleteAccount(password) {
   const result = await fetchApi('/auth/me', {
     method: 'DELETE',
@@ -127,6 +140,19 @@ export async function deleteAccount(password) {
   });
   clearStoredAuthToken();
   return result;
+}
+
+export async function adminResetUserPassword({ email, newPassword }) {
+  return fetchApi('/api/admin/users/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, newPassword }),
+  });
+}
+
+export async function adminSendMonitoringTestError() {
+  return fetchApi('/api/admin/monitoring/test-error', {
+    method: 'POST',
+  });
 }
 
 // ============================================

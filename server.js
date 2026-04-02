@@ -36,11 +36,17 @@ const permissionPolicy = require('./policies/permissionPolicy');
 const emailDeliveryStore = require('./stores/emailDeliveryStore');
 const { getCoeditingHealthSnapshotAsync } = require('./utils/coeditingObservability');
 const {
+  createExpressSentryErrorMiddleware,
+  installBackendSentryProcessHandlers,
+  isBackendSentryEnabled,
+} = require('./utils/sentryBackend');
+const {
   summarizeCoeditingRolloutConfigAsync,
   resolveCoeditingSystemStatusAsync,
 } = require('./utils/coeditingRollout');
 const { buildHealthSnapshot: getEmailHealthSnapshot } = require('./utils/emailProvider');
 const { JOB_TYPES: EMAIL_JOB_TYPES, processEmailDeliveryJobAsync } = require('./utils/emailDelivery');
+const { AVATAR_PUBLIC_BASE, AVATAR_STORAGE_DIR } = require('./utils/avatarStorage');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -133,6 +139,7 @@ if (!fs.existsSync(SCREENSHOT_DIR)) {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 }
 app.use('/screenshots', express.static(SCREENSHOT_DIR));
+app.use(AVATAR_PUBLIC_BASE, express.static(AVATAR_STORAGE_DIR));
 
 // Mount routes
 app.use('/auth', authRouter);
@@ -151,6 +158,8 @@ const DB_RUNTIME = db.runtime || {
 const DB_PROVIDER = DB_RUNTIME.activeProvider;
 const EMAIL_HEALTH = getEmailHealthSnapshot();
 console.log(`[email] provider=${EMAIL_HEALTH.provider} configured=${EMAIL_HEALTH.providerConfigured ? 'yes' : 'no'} appBaseUrl=${EMAIL_HEALTH.appBaseUrl}`);
+console.log(`[monitoring] backend_sentry=${isBackendSentryEnabled() ? 'enabled' : 'disabled'}`);
+installBackendSentryProcessHandlers();
 
 // Browser instance for screenshots
 let browser = null;
@@ -3223,6 +3232,8 @@ app.get('/screenshot-jobs/:id/stream', authMiddleware, requireApiKey, (req, res)
     }
   }, 1000);
 });
+
+app.use(createExpressSentryErrorMiddleware());
 
 // Cleanup on exit
 process.on('SIGINT', async () => {

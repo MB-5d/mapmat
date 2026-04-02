@@ -57,15 +57,19 @@ import CanvasMapHeader from './components/toolbar/CanvasMapHeader';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname } from './utils/url';
 import {
+  APP_ONLY_MODE,
   API_BASE,
   DEFAULT_COLORS,
   ACCESS_LEVELS,
   SCAN_MESSAGES,
+  SCAN_MAX_DEPTH_UI,
   REPORT_TYPE_OPTIONS,
   ANNOTATION_STATUS_OPTIONS,
   LAYOUT,
+  TESTER_NOT_READY_MESSAGE,
 } from './utils/constants';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import { resolveApiAssetUrl } from './utils/assets';
 import {
   buildExpandedStackMap,
   getMaxDepth,
@@ -101,6 +105,11 @@ import {
   createMapRoute,
   createShareRoute,
 } from './utils/appRoutes';
+import {
+  clearAnalyticsUser,
+  identifyAnalyticsUser,
+  trackEvent,
+} from './utils/analytics';
 
 const DEFAULT_CONNECTION_COLORS = {
   userFlows: '#14b8a6',
@@ -398,6 +407,7 @@ const buildPresenceCollaborators = (
       id: dedupeKey,
       label,
       avatarLabel,
+      avatarUrl: entry.avatarUrl || null,
       tone,
       accessMode: String(entry.accessMode || '').trim().toLowerCase() || 'view',
     });
@@ -426,7 +436,15 @@ const PresenceChipList = ({ collaborators = [] }) => {
           title={`${collaborator.label} • ${formatPresenceAccessLabel(collaborator.accessMode)}`}
         >
           <span className="presence-chip-avatar" aria-hidden="true">
-            {collaborator.avatarLabel}
+            {resolveApiAssetUrl(collaborator.avatarUrl) ? (
+              <img
+                className="presence-chip-avatar-image"
+                src={resolveApiAssetUrl(collaborator.avatarUrl)}
+                alt=""
+              />
+            ) : (
+              collaborator.avatarLabel
+            )}
           </span>
           <span className="presence-chip-label">{collaborator.label}</span>
         </div>
@@ -3372,6 +3390,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         email,
         role: collaborationInviteRole,
       });
+      trackEvent('invite_sent', {
+        map_id: String(currentMap.id),
+        role: collaborationInviteRole,
+      });
       setCollaborationInviteEmail('');
       showToast('Invite created', 'success');
       await loadCollaborationData();
@@ -3760,6 +3782,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       name,
       notes,
     });
+    trackEvent('version_saved', {
+      map_id: String(targetMapId),
+      version_id: String(version?.id || ''),
+      version_name: version?.name || name || '',
+      autosaved: (version?.name || name || '').toLowerCase() === 'autosaved' ? 'true' : 'false',
+    });
     lastVersionSnapshotRef.current = serialized;
     setMapVersions((prev) => [version, ...(prev || [])].slice(0, 25));
     setLatestVersionId(version.id);
@@ -3831,6 +3859,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setCurrentUser(user);
     setIsLoggedIn(true);
     setAccessLevel(ACCESS_LEVELS.EDIT);
+    identifyAnalyticsUser(user);
+    trackEvent('login', {
+      method: user?.authMode === 'demo' ? 'demo' : 'password',
+      app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
+    });
 
     // Load user's projects, maps, and history
     try {
@@ -3848,6 +3881,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setCurrentUser(user);
     setIsLoggedIn(true);
     setAccessLevel(ACCESS_LEVELS.EDIT);
+    identifyAnalyticsUser(user);
+    trackEvent('login', {
+      method: 'demo',
+      app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
+    });
     setProjects([]);
     setScanHistory([]);
     setPendingMapInvites([]);
@@ -3856,12 +3894,21 @@ export default function App({ currentRoute, navigateToRoute }) {
     setPendingAccessRequestsError('');
   }, []);
 
+  useEffect(() => {
+    if (currentUser) {
+      identifyAnalyticsUser(currentUser);
+      return;
+    }
+    clearAnalyticsUser();
+  }, [currentUser]);
+
 
   const applyLoggedOutState = useCallback(({ preserveViewOnlyMap = false } = {}) => {
     try {
       if (preserveViewOnlyMap && root) {
         setCurrentUser(null);
         setIsLoggedIn(false);
+        clearAnalyticsUser();
         setProjects([]);
         setScanHistory([]);
         setCurrentMap(null);
@@ -3881,6 +3928,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       setCurrentUser(null);
       setIsLoggedIn(false);
+      clearAnalyticsUser();
       setProjects([]);
       setScanHistory([]);
       setRoot(null);
@@ -4019,6 +4067,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     setPendingMapInvitesError('');
     try {
       await api.acceptMapInviteById(invite.id);
+      trackEvent('invite_accepted', {
+        map_id: String(invite?.mapId || ''),
+      });
       showToast(`Invite accepted for ${invite.mapName || 'shared map'}`, 'success');
       await Promise.all([
         loadAuthenticatedWorkspace(),
@@ -4080,6 +4131,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         status: 'approved',
         role: role || request.requestedRole || 'viewer',
       });
+      trackEvent('access_request_approved', {
+        map_id: String(request.mapId),
+        role: role || request.requestedRole || 'viewer',
+      });
       showToast(`Approved access for ${request.requesterName || request.requesterEmail || 'user'}`, 'success');
       await Promise.all([
         loadPendingAccessRequests({ silent: true }),
@@ -4137,6 +4192,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       const response = await api.createMapAccessRequest(mapId, {
         requestedRole: 'viewer',
         message: routeAccessRequestMessage.trim() || undefined,
+      });
+      trackEvent('access_request_sent', {
+        map_id: String(mapId),
+        reused: response?.reused ? 'true' : 'false',
       });
       setRouteMapGateState((previous) => ({
         mapId,
@@ -4674,6 +4733,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setThumbnailScopeIds(targetIds);
     setShowThumbnails(true);
     setShowImageMenu(false);
+    trackEvent('screenshot_capture', {
+      type: 'thumbnail',
+      scope,
+      count: candidates.length,
+    });
     candidates.forEach((node) => {
       requestThumbnail(node);
     });
@@ -4847,6 +4911,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         `Downloaded ${targets.length} ${assetType === 'thumb' ? 'thumbnail' : 'full screenshot'} asset${targets.length === 1 ? '' : 's'}`,
         'success',
       );
+      trackEvent('screenshot_download', {
+        asset_type: assetType,
+        scope,
+        count: targets.length,
+      });
     } catch (error) {
       console.error('Screenshot asset download error:', error);
       showToast(error.message || 'Failed to download screenshot assets', 'error');
@@ -5009,6 +5078,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         `Captured ${targets.length} full screenshot${targets.length === 1 ? '' : 's'}`,
         'success',
       );
+      trackEvent('screenshot_capture', {
+        type: 'full',
+        scope,
+        count: targets.length,
+      });
     } catch (error) {
       console.error('Full screenshot batch error:', error);
       if (isScreenshotAuthError(error?.message)) {
@@ -5026,6 +5100,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       const { project } = await api.createProject(name.trim());
       await loadAuthenticatedWorkspace();
       setExpandedProjects((prev) => ({ ...prev, [project.id]: true }));
+      trackEvent('project_created', {
+        project_id: String(project?.id || ''),
+        project_name: project?.name || name.trim(),
+      });
       if (!root) {
         setShowProjectsModal(true);
       }
@@ -5489,6 +5567,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       setMapSaveConflict(null);
       setShowSaveMapModal(false);
+      trackEvent('map_saved', {
+        map_id: String(savedMap?.id || ''),
+        project_id: String(savedMap?.project_id || targetProjectId || ''),
+        new_map: wasNewMap ? 'true' : 'false',
+        imported_map: isImportedMap ? 'true' : 'false',
+      });
       showToast(`Map "${mapName}" saved`, 'success');
 
       if (pendingLogoutAfterSave) {
@@ -6016,11 +6100,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     const parsedDepth = Number.parseInt(scanDepth, 10);
-    const depthValue = Number.isFinite(parsedDepth) ? Math.min(Math.max(parsedDepth, 1), 8) : 4;
+    const depthValue = Number.isFinite(parsedDepth)
+      ? Math.min(Math.max(parsedDepth, 1), SCAN_MAX_DEPTH_UI)
+      : Math.min(4, SCAN_MAX_DEPTH_UI);
 
     setLoading(true);
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
+    trackEvent('scan_started', {
+      depth: depthValue,
+      authenticated_pages: scanOptions.authenticatedPages ? 'true' : 'false',
+    });
 
     const scanConfig = {
       ...scanOptions,
@@ -6039,6 +6129,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     } catch (err) {
       console.error('Scan job creation failed:', err);
       showToast(err.message || 'Failed to start scan', 'error');
+      trackEvent('scan_failed', {
+        phase: 'job_create',
+        message: err?.message || 'Failed to start scan',
+      });
       stopScanTimers();
       setLoading(false);
       setScanProgress({ scanned: 0, queued: 0 });
@@ -6077,6 +6171,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       if (job?.status === 'failed') {
         showToast(`Scan failed: ${job.error || 'Unknown error'}`, 'error');
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: job?.error || 'Unknown error',
+        });
         eventSource.close();
         eventSourceRef.current = null;
         scanJobIdRef.current = null;
@@ -6101,6 +6199,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!data?.root) {
         console.error('Scan completed without a root node:', data);
         showToast('Scan completed but returned no pages', 'error');
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: 'Scan completed but returned no pages',
+        });
         eventSource.close();
         eventSourceRef.current = null;
         scanJobIdRef.current = null;
@@ -6205,6 +6307,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
         const pageCount = countNodes(merged.root);
         addToHistory(url, merged.root, pageCount, scanConfig, depthValue);
+        trackEvent('scan_completed', {
+          hostname: (() => {
+            try {
+              return new URL(url).hostname;
+            } catch {
+              return '';
+            }
+          })(),
+          page_count: pageCount,
+          depth: depthValue,
+        });
         showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
         setTimeout(resetView, 100);
 
@@ -6220,8 +6333,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       try {
         const data = JSON.parse(e.data);
         showToast(`Scan failed: ${data.error}`, 'error');
+        trackEvent('scan_failed', {
+          phase: 'stream',
+          message: data?.error || 'Connection error',
+        });
       } catch {
         showToast('Scan failed: Connection error', 'error');
+        trackEvent('scan_failed', {
+          phase: 'stream',
+          message: 'Connection error',
+        });
       }
       eventSource.close();
       eventSourceRef.current = null;
@@ -6233,6 +6354,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     eventSource.onerror = () => {
       showToast('Scan failed: Connection error', 'error');
+      trackEvent('scan_failed', {
+        phase: 'stream',
+        message: 'Connection error',
+      });
       eventSource.close();
       eventSourceRef.current = null;
       scanJobIdRef.current = null;
@@ -7534,6 +7659,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           parentCommentId,
           text: commentText.trim(),
         });
+        trackEvent('comment_created', {
+          map_id: String(currentMap.id),
+          reply: parentCommentId ? 'true' : 'false',
+          mentions: extractCommentMentions(commentText).length,
+        });
         await loadSavedMapComments(currentMap.id);
       } catch (error) {
         console.error('Create map comment error:', error);
@@ -7590,6 +7720,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       try {
         await api.updateMapComment(currentMap.id, commentId, {
           completed: !currentComment.completed,
+        });
+        trackEvent(currentComment.completed ? 'comment_reopened' : 'comment_resolved', {
+          map_id: String(currentMap.id),
         });
         await loadSavedMapComments(currentMap.id);
       } catch (error) {
@@ -10024,7 +10157,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setScanDepth('');
             return;
           }
-          const nextValue = Math.min(Number(cleaned), 8);
+          const nextValue = Math.min(Number(cleaned), SCAN_MAX_DEPTH_UI);
           setScanDepth(String(nextValue));
         }}
         onScan={scan}
@@ -10738,9 +10871,14 @@ export default function App({ currentRoute, navigateToRoute }) {
                 >
                   <button
                     className="connection-menu-item"
+                    title={APP_ONLY_MODE ? `${TESTER_NOT_READY_MESSAGE}: connection comments` : 'Add comment'}
                     onClick={() => {
-                      // TODO: Implement connection comments
-                      showToast('Connection comments coming soon', 'info');
+                      showToast(
+                        APP_ONLY_MODE
+                          ? `${TESTER_NOT_READY_MESSAGE}: connection comments are not ready yet.`
+                          : 'Connection comments coming soon',
+                        'info',
+                      );
                       setConnectionMenu(null);
                     }}
                   >

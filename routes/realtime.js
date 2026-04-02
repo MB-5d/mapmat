@@ -70,6 +70,7 @@ function serializePresenceSession(row) {
     identityMode: metadata?.identityMode || 'named',
     tone: Number.isInteger(metadata?.tone) ? metadata.tone : null,
     avatarLabel: metadata?.avatarLabel || null,
+    avatarUrl: metadata?.avatarUrl || null,
     lastSeenAt: row.last_seen_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -185,6 +186,7 @@ router.post('/maps/:id/presence/heartbeat', async (req, res) => {
     metadataPayload.identityMode = identity.identityMode;
     metadataPayload.tone = identity.tone;
     metadataPayload.avatarLabel = identity.avatarLabel;
+    metadataPayload.avatarUrl = identity.avatarUrl || null;
     const metadata = JSON.stringify(metadataPayload);
     const nowIso = new Date().toISOString();
     const cutoffIso = getCutoffIso();

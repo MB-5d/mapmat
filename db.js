@@ -193,6 +193,7 @@ db.exec(`
 `);
 
 // Backfill new columns without full migrations
+ensureColumn('users', 'avatar_path', 'TEXT');
 ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
 ensureColumn('maps', 'connection_colors', 'TEXT');

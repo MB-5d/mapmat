@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, User } from 'lucide-react';
+import { AlertTriangle, ImagePlus, Loader2, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
+import { resolveApiAssetUrl } from '../../utils/assets';
+import { captureFrontendError } from '../../utils/analytics';
 
 const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast }) => {
   const [name, setName] = useState('');
@@ -11,11 +13,17 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
+  const [supportEmail, setSupportEmail] = useState('');
+  const [supportPassword, setSupportPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const wasOpenRef = useRef(false);
+  const avatarInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
@@ -24,13 +32,20 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       setNewPassword('');
       setConfirmPassword('');
       setDeletePassword('');
+      setSupportEmail('');
+      setSupportPassword('');
       setShowDeleteConfirm(false);
       setError('');
       setSuccess('');
       setLoading(false);
+      setAvatarLoading(false);
+      setSupportLoading(false);
+      setMonitoringLoading(false);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, user]);
+
+  const avatarUrl = resolveApiAssetUrl(user?.avatarUrl);
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -85,6 +100,95 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     }
   };
 
+  const handleAvatarFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      setError('Upload a PNG, JPG, or WebP image.');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setAvatarLoading(true);
+
+    try {
+      const imageDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read image file'));
+        reader.readAsDataURL(file);
+      });
+      const { user: updatedUser } = await api.uploadMyAvatar({ imageDataUrl });
+      onUpdate?.(updatedUser);
+      setSuccess('Avatar updated');
+    } catch (err) {
+      setError(err.message || 'Failed to upload avatar');
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setError('');
+    setSuccess('');
+    setAvatarLoading(true);
+    try {
+      const { user: updatedUser } = await api.removeMyAvatar();
+      onUpdate?.(updatedUser);
+      setSuccess('Avatar removed');
+    } catch (err) {
+      setError(err.message || 'Failed to remove avatar');
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
+
+  const handleAdminPasswordReset = async (e) => {
+    e.preventDefault();
+    if (!user?.isSupportAdmin) return;
+    setError('');
+    setSuccess('');
+    setSupportLoading(true);
+    try {
+      await api.adminResetUserPassword({
+        email: supportEmail.trim(),
+        newPassword: supportPassword,
+      });
+      setSupportPassword('');
+      setSuccess(`Temporary password updated for ${supportEmail.trim()}`);
+    } catch (err) {
+      setError(err.message || 'Failed to reset tester password');
+    } finally {
+      setSupportLoading(false);
+    }
+  };
+
+  const handleSendFrontendMonitoringTest = () => {
+    const error = new Error('Staging test frontend exception');
+    captureFrontendError(error, {
+      source: 'admin_test',
+      userId: user?.id || null,
+      email: user?.email || null,
+    });
+    setSuccess('Frontend test error sent to monitoring');
+  };
+
+  const handleSendBackendMonitoringTest = async () => {
+    setError('');
+    setSuccess('');
+    setMonitoringLoading(true);
+    try {
+      await api.adminSendMonitoringTestError();
+      setSuccess('Backend test error sent to monitoring');
+    } catch (err) {
+      setError(err.message || 'Failed to send backend test error');
+    } finally {
+      setMonitoringLoading(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!deletePassword) {
       setError('Password is required to delete account');
@@ -118,8 +222,12 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       className="profile-drawer"
     >
       <div className="account-hero">
-        <div className="account-hero-avatar">
-          <User size={20} />
+        <div className="account-hero-avatar account-hero-avatar-image">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" />
+          ) : (
+            <User size={20} />
+          )}
         </div>
         <div className="account-hero-details">
           <div className="account-hero-name">{user?.name || 'Your account'}</div>
@@ -135,6 +243,33 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
 
           <div className="form-section">
             <h4>Profile</h4>
+            <div className="profile-avatar-controls">
+              <button
+                type="button"
+                className="modal-btn secondary"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={!user || avatarLoading}
+              >
+                {avatarLoading ? <Loader2 size={18} className="btn-spinner" /> : <ImagePlus size={16} />}
+                Upload Avatar
+              </button>
+              <button
+                type="button"
+                className="modal-btn secondary"
+                onClick={handleRemoveAvatar}
+                disabled={!user || avatarLoading || !avatarUrl}
+              >
+                {avatarLoading ? <Loader2 size={18} className="btn-spinner" /> : <Trash2 size={16} />}
+                Remove Avatar
+              </button>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="hidden-file-input"
+                onChange={handleAvatarFile}
+              />
+            </div>
             <div className="form-group">
               <label>Name</label>
               <input
@@ -189,6 +324,67 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
               />
             </div>
           </div>
+
+          {user?.isSupportAdmin ? (
+            <div className="form-section">
+              <h4>Tester Password Help</h4>
+              <div className="form-group">
+                <label>Tester Email</label>
+                <input
+                  type="email"
+                  value={supportEmail}
+                  onChange={(e) => setSupportEmail(e.target.value)}
+                  placeholder="tester@example.com"
+                  disabled={supportLoading}
+                />
+              </div>
+              <div className="form-group">
+                <label>Temporary Password</label>
+                <input
+                  type="password"
+                  value={supportPassword}
+                  onChange={(e) => setSupportPassword(e.target.value)}
+                  placeholder="Min 6 characters"
+                  minLength={6}
+                  disabled={supportLoading}
+                />
+              </div>
+              <button
+                type="button"
+                className="modal-btn secondary"
+                onClick={handleAdminPasswordReset}
+                disabled={supportLoading || !supportEmail.trim() || supportPassword.length < 6}
+              >
+                {supportLoading ? <Loader2 size={18} className="btn-spinner" /> : null}
+                Reset Tester Password
+              </button>
+            </div>
+          ) : null}
+
+          {user?.isSupportAdmin ? (
+            <div className="form-section">
+              <h4>Monitoring Check</h4>
+              <div className="profile-avatar-controls">
+                <button
+                  type="button"
+                  className="modal-btn secondary"
+                  onClick={handleSendFrontendMonitoringTest}
+                  disabled={monitoringLoading}
+                >
+                  Send Frontend Test Error
+                </button>
+                <button
+                  type="button"
+                  className="modal-btn secondary"
+                  onClick={handleSendBackendMonitoringTest}
+                  disabled={monitoringLoading}
+                >
+                  {monitoringLoading ? <Loader2 size={18} className="btn-spinner" /> : null}
+                  Send Backend Test Error
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <button
             type="submit"

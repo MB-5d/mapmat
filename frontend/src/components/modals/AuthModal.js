@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Loader2, X } from 'lucide-react';
 
 import * as api from '../../api';
+import { SHOW_DEMO_AUTH } from '../../utils/constants';
+import { trackEvent } from '../../utils/analytics';
 
 const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
   const [mode, setMode] = useState('login');
@@ -35,6 +37,7 @@ const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
         result = await api.login(email, password);
       } else {
         result = await api.signup(email, password, name);
+        trackEvent('signup', { method: 'password' });
       }
       onSuccess(result.user);
       onClose();
@@ -132,18 +135,20 @@ const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
             </button>
           </form>
 
-          <div className="auth-demo">
-            <div className="auth-demo-label">Quick access</div>
-            <button
-              type="button"
-              className="modal-btn secondary auth-demo-btn"
-              onClick={handleDemoLogin}
-              disabled={loading}
-            >
-              Continue as demo
-            </button>
-            <div className="auth-demo-hint">Bypasses login during build/test.</div>
-          </div>
+          {SHOW_DEMO_AUTH ? (
+            <div className="auth-demo">
+              <div className="auth-demo-label">Quick access</div>
+              <button
+                type="button"
+                className="modal-btn secondary auth-demo-btn"
+                onClick={handleDemoLogin}
+                disabled={loading}
+              >
+                Continue as demo
+              </button>
+              <div className="auth-demo-hint">Bypasses login during build/test.</div>
+            </div>
+          ) : null}
 
           <div className="auth-footer">
             {mode === 'login' ? (

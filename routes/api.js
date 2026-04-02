@@ -3,6 +3,7 @@
  */
 
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
@@ -12,8 +13,10 @@ const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
 const emailDeliveryStore = require('../stores/emailDeliveryStore');
+const authStore = require('../stores/authStore');
 const { authMiddleware, requireAuth } = require('./auth');
 const permissionPolicy = require('../policies/permissionPolicy');
+const { isSupportAdminEmail, normalizeEmail } = require('../utils/supportAdmin');
 const {
   ACTIVITY_SCOPES,
   ACTIVITY_TYPES,
@@ -26,6 +29,7 @@ const {
   summarizeCoeditingRolloutConfigAsync,
 } = require('../utils/coeditingRollout');
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
+const { captureBackendException } = require('../utils/sentryBackend');
 const { buildHealthSnapshot: getEmailHealthSnapshot } = require('../utils/emailProvider');
 
 const router = express.Router();
@@ -649,6 +653,61 @@ async function resolveMapPermissionContextAsync({ mapId, actorUserId }) {
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
+
+router.post('/admin/users/reset-password', requireAuth, async (req, res) => {
+  try {
+    if (!isSupportAdminEmail(req.user?.email)) {
+      return res.status(403).json({ error: 'Admin support access required' });
+    }
+
+    const email = normalizeEmail(req.body?.email);
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!email || !newPassword) {
+      return res.status(400).json({ error: 'Email and newPassword are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'Temporary password must be at least 6 characters' });
+    }
+
+    const userId = await authStore.findUserIdByEmailAsync(email);
+    if (!userId) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+    await authStore.updateUserPasswordAsync(userId, passwordHash);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+router.post('/admin/monitoring/test-error', requireAuth, async (req, res) => {
+  try {
+    if (!isSupportAdminEmail(req.user?.email)) {
+      return res.status(403).json({ error: 'Admin support access required' });
+    }
+    const error = new Error('Staging test backend exception');
+    captureBackendException(error, {
+      tags: { source: 'admin_test' },
+      user: {
+        id: req.user?.id,
+        email: req.user?.email,
+      },
+      extra: {
+        triggeredBy: req.user?.email || 'unknown',
+      },
+    });
+    res.json({ success: true, message: 'Backend test error sent to monitoring' });
+  } catch (error) {
+    console.error('Backend monitoring test error:', error);
+    res.status(500).json({ error: 'Failed to send backend monitoring test error' });
+  }
+});
 
 // ============================================
 // ADMIN / USAGE

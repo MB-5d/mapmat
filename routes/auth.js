@@ -6,6 +6,8 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const authStore = require('../stores/authStore');
+const { isSupportAdminEmail } = require('../utils/supportAdmin');
+const { saveAvatarFromDataUrl, removeAvatarFile } = require('../utils/avatarStorage');
 
 const router = express.Router();
 
@@ -64,6 +66,18 @@ const AUTH_PROFILE_RATE_LIMIT = Number(
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function buildClientUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatar_path || null,
+    isSupportAdmin: isSupportAdminEmail(user.email),
+    createdAt: user.created_at,
+  };
 }
 
 const normalizeIp = (ip) => (ip && ip.startsWith('::ffff:') ? ip.slice(7) : ip || '');
@@ -262,6 +276,7 @@ function getCookieToken(req) {
 }
 
 async function authenticateRequestAsync(req) {
+  await authStore.ensureAuthSchemaAsync();
   const bearerToken = AUTH_HEADER_FALLBACK
     ? (extractBearerToken(req) || extractWebSocketProtocolToken(req))
     : null;
@@ -303,6 +318,7 @@ function requireAuth(req, res, next) {
 // POST /auth/signup - Create new account
 router.post('/signup', signupLimiter, async (req, res) => {
   try {
+    await authStore.ensureAuthSchemaAsync();
     const { email, password, name } = req.body;
     const emailNormalized = normalizeEmail(email);
 
@@ -338,11 +354,7 @@ router.post('/signup', signupLimiter, async (req, res) => {
     res.cookie('auth_token', token, COOKIE_OPTIONS);
 
     res.json({
-      user: {
-        id: createdUser.id,
-        email: emailNormalized,
-        name: displayName,
-      },
+      user: buildClientUser(createdUser),
       token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
@@ -354,6 +366,7 @@ router.post('/signup', signupLimiter, async (req, res) => {
 // POST /auth/login - Login to existing account
 router.post('/login', loginLimiter, async (req, res) => {
   try {
+    await authStore.ensureAuthSchemaAsync();
     const { email, password } = req.body;
     const emailNormalized = normalizeEmail(email);
 
@@ -396,11 +409,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     res.cookie('auth_token', token, COOKIE_OPTIONS);
 
     res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      },
+      user: buildClientUser(user),
       token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
@@ -422,18 +431,14 @@ router.get('/me', authMiddleware, (req, res) => {
   }
 
   res.json({
-    user: {
-      id: req.user.id,
-      email: req.user.email,
-      name: req.user.name,
-      createdAt: req.user.created_at,
-    },
+    user: buildClientUser(req.user),
   });
 });
 
 // PUT /auth/me - Update current user profile
 router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (req, res) => {
   try {
+    await authStore.ensureAuthSchemaAsync();
     const { name, currentPassword, newPassword } = req.body;
 
     // If changing password, verify current password
@@ -467,16 +472,50 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
     const updated = await authStore.getPublicUserByIdAsync(req.user.id);
 
     res.json({
-      user: {
-        id: updated.id,
-        email: updated.email,
-        name: updated.name,
-        createdAt: updated.created_at,
-      },
+      user: buildClientUser(updated),
     });
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+router.post('/me/avatar', authMiddleware, requireAuth, profileMutationLimiter, async (req, res) => {
+  try {
+    const { imageDataUrl } = req.body || {};
+    if (!imageDataUrl) {
+      return res.status(400).json({ error: 'Avatar image is required.' });
+    }
+
+    const nextAvatarPath = await saveAvatarFromDataUrl({
+      userId: req.user.id,
+      imageDataUrl,
+    });
+
+    if (req.user?.avatar_path) {
+      await removeAvatarFile(req.user.avatar_path);
+    }
+
+    await authStore.updateUserAvatarPathAsync(req.user.id, nextAvatarPath);
+    const updated = await authStore.getPublicUserByIdAsync(req.user.id);
+    res.json({ user: buildClientUser(updated) });
+  } catch (error) {
+    console.error('Upload avatar error:', error);
+    res.status(error?.status || 500).json({ error: error?.message || 'Failed to upload avatar' });
+  }
+});
+
+router.delete('/me/avatar', authMiddleware, requireAuth, profileMutationLimiter, async (req, res) => {
+  try {
+    if (req.user?.avatar_path) {
+      await removeAvatarFile(req.user.avatar_path);
+    }
+    await authStore.updateUserAvatarPathAsync(req.user.id, null);
+    const updated = await authStore.getPublicUserByIdAsync(req.user.id);
+    res.json({ user: buildClientUser(updated) });
+  } catch (error) {
+    console.error('Remove avatar error:', error);
+    res.status(500).json({ error: 'Failed to remove avatar' });
   }
 });
 

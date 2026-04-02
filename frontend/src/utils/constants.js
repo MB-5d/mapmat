@@ -1,5 +1,33 @@
 export const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
 
+function parseEnvBool(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+function parseEnvInt(value, fallback, { min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+export const APP_ONLY_MODE = parseEnvBool(process.env.REACT_APP_APP_ONLY_MODE, false);
+export const SHOW_DEMO_AUTH = parseEnvBool(process.env.REACT_APP_ENABLE_DEMO_AUTH, !APP_ONLY_MODE);
+export const APP_BRAND_NAME = APP_ONLY_MODE ? 'IA Tool' : 'Map Mat';
+export const ENABLE_ANALYTICS = parseEnvBool(process.env.REACT_APP_ENABLE_ANALYTICS, false);
+export const CLARITY_PROJECT_ID = String(process.env.REACT_APP_CLARITY_PROJECT_ID || '').trim();
+export const GA_MEASUREMENT_ID = String(process.env.REACT_APP_GA_MEASUREMENT_ID || '').trim();
+export const SENTRY_DSN = String(process.env.REACT_APP_SENTRY_DSN || '').trim();
+export const SCAN_MAX_DEPTH_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_DEPTH, 8, { min: 1, max: 10 });
+export const SCAN_MAX_PAGES_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_PAGES, 300, { min: 1, max: 5000 });
+export const TESTER_NOT_READY_MESSAGE = 'Not ready for testing yet';
+export const TESTER_SCAN_LIMITS_COPY = APP_ONLY_MODE
+  ? `Limited to ${SCAN_MAX_DEPTH_UI} levels and ${SCAN_MAX_PAGES_UI} pages for testing.`
+  : 'Limited by scan depth and max pages.';
+
 export const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 // Permission levels for sharing

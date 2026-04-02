@@ -60,6 +60,7 @@ function buildPresenceIdentity({
       userEmail: null,
       tone,
       avatarLabel: buildAvatarLabel(displayName, roleLabel),
+      avatarUrl: null,
     };
   }
 
@@ -73,6 +74,7 @@ function buildPresenceIdentity({
     userEmail: trimDisplayText(user?.email, 120),
     tone,
     avatarLabel: buildAvatarLabel(displayName, 'C'),
+    avatarUrl: trimDisplayText(user?.avatar_path, 255),
   };
 }
 

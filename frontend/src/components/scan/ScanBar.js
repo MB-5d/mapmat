@@ -1,6 +1,13 @@
 import React from 'react';
 import { RotateCcw, Scan, SlidersHorizontal } from 'lucide-react';
 
+import {
+  APP_ONLY_MODE,
+  SCAN_MAX_DEPTH_UI,
+  TESTER_NOT_READY_MESSAGE,
+  TESTER_SCAN_LIMITS_COPY,
+} from '../../utils/constants';
+
 const ScanBar = ({
   canEdit,
   urlInput,
@@ -78,8 +85,8 @@ const ScanBar = ({
                   disabled={optionsDisabled}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {[...Array(8).keys()].map(i => (
-                    <option key={i} value={i}>{i}</option>
+                  {Array.from({ length: SCAN_MAX_DEPTH_UI }, (_, index) => index + 1).map((value) => (
+                    <option key={value} value={value}>{value}</option>
                   ))}
                 </select>
               </label>
@@ -136,10 +143,15 @@ const ScanBar = ({
                   type="checkbox"
                   checked={options.authenticatedPages}
                   onChange={() => onOptionChange('authenticatedPages')}
-                  disabled={optionsDisabled}
+                  disabled={optionsDisabled || APP_ONLY_MODE}
                 />
                 <span>Authenticated Pages</span>
               </label>
+              {APP_ONLY_MODE && (
+                <div className="layers-panel-hint">
+                  {TESTER_NOT_READY_MESSAGE}: prompted-login crawling is disabled during testing.
+                </div>
+              )}
 
               <div className="layers-panel-section">Type</div>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
@@ -172,7 +184,7 @@ const ScanBar = ({
                 <span>Crosslinks</span>
               </label>
               <div className="layers-panel-hint">
-                Limited by scan depth and max pages.
+                {TESTER_SCAN_LIMITS_COPY}
               </div>
             </div>
           </div>

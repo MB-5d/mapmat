@@ -16,6 +16,8 @@ import {
 import ScanBar from '../scan/ScanBar';
 import { useAuth } from '../../contexts/AuthContext';
 import mapmatLogo from '../../assets/MM-Logo.svg';
+import { APP_BRAND_NAME, APP_ONLY_MODE } from '../../utils/constants';
+import { resolveApiAssetUrl } from '../../utils/assets';
 
 const Topbar = ({
   canEdit,
@@ -76,7 +78,11 @@ const Topbar = ({
     <div className="topbar">
       <div className="topbar-left">
         <div className="brand">
-          <img className="brand-logo" src={mapmatLogo} alt="Map Mat" />
+          {APP_ONLY_MODE ? (
+            <span className="brand-text">{APP_BRAND_NAME}</span>
+          ) : (
+            <img className="brand-logo" src={mapmatLogo} alt="Map Mat" />
+          )}
         </div>
       </div>
 
@@ -145,7 +151,15 @@ const Topbar = ({
               aria-expanded={showAccountMenu}
               aria-haspopup="menu"
             >
-              <User size={18} />
+              {resolveApiAssetUrl(currentUser?.avatarUrl) ? (
+                <img
+                  className="user-btn-avatar"
+                  src={resolveApiAssetUrl(currentUser?.avatarUrl)}
+                  alt=""
+                />
+              ) : (
+                <User size={18} />
+              )}
               <span>{currentUser?.name}</span>
               {totalPendingCount > 0 ? (
                 <span className="account-menu-badge" aria-label={`${totalPendingCount} pending collaboration items`}>
