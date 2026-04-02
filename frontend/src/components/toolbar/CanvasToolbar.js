@@ -226,6 +226,7 @@ const CanvasToolbar = ({
     >
       <GanttChartSquare size={20} />
     </button>
+    <div className="canvas-toolbar-divider" />
     <div className="canvas-tool-menu-wrapper" ref={layersMenuRef}>
       <button
         className={`canvas-tool-btn ${showLayersMenu ? 'active' : ''}`}
