@@ -1,6 +1,8 @@
 import React from 'react';
 import { AlertTriangle, Globe, Loader2 } from 'lucide-react';
 
+import { APP_ONLY_MODE, SCAN_MAX_PAGES_UI } from '../../utils/constants';
+
 const ScanProgressModal = ({
   loading,
   showCancelConfirm,
@@ -27,6 +29,11 @@ const ScanProgressModal = ({
             <div className="scan-status">
               <div className="scan-message">{scanMessage}</div>
               <div className="scan-url">{urlInput}</div>
+              {APP_ONLY_MODE ? (
+                <div className="scan-limit-note">
+                  Testing limit: scans stop after {SCAN_MAX_PAGES_UI} pages.
+                </div>
+              ) : null}
               <div className={`scan-stats${hasQueue ? '' : ' single'}`}>
                 <div className="scan-pages">
                   <span className="scan-pages-count">{scanProgress.scanned}</span>

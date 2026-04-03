@@ -4,6 +4,7 @@ import { RotateCcw, Scan, SlidersHorizontal } from 'lucide-react';
 import {
   APP_ONLY_MODE,
   SCAN_MAX_DEPTH_UI,
+  SCAN_MAX_PAGES_UI,
   TESTER_NOT_READY_MESSAGE,
   TESTER_SCAN_LIMITS_COPY,
 } from '../../utils/constants';
@@ -90,6 +91,9 @@ const ScanBar = ({
                   ))}
                 </select>
               </label>
+              <div className="layers-panel-hint">
+                Max {SCAN_MAX_DEPTH_UI} levels during testing.
+              </div>
               <div className="layers-panel-section">Placement</div>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <input
@@ -185,6 +189,9 @@ const ScanBar = ({
               </label>
               <div className="layers-panel-hint">
                 {TESTER_SCAN_LIMITS_COPY}
+              </div>
+              <div className="layers-panel-hint">
+                Scans stop after {SCAN_MAX_PAGES_UI} pages during testing.
               </div>
             </div>
           </div>

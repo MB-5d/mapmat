@@ -7735,6 +7735,13 @@ body {
   border-radius: 6px;
 }
 
+.scan-limit-note {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  margin: -8px 0 16px;
+}
+
 .cancel-confirm {
   margin-bottom: 24px;
 }
