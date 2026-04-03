@@ -4,7 +4,6 @@ import { AlertTriangle, ImagePlus, Loader2, Trash2, User } from 'lucide-react';
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
 import { resolveApiAssetUrl } from '../../utils/assets';
-import { captureFrontendError } from '../../utils/analytics';
 
 const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast }) => {
   const [name, setName] = useState('');
@@ -13,12 +12,8 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
-  const [supportEmail, setSupportEmail] = useState('');
-  const [supportPassword, setSupportPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
-  const [supportLoading, setSupportLoading] = useState(false);
-  const [monitoringLoading, setMonitoringLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -32,15 +27,11 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       setNewPassword('');
       setConfirmPassword('');
       setDeletePassword('');
-      setSupportEmail('');
-      setSupportPassword('');
       setShowDeleteConfirm(false);
       setError('');
       setSuccess('');
       setLoading(false);
       setAvatarLoading(false);
-      setSupportLoading(false);
-      setMonitoringLoading(false);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, user]);
@@ -142,50 +133,6 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       setError(err.message || 'Failed to remove avatar');
     } finally {
       setAvatarLoading(false);
-    }
-  };
-
-  const handleAdminPasswordReset = async (e) => {
-    e.preventDefault();
-    if (!user?.isSupportAdmin) return;
-    setError('');
-    setSuccess('');
-    setSupportLoading(true);
-    try {
-      await api.adminResetUserPassword({
-        email: supportEmail.trim(),
-        newPassword: supportPassword,
-      });
-      setSupportPassword('');
-      setSuccess(`Temporary password updated for ${supportEmail.trim()}`);
-    } catch (err) {
-      setError(err.message || 'Failed to reset tester password');
-    } finally {
-      setSupportLoading(false);
-    }
-  };
-
-  const handleSendFrontendMonitoringTest = () => {
-    const error = new Error('Staging test frontend exception');
-    captureFrontendError(error, {
-      source: 'admin_test',
-      userId: user?.id || null,
-      email: user?.email || null,
-    });
-    setSuccess('Frontend test error sent to monitoring');
-  };
-
-  const handleSendBackendMonitoringTest = async () => {
-    setError('');
-    setSuccess('');
-    setMonitoringLoading(true);
-    try {
-      await api.adminSendMonitoringTestError();
-      setSuccess('Backend test error sent to monitoring');
-    } catch (err) {
-      setError(err.message || 'Failed to send backend test error');
-    } finally {
-      setMonitoringLoading(false);
     }
   };
 
@@ -324,67 +271,6 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
               />
             </div>
           </div>
-
-          {user?.isSupportAdmin ? (
-            <div className="form-section">
-              <h4>Tester Password Help</h4>
-              <div className="form-group">
-                <label>Tester Email</label>
-                <input
-                  type="email"
-                  value={supportEmail}
-                  onChange={(e) => setSupportEmail(e.target.value)}
-                  placeholder="tester@example.com"
-                  disabled={supportLoading}
-                />
-              </div>
-              <div className="form-group">
-                <label>Temporary Password</label>
-                <input
-                  type="password"
-                  value={supportPassword}
-                  onChange={(e) => setSupportPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  minLength={6}
-                  disabled={supportLoading}
-                />
-              </div>
-              <button
-                type="button"
-                className="modal-btn secondary"
-                onClick={handleAdminPasswordReset}
-                disabled={supportLoading || !supportEmail.trim() || supportPassword.length < 6}
-              >
-                {supportLoading ? <Loader2 size={18} className="btn-spinner" /> : null}
-                Reset Tester Password
-              </button>
-            </div>
-          ) : null}
-
-          {user?.isSupportAdmin ? (
-            <div className="form-section">
-              <h4>Monitoring Check</h4>
-              <div className="profile-avatar-controls">
-                <button
-                  type="button"
-                  className="modal-btn secondary"
-                  onClick={handleSendFrontendMonitoringTest}
-                  disabled={monitoringLoading}
-                >
-                  Send Frontend Test Error
-                </button>
-                <button
-                  type="button"
-                  className="modal-btn secondary"
-                  onClick={handleSendBackendMonitoringTest}
-                  disabled={monitoringLoading}
-                >
-                  {monitoringLoading ? <Loader2 size={18} className="btn-spinner" /> : null}
-                  Send Backend Test Error
-                </button>
-              </div>
-            </div>
-          ) : null}
 
           <button
             type="submit"

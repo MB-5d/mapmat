@@ -50,7 +50,6 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
     };
   };
 }
-
 if (typeof window !== 'undefined' && !window.HTMLElement.prototype.scrollIntoView) {
   window.HTMLElement.prototype.scrollIntoView = function scrollIntoView() {};
 }

@@ -142,19 +142,6 @@ export async function deleteAccount(password) {
   return result;
 }
 
-export async function adminResetUserPassword({ email, newPassword }) {
-  return fetchApi('/api/admin/users/reset-password', {
-    method: 'POST',
-    body: JSON.stringify({ email, newPassword }),
-  });
-}
-
-export async function adminSendMonitoringTestError() {
-  return fetchApi('/api/admin/monitoring/test-error', {
-    method: 'POST',
-  });
-}
-
 // ============================================
 // PROJECTS
 // ============================================

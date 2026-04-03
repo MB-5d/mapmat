@@ -1,145 +1,264 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  MapIcon, Zap, Share2, FolderOpen, Download,
-  ChevronDown, Menu, X, Check, ArrowRight, Mail, Send,
-  Globe, Layers, Eye
+  ArrowRight,
+  Check,
+  ChevronDown,
+  Download,
+  Eye,
+  FolderOpen,
+  Globe,
+  Layers,
+  Mail,
+  MapIcon,
+  Menu,
+  MessageSquare,
+  Share2,
+  X,
 } from 'lucide-react';
+
+import mapmatLogo from './assets/MM-Logo.svg';
 import './LandingPage.css';
 
-const LandingPage = ({ onLaunchApp }) => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState(null);
-  const [scrollY, setScrollY] = useState(0);
-  const [visibleSections, setVisibleSections] = useState({});
-  const [contactForm, setContactForm] = useState({ name: '', email: '', message: '' });
-  const [contactSubmitted, setContactSubmitted] = useState(false);
-  const [activeFaq, setActiveFaq] = useState(null);
+const audienceCards = [
+  {
+    title: 'Agencies and consultants',
+    description: 'Audit an existing site quickly, walk clients through the structure, and keep review artifacts in one place.',
+  },
+  {
+    title: 'UX, IA, and content teams',
+    description: 'Use a live crawl as the starting point for restructuring, page moves, and content cleanup.',
+  },
+  {
+    title: 'SEO and site-ops teams',
+    description: 'Review broken links, orphan pages, duplicate URLs, files, and subdomains without losing the site-map context.',
+  },
+];
 
-  // Enable scrolling on landing page
-  useEffect(() => {
-    document.body.style.overflow = 'auto';
-    document.body.style.height = 'auto';
-    document.documentElement.style.overflow = 'auto';
-    return () => {
-      document.body.style.overflow = '';
-      document.body.style.height = '';
-      document.documentElement.style.overflow = '';
-    };
-  }, []);
+const problemCards = [
+  {
+    title: 'Understand the current site before changing it',
+    description: 'Stop rebuilding structure from spreadsheets, browser tabs, and half-finished diagrams before every redesign or audit.',
+  },
+  {
+    title: 'Review site shape with visual context',
+    description: 'Hierarchy, depth, files, orphan pages, and subdomains are easier to discuss when the map is visible instead of buried in lists.',
+  },
+  {
+    title: 'Keep review and delivery in the same workflow',
+    description: 'Comments, share links, screenshots, exports, and saved maps stay connected to the sitemap instead of scattering across tools.',
+  },
+];
 
-  // Track scroll for parallax
-  useEffect(() => {
-    const handleScroll = () => setScrollY(window.scrollY);
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+const useCaseCards = [
+  {
+    title: 'Pre-redesign audits',
+    description: 'Crawl the current site, surface issue layers, and capture the structure before planning changes.',
+  },
+  {
+    title: 'Stakeholder review',
+    description: 'Share a live map with permissions and comments so clients or teammates can review the same artifact.',
+  },
+  {
+    title: 'Testing prep',
+    description: 'Keep screenshots, issue reporting, and exports close to the sitemap when moving toward real testing.',
+  },
+];
 
-  // Intersection observer for scroll animations
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setVisibleSections((prev) => ({ ...prev, [entry.target.id]: true }));
-          }
-        });
-      },
-      { threshold: 0.1, rootMargin: '0px 0px -50px 0px' }
-    );
+const featureCards = [
+  {
+    icon: Globe,
+    title: 'Crawl a live site from a URL',
+    description: 'Start from a public website URL and generate a map you can inspect immediately.',
+  },
+  {
+    icon: MapIcon,
+    title: 'Review the structure visually',
+    description: 'Use the sitemap canvas to read hierarchy, page depth, branches, and layout at a glance.',
+  },
+  {
+    icon: Layers,
+    title: 'Surface issue layers and reports',
+    description: 'Review broken links, orphan pages, duplicates, inactive pages, files, and subdomains in visual context.',
+  },
+  {
+    icon: Eye,
+    title: 'Capture thumbnails and screenshots',
+    description: 'Generate page thumbnails and full screenshots for visual QA, audits, and stakeholder review.',
+  },
+  {
+    icon: Share2,
+    title: 'Share maps with permissions and comments',
+    description: 'Send review links, control access levels, and keep comments attached to the map.',
+  },
+  {
+    icon: FolderOpen,
+    title: 'Save, reopen, import, and export',
+    description: 'Organize work into projects, revisit scan history, import common sitemap formats, and export deliverables.',
+  },
+];
 
-    document.querySelectorAll('.animate-on-scroll').forEach((el) => {
-      observer.observe(el);
-    });
+const workflowSteps = [
+  {
+    step: '1',
+    title: 'Scan the current site',
+    description: 'Start with a live URL and bring the existing structure into the app.',
+  },
+  {
+    step: '2',
+    title: 'Review issues in context',
+    description: 'Inspect the map, turn on relevant layers, and capture screenshots where visual context matters.',
+  },
+  {
+    step: '3',
+    title: 'Share and deliver',
+    description: 'Comment, save the work, and export the outputs needed for clients, teammates, or testing prep.',
+  },
+];
 
-    return () => observer.disconnect();
-  }, []);
+const comparisonColumns = [
+  { key: 'mapmat', label: 'Map Mat', highlight: true },
+  { key: 'flowmapp', label: 'FlowMapp' },
+  { key: 'slickplan', label: 'Slickplan' },
+  { key: 'octopus', label: 'Octopus.do' },
+  { key: 'visualsitemaps', label: 'VisualSitemaps' },
+  { key: 'screamingfrog', label: 'Screaming Frog' },
+  { key: 'dynomapper', label: 'DYNO Mapper' },
+];
 
-  const scrollToSection = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-    setMobileMenuOpen(false);
-  };
-
-  const handleContactSubmit = (e) => {
-    e.preventDefault();
-    // In production, this would send to a backend
-    console.log('Contact form:', contactForm);
-    setContactSubmitted(true);
-    setTimeout(() => {
-      setContactSubmitted(false);
-      setContactForm({ name: '', email: '', message: '' });
-    }, 3000);
-  };
-
-  const features = [
-    {
-      icon: <Zap size={28} />,
-      title: 'Instant Crawling',
-      description: 'Enter any URL and watch as Map Mat intelligently discovers and maps every page on the site in seconds.'
+const comparisonRows = [
+  {
+    feature: 'Crawl from live URL',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Yes',
+      slickplan: 'Yes',
+      octopus: 'Yes',
+      visualsitemaps: 'Yes',
+      screamingfrog: 'Yes',
+      dynomapper: 'Yes',
     },
-    {
-      icon: <Layers size={28} />,
-      title: 'Visual Hierarchy',
-      description: 'See your site structure as a beautiful tree diagram. Instantly understand page relationships and depth.'
+  },
+  {
+    feature: 'Visual sitemap canvas',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Yes',
+      slickplan: 'Yes',
+      octopus: 'Yes',
+      visualsitemaps: 'Yes',
+      screamingfrog: 'Partial',
+      dynomapper: 'Yes',
     },
-    {
-      icon: <Eye size={28} />,
-      title: 'Live Thumbnails',
-      description: 'Preview each page with auto-generated thumbnails. No more guessing what\'s behind each link.'
+  },
+  {
+    feature: 'Issue-focused auditing / reporting',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Not core',
+      slickplan: 'Partial',
+      octopus: 'Partial',
+      visualsitemaps: 'Yes',
+      screamingfrog: 'Yes',
+      dynomapper: 'Yes',
     },
-    {
-      icon: <FolderOpen size={28} />,
-      title: 'Projects & Organization',
-      description: 'Save unlimited sitemaps, organize into projects, and access your maps from anywhere.'
+  },
+  {
+    feature: 'Thumbnails or screenshots',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Not core',
+      slickplan: 'Not core',
+      octopus: 'Not core',
+      visualsitemaps: 'Yes',
+      screamingfrog: 'Not core',
+      dynomapper: 'Partial',
     },
-    {
-      icon: <Share2 size={28} />,
-      title: 'Share & Collaborate',
-      description: 'Generate shareable links for clients and teammates. No account needed to view.'
+  },
+  {
+    feature: 'Shareable review links',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Yes',
+      slickplan: 'Yes',
+      octopus: 'Yes',
+      visualsitemaps: 'Yes',
+      screamingfrog: 'Not core',
+      dynomapper: 'Yes',
     },
-    {
-      icon: <Download size={28} />,
-      title: 'Download Anywhere',
-      description: 'Download as PNG, PDF, or SVG. Perfect for presentations, documentation, and audits.'
-    }
-  ];
+  },
+  {
+    feature: 'Comments / collaboration',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Yes',
+      slickplan: 'Yes',
+      octopus: 'Yes',
+      visualsitemaps: 'Yes',
+      screamingfrog: 'Not core',
+      dynomapper: 'Yes',
+    },
+  },
+  {
+    feature: 'Project organization / history',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Yes',
+      slickplan: 'Yes',
+      octopus: 'Yes',
+      visualsitemaps: 'Partial',
+      screamingfrog: 'Partial',
+      dynomapper: 'Partial',
+    },
+  },
+  {
+    feature: 'Export options',
+    values: {
+      mapmat: 'Yes',
+      flowmapp: 'Yes',
+      slickplan: 'Yes',
+      octopus: 'Yes',
+      visualsitemaps: 'Yes',
+      screamingfrog: 'Yes',
+      dynomapper: 'Yes',
+    },
+  },
+];
 
-  const howItWorks = [
-    { step: '1', title: 'Enter URL', description: 'Paste any website URL into the scan bar' },
-    { step: '2', title: 'Watch it Map', description: 'Our crawler discovers pages and builds your tree' },
-    { step: '3', title: 'Explore & Download', description: 'Navigate the map, customize colors, and download' }
-  ];
+const faqs = [
+  {
+    question: 'Who is Map Mat for?',
+    answer: 'It is built first for agencies, consultants, and internal web teams that need to understand site structure quickly and review it with other people.',
+  },
+  {
+    question: 'What is it best at compared with SEO crawlers or sitemap planning tools?',
+    answer: 'Map Mat is strongest when you want a live crawl, a visual sitemap canvas, screenshots, and review workflows in one place. It is not trying to be the deepest SEO spider or the broadest planning suite.',
+  },
+  {
+    question: 'What can it scan today?',
+    answer: 'Today the safest promise is public, reachable websites scanned from a URL, with controls for map depth and issue layers such as subdomains, orphan pages, broken links, duplicates, files, and inactive pages.',
+  },
+  {
+    question: 'What can I share with clients or teammates?',
+    answer: 'You can share saved maps with permissioned access, comments, and review-friendly links so people can see the same structure without recreating it elsewhere.',
+  },
+  {
+    question: 'What can I export?',
+    answer: 'Map exports currently include PNG, PDF, CSV, JSON, and site-index style outputs. Captured thumbnails and full screenshots can also be downloaded.',
+  },
+  {
+    question: 'Does it work on mobile?',
+    answer: 'The marketing site works on mobile, but the mapping workflow is best on desktop or tablet where the sitemap canvas has enough room to be useful.',
+  },
+  {
+    question: 'Does it support password-protected or authenticated sites?',
+    answer: 'That is not a broad production promise right now. The current landing-page positioning stays focused on public-site mapping and controlled testing workflows.',
+  },
+];
 
-  const faqs = [
-    {
-      q: 'How many pages can Map Mat crawl?',
-      a: 'The free tier crawls up to 100 pages per scan. Pro accounts can crawl up to 500 pages, and Team accounts have unlimited crawling.'
-    },
-    {
-      q: 'Does it work with password-protected sites?',
-      a: 'Currently, Map Mat only crawls publicly accessible pages. We\'re working on authenticated crawling for a future release.'
-    },
-    {
-      q: 'Can I import existing sitemaps?',
-      a: 'Yes! You can import sitemaps from XML, HTML, RSS, CSV, Markdown, and other common formats.'
-    },
-    {
-      q: 'How long are shared links valid?',
-      a: 'Shared links are valid for 30 days by default. Pro users can create permanent links.'
-    },
-    {
-      q: 'Is my data secure?',
-      a: 'Absolutely. We use industry-standard encryption, and your maps are only visible to you unless you explicitly share them.'
-    },
-    {
-      q: 'Can I use Map Mat on mobile?',
-      a: 'The marketing site works great on mobile! However, the mapping app itself is designed for desktop and tablet screens to give you the best experience with large visual sitemaps.'
-    }
-  ];
-
-  const legalContent = {
-    terms: {
-      title: 'Terms of Service',
-      content: `Last updated: January 2025
+const legalContent = {
+  terms: {
+    title: 'Terms of Service',
+    content: `Last updated: January 2025
 
 1. Acceptance of Terms
 By accessing and using Map Mat ("the Service"), you agree to be bound by these Terms of Service.
@@ -167,11 +286,11 @@ Map Mat shall not be liable for any indirect, incidental, special, or consequent
 We reserve the right to modify these terms at any time. Continued use constitutes acceptance of new terms.
 
 8. Contact
-Questions about these terms should be directed to hello@mapmat.com`
-    },
-    privacy: {
-      title: 'Privacy Policy',
-      content: `Last updated: January 2025
+Questions about these terms should be directed to hello@mapmat.com`,
+  },
+  privacy: {
+    title: 'Privacy Policy',
+    content: `Last updated: January 2025
 
 1. Information We Collect
 - Account information (email, name)
@@ -203,11 +322,11 @@ You have the right to:
 We use essential cookies for authentication and preferences. No third-party tracking cookies are used.
 
 7. Contact
-Privacy questions should be directed to privacy@mapmat.com`
-    },
-    legal: {
-      title: 'Legal Notice',
-      content: `Map Mat Legal Notice
+Privacy questions should be directed to privacy@mapmat.com`,
+  },
+  legal: {
+    title: 'Legal Notice',
+    content: `Map Mat Legal Notice
 
 Copyright
 All content on this site is copyright Map Mat unless otherwise noted.
@@ -235,329 +354,491 @@ If you believe content infringes your copyright, please contact legal@mapmat.com
 - Statement of good faith belief
 
 Contact
-Legal inquiries: legal@mapmat.com`
+Legal inquiries: legal@mapmat.com`,
+  },
+};
+
+function getVisibleEntryClass(visibleSections, id) {
+  return `animate-on-scroll ${visibleSections[id] ? 'visible' : ''}`.trim();
+}
+
+function getComparisonTone(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+}
+
+const LandingPage = ({ onLaunchApp }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState(null);
+  const [scrollY, setScrollY] = useState(0);
+  const [visibleSections, setVisibleSections] = useState({});
+  const [activeFaq, setActiveFaq] = useState(null);
+
+  useEffect(() => {
+    document.body.style.overflow = 'auto';
+    document.body.style.height = 'auto';
+    document.documentElement.style.overflow = 'auto';
+
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.height = '';
+      document.documentElement.style.overflow = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const elements = Array.from(document.querySelectorAll('.animate-on-scroll'));
+    const revealAll = () => {
+      setVisibleSections(
+        elements.reduce((acc, element) => {
+          if (element.id) acc[element.id] = true;
+          return acc;
+        }, {})
+      );
+    };
+
+    if (typeof window.IntersectionObserver !== 'function') {
+      revealAll();
+      return undefined;
     }
+
+    const observer = new window.IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.target.id) {
+            setVisibleSections((prev) => ({ ...prev, [entry.target.id]: true }));
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -64px 0px' }
+    );
+
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
+  const handleLaunchApp = () => {
+    setMobileMenuOpen(false);
+    onLaunchApp?.();
+  };
+
+  const scrollToSection = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setMobileMenuOpen(false);
   };
 
   return (
     <div className="landing">
-      {/* Navigation */}
-      <nav className={`landing-nav ${scrollY > 50 ? 'scrolled' : ''}`}>
+      <nav className={`landing-nav ${scrollY > 24 ? 'scrolled' : ''}`}>
         <div className="nav-container">
-          <div className="nav-brand" onClick={() => scrollToSection('hero')}>
-            <MapIcon size={24} />
-            <span>Map Mat</span>
-          </div>
+          <button type="button" className="nav-brand" onClick={() => scrollToSection('hero')} aria-label="Map Mat home">
+            <img src={mapmatLogo} alt="Map Mat" />
+          </button>
 
           <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            <button onClick={() => scrollToSection('features')}>Features</button>
-            <button onClick={() => scrollToSection('how-it-works')}>How It Works</button>
-            <button onClick={() => scrollToSection('faq')}>FAQ</button>
-            <button onClick={() => scrollToSection('contact')}>Contact</button>
-            <button className="nav-cta" onClick={onLaunchApp}>
-              Launch App <ArrowRight size={16} />
+            <button type="button" onClick={() => scrollToSection('audience')}>Who It&apos;s For</button>
+            <button type="button" onClick={() => scrollToSection('features')}>Features</button>
+            <button type="button" onClick={() => scrollToSection('compare')}>Compare</button>
+            <button type="button" onClick={() => scrollToSection('faq')}>FAQ</button>
+            <button type="button" onClick={() => scrollToSection('contact')}>Contact</button>
+            <button type="button" className="nav-cta" onClick={handleLaunchApp}>
+              Launch App
+              <ArrowRight size={16} />
             </button>
           </div>
 
-          <button className="mobile-menu-toggle" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          <button
+            type="button"
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          >
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section id="hero" className="hero">
-        <div
-          className="hero-bg"
-          style={{ transform: `translateY(${scrollY * 0.3}px)` }}
-        />
-        <div className="hero-content">
-          <h1 className="hero-title">
-            Visualize Any Website's
-            <span className="gradient-text"> Structure</span>
-          </h1>
-          <p className="hero-subtitle">
-            Stop guessing. Start seeing. Map Mat crawls any site and transforms it into
-            a beautiful, interactive sitemap in seconds.
-          </p>
-          <div className="hero-cta">
-            <button className="btn-primary" onClick={onLaunchApp}>
-              Try It Free <ArrowRight size={18} />
-            </button>
-            <button className="btn-secondary" onClick={() => scrollToSection('how-it-works')}>
-              See How It Works
-            </button>
-          </div>
-          <div className="hero-stats">
-            <div className="stat">
-              <span className="stat-number">10K+</span>
-              <span className="stat-label">Sites Mapped</span>
-            </div>
-            <div className="stat">
-              <span className="stat-number">500+</span>
-              <span className="stat-label">Happy Users</span>
-            </div>
-            <div className="stat">
-              <span className="stat-number">99%</span>
-              <span className="stat-label">Uptime</span>
-            </div>
-          </div>
-        </div>
-        <div
-          className="hero-visual"
-          style={{ transform: `translateY(${scrollY * -0.15}px)` }}
-        >
-          <div className="mock-app">
-            <div className="mock-topbar">
-              <div className="mock-dots">
-                <span /><span /><span />
+      <main>
+        <section id="hero" className="hero">
+          <div className="hero-background" aria-hidden="true" />
+          <div className="section-container hero-grid">
+            <div className="hero-copy">
+              <div className="section-eyebrow">Visual site mapping for audits, redesigns, and stakeholder review</div>
+              <h1>Map site structure fast enough to use in real client work.</h1>
+              <p className="hero-subtitle">
+                Map Mat crawls a live website, lays it out on a visual sitemap canvas, and gives teams
+                a clearer way to review hierarchy, issues, screenshots, and shareable feedback before testing starts.
+              </p>
+              <div className="hero-actions">
+                <button type="button" className="btn-primary" onClick={handleLaunchApp}>
+                  Launch App
+                  <ArrowRight size={18} />
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => scrollToSection('compare')}>
+                  See Comparison
+                </button>
               </div>
-              <div className="mock-url">mapmat.app</div>
-            </div>
-            <div className="mock-content">
-              <div className="mock-tree">
-                <div className="mock-node root">
-                  <Globe size={16} />
-                  <span>Home</span>
-                </div>
-                <div className="mock-children">
-                  <div className="mock-node"><span>About</span></div>
-                  <div className="mock-node"><span>Products</span></div>
-                  <div className="mock-node"><span>Blog</span></div>
-                  <div className="mock-node"><span>Contact</span></div>
-                </div>
+              <div className="hero-proof-list" aria-label="Core proof points">
+                <span><Check size={16} /> Live URL crawl</span>
+                <span><Check size={16} /> Visual sitemap canvas</span>
+                <span><Check size={16} /> Share links and comments</span>
+                <span><Check size={16} /> Projects, history, and exports</span>
               </div>
             </div>
-          </div>
-        </div>
-        <div className="scroll-indicator" onClick={() => scrollToSection('problem')}>
-          <ChevronDown size={24} />
-        </div>
-      </section>
 
-      {/* Problem Section */}
-      <section id="problem" className={`problem animate-on-scroll ${visibleSections['problem'] ? 'visible' : ''}`}>
-        <div className="section-container">
-          <h2>The Problem with Website Planning</h2>
-          <div className="problem-grid">
-            <div className="problem-card">
-              <div className="problem-icon">😵</div>
-              <h3>Lost in the Maze</h3>
-              <p>Large websites become impossible to visualize. Teams waste hours clicking through pages trying to understand structure.</p>
-            </div>
-            <div className="problem-card">
-              <div className="problem-icon">📝</div>
-              <h3>Manual Documentation</h3>
-              <p>Creating sitemaps by hand is tedious, error-prone, and outdated the moment you finish.</p>
-            </div>
-            <div className="problem-card">
-              <div className="problem-icon">🤷</div>
-              <h3>Communication Gaps</h3>
-              <p>Explaining site structure to clients, developers, or stakeholders without visuals leads to misunderstandings.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Solution Section */}
-      <section id="solution" className={`solution animate-on-scroll ${visibleSections['solution'] ? 'visible' : ''}`}>
-        <div className="section-container">
-          <div className="solution-content">
-            <h2>Map Mat Makes It Simple</h2>
-            <p>
-              Enter a URL. Get a complete visual sitemap. It's that easy. Map Mat automatically
-              crawls websites, discovers every page, and presents the structure as an intuitive,
-              interactive tree diagram.
-            </p>
-            <ul className="solution-list">
-              <li><Check size={20} /> No more manual documentation</li>
-              <li><Check size={20} /> Instant visual understanding</li>
-              <li><Check size={20} /> Share with one click</li>
-              <li><Check size={20} /> Download for any use case</li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className={`features animate-on-scroll ${visibleSections['features'] ? 'visible' : ''}`}>
-        <div className="section-container">
-          <h2>Powerful Features</h2>
-          <p className="section-subtitle">Everything you need to understand, document, and share website structure</p>
-          <div className="features-grid">
-            {features.map((feature, i) => (
-              <div
-                key={i}
-                className="feature-card"
-                style={{ animationDelay: `${i * 0.1}s` }}
-              >
-                <div className="feature-icon">{feature.icon}</div>
-                <h3>{feature.title}</h3>
-                <p>{feature.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section id="how-it-works" className={`how-it-works animate-on-scroll ${visibleSections['how-it-works'] ? 'visible' : ''}`}>
-        <div className="section-container">
-          <h2>How It Works</h2>
-          <p className="section-subtitle">Three simple steps to a complete sitemap</p>
-          <div className="steps">
-            {howItWorks.map((item, i) => (
-              <div key={i} className="step">
-                <div className="step-number">{item.step}</div>
-                <h3>{item.title}</h3>
-                <p>{item.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Mobile Notice */}
-      <section className={`mobile-notice animate-on-scroll ${visibleSections['mobile-notice'] ? 'visible' : ''}`} id="mobile-notice">
-        <div className="section-container">
-          <div className="notice-card">
-            <div className="notice-icon">💻</div>
-            <h3>Designed for Bigger Screens</h3>
-            <p>
-              Map Mat's visual sitemap experience is optimized for desktop and tablet devices.
-              For the best experience creating and exploring sitemaps, please visit us on a larger screen.
-            </p>
-            <p className="notice-sub">This marketing site works great on mobile though!</p>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ Section */}
-      <section id="faq" className={`faq animate-on-scroll ${visibleSections['faq'] ? 'visible' : ''}`}>
-        <div className="section-container">
-          <h2>Frequently Asked Questions</h2>
-          <div className="faq-list">
-            {faqs.map((faq, i) => (
-              <div
-                key={i}
-                className={`faq-item ${activeFaq === i ? 'active' : ''}`}
-                onClick={() => setActiveFaq(activeFaq === i ? null : i)}
-              >
-                <div className="faq-question">
-                  <span>{faq.q}</span>
-                  <ChevronDown size={20} />
-                </div>
-                <div className="faq-answer">
-                  <p>{faq.a}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Contact Section */}
-      <section id="contact" className={`contact animate-on-scroll ${visibleSections['contact'] ? 'visible' : ''}`}>
-        <div className="section-container">
-          <h2>Get in Touch</h2>
-          <p className="section-subtitle">Have questions? We'd love to hear from you.</p>
-          <div className="contact-wrapper">
-            <form className="contact-form" onSubmit={handleContactSubmit}>
-              {contactSubmitted ? (
-                <div className="contact-success">
-                  <Check size={48} />
-                  <h3>Message Sent!</h3>
-                  <p>We'll get back to you soon.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="form-group">
-                    <label>Name</label>
-                    <input
-                      type="text"
-                      value={contactForm.name}
-                      onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
-                      placeholder="Your name"
-                      required
-                    />
+            <div className="hero-product" aria-hidden="true">
+              <div className="product-shell">
+                <div className="product-shell-bar">
+                  <div className="product-dots">
+                    <span />
+                    <span />
+                    <span />
                   </div>
-                  <div className="form-group">
-                    <label>Email</label>
-                    <input
-                      type="email"
-                      value={contactForm.email}
-                      onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
-                      placeholder="you@example.com"
-                      required
-                    />
+                  <div className="product-url">https://example.com</div>
+                  <div className="product-bar-pill">Scan</div>
+                </div>
+
+                <div className="product-shell-body">
+                  <div className="product-canvas-card">
+                    <div className="product-card-header">
+                      <span className="product-card-label"><Globe size={14} /> Current site</span>
+                      <span className="product-card-label"><Layers size={14} /> Review layers</span>
+                    </div>
+
+                    <div className="product-map">
+                      <div className="product-node product-node-root">
+                        <span>Home</span>
+                        <small>Primary tree</small>
+                      </div>
+                      <div className="product-branches">
+                        <div className="product-node">
+                          <span>Services</span>
+                          <small>Client-facing branch</small>
+                        </div>
+                        <div className="product-node">
+                          <span>Work</span>
+                          <small>Share-ready section</small>
+                        </div>
+                        <div className="product-node">
+                          <span>Resources</span>
+                          <small>Needs review</small>
+                        </div>
+                      </div>
+                      <div className="product-tag-row">
+                        <span>Broken links</span>
+                        <span>Orphan pages</span>
+                        <span>Files</span>
+                        <span>Subdomains</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>Message</label>
-                    <textarea
-                      value={contactForm.message}
-                      onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
-                      placeholder="How can we help?"
-                      rows={4}
-                      required
-                    />
+
+                  <div className="product-sidebar">
+                    <div className="product-sidebar-card">
+                      <div className="product-sidebar-title">Review outputs</div>
+                      <ul>
+                        <li><Eye size={14} /> Thumbnails and full screenshots</li>
+                        <li><MessageSquare size={14} /> Comments on the map</li>
+                        <li><Share2 size={14} /> Permissioned share links</li>
+                      </ul>
+                    </div>
+
+                    <div className="product-sidebar-card">
+                      <div className="product-sidebar-title">Delivery</div>
+                      <ul>
+                        <li><FolderOpen size={14} /> Saved projects and history</li>
+                        <li><Download size={14} /> PNG, PDF, CSV, JSON</li>
+                        <li><Layers size={14} /> Issue-focused reporting</li>
+                      </ul>
+                    </div>
                   </div>
-                  <button type="submit" className="btn-primary">
-                    Send Message <Send size={18} />
-                  </button>
-                </>
-              )}
-            </form>
-            <div className="contact-info">
-              <div className="contact-item">
-                <Mail size={20} />
-                <span>hello@mapmat.com</span>
-              </div>
-              <div className="contact-social">
-                <p>Follow us for updates</p>
-                {/* Add social links here */}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA Section */}
-      <section className="final-cta">
-        <div className="section-container">
-          <h2>Ready to Map Your First Site?</h2>
-          <p>Join thousands of designers, developers, and marketers who trust Map Mat.</p>
-          <button className="btn-primary large" onClick={onLaunchApp}>
-            Launch App - It's Free <ArrowRight size={20} />
-          </button>
-        </div>
-      </section>
+        <section id="audience" className={`landing-section ${getVisibleEntryClass(visibleSections, 'audience')}`}>
+          <div className="section-container">
+            <div className="section-header">
+              <div className="section-eyebrow">Who it&apos;s for</div>
+              <h2>Built for teams that need structure, review context, and client-ready outputs.</h2>
+              <p>
+                The page is positioned for agencies and consultants first, but the workflow is still useful
+                for internal web teams preparing audits, planning restructures, and getting closer to testing.
+              </p>
+            </div>
 
-      {/* Footer */}
+            <div className="card-grid card-grid-three">
+              {audienceCards.map((card) => (
+                <article key={card.title} className="info-card">
+                  <h3>{card.title}</h3>
+                  <p>{card.description}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="problems" className={`landing-section landing-section-alt ${getVisibleEntryClass(visibleSections, 'problems')}`}>
+          <div className="section-container">
+            <div className="section-header">
+              <div className="section-eyebrow">What it solves</div>
+              <h2>Map Mat is useful when a crawler alone is not enough and a diagram alone is too manual.</h2>
+              <p>
+                The product is most compelling when you need to understand the existing site, review it visually,
+                and keep the review loop connected to exports, comments, and saved work.
+              </p>
+            </div>
+
+            <div className="card-grid card-grid-three">
+              {problemCards.map((card) => (
+                <article key={card.title} className="info-card info-card-emphasis">
+                  <h3>{card.title}</h3>
+                  <p>{card.description}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="section-subgroup">
+              <div className="section-eyebrow">Why teams use it</div>
+              <div className="card-grid card-grid-three">
+                {useCaseCards.map((card) => (
+                  <article key={card.title} className="info-card">
+                    <h3>{card.title}</h3>
+                    <p>{card.description}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="features" className={`landing-section ${getVisibleEntryClass(visibleSections, 'features')}`}>
+          <div className="section-container">
+            <div className="section-header">
+              <div className="section-eyebrow">Core features</div>
+              <h2>Practical capabilities the app supports today.</h2>
+              <p>
+                The copy below stays close to the product: live crawling, a visual sitemap canvas,
+                issue review, screenshots, collaboration, and delivery outputs.
+              </p>
+            </div>
+
+            <div className="card-grid card-grid-three">
+              {featureCards.map((feature) => {
+                const Icon = feature.icon;
+                return (
+                  <article key={feature.title} className="feature-card">
+                    <div className="feature-icon">
+                      <Icon size={20} />
+                    </div>
+                    <h3>{feature.title}</h3>
+                    <p>{feature.description}</p>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section id="workflow" className={`landing-section landing-section-alt ${getVisibleEntryClass(visibleSections, 'workflow')}`}>
+          <div className="section-container">
+            <div className="section-header">
+              <div className="section-eyebrow">How teams use it</div>
+              <h2>Start with the live site, review it visually, then hand off cleaner outputs.</h2>
+              <p>
+                This is the simple workflow the page is selling right now: crawl, review, then share or export.
+              </p>
+            </div>
+
+            <div className="workflow-grid">
+              {workflowSteps.map((item) => (
+                <article key={item.step} className="workflow-card">
+                  <div className="workflow-step">{item.step}</div>
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="compare" className={`landing-section ${getVisibleEntryClass(visibleSections, 'compare')}`}>
+          <div className="section-container">
+            <div className="section-header">
+              <div className="section-eyebrow">How Map Mat compares</div>
+              <h2>A conservative feature matrix for adjacent tools.</h2>
+              <p>
+                The goal is not to flatten every tool into the same category. This matrix focuses on whether each product
+                appears to cover the specific workflow pieces this page is emphasizing.
+              </p>
+            </div>
+
+            <div className="compare-table-shell">
+              <div className="compare-table-wrap">
+                <table className="compare-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Workflow area</th>
+                      {comparisonColumns.map((column) => (
+                        <th
+                          key={column.key}
+                          scope="col"
+                          className={column.highlight ? 'compare-highlight' : undefined}
+                        >
+                          {column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparisonRows.map((row) => (
+                      <tr key={row.feature}>
+                        <th scope="row">{row.feature}</th>
+                        {comparisonColumns.map((column) => {
+                          const value = row.values[column.key];
+                          return (
+                            <td key={column.key} className={column.highlight ? 'compare-highlight' : undefined}>
+                              <span className={`compare-chip compare-chip-${getComparisonTone(value)}`}>
+                                {value}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="compare-note">
+                Based on public product pages reviewed on April 2, 2026. When product pages were broad or plan-gated,
+                labels were kept intentionally conservative.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="faq" className={`landing-section landing-section-alt ${getVisibleEntryClass(visibleSections, 'faq')}`}>
+          <div className="section-container">
+            <div className="section-header">
+              <div className="section-eyebrow">FAQ</div>
+              <h2>Short answers to the questions likely to block adoption.</h2>
+              <p>
+                The FAQ stays tight and product-truthful. It avoids pricing tiers, fake roadmap certainty,
+                and broad claims the app should not be making yet.
+              </p>
+            </div>
+
+            <div className="faq-list">
+              {faqs.map((faq, index) => {
+                const isOpen = activeFaq === index;
+                const buttonId = `faq-button-${index}`;
+                const panelId = `faq-panel-${index}`;
+
+                return (
+                  <article key={faq.question} className={`faq-item ${isOpen ? 'active' : ''}`}>
+                    <button
+                      id={buttonId}
+                      type="button"
+                      className="faq-question"
+                      aria-expanded={isOpen}
+                      aria-controls={panelId}
+                      onClick={() => setActiveFaq(isOpen ? null : index)}
+                    >
+                      <span>{faq.question}</span>
+                      <ChevronDown size={18} />
+                    </button>
+                    {isOpen ? (
+                      <div id={panelId} className="faq-answer" role="region" aria-labelledby={buttonId}>
+                        <p>{faq.answer}</p>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section id="contact" className={`landing-section ${getVisibleEntryClass(visibleSections, 'contact')}`}>
+          <div className="section-container">
+            <div className="section-header">
+              <div className="section-eyebrow">Launch or contact</div>
+              <h2>Use the app directly, or email if you want a walkthrough before broader testing.</h2>
+              <p>
+                There is no fake contact form here. If you need to talk through fit for a client audit or a stakeholder review flow,
+                use the email path instead.
+              </p>
+            </div>
+
+            <div className="contact-grid">
+              <article className="contact-card contact-card-primary">
+                <div className="contact-card-label">Self-serve</div>
+                <h3>Launch the app</h3>
+                <p>
+                  Best if you are ready to crawl a public site, review the structure visually,
+                  and test the workflow on a real project.
+                </p>
+                <button type="button" className="btn-primary btn-primary-large" onClick={handleLaunchApp}>
+                  Launch App
+                  <ArrowRight size={18} />
+                </button>
+              </article>
+
+              <article className="contact-card">
+                <div className="contact-card-label">Direct contact</div>
+                <h3>Email for a walkthrough</h3>
+                <p>
+                  Useful if you want to sanity-check fit for audits, redesign planning, or stakeholder review before sending people into the product.
+                </p>
+                <a className="contact-link" href="mailto:hello@mapmat.com">
+                  <Mail size={18} />
+                  hello@mapmat.com
+                </a>
+                <p className="contact-footnote">
+                  Current focus: public-site mapping, review workflows, and controlled testing readiness.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+
       <footer className="landing-footer">
         <div className="footer-container">
           <div className="footer-brand">
-            <div className="nav-brand">
-              <MapIcon size={20} />
-              <span>Map Mat</span>
-            </div>
-            <p>Visual sitemaps made simple.</p>
+            <img src={mapmatLogo} alt="Map Mat" />
+            <p>Visual site mapping for audits, redesigns, and review.</p>
           </div>
+
           <div className="footer-links">
-            <div className="footer-col">
+            <div className="footer-column">
               <h4>Product</h4>
-              <button onClick={() => scrollToSection('features')}>Features</button>
-              <button onClick={() => scrollToSection('how-it-works')}>How It Works</button>
-              <button onClick={() => scrollToSection('faq')}>FAQ</button>
+              <button type="button" onClick={() => scrollToSection('features')}>Features</button>
+              <button type="button" onClick={() => scrollToSection('compare')}>Compare</button>
+              <button type="button" onClick={() => scrollToSection('faq')}>FAQ</button>
             </div>
-            <div className="footer-col">
+
+            <div className="footer-column">
               <h4>Legal</h4>
-              <button onClick={() => setActiveModal('terms')}>Terms of Service</button>
-              <button onClick={() => setActiveModal('privacy')}>Privacy Policy</button>
-              <button onClick={() => setActiveModal('legal')}>Legal Notice</button>
+              <button type="button" onClick={() => setActiveModal('terms')}>Terms of Service</button>
+              <button type="button" onClick={() => setActiveModal('privacy')}>Privacy Policy</button>
+              <button type="button" onClick={() => setActiveModal('legal')}>Legal Notice</button>
             </div>
-            <div className="footer-col">
-              <h4>Connect</h4>
-              <button onClick={() => scrollToSection('contact')}>Contact Us</button>
+
+            <div className="footer-column">
+              <h4>Contact</h4>
+              <a href="mailto:hello@mapmat.com">hello@mapmat.com</a>
+              <button type="button" onClick={handleLaunchApp}>Launch App</button>
             </div>
           </div>
         </div>
@@ -566,12 +847,11 @@ Legal inquiries: legal@mapmat.com`
         </div>
       </footer>
 
-      {/* Legal Modals */}
-      {activeModal && (
+      {activeModal ? (
         <div className="legal-overlay" onClick={() => setActiveModal(null)}>
-          <div className="legal-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="legal-close" onClick={() => setActiveModal(null)}>
-              <X size={24} />
+          <div className="legal-modal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="legal-close" onClick={() => setActiveModal(null)} aria-label="Close legal dialog">
+              <X size={20} />
             </button>
             <h2>{legalContent[activeModal].title}</h2>
             <div className="legal-content">
@@ -579,7 +859,7 @@ Legal inquiries: legal@mapmat.com`
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

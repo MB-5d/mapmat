@@ -6,7 +6,6 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const authStore = require('../stores/authStore');
-const { isSupportAdminEmail } = require('../utils/supportAdmin');
 const { saveAvatarFromDataUrl, removeAvatarFile } = require('../utils/avatarStorage');
 
 const router = express.Router();
@@ -75,7 +74,6 @@ function buildClientUser(user) {
     email: user.email,
     name: user.name,
     avatarUrl: user.avatar_path || null,
-    isSupportAdmin: isSupportAdminEmail(user.email),
     createdAt: user.created_at,
   };
 }

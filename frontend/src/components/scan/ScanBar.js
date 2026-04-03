@@ -4,9 +4,7 @@ import { RotateCcw, Scan, SlidersHorizontal } from 'lucide-react';
 import {
   APP_ONLY_MODE,
   SCAN_MAX_DEPTH_UI,
-  SCAN_MAX_PAGES_UI,
   TESTER_NOT_READY_MESSAGE,
-  TESTER_SCAN_LIMITS_COPY,
 } from '../../utils/constants';
 
 const ScanBar = ({
@@ -78,7 +76,7 @@ const ScanBar = ({
           <div className="layers-panel">
             <div className="layers-panel-list">
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <span>Scan depth level</span>
+                <span>Levels</span>
                 <select
                   className="layers-panel-select-input"
                   value={scanDepth}
@@ -92,7 +90,7 @@ const ScanBar = ({
                 </select>
               </label>
               <div className="layers-panel-hint">
-                Max {SCAN_MAX_DEPTH_UI} levels during testing.
+                Max {SCAN_MAX_DEPTH_UI} levels during testing
               </div>
               <div className="layers-panel-section">Placement</div>
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
@@ -153,7 +151,7 @@ const ScanBar = ({
               </label>
               {APP_ONLY_MODE && (
                 <div className="layers-panel-hint">
-                  {TESTER_NOT_READY_MESSAGE}: prompted-login crawling is disabled during testing.
+                  {TESTER_NOT_READY_MESSAGE}
                 </div>
               )}
 
@@ -187,12 +185,6 @@ const ScanBar = ({
                 />
                 <span>Crosslinks</span>
               </label>
-              <div className="layers-panel-hint">
-                {TESTER_SCAN_LIMITS_COPY}
-              </div>
-              <div className="layers-panel-hint">
-                Scans stop after {SCAN_MAX_PAGES_UI} pages during testing.
-              </div>
             </div>
           </div>
         )}

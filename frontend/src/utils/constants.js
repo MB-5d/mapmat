@@ -24,9 +24,6 @@ export const SENTRY_DSN = String(process.env.REACT_APP_SENTRY_DSN || '').trim();
 export const SCAN_MAX_DEPTH_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_DEPTH, 8, { min: 1, max: 10 });
 export const SCAN_MAX_PAGES_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_PAGES, 300, { min: 1, max: 5000 });
 export const TESTER_NOT_READY_MESSAGE = 'Not ready for testing yet';
-export const TESTER_SCAN_LIMITS_COPY = APP_ONLY_MODE
-  ? `Limited to ${SCAN_MAX_DEPTH_UI} levels and ${SCAN_MAX_PAGES_UI} pages for testing.`
-  : 'Limited by scan depth and max pages.';
 
 export const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
