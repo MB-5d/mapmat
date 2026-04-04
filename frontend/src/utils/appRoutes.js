@@ -2,6 +2,7 @@ export const ROUTE_SURFACES = Object.freeze({
   WEBSITE: 'website',
   APP: 'app',
   SHARE: 'share',
+  ADMIN: 'admin',
 });
 
 function trimSlashes(value) {
@@ -50,6 +51,29 @@ export function parseCurrentRoute(locationLike = window.location) {
       shareId: decodeSegment(shareMatch[1]),
       accessLevel: searchParams.get('access') || null,
       legacyShareQuery: false,
+    };
+  }
+
+  if (pathname === '/admin' || pathname === '/admin/') {
+    return {
+      surface: ROUTE_SURFACES.ADMIN,
+      pathname,
+      search,
+      searchParams,
+      section: 'home',
+      userId: null,
+    };
+  }
+
+  const adminUserMatch = pathname.match(/^\/admin\/users\/([^/]+)$/);
+  if (adminUserMatch) {
+    return {
+      surface: ROUTE_SURFACES.ADMIN,
+      pathname,
+      search,
+      searchParams,
+      section: 'user',
+      userId: decodeSegment(adminUserMatch[1]),
     };
   }
 
@@ -136,6 +160,13 @@ export function buildRouteUrl(route) {
     return search ? `${basePath}?${search}` : basePath;
   }
 
+  if (route.surface === ROUTE_SURFACES.ADMIN) {
+    if (route.section === 'user' && route.userId) {
+      return `/admin/users/${encodeURIComponent(route.userId)}`;
+    }
+    return '/admin';
+  }
+
   if (route.surface === ROUTE_SURFACES.APP) {
     if (route.section === 'invites') return '/app/invites';
     if (route.section === 'access_requests') return '/app/access-requests';
@@ -153,6 +184,14 @@ export function buildRouteUrl(route) {
 
 export function createAppHomeRoute() {
   return { surface: ROUTE_SURFACES.APP, section: 'home', mapId: null };
+}
+
+export function createAdminHomeRoute() {
+  return { surface: ROUTE_SURFACES.ADMIN, section: 'home', userId: null };
+}
+
+export function createAdminUserRoute(userId) {
+  return { surface: ROUTE_SURFACES.ADMIN, section: 'user', userId };
 }
 
 export function createMapRoute(mapId) {

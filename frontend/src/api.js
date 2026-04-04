@@ -38,8 +38,8 @@ function clearStoredAuthToken() {
 }
 
 // Fetch wrapper with credentials and error handling
-async function fetchApi(endpoint, options = {}) {
-  const authToken = getStoredAuthToken();
+async function fetchJson(endpoint, options = {}, { includeUserToken = true } = {}) {
+  const authToken = includeUserToken ? getStoredAuthToken() : null;
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -71,6 +71,14 @@ async function fetchApi(endpoint, options = {}) {
   }
 
   return data;
+}
+
+async function fetchApi(endpoint, options = {}) {
+  return fetchJson(endpoint, options, { includeUserToken: true });
+}
+
+async function fetchAdminApi(endpoint, options = {}) {
+  return fetchJson(endpoint, options, { includeUserToken: false });
 }
 
 function buildWebSocketUrl(endpoint) {
@@ -140,6 +148,63 @@ export async function deleteAccount(password) {
   });
   clearStoredAuthToken();
   return result;
+}
+
+export async function getAdminSession() {
+  return fetchAdminApi('/api/admin/session');
+}
+
+export async function createAdminSession({ operatorLabel, adminKey }) {
+  return fetchAdminApi('/api/admin/session', {
+    method: 'POST',
+    body: JSON.stringify({ operatorLabel, adminKey }),
+  });
+}
+
+export async function destroyAdminSession() {
+  return fetchAdminApi('/api/admin/session', {
+    method: 'DELETE',
+  });
+}
+
+export async function getAdminUsers({
+  query = '',
+  limit,
+  offset,
+  sortBy = 'updatedAt',
+  sortDirection = 'desc',
+} = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  if (offset !== undefined && offset !== null) params.set('offset', String(offset));
+  params.set('sortBy', sortBy);
+  params.set('sortDirection', sortDirection);
+  return fetchAdminApi(`/api/admin/users?${params.toString()}`);
+}
+
+export async function getAdminUser(userId) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}`);
+}
+
+export async function adminResetUserPassword(userId, { newPassword }) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ newPassword }),
+  });
+}
+
+export async function adminDisableUser(userId, { reason } = {}) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/disable`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function adminReactivateUser(userId) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/reactivate`, {
+    method: 'POST',
+  });
 }
 
 // ============================================

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import App from './App';
+import AdminConsole from './components/admin/AdminConsole';
 import LandingPage from './LandingPage';
 import { initAnalytics, trackPageView } from './utils/analytics';
 import {
@@ -61,6 +62,10 @@ function RootApp() {
   if (route.surface === ROUTE_SURFACES.WEBSITE) {
     if (APP_ONLY_MODE) return null;
     return <LandingPage onLaunchApp={() => navigateToRoute(createAppHomeRoute())} />;
+  }
+
+  if (route.surface === ROUTE_SURFACES.ADMIN) {
+    return <AdminConsole route={route} navigateToRoute={navigateToRoute} />;
   }
 
   return <App currentRoute={route} navigateToRoute={navigateToRoute} />;

@@ -17,6 +17,7 @@ function parseEnvInt(value, fallback, { min = Number.MIN_SAFE_INTEGER, max = Num
 export const APP_ONLY_MODE = parseEnvBool(process.env.REACT_APP_APP_ONLY_MODE, false);
 export const SHOW_DEMO_AUTH = parseEnvBool(process.env.REACT_APP_ENABLE_DEMO_AUTH, !APP_ONLY_MODE);
 export const APP_BRAND_NAME = APP_ONLY_MODE ? 'IA Tool' : 'Map Mat';
+export const ENABLE_ADMIN_CONSOLE = parseEnvBool(process.env.REACT_APP_ENABLE_ADMIN_CONSOLE, false);
 export const ENABLE_ANALYTICS = parseEnvBool(process.env.REACT_APP_ENABLE_ANALYTICS, false);
 export const CLARITY_PROJECT_ID = String(process.env.REACT_APP_CLARITY_PROJECT_ID || '').trim();
 export const GA_MEASUREMENT_ID = String(process.env.REACT_APP_GA_MEASUREMENT_ID || '').trim();

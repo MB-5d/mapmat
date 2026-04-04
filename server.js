@@ -54,6 +54,7 @@ const db = require('./db');
 // Import routes
 const { router: authRouter, authMiddleware, requireAuth } = require('./routes/auth');
 const apiRouter = require('./routes/api');
+const adminRouter = require('./routes/admin');
 const collaborationRouter = require('./routes/collaboration');
 const realtimeRouter = require('./routes/realtime');
 const coeditingRouter = require('./routes/coediting');
@@ -143,6 +144,7 @@ app.use(AVATAR_PUBLIC_BASE, express.static(AVATAR_STORAGE_DIR));
 
 // Mount routes
 app.use('/auth', authRouter);
+app.use('/api/admin', adminRouter);
 app.use('/api', apiRouter);
 app.use('/api', collaborationRouter);
 app.use('/api', realtimeRouter);

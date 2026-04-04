@@ -78,6 +78,10 @@ function buildClientUser(user) {
   };
 }
 
+function isAccountDisabled(user) {
+  return String(user?.account_status || 'active').trim().toLowerCase() === 'disabled';
+}
+
 const normalizeIp = (ip) => (ip && ip.startsWith('::ffff:') ? ip.slice(7) : ip || '');
 
 const getClientIp = (req) => normalizeIp(req.ip || req.connection?.remoteAddress || 'unknown');
@@ -292,7 +296,10 @@ async function authenticateRequestAsync(req) {
 
   try {
     const user = await authStore.getPublicUserByIdAsync(decoded.userId);
-    return user || null;
+    if (!user || isAccountDisabled(user)) {
+      return null;
+    }
+    return user;
   } catch (error) {
     console.error('Authenticate request error:', error);
     return null;
@@ -394,6 +401,12 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (isAccountDisabled(user)) {
+      return res.status(403).json({
+        error: 'This account has been disabled. Contact support for help reactivating it.',
+      });
     }
 
     // Check password
