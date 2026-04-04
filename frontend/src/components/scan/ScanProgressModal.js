@@ -31,7 +31,7 @@ const ScanProgressModal = ({
               <div className="scan-url">{urlInput}</div>
               {APP_ONLY_MODE ? (
                 <div className="scan-limit-note">
-                  Testing limit: scans stop after {SCAN_MAX_PAGES_UI} pages.
+                  Limited to {SCAN_MAX_PAGES_UI} pages during testing
                 </div>
               ) : null}
               <div className={`scan-stats${hasQueue ? '' : ' single'}`}>
