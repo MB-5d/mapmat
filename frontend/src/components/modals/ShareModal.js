@@ -162,7 +162,12 @@ const ShareModal = ({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md modal-scrollable share-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-card modal-md modal-scrollable share-modal"
+        data-feedback-id="share-modal"
+        data-feedback-label="Share modal"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h3>Share Sitemap</h3>
           <button className="modal-close" onClick={onClose}>

@@ -51,7 +51,12 @@ const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md modal-scrollable auth-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-card modal-md modal-scrollable auth-modal"
+        data-feedback-id="auth-modal"
+        data-feedback-label="Account modal"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h3>Account</h3>
           <button className="modal-close" onClick={onClose}>

@@ -26,6 +26,7 @@ import * as api from './api';
 import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
 import CommentPopover from './components/comments/CommentPopover';
 import CommentsPanel from './components/comments/CommentsPanel';
+import FeedbackWidget from './components/feedback/FeedbackWidget';
 import InviteAcceptGate from './components/routes/InviteAcceptGate';
 import MapAccessGate from './components/routes/MapAccessGate';
 import AuthModal from './components/modals/AuthModal';
@@ -3993,6 +3994,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     clearAnalyticsUser();
   }, [currentUser]);
+
 
   const applyLoggedOutState = useCallback(({ preserveViewOnlyMap = false } = {}) => {
     try {
@@ -10361,6 +10363,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     saveMapModalProjectId || 'none',
     saveMapModalName || 'untitled',
   ].join(':');
+
   return (
     <AuthProvider value={authValue}>
     <div className="app">
@@ -11603,6 +11606,27 @@ export default function App({ currentRoute, navigateToRoute }) {
         })()}
       </div>
 
+      <FeedbackWidget
+        currentRoute={currentRoute}
+        currentUser={currentUser}
+        currentMapId={currentMap?.id || null}
+        activeSurfaces={{
+          commentsPanel: showCommentsPanel,
+          reportDrawer: showReportDrawer,
+          shareModal: showShareModal,
+          exportModal: showExportModal,
+          projectsModal: showProjectsModal,
+          historyModal: showHistoryModal,
+          authModal: showAuthModal,
+          profileDrawer: showProfileDrawer,
+          settingsDrawer: showSettingsDrawer,
+          versionHistoryDrawer: showVersionHistoryDrawer,
+          inviteInboxModal: showInviteInboxModal,
+          accessRequestsInboxModal: showAccessRequestsInboxModal,
+        }}
+        showToast={showToast}
+      />
+
       {/* Comments Panel - Right Rail */}
       {showCommentsPanel && (
         <CommentsPanel
@@ -11934,6 +11958,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           specialParentOptions={specialParentOptions}
         />
       )}
+
 
       <DeleteConfirmModal
         node={deleteConfirmNode}

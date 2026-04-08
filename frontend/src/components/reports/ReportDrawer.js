@@ -210,6 +210,8 @@ const ReportDrawer = ({
   return (
     <aside
       className={`report-drawer ${isClosing ? 'report-drawer-closing' : 'report-drawer-open'}`}
+      data-feedback-id="report-drawer"
+      data-feedback-label="Report drawer"
       role="dialog"
       aria-label="Scan report"
       onPointerDown={(e) => e.stopPropagation()}

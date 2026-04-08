@@ -1,42 +1,41 @@
 const { v4: uuidv4 } = require('uuid');
 const adapter = require('./dbAdapter');
-const db = require('../db');
 
 let ensureSchemaPromise = null;
+
+async function ensureColumnAsync(table, column, type) {
+  let rows = [];
+
+  if (adapter.runtime?.activeProvider === 'postgres') {
+    rows = await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ?
+    `, [table]);
+  } else {
+    rows = await adapter.queryAllAsync(`PRAGMA table_info(${table})`);
+  }
+
+  const columns = rows.map((row) => row.column_name || row.name).filter(Boolean);
+  if (!columns.includes(column)) {
+    await adapter.executeAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
 
 async function ensureAuthSchemaAsync() {
   if (ensureSchemaPromise) return ensureSchemaPromise;
 
   ensureSchemaPromise = (async () => {
-    if (adapter.runtime?.activeProvider === 'postgres') {
-      await adapter.executeAsync('ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT');
-      await adapter.executeAsync("ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active'");
-      await adapter.executeAsync('ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_at TIMESTAMP');
-      await adapter.executeAsync('ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_reason TEXT');
-      await adapter.executeAsync("UPDATE users SET account_status = 'active' WHERE account_status IS NULL OR TRIM(account_status) = ''");
-      await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status)');
-      await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at)');
-      await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)');
-      return;
-    }
-
-    const columns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name);
-    if (!columns.includes('avatar_path')) {
-      db.exec('ALTER TABLE users ADD COLUMN avatar_path TEXT');
-    }
-    if (!columns.includes('account_status')) {
-      db.exec("ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'active'");
-    }
-    if (!columns.includes('disabled_at')) {
-      db.exec('ALTER TABLE users ADD COLUMN disabled_at DATETIME');
-    }
-    if (!columns.includes('disabled_reason')) {
-      db.exec('ALTER TABLE users ADD COLUMN disabled_reason TEXT');
-    }
-    db.exec("UPDATE users SET account_status = 'active' WHERE account_status IS NULL OR TRIM(account_status) = ''");
-    db.exec('CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at)');
-    db.exec('CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)');
+    await ensureColumnAsync('users', 'avatar_path', 'TEXT');
+    await ensureColumnAsync('users', 'account_status', "TEXT NOT NULL DEFAULT 'active'");
+    await ensureColumnAsync('users', 'disabled_at', 'TIMESTAMP');
+    await ensureColumnAsync('users', 'disabled_reason', 'TEXT');
+    await adapter.executeAsync(
+      "UPDATE users SET account_status = 'active' WHERE account_status IS NULL OR TRIM(account_status) = ''"
+    );
+    await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status)');
+    await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at)');
+    await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)');
   })();
 
   try {

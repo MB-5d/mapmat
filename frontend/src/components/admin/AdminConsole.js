@@ -6,6 +6,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  MessageSquare,
   PanelRightOpen,
   Search,
   Shield,
@@ -17,6 +18,7 @@ import {
 
 import './AdminConsole.css';
 import AccountDrawer from '../drawers/AccountDrawer';
+import FeedbackConsole from './FeedbackConsole';
 import {
   adminDisableUser,
   adminReactivateUser,
@@ -244,6 +246,7 @@ function AdminConsole({ route, navigateToRoute }) {
   const [adminKey, setAdminKey] = useState('');
   const [showAdminKey, setShowAdminKey] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [activePanel, setActivePanel] = useState('users');
 
   const [searchInput, setSearchInput] = useState('');
   const deferredSearchInput = useDeferredValue(searchInput);
@@ -266,7 +269,7 @@ function AdminConsole({ route, navigateToRoute }) {
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
 
-  const activeUserId = route?.section === 'user' ? route.userId : null;
+  const activeUserId = activePanel === 'users' && route?.section === 'user' ? route.userId : null;
   const activeSearchQuery = deferredSearchInput.trim();
   const hasSearchInput = searchInput.trim().length > 0;
 
@@ -285,6 +288,12 @@ function AdminConsole({ route, navigateToRoute }) {
     setDisableReason('');
     navigateToRoute(createAdminHomeRoute(), { replace: true });
   }, [navigateToRoute]);
+
+  useEffect(() => {
+    if (route?.section === 'user') {
+      setActivePanel('users');
+    }
+  }, [route?.section]);
 
   useEffect(() => {
     if (!ENABLE_ADMIN_CONSOLE) {
@@ -325,7 +334,7 @@ function AdminConsole({ route, navigateToRoute }) {
   }, []);
 
   useEffect(() => {
-    if (!ENABLE_ADMIN_CONSOLE || !isAuthenticated) return undefined;
+    if (!ENABLE_ADMIN_CONSOLE || !isAuthenticated || activePanel !== 'users') return undefined;
 
     let cancelled = false;
 
@@ -365,13 +374,14 @@ function AdminConsole({ route, navigateToRoute }) {
     deferredSearchInput,
     handleSessionExpired,
     isAuthenticated,
+    activePanel,
     sortState.sortBy,
     sortState.sortDirection,
     usersReloadKey,
   ]);
 
   useEffect(() => {
-    if (!ENABLE_ADMIN_CONSOLE || !isAuthenticated || !activeUserId) {
+    if (!ENABLE_ADMIN_CONSOLE || !isAuthenticated || activePanel !== 'users' || !activeUserId) {
       setSelectedUser(null);
       setDetailError('');
       setActionError('');
@@ -415,7 +425,7 @@ function AdminConsole({ route, navigateToRoute }) {
     return () => {
       cancelled = true;
     };
-  }, [activeUserId, handleSessionExpired, isAuthenticated]);
+  }, [activePanel, activeUserId, handleSessionExpired, isAuthenticated]);
 
   async function handleLoginSubmit(event) {
     event.preventDefault();
@@ -552,6 +562,7 @@ function AdminConsole({ route, navigateToRoute }) {
   }
 
   function handleSelectUser(userId) {
+    setActivePanel('users');
     navigateToRoute(createAdminUserRoute(userId));
   }
 
@@ -569,6 +580,17 @@ function AdminConsole({ route, navigateToRoute }) {
     setNewPassword('');
     setDisableReason('');
     navigateToRoute(createAdminHomeRoute());
+  }
+
+  function handleShowUsers() {
+    setActivePanel('users');
+  }
+
+  function handleShowFeedback() {
+    setActivePanel('feedback');
+    if (route?.section === 'user') {
+      navigateToRoute(createAdminHomeRoute(), { replace: true });
+    }
   }
 
   if (!ENABLE_ADMIN_CONSOLE) {
@@ -662,7 +684,25 @@ function AdminConsole({ route, navigateToRoute }) {
           <div>
             <div className="admin-console-badge">Private Surface</div>
             <h1>Support Console</h1>
-            <p>Support-only access for user lookup, password reset, and account status changes.</p>
+            <p>Support-only access for user support operations and feedback triage.</p>
+            <div className="admin-console-surface-nav">
+              <button
+                type="button"
+                className={`admin-console-surface-tab ${activePanel === 'users' ? 'is-active' : ''}`}
+                onClick={handleShowUsers}
+              >
+                <User size={16} />
+                Users
+              </button>
+              <button
+                type="button"
+                className={`admin-console-surface-tab ${activePanel === 'feedback' ? 'is-active' : ''}`}
+                onClick={handleShowFeedback}
+              >
+                <MessageSquare size={16} />
+                Feedback
+              </button>
+            </div>
           </div>
           <div className="admin-console-header-actions">
             <div className="admin-console-operator">
@@ -678,181 +718,187 @@ function AdminConsole({ route, navigateToRoute }) {
 
         {sessionError ? <div className="admin-console-error admin-console-banner">{sessionError}</div> : null}
 
-        <section className="admin-console-panel admin-console-table-panel">
-          <div className="admin-console-table-toolbar">
-            <div className="admin-console-search-row">
-              <div className="admin-console-search-input">
-                <Search size={16} />
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={handleSearchChange}
-                  placeholder="Search by email or name"
-                />
+        {activePanel === 'users' ? (
+          <section className="admin-console-panel admin-console-table-panel">
+            <div className="admin-console-table-toolbar">
+              <div className="admin-console-search-row">
+                <div className="admin-console-search-input">
+                  <Search size={16} />
+                  <input
+                    type="search"
+                    value={searchInput}
+                    onChange={handleSearchChange}
+                    placeholder="Search by email or name"
+                  />
+                </div>
+                {hasSearchInput ? (
+                  <button
+                    type="button"
+                    className="admin-console-secondary-btn admin-console-search-clear"
+                    onClick={() => setSearchInput('')}
+                  >
+                    Clear
+                  </button>
+                ) : null}
               </div>
-              {hasSearchInput ? (
-                <button
-                  type="button"
-                  className="admin-console-secondary-btn admin-console-search-clear"
-                  onClick={() => setSearchInput('')}
-                >
-                  Clear
-                </button>
+
+              <div className="admin-console-list-meta">
+                <span>{activeSearchQuery ? 'Matching users' : 'Recent users'}</span>
+                <span>
+                  {usersLoading && users.length > 0
+                    ? 'Refreshing…'
+                    : totalUsers === 0
+                      ? '0 results'
+                      : `${totalUsers} result${totalUsers === 1 ? '' : 's'}`}
+                </span>
+              </div>
+            </div>
+
+            {usersError ? <div className="admin-console-error">{usersError}</div> : null}
+
+            <div className="admin-console-table-frame">
+              {usersLoading && users.length === 0 ? (
+                <div className="admin-console-empty admin-console-table-state">
+                  <div className="admin-console-empty-icon">
+                    <Loader2 size={18} className="admin-console-spinner" />
+                  </div>
+                  <div className="admin-console-empty-copy">
+                    <div className="admin-console-empty-title">Loading users</div>
+                    <div className="admin-console-empty-subtitle">
+                      Pulling the latest support records for this workspace.
+                    </div>
+                  </div>
+                </div>
               ) : null}
-            </div>
 
-            <div className="admin-console-list-meta">
-              <span>{activeSearchQuery ? 'Matching users' : 'Recent users'}</span>
-              <span>
-                {usersLoading && users.length > 0
-                  ? 'Refreshing…'
-                  : totalUsers === 0
-                    ? '0 results'
-                    : `${totalUsers} result${totalUsers === 1 ? '' : 's'}`}
-              </span>
-            </div>
-          </div>
-
-          {usersError ? <div className="admin-console-error">{usersError}</div> : null}
-
-          <div className="admin-console-table-frame">
-            {usersLoading && users.length === 0 ? (
-              <div className="admin-console-empty admin-console-table-state">
-                <div className="admin-console-empty-icon">
-                  <Loader2 size={18} className="admin-console-spinner" />
-                </div>
-                <div className="admin-console-empty-copy">
-                  <div className="admin-console-empty-title">Loading users</div>
-                  <div className="admin-console-empty-subtitle">
-                    Pulling the latest support records for this workspace.
+              {!usersLoading && users.length === 0 ? (
+                <div className="admin-console-empty admin-console-table-state">
+                  <div className="admin-console-empty-icon">
+                    <ShieldAlert size={18} />
+                  </div>
+                  <div className="admin-console-empty-copy">
+                    <div className="admin-console-empty-title">
+                      {activeSearchQuery ? 'No matching users' : 'No users yet'}
+                    </div>
+                    <div className="admin-console-empty-subtitle">
+                      {activeSearchQuery
+                        ? 'Try another email address or a different name search.'
+                        : 'Accounts will appear here as new testers sign up.'}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            {!usersLoading && users.length === 0 ? (
-              <div className="admin-console-empty admin-console-table-state">
-                <div className="admin-console-empty-icon">
-                  <ShieldAlert size={18} />
-                </div>
-                <div className="admin-console-empty-copy">
-                  <div className="admin-console-empty-title">
-                    {activeSearchQuery ? 'No matching users' : 'No users yet'}
-                  </div>
-                  <div className="admin-console-empty-subtitle">
-                    {activeSearchQuery
-                      ? 'Try another email address or a different name search.'
-                      : 'Accounts will appear here as new testers sign up.'}
-                  </div>
-                </div>
-              </div>
-            ) : null}
+              {users.length > 0 ? (
+                <div className="admin-console-table-scroll">
+                  <table className="admin-console-table">
+                    <thead>
+                      <tr>
+                        {SORTABLE_COLUMNS.map((column) => {
+                          const isActive = sortState.sortBy === column.key;
+                          const ariaSort = isActive
+                            ? (sortState.sortDirection === 'asc' ? 'ascending' : 'descending')
+                            : 'none';
 
-            {users.length > 0 ? (
-              <div className="admin-console-table-scroll">
-                <table className="admin-console-table">
-                  <thead>
-                    <tr>
-                      {SORTABLE_COLUMNS.map((column) => {
-                        const isActive = sortState.sortBy === column.key;
-                        const ariaSort = isActive
-                          ? (sortState.sortDirection === 'asc' ? 'ascending' : 'descending')
-                          : 'none';
-
-                        return (
-                          <th key={column.key} scope="col" aria-sort={ariaSort}>
+                          return (
+                            <th key={column.key} scope="col" aria-sort={ariaSort}>
+                              <button
+                                type="button"
+                                className={`admin-console-sort-btn${isActive ? ' is-active' : ''}`}
+                                onClick={() => handleSort(column.key)}
+                              >
+                                <span>{column.label}</span>
+                                <SortIcon active={isActive} direction={sortState.sortDirection} />
+                              </button>
+                            </th>
+                          );
+                        })}
+                        <th scope="col" className="admin-console-expand-col">Expand</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => (
+                        <tr
+                          key={user.id}
+                          className={activeUserId === user.id ? 'is-selected' : ''}
+                          onClick={() => handleSelectUser(user.id)}
+                          onKeyDown={(event) => handleRowKeyDown(event, user.id)}
+                          tabIndex={0}
+                          aria-selected={activeUserId === user.id}
+                        >
+                          <td>
+                            <div className="admin-console-name-cell">
+                              <div className="admin-console-avatar">
+                                {user.avatarUrl ? (
+                                  <img src={resolveApiAssetUrl(user.avatarUrl)} alt="" />
+                                ) : (
+                                  <User size={18} />
+                                )}
+                              </div>
+                              <span className="admin-console-cell-primary">
+                                {user.name || 'Unnamed user'}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="admin-console-cell-secondary">{user.email}</span>
+                          </td>
+                          <td>
+                            <span className={`admin-console-status-pill is-${user.accountStatus}`}>
+                              {user.accountStatus}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="admin-console-cell-secondary">
+                              {formatTableTimestamp(user.updatedAt)}
+                            </span>
+                          </td>
+                          <td className="admin-console-expand-cell">
                             <button
                               type="button"
-                              className={`admin-console-sort-btn${isActive ? ' is-active' : ''}`}
-                              onClick={() => handleSort(column.key)}
+                              className="admin-console-row-expand"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleSelectUser(user.id);
+                              }}
+                              aria-label={`Open support details for ${user.email}`}
                             >
-                              <span>{column.label}</span>
-                              <SortIcon active={isActive} direction={sortState.sortDirection} />
+                              <PanelRightOpen size={16} />
+                              <span>Open</span>
                             </button>
-                          </th>
-                        );
-                      })}
-                      <th scope="col" className="admin-console-expand-col">Expand</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr
-                        key={user.id}
-                        className={activeUserId === user.id ? 'is-selected' : ''}
-                        onClick={() => handleSelectUser(user.id)}
-                        onKeyDown={(event) => handleRowKeyDown(event, user.id)}
-                        tabIndex={0}
-                        aria-selected={activeUserId === user.id}
-                      >
-                        <td>
-                          <div className="admin-console-name-cell">
-                            <div className="admin-console-avatar">
-                              {user.avatarUrl ? (
-                                <img src={resolveApiAssetUrl(user.avatarUrl)} alt="" />
-                              ) : (
-                                <User size={18} />
-                              )}
-                            </div>
-                            <span className="admin-console-cell-primary">
-                              {user.name || 'Unnamed user'}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="admin-console-cell-secondary">{user.email}</span>
-                        </td>
-                        <td>
-                          <span className={`admin-console-status-pill is-${user.accountStatus}`}>
-                            {user.accountStatus}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="admin-console-cell-secondary">
-                            {formatTableTimestamp(user.updatedAt)}
-                          </span>
-                        </td>
-                        <td className="admin-console-expand-cell">
-                          <button
-                            type="button"
-                            className="admin-console-row-expand"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleSelectUser(user.id);
-                            }}
-                            aria-label={`Open support details for ${user.email}`}
-                          >
-                            <PanelRightOpen size={16} />
-                            <span>Open</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-          </div>
-        </section>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : (
+          <FeedbackConsole onSessionExpired={handleSessionExpired} />
+        )}
       </div>
 
-      <AdminUserDrawer
-        isOpen={!!activeUserId}
-        user={selectedUser}
-        loading={detailLoading}
-        error={detailError}
-        actionLoading={actionLoading}
-        actionError={actionError}
-        actionMessage={actionMessage}
-        newPassword={newPassword}
-        disableReason={disableReason}
-        onNewPasswordChange={setNewPassword}
-        onDisableReasonChange={setDisableReason}
-        onPasswordReset={handlePasswordReset}
-        onDisableUser={handleDisableUser}
-        onReactivateUser={handleReactivateUser}
-        onClose={handleCloseDrawer}
-      />
+      {activePanel === 'users' ? (
+        <AdminUserDrawer
+          isOpen={!!activeUserId}
+          user={selectedUser}
+          loading={detailLoading}
+          error={detailError}
+          actionLoading={actionLoading}
+          actionError={actionError}
+          actionMessage={actionMessage}
+          newPassword={newPassword}
+          disableReason={disableReason}
+          onNewPasswordChange={setNewPassword}
+          onDisableReasonChange={setDisableReason}
+          onPasswordReset={handlePasswordReset}
+          onDisableUser={handleDisableUser}
+          onReactivateUser={handleReactivateUser}
+          onClose={handleCloseDrawer}
+        />
+      ) : null}
     </div>
   );
 }

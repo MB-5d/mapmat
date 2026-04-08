@@ -195,6 +195,8 @@ const NodeCard = ({
       className={classNames.join(' ')}
       data-node-card="1"
       data-node-id={node.id}
+      data-feedback-id={`node-card-${node.id}`}
+      data-feedback-label={node.title || 'Node card'}
       style={{ cursor: isRoot ? 'default' : (connectionTool ? 'default' : 'grab') }}
       {...(isRoot ? {} : dragHandleProps)}
     >

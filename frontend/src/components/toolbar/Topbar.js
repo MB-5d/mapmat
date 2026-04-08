@@ -69,7 +69,7 @@ const Topbar = ({
   const totalPendingCount = pendingInviteCount + pendingAccessRequestCount;
 
   return (
-    <div className="topbar">
+    <div className="topbar" data-feedback-id="topbar" data-feedback-label="Top navigation">
       <div className="topbar-left">
         <div className="brand">
           {APP_ONLY_MODE ? (

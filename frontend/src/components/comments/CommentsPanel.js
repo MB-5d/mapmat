@@ -72,7 +72,12 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
   });
 
   return (
-    <div className="comments-panel" onWheel={(e) => e.stopPropagation()}>
+    <div
+      className="comments-panel"
+      data-feedback-id="comments-panel"
+      data-feedback-label="Comments panel"
+      onWheel={(e) => e.stopPropagation()}
+    >
       <div className="comments-panel-header">
         <h3>All Comments</h3>
         <IconButton className="comments-panel-close" onClick={onClose} aria-label="Close comments panel">

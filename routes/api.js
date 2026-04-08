@@ -8,6 +8,7 @@ const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
 const mapCommentStore = require('../stores/mapCommentStore');
+const feedbackStore = require('../stores/feedbackStore');
 const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
@@ -27,6 +28,7 @@ const {
 } = require('../utils/coeditingRollout');
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
 const { buildHealthSnapshot: getEmailHealthSnapshot } = require('../utils/emailProvider');
+const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
 
 const router = express.Router();
 
@@ -54,6 +56,7 @@ const FEATURE_GATES = Object.freeze({
   accessRequestsCreate: permissionPolicy.FEATURES.ACCESS_REQUESTS_CREATE,
   presenceView: permissionPolicy.FEATURES.PRESENCE_VIEW,
 });
+const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -101,6 +104,45 @@ function parseJsonObject(raw) {
   } catch {
     return raw;
   }
+}
+
+function parseBooleanLike(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+function serializeFeedbackItem(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    actorUserId: row.actor_user_id || null,
+    actorName: row.actor_name || '',
+    actorEmail: row.actor_email || '',
+    surface: row.surface || '',
+    routePath: row.route_path || '',
+    routeSection: row.route_section || '',
+    mapId: row.map_id || null,
+    shareId: row.share_id || null,
+    scope: row.scope || 'whole_app',
+    intent: row.intent || 'idea',
+    rating: row.rating === null || row.rating === undefined ? null : Number(row.rating),
+    message: row.message || '',
+    componentKey: row.component_key || null,
+    componentLabel: row.component_label || null,
+    domHint: parseJsonObject(row.dom_hint_json),
+    screenshotPath: row.screenshot_path || null,
+    allowFollowUp: Number(row.allow_follow_up || 0) > 0,
+    triageStatus: row.triage_status || 'new',
+    themeId: row.theme_id || null,
+    context: parseJsonObject(row.context_json),
+    themeTitle: row.theme_title || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 function redactSensitiveFields(value) {
@@ -649,6 +691,76 @@ async function resolveMapPermissionContextAsync({ mapId, actorUserId }) {
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
+
+// POST /api/feedback - capture authenticated in-app feedback
+router.post('/feedback', requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const message = String(body.message || '').trim();
+    const intent = String(body.intent || '').trim();
+    const scope = String(body.scope || '').trim();
+    const surface = String(body.surface || '').trim();
+
+    if (!message) {
+      return res.status(400).json({ error: 'Feedback message is required.' });
+    }
+    if (!feedbackStore.ITEM_INTENTS.has(intent)) {
+      return res.status(400).json({ error: 'Invalid feedback intent.' });
+    }
+    if (!feedbackStore.ITEM_SCOPES.has(scope)) {
+      return res.status(400).json({ error: 'Invalid feedback scope.' });
+    }
+    if (!surface) {
+      return res.status(400).json({ error: 'Feedback surface is required.' });
+    }
+    if (message.length > FEEDBACK_MESSAGE_MAX_LENGTH) {
+      return res.status(400).json({ error: `Feedback message must be ${FEEDBACK_MESSAGE_MAX_LENGTH} characters or less.` });
+    }
+
+    await feedbackStore.ensureFeedbackSchemaAsync();
+
+    const feedbackId = uuidv4();
+    const screenshotDataUrl = typeof body.screenshot_data_url === 'string'
+      ? body.screenshot_data_url
+      : (typeof body.screenshotDataUrl === 'string' ? body.screenshotDataUrl : '');
+    const screenshotPath = screenshotDataUrl.trim()
+      ? await saveFeedbackImageFromDataUrl({
+        feedbackId,
+        imageDataUrl: screenshotDataUrl,
+      })
+      : null;
+
+    const created = await feedbackStore.createFeedbackItemAsync({
+      id: feedbackId,
+      actorUserId: req.user?.id || null,
+      actorName: req.user?.name || 'Anonymous',
+      actorEmail: req.user?.email || null,
+      surface,
+      routePath: body.route_path || body.routePath || null,
+      routeSection: body.route_section || body.routeSection || null,
+      mapId: body.map_id || body.mapId || null,
+      shareId: body.share_id || body.shareId || null,
+      scope,
+      intent,
+      rating: body.rating,
+      message,
+      componentKey: body.component_key || body.componentKey || null,
+      componentLabel: body.component_label || body.componentLabel || null,
+      domHint: body.dom_hint || body.domHint || null,
+      screenshotPath,
+      allowFollowUp: parseBooleanLike(body.allow_follow_up ?? body.allowFollowUp, false),
+      context: body.context || null,
+    });
+
+    const refreshed = await feedbackStore.getFeedbackItemByIdAsync(created.id);
+    return res.status(201).json({
+      feedback: serializeFeedbackItem(refreshed),
+    });
+  } catch (error) {
+    console.error('Create feedback error:', error);
+    return res.status(error?.status || 500).json({ error: error?.message || 'Failed to submit feedback.' });
+  }
+});
 
 // ============================================
 // ADMIN / USAGE

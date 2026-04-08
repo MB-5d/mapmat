@@ -87,7 +87,7 @@ const CanvasToolbar = ({
   const shareUnavailable = !hasSavedMap;
 
   return (
-  <div className="canvas-toolbar">
+  <div className="canvas-toolbar" data-feedback-id="canvas-toolbar" data-feedback-label="Canvas toolbar">
     <button
       className={`canvas-tool-btn ${activeTool === 'select' && !connectionTool ? 'active' : ''}`}
       onClick={onSelectTool}

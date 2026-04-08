@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const authStore = require('../stores/authStore');
 const adminAuditStore = require('../stores/adminAuditStore');
+const feedbackStore = require('../stores/feedbackStore');
 
 const router = express.Router();
 
@@ -113,6 +114,7 @@ function ensureAdminConsoleEnabled(req, res, next) {
 async function ensureAdminSupportSchemaAsync() {
   await authStore.ensureAuthSchemaAsync();
   await adminAuditStore.ensureAdminAuditSchemaAsync();
+  await feedbackStore.ensureFeedbackSchemaAsync();
 }
 
 function createAdminSessionToken({ operatorLabel }) {
@@ -222,6 +224,112 @@ function serializeUserDetail(user) {
   };
 }
 
+function parseJsonObject(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+function serializeFeedbackItem(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    actorUserId: row.actor_user_id || null,
+    actorName: row.actor_name || '',
+    actorEmail: row.actor_email || '',
+    surface: row.surface || '',
+    routePath: row.route_path || '',
+    routeSection: row.route_section || '',
+    mapId: row.map_id || null,
+    shareId: row.share_id || null,
+    scope: row.scope || 'whole_app',
+    intent: row.intent || 'idea',
+    rating: row.rating === null || row.rating === undefined ? null : Number(row.rating),
+    message: row.message || '',
+    componentKey: row.component_key || null,
+    componentLabel: row.component_label || null,
+    domHint: parseJsonObject(row.dom_hint_json),
+    screenshotPath: row.screenshot_path || null,
+    allowFollowUp: Number(row.allow_follow_up || 0) > 0,
+    triageStatus: row.triage_status || 'new',
+    themeId: row.theme_id || null,
+    themeTitle: row.theme_title || null,
+    themeStatus: row.theme_status || null,
+    themePriorityBucket: row.theme_priority_bucket || null,
+    context: parseJsonObject(row.context_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function serializeFeedbackTheme(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    normalizedTitle: row.normalized_title || '',
+    title: row.title || '',
+    summary: row.summary || '',
+    severity: row.severity || 'medium',
+    feedbackCount: Number(row.feedback_count || 0),
+    priorityBucket: row.priority_bucket || 'medium',
+    status: row.status || 'watching',
+    ownerLabel: row.owner_label || '',
+    externalTrackerType: row.external_tracker_type || '',
+    externalTrackerUrl: row.external_tracker_url || '',
+    averageRating: row.average_rating === null || row.average_rating === undefined
+      ? null
+      : Number(row.average_rating),
+    lastFeedbackAt: row.last_feedback_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function parseFeedbackItemFilters(query = {}) {
+  const unassigned = String(query?.unassigned || '').trim().toLowerCase();
+  const hasTheme = unassigned === 'true'
+    ? false
+    : (String(query?.themed || '').trim().toLowerCase() === 'true' ? true : null);
+
+  return {
+    query: String(query?.q || query?.query || '').trim(),
+    triageStatus: String(query?.status || query?.triageStatus || '').trim() || null,
+    intent: String(query?.intent || '').trim() || null,
+    scope: String(query?.scope || '').trim() || null,
+    componentKey: String(query?.componentKey || query?.component_key || '').trim() || null,
+    themeId: String(query?.themeId || query?.theme_id || '').trim() || null,
+    hasTheme,
+  };
+}
+
+function parseFeedbackThemeFilters(query = {}) {
+  return {
+    query: String(query?.q || query?.query || '').trim(),
+    status: String(query?.status || '').trim() || null,
+    priorityBucket: String(query?.priorityBucket || query?.priority_bucket || '').trim() || null,
+    severity: String(query?.severity || '').trim() || null,
+  };
+}
+
+function escapeCsvCell(value) {
+  if (value === null || value === undefined) return '';
+  const normalized = typeof value === 'string' ? value : JSON.stringify(value);
+  return `"${String(normalized).replace(/"/g, '""')}"`;
+}
+
+function buildCsv(columns, rows) {
+  const header = columns.map((column) => escapeCsvCell(column.header)).join(',');
+  const body = rows.map((row) => (
+    columns.map((column) => escapeCsvCell(
+      typeof column.value === 'function' ? column.value(row) : row[column.value]
+    )).join(',')
+  ));
+  return [header, ...body].join('\n');
+}
+
 router.use(ensureAdminConsoleEnabled);
 router.use(async (_req, _res, next) => {
   try {
@@ -308,6 +416,311 @@ router.delete('/session', authenticateAdminSession, async (req, res) => {
 
 router.use(authenticateAdminSession);
 router.use(requireAdminSession);
+
+router.get('/feedback', async (req, res) => {
+  try {
+    const parsedPagination = parsePagination(req.query);
+    const limit = parsedPagination.limit ?? 100;
+    const offset = parsedPagination.offset ?? 0;
+    const filters = parseFeedbackItemFilters(req.query);
+
+    const [items, total] = await Promise.all([
+      feedbackStore.listFeedbackItemsAsync({ ...filters, limit, offset }),
+      feedbackStore.countFeedbackItemsAsync(filters),
+    ]);
+
+    return res.json({
+      items: items.map((item) => serializeFeedbackItem(item)),
+      pagination: {
+        limit,
+        offset,
+        total,
+      },
+      filters,
+    });
+  } catch (error) {
+    console.error('Admin list feedback error:', error);
+    return res.status(500).json({ error: 'Failed to load feedback items.' });
+  }
+});
+
+router.patch('/feedback/:id', async (req, res) => {
+  try {
+    const existing = await feedbackStore.getFeedbackItemByIdAsync(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Feedback item not found.' });
+    }
+
+    const updates = {};
+    const oldThemeId = existing.theme_id || null;
+    let newThemeId = oldThemeId;
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'themeId')) {
+      const requestedThemeId = String(req.body?.themeId || '').trim();
+      if (requestedThemeId) {
+        const theme = await feedbackStore.getFeedbackThemeByIdAsync(requestedThemeId);
+        if (!theme) {
+          return res.status(404).json({ error: 'Feedback theme not found.' });
+        }
+        updates.themeId = theme.id;
+        newThemeId = theme.id;
+      } else {
+        updates.themeId = null;
+        newThemeId = null;
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, 'triageStatus')) {
+      const triageStatus = String(req.body?.triageStatus || '').trim();
+      if (!feedbackStore.ITEM_STATUSES.has(triageStatus)) {
+        return res.status(400).json({ error: 'Invalid feedback item status.' });
+      }
+      updates.triageStatus = triageStatus;
+    } else if (Object.prototype.hasOwnProperty.call(updates, 'themeId')) {
+      updates.triageStatus = updates.themeId ? 'themed' : (existing.triage_status === 'themed' ? 'reviewed' : existing.triage_status);
+    }
+
+    const updated = await feedbackStore.updateFeedbackItemAsync(req.params.id, updates);
+    await feedbackStore.syncFeedbackThemeCountsAsync([oldThemeId, newThemeId]);
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.operatorLabel,
+      actorIp: getClientIp(req),
+      action: 'feedback_item_updated',
+      metadata: {
+        feedbackId: req.params.id,
+        oldThemeId,
+        newThemeId,
+        triageStatus: updated?.triage_status || null,
+      },
+    });
+
+    return res.json({ item: serializeFeedbackItem(updated) });
+  } catch (error) {
+    console.error('Admin update feedback error:', error);
+    return res.status(500).json({ error: 'Failed to update feedback item.' });
+  }
+});
+
+router.get('/feedback/themes', async (req, res) => {
+  try {
+    const parsedPagination = parsePagination(req.query);
+    const limit = parsedPagination.limit ?? 100;
+    const offset = parsedPagination.offset ?? 0;
+    const filters = parseFeedbackThemeFilters(req.query);
+
+    const [themes, total] = await Promise.all([
+      feedbackStore.listFeedbackThemesAsync({ ...filters, limit, offset }),
+      feedbackStore.countFeedbackThemesAsync(filters),
+    ]);
+
+    return res.json({
+      themes: themes.map((theme) => serializeFeedbackTheme(theme)),
+      pagination: {
+        limit,
+        offset,
+        total,
+      },
+      filters,
+    });
+  } catch (error) {
+    console.error('Admin list feedback themes error:', error);
+    return res.status(500).json({ error: 'Failed to load feedback themes.' });
+  }
+});
+
+router.post('/feedback/themes', async (req, res) => {
+  try {
+    const title = String(req.body?.title || '').trim();
+    if (!title) {
+      return res.status(400).json({ error: 'Theme title is required.' });
+    }
+
+    const severity = Object.prototype.hasOwnProperty.call(req.body || {}, 'severity')
+      ? String(req.body.severity || '').trim()
+      : 'medium';
+    if (!feedbackStore.SEVERITY_LEVELS.has(severity)) {
+      return res.status(400).json({ error: 'Invalid theme severity.' });
+    }
+
+    const priorityBucket = Object.prototype.hasOwnProperty.call(req.body || {}, 'priorityBucket')
+      ? String(req.body.priorityBucket || '').trim()
+      : 'medium';
+    if (!feedbackStore.PRIORITY_BUCKETS.has(priorityBucket)) {
+      return res.status(400).json({ error: 'Invalid theme priority bucket.' });
+    }
+
+    const status = Object.prototype.hasOwnProperty.call(req.body || {}, 'status')
+      ? String(req.body.status || '').trim()
+      : 'watching';
+    if (!feedbackStore.THEME_STATUSES.has(status)) {
+      return res.status(400).json({ error: 'Invalid theme status.' });
+    }
+
+    const created = await feedbackStore.createFeedbackThemeAsync({
+      title,
+      summary: req.body?.summary || null,
+      severity,
+      priorityBucket,
+      status,
+      ownerLabel: req.body?.ownerLabel || null,
+      externalTrackerType: req.body?.externalTrackerType || null,
+      externalTrackerUrl: req.body?.externalTrackerUrl || null,
+    });
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.operatorLabel,
+      actorIp: getClientIp(req),
+      action: 'feedback_theme_created',
+      metadata: {
+        themeId: created.id,
+        title: created.title,
+      },
+    });
+
+    return res.status(201).json({ theme: serializeFeedbackTheme(created) });
+  } catch (error) {
+    console.error('Admin create feedback theme error:', error);
+    return res.status(500).json({ error: 'Failed to create feedback theme.' });
+  }
+});
+
+router.patch('/feedback/themes/:id', async (req, res) => {
+  try {
+    const existing = await feedbackStore.getFeedbackThemeByIdAsync(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Feedback theme not found.' });
+    }
+
+    const updates = {};
+    const body = req.body || {};
+
+    if (Object.prototype.hasOwnProperty.call(body, 'title')) {
+      const title = String(body.title || '').trim();
+      if (!title) {
+        return res.status(400).json({ error: 'Theme title is required.' });
+      }
+      updates.title = title;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'summary')) {
+      updates.summary = body.summary == null ? null : String(body.summary).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'severity')) {
+      const severity = String(body.severity || '').trim();
+      if (!feedbackStore.SEVERITY_LEVELS.has(severity)) {
+        return res.status(400).json({ error: 'Invalid theme severity.' });
+      }
+      updates.severity = severity;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'priorityBucket')) {
+      const priorityBucket = String(body.priorityBucket || '').trim();
+      if (!feedbackStore.PRIORITY_BUCKETS.has(priorityBucket)) {
+        return res.status(400).json({ error: 'Invalid theme priority bucket.' });
+      }
+      updates.priorityBucket = priorityBucket;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+      const status = String(body.status || '').trim();
+      if (!feedbackStore.THEME_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'Invalid theme status.' });
+      }
+      updates.status = status;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'ownerLabel')) {
+      updates.ownerLabel = body.ownerLabel == null ? null : String(body.ownerLabel).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'externalTrackerType')) {
+      updates.externalTrackerType = body.externalTrackerType == null ? null : String(body.externalTrackerType).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'externalTrackerUrl')) {
+      updates.externalTrackerUrl = body.externalTrackerUrl == null ? null : String(body.externalTrackerUrl).trim();
+    }
+
+    const updated = await feedbackStore.updateFeedbackThemeAsync(req.params.id, updates);
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.operatorLabel,
+      actorIp: getClientIp(req),
+      action: 'feedback_theme_updated',
+      metadata: {
+        themeId: req.params.id,
+        status: updated?.status || null,
+        priorityBucket: updated?.priority_bucket || null,
+      },
+    });
+
+    return res.json({ theme: serializeFeedbackTheme(updated) });
+  } catch (error) {
+    console.error('Admin update feedback theme error:', error);
+    return res.status(500).json({ error: 'Failed to update feedback theme.' });
+  }
+});
+
+router.get('/feedback/export.csv', async (req, res) => {
+  try {
+    const items = await feedbackStore.listFeedbackItemsAsync(parseFeedbackItemFilters(req.query));
+    const csv = buildCsv([
+      { header: 'id', value: 'id' },
+      { header: 'created_at', value: 'created_at' },
+      { header: 'updated_at', value: 'updated_at' },
+      { header: 'actor_name', value: 'actor_name' },
+      { header: 'actor_email', value: 'actor_email' },
+      { header: 'surface', value: 'surface' },
+      { header: 'route_path', value: 'route_path' },
+      { header: 'route_section', value: 'route_section' },
+      { header: 'map_id', value: 'map_id' },
+      { header: 'scope', value: 'scope' },
+      { header: 'intent', value: 'intent' },
+      { header: 'rating', value: 'rating' },
+      { header: 'message', value: 'message' },
+      { header: 'component_key', value: 'component_key' },
+      { header: 'component_label', value: 'component_label' },
+      { header: 'triage_status', value: 'triage_status' },
+      { header: 'allow_follow_up', value: (row) => Number(row.allow_follow_up || 0) > 0 ? 'true' : 'false' },
+      { header: 'theme_id', value: 'theme_id' },
+      { header: 'theme_title', value: 'theme_title' },
+      { header: 'screenshot_path', value: 'screenshot_path' },
+      { header: 'dom_hint_json', value: 'dom_hint_json' },
+      { header: 'context_json', value: 'context_json' },
+    ], items);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="mapmat-feedback-items.csv"');
+    return res.send(csv);
+  } catch (error) {
+    console.error('Admin export feedback items error:', error);
+    return res.status(500).json({ error: 'Failed to export feedback items.' });
+  }
+});
+
+router.get('/feedback/themes/export.csv', async (req, res) => {
+  try {
+    const themes = await feedbackStore.listFeedbackThemesAsync(parseFeedbackThemeFilters(req.query));
+    const csv = buildCsv([
+      { header: 'id', value: 'id' },
+      { header: 'created_at', value: 'created_at' },
+      { header: 'updated_at', value: 'updated_at' },
+      { header: 'title', value: 'title' },
+      { header: 'summary', value: 'summary' },
+      { header: 'severity', value: 'severity' },
+      { header: 'feedback_count', value: 'feedback_count' },
+      { header: 'priority_bucket', value: 'priority_bucket' },
+      { header: 'status', value: 'status' },
+      { header: 'owner_label', value: 'owner_label' },
+      { header: 'external_tracker_type', value: 'external_tracker_type' },
+      { header: 'external_tracker_url', value: 'external_tracker_url' },
+      { header: 'average_rating', value: 'average_rating' },
+      { header: 'last_feedback_at', value: 'last_feedback_at' },
+    ], themes);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="mapmat-feedback-themes.csv"');
+    return res.send(csv);
+  } catch (error) {
+    console.error('Admin export feedback themes error:', error);
+    return res.status(500).json({ error: 'Failed to export feedback themes.' });
+  }
+});
 
 router.get('/users', async (req, res) => {
   try {

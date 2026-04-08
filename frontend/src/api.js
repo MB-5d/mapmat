@@ -81,6 +81,45 @@ async function fetchAdminApi(endpoint, options = {}) {
   return fetchJson(endpoint, options, { includeUserToken: false });
 }
 
+async function fetchBlob(endpoint, { includeUserToken = true } = {}) {
+  const authToken = includeUserToken ? getStoredAuthToken() : null;
+  const headers = {};
+
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    credentials: 'include',
+    headers,
+  });
+
+  if (!response.ok) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const error = new Error(payload?.error || 'Request failed');
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.blob();
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function buildWebSocketUrl(endpoint) {
   const baseUrl = new URL(API_BASE);
   const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -204,6 +243,84 @@ export async function adminDisableUser(userId, { reason } = {}) {
 export async function adminReactivateUser(userId) {
   return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/reactivate`, {
     method: 'POST',
+  });
+}
+
+export async function getAdminFeedback({
+  query = '',
+  limit = 100,
+  offset = 0,
+  status = '',
+  intent = '',
+  scope = '',
+  componentKey = '',
+  unassigned = false,
+} = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  if (offset !== undefined && offset !== null) params.set('offset', String(offset));
+  if (status) params.set('status', status);
+  if (intent) params.set('intent', intent);
+  if (scope) params.set('scope', scope);
+  if (componentKey) params.set('componentKey', componentKey);
+  if (unassigned) params.set('unassigned', 'true');
+  return fetchAdminApi(`/api/admin/feedback?${params.toString()}`);
+}
+
+export async function updateAdminFeedback(feedbackId, payload = {}) {
+  return fetchAdminApi(`/api/admin/feedback/${encodeURIComponent(feedbackId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getAdminFeedbackThemes({
+  query = '',
+  limit = 100,
+  offset = 0,
+  status = '',
+  priorityBucket = '',
+  severity = '',
+} = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  if (offset !== undefined && offset !== null) params.set('offset', String(offset));
+  if (status) params.set('status', status);
+  if (priorityBucket) params.set('priorityBucket', priorityBucket);
+  if (severity) params.set('severity', severity);
+  return fetchAdminApi(`/api/admin/feedback/themes?${params.toString()}`);
+}
+
+export async function createAdminFeedbackTheme(payload = {}) {
+  return fetchAdminApi('/api/admin/feedback/themes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminFeedbackTheme(themeId, payload = {}) {
+  return fetchAdminApi(`/api/admin/feedback/themes/${encodeURIComponent(themeId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function downloadAdminFeedbackExport() {
+  const blob = await fetchBlob('/api/admin/feedback/export.csv', { includeUserToken: false });
+  triggerBlobDownload(blob, 'mapmat-feedback-items.csv');
+}
+
+export async function downloadAdminFeedbackThemeExport() {
+  const blob = await fetchBlob('/api/admin/feedback/themes/export.csv', { includeUserToken: false });
+  triggerBlobDownload(blob, 'mapmat-feedback-themes.csv');
+}
+
+export async function submitFeedback(payload = {}) {
+  return fetchApi('/api/feedback', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

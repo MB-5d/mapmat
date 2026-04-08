@@ -47,6 +47,7 @@ const {
 const { buildHealthSnapshot: getEmailHealthSnapshot } = require('./utils/emailProvider');
 const { JOB_TYPES: EMAIL_JOB_TYPES, processEmailDeliveryJobAsync } = require('./utils/emailDelivery');
 const { AVATAR_PUBLIC_BASE, AVATAR_STORAGE_DIR } = require('./utils/avatarStorage');
+const { FEEDBACK_PUBLIC_BASE, FEEDBACK_STORAGE_DIR } = require('./utils/feedbackStorage');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -141,6 +142,7 @@ if (!fs.existsSync(SCREENSHOT_DIR)) {
 }
 app.use('/screenshots', express.static(SCREENSHOT_DIR));
 app.use(AVATAR_PUBLIC_BASE, express.static(AVATAR_STORAGE_DIR));
+app.use(FEEDBACK_PUBLIC_BASE, express.static(FEEDBACK_STORAGE_DIR));
 
 // Mount routes
 app.use('/auth', authRouter);
