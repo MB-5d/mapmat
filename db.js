@@ -195,7 +195,6 @@ db.exec(`
 
   -- Create indexes for faster queries
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
-  CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status);
   CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at);
   CREATE INDEX IF NOT EXISTS idx_users_name ON users(name);
   CREATE INDEX IF NOT EXISTS idx_maps_user ON maps(user_id);
@@ -218,6 +217,7 @@ ensureColumn('users', 'avatar_path', 'TEXT');
 ensureColumn('users', 'account_status', "TEXT NOT NULL DEFAULT 'active'");
 ensureColumn('users', 'disabled_at', 'DATETIME');
 ensureColumn('users', 'disabled_reason', 'TEXT');
+db.exec("CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status)");
 ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
 ensureColumn('maps', 'connection_colors', 'TEXT');
