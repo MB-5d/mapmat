@@ -36,7 +36,8 @@ async function ensureAdminAuditSchemaAsync() {
         metadata TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
-      `);
+      )
+    `);
     await adapter.executeAsync(
       'CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_target_created ON admin_audit_logs(target_user_id, created_at)'
     );
