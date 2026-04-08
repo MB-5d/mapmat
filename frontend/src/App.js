@@ -39,6 +39,7 @@ import ImageOverlay from './components/modals/ImageOverlay';
 import ImportModal from './components/modals/ImportModal';
 import AccessRequestInboxModal from './components/modals/AccessRequestInboxModal';
 import InviteInboxModal from './components/modals/InviteInboxModal';
+import WelcomeModal from './components/modals/WelcomeModal';
 import ProfileDrawer from './components/drawers/ProfileDrawer';
 import SettingsDrawer from './components/drawers/SettingsDrawer';
 import VersionHistoryDrawer from './components/drawers/VersionHistoryDrawer';
@@ -150,6 +151,35 @@ const extractCommentMentions = (text) => (
 );
 
 const COMMENT_MENTION_READ_STORAGE_PREFIX = 'mapmat-comment-mentions';
+export const WELCOME_MODAL_STORAGE_KEY = 'mapmat:welcome-modal-hidden:v1';
+
+export const readWelcomeModalHidden = (
+  storage = typeof window !== 'undefined' ? window.localStorage : null
+) => {
+  if (!storage) return false;
+  try {
+    return storage.getItem(WELCOME_MODAL_STORAGE_KEY) === 'true';
+  } catch (error) {
+    console.warn('Failed to load welcome modal dismissal state', error);
+    return false;
+  }
+};
+
+export const writeWelcomeModalHidden = (
+  hidden,
+  storage = typeof window !== 'undefined' ? window.localStorage : null
+) => {
+  if (!storage) return;
+  try {
+    if (hidden) {
+      storage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+      return;
+    }
+    storage.removeItem(WELCOME_MODAL_STORAGE_KEY);
+  } catch (error) {
+    console.warn('Failed to persist welcome modal dismissal state', error);
+  }
+};
 
 const flattenCommentsForNode = (comments = [], nodeId, entries = []) => {
   (comments || []).forEach((comment) => {
@@ -1135,6 +1165,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showSaveMapModal, setShowSaveMapModal] = useState(false);
   const [showVersionHistoryDrawer, setShowVersionHistoryDrawer] = useState(false);
   const [showSaveVersionModal, setShowSaveVersionModal] = useState(false);
+  const [welcomeModalDismissedForSession, setWelcomeModalDismissedForSession] = useState(false);
+  const [welcomeModalHidden, setWelcomeModalHidden] = useState(() => readWelcomeModalHidden());
+  const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
   const [mapVersions, setMapVersions] = useState([]);
   const [mapActivity, setMapActivity] = useState([]);
   const [draftVersions, setDraftVersions] = useState([]);
@@ -10131,6 +10164,22 @@ export default function App({ currentRoute, navigateToRoute }) {
       || authLoading
       || !!pendingInviteForCurrentRoute
     );
+  const isWelcomeModalEligible = currentRoute?.surface === ROUTE_SURFACES.APP
+    && (currentRoute?.section === 'home' || currentRoute?.section === 'map')
+    && !showInviteAcceptGate
+    && !showMapAccessGate;
+  const showWelcomeModal = isWelcomeModalEligible
+    && !welcomeModalDismissedForSession
+    && !welcomeModalHidden;
+
+  const dismissWelcomeModal = useCallback(() => {
+    if (welcomeDontShowAgain) {
+      writeWelcomeModalHidden(true);
+      setWelcomeModalHidden(true);
+    }
+    setWelcomeModalDismissedForSession(true);
+    setWelcomeDontShowAgain(false);
+  }, [welcomeDontShowAgain]);
 
   return (
     <AuthProvider value={authValue}>
@@ -11590,6 +11639,14 @@ export default function App({ currentRoute, navigateToRoute }) {
           showToast('Failed to load screenshot', 'error');
           setFullImageUrl(null);
         }}
+      />
+
+      <WelcomeModal
+        show={showWelcomeModal}
+        dontShowAgain={welcomeDontShowAgain}
+        onToggleDontShowAgain={() => setWelcomeDontShowAgain((prev) => !prev)}
+        onClose={dismissWelcomeModal}
+        onConfirm={dismissWelcomeModal}
       />
 
       {showAuthModal && (
