@@ -670,6 +670,7 @@ const JOB_TYPES = {
 const JOB_STATUS = {
   queued: 'queued',
   running: 'running',
+  stopping: 'stopping',
   complete: 'complete',
   failed: 'failed',
   canceled: 'canceled',
@@ -746,6 +747,7 @@ let activeJobs = 0;
 
 const takeNextJob = () => jobStore.takeNextQueuedJobAsync({
   queuedStatus: JOB_STATUS.queued,
+  stoppingStatus: JOB_STATUS.stopping,
   runningStatus: JOB_STATUS.running,
 });
 
@@ -774,13 +776,37 @@ const markJobCanceled = async (id) => {
   );
 };
 
-const shouldAbortJob = (id, throttleMs = 1000) => {
+const markJobStopping = async (id) => {
+  await jobStore.markJobStoppingAsync(
+    id,
+    JOB_STATUS.stopping,
+    JOB_STATUS.queued,
+    JOB_STATUS.running
+  );
+};
+
+const createJobStatusReader = (id, throttleMs = 1000) => {
   let lastCheck = 0;
+  let lastStatus = null;
   return async () => {
     const now = Date.now();
-    if (now - lastCheck < throttleMs) return false;
+    if (
+      lastStatus
+      && [JOB_STATUS.canceled, JOB_STATUS.stopping, JOB_STATUS.complete, JOB_STATUS.failed].includes(lastStatus)
+    ) {
+      return lastStatus;
+    }
+    if (now - lastCheck < throttleMs) return lastStatus;
     lastCheck = now;
-    return (await jobStore.getJobStatusAsync(id)) === JOB_STATUS.canceled;
+    lastStatus = await jobStore.getJobStatusAsync(id);
+    return lastStatus;
+  };
+};
+
+const shouldAbortJob = (id, throttleMs = 1000) => {
+  const readStatus = createJobStatusReader(id, throttleMs);
+  return async () => {
+    return (await readStatus()) === JOB_STATUS.canceled;
   };
 };
 
@@ -1663,7 +1689,7 @@ function normalizeScanOptions(options = {}) {
   };
 }
 
-async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null, shouldAbort = null) {
+async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null, readJobStatus = null) {
   const scanOptions = normalizeScanOptions(options);
   const seed = normalizeUrl(startUrl);
   if (!seed) throw new Error('Invalid URL');
@@ -1744,10 +1770,28 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   }
 
+  const extraHeaders = {};
+  let partialReason = null;
+  let stopRequested = false;
+
+  const pollJobStatus = async () => {
+    const status = await readJobStatus?.();
+    if (status === JOB_STATUS.canceled) {
+      throw new Error('Scan aborted');
+    }
+    if (status === JOB_STATUS.stopping) {
+      partialReason = 'stopped_by_user';
+      stopRequested = true;
+      return true;
+    }
+    return false;
+  };
+
   const processedSitemaps = new Set();
   const MAX_SITEMAPS = 12;
 
   const processSitemap = async (sitemapUrl) => {
+    if (await pollJobStatus()) return;
     const normalizedSitemap = normalizeUrl(sitemapUrl);
     if (!normalizedSitemap) return;
     if (processedSitemaps.has(normalizedSitemap)) return;
@@ -1797,7 +1841,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       });
 
       for (const loc of subSitemaps) {
+        if (await pollJobStatus()) return;
         await processSitemap(loc);
+        if (stopRequested) return;
       }
     } catch {
       // Not available, continue
@@ -1806,6 +1852,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   await processSitemap(`${origin}/sitemap.xml`);
   for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
+    if (stopRequested) break;
     await processSitemap(`${origin}${altSitemap}`);
   }
 
@@ -1819,10 +1866,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const linkStatusCache = new Map();
   const MAX_BROKEN_LINK_CHECKS = 500;
   let brokenChecks = 0;
-  const extraHeaders = {};
 
   while (queueIndex < queue.length && visited.size < maxPages) {
-    if (await shouldAbort?.()) throw new Error('Scan aborted');
+    if (await pollJobStatus()) break;
     const { url, depth } = queue[queueIndex++];
 
     if (visited.has(url)) continue;
@@ -1915,6 +1961,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     linksByUrl.set(url, allowedLinks);
 
     for (const link of links) {
+      if (await pollJobStatus()) break;
       if (!allowUrl(link)) continue;
 
       if (scanOptions.brokenLinks && brokenChecks < MAX_BROKEN_LINK_CHECKS && !linkStatusCache.has(link)) {
@@ -1949,6 +1996,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         }
       enqueue(link, d);
     }
+
+    if (stopRequested) break;
   }
 
   // Ensure the root exists
@@ -2378,7 +2427,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
 
-  return {
+  const result = {
     root,
     orphans: scanOptions.orphanPages ? prunedOrphanNodes : [],
     subdomains: scanOptions.subdomains ? subdomainNodes : [],
@@ -2388,6 +2437,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     files: scanOptions.files ? files : [],
     crosslinks,
   };
+
+  if (partialReason) {
+    result.partial = true;
+    result.partialReason = partialReason;
+  }
+
+  return result;
 }
 
 const getBaseUrl = () => (
@@ -2659,7 +2715,7 @@ async function processJob(job) {
   try {
     if (job.type === JOB_TYPES.scan) {
       const progressState = { lastUpdate: 0, lastScanned: 0 };
-      const abortCheck = shouldAbortJob(jobId);
+      const readJobStatus = createJobStatusReader(jobId);
       const progressCb = (progress) => {
         const now = Date.now();
         if (progress.scanned - progressState.lastScanned < 5 && now - progressState.lastUpdate < 500) {
@@ -2678,7 +2734,7 @@ async function processJob(job) {
         payload.maxDepth,
         payload.options || {},
         progressCb,
-        abortCheck
+        readJobStatus
       );
 
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
@@ -2994,7 +3050,7 @@ app.get('/scan-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
   const row = await getJobRow(id);
-  if (!row || row.type !== JOB_TYPES.scan) {
+  if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
     return res.status(404).json({ error: 'Job not found' });
   }
   res.json({ job: serializeJobRow(row, includeResult) });
@@ -3003,10 +3059,20 @@ app.get('/scan-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
 app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const row = await getJobRow(id);
-  if (!row || row.type !== JOB_TYPES.scan) {
+  if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
     return res.status(404).json({ error: 'Job not found' });
   }
   await markJobCanceled(id);
+  res.json({ success: true });
+});
+
+app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) => {
+  const { id } = req.params;
+  const row = await getJobRow(id);
+  if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  await markJobStopping(id);
   res.json({ success: true });
 });
 
@@ -3037,7 +3103,7 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
       return;
     }
     const row = await getJobRow(id);
-    if (!row || row.type !== JOB_TYPES.scan) {
+    if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
       sendEvent('error', { error: 'Job not found' });
       clearInterval(interval);
       res.end();

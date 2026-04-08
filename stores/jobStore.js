@@ -38,22 +38,28 @@ function insertJobAsync({
   ]);
 }
 
-const takeNextQueuedJobAsync = adapter.transactionAsync(async ({ queuedStatus, runningStatus }) => {
+const takeNextQueuedJobAsync = adapter.transactionAsync(async ({
+  queuedStatus,
+  stoppingStatus,
+  runningStatus,
+}) => {
   const job = await adapter.queryOneAsync(`
     SELECT * FROM jobs
-    WHERE status = ?
+    WHERE status IN (?, ?)
     ORDER BY created_at ASC
     LIMIT 1
-  `, [queuedStatus]);
+  `, [queuedStatus, stoppingStatus]);
   if (!job) return null;
 
+  const nextStatus = job.status === queuedStatus ? runningStatus : stoppingStatus;
   const updated = await adapter.executeAsync(`
-    UPDATE jobs SET status = ?, started_at = CURRENT_TIMESTAMP
+    UPDATE jobs
+    SET status = ?, started_at = COALESCE(started_at, CURRENT_TIMESTAMP)
     WHERE id = ? AND status = ?
-  `, [runningStatus, job.id, queuedStatus]);
+  `, [nextStatus, job.id, job.status]);
 
   if (updated.changes !== 1) return null;
-  return job;
+  return { ...job, status: nextStatus };
 });
 
 function updateJobProgressAsync(id, progressJson) {
@@ -84,6 +90,14 @@ function markJobCanceledAsync(id, canceledStatus, queuedStatus, runningStatus) {
   `, [canceledStatus, id, queuedStatus, runningStatus]);
 }
 
+function markJobStoppingAsync(id, stoppingStatus, queuedStatus, runningStatus) {
+  return adapter.executeAsync(`
+    UPDATE jobs
+    SET status = ?
+    WHERE id = ? AND status IN (?, ?)
+  `, [stoppingStatus, id, queuedStatus, runningStatus]);
+}
+
 async function getJobStatusAsync(id) {
   return (await adapter.queryOneAsync('SELECT status FROM jobs WHERE id = ?', [id]))?.status || null;
 }
@@ -97,5 +111,6 @@ module.exports = {
   markJobCompleteAsync,
   markJobFailedAsync,
   markJobCanceledAsync,
+  markJobStoppingAsync,
   getJobStatusAsync,
 };

@@ -421,6 +421,10 @@ export async function cancelScanJob(id) {
   return fetchApi(`/scan-jobs/${id}/cancel`, { method: 'POST' });
 }
 
+export async function stopScanJob(id) {
+  return fetchApi(`/scan-jobs/${id}/stop`, { method: 'POST' });
+}
+
 export async function createScreenshotJob(payload) {
   return fetchApi('/screenshot-jobs', {
     method: 'POST',

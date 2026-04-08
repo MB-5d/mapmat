@@ -1225,6 +1225,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanElapsed, setScanElapsed] = useState(0);
   const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [isStoppingScan, setIsStoppingScan] = useState(false);
   const [scanHistory, setScanHistory] = useState([]);
   const [lastHistoryId, setLastHistoryId] = useState(null);
   const [lastScanUrl, setLastScanUrl] = useState('');
@@ -6134,8 +6135,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   // History functions
-  const addToHistory = async (url, rootData, pageCount, scanConfig, depthValue) => {
+  const addToHistory = async (url, rootData, pageCount, scanConfig, depthValue, snapshot = null) => {
     if (!isLoggedIn) return; // Only save history for logged-in users
+
+    const historyOrphans = Array.isArray(snapshot?.orphans) ? snapshot.orphans : orphans;
+    const historyConnections = Array.isArray(snapshot?.connections) ? snapshot.connections : connections;
+    const historyColors = snapshot?.colors || colors;
+    const historyConnectionColors = snapshot?.connectionColors || connectionColors;
 
     try {
       const { id } = await api.addToHistory({
@@ -6144,10 +6150,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         title: rootData?.title || getHostname(url),
         page_count: pageCount,
         root: rootData,
-        orphans,
-        connections,
-        colors,
-        connectionColors,
+        orphans: historyOrphans,
+        connections: historyConnections,
+        colors: historyColors,
+        connectionColors: historyConnectionColors,
         scan_options: scanConfig || null,
         scan_depth: Number.isFinite(depthValue) ? depthValue : null,
         map_id: null,
@@ -6162,10 +6168,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         page_count: pageCount,
         scanned_at: new Date().toISOString(),
         root: rootData,
-        orphans,
-        connections,
-        colors,
-        connectionColors,
+        orphans: historyOrphans,
+        connections: historyConnections,
+        colors: historyColors,
+        connectionColors: historyConnectionColors,
         scan_options: scanConfig || null,
         scan_depth: Number.isFinite(depthValue) ? depthValue : null,
         map_id: null,
@@ -6248,21 +6254,46 @@ export default function App({ currentRoute, navigateToRoute }) {
     messageTimerRef.current = null;
   };
 
-  const cancelScan = () => {
+  const resetScanUi = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
-    const jobId = scanJobIdRef.current;
     scanJobIdRef.current = null;
-    if (jobId) {
-      api.cancelScanJob(jobId).catch(() => {});
-    }
     stopScanTimers();
     setLoading(false);
     setShowCancelConfirm(false);
+    setIsStoppingScan(false);
     setScanProgress({ scanned: 0, queued: 0 });
+  };
+
+  const cancelScan = () => {
+    const jobId = scanJobIdRef.current;
+    resetScanUi();
+    if (jobId) {
+      api.cancelScanJob(jobId).catch(() => {});
+    }
     showToast('Scan cancelled', 'info');
+  };
+
+  const stopScan = async () => {
+    const jobId = scanJobIdRef.current;
+    if (!jobId || isStoppingScan) return;
+
+    setIsStoppingScan(true);
+    setShowCancelConfirm(false);
+
+    try {
+      await api.stopScanJob(jobId);
+      if (scanJobIdRef.current !== jobId) return;
+      showToast('Stopping scan and preparing current results...', 'info');
+    } catch (err) {
+      if (scanJobIdRef.current !== jobId) return;
+      console.error('Scan stop failed:', err);
+      setIsStoppingScan(false);
+      setShowCancelConfirm(true);
+      showToast(err.message || 'Failed to stop scan', 'error');
+    }
   };
 
   const scan = async (overrideUrl, preserveName = false) => {
@@ -6281,6 +6312,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? Math.min(Math.max(parsedDepth, 1), SCAN_MAX_DEPTH_UI)
       : Math.min(4, SCAN_MAX_DEPTH_UI);
 
+    setShowCancelConfirm(false);
+    setIsStoppingScan(false);
     setLoading(true);
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
@@ -6310,9 +6343,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         phase: 'job_create',
         message: err?.message || 'Failed to start scan',
       });
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+      resetScanUi();
       return;
     }
 
@@ -6327,6 +6358,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (job?.progress) {
           setScanProgress(job.progress);
         }
+        if (job?.status === 'stopping') {
+          setIsStoppingScan(true);
+          setShowCancelConfirm(false);
+        }
       } catch {}
     });
 
@@ -6337,12 +6372,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       } catch (err) {
         console.error('Scan payload parse failed:', err);
         showToast('Scan completed but response could not be read', 'error');
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
+        resetScanUi();
         return;
       }
 
@@ -6352,23 +6382,13 @@ export default function App({ currentRoute, navigateToRoute }) {
           phase: 'complete',
           message: job?.error || 'Unknown error',
         });
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
+        resetScanUi();
         return;
       }
 
       if (job?.status === 'canceled') {
         showToast('Scan cancelled', 'info');
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
+        resetScanUi();
         return;
       }
 
@@ -6380,14 +6400,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           phase: 'complete',
           message: 'Scan completed but returned no pages',
         });
-        eventSource.close();
-        eventSourceRef.current = null;
-        scanJobIdRef.current = null;
-        stopScanTimers();
-        setLoading(false);
-        setScanProgress({ scanned: 0, queued: 0 });
+        resetScanUi();
         return;
       }
+
+      const isStoppedPartial = data.partial === true && data.partialReason === 'stopped_by_user';
+      const isPartialResult = data.partial === true;
 
       let merged = { root: data.root, orphans: data.orphans || [] };
       try {
@@ -6434,7 +6452,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       setThumbnailScopeIds(null);
       resetThumbnailQueue(0);
       setConnections(scannedCrosslinks);
-      setScanMeta({ brokenLinks: data.brokenLinks || [] });
+      setScanMeta({
+        brokenLinks: data.brokenLinks || [],
+        partial: isPartialResult,
+        partialReason: data.partialReason || null,
+      });
       setScanLayerAvailability({
         placementPrimary: true,
         placementSubdomain: hasSubdomains,
@@ -6482,28 +6504,35 @@ export default function App({ currentRoute, navigateToRoute }) {
           setMapName('Untitled Map');
         }
       }
-        const pageCount = countNodes(merged.root);
-        addToHistory(url, merged.root, pageCount, scanConfig, depthValue);
-        trackEvent('scan_completed', {
-          hostname: (() => {
-            try {
-              return new URL(url).hostname;
-            } catch {
-              return '';
-            }
-          })(),
-          page_count: pageCount,
-          depth: depthValue,
-        });
-        showToast(`Scan complete: ${new URL(url).hostname}`, 'success');
-        setTimeout(resetView, 100);
+      const hostname = (() => {
+        try {
+          return new URL(url).hostname;
+        } catch {
+          return '';
+        }
+      })();
+      const pageCount = countNodes(merged.root);
+      addToHistory(url, merged.root, pageCount, scanConfig, depthValue, {
+        orphans: merged.orphans,
+        connections: scannedCrosslinks,
+      });
+      trackEvent('scan_completed', {
+        hostname,
+        page_count: pageCount,
+        depth: depthValue,
+        partial: isPartialResult ? 'true' : 'false',
+        partial_reason: data.partialReason || '',
+      });
+      if (isStoppedPartial) {
+        showToast(`Scan stopped. Showing current results${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (isPartialResult) {
+        showToast(`Scan complete with partial data${hostname ? `: ${hostname}` : ''}`, 'warning');
+      } else {
+        showToast(`Scan complete${hostname ? `: ${hostname}` : ''}`, 'success');
+      }
+      setTimeout(resetView, 100);
 
-      eventSource.close();
-      eventSourceRef.current = null;
-      scanJobIdRef.current = null;
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+      resetScanUi();
     });
 
     eventSource.addEventListener('error', (e) => {
@@ -6521,12 +6550,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           message: 'Connection error',
         });
       }
-      eventSource.close();
-      eventSourceRef.current = null;
-      scanJobIdRef.current = null;
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+      resetScanUi();
     });
 
     eventSource.onerror = () => {
@@ -6535,12 +6559,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         phase: 'stream',
         message: 'Connection error',
       });
-      eventSource.close();
-      eventSourceRef.current = null;
-      scanJobIdRef.current = null;
-      stopScanTimers();
-      setLoading(false);
-      setScanProgress({ scanned: 0, queued: 0 });
+      resetScanUi();
     };
   };
 
@@ -11822,11 +11841,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       <ScanProgressModal
         loading={loading}
         showCancelConfirm={showCancelConfirm}
+        isStoppingScan={isStoppingScan}
         scanMessage={scanMessage}
         scanProgress={scanProgress}
         scanElapsed={scanElapsed}
         urlInput={urlInput}
         onRequestCancel={() => setShowCancelConfirm(true)}
+        onStopScan={stopScan}
         onCancelScan={cancelScan}
         onContinueScan={() => setShowCancelConfirm(false)}
       />
