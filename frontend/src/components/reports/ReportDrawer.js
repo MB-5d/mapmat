@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowUp,
+  ArrowUpDown,
   ChevronDown,
   ChevronUp,
   Download,
@@ -10,6 +11,8 @@ import {
   Search,
   X,
 } from 'lucide-react';
+
+import { comparePageNumbers } from '../../utils/reportUtils';
 
 const ReportDrawer = ({
   isOpen,
@@ -23,6 +26,7 @@ const ReportDrawer = ({
   reportTitle,
   reportTimestamp,
 }) => {
+  const [sortConfig, setSortConfig] = useState({ key: 'number', direction: 'asc' });
   const [showFilters, setShowFilters] = useState(false);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
@@ -116,6 +120,67 @@ const ReportDrawer = ({
       );
     });
   }, [entries, activeFilterKeys, search, visibleFilterOptions, filters]);
+
+  const entryOrder = useMemo(
+    () => new Map(entries.map((entry, index) => [entry.id, index])),
+    [entries]
+  );
+
+  const sortedEntries = useMemo(() => {
+    const direction = sortConfig.direction === 'desc' ? -1 : 1;
+    return [...filteredEntries].sort((left, right) => {
+      let result = 0;
+
+      if (sortConfig.key === 'number') {
+        if (!left.number && right.number) result = 1;
+        else if (left.number && !right.number) result = -1;
+        else result = comparePageNumbers(left.number, right.number);
+      } else if (sortConfig.key === 'pageType') {
+        result = (left.pageType || '').localeCompare(right.pageType || '', undefined, { sensitivity: 'base' });
+      } else if (sortConfig.key === 'title') {
+        result = (left.title || left.url || '').localeCompare(right.title || right.url || '', undefined, { sensitivity: 'base' });
+      } else if (sortConfig.key === 'issues') {
+        result = (left.types?.length || 0) - (right.types?.length || 0);
+      }
+
+      if (result === 0) {
+        result = (entryOrder.get(left.id) || 0) - (entryOrder.get(right.id) || 0);
+      }
+
+      return result * direction;
+    });
+  }, [entryOrder, filteredEntries, sortConfig]);
+
+  const toggleSort = (key) => {
+    setSortConfig((previous) => {
+      if (previous.key === key) {
+        return {
+          key,
+          direction: previous.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const renderSortButton = (key, label, extraClassName = '') => {
+    const isActive = sortConfig.key === key;
+
+    return (
+      <button
+        type="button"
+        className={`report-sort-button ${extraClassName} ${isActive ? 'active' : ''}`.trim()}
+        onClick={() => toggleSort(key)}
+      >
+        <span>{label}</span>
+        {isActive ? (
+          sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+        ) : (
+          <ArrowUpDown size={14} />
+        )}
+      </button>
+    );
+  };
 
   const truncatedTitle = reportTitle.length > 56
     ? `${reportTitle.slice(0, 56).trim()}…`
@@ -253,10 +318,10 @@ const ReportDrawer = ({
         <section className="report-table">
           <div className="report-table-header">
             <div />
-            <div>Number</div>
-            <div>Page type</div>
-            <div>Page name</div>
-            <div className="report-header-issues">Issues</div>
+            <div>{renderSortButton('number', 'Number')}</div>
+            <div>{renderSortButton('pageType', 'Page type')}</div>
+            <div>{renderSortButton('title', 'Page name')}</div>
+            <div>{renderSortButton('issues', 'Issues', 'report-header-issues')}</div>
             <div>Show on map</div>
             <div />
           </div>
@@ -265,7 +330,7 @@ const ReportDrawer = ({
             onWheel={(e) => e.stopPropagation()}
             onWheelCapture={(e) => e.stopPropagation()}
           >
-          {filteredEntries.map(entry => {
+          {sortedEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
             return (
               <div key={entry.id} className="report-row">
@@ -378,7 +443,7 @@ const ReportDrawer = ({
               </div>
             );
           })}
-          {filteredEntries.length === 0 && (
+          {sortedEntries.length === 0 && (
             <div className="report-empty">No pages match these filters yet.</div>
           )}
         </div>

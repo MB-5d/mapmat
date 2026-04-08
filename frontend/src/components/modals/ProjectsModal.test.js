@@ -1,0 +1,125 @@
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+
+import ProjectsModal from './ProjectsModal';
+
+describe('ProjectsModal', () => {
+  let container;
+  let root;
+  let props;
+
+  const ownedProject = {
+    id: 'project-1',
+    name: 'Alpha Project',
+    maps: [
+      {
+        id: 'map-1',
+        name: 'Alpha Map',
+        project_id: 'project-1',
+      },
+    ],
+  };
+
+  const renderModal = (nextProps = {}) => {
+    props = {
+      show: true,
+      onClose: jest.fn(),
+      isLoggedIn: true,
+      projects: [ownedProject],
+      expandedProjects: {},
+      editingProjectId: null,
+      editingProjectName: '',
+      editingMapId: null,
+      editingMapName: '',
+      onToggleProjectExpanded: jest.fn(),
+      onEditProjectNameChange: jest.fn(),
+      onEditProjectNameStart: jest.fn(),
+      onEditProjectNameCancel: jest.fn(),
+      onRenameProject: jest.fn(),
+      onEditMapNameChange: jest.fn(),
+      onEditMapNameStart: jest.fn(),
+      onEditMapNameCancel: jest.fn(),
+      onRenameMap: jest.fn(),
+      onDeleteProject: jest.fn(),
+      onLoadMap: jest.fn(),
+      onDeleteMap: jest.fn(),
+      onMoveMap: jest.fn(),
+      onAddMap: jest.fn(),
+      onAddProject: jest.fn(),
+      ...nextProps,
+    };
+
+    act(() => {
+      root.render(<ProjectsModal {...props} />);
+    });
+  };
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    container = null;
+    root = null;
+  });
+
+  test('shows add-map only for owned projects and keeps delete inside the expanded body', () => {
+    renderModal();
+
+    const addMapButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.replace(/\s+/g, ' ').trim() === 'Add map'
+    );
+
+    expect(addMapButton).not.toBeNull();
+    expect(container.textContent).not.toContain('Delete project');
+
+    act(() => {
+      addMapButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(props.onAddMap).toHaveBeenCalledWith('project-1');
+
+    renderModal({ expandedProjects: { 'project-1': true } });
+    expect(container.textContent).toContain('Delete project');
+  });
+
+  test('starts inline rename from owned project and map titles and commits rename inputs on blur', () => {
+    renderModal({ expandedProjects: { 'project-1': true } });
+
+    const projectTitleButton = container.querySelector('.project-title-button');
+    const mapTitleButton = container.querySelector('.map-title-button');
+
+    act(() => {
+      projectTitleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      mapTitleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(props.onEditProjectNameStart).toHaveBeenCalledWith('project-1', 'Alpha Project');
+    expect(props.onEditMapNameStart).toHaveBeenCalledWith('map-1', 'Alpha Map');
+
+    renderModal({
+      expandedProjects: { 'project-1': true },
+      editingProjectId: 'project-1',
+      editingProjectName: 'Renamed Project',
+      editingMapId: 'map-1',
+      editingMapName: 'Renamed Map',
+    });
+
+    const projectInput = container.querySelector('.project-name-input');
+    const mapInput = container.querySelector('.project-map-name-input');
+
+    act(() => {
+      projectInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      mapInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+
+    expect(props.onRenameProject).toHaveBeenCalledWith('project-1', 'Renamed Project');
+    expect(props.onRenameMap).toHaveBeenCalledWith('project-1', 'map-1', 'Renamed Map');
+  });
+});

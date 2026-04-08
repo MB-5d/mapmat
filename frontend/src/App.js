@@ -180,7 +180,6 @@ export const writeWelcomeModalHidden = (
     console.warn('Failed to persist welcome modal dismissal state', error);
   }
 };
-
 const flattenCommentsForNode = (comments = [], nodeId, entries = []) => {
   (comments || []).forEach((comment) => {
     if (!comment?.id) return;
@@ -1181,12 +1180,15 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [duplicateMapConfig, setDuplicateMapConfig] = useState(null);
   const [pendingLoadMap, setPendingLoadMap] = useState(null);
   const [createMapMode, setCreateMapMode] = useState(false);
+  const [createMapDefaults, setCreateMapDefaults] = useState(null);
   const [pendingMapCreation, setPendingMapCreation] = useState(null);
-  const [pendingCreateAfterSave, setPendingCreateAfterSave] = useState(false);
+  const [pendingCreateAfterSave, setPendingCreateAfterSave] = useState(null);
   const [pendingLogoutAfterSave, setPendingLogoutAfterSave] = useState(false);
   const [expandedProjects, setExpandedProjects] = useState({});
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editingProjectName, setEditingProjectName] = useState('');
+  const [editingMapId, setEditingMapId] = useState(null);
+  const [editingMapName, setEditingMapName] = useState('');
   const [shareEmails, setShareEmails] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
   const [sharePermission, setSharePermission] = useState(ACCESS_LEVELS.VIEW); // Permission for shared link
@@ -1265,6 +1267,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [blankUploadDragActive, setBlankUploadDragActive] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [editModalNode, setEditModalNode] = useState(null);
   const [editModalMode, setEditModalMode] = useState('edit'); // 'edit', 'duplicate', 'add'
@@ -1351,6 +1354,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const colorKeyRef = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
+  const blankUploadInputRef = useRef(null);
   const thumbnailQueueRef = useRef([]);
   const thumbnailQueuedRef = useRef(new Set());
   const thumbnailInFlightRef = useRef(new Set());
@@ -2677,6 +2681,60 @@ export default function App({ currentRoute, navigateToRoute }) {
     return true;
   };
 
+  const openCreateMapFlow = async ({ defaultProjectId = null } = {}) => {
+    const normalizedProjectId = normalizeProjectSelection(defaultProjectId);
+
+    if (!currentUser) {
+      showToast('Please sign in to create a new map', 'warning');
+      setShowAuthModal(true);
+      return;
+    }
+
+    const hasUnsavedMap = hasMap && !currentMap?.id;
+    if (hasUnsavedMap) {
+      const wantsSave = await showConfirm({
+        title: 'Save current map?',
+        message: 'You have an unsaved map. Save it before creating a new one?',
+        confirmText: 'Save',
+        cancelText: "Don't Save",
+      });
+
+      if (wantsSave) {
+        setPendingCreateAfterSave({ projectId: normalizedProjectId });
+        setCreateMapMode(false);
+        setCreateMapDefaults(null);
+        setShowProjectsModal(false);
+        setShowSaveMapModal(true);
+        return;
+      }
+      setRoot(null);
+      setOrphans([]);
+      setCurrentMap(null);
+      navigateToRoute(createAppHomeRoute());
+      setIsImportedMap(false);
+      setShowThumbnails(false);
+      setHasCreatedShareLink(false);
+      setCurrentShareAccess(null);
+      resetThumbnailQueue(0);
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+      setUrlInput('');
+      resetScanLayers();
+    }
+
+    setDuplicateMapConfig(null);
+    setPendingLoadMap(null);
+    setPendingCreateAfterSave(null);
+    setShowProjectsModal(false);
+    setShowCreateMapModal(false);
+    setCreateMapMode(true);
+    setCreateMapDefaults({
+      projectId: normalizedProjectId,
+      name: '',
+      notes: '',
+    });
+    setShowSaveMapModal(true);
+  };
+
   // Show prompt modal and return promise
   const showPrompt = ({ title, message, placeholder = '', defaultValue = '' }) => {
     return new Promise((resolve) => {
@@ -3935,7 +3993,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     clearAnalyticsUser();
   }, [currentUser]);
 
-
   const applyLoggedOutState = useCallback(({ preserveViewOnlyMap = false } = {}) => {
     try {
       if (preserveViewOnlyMap && root) {
@@ -3989,7 +4046,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('Logged out', 'info');
     } finally {
       setPendingLogoutAfterSave(false);
-      setPendingCreateAfterSave(false);
+      setPendingCreateAfterSave(null);
+      setCreateMapDefaults(null);
       setPendingLoadMap(null);
       setHasCreatedShareLink(false);
       setCurrentShareAccess(null);
@@ -5176,6 +5234,65 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
+  const renameMap = async (projectId, mapId, newName) => {
+    if (!mapId) {
+      setEditingMapId(null);
+      return;
+    }
+    const trimmedName = newName?.trim();
+    if (!trimmedName) {
+      setEditingMapId(null);
+      showToast('Map name is required', 'error');
+      return;
+    }
+
+    const currentProject = projects.find((project) => project.id === projectId);
+    const current = (currentProject?.maps || []).find((map) => map.id === mapId)
+      || projects.flatMap((project) => project.maps || []).find((map) => map.id === mapId);
+
+    if (current && current.name === trimmedName) {
+      setEditingMapId(null);
+      return;
+    }
+
+    if (isCoeditingReadOnlyMode && currentMap?.id === mapId) {
+      setEditingMapId(null);
+      warnCoeditingReadOnly('This map');
+      return;
+    }
+    if (isLiveActive && currentMap?.id === mapId) {
+      setEditingMapId(null);
+      showToast('Rename this map after live editing is turned off.', 'info');
+      return;
+    }
+
+    try {
+      const { map } = await api.updateMap(
+        mapId,
+        { name: trimmedName },
+        { expectedUpdatedAt: current?.updated_at || (currentMap?.id === mapId ? currentMap?.updated_at : null) }
+      );
+      setProjects((prev) => prev.map((project) => ({
+        ...project,
+        maps: (project.maps || []).map((projectMap) => (projectMap.id === map.id ? map : projectMap)),
+      })));
+      if (currentMap?.id === map.id) {
+        setCurrentMap(map);
+        setMapName(map.name || '');
+      }
+      setMapSaveConflict(null);
+      setEditingMapId(null);
+      showToast('Map renamed', 'success');
+    } catch (error) {
+      if (isMapUpdateConflictError(error)) {
+        setEditingMapId(null);
+        registerMapConflict({ error, mapId, source: 'rename' });
+        return;
+      }
+      showToast(error.message || 'Failed to rename map', 'error');
+    }
+  };
+
   const deleteProject = async (projectId) => {
     if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
       showToast('Cannot delete a virtual folder', 'warning');
@@ -5190,7 +5307,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!confirmed) return;
     try {
       await api.deleteProject(projectId);
+      const deletedProject = projects.find((project) => project.id === projectId);
       setProjects(prev => prev.filter(p => p.id !== projectId));
+      if (editingProjectId === projectId) {
+        setEditingProjectId(null);
+      }
+      if (deletedProject?.maps?.some((map) => map.id === editingMapId)) {
+        setEditingMapId(null);
+      }
+      if (expandedProjects[projectId]) {
+        setExpandedProjects({});
+      }
       showToast('Project deleted', 'success');
     } catch (e) {
       showToast(e.message || 'Failed to delete project', 'error');
@@ -5644,8 +5771,18 @@ export default function App({ currentRoute, navigateToRoute }) {
           });
       }
       if (pendingCreateAfterSave) {
-        setPendingCreateAfterSave(false);
-        setShowCreateMapModal(true);
+        const createConfig = pendingCreateAfterSave;
+        setPendingCreateAfterSave(null);
+        setDuplicateMapConfig(null);
+        setPendingLoadMap(null);
+        setCreateMapMode(true);
+        setCreateMapDefaults({
+          projectId: createConfig?.projectId || null,
+          name: '',
+          notes: '',
+        });
+        setShowCreateMapModal(false);
+        setShowSaveMapModal(true);
       }
     } catch (e) {
       if (isMapUpdateConflictError(e)) {
@@ -5660,6 +5797,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!mapName?.trim()) return;
     const trimmedName = mapName.trim();
     setCreateMapMode(false);
+    setCreateMapDefaults(null);
+    setPendingCreateAfterSave(null);
     setPendingMapCreation({ name: trimmedName, projectId: projectId || null, notes: notes?.trim() || '' });
     setMapName(trimmedName);
     setRoot(null);
@@ -5761,6 +5900,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     resetThumbnailQueue(0);
     loadMapVersions(map.id);
     setShowProjectsModal(false);
+    setEditingProjectId(null);
+    setEditingMapId(null);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput(map.root?.url || '');
     if (!silent) {
@@ -5972,6 +6113,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (p.id !== projectId) return p;
         return { ...p, maps: (p.maps || []).filter(m => m.id !== mapId) };
       }));
+      if (editingMapId === mapId) {
+        setEditingMapId(null);
+      }
       if (currentMap?.id === mapId) {
         setCurrentMap(null);
         navigateToRoute(createAppHomeRoute());
@@ -10125,6 +10269,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   // Handle file selection via browse button
   const handleFileImport = async (e) => {
     const file = e.target.files?.[0];
+    setBlankUploadDragActive(false);
     await processImportFile(file);
     e.target.value = ''; // Reset input for re-selection
   };
@@ -10134,6 +10279,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-over');
+    setBlankUploadDragActive(false);
     const file = e.dataTransfer.files?.[0];
     await processImportFile(file);
   };
@@ -10143,6 +10289,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.add('drag-over');
+    setBlankUploadDragActive(true);
   };
 
   // Handle drag leave
@@ -10150,6 +10297,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     e.preventDefault();
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-over');
+    setBlankUploadDragActive(false);
   };
 
   const zoomBounds = getZoomBounds();
@@ -10180,7 +10328,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     setWelcomeModalDismissedForSession(true);
     setWelcomeDontShowAgain(false);
   }, [welcomeDontShowAgain]);
-
+  const saveMapModalProjectId = createMapMode
+    ? createMapDefaults?.projectId || null
+    : duplicateMapConfig?.projectId || null;
+  const saveMapModalName = createMapMode
+    ? createMapDefaults?.name ?? ''
+    : duplicateMapConfig?.name || '';
+  const saveMapModalNotes = createMapMode
+    ? createMapDefaults?.notes ?? ''
+    : currentMap?.notes || '';
+  const saveMapModalKey = [
+    createMapMode ? 'create' : (duplicateMapConfig ? 'duplicate' : 'save'),
+    saveMapModalProjectId || 'none',
+    saveMapModalName || 'untitled',
+  ].join(':');
   return (
     <AuthProvider value={authValue}>
     <div className="app">
@@ -10217,32 +10378,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onClearUrl={() => setUrlInput('')}
         showClearUrl={showTopbarScanBar && !!urlInput.trim()}
         sharedTitle={root?.title || 'Shared Sitemap'}
-        onCreateMap={async () => {
-          if (!currentUser) {
-            showToast('Please sign in to create a new map', 'warning');
-            setShowAuthModal(true);
-            return;
-          }
-          const hasUnsavedMap = hasMap && !currentMap?.id;
-          if (hasUnsavedMap) {
-            const wantsSave = await showConfirm({
-              title: 'Save current map?',
-              message: 'You have an unsaved map. Save it before creating a new one?',
-              confirmText: 'Save',
-              cancelText: "Don't Save",
-            });
-            if (wantsSave) {
-              setPendingCreateAfterSave(true);
-              setCreateMapMode(false);
-              setShowSaveMapModal(true);
-              return;
-            }
-            const cleared = await clearCanvas();
-            if (cleared) setShowCreateMapModal(true);
-            return;
-          }
-          setShowCreateMapModal(true);
-        }}
+        onCreateMap={() => openCreateMapFlow()}
         onImportFile={() => setShowImportModal(true)}
         onShowInvites={handleShowInviteInbox}
         onShowAccessRequests={handleShowAccessRequestsInbox}
@@ -10368,41 +10504,88 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         {!hasMap && (
           <div className="blank">
-            <div className="blank-icon">
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            </div>
-            <div className="blank-title">Ready to Map</div>
-            <div className="blank-subtitle">Enter a URL above to get started</div>
-            {isLoggedIn && (
-              <div className="blank-actions">
+            <div className="blank-shell">
+              <div className="blank-title">Ready to Map</div>
+              <div className="blank-subtitle">Choose how you want to get started.</div>
+              <div className="blank-card-grid">
                 <button
                   type="button"
-                  className="blank-action-btn"
-                  onClick={async () => {
-                    const name = await showPrompt({
-                      title: 'New Project',
-                      message: 'Enter a name for the new project:',
-                      placeholder: 'Project name',
-                    });
-                    if (name) {
-                      await createProject(name);
-                    }
-                  }}
+                  className="blank-card"
+                  onClick={() => openCreateMapFlow()}
                 >
-                  Create Project
+                  <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
+                    <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+                      <rect x="12" y="12" width="48" height="48" rx="14" fill="currentColor" opacity="0.08" />
+                      <path d="M24 36h24" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                      <path d="M36 24v24" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                      <path d="M24 52h24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
+                    </svg>
+                  </div>
+                  <div className="blank-card-title-row">
+                    <span className="blank-card-title">Create</span>
+                  </div>
+                  <div className="blank-card-copy">Start a new map with a name and project.</div>
                 </button>
+
                 <button
                   type="button"
-                  className="blank-action-btn secondary"
-                  onClick={() => setShowProjectsModal(true)}
+                  className="blank-card blank-card-disabled"
+                  disabled
                 >
-                  Open Projects
+                  <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
+                    <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+                      <rect x="14" y="18" width="44" height="36" rx="12" fill="currentColor" opacity="0.08" />
+                      <path d="M25 45l8-8 6 6 10-12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      <circle cx="48" cy="25" r="5" fill="currentColor" opacity="0.2" />
+                    </svg>
+                  </div>
+                  <div className="blank-card-title-row">
+                    <span className="blank-card-title">Modify</span>
+                    <span className="blank-card-badge">Coming soon</span>
+                  </div>
+                  <div className="blank-card-copy">Update an existing map with a guided modification flow.</div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`blank-card blank-card-upload ${blankUploadDragActive ? 'drag-over' : ''}`}
+                  onClick={() => blankUploadInputRef.current?.click()}
+                  onDrop={handleImportDrop}
+                  onDragOver={handleImportDragOver}
+                  onDragLeave={handleImportDragLeave}
+                  disabled={importLoading}
+                >
+                  <div className="blank-card-illustration blank-card-illustration-upload" aria-hidden="true">
+                    {importLoading ? (
+                      <Loader2 size={32} className="spin" />
+                    ) : (
+                      <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+                        <path d="M20 48.5a10 10 0 0 1 2.2-19.76A14.5 14.5 0 0 1 49 24.2 9 9 0 1 1 51 48H20Z" fill="currentColor" opacity="0.08" />
+                        <path d="M36 25v22" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                        <path d="M27 34l9-9 9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M24 52h24" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="blank-card-title-row">
+                    <span className="blank-card-title">Upload</span>
+                  </div>
+                  <div className="blank-card-copy">
+                    {importLoading
+                      ? 'Processing your file...'
+                      : 'Drag in a sitemap file or browse to import existing URLs.'}
+                  </div>
                 </button>
               </div>
-            )}
+              <input
+                ref={blankUploadInputRef}
+                className="blank-upload-input"
+                type="file"
+                accept=".xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
+                onChange={handleFileImport}
+                disabled={importLoading}
+              />
+            </div>
           </div>
         )}
 
@@ -11536,11 +11719,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       />
 
       <SaveMapModal
+        key={saveMapModalKey}
         show={showSaveMapModal}
         onClose={() => {
           setShowSaveMapModal(false);
           setCreateMapMode(false);
-          setPendingCreateAfterSave(false);
+          setCreateMapDefaults(null);
+          setPendingCreateAfterSave(null);
           setPendingLogoutAfterSave(false);
           setDuplicateMapConfig(null);
           setPendingLoadMap(null);
@@ -11549,7 +11734,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         onRequireLogin={() => {
           setShowSaveMapModal(false);
           setCreateMapMode(false);
-          setPendingCreateAfterSave(false);
+          setCreateMapDefaults(null);
+          setPendingCreateAfterSave(null);
           setPendingLogoutAfterSave(false);
           setDuplicateMapConfig(null);
           setPendingLoadMap(null);
@@ -11558,9 +11744,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         projects={projects}
         currentMap={currentMap}
         rootUrl={root?.url}
-        defaultProjectId={duplicateMapConfig?.projectId || null}
-        defaultName={duplicateMapConfig?.name || ''}
-        defaultNotes={currentMap?.notes || ''}
+        defaultProjectId={saveMapModalProjectId}
+        defaultName={saveMapModalName}
+        defaultNotes={saveMapModalNotes}
         onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
         title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
@@ -11578,24 +11764,40 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       <ProjectsModal
         show={showProjectsModal}
-        onClose={() => { setShowProjectsModal(false); setEditingProjectId(null); }}
+        onClose={() => {
+          setShowProjectsModal(false);
+          setEditingProjectId(null);
+          setEditingMapId(null);
+        }}
         isLoggedIn={isLoggedIn}
         projects={projects}
         expandedProjects={expandedProjects}
         editingProjectId={editingProjectId}
         editingProjectName={editingProjectName}
+        editingMapId={editingMapId}
+        editingMapName={editingMapName}
         onToggleProjectExpanded={toggleProjectExpanded}
         onEditProjectNameChange={setEditingProjectName}
         onEditProjectNameStart={(projectId, projectName) => {
           setEditingProjectId(projectId);
           setEditingProjectName(projectName);
+          setEditingMapId(null);
         }}
         onEditProjectNameCancel={() => setEditingProjectId(null)}
         onRenameProject={renameProject}
+        onEditMapNameChange={setEditingMapName}
+        onEditMapNameStart={(mapId, mapName) => {
+          setEditingMapId(mapId);
+          setEditingMapName(mapName);
+          setEditingProjectId(null);
+        }}
+        onEditMapNameCancel={() => setEditingMapId(null)}
+        onRenameMap={renameMap}
         onDeleteProject={deleteProject}
         onLoadMap={handleLoadMapRequest}
         onDeleteMap={deleteMap}
         onMoveMap={moveMapToProject}
+        onAddMap={(projectId) => openCreateMapFlow({ defaultProjectId: projectId })}
         onAddProject={async () => {
           const name = await showPrompt({
             title: 'New Project',
@@ -11711,7 +11913,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           specialParentOptions={specialParentOptions}
         />
       )}
-
 
       <DeleteConfirmModal
         node={deleteConfirmNode}

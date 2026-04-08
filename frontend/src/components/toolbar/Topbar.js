@@ -5,10 +5,8 @@ import {
   LogIn,
   LogOut,
   Mail,
-  Plus,
   Settings2,
   ShieldCheck,
-  Upload,
   UserCircle,
   User,
 } from 'lucide-react';
@@ -24,7 +22,6 @@ const Topbar = ({
   urlInput,
   onUrlInputChange,
   onUrlKeyDown,
-  hasMap,
   scanOptions,
   showScanOptions,
   scanOptionsRef,
@@ -44,8 +41,6 @@ const Topbar = ({
   showClearUrl,
   sharedTitle,
   showScanBar = true,
-  onCreateMap,
-  onImportFile,
   onShowProjects,
   onShowHistory,
   onShowInvites,
@@ -72,7 +67,6 @@ const Topbar = ({
   const closeMenu = () => setShowAccountMenu(false);
 
   const totalPendingCount = pendingInviteCount + pendingAccessRequestCount;
-  const showMapCreationActions = !hasMap && (isLoggedIn ? canEdit : true);
 
   return (
     <div className="topbar">
@@ -120,28 +114,6 @@ const Topbar = ({
       </div>
 
       <div className="topbar-right">
-        {showMapCreationActions && (
-          <button
-            className="icon-btn"
-            title="Create New Map"
-            onClick={onCreateMap}
-          >
-            <Plus size={22} />
-          </button>
-        )}
-
-        {showMapCreationActions && (
-          <button
-            className="icon-btn"
-            title="Import File"
-            onClick={onImportFile}
-          >
-            <Upload size={22} />
-          </button>
-        )}
-
-        {showMapCreationActions && <div className="divider" />}
-
         {isLoggedIn ? (
           <div className="account-menu-wrapper" ref={accountMenuRef}>
             <button
