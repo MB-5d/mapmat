@@ -10663,13 +10663,13 @@ export default function App({ currentRoute, navigateToRoute }) {
               <div className="blank-card-guide" aria-hidden="true">
                 <svg className="blank-guide-svg" viewBox="0 0 960 120" fill="none" preserveAspectRatio="none">
                   <path className="blank-guide-line" d="M480 0V46" />
-                  <path className="blank-guide-line" d="M170 46H790" />
-                  <path className="blank-guide-line" d="M170 46V82" />
-                  <path className="blank-guide-line" d="M480 46V82" />
-                  <path className="blank-guide-line" d="M790 46V82" />
-                  <path className="blank-guide-arrow" d="M162 74L170 82L178 74" />
-                  <path className="blank-guide-arrow" d="M472 74L480 82L488 74" />
-                  <path className="blank-guide-arrow" d="M782 74L790 82L798 74" />
+                  <path className="blank-guide-line" d="M154 46H806" />
+                  <path className="blank-guide-line" d="M154 46V112" />
+                  <path className="blank-guide-line" d="M480 46V112" />
+                  <path className="blank-guide-line" d="M806 46V112" />
+                  <path className="blank-guide-arrow" d="M146 104L154 112L162 104" />
+                  <path className="blank-guide-arrow" d="M472 104L480 112L488 104" />
+                  <path className="blank-guide-arrow" d="M798 104L806 112L814 104" />
                 </svg>
               </div>
               <div className="blank-card-grid">
