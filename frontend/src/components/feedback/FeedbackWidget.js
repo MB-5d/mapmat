@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Crosshair,
   Loader2,
-  MessageSquarePlus,
   X,
 } from 'lucide-react';
 
@@ -30,6 +29,28 @@ const SCOPE_OPTIONS = [
   { value: 'flow', label: 'This flow' },
   { value: 'specific_thing', label: 'Specific thing' },
 ];
+
+function MessageSquareShareIcon({ size = 14, strokeWidth = 2, ...props }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h9" />
+      <path d="M15 5h6" />
+      <path d="m18 2 3 3-3 3" />
+    </svg>
+  );
+}
 
 function getActiveSurfaceList(activeSurfaces = {}) {
   return Object.entries(activeSurfaces)
@@ -272,7 +293,7 @@ export default function FeedbackWidget({
           >
             <span className="feedback-widget-tab-label">Feedback</span>
             <span className="feedback-widget-tab-icon" aria-hidden="true">
-              <MessageSquarePlus size={13} />
+              <MessageSquareShareIcon size={14} />
             </span>
           </button>
         ) : null}
@@ -372,7 +393,7 @@ export default function FeedbackWidget({
                 <label className="feedback-label" htmlFor="feedback-message">Tell us more</label>
                 <textarea
                   id="feedback-message"
-                  className="feedback-textarea"
+                  className="ui-textarea ui-textarea--lg feedback-textarea"
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   placeholder="What happened, what you expected, or what felt unclear."
@@ -400,7 +421,7 @@ export default function FeedbackWidget({
               <div className="feedback-drawer-actions">
                 <button
                   type="button"
-                  className="feedback-secondary-btn"
+                  className="modal-btn secondary"
                   onClick={handleClose}
                   disabled={submitting}
                 >
@@ -408,7 +429,7 @@ export default function FeedbackWidget({
                 </button>
                 <button
                   type="submit"
-                  className="feedback-primary-btn"
+                  className="modal-btn primary"
                   disabled={submitting}
                 >
                   {submitting ? <Loader2 size={16} className="feedback-spin" /> : null}

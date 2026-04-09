@@ -10552,11 +10552,11 @@ body {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  justify-content: center;
+  gap: 16px;
   min-width: 30px;
-  min-height: 134px;
-  padding: 12px 5px 8px 7px;
+  min-height: 120px;
+  padding: 12px 5px 12px 7px;
   border: 1px solid rgba(184, 213, 235, 0.92);
   border-left: 0;
   border-top-right-radius: 10px;
@@ -10579,15 +10579,12 @@ body {
 }
 
 .feedback-widget-tab-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(189, 220, 239, 0.9);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #1f2937;
+  background: transparent;
+  color: #64748b;
+  line-height: 0;
 }
 
 .feedback-widget-tab svg {
@@ -10627,13 +10624,11 @@ body {
 .feedback-drawer-subtitle {
   margin-top: 4px;
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.45;
 }
 
 .feedback-drawer-close,
-.feedback-secondary-btn,
-.feedback-primary-btn,
 .feedback-chip,
 .feedback-rating-pill,
 .feedback-target-picker {
@@ -10657,8 +10652,10 @@ body {
 .feedback-drawer-close:hover,
 .feedback-chip:hover,
 .feedback-rating-pill:hover,
-.feedback-target-picker:hover,
-.feedback-secondary-btn:hover,
+.feedback-target-picker:hover {
+  background: var(--color-bg-hover);
+}
+
 .feedback-widget-tab:hover {
   background: linear-gradient(180deg, rgba(240, 250, 255, 1) 0%, rgba(230, 244, 253, 1) 100%);
   box-shadow: 0 14px 28px rgba(112, 144, 176, 0.22);
@@ -10682,10 +10679,8 @@ body {
 
 .feedback-label {
   color: var(--color-text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .feedback-chip-grid,
@@ -10697,15 +10692,15 @@ body {
 
 .feedback-chip,
 .feedback-rating-pill,
-.feedback-target-picker,
-.feedback-secondary-btn,
-.feedback-primary-btn {
+.feedback-target-picker {
   min-height: 38px;
   padding: 8px 12px;
   background: var(--color-bg-primary);
   border-color: var(--color-border);
   color: var(--color-text-primary);
   cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .feedback-chip.is-active,
@@ -10737,7 +10732,7 @@ body {
   gap: 8px;
   border-radius: 12px;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .feedback-target-selected {
@@ -10754,19 +10749,8 @@ body {
   width: 100%;
   box-sizing: border-box;
   min-height: 132px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--color-border);
-  background: var(--ui-color-input-bg);
-  color: var(--color-text-primary);
   resize: vertical;
-  font: inherit;
-  outline: none;
-}
-
-.feedback-textarea:focus {
-  border-color: var(--color-primary);
-  box-shadow: var(--ui-focus-ring);
+  line-height: 1.5;
 }
 
 .feedback-checkbox-row {
@@ -10789,21 +10773,9 @@ body {
   gap: 10px;
 }
 
-.feedback-primary-btn {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #ffffff;
-}
-
-.feedback-primary-btn:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-}
-
-.feedback-primary-btn:disabled,
-.feedback-secondary-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.feedback-drawer-actions .modal-btn {
+  min-width: 132px;
+  min-height: 38px;
 }
 
 .feedback-spin {
