@@ -2450,9 +2450,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
 
+  const includePartialOrphans = Boolean(partialReason);
+
   const result = {
     root,
-    orphans: scanOptions.orphanPages ? prunedOrphanNodes : [],
+    orphans: (scanOptions.orphanPages || includePartialOrphans) ? prunedOrphanNodes : [],
     subdomains: scanOptions.subdomains ? subdomainNodes : [],
     errors: scanOptions.errorPages ? errors : [],
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
