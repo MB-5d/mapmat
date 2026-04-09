@@ -444,6 +444,12 @@ const requireApiKey = (req, res, next) => {
 };
 
 const getApiKey = (req) => req.get('x-api-key') || req.query?.api_key || req.body?.api_key || null;
+const getJobAccessToken = (req) => (
+  req.get('x-job-access-token')
+  || req.query?.access_token
+  || req.body?.access_token
+  || null
+);
 const hashIp = (ip) => (ip ? crypto.createHash('sha256').update(ip).digest('hex') : null);
 
 const recordUsage = (req, eventType, quantity = 1, meta = null) => {
@@ -575,11 +581,16 @@ const normalizeScreenshotType = (type) => {
 
 const isJobVisibleToRequest = (row, req) => {
   if (!row) return false;
+  const jobAccessToken = getJobAccessToken(req);
+  const rowAccessToken = getJobPayload(row)?.accessToken || null;
   const userId = req.user?.id || null;
   const apiKey = getApiKey(req);
   const ip = getClientIp(req);
   const ipHash = hashIp(ip);
 
+  if (rowAccessToken && jobAccessToken) {
+    return rowAccessToken === jobAccessToken;
+  }
   if (row.user_id && userId) {
     return row.user_id === userId;
   }
@@ -692,8 +703,18 @@ const parseJsonSafe = (raw) => {
   }
 };
 
+const sanitizeJobPayload = (payload) => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  if (!Object.prototype.hasOwnProperty.call(payload, 'accessToken')) return payload;
+  const { accessToken, ...safePayload } = payload;
+  return safePayload;
+};
+
+const getJobPayload = (row) => parseJsonSafe(row?.payload) || {};
+
 const serializeJobRow = (row, includeResult = true) => {
   if (!row) return null;
+  const payload = getJobPayload(row);
   return {
     id: row.id,
     type: row.type,
@@ -701,7 +722,7 @@ const serializeJobRow = (row, includeResult = true) => {
     createdAt: row.created_at,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
-    payload: parseJsonSafe(row.payload),
+    payload: sanitizeJobPayload(payload),
     progress: parseJsonSafe(row.progress),
     result: includeResult ? parseJsonSafe(row.result) : null,
     error: row.error || null,
@@ -717,7 +738,7 @@ const findActiveDiscoveryJob = async (mapId) => {
   );
 
   for (const row of rows) {
-    const payload = parseJsonSafe(row.payload) || {};
+    const payload = getJobPayload(row);
     if (payload.mapId === mapId || payload.id === mapId) {
       return row.id;
     }
@@ -3020,6 +3041,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
       max: SCAN_LIMITS.maxDepthHard,
       fallback: DEFAULT_MAX_DEPTH,
     });
+    const jobAccessToken = crypto.randomBytes(24).toString('hex');
 
     const jobId = await createJob({
       type: JOB_TYPES.scan,
@@ -3028,6 +3050,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
         maxPages: maxPagesSafe,
         maxDepth: maxDepthSafe,
         options: options || {},
+        accessToken: jobAccessToken,
       },
       req,
     });
@@ -3038,7 +3061,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
       maxDepth: maxDepthSafe,
     });
 
-    res.json({ jobId });
+    res.json({ jobId, jobAccessToken });
   } catch (e) {
     const message = e.message || 'Failed to create scan job';
     const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
@@ -3052,8 +3075,11 @@ app.get('/scan-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
   const row = await getJobRow(id);
-  if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
+  if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
+  }
+  if (!isJobVisibleToRequest(row, req)) {
+    return res.status(403).json({ error: 'This scan is no longer available in this browser session' });
   }
   res.json({ job: serializeJobRow(row, includeResult) });
 });
@@ -3061,8 +3087,11 @@ app.get('/scan-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
 app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const row = await getJobRow(id);
-  if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
+  if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
+  }
+  if (!isJobVisibleToRequest(row, req)) {
+    return res.status(403).json({ error: 'This scan is no longer available in this browser session' });
   }
   await markJobCanceled(id);
   res.json({ success: true });
@@ -3071,8 +3100,11 @@ app.post('/scan-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res
 app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const row = await getJobRow(id);
-  if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
+  if (!row || row.type !== JOB_TYPES.scan) {
     return res.status(404).json({ error: 'Job not found' });
+  }
+  if (!isJobVisibleToRequest(row, req)) {
+    return res.status(403).json({ error: 'This scan is no longer available in this browser session' });
   }
   await markJobStopping(id);
   res.json({ success: true });
@@ -3105,8 +3137,14 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
       return;
     }
     const row = await getJobRow(id);
-    if (!row || row.type !== JOB_TYPES.scan || !isJobVisibleToRequest(row, req)) {
-      sendEvent('error', { error: 'Job not found' });
+    if (!row || row.type !== JOB_TYPES.scan) {
+      sendEvent('job-error', { error: 'Job not found' });
+      clearInterval(interval);
+      res.end();
+      return;
+    }
+    if (!isJobVisibleToRequest(row, req)) {
+      sendEvent('job-error', { error: 'This scan is no longer available in this browser session' });
       clearInterval(interval);
       res.end();
       return;

@@ -1228,7 +1228,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanElapsed, setScanElapsed] = useState(0);
   const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [isStoppingScan, setIsStoppingScan] = useState(false);
+  const [scanErrorMessage, setScanErrorMessage] = useState('');
   const [scanHistory, setScanHistory] = useState([]);
   const [lastHistoryId, setLastHistoryId] = useState(null);
   const [lastScanUrl, setLastScanUrl] = useState('');
@@ -1340,6 +1342,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const canvasRef = useRef(null);
   const scanJobIdRef = useRef(null);
+  const scanJobAccessTokenRef = useRef(null);
   const eventSourceRef = useRef(null);
   const scanTimerRef = useRef(null);
   const messageTimerRef = useRef(null);
@@ -6285,44 +6288,94 @@ export default function App({ currentRoute, navigateToRoute }) {
     messageTimerRef.current = null;
   };
 
-  const resetScanUi = () => {
+  const closeScanStream = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+  };
+
+  const resetScanUi = ({ clearError = true, clearProgress = true } = {}) => {
+    closeScanStream();
     scanJobIdRef.current = null;
+    scanJobAccessTokenRef.current = null;
     stopScanTimers();
     setLoading(false);
     setShowCancelConfirm(false);
+    setShowStopConfirm(false);
+    setIsStoppingScan(false);
+    if (clearProgress) {
+      setScanProgress({ scanned: 0, queued: 0 });
+    }
+    if (clearError) {
+      setScanErrorMessage('');
+    }
+  };
+
+  const showScanError = (message) => {
+    closeScanStream();
+    scanJobIdRef.current = null;
+    scanJobAccessTokenRef.current = null;
+    stopScanTimers();
+    setLoading(false);
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
     setIsStoppingScan(false);
     setScanProgress({ scanned: 0, queued: 0 });
+    setScanErrorMessage(message || 'Scan failed');
+  };
+
+  const dismissScanError = () => {
+    setScanErrorMessage('');
+    setScanProgress({ scanned: 0, queued: 0 });
+  };
+
+  const requestCancelScan = () => {
+    if (isStoppingScan) return;
+    setShowStopConfirm(false);
+    setShowCancelConfirm(true);
+  };
+
+  const requestStopScan = () => {
+    if (isStoppingScan) return;
+    setShowCancelConfirm(false);
+    setShowStopConfirm(true);
+  };
+
+  const dismissScanConfirm = () => {
+    if (isStoppingScan) return;
+    setShowCancelConfirm(false);
+    setShowStopConfirm(false);
   };
 
   const cancelScan = () => {
     const jobId = scanJobIdRef.current;
+    const accessToken = scanJobAccessTokenRef.current;
     resetScanUi();
     if (jobId) {
-      api.cancelScanJob(jobId).catch(() => {});
+      api.cancelScanJob(jobId, { accessToken }).catch(() => {});
     }
     showToast('Scan cancelled', 'info');
   };
 
   const stopScan = async () => {
     const jobId = scanJobIdRef.current;
+    const accessToken = scanJobAccessTokenRef.current;
     if (!jobId || isStoppingScan) return;
 
     setIsStoppingScan(true);
+    setShowStopConfirm(false);
     setShowCancelConfirm(false);
 
     try {
-      await api.stopScanJob(jobId);
+      await api.stopScanJob(jobId, { accessToken });
       if (scanJobIdRef.current !== jobId) return;
       showToast('Stopping scan and preparing current results...', 'info');
     } catch (err) {
       if (scanJobIdRef.current !== jobId) return;
       console.error('Scan stop failed:', err);
       setIsStoppingScan(false);
-      setShowCancelConfirm(true);
+      setShowStopConfirm(true);
       showToast(err.message || 'Failed to stop scan', 'error');
     }
   };
@@ -6344,7 +6397,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       : Math.min(4, SCAN_MAX_DEPTH_UI);
 
     setShowCancelConfirm(false);
+    setShowStopConfirm(false);
     setIsStoppingScan(false);
+    setScanErrorMessage('');
     setLoading(true);
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
@@ -6357,6 +6412,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       ...scanOptions,
     };
     let jobId;
+    let jobAccessToken = null;
     try {
       const jobResponse = await api.createScanJob({
         url,
@@ -6364,60 +6420,45 @@ export default function App({ currentRoute, navigateToRoute }) {
         options: scanConfig,
       });
       jobId = jobResponse?.jobId;
+      jobAccessToken = jobResponse?.jobAccessToken || null;
       if (!jobId) {
         throw new Error('Failed to start scan');
       }
     } catch (err) {
       console.error('Scan job creation failed:', err);
-      showToast(err.message || 'Failed to start scan', 'error');
       trackEvent('scan_failed', {
         phase: 'job_create',
         message: err?.message || 'Failed to start scan',
       });
-      resetScanUi();
+      showScanError(err.message || 'Failed to start scan');
       return;
     }
 
     scanJobIdRef.current = jobId;
+    scanJobAccessTokenRef.current = jobAccessToken;
 
-    const eventSource = new EventSource(`${API_BASE}/scan-jobs/${jobId}/stream`);
+    const eventSource = new EventSource(
+      api.getScanJobStreamUrl(jobId, { accessToken: jobAccessToken }),
+      { withCredentials: true }
+    );
     eventSourceRef.current = eventSource;
+    let streamHandled = false;
 
-    eventSource.addEventListener('update', (e) => {
-      try {
-        const job = JSON.parse(e.data);
-        if (job?.progress) {
-          setScanProgress(job.progress);
-        }
-        if (job?.status === 'stopping') {
-          setIsStoppingScan(true);
-          setShowCancelConfirm(false);
-        }
-      } catch {}
-    });
-
-    eventSource.addEventListener('complete', (e) => {
-      let job;
-      try {
-        job = JSON.parse(e.data);
-      } catch (err) {
-        console.error('Scan payload parse failed:', err);
-        showToast('Scan completed but response could not be read', 'error');
-        resetScanUi();
-        return;
-      }
+    const handleCompletedJob = (job) => {
+      if (streamHandled) return;
 
       if (job?.status === 'failed') {
-        showToast(`Scan failed: ${job.error || 'Unknown error'}`, 'error');
+        streamHandled = true;
         trackEvent('scan_failed', {
           phase: 'complete',
           message: job?.error || 'Unknown error',
         });
-        resetScanUi();
+        showScanError(job?.error || 'Unknown error');
         return;
       }
 
       if (job?.status === 'canceled') {
+        streamHandled = true;
         showToast('Scan cancelled', 'info');
         resetScanUi();
         return;
@@ -6426,12 +6467,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       const data = job?.result;
       if (!data?.root) {
         console.error('Scan completed without a root node:', data);
-        showToast('Scan completed but returned no pages', 'error');
+        streamHandled = true;
         trackEvent('scan_failed', {
           phase: 'complete',
           message: 'Scan completed but returned no pages',
         });
-        resetScanUi();
+        showScanError('Scan completed but returned no pages');
         return;
       }
 
@@ -6563,34 +6604,87 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
       setTimeout(resetView, 100);
 
+      streamHandled = true;
       resetScanUi();
+    };
+
+    eventSource.addEventListener('update', (e) => {
+      try {
+        const job = JSON.parse(e.data);
+        if (job?.progress) {
+          setScanProgress(job.progress);
+        }
+        if (job?.status === 'stopping') {
+          setIsStoppingScan(true);
+          setShowCancelConfirm(false);
+          setShowStopConfirm(false);
+        }
+      } catch {
+      }
     });
 
-    eventSource.addEventListener('error', (e) => {
+    eventSource.addEventListener('complete', (e) => {
+      let job;
+      try {
+        job = JSON.parse(e.data);
+      } catch (err) {
+        console.error('Scan payload parse failed:', err);
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: 'Scan completed but response could not be read',
+        });
+        showScanError('Scan completed but response could not be read');
+        return;
+      }
+
+      handleCompletedJob(job);
+    });
+
+    eventSource.addEventListener('job-error', (e) => {
+      let message = 'Connection error';
       try {
         const data = JSON.parse(e.data);
-        showToast(`Scan failed: ${data.error}`, 'error');
-        trackEvent('scan_failed', {
-          phase: 'stream',
-          message: data?.error || 'Connection error',
-        });
-      } catch {
-        showToast('Scan failed: Connection error', 'error');
-        trackEvent('scan_failed', {
-          phase: 'stream',
-          message: 'Connection error',
-        });
-      }
-      resetScanUi();
-    });
-
-    eventSource.onerror = () => {
-      showToast('Scan failed: Connection error', 'error');
+        message = data?.error || message;
+      } catch {}
+      if (streamHandled) return;
+      streamHandled = true;
       trackEvent('scan_failed', {
         phase: 'stream',
-        message: 'Connection error',
+        message,
       });
-      resetScanUi();
+      showScanError(message);
+    });
+
+    eventSource.onerror = async () => {
+      if (streamHandled) return;
+
+      try {
+        const { job } = await api.getScanJob(jobId, {
+          includeResult: true,
+          accessToken: jobAccessToken,
+        });
+        if (job?.status === 'complete' || job?.status === 'failed' || job?.status === 'canceled') {
+          handleCompletedJob(job);
+          return;
+        }
+      } catch (err) {
+        const message = err?.message || 'Connection error';
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'stream',
+          message,
+        });
+        showScanError(message);
+        return;
+      }
+
+      streamHandled = true;
+      trackEvent('scan_failed', {
+        phase: 'stream',
+        message: 'Lost connection while receiving scan progress',
+      });
+      showScanError('Lost connection while receiving scan progress');
     };
   };
 
@@ -11927,15 +12021,19 @@ export default function App({ currentRoute, navigateToRoute }) {
       <ScanProgressModal
         loading={loading}
         showCancelConfirm={showCancelConfirm}
+        showStopConfirm={showStopConfirm}
         isStoppingScan={isStoppingScan}
+        scanErrorMessage={scanErrorMessage}
         scanMessage={scanMessage}
         scanProgress={scanProgress}
         scanElapsed={scanElapsed}
         urlInput={urlInput}
-        onRequestCancel={() => setShowCancelConfirm(true)}
+        onRequestCancel={requestCancelScan}
+        onRequestStop={requestStopScan}
         onStopScan={stopScan}
         onCancelScan={cancelScan}
-        onContinueScan={() => setShowCancelConfirm(false)}
+        onContinueScan={dismissScanConfirm}
+        onDismissScanError={dismissScanError}
       />
 
       <ImageOverlay

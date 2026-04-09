@@ -522,6 +522,14 @@ export async function deleteHistory(ids) {
 // BACKGROUND JOBS
 // ============================================
 
+function buildScanJobPath(id, { includeResult = true, accessToken = null, suffix = '' } = {}) {
+  const params = new URLSearchParams();
+  if (!includeResult) params.set('include_result', 'false');
+  if (accessToken) params.set('access_token', accessToken);
+  const query = params.toString();
+  return `/scan-jobs/${id}${suffix}${query ? `?${query}` : ''}`;
+}
+
 export async function createScanJob(payload) {
   return fetchApi('/scan-jobs', {
     method: 'POST',
@@ -529,17 +537,28 @@ export async function createScanJob(payload) {
   });
 }
 
-export async function getScanJob(id, { includeResult = true } = {}) {
-  const query = includeResult ? '' : '?include_result=false';
-  return fetchApi(`/scan-jobs/${id}${query}`);
+export async function getScanJob(id, { includeResult = true, accessToken = null } = {}) {
+  return fetchApi(buildScanJobPath(id, { includeResult, accessToken }));
 }
 
-export async function cancelScanJob(id) {
-  return fetchApi(`/scan-jobs/${id}/cancel`, { method: 'POST' });
+export function getScanJobStreamUrl(id, { accessToken = null } = {}) {
+  return `${API_BASE}${buildScanJobPath(id, { accessToken, suffix: '/stream' })}`;
 }
 
-export async function stopScanJob(id) {
-  return fetchApi(`/scan-jobs/${id}/stop`, { method: 'POST' });
+export async function cancelScanJob(id, { accessToken = null } = {}) {
+  const body = accessToken ? JSON.stringify({ access_token: accessToken }) : undefined;
+  return fetchApi(buildScanJobPath(id, { suffix: '/cancel' }), {
+    method: 'POST',
+    ...(body ? { body } : {}),
+  });
+}
+
+export async function stopScanJob(id, { accessToken = null } = {}) {
+  const body = accessToken ? JSON.stringify({ access_token: accessToken }) : undefined;
+  return fetchApi(buildScanJobPath(id, { suffix: '/stop' }), {
+    method: 'POST',
+    ...(body ? { body } : {}),
+  });
 }
 
 export async function createScreenshotJob(payload) {

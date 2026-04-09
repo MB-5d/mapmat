@@ -6,17 +6,21 @@ import { APP_ONLY_MODE, SCAN_MAX_PAGES_UI } from '../../utils/constants';
 const ScanProgressModal = ({
   loading,
   showCancelConfirm,
+  showStopConfirm,
   isStoppingScan,
+  scanErrorMessage,
   scanMessage,
   scanProgress,
   scanElapsed,
   urlInput,
   onRequestCancel,
+  onRequestStop,
   onStopScan,
   onCancelScan,
   onContinueScan,
+  onDismissScanError,
 }) => {
-  if (!loading) return null;
+  if (!loading && !scanErrorMessage) return null;
   const hasQueue = scanProgress.queued > 0;
   const displayMessage = isStoppingScan
     ? 'Stopping scan and preparing current results...'
@@ -25,7 +29,20 @@ const ScanProgressModal = ({
   return (
     <div className="modal-overlay scanning-overlay">
       <div className="modal-card scanning-modal" onClick={(e) => e.stopPropagation()}>
-        {!showCancelConfirm ? (
+        {scanErrorMessage ? (
+          <>
+            <div className="cancel-confirm scan-error-state">
+              <AlertTriangle size={48} className="cancel-warning-icon scan-error-icon" />
+              <h3>Scan Failed</h3>
+              <p>{scanErrorMessage}</p>
+            </div>
+            <div className="cancel-actions">
+              <button className="modal-btn primary" onClick={onDismissScanError}>
+                Close
+              </button>
+            </div>
+          </>
+        ) : !showCancelConfirm && !showStopConfirm ? (
           <>
             <div className="scan-animation">
               <Globe size={48} className="scan-globe" />
@@ -76,34 +93,60 @@ const ScanProgressModal = ({
                 )}
               </div>
             </div>
-            <button
-              className="modal-btn secondary"
-              onClick={onRequestCancel}
-              disabled={isStoppingScan}
-            >
-              {isStoppingScan ? 'Preparing current results...' : 'Stop or Cancel Scan'}
-            </button>
+            <div className="scan-actions">
+              <button
+                className="modal-btn secondary"
+                onClick={onRequestCancel}
+                disabled={isStoppingScan}
+              >
+                Cancel
+              </button>
+              <button
+                className="modal-btn primary"
+                onClick={onRequestStop}
+                disabled={isStoppingScan}
+              >
+                {isStoppingScan ? 'Stopping...' : 'Stop'}
+              </button>
+            </div>
           </>
-        ) : (
+        ) : showCancelConfirm ? (
           <>
             <div className="cancel-confirm">
               <AlertTriangle size={48} className="cancel-warning-icon" />
-              <h3>Stop Scan?</h3>
-              <p>Choose whether to show the current results, discard them, or keep scanning.</p>
+              <h3>Cancel Scan?</h3>
+              <p>Are you sure you want to cancel the current scan?</p>
             </div>
             <div className="cancel-actions">
-              <button className="modal-btn primary" onClick={onStopScan} disabled={isStoppingScan}>
-                Stop and Show Current Results
-              </button>
               <button className="modal-btn danger" onClick={onCancelScan} disabled={isStoppingScan}>
-                Cancel and Discard
+                Yes, Cancel Scan
               </button>
               <button
                 className="modal-btn secondary"
                 onClick={onContinueScan}
                 disabled={isStoppingScan}
               >
-                Keep Scanning
+                No, Continue Scanning
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="cancel-confirm">
+              <AlertTriangle size={48} className="cancel-warning-icon" />
+              <h3>Stop Scanning?</h3>
+              <p>Stop scanning and show current progress?</p>
+            </div>
+            <div className="cancel-actions">
+              <button className="modal-btn primary" onClick={onStopScan} disabled={isStoppingScan}>
+                Yes
+              </button>
+              <button
+                className="modal-btn secondary"
+                onClick={onContinueScan}
+                disabled={isStoppingScan}
+              >
+                Cancel
               </button>
             </div>
           </>
