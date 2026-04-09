@@ -119,6 +119,8 @@ const DEFAULT_CONNECTION_COLORS = {
   brokenLinks: '#fca5a5',
 };
 
+const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
+
 // ============================================================================
 // SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
 // ============================================================================
@@ -1265,6 +1267,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authContextMessage, setAuthContextMessage] = useState('');
+  const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -2688,7 +2692,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     if (!currentUser) {
       showToast('Please sign in to create a new map', 'warning');
-      setShowAuthModal(true);
+      openAuthModal();
       return;
     }
 
@@ -3944,9 +3948,31 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [isViewingHistoricalVersion, toast, showToast]);
 
-  const handleLogin = useCallback(() => {
+  const closeAuthModal = useCallback(() => {
+    setShowAuthModal(false);
+    setAuthContextMessage('');
+    setPendingAuthPostSuccessAction(null);
+  }, []);
+
+  const openAuthModal = useCallback(({ contextMessage = '', postSuccessAction = null } = {}) => {
+    setAuthContextMessage(contextMessage);
+    setPendingAuthPostSuccessAction(postSuccessAction);
     setShowAuthModal(true);
   }, []);
+
+  const openProjectsPanel = useCallback(() => {
+    setShowProjectsModal(true);
+    setShowHistoryModal(false);
+    setShowCommentsPanel(false);
+    setShowReportDrawer(false);
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
+    setShowVersionHistoryDrawer(false);
+  }, []);
+
+  const handleLogin = useCallback(() => {
+    openAuthModal();
+  }, [openAuthModal]);
 
   const handleAuthSuccess = async (user) => {
     setCurrentUser(user);
@@ -3968,6 +3994,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     } catch (e) {
       console.error('Failed to load user data:', e);
     }
+    if (pendingAuthPostSuccessAction === 'open-projects') {
+      openProjectsPanel();
+    }
   };
 
   const handleDemoAccess = useCallback((user) => {
@@ -3985,7 +4014,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     setPendingMapInvitesError('');
     setPendingAccessRequests([]);
     setPendingAccessRequestsError('');
-  }, []);
+    if (pendingAuthPostSuccessAction === 'open-projects') {
+      openProjectsPanel();
+    }
+  }, [openProjectsPanel, pendingAuthPostSuccessAction]);
 
   useEffect(() => {
     if (currentUser) {
@@ -4125,7 +4157,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invites') return;
     if (authLoading) return;
     if (!isLoggedIn) {
-      setShowAuthModal(true);
+      openAuthModal();
       return;
     }
     setShowInviteInboxModal(true);
@@ -4136,13 +4168,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.surface,
     isLoggedIn,
     loadPendingMapInvites,
+    openAuthModal,
   ]);
 
   useEffect(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'access_requests') return;
     if (authLoading) return;
     if (!isLoggedIn) {
-      setShowAuthModal(true);
+      openAuthModal();
       return;
     }
     setShowAccessRequestsInboxModal(true);
@@ -4153,6 +4186,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.surface,
     isLoggedIn,
     loadPendingAccessRequests,
+    openAuthModal,
   ]);
 
   const handleAcceptPendingInvite = useCallback(async (invite) => {
@@ -4269,7 +4303,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       : null;
     if (!mapId) return;
     if (!isLoggedIn) {
-      setShowAuthModal(true);
+      openAuthModal();
       return;
     }
 
@@ -4329,6 +4363,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.surface,
     isLoggedIn,
     loadPendingMapInvites,
+    openAuthModal,
     routeAccessRequestMessage,
     showToast,
   ]);
@@ -4353,15 +4388,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowHistoryModal(false);
   }, []);
 
-  const handleShowProjects = useCallback(() => {
-    setShowProjectsModal(true);
-    setShowHistoryModal(false);
-    setShowCommentsPanel(false);
-    setShowReportDrawer(false);
-    setShowProfileDrawer(false);
-    setShowSettingsDrawer(false);
-    setShowVersionHistoryDrawer(false);
-  }, []);
+  const handleShowProjects = openProjectsPanel;
 
   const handleShowHistory = useCallback(() => {
     setShowHistoryModal(true);
@@ -5953,7 +5980,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         requestStatus: 'idle',
         requestError: '',
       });
-      setShowAuthModal(true);
+      openAuthModal();
       return undefined;
     }
 
@@ -6003,6 +6030,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     isLoggedIn,
     loadPendingMapInvites,
     loadSavedMapById,
+    openAuthModal,
     showToast,
   ]);
 
@@ -6018,7 +6046,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         status: 'auth_required',
         error: '',
       });
-      setShowAuthModal(true);
+      openAuthModal();
       return undefined;
     }
 
@@ -6070,6 +6098,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     loadPendingMapInvites,
     loadSavedMapById,
     navigateToRoute,
+    openAuthModal,
     showToast,
   ]);
 
@@ -10422,7 +10451,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           <InviteAcceptGate
             status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
             error={inviteAcceptState?.error || ''}
-            onLogin={() => setShowAuthModal(true)}
+            onLogin={() => openAuthModal()}
             onGoHome={() => navigateToRoute(createAppHomeRoute(), { replace: true })}
             onShowInvites={handleShowInviteInbox}
           />
@@ -10437,7 +10466,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             requestStatus={routeMapGateState?.requestStatus || 'idle'}
             requestError={routeMapGateState?.requestError || ''}
             requestMessage={routeAccessRequestMessage}
-            onLogin={() => setShowAuthModal(true)}
+            onLogin={() => openAuthModal()}
             onGoHome={() => navigateToRoute(createAppHomeRoute(), { replace: true })}
             onRequestMessageChange={setRouteAccessRequestMessage}
             onRequestAccess={handleRequestRouteMapAccess}
@@ -10527,8 +10556,28 @@ export default function App({ currentRoute, navigateToRoute }) {
         {!hasMap && (
           <div className="blank">
             <div className="blank-shell">
-              <div className="blank-title">Ready to Map</div>
-              <div className="blank-subtitle">Choose how you want to get started.</div>
+              <div className="blank-top-guide" aria-hidden="true">
+                <svg className="blank-guide-svg" viewBox="0 0 120 72" fill="none" preserveAspectRatio="none">
+                  <path className="blank-guide-line" d="M60 60V12" />
+                  <path className="blank-guide-arrow" d="M52 20L60 12L68 20" />
+                </svg>
+              </div>
+              <div className="blank-heading">
+                <div className="blank-title">Plan your site or software</div>
+                <div className="blank-subtitle">multiple ways to match your needs</div>
+              </div>
+              <div className="blank-card-guide" aria-hidden="true">
+                <svg className="blank-guide-svg" viewBox="0 0 960 120" fill="none" preserveAspectRatio="none">
+                  <path className="blank-guide-line" d="M480 0V46" />
+                  <path className="blank-guide-line" d="M170 46H790" />
+                  <path className="blank-guide-line" d="M170 46V82" />
+                  <path className="blank-guide-line" d="M480 46V82" />
+                  <path className="blank-guide-line" d="M790 46V82" />
+                  <path className="blank-guide-arrow" d="M162 74L170 82L178 74" />
+                  <path className="blank-guide-arrow" d="M472 74L480 82L488 74" />
+                  <path className="blank-guide-arrow" d="M782 74L790 82L798 74" />
+                </svg>
+              </div>
               <div className="blank-card-grid">
                 <button
                   type="button"
@@ -10546,13 +10595,22 @@ export default function App({ currentRoute, navigateToRoute }) {
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Create</span>
                   </div>
-                  <div className="blank-card-copy">Start a new map with a name and project.</div>
+                  <div className="blank-card-copy">Start a new map from scratch</div>
                 </button>
 
                 <button
                   type="button"
-                  className="blank-card blank-card-disabled"
-                  disabled
+                  className="blank-card"
+                  onClick={() => {
+                    if (currentUser) {
+                      openProjectsPanel();
+                      return;
+                    }
+                    openAuthModal({
+                      contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
+                      postSuccessAction: 'open-projects',
+                    });
+                  }}
                 >
                   <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
                     <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
@@ -10563,9 +10621,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Modify</span>
-                    <span className="blank-card-badge">Coming soon</span>
                   </div>
-                  <div className="blank-card-copy">Update an existing map with a guided modification flow.</div>
+                  <div className="blank-card-copy">Make updates to existing maps</div>
                 </button>
 
                 <button
@@ -10595,7 +10652,12 @@ export default function App({ currentRoute, navigateToRoute }) {
                   <div className="blank-card-copy">
                     {importLoading
                       ? 'Processing your file...'
-                      : 'Drag in a sitemap file or browse to import existing URLs.'}
+                      : (
+                        <>
+                          <span>Use existing sitemap files</span>
+                          <span className="blank-card-copy-secondary">(drag in here or click to select)</span>
+                        </>
+                      )}
                   </div>
                 </button>
               </div>
@@ -11782,7 +11844,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           setPendingLogoutAfterSave(false);
           setDuplicateMapConfig(null);
           setPendingLoadMap(null);
-          setShowAuthModal(true);
+          openAuthModal();
         }}
         projects={projects}
         currentMap={currentMap}
@@ -11898,9 +11960,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       {showAuthModal && (
         <AuthModal
-          onClose={() => setShowAuthModal(false)}
+          onClose={closeAuthModal}
           onSuccess={handleAuthSuccess}
           onDemo={handleDemoAccess}
+          contextMessage={authContextMessage}
           showToast={showToast}
         />
       )}

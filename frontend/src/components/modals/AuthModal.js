@@ -5,7 +5,13 @@ import * as api from '../../api';
 import { SHOW_DEMO_AUTH } from '../../utils/constants';
 import { trackEvent } from '../../utils/analytics';
 
-const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
+const AuthModal = ({
+  onClose,
+  onSuccess,
+  onDemo,
+  showToast,
+  contextMessage = '',
+}) => {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,6 +71,10 @@ const AuthModal = ({ onClose, onSuccess, onDemo, showToast }) => {
         </div>
 
         <div className="modal-body">
+          {contextMessage ? (
+            <div className="auth-context-message">{contextMessage}</div>
+          ) : null}
+
           <div className="auth-tabs">
             <button
               className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
