@@ -270,8 +270,10 @@ export default function FeedbackWidget({
             onClick={handleOpen}
             aria-label="Open feedback drawer"
           >
-            <MessageSquarePlus size={16} />
-            <span>Feedback</span>
+            <span className="feedback-widget-tab-label">Feedback</span>
+            <span className="feedback-widget-tab-icon" aria-hidden="true">
+              <MessageSquarePlus size={13} />
+            </span>
           </button>
         ) : null}
 
