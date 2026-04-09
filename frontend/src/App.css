@@ -1401,7 +1401,7 @@ body {
   fill: none;
   stroke: #b8c5d8;
   stroke-width: 2.5;
-  stroke-linecap: square;
+  stroke-linecap: butt;
   stroke-linejoin: miter;
   stroke-miterlimit: 10;
   vector-effect: non-scaling-stroke;

@@ -10652,7 +10652,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             <div className="blank-shell">
               <div className="blank-top-guide" aria-hidden="true">
                 <svg className="blank-guide-svg" viewBox="0 0 120 84" fill="none" preserveAspectRatio="none">
-                  <path className="blank-guide-line" d="M60 72V12" />
+                  <path className="blank-guide-line" d="M60 84V12" />
                   <path className="blank-guide-arrow" d="M52 20L60 12L68 20" />
                 </svg>
               </div>
