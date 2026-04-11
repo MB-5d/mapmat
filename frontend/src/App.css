@@ -1473,29 +1473,26 @@ body {
 }
 
 .blank-card-illustration {
-  height: 164px;
-  border-radius: 18px;
+  height: 216px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #4f46e5;
-  background:
-    radial-gradient(circle at top left, rgba(99, 102, 241, 0.2), transparent 52%),
-    linear-gradient(160deg, rgba(241, 245, 249, 0.92), rgba(226, 232, 240, 0.72));
+  background: none;
 }
 
 .blank-card-illustration-modify {
   color: #0f766e;
-  background:
-    radial-gradient(circle at top left, rgba(20, 184, 166, 0.16), transparent 52%),
-    linear-gradient(160deg, rgba(240, 253, 250, 0.92), rgba(204, 251, 241, 0.75));
 }
 
 .blank-card-illustration-upload {
   color: #2563eb;
-  background:
-    radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 52%),
-    linear-gradient(160deg, rgba(239, 246, 255, 0.94), rgba(219, 234, 254, 0.78));
+}
+
+.blank-card-illustration svg {
+  width: 216px;
+  height: 216px;
+  display: block;
 }
 
 .blank-card-title-row {
