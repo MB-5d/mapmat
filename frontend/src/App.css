@@ -10672,6 +10672,38 @@ body {
   box-shadow: 0 14px 28px var(--feedback-tab-shadow-hover);
 }
 
+html[data-theme="light"] .feedback-widget-tab {
+  border-color: rgba(184, 213, 235, 0.92);
+  background: linear-gradient(180deg, rgba(234, 247, 255, 0.98) 0%, rgba(225, 241, 251, 0.98) 100%);
+  color: #1f2937;
+  box-shadow: 0 10px 24px rgba(112, 144, 176, 0.18);
+}
+
+html[data-theme="light"] .feedback-widget-tab:hover {
+  background: linear-gradient(180deg, rgba(240, 250, 255, 1) 0%, rgba(230, 244, 253, 1) 100%);
+  box-shadow: 0 14px 28px rgba(112, 144, 176, 0.22);
+}
+
+html[data-theme="light"] .feedback-widget-tab-icon {
+  color: #64748b;
+}
+
+html[data-theme="dark"] .feedback-widget-tab {
+  border-color: rgba(86, 69, 110, 0.9);
+  background: linear-gradient(180deg, rgba(39, 27, 53, 0.98) 0%, rgba(28, 18, 39, 0.98) 100%);
+  color: #e2e0e8;
+  box-shadow: 0 10px 24px rgba(4, 1, 8, 0.34);
+}
+
+html[data-theme="dark"] .feedback-widget-tab:hover {
+  background: linear-gradient(180deg, rgba(49, 34, 67, 1) 0%, rgba(35, 23, 48, 1) 100%);
+  box-shadow: 0 14px 28px rgba(4, 1, 8, 0.42);
+}
+
+html[data-theme="dark"] .feedback-widget-tab-icon {
+  color: #b8add1;
+}
+
 .feedback-drawer-body {
   flex: 1;
   min-height: 0;
