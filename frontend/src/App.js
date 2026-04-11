@@ -10679,11 +10679,16 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onClick={() => openCreateMapFlow()}
                 >
                   <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
-                    <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
-                      <rect x="12" y="12" width="48" height="48" rx="14" fill="currentColor" opacity="0.08" />
-                      <path d="M24 36h24" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                      <path d="M36 24v24" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                      <path d="M24 52h24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.55" />
+                    <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
+                      <rect x="14" y="14" width="68" height="68" rx="24" fill="currentColor" opacity="0.08" />
+                      <path d="M48 24L54 42L72 48L54 54L48 72L42 54L24 48L42 42L48 24Z" fill="currentColor" opacity="0.12" />
+                      <path
+                        d="M48 30L52.5 43.5L66 48L52.5 52.5L48 66L43.5 52.5L30 48L43.5 43.5L48 30Z"
+                        stroke="currentColor"
+                        strokeWidth="3.25"
+                        strokeLinejoin="round"
+                      />
+                      <circle cx="48" cy="48" r="5" fill="currentColor" opacity="0.24" />
                     </svg>
                   </div>
                   <div className="blank-card-title-row">
@@ -10707,10 +10712,26 @@ export default function App({ currentRoute, navigateToRoute }) {
                   }}
                 >
                   <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
-                    <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
-                      <rect x="14" y="18" width="44" height="36" rx="12" fill="currentColor" opacity="0.08" />
-                      <path d="M25 45l8-8 6 6 10-12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                      <circle cx="48" cy="25" r="5" fill="currentColor" opacity="0.2" />
+                    <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
+                      <rect x="14" y="14" width="68" height="68" rx="24" fill="currentColor" opacity="0.08" />
+                      <rect x="25" y="53" width="16" height="16" rx="5.5" fill="currentColor" opacity="0.14" />
+                      <rect x="41" y="38" width="18" height="18" rx="6" fill="currentColor" opacity="0.18" />
+                      <rect x="61" y="24" width="12" height="12" rx="4" fill="currentColor" opacity="0.22" />
+                      <path
+                        d="M33 61L50 45L67 30"
+                        stroke="currentColor"
+                        strokeWidth="3.25"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M58 30H68V40"
+                        stroke="currentColor"
+                        strokeWidth="3.25"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        opacity="0.82"
+                      />
                     </svg>
                   </div>
                   <div className="blank-card-title-row">
@@ -10732,11 +10753,14 @@ export default function App({ currentRoute, navigateToRoute }) {
                     {importLoading ? (
                       <Loader2 size={32} className="spin" />
                     ) : (
-                      <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
-                        <path d="M20 48.5a10 10 0 0 1 2.2-19.76A14.5 14.5 0 0 1 49 24.2 9 9 0 1 1 51 48H20Z" fill="currentColor" opacity="0.08" />
-                        <path d="M36 25v22" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                        <path d="M27 34l9-9 9 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M24 52h24" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                      <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
+                        <rect x="14" y="14" width="68" height="68" rx="24" fill="currentColor" opacity="0.08" />
+                        <path d="M31 66H65" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" />
+                        <path d="M36 57H60" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" opacity="0.72" />
+                        <path d="M41 48H55" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" opacity="0.45" />
+                        <rect x="42" y="50" width="12" height="12" rx="4" fill="currentColor" opacity="0.16" />
+                        <path d="M48 28V50" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" />
+                        <path d="M37 39L48 28L59 39" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     )}
                   </div>
