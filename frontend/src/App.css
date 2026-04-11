@@ -61,6 +61,13 @@
   --modal-card-border: var(--color-border);
   --modal-card-radius: 10px;
   --modal-card-padding: 16px;
+  --feedback-tab-bg: linear-gradient(180deg, rgba(234, 247, 255, 0.98) 0%, rgba(225, 241, 251, 0.98) 100%);
+  --feedback-tab-bg-hover: linear-gradient(180deg, rgba(240, 250, 255, 1) 0%, rgba(230, 244, 253, 1) 100%);
+  --feedback-tab-border: rgba(184, 213, 235, 0.92);
+  --feedback-tab-text: #1f2937;
+  --feedback-tab-icon: #64748b;
+  --feedback-tab-shadow: rgba(112, 144, 176, 0.18);
+  --feedback-tab-shadow-hover: rgba(112, 144, 176, 0.22);
 }
 
 /* Prevent browser pinch-to-zoom on the entire app */
@@ -100,6 +107,13 @@ body {
   --modal-shadow: 0 20px 25px rgba(var(--shadow-rgb), 0.12);
   --shadow-soft: 0 4px 12px rgba(var(--shadow-rgb), 0.12);
   --shadow-strong: 0 12px 24px rgba(var(--shadow-rgb-deep), 0.18);
+  --feedback-tab-bg: linear-gradient(180deg, rgba(39, 27, 53, 0.98) 0%, rgba(28, 18, 39, 0.98) 100%);
+  --feedback-tab-bg-hover: linear-gradient(180deg, rgba(49, 34, 67, 1) 0%, rgba(35, 23, 48, 1) 100%);
+  --feedback-tab-border: rgba(86, 69, 110, 0.9);
+  --feedback-tab-text: #e2e0e8;
+  --feedback-tab-icon: #b8add1;
+  --feedback-tab-shadow: rgba(4, 1, 8, 0.34);
+  --feedback-tab-shadow-hover: rgba(4, 1, 8, 0.42);
 }
 
 .ui-btn {
@@ -10554,13 +10568,13 @@ body {
   min-width: 30px;
   min-height: 120px;
   padding: 12px 5px 12px 7px;
-  border: 1px solid rgba(184, 213, 235, 0.92);
+  border: 1px solid var(--feedback-tab-border);
   border-left: 0;
   border-top-right-radius: 10px;
   border-bottom-right-radius: 10px;
-  background: linear-gradient(180deg, rgba(234, 247, 255, 0.98) 0%, rgba(225, 241, 251, 0.98) 100%);
-  color: #1f2937;
-  box-shadow: 0 10px 24px rgba(112, 144, 176, 0.18);
+  background: var(--feedback-tab-bg);
+  color: var(--feedback-tab-text);
+  box-shadow: 0 10px 24px var(--feedback-tab-shadow);
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
@@ -10580,7 +10594,7 @@ body {
   align-items: center;
   justify-content: center;
   background: transparent;
-  color: #64748b;
+  color: var(--feedback-tab-icon);
   line-height: 0;
 }
 
@@ -10654,8 +10668,8 @@ body {
 }
 
 .feedback-widget-tab:hover {
-  background: linear-gradient(180deg, rgba(240, 250, 255, 1) 0%, rgba(230, 244, 253, 1) 100%);
-  box-shadow: 0 14px 28px rgba(112, 144, 176, 0.22);
+  background: var(--feedback-tab-bg-hover);
+  box-shadow: 0 14px 28px var(--feedback-tab-shadow-hover);
 }
 
 .feedback-drawer-body {
