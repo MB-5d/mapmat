@@ -5597,40 +5597,48 @@ body {
   white-space: nowrap;
 }
 
-.inline-title-button {
+.inline-title-row {
   min-width: 0;
   max-width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
 }
 
-.inline-title-button:focus-visible {
-  outline: none;
-}
-
-.inline-title-affordance {
+.inline-title-edit-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
   opacity: 0;
   transform: translateX(-2px);
   transition: opacity 0.18s ease, transform 0.18s ease;
-  color: var(--color-text-secondary);
+  cursor: pointer;
 }
 
-.project-title-button:hover .inline-title-affordance,
-.project-title-button:focus-visible .inline-title-affordance,
-.project-folder-header:hover .project-title-button .inline-title-affordance,
-.map-title-button:hover .inline-title-affordance,
-.map-title-button:focus-visible .inline-title-affordance,
-.map-item:hover .map-title-button .inline-title-affordance,
-.map-item:focus-within .map-title-button .inline-title-affordance {
+.inline-title-edit-button:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+}
+
+.inline-title-edit-button:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
+  outline: 2px solid rgba(99, 102, 241, 0.45);
+  outline-offset: 2px;
+}
+
+.project-folder-header:hover .project-title-edit-button,
+.project-folder-header:focus-within .project-title-edit-button,
+.map-item:hover .map-title-edit-button,
+.map-item:focus-within .map-title-edit-button {
   opacity: 1;
   transform: translateX(0);
 }
@@ -8817,8 +8825,13 @@ body {
   color: #6b5a80;
 }
 
-[data-theme="dark"] .inline-title-affordance {
+[data-theme="dark"] .inline-title-edit-button {
   color: #9f8fb8;
+}
+
+[data-theme="dark"] .inline-title-edit-button:hover {
+  background: rgba(167, 139, 250, 0.14);
+  color: #d8b4fe;
 }
 
 [data-theme="dark"] .project-add-map-btn {

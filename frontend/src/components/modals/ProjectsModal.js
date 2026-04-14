@@ -121,19 +121,20 @@ const ProjectsModal = ({
                             ) : projectIsVirtual ? (
                               <span className="project-folder-name">{project.name}</span>
                             ) : (
-                              <button
-                                type="button"
-                                className="inline-title-button project-title-button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  onEditProjectNameStart(project.id, project.name);
-                                }}
-                              >
+                              <div className="inline-title-row">
                                 <span className="project-folder-name">{project.name}</span>
-                                <span className="inline-title-affordance" aria-hidden="true">
+                                <button
+                                  type="button"
+                                  className="inline-title-edit-button project-title-edit-button"
+                                  aria-label={`Rename project ${project.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onEditProjectNameStart(project.id, project.name);
+                                  }}
+                                >
                                   <Edit2 size={14} />
-                                </span>
-                              </button>
+                                </button>
+                              </div>
                             )}
                           </div>
 
@@ -199,19 +200,20 @@ const ProjectsModal = ({
                                           ) : mapIsReadOnly ? (
                                             <span className="map-name">{map.name}</span>
                                           ) : (
-                                            <button
-                                              type="button"
-                                              className="inline-title-button map-title-button"
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                onEditMapNameStart(map.id, map.name);
-                                              }}
-                                            >
+                                            <div className="inline-title-row">
                                               <span className="map-name">{map.name}</span>
-                                              <span className="inline-title-affordance" aria-hidden="true">
+                                              <button
+                                                type="button"
+                                                className="inline-title-edit-button map-title-edit-button"
+                                                aria-label={`Rename map ${map.name}`}
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  onEditMapNameStart(map.id, map.name);
+                                                }}
+                                              >
                                                 <Edit2 size={14} />
-                                              </span>
-                                            </button>
+                                              </button>
+                                            </div>
                                           )}
                                         </div>
 

@@ -89,15 +89,32 @@ describe('ProjectsModal', () => {
     expect(container.textContent).toContain('Delete project');
   });
 
-  test('starts inline rename from owned project and map titles and commits rename inputs on blur', () => {
+  test('clicking project and map titles keeps expand and open behavior intact', () => {
     renderModal({ expandedProjects: { 'project-1': true } });
 
-    const projectTitleButton = container.querySelector('.project-title-button');
-    const mapTitleButton = container.querySelector('.map-title-button');
+    const projectTitle = container.querySelector('.project-folder-name');
+    const mapTitle = container.querySelector('.map-name');
 
     act(() => {
-      projectTitleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      mapTitleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      projectTitle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      mapTitle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(props.onToggleProjectExpanded).toHaveBeenCalledWith('project-1');
+    expect(props.onLoadMap).toHaveBeenCalledWith(ownedProject.maps[0]);
+    expect(props.onEditProjectNameStart).not.toHaveBeenCalled();
+    expect(props.onEditMapNameStart).not.toHaveBeenCalled();
+  });
+
+  test('starts inline rename only from the edit buttons and commits rename inputs on blur', () => {
+    renderModal({ expandedProjects: { 'project-1': true } });
+
+    const projectEditButton = container.querySelector('.project-title-edit-button');
+    const mapEditButton = container.querySelector('.map-title-edit-button');
+
+    act(() => {
+      projectEditButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      mapEditButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(props.onEditProjectNameStart).toHaveBeenCalledWith('project-1', 'Alpha Project');
