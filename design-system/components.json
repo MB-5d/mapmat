@@ -1,0 +1,171 @@
+{
+  "meta": {
+    "generatedOn": "2026-04-16",
+    "sources": [
+      "frontend/src/components/ui",
+      "frontend/src/components/drawers/AccountDrawer.js"
+    ],
+    "notes": [
+      "Only shared components that exist in the repo are exported here.",
+      "Page-specific surfaces that still rely on bespoke CSS are intentionally omitted instead of guessed into shared variants."
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Button.js",
+      "props": {
+        "variant": ["primary", "secondary", "danger", "ghost"],
+        "size": ["sm", "md", "lg"],
+        "loading": "boolean",
+        "disabled": "native button prop"
+      },
+      "states": ["default", "disabled", "loading"]
+    },
+    {
+      "name": "IconButton",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/IconButton.js",
+      "props": {
+        "variant": ["default", "primary", "danger", "ghost"],
+        "size": ["sm", "md", "lg"]
+      },
+      "states": ["default", "disabled"]
+    },
+    {
+      "name": "TextInput",
+      "kind": "form",
+      "source": "frontend/src/components/ui/TextInput.js",
+      "props": {
+        "size": ["sm", "md", "lg"],
+        "invalid": "boolean"
+      },
+      "states": ["default", "focus", "invalid", "disabled via native input props"]
+    },
+    {
+      "name": "SelectInput",
+      "kind": "form",
+      "source": "frontend/src/components/ui/SelectInput.js",
+      "props": {
+        "size": ["sm", "md", "lg"],
+        "invalid": "boolean"
+      },
+      "states": ["default", "focus", "invalid", "disabled via native select props"]
+    },
+    {
+      "name": "TextareaInput",
+      "kind": "form",
+      "source": "frontend/src/components/ui/TextareaInput.js",
+      "props": {
+        "size": ["sm", "md", "lg"],
+        "invalid": "boolean"
+      },
+      "states": ["default", "focus", "invalid", "disabled via native textarea props"]
+    },
+    {
+      "name": "Field",
+      "kind": "form-shell",
+      "source": "frontend/src/components/ui/Field.js",
+      "props": {
+        "label": "string",
+        "htmlFor": "string",
+        "required": "boolean",
+        "hint": "string",
+        "error": "string"
+      },
+      "subparts": ["FieldHint", "FieldError"]
+    },
+    {
+      "name": "CheckboxField",
+      "kind": "form",
+      "source": "frontend/src/components/ui/CheckboxField.js",
+      "props": {
+        "label": "string",
+        "description": "string",
+        "disabled": "boolean",
+        "indeterminate": "boolean"
+      },
+      "states": ["default", "disabled", "indeterminate"]
+    },
+    {
+      "name": "ToggleSwitch",
+      "kind": "form",
+      "source": "frontend/src/components/ui/ToggleSwitch.js",
+      "props": {
+        "label": "string",
+        "description": "string",
+        "disabled": "boolean"
+      },
+      "states": ["off", "on", "disabled"]
+    },
+    {
+      "name": "RadioCardGroup",
+      "kind": "selection",
+      "source": "frontend/src/components/ui/RadioCardGroup.js",
+      "props": {
+        "options": "array of { value, label, description?, icon?, disabled? }",
+        "value": "selected option value",
+        "name": "string"
+      },
+      "states": ["default", "selected", "disabled"]
+    },
+    {
+      "name": "SegmentedControl",
+      "kind": "selection",
+      "source": "frontend/src/components/ui/SegmentedControl.js",
+      "props": {
+        "variant": ["pill", "tabs", "grid"],
+        "size": ["sm", "md"],
+        "fullWidth": "boolean",
+        "options": "array of { value, label, icon?, disabled? }",
+        "optionRole": ["tab"]
+      },
+      "states": ["default", "active", "disabled"]
+    },
+    {
+      "name": "OptionCard",
+      "kind": "action-card",
+      "source": "frontend/src/components/ui/OptionCard.js",
+      "props": {
+        "title": "string",
+        "description": "string",
+        "icon": "node",
+        "badge": "node",
+        "disabled": "native button prop"
+      },
+      "states": ["default", "hover", "disabled"]
+    },
+    {
+      "name": "Modal",
+      "kind": "shell",
+      "source": "frontend/src/components/ui/Modal.js",
+      "props": {
+        "size": ["sm", "md", "lg"],
+        "scrollable": "boolean",
+        "hideCloseButton": "boolean",
+        "footer": "node"
+      },
+      "states": ["open", "closed"]
+    },
+    {
+      "name": "AccountDrawer",
+      "kind": "shell",
+      "source": "frontend/src/components/drawers/AccountDrawer.js",
+      "props": {
+        "title": "string",
+        "subtitle": "string",
+        "icon": "node",
+        "actions": "node",
+        "bodyRef": "ref",
+        "onBodyScroll": "function"
+      },
+      "states": ["open", "closing", "closed"]
+    }
+  ],
+  "omittedDueToAmbiguity": [
+    "Admin console pills and tabs remain page-specific CSS classes.",
+    "MinimapNavigator palette values are still component-local rather than shared app primitives.",
+    "Landing page controls remain part of a separate marketing token track and are not exported as shared app primitives."
+  ]
+}

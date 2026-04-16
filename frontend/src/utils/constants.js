@@ -27,6 +27,11 @@ export const SCAN_MAX_PAGES_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_PAGE
 export const TESTER_NOT_READY_MESSAGE = 'Not ready for testing yet';
 
 export const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+export const DEFAULT_CONNECTION_COLORS = {
+  userFlows: '#14b8a6',
+  crossLinks: '#f97316',
+  brokenLinks: '#fca5a5',
+};
 
 // Permission levels for sharing
 export const ACCESS_LEVELS = {

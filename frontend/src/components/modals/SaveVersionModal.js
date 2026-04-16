@@ -55,7 +55,7 @@ const SaveVersionModal = ({
       )}
     >
       <div className="version-meta-row">
-        <div className="version-meta-pill">
+        <div className="ui-inline-badge version-meta-pill">
           <BookmarkPlus size={14} />
           <span>v{versionNumber}</span>
         </div>

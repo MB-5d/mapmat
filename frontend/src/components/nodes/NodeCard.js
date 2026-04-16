@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 import { getHostname } from '../../utils/url';
-import { ANNOTATION_STATUS_LABELS } from '../../utils/constants';
+import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS } from '../../utils/constants';
 
 const NodeCard = ({
   node,
@@ -184,7 +184,9 @@ const NodeCard = ({
   if (isSelected) classNames.push('selected');
 
   // Anchor color based on connection tool type
-  const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
+  const anchorColor = connectionTool === 'userflow'
+    ? DEFAULT_CONNECTION_COLORS.userFlows
+    : DEFAULT_CONNECTION_COLORS.crossLinks;
   const showStackToggle = stackInfo?.collapsed || stackInfo?.showCollapse;
   const stackToggleLabel = stackInfo?.collapsed
     ? `+${Math.max(0, (stackInfo.totalCount || 0) - 1)} more`

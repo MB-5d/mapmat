@@ -1,6 +1,8 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Edit2, Palette } from 'lucide-react';
 
+import { DEFAULT_CONNECTION_COLORS } from '../../utils/constants';
+
 const ColorKey = ({
   showColorKey,
   onToggle,
@@ -73,7 +75,7 @@ const ColorKey = ({
               >
                 <span
                   className="legend-line legend-line-solid"
-                  style={{ '--legend-color': connectionColors?.userFlows || '#14b8a6' }}
+                  style={{ '--legend-color': connectionColors?.userFlows || DEFAULT_CONNECTION_COLORS.userFlows }}
                 />
                 <span>User Flows</span>
                 {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
@@ -95,7 +97,7 @@ const ColorKey = ({
               >
                 <span
                   className="legend-line legend-line-crosslinks"
-                  style={{ '--legend-color': connectionColors?.crossLinks || '#f97316' }}
+                  style={{ '--legend-color': connectionColors?.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks }}
                 />
                 <span>Crosslinks</span>
                 {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
@@ -117,7 +119,7 @@ const ColorKey = ({
               >
                 <span
                   className="legend-line legend-line-broken"
-                  style={{ '--legend-color': connectionColors?.brokenLinks || '#fca5a5' }}
+                  style={{ '--legend-color': connectionColors?.brokenLinks || DEFAULT_CONNECTION_COLORS.brokenLinks }}
                 />
                 <span>Broken Links</span>
                 {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}

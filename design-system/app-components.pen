@@ -1,0 +1,4440 @@
+{
+  "version": "2.11",
+  "children": [
+    {
+      "type": "frame",
+      "id": "app-components-canvas",
+      "name": "App Components",
+      "layout": "vertical",
+      "gap": 24,
+      "width": 1680,
+      "fill": "$ui-canvas-scrim",
+      "cornerRadius": 20,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "$ui-color-border"
+      },
+      "padding": 32,
+      "children": [
+        {
+          "type": "frame",
+          "name": "Overview",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-75",
+              "fill": "$ui-color-text",
+              "content": "Overview",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-76",
+              "fill": "$ui-color-muted",
+              "content": "Composed current app examples built from the shared visual patterns.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "name": "Meta",
+              "layout": "horizontal",
+              "alignItems": "center",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "What this file is",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 340,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-65",
+                      "fill": "$ui-color-text",
+                      "content": "What this file is",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-66",
+                      "fill": "$ui-color-muted",
+                      "content": "Use this when you want current composed app surfaces, not just the base library.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Shared source",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 360,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-68",
+                      "fill": "$ui-color-text",
+                      "content": "Shared source",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-69",
+                      "fill": "$ui-color-muted",
+                      "content": "All examples reflect current code tokens and the existing shared component APIs.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Still separate",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 320,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-71",
+                      "fill": "$ui-color-text",
+                      "content": "Still separate",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-72",
+                      "fill": "$ui-color-muted",
+                      "content": "The library stays in design.lib.pen. This file is the consumer layer.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Topbar, Search, And Menu",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-79",
+              "fill": "$ui-color-text",
+              "content": "Topbar, Search, And Menu",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-80",
+              "fill": "$ui-color-muted",
+              "content": "Current topbar structure, centered search, and account menu patterns.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "topbar",
+              "name": "Topbar",
+              "layout": "horizontal",
+              "alignItems": "center",
+              "justifyContent": "space-between",
+              "gap": 12,
+              "width": 1280,
+              "height": 60,
+              "fill": "$ui-color-surface",
+              "cornerRadius": 10,
+              "stroke": {
+                "align": "inside",
+                "thickness": 1,
+                "fill": "$ui-color-border"
+              },
+              "padding": [
+                0,
+                20
+              ],
+              "reusable": true,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Brand",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "gap": 12,
+                  "width": 180,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-32",
+                      "fill": "#2563eb",
+                      "content": "MapMat",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 32,
+                      "fontWeight": "800"
+                    }
+                  ]
+                },
+                {
+                  "type": "ref",
+                  "id": "topbar-search-34",
+                  "ref": "search-bar"
+                },
+                {
+                  "type": "frame",
+                  "name": "Right",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "justifyContent": "flex-end",
+                  "gap": 12,
+                  "width": 320,
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "topbar-badge-35",
+                      "ref": "inline-badge",
+                      "descendants": {
+                        "inline-badge-label": {
+                          "content": "Shared"
+                        },
+                        "inline-badge-icon": {
+                          "iconFontName": "users"
+                        }
+                      }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "user-button",
+                      "name": "UserButton",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "gap": 6,
+                      "width": 110,
+                      "height": 32,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 6,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "padding": [
+                        6,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "user-btn-avatar",
+                          "name": "Avatar",
+                          "width": 18,
+                          "height": 18,
+                          "fill": "$ui-color-primary",
+                          "cornerRadius": 999
+                        },
+                        {
+                          "type": "text",
+                          "id": "user-btn-label",
+                          "fill": "$ui-color-muted",
+                          "content": "Matthew",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "icon_font",
+                          "id": "user-btn-icon",
+                          "width": 14,
+                          "height": 14,
+                          "iconFontName": "chevron-down",
+                          "iconFontFamily": "lucide",
+                          "fill": "$ui-color-primary"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "name": "Menu row",
+              "layout": "horizontal",
+              "alignItems": "flex-start",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "search-bar",
+                  "name": "SearchBar",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "gap": 10,
+                  "width": 496,
+                  "height": 40,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1.5,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": [
+                    4,
+                    10
+                  ],
+                  "reusable": true,
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "search-icon",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "search",
+                      "iconFontFamily": "lucide",
+                      "fill": "$ui-color-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "search-placeholder",
+                      "fill": "$ui-color-input-placeholder",
+                      "content": "Search maps",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "user-button",
+                  "name": "UserButton",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "gap": 6,
+                  "width": 110,
+                  "height": 32,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": [
+                    6,
+                    10
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "user-btn-avatar",
+                      "name": "Avatar",
+                      "width": 18,
+                      "height": 18,
+                      "fill": "$ui-color-primary",
+                      "cornerRadius": 999
+                    },
+                    {
+                      "type": "text",
+                      "id": "user-btn-label",
+                      "fill": "$ui-color-muted",
+                      "content": "Matthew",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "user-btn-icon",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "chevron-down",
+                      "iconFontFamily": "lucide",
+                      "fill": "$ui-color-primary"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "account-menu",
+                  "name": "AccountMenu",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 204,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 10,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 8,
+                  "reusable": true,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Item",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 188,
+                      "cornerRadius": 8,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "icon-8",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "bell",
+                          "iconFontFamily": "lucide",
+                          "fill": "$ui-color-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-9",
+                          "fill": "$ui-color-muted",
+                          "content": "Notifications",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "badge-11",
+                          "name": "Badge",
+                          "width": 18,
+                          "height": 18,
+                          "fill": "$ui-color-danger",
+                          "cornerRadius": 999,
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "text-10",
+                              "fill": "#ffffff",
+                              "content": "2",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 10,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Item",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 188,
+                      "cornerRadius": 8,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "icon-13",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "settings-2",
+                          "iconFontFamily": "lucide",
+                          "fill": "$ui-color-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-14",
+                          "fill": "$ui-color-muted",
+                          "content": "Settings",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "badge-16",
+                          "name": "Badge",
+                          "width": 22,
+                          "height": 18,
+                          "fill": "$ui-color-accent-soft",
+                          "cornerRadius": 999,
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "text-15",
+                              "fill": "$ui-color-primary-hover",
+                              "content": "New",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 10,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "divider-18",
+                      "name": "Divider",
+                      "width": 188,
+                      "height": 1,
+                      "fill": "$ui-color-border"
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Item",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "gap": 12,
+                      "width": 188,
+                      "cornerRadius": 8,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "icon-19",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "log-out",
+                          "iconFontFamily": "lucide",
+                          "fill": "$ui-color-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-20",
+                          "fill": "$ui-color-muted",
+                          "content": "Log out",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "node-menu",
+                  "name": "NodeMenu",
+                  "layout": "vertical",
+                  "gap": 4,
+                  "width": 206,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 6,
+                  "reusable": true,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-22",
+                      "fill": "$ui-color-input-placeholder",
+                      "content": "NODE STATUS",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Item",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 190,
+                      "fill": "$ui-color-accent-soft",
+                      "cornerRadius": 6,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-23",
+                          "fill": "$ui-color-primary-hover",
+                          "content": "New",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-24",
+                          "fill": "$ui-color-muted",
+                          "content": "⌘1",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Item",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 190,
+                      "cornerRadius": 6,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-26",
+                          "fill": "$ui-color-text",
+                          "content": "Needs move",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-27",
+                          "fill": "$ui-color-muted",
+                          "content": "⌘2",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "divider-29",
+                      "name": "Divider",
+                      "width": 190,
+                      "height": 1,
+                      "fill": "$ui-color-border"
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Item",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "gap": 12,
+                      "width": 190,
+                      "cornerRadius": 6,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-30",
+                          "fill": "$ui-color-danger-hover",
+                          "content": "Clear status",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Create Map",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-95",
+              "fill": "$ui-color-text",
+              "content": "Create Map",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-96",
+              "fill": "$ui-color-muted",
+              "content": "Current modal pattern using shared inputs, option cards, and footer actions.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "name": "Create map modal",
+              "layout": "vertical",
+              "gap": 16,
+              "width": 568,
+              "fill": "$modal-bg",
+              "cornerRadius": 16,
+              "stroke": {
+                "align": "inside",
+                "thickness": 1,
+                "fill": "$ui-color-border"
+              },
+              "padding": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Header",
+                  "layout": "horizontal",
+                  "alignItems": "flex-start",
+                  "justifyContent": "space-between",
+                  "gap": 12,
+                  "width": 520,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Copy",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-82",
+                          "fill": "$ui-color-text",
+                          "content": "Create map",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 18,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-83",
+                          "fill": "$ui-color-muted",
+                          "content": "Choose how you want to start",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "ref",
+                      "id": "cm-close-85",
+                      "ref": "icon-button",
+                      "descendants": {
+                        "icon-button-icon": {
+                          "iconFontName": "x"
+                        }
+                      },
+                      "width": 32,
+                      "height": 32
+                    }
+                  ]
+                },
+                {
+                  "type": "ref",
+                  "id": "cm-input-87",
+                  "ref": "text-input",
+                  "width": 520,
+                  "descendants": {
+                    "text-input-placeholder": {
+                      "content": "Untitled map",
+                      "fill": "$ui-color-text"
+                    }
+                  }
+                },
+                {
+                  "type": "ref",
+                  "id": "cm-option-1-88",
+                  "ref": "option-card",
+                  "width": 520,
+                  "descendants": {
+                    "option-card-title": {
+                      "content": "Create blank map"
+                    },
+                    "option-card-description": {
+                      "content": "Start with an empty canvas and add structure manually"
+                    },
+                    "inline-badge-label": {
+                      "content": "Default"
+                    },
+                    "inline-badge-icon": {
+                      "iconFontName": "sparkles"
+                    }
+                  }
+                },
+                {
+                  "type": "ref",
+                  "id": "cm-option-2-89",
+                  "ref": "option-card",
+                  "width": 520,
+                  "fill": "$ui-color-surface",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "descendants": {
+                    "option-card-title": {
+                      "content": "Import sitemap"
+                    },
+                    "option-card-description": {
+                      "content": "Pull structure from an existing site map or crawl"
+                    },
+                    "option-card-icon": {
+                      "iconFontName": "arrow-up-right",
+                      "fill": "$ui-color-primary"
+                    },
+                    "inline-badge-label": {
+                      "content": "Popular"
+                    },
+                    "inline-badge-icon": {
+                      "iconFontName": "sparkles"
+                    }
+                  }
+                },
+                {
+                  "type": "ref",
+                  "id": "cm-option-3-90",
+                  "ref": "option-card",
+                  "width": 520,
+                  "fill": "$ui-color-surface",
+                  "descendants": {
+                    "option-card-title": {
+                      "content": "Import Miro board",
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "option-card-description": {
+                      "content": "Coming soon",
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "option-card-icon": {
+                      "iconFontName": "upload",
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "inline-badge-label": {
+                      "content": "Soon"
+                    },
+                    "inline-badge-icon": {
+                      "iconFontName": "clock-3"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "name": "Footer",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "justifyContent": "flex-end",
+                  "gap": 12,
+                  "width": 520,
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "cm-cancel-91",
+                      "ref": "button",
+                      "width": 100,
+                      "fill": "$ui-color-surface",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "descendants": {
+                        "button-label": {
+                          "content": "Cancel",
+                          "fill": "$ui-color-muted"
+                        },
+                        "button-spinner": {
+                          "fill": "$ui-color-muted"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "cm-submit-92",
+                      "ref": "button",
+                      "width": 116,
+                      "descendants": {
+                        "button-label": {
+                          "content": "Create map"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Drawers And Share",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-123",
+              "fill": "$ui-color-text",
+              "content": "Drawers And Share",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-124",
+              "fill": "$ui-color-muted",
+              "content": "Current drawer cards, segmented tabs, search, and radio-card sharing flow.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "name": "Drawer share row",
+              "layout": "horizontal",
+              "alignItems": "flex-start",
+              "gap": 20,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Project settings drawer",
+                  "layout": "vertical",
+                  "gap": 16,
+                  "width": 428,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Header",
+                      "layout": "horizontal",
+                      "alignItems": "flex-start",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 380,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "name": "Title",
+                          "layout": "horizontal",
+                          "alignItems": "center",
+                          "gap": 12,
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "icon-98",
+                              "width": 16,
+                              "height": 16,
+                              "iconFontName": "settings-2",
+                              "iconFontFamily": "lucide",
+                              "fill": "$ui-color-primary"
+                            },
+                            {
+                              "type": "frame",
+                              "name": "Copy",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "text-99",
+                                  "fill": "$ui-color-text",
+                                  "content": "Project settings",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 18,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "text-100",
+                                  "fill": "$ui-color-muted",
+                                  "content": "Manage access, sharing, and defaults",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "ref",
+                          "id": "ps-close-103",
+                          "ref": "icon-button",
+                          "descendants": {
+                            "icon-button-icon": {
+                              "iconFontName": "x"
+                            }
+                          },
+                          "width": 32,
+                          "height": 32
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Workspace access",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "width": 380,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 12,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-105",
+                          "fill": "$ui-color-text",
+                          "content": "Workspace access",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-106",
+                          "fill": "$ui-color-muted",
+                          "content": "Editors can update content and structure",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Default theme",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "width": 380,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 12,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-108",
+                          "fill": "$ui-color-text",
+                          "content": "Default theme",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-109",
+                          "fill": "$ui-color-muted",
+                          "content": "Use shared UI tokens for all canvases",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Recent activity",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "width": 380,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 12,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-111",
+                          "fill": "$ui-color-text",
+                          "content": "Recent activity",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-112",
+                          "fill": "$ui-color-muted",
+                          "content": "Jane updated map permissions two minutes ago",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Share access",
+                  "layout": "vertical",
+                  "alignItems": "flex-start",
+                  "gap": 16,
+                  "width": 468,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-115",
+                      "fill": "$ui-color-text",
+                      "content": "Share Access",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-116",
+                      "fill": "$ui-color-muted",
+                      "content": "Composed from the current shared form and selection patterns.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "segmented-control",
+                      "name": "SegmentedControl",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "gap": 6,
+                      "width": 278,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "padding": 4,
+                      "reusable": true,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "seg-active",
+                          "name": "Active",
+                          "width": 86,
+                          "height": 32,
+                          "fill": "$ui-color-surface",
+                          "cornerRadius": 999,
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          },
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "seg-active-label",
+                              "fill": "$ui-color-text",
+                              "content": "General",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "seg-idle-1",
+                          "name": "Idle",
+                          "width": 86,
+                          "height": 32,
+                          "fill": "rgba(255,255,255,0)",
+                          "cornerRadius": 999,
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "seg-idle-1-label",
+                              "fill": "$ui-color-muted",
+                              "content": "Sharing",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "seg-idle-2",
+                          "name": "Idle",
+                          "width": 86,
+                          "height": 32,
+                          "fill": "rgba(255,255,255,0)",
+                          "cornerRadius": 999,
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "seg-idle-2-label",
+                              "fill": "$ui-color-muted",
+                              "content": "History",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "ref",
+                      "id": "share-search-117",
+                      "ref": "text-input",
+                      "width": 420,
+                      "descendants": {
+                        "text-input-placeholder": {
+                          "content": "Search people or emails"
+                        }
+                      }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "radio-card-group",
+                      "name": "RadioCardGroup",
+                      "layout": "vertical",
+                      "gap": 8,
+                      "width": 290,
+                      "reusable": true,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "radio-selected-option",
+                          "name": "Selected",
+                          "layout": "horizontal",
+                          "alignItems": "flex-start",
+                          "gap": 10,
+                          "width": 290,
+                          "fill": "$ui-color-surface",
+                          "cornerRadius": 8,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-primary"
+                          },
+                          "padding": [
+                            10,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "radio-selected-ring",
+                              "name": "Ring",
+                              "width": 16,
+                              "height": 16,
+                              "fill": "$ui-color-surface",
+                              "stroke": {
+                                "align": "inside",
+                                "thickness": 2,
+                                "fill": "$ui-color-primary"
+                              },
+                              "cornerRadius": 999,
+                              "layout": "horizontal",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "radio-selected-dot",
+                                  "name": "Dot",
+                                  "width": 6,
+                                  "height": 6,
+                                  "fill": "$ui-color-primary",
+                                  "cornerRadius": 999
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "name": "Copy",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "width": 220,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "radio-selected-label",
+                                  "fill": "$ui-color-text",
+                                  "content": "Invite by email",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 13,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "radio-selected-description",
+                                  "fill": "$ui-color-muted",
+                                  "content": "Best for specific collaborators",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "radio-default-option",
+                          "name": "Default",
+                          "layout": "horizontal",
+                          "alignItems": "flex-start",
+                          "gap": 10,
+                          "width": 290,
+                          "fill": "$ui-color-surface",
+                          "cornerRadius": 8,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          },
+                          "padding": [
+                            10,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "radio-default-ring",
+                              "name": "Ring",
+                              "width": 16,
+                              "height": 16,
+                              "fill": "$ui-color-surface",
+                              "stroke": {
+                                "align": "inside",
+                                "thickness": 1,
+                                "fill": "$ui-color-border"
+                              },
+                              "cornerRadius": 999
+                            },
+                            {
+                              "type": "frame",
+                              "name": "Copy",
+                              "layout": "vertical",
+                              "gap": 2,
+                              "width": 220,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "radio-default-label",
+                                  "fill": "$ui-color-text",
+                                  "content": "Share link",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 13,
+                                  "fontWeight": "500"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "radio-default-description",
+                                  "fill": "$ui-color-muted",
+                                  "content": "Anyone with the link can request access",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 11,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "name": "Footer",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "justifyContent": "flex-end",
+                      "gap": 12,
+                      "width": 420,
+                      "children": [
+                        {
+                          "type": "ref",
+                          "id": "share-cancel-118",
+                          "ref": "button",
+                          "width": 92,
+                          "fill": "$ui-color-surface",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          },
+                          "descendants": {
+                            "button-label": {
+                              "content": "Cancel",
+                              "fill": "$ui-color-muted"
+                            },
+                            "button-spinner": {
+                              "fill": "$ui-color-muted"
+                            }
+                          }
+                        },
+                        {
+                          "type": "ref",
+                          "id": "share-submit-119",
+                          "ref": "button",
+                          "width": 110,
+                          "descendants": {
+                            "button-label": {
+                              "content": "Send invite"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Form States",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-144",
+              "fill": "$ui-color-text",
+              "content": "Form States",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-145",
+              "fill": "$ui-color-muted",
+              "content": "Focused, default, invalid, and disabled samples from the current shared inputs and controls.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "name": "Form row",
+              "layout": "horizontal",
+              "alignItems": "flex-start",
+              "gap": 24,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Left",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "width": 320,
+                  "children": [
+                    {
+                      "type": "ref",
+                      "id": "fs-search-126",
+                      "ref": "text-input",
+                      "width": 320
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-default-127",
+                      "ref": "text-input",
+                      "width": 320,
+                      "descendants": {
+                        "text-input-placeholder": {
+                          "content": "Untitled map",
+                          "fill": "$ui-color-text"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-invalid-128",
+                      "ref": "text-input",
+                      "width": 320,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-danger"
+                      },
+                      "descendants": {
+                        "text-input-placeholder": {
+                          "content": "Name is required",
+                          "fill": "$ui-color-danger"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-select-129",
+                      "ref": "select-input",
+                      "width": 320
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-select-default-130",
+                      "ref": "select-input",
+                      "width": 320,
+                      "descendants": {
+                        "select-input-placeholder": {
+                          "content": "Default workspace",
+                          "fill": "$ui-color-text"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-select-invalid-131",
+                      "ref": "select-input",
+                      "width": 320,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-danger"
+                      },
+                      "descendants": {
+                        "select-input-placeholder": {
+                          "content": "Select a workspace",
+                          "fill": "$ui-color-danger"
+                        },
+                        "select-input-icon": {
+                          "fill": "$ui-color-danger"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-textarea-default-132",
+                      "ref": "textarea-input",
+                      "width": 320
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-textarea-focus-133",
+                      "ref": "textarea-input",
+                      "width": 320,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-primary"
+                      },
+                      "descendants": {
+                        "textarea-input-placeholder": {
+                          "content": "Outline key flows\nCapture structure before review",
+                          "fill": "$ui-color-text"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-textarea-invalid-134",
+                      "ref": "textarea-input",
+                      "width": 320,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-danger"
+                      },
+                      "descendants": {
+                        "textarea-input-placeholder": {
+                          "content": "Notes are too long\nTrim the description to continue",
+                          "fill": "$ui-color-danger"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Right",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "width": 290,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "checkbox-field",
+                      "name": "CheckboxField",
+                      "layout": "horizontal",
+                      "alignItems": "flex-start",
+                      "gap": 10,
+                      "width": 260,
+                      "reusable": true,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "checkbox-box",
+                          "name": "Box",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "$ui-color-surface",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          },
+                          "cornerRadius": 4
+                        },
+                        {
+                          "type": "frame",
+                          "name": "Copy",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "width": 220,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "checkbox-label",
+                              "fill": "$ui-color-text",
+                              "content": "Email me updates",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "checkbox-description",
+                              "fill": "$ui-color-muted",
+                              "content": "Get notified about map changes",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-checkbox-disabled-136",
+                      "ref": "checkbox-field",
+                      "descendants": {
+                        "checkbox-label": {
+                          "content": "Shared externally",
+                          "fill": "$ui-color-input-placeholder"
+                        },
+                        "checkbox-description": {
+                          "content": "Unavailable on this plan"
+                        },
+                        "checkbox-box": {
+                          "fill": "$ui-color-surface-muted"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-toggle-on-137",
+                      "ref": "toggle-switch",
+                      "descendants": {
+                        "toggle-track": {
+                          "fill": "$ui-color-primary"
+                        }
+                      }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "toggle-switch",
+                      "name": "ToggleSwitch",
+                      "layout": "horizontal",
+                      "alignItems": "center",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 240,
+                      "reusable": true,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "name": "Copy",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "width": 180,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "toggle-label",
+                              "fill": "$ui-color-text",
+                              "content": "Auto-save",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "toggle-description",
+                              "fill": "$ui-color-muted",
+                              "content": "Changes save every few seconds",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "toggle-track",
+                          "name": "Track",
+                          "width": 38,
+                          "height": 22,
+                          "fill": "$ui-color-border",
+                          "cornerRadius": 999,
+                          "layout": "horizontal",
+                          "justifyContent": "flex-start",
+                          "alignItems": "center",
+                          "padding": 2,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "toggle-thumb",
+                              "name": "Thumb",
+                              "width": 18,
+                              "height": 18,
+                              "fill": "#ffffff",
+                              "cornerRadius": 999
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-toggle-disabled-138",
+                      "ref": "toggle-switch",
+                      "descendants": {
+                        "toggle-label": {
+                          "content": "Locked by permissions",
+                          "fill": "$ui-color-input-placeholder"
+                        },
+                        "toggle-description": {
+                          "content": "Only owners can change this"
+                        },
+                        "toggle-track": {
+                          "fill": "$ui-color-surface-muted"
+                        },
+                        "toggle-thumb": {
+                          "fill": "$ui-color-border"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-badge-139",
+                      "ref": "inline-badge",
+                      "descendants": {
+                        "inline-badge-label": {
+                          "content": "Beta"
+                        },
+                        "inline-badge-icon": {
+                          "iconFontName": "sparkles"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-status-140",
+                      "ref": "status-badge",
+                      "fill": "$ui-status-success-bg",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-status-success-border"
+                      },
+                      "descendants": {
+                        "status-badge-label": {
+                          "content": "Moved"
+                        },
+                        "status-badge-dot": {
+                          "fill": "$ui-status-success-icon"
+                        }
+                      }
+                    },
+                    {
+                      "type": "ref",
+                      "id": "fs-node-badge-141",
+                      "ref": "node-badge",
+                      "descendants": {
+                        "node-badge-label": {
+                          "content": "Archived"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Nodes",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-160",
+              "fill": "$ui-color-text",
+              "content": "Nodes",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-161",
+              "fill": "$ui-color-muted",
+              "content": "Current node card patterns, status chips, comments, and tag combinations.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "name": "Node row",
+              "layout": "horizontal",
+              "alignItems": "flex-start",
+              "gap": 20,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "node-card",
+                  "name": "NodeCard",
+                  "layout": "vertical",
+                  "gap": 12,
+                  "width": 288,
+                  "height": 200,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "reusable": true,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "name": "Header",
+                      "layout": "horizontal",
+                      "alignItems": "flex-start",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 256,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "node-card-title",
+                          "fill": "$ui-color-text",
+                          "content": "Pricing Page",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "ref",
+                          "id": "comment-badge-ref-37",
+                          "ref": "inline-badge",
+                          "descendants": {
+                            "inline-badge-label": {
+                              "content": "3 comments"
+                            },
+                            "inline-badge-icon": {
+                              "iconFontName": "message-circle"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "node-card-body",
+                      "fill": "$ui-color-muted",
+                      "content": "Primary conversion surface for enterprise plans and self-serve onboarding.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spacer-39",
+                      "name": "Spacer",
+                      "width": 1,
+                      "height": 48,
+                      "fill": "rgba(255,255,255,0)"
+                    },
+                    {
+                      "type": "frame",
+                      "name": "StatusRow",
+                      "layout": "horizontal",
+                      "alignItems": "flex-end",
+                      "justifyContent": "space-between",
+                      "gap": 12,
+                      "width": 256,
+                      "children": [
+                        {
+                          "type": "ref",
+                          "id": "node-status-ref-40",
+                          "ref": "status-badge",
+                          "descendants": {
+                            "status-badge-label": {
+                              "content": "Needs move"
+                            },
+                            "status-badge-dot": {
+                              "fill": "$ui-status-warning-icon"
+                            }
+                          },
+                          "fill": "$ui-status-warning-bg",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-status-warning-border"
+                          }
+                        },
+                        {
+                          "type": "frame",
+                          "name": "Badges",
+                          "layout": "horizontal",
+                          "alignItems": "center",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "ref",
+                              "id": "node-badge-ref-1-41",
+                              "ref": "node-badge",
+                              "descendants": {
+                                "node-badge-label": {
+                                  "content": "Marketing"
+                                }
+                              }
+                            },
+                            {
+                              "type": "ref",
+                              "id": "node-badge-ref-2-42",
+                              "ref": "node-badge",
+                              "descendants": {
+                                "node-badge-label": {
+                                  "content": "L2"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "ref",
+                  "id": "node-card-alt-147",
+                  "ref": "node-card",
+                  "descendants": {
+                    "node-card-title": {
+                      "content": "Enterprise Docs"
+                    },
+                    "node-card-body": {
+                      "content": "Shared reference content for support, sales, and migration flows."
+                    },
+                    "status-badge-label": {
+                      "content": "New"
+                    },
+                    "status-badge-dot": {
+                      "fill": "$ui-status-info-icon"
+                    },
+                    "node-badge-label": {
+                      "content": "Docs"
+                    }
+                  },
+                  "fill": "$ui-color-surface-muted"
+                },
+                {
+                  "type": "ref",
+                  "id": "node-card-danger-148",
+                  "ref": "node-card",
+                  "descendants": {
+                    "node-card-title": {
+                      "content": "Deprecated Billing Page"
+                    },
+                    "node-card-body": {
+                      "content": "Pending removal after redirect plan is approved."
+                    },
+                    "status-badge-label": {
+                      "content": "To delete"
+                    },
+                    "status-badge-dot": {
+                      "fill": "$ui-status-danger-icon"
+                    },
+                    "node-badge-label": {
+                      "content": "Billing"
+                    }
+                  },
+                  "fill": "$ui-color-surface"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "name": "Node notes",
+              "layout": "horizontal",
+              "alignItems": "center",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Node size",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 260,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-150",
+                      "fill": "$ui-color-text",
+                      "content": "Node size",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-151",
+                      "fill": "$ui-color-muted",
+                      "content": "288px wide, 200px collapsed height, with thumbnail state extending taller.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Status chips",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 320,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-153",
+                      "fill": "$ui-color-text",
+                      "content": "Status chips",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-154",
+                      "fill": "$ui-color-muted",
+                      "content": "New, needs move, moved, to delete, deleted, and note styles exist in CSS today.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Menus",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 320,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-156",
+                      "fill": "$ui-color-text",
+                      "content": "Menus",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-157",
+                      "fill": "$ui-color-muted",
+                      "content": "Context menus exist for node status and connection actions; this file shows the node menu surface.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Selection Patterns",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-171",
+              "fill": "$ui-color-text",
+              "content": "Selection Patterns",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-172",
+              "fill": "$ui-color-muted",
+              "content": "Current segmented, grid-style choices, and option-card actions used across modals and drawers.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "name": "Selection row",
+              "layout": "horizontal",
+              "alignItems": "flex-start",
+              "gap": 20,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "segmented-control",
+                  "name": "SegmentedControl",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "gap": 6,
+                  "width": 278,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 4,
+                  "reusable": true,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "seg-active",
+                      "name": "Active",
+                      "width": 86,
+                      "height": 32,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 999,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "seg-active-label",
+                          "fill": "$ui-color-text",
+                          "content": "General",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "seg-idle-1",
+                      "name": "Idle",
+                      "width": 86,
+                      "height": 32,
+                      "fill": "rgba(255,255,255,0)",
+                      "cornerRadius": 999,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "seg-idle-1-label",
+                          "fill": "$ui-color-muted",
+                          "content": "Sharing",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "seg-idle-2",
+                      "name": "Idle",
+                      "width": 86,
+                      "height": 32,
+                      "fill": "rgba(255,255,255,0)",
+                      "cornerRadius": 999,
+                      "layout": "horizontal",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "seg-idle-2-label",
+                          "fill": "$ui-color-muted",
+                          "content": "History",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Account tabs",
+                  "layout": "horizontal",
+                  "alignItems": "center",
+                  "gap": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-163",
+                      "fill": "$ui-color-primary",
+                      "content": "Account",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-164",
+                      "fill": "$ui-color-muted",
+                      "content": "Security",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-165",
+                      "fill": "$ui-color-muted",
+                      "content": "Billing",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "name": "Cards row",
+              "layout": "horizontal",
+              "alignItems": "flex-start",
+              "gap": 20,
+              "children": [
+                {
+                  "type": "ref",
+                  "id": "sel-blank-168",
+                  "ref": "option-card",
+                  "width": 420,
+                  "descendants": {
+                    "option-card-title": {
+                      "content": "Create blank map"
+                    },
+                    "option-card-description": {
+                      "content": "Start with an empty canvas and add structure manually"
+                    },
+                    "inline-badge-label": {
+                      "content": "Default"
+                    }
+                  }
+                },
+                {
+                  "type": "ref",
+                  "id": "sel-import-169",
+                  "ref": "option-card",
+                  "width": 420,
+                  "fill": "$ui-color-surface",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "descendants": {
+                    "option-card-title": {
+                      "content": "Import sitemap"
+                    },
+                    "option-card-description": {
+                      "content": "Pull structure from an existing site map or crawl"
+                    },
+                    "option-card-icon": {
+                      "iconFontName": "arrow-up-right",
+                      "fill": "$ui-color-primary"
+                    },
+                    "inline-badge-label": {
+                      "content": "Popular"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "radio-card-group",
+                  "name": "RadioCardGroup",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 290,
+                  "reusable": true,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "radio-selected-option",
+                      "name": "Selected",
+                      "layout": "horizontal",
+                      "alignItems": "flex-start",
+                      "gap": 10,
+                      "width": 290,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-primary"
+                      },
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "radio-selected-ring",
+                          "name": "Ring",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "$ui-color-surface",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 2,
+                            "fill": "$ui-color-primary"
+                          },
+                          "cornerRadius": 999,
+                          "layout": "horizontal",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "radio-selected-dot",
+                              "name": "Dot",
+                              "width": 6,
+                              "height": 6,
+                              "fill": "$ui-color-primary",
+                              "cornerRadius": 999
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "name": "Copy",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "width": 220,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "radio-selected-label",
+                              "fill": "$ui-color-text",
+                              "content": "Invite by email",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "radio-selected-description",
+                              "fill": "$ui-color-muted",
+                              "content": "Best for specific collaborators",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "radio-default-option",
+                      "name": "Default",
+                      "layout": "horizontal",
+                      "alignItems": "flex-start",
+                      "gap": 10,
+                      "width": 290,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "radio-default-ring",
+                          "name": "Ring",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "$ui-color-surface",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          },
+                          "cornerRadius": 999
+                        },
+                        {
+                          "type": "frame",
+                          "name": "Copy",
+                          "layout": "vertical",
+                          "gap": 2,
+                          "width": 220,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "radio-default-label",
+                              "fill": "$ui-color-text",
+                              "content": "Share link",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "radio-default-description",
+                              "fill": "$ui-color-muted",
+                              "content": "Anyone with the link can request access",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "name": "Color And Type Boards",
+          "layout": "vertical",
+          "gap": 16,
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-218",
+              "fill": "$ui-color-text",
+              "content": "Color And Type Boards",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-219",
+              "fill": "$ui-color-muted",
+              "content": "Reference-only boards for the current app palette and typography steps.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "name": "Color scales",
+              "layout": "horizontal",
+              "alignItems": "center",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Primary",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "primary-tile-174",
+                      "name": "Primary tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-primary",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-175",
+                      "fill": "$ui-color-text",
+                      "content": "Primary",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-176",
+                      "fill": "$ui-color-muted",
+                      "content": "#6366f1",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Primary hover",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "primary-hover-tile-178",
+                      "name": "Primary hover tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-primary-hover",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-179",
+                      "fill": "$ui-color-text",
+                      "content": "Primary hover",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-180",
+                      "fill": "$ui-color-muted",
+                      "content": "#4f46e5",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Surface",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "surface-tile-182",
+                      "name": "Surface tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-surface",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-183",
+                      "fill": "$ui-color-text",
+                      "content": "Surface",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-184",
+                      "fill": "$ui-color-muted",
+                      "content": "theme-aware",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Muted surface",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "muted-surface-tile-186",
+                      "name": "Muted surface tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-surface-muted",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-187",
+                      "fill": "$ui-color-text",
+                      "content": "Muted surface",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-188",
+                      "fill": "$ui-color-muted",
+                      "content": "theme-aware",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Danger",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "danger-tile-190",
+                      "name": "Danger tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-danger",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-191",
+                      "fill": "$ui-color-text",
+                      "content": "Danger",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-192",
+                      "fill": "$ui-color-muted",
+                      "content": "#ef4444",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Warning",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "warning-tile-194",
+                      "name": "Warning tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-status-warning-bg",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-195",
+                      "fill": "$ui-color-text",
+                      "content": "Warning",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-196",
+                      "fill": "$ui-color-muted",
+                      "content": "status background",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Success",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "success-tile-198",
+                      "name": "Success tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-status-success-bg",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-199",
+                      "fill": "$ui-color-text",
+                      "content": "Success",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-200",
+                      "fill": "$ui-color-muted",
+                      "content": "status background",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Info",
+                  "layout": "vertical",
+                  "gap": 6,
+                  "width": 140,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "info-tile-202",
+                      "name": "Info tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-status-info-bg",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "cornerRadius": 10
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-203",
+                      "fill": "$ui-color-text",
+                      "content": "Info",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-204",
+                      "fill": "$ui-color-muted",
+                      "content": "status background",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "name": "Type board",
+              "layout": "horizontal",
+              "alignItems": "flex-start",
+              "gap": 20,
+              "children": [
+                {
+                  "type": "frame",
+                  "name": "Type samples",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 280,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-207",
+                      "fill": "#2563eb",
+                      "content": "MapMat",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 32,
+                      "fontWeight": "800"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-208",
+                      "fill": "$ui-color-text",
+                      "content": "Modal title 18 / 600",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-209",
+                      "fill": "$ui-color-text",
+                      "content": "Button and label 14 / 600",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-210",
+                      "fill": "$ui-color-text",
+                      "content": "Menu body 13 / 500",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-211",
+                      "fill": "$ui-color-muted",
+                      "content": "Helper copy 12 / 400",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 12,
+                      "fontWeight": "400"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-212",
+                      "fill": "$ui-inline-badge-text",
+                      "content": "Badge 10 / 700",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "name": "Notes",
+                  "layout": "vertical",
+                  "gap": 8,
+                  "width": 360,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-214",
+                      "fill": "$ui-color-text",
+                      "content": "Notes",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-215",
+                      "fill": "$ui-color-muted",
+                      "content": "These are reference steps taken from the current app CSS, not a guessed new type system.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "themes": {
+    "theme": [
+      "light",
+      "dark"
+    ]
+  },
+  "variables": {
+    "bus-y-gap": {
+      "type": "string",
+      "value": "80px"
+    },
+    "color-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-bg-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-bg-primary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-bg-secondary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#e2e8f0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#3d2a52",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-danger": {
+      "type": "color",
+      "value": "#ef4444"
+    },
+    "color-primary": {
+      "type": "color",
+      "value": "#6366f1"
+    },
+    "color-primary-hover": {
+      "type": "color",
+      "value": "#4f46e5"
+    },
+    "color-text-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#9f8fb8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-text-primary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1e293b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#e2e0e8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-text-secondary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#9f8fb8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-bg": {
+      "type": "string",
+      "value": [
+        {
+          "value": "linear-gradient(180deg, rgba(234, 247, 255, 0.98) 0%, rgba(225, 241, 251, 0.98) 100%)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "linear-gradient(180deg, rgba(39, 27, 53, 0.98) 0%, rgba(28, 18, 39, 0.98) 100%)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-bg-hover": {
+      "type": "string",
+      "value": [
+        {
+          "value": "linear-gradient(180deg, rgba(240, 250, 255, 1) 0%, rgba(230, 244, 253, 1) 100%)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "linear-gradient(180deg, rgba(49, 34, 67, 1) 0%, rgba(35, 23, 48, 1) 100%)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(184, 213, 235, 0.92)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(86, 69, 110, 0.9)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#b8add1",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-shadow": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(112, 144, 176, 0.18)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(4, 1, 8, 0.34)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-shadow-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(112, 144, 176, 0.22)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(4, 1, 8, 0.42)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1f2937",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#e2e0e8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "gap-l1-x": {
+      "type": "string",
+      "value": "80px"
+    },
+    "gap-stack-y": {
+      "type": "string",
+      "value": "56px"
+    },
+    "indent-x": {
+      "type": "string",
+      "value": "40px"
+    },
+    "modal-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#0d0812",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-bg-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1025",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#e2e8f0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#301E3F",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-padding": {
+      "type": "string",
+      "value": "16px"
+    },
+    "modal-card-radius": {
+      "type": "string",
+      "value": "10px"
+    },
+    "modal-footer-padding": {
+      "type": "string",
+      "value": "24px"
+    },
+    "modal-gap": {
+      "type": "string",
+      "value": "16px"
+    },
+    "modal-header-padding": {
+      "type": "string",
+      "value": "24px"
+    },
+    "modal-overlay-bg": {
+      "type": "color",
+      "value": "rgba(0, 0, 0, 0.5)"
+    },
+    "modal-padding": {
+      "type": "string",
+      "value": "24px"
+    },
+    "modal-shadow": {
+      "type": "string",
+      "value": [
+        {
+          "value": "0 20px 25px rgba(0, 0, 0, 0.15)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "0 20px 25px rgba(var(--shadow-rgb), 0.12)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-subtitle-size": {
+      "type": "string",
+      "value": "0.875rem"
+    },
+    "modal-title-size": {
+      "type": "string",
+      "value": "1.125rem"
+    },
+    "modal-title-weight": {
+      "type": "string",
+      "value": "600"
+    },
+    "modal-width-lg": {
+      "type": "string",
+      "value": "520px"
+    },
+    "modal-width-md": {
+      "type": "string",
+      "value": "480px"
+    },
+    "modal-width-sm": {
+      "type": "string",
+      "value": "400px"
+    },
+    "node-h-collapsed": {
+      "type": "string",
+      "value": "200px"
+    },
+    "node-h-thumb": {
+      "type": "string",
+      "value": "262px"
+    },
+    "node-w": {
+      "type": "string",
+      "value": "288px"
+    },
+    "orphan-group-gap": {
+      "type": "string",
+      "value": "160px"
+    },
+    "radius-lg": {
+      "type": "string",
+      "value": "8px"
+    },
+    "radius-md": {
+      "type": "string",
+      "value": "6px"
+    },
+    "radius-sm": {
+      "type": "string",
+      "value": "6px"
+    },
+    "radius-xl": {
+      "type": "string",
+      "value": "12px"
+    },
+    "root-y": {
+      "type": "string",
+      "value": "0px"
+    },
+    "shadow-rgb": {
+      "type": "string",
+      "value": [
+        {
+          "value": "0, 0, 0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "180, 180, 180",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "shadow-rgb-deep": {
+      "type": "string",
+      "value": [
+        {
+          "value": "15, 23, 42",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "160, 160, 160",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "shadow-soft": {
+      "type": "string",
+      "value": "0 4px 12px rgba(var(--shadow-rgb), 0.12)"
+    },
+    "shadow-strong": {
+      "type": "string",
+      "value": "0 12px 24px rgba(var(--shadow-rgb-deep), 0.18)"
+    },
+    "space-lg": {
+      "type": "string",
+      "value": "16px"
+    },
+    "space-md": {
+      "type": "string",
+      "value": "12px"
+    },
+    "space-sm": {
+      "type": "string",
+      "value": "8px"
+    },
+    "space-xl": {
+      "type": "string",
+      "value": "24px"
+    },
+    "stroke-pad-x": {
+      "type": "string",
+      "value": "20px"
+    },
+    "ui-canvas-scrim": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(248, 250, 252, 0.92)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(13, 8, 18, 0.9)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-accent-soft": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(99, 102, 241, 0.12)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(99, 102, 241, 0.18)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-accent-soft-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(99, 102, 241, 0.28)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(129, 140, 248, 0.36)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#e2e8f0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#3d2a52",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-border-strong": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#cbd5e1",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#4d3a62",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-danger": {
+      "type": "color",
+      "value": "#ef4444"
+    },
+    "ui-color-danger-hover": {
+      "type": "color",
+      "value": "#dc2626"
+    },
+    "ui-color-icon-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f1f5f9",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#301E3F",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-input-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-input-placeholder": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#94a3b8",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#6b5a80",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#9f8fb8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-primary": {
+      "type": "color",
+      "value": "#6366f1"
+    },
+    "ui-color-primary-hover": {
+      "type": "color",
+      "value": "#4f46e5"
+    },
+    "ui-color-surface": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-surface-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1e293b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#e2e0e8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-focus-ring": {
+      "type": "string",
+      "value": "0 0 0 3px rgba(99, 102, 241, 0.1)"
+    },
+    "ui-inline-badge-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(99, 102, 241, 0.12)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(167, 139, 250, 0.16)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-inline-badge-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#4f46e5",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#c4b5fd",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-overlay-shadow": {
+      "type": "string",
+      "value": [
+        {
+          "value": "0 12px 24px rgba(15, 23, 42, 0.12)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "0 12px 24px rgba(0, 0, 0, 0.4)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-radius-lg": {
+      "type": "string",
+      "value": "12px"
+    },
+    "ui-radius-md": {
+      "type": "string",
+      "value": "8px"
+    },
+    "ui-radius-sm": {
+      "type": "string",
+      "value": "6px"
+    },
+    "ui-route-gate-surface": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(255, 255, 255, 0.96)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(26, 16, 34, 0.96)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-route-gate-warning-surface": {
+      "type": "string",
+      "value": [
+        {
+          "value": "linear-gradient(180deg, rgba(255, 251, 235, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "linear-gradient(180deg, rgba(42, 29, 8, 0.98) 0%, rgba(26, 16, 34, 0.98) 100%)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-selection-highlight-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(14, 165, 233, 0.08)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(14, 165, 233, 0.12)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-selection-highlight-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(14, 165, 233, 0.65)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(56, 189, 248, 0.8)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-selection-highlight-inset": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(255, 255, 255, 0.72)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(15, 23, 42, 0.88)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fee2e2",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1313",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fca5a5",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#7f1d1d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#dc2626",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#f87171",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#991b1b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#fecaca",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#dbeafe",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#0f1d3a",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#93c5fd",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1d4ed8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#2563eb",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#60a5fa",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1e3a8a",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#bfdbfe",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#dcfce7",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#102417",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#86efac",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#166534",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#16a34a",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#4ade80",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#166534",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#bbf7d0",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fef3c7",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2a1d08",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fbbf24",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#d97706",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#d97706",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#fbbf24",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#92400e",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#fde68a",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "runtime-depth-1": {
+      "type": "color",
+      "value": "#6366f1"
+    },
+    "runtime-depth-2": {
+      "type": "color",
+      "value": "#0ea5e9"
+    },
+    "runtime-depth-3": {
+      "type": "color",
+      "value": "#10b981"
+    },
+    "runtime-depth-4": {
+      "type": "color",
+      "value": "#f59e0b"
+    },
+    "runtime-depth-5": {
+      "type": "color",
+      "value": "#ef4444"
+    },
+    "runtime-depth-6": {
+      "type": "color",
+      "value": "#8b5cf6"
+    },
+    "runtime-connection-userFlows": {
+      "type": "color",
+      "value": "#14b8a6"
+    },
+    "runtime-connection-crossLinks": {
+      "type": "color",
+      "value": "#f97316"
+    },
+    "runtime-connection-brokenLinks": {
+      "type": "color",
+      "value": "#fca5a5"
+    },
+    "runtime-layout-nodeW": {
+      "type": "string",
+      "value": "288"
+    },
+    "runtime-layout-nodeHCollapsed": {
+      "type": "string",
+      "value": "200"
+    },
+    "runtime-layout-nodeHThumb": {
+      "type": "string",
+      "value": "262"
+    },
+    "runtime-layout-gapL1X": {
+      "type": "string",
+      "value": "80"
+    },
+    "runtime-layout-gapStackY": {
+      "type": "string",
+      "value": "56"
+    },
+    "runtime-layout-indentX": {
+      "type": "string",
+      "value": "40"
+    },
+    "runtime-layout-busYGap": {
+      "type": "string",
+      "value": "80"
+    },
+    "runtime-layout-orphanGroupGap": {
+      "type": "string",
+      "value": "160"
+    },
+    "runtime-layout-strokePadX": {
+      "type": "string",
+      "value": "20"
+    },
+    "runtime-layout-rootY": {
+      "type": "string",
+      "value": "0"
+    },
+    "landing-bg": {
+      "type": "color",
+      "value": "#f6f8fc"
+    },
+    "landing-surface": {
+      "type": "color",
+      "value": "rgba(255, 255, 255, 0.86)"
+    },
+    "landing-surface-strong": {
+      "type": "color",
+      "value": "#ffffff"
+    },
+    "landing-surface-alt": {
+      "type": "color",
+      "value": "#eef3ff"
+    },
+    "landing-border": {
+      "type": "color",
+      "value": "rgba(99, 102, 241, 0.16)"
+    },
+    "landing-border-strong": {
+      "type": "color",
+      "value": "rgba(99, 102, 241, 0.26)"
+    },
+    "landing-text": {
+      "type": "color",
+      "value": "#172033"
+    },
+    "landing-text-muted": {
+      "type": "color",
+      "value": "#5a6478"
+    },
+    "landing-title": {
+      "type": "color",
+      "value": "#0f172a"
+    },
+    "landing-primary": {
+      "type": "color",
+      "value": "#4f46e5"
+    },
+    "landing-primary-strong": {
+      "type": "color",
+      "value": "#3730a3"
+    },
+    "landing-primary-soft": {
+      "type": "color",
+      "value": "rgba(79, 70, 229, 0.12)"
+    },
+    "landing-accent": {
+      "type": "color",
+      "value": "#0f766e"
+    },
+    "landing-success": {
+      "type": "color",
+      "value": "#15803d"
+    },
+    "landing-success-soft": {
+      "type": "color",
+      "value": "rgba(21, 128, 61, 0.12)"
+    },
+    "landing-warning": {
+      "type": "color",
+      "value": "#a16207"
+    },
+    "landing-warning-soft": {
+      "type": "color",
+      "value": "rgba(161, 98, 7, 0.14)"
+    },
+    "landing-muted-soft": {
+      "type": "color",
+      "value": "rgba(71, 85, 105, 0.14)"
+    },
+    "landing-shadow": {
+      "type": "string",
+      "value": "0 24px 80px rgba(15, 23, 42, 0.08)"
+    },
+    "landing-radius-xl": {
+      "type": "string",
+      "value": "28px"
+    },
+    "landing-radius-lg": {
+      "type": "string",
+      "value": "20px"
+    },
+    "landing-radius-md": {
+      "type": "string",
+      "value": "16px"
+    }
+  }
+}

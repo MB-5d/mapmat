@@ -5,6 +5,7 @@ import * as api from '../../api';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
 import Modal from '../ui/Modal';
+import SegmentedControl from '../ui/SegmentedControl';
 import TextInput from '../ui/TextInput';
 import { SHOW_DEMO_AUTH } from '../../utils/constants';
 import { trackEvent } from '../../utils/analytics';
@@ -23,6 +24,10 @@ const AuthModal = ({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const authTabs = [
+    { value: 'login', label: 'Log In' },
+    { value: 'signup', label: 'Sign Up' },
+  ];
 
   const handleDemoLogin = () => {
     const demoUser = {
@@ -72,22 +77,19 @@ const AuthModal = ({
         <div className="auth-context-message">{contextMessage}</div>
       ) : null}
 
-      <div className="auth-tabs">
-        <button
-          type="button"
-          className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
-          onClick={() => { setMode('login'); setError(''); }}
-        >
-          Log In
-        </button>
-        <button
-          type="button"
-          className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
-          onClick={() => { setMode('signup'); setError(''); }}
-        >
-          Sign Up
-        </button>
-      </div>
+      <SegmentedControl
+        className="auth-tabs"
+        variant="tabs"
+        fullWidth
+        ariaLabel="Account mode"
+        value={mode}
+        onChange={(nextMode) => {
+          setMode(nextMode);
+          setError('');
+        }}
+        options={authTabs}
+        optionRole="tab"
+      />
 
       <form onSubmit={handleSubmit} className="auth-form">
         {error && <div className="auth-error">{error}</div>}

@@ -2,6 +2,7 @@ import React from 'react';
 import { FileImage, FileJson, FileSpreadsheet, FileText, List } from 'lucide-react';
 
 import Modal from '../ui/Modal';
+import OptionCard from '../ui/OptionCard';
 
 const ExportModal = ({
   show,
@@ -23,41 +24,41 @@ const ExportModal = ({
       className="export-modal"
     >
       <div className="export-options">
-        <button className="export-btn" onClick={onExportPng}>
-          <FileImage size={24} />
-          <div className="export-btn-text">
-            <span className="export-btn-title">PNG Image</span>
-            <span className="export-btn-desc">Visual sitemap for presentations</span>
-          </div>
-        </button>
-        <button className="export-btn" onClick={onExportPdf}>
-          <FileText size={24} />
-          <div className="export-btn-text">
-            <span className="export-btn-title">PDF Document</span>
-            <span className="export-btn-desc">Printable report with page list</span>
-          </div>
-        </button>
-        <button className="export-btn" onClick={onExportCsv}>
-          <FileSpreadsheet size={24} />
-          <div className="export-btn-text">
-            <span className="export-btn-title">CSV Spreadsheet</span>
-            <span className="export-btn-desc">Page data for Excel or Google Sheets</span>
-          </div>
-        </button>
-        <button className="export-btn" onClick={onExportJson}>
-          <FileJson size={24} />
-          <div className="export-btn-text">
-            <span className="export-btn-title">JSON Data</span>
-            <span className="export-btn-desc">Raw data for import or backup</span>
-          </div>
-        </button>
-        <button className="export-btn" onClick={onExportSiteIndex}>
-          <List size={24} />
-          <div className="export-btn-text">
-            <span className="export-btn-title">Site Index</span>
-            <span className="export-btn-desc">Page list document for Word or Google Docs</span>
-          </div>
-        </button>
+        <OptionCard
+          className="export-btn"
+          icon={<FileImage size={24} />}
+          title="PNG Image"
+          description="Visual sitemap for presentations"
+          onClick={onExportPng}
+        />
+        <OptionCard
+          className="export-btn"
+          icon={<FileText size={24} />}
+          title="PDF Document"
+          description="Printable report with page list"
+          onClick={onExportPdf}
+        />
+        <OptionCard
+          className="export-btn"
+          icon={<FileSpreadsheet size={24} />}
+          title="CSV Spreadsheet"
+          description="Page data for Excel or Google Sheets"
+          onClick={onExportCsv}
+        />
+        <OptionCard
+          className="export-btn"
+          icon={<FileJson size={24} />}
+          title="JSON Data"
+          description="Raw data for import or backup"
+          onClick={onExportJson}
+        />
+        <OptionCard
+          className="export-btn"
+          icon={<List size={24} />}
+          title="Site Index"
+          description="Page list document for Word or Google Docs"
+          onClick={onExportSiteIndex}
+        />
       </div>
     </Modal>
   );

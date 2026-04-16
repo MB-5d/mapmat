@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
+import SegmentedControl from '../ui/SegmentedControl';
 
 const VIEW_TABS = Object.freeze({
   VERSIONS: 'versions',
@@ -81,6 +82,10 @@ const VersionHistoryDrawer = ({
   const bodyRef = useRef(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [activeView, setActiveView] = useState(VIEW_TABS.VERSIONS);
+  const viewOptions = [
+    { value: VIEW_TABS.VERSIONS, label: 'Versions' },
+    { value: VIEW_TABS.ACTIVITY, label: 'Activity' },
+  ];
 
   React.useEffect(() => {
     if (!isOpen) {
@@ -127,7 +132,7 @@ const VersionHistoryDrawer = ({
                 <div className="version-history-title-row">
                   <span className="version-history-title">{version.name || 'Updated'}</span>
                   {isCurrent ? (
-                    <span className="version-history-badge">Current</span>
+                    <span className="ui-inline-badge version-history-badge">Current</span>
                   ) : null}
                 </div>
                 {version.notes ? (
@@ -220,26 +225,16 @@ const VersionHistoryDrawer = ({
       onBodyScroll={handleScroll}
     >
       {canViewActivity ? (
-        <div className="version-history-tabs" role="tablist" aria-label="Map timeline views">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === VIEW_TABS.VERSIONS}
-            className={`version-history-tab${activeView === VIEW_TABS.VERSIONS ? ' active' : ''}`}
-            onClick={() => setActiveView(VIEW_TABS.VERSIONS)}
-          >
-            Versions
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === VIEW_TABS.ACTIVITY}
-            className={`version-history-tab${activeView === VIEW_TABS.ACTIVITY ? ' active' : ''}`}
-            onClick={() => setActiveView(VIEW_TABS.ACTIVITY)}
-          >
-            Activity
-          </button>
-        </div>
+        <SegmentedControl
+          className="version-history-tabs"
+          variant="pill"
+          size="sm"
+          ariaLabel="Map timeline views"
+          value={activeView}
+          onChange={setActiveView}
+          options={viewOptions}
+          optionRole="tab"
+        />
       ) : null}
 
       <section className="drawer-card version-history-card">

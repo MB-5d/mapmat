@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, LayoutTemplate, Upload } from 'lucide-react';
 
 import Modal from '../ui/Modal';
+import OptionCard from '../ui/OptionCard';
 
 const CreateMapModal = ({
   show,
@@ -20,42 +21,36 @@ const CreateMapModal = ({
       className="create-map-modal"
     >
       <div className="create-map-options">
-        <button
+        <OptionCard
           className="create-map-option"
+          icon={<FileText size={24} />}
+          title="Start from Scratch"
+          description="Begin with a blank canvas"
           onClick={() => {
             onClose();
             onStartFromScratch();
           }}
-        >
-          <FileText size={24} />
-          <div className="create-map-option-text">
-            <span className="create-map-option-title">Start from Scratch</span>
-            <span className="create-map-option-desc">Begin with a blank canvas</span>
-          </div>
-        </button>
+        />
 
-        <button className="create-map-option disabled" disabled>
-          <LayoutTemplate size={24} />
-          <div className="create-map-option-text">
-            <span className="create-map-option-title">Start from Template</span>
-            <span className="create-map-option-desc">Product, Ecommerce, Blog...</span>
-          </div>
-          <span className="coming-soon-badge">Coming Soon</span>
-        </button>
+        <OptionCard
+          className="create-map-option disabled"
+          icon={<LayoutTemplate size={24} />}
+          title="Start from Template"
+          description="Product, Ecommerce, Blog..."
+          badge={<span className="ui-inline-badge coming-soon-badge">Coming Soon</span>}
+          disabled
+        />
 
-        <button
+        <OptionCard
           className="create-map-option"
+          icon={<Upload size={24} />}
+          title="Import from File"
+          description="XML sitemap, CSV, JSON"
           onClick={() => {
             onClose();
             onImportFromFile();
           }}
-        >
-          <Upload size={24} />
-          <div className="create-map-option-text">
-            <span className="create-map-option-title">Import from File</span>
-            <span className="create-map-option-desc">XML sitemap, CSV, JSON</span>
-          </div>
-        </button>
+        />
       </div>
     </Modal>
   );

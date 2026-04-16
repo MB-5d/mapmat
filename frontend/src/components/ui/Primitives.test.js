@@ -4,7 +4,9 @@ import { createRoot } from 'react-dom/client';
 import Button from './Button';
 import CheckboxField from './CheckboxField';
 import Modal from './Modal';
+import OptionCard from './OptionCard';
 import RadioCardGroup from './RadioCardGroup';
+import SegmentedControl from './SegmentedControl';
 import ToggleSwitch from './ToggleSwitch';
 
 describe('ui primitives', () => {
@@ -93,5 +95,43 @@ describe('ui primitives', () => {
     expect(onCheckboxChange).toHaveBeenCalledTimes(1);
     expect(onRadioChange).toHaveBeenCalledWith('editor');
     expect(onToggleChange).toHaveBeenCalledTimes(1);
+  });
+
+  test('SegmentedControl and OptionCard emit interactions', () => {
+    const onSegmentChange = jest.fn();
+    const onOptionClick = jest.fn();
+
+    act(() => {
+      root.render(
+        <div>
+          <SegmentedControl
+            value="one"
+            onChange={onSegmentChange}
+            options={[
+              { value: 'one', label: 'One' },
+              { value: 'two', label: 'Two' },
+            ]}
+          />
+          <OptionCard
+            title="Export PNG"
+            description="Save an image"
+            onClick={onOptionClick}
+          />
+        </div>
+      );
+    });
+
+    const segmentButton = Array.from(container.querySelectorAll('.ui-segmented-control__option')).find(
+      (button) => button.textContent.includes('Two')
+    );
+    const optionCard = container.querySelector('.ui-option-card');
+
+    act(() => {
+      segmentButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      optionCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSegmentChange).toHaveBeenCalledWith('two');
+    expect(onOptionClick).toHaveBeenCalledTimes(1);
   });
 });

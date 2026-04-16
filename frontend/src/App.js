@@ -67,6 +67,7 @@ import {
   APP_ONLY_MODE,
   API_BASE,
   DEFAULT_COLORS,
+  DEFAULT_CONNECTION_COLORS,
   ACCESS_LEVELS,
   SCAN_MESSAGES,
   SCAN_MAX_DEPTH_UI,
@@ -117,12 +118,6 @@ import {
   identifyAnalyticsUser,
   trackEvent,
 } from './utils/analytics';
-
-const DEFAULT_CONNECTION_COLORS = {
-  userFlows: '#14b8a6',
-  crossLinks: '#f97316',
-  brokenLinks: '#fca5a5',
-};
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
 

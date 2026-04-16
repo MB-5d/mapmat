@@ -40,7 +40,7 @@ describe('SettingsDrawer', () => {
       );
     });
 
-    const lightButton = Array.from(container.querySelectorAll('.settings-segment-option')).find((button) =>
+    const lightButton = Array.from(container.querySelectorAll('.ui-segmented-control__option')).find((button) =>
       button.textContent.includes('Light')
     );
     const toggle = container.querySelector('.ui-toggle__input');

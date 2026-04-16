@@ -2,6 +2,7 @@ import React from 'react';
 import { Sun, Moon, Monitor } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
+import SegmentedControl from '../ui/SegmentedControl';
 import ToggleSwitch from '../ui/ToggleSwitch';
 
 const SettingsDrawer = ({
@@ -28,20 +29,15 @@ const SettingsDrawer = ({
     >
       <section className="drawer-card">
         <div className="drawer-card-title">Appearance</div>
-        <div className="settings-segment">
-          {themeOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`settings-segment-option ${theme === option.value ? 'active' : ''}`}
-              onClick={() => onThemeChange?.(option.value)}
-              aria-pressed={theme === option.value}
-            >
-              {option.icon}
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className="settings-segment"
+          variant="grid"
+          fullWidth
+          ariaLabel="Theme"
+          value={theme}
+          onChange={onThemeChange}
+          options={themeOptions}
+        />
         <div className="drawer-helper">Auto follows your system preference.</div>
       </section>
 

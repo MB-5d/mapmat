@@ -1,0 +1,5279 @@
+{
+  "version": "2.11",
+  "children": [
+    {
+      "type": "frame",
+      "id": "library-canvas",
+      "x": 0,
+      "y": 0,
+      "name": "MapMat Library",
+      "fill": "$ui-canvas-scrim",
+      "cornerRadius": 20,
+      "stroke": {
+        "align": "inside",
+        "thickness": 1,
+        "fill": "$ui-color-border"
+      },
+      "layout": "vertical",
+      "gap": 24,
+      "padding": 32,
+      "justifyContent": "center",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "jz4iK",
+          "name": "Overview",
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-246",
+              "fill": "$ui-color-text",
+              "content": "Overview",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-247",
+              "fill": "$ui-color-muted",
+              "content": "Reusable MapMat primitives and shell patterns. This file is the library layer for Pencil.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "P9ZYw",
+              "name": "Meta",
+              "gap": 16,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "2pb8v",
+                  "name": "Source of truth",
+                  "width": 320,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-233",
+                      "fill": "$ui-color-text",
+                      "content": "Source of truth",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-234",
+                      "fill": "$ui-color-muted",
+                      "content": "Built from design-system exports and the current shared UI code in this repo.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "xDc7S",
+                  "name": "Font and icons",
+                  "width": 260,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-236",
+                      "fill": "$ui-color-text",
+                      "content": "Font and icons",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-237",
+                      "fill": "$ui-color-muted",
+                      "content": "Uses Nata Sans and Lucide icon_font nodes.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "w9GsX",
+                  "name": "What changed",
+                  "width": 320,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-239",
+                      "fill": "$ui-color-text",
+                      "content": "What changed",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-240",
+                      "fill": "$ui-color-muted",
+                      "content": "Adds badges, button sizes, search, menus, nodes, color scales, and type scale.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "B9xyF",
+                  "name": "Theme axis",
+                  "width": 300,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-242",
+                      "fill": "$ui-color-text",
+                      "content": "Theme axis",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-243",
+                      "fill": "$ui-color-muted",
+                      "content": "Switch Pencil between light and dark to preview app theme tokens.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "7iyDh",
+          "name": "Foundations",
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-147",
+              "fill": "$ui-color-text",
+              "content": "Foundations",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-148",
+              "fill": "$ui-color-muted",
+              "content": "Core app tokens, color scales, and current type steps pulled from the real codebase.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "n0J95",
+              "name": "Core colors",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Nr3h6",
+                  "name": "Primary",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "primary-tile-65",
+                      "name": "Primary tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-primary",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-66",
+                      "fill": "$ui-color-text",
+                      "content": "Primary",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-67",
+                      "fill": "$ui-color-muted",
+                      "content": "ui-color-primary",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "TmqgE",
+                  "name": "Surface",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "surface-tile-69",
+                      "name": "Surface tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-70",
+                      "fill": "$ui-color-text",
+                      "content": "Surface",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-71",
+                      "fill": "$ui-color-muted",
+                      "content": "ui-color-surface",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "s8rBD",
+                  "name": "Surface muted",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "surface-muted-tile-73",
+                      "name": "Surface muted tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-74",
+                      "fill": "$ui-color-text",
+                      "content": "Surface muted",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-75",
+                      "fill": "$ui-color-muted",
+                      "content": "ui-color-surface-muted",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "S9Fen",
+                  "name": "Border",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "border-tile-77",
+                      "name": "Border tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-border",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-78",
+                      "fill": "$ui-color-text",
+                      "content": "Border",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-79",
+                      "fill": "$ui-color-muted",
+                      "content": "ui-color-border",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "AdYto",
+                  "name": "Danger",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "danger-tile-81",
+                      "name": "Danger tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-danger",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-82",
+                      "fill": "$ui-color-text",
+                      "content": "Danger",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-83",
+                      "fill": "$ui-color-muted",
+                      "content": "ui-color-danger",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "U8acr",
+                  "name": "Accent soft",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "accent-soft-tile-85",
+                      "name": "Accent soft tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$ui-color-accent-soft",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-86",
+                      "fill": "$ui-color-text",
+                      "content": "Accent soft",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-87",
+                      "fill": "$ui-color-muted",
+                      "content": "ui-color-accent-soft",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "3AOGH",
+              "name": "Depth palette",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Hl75L",
+                  "name": "Depth 1",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "depth-1-tile-90",
+                      "name": "Depth 1 tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-depth-1",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-91",
+                      "fill": "$ui-color-text",
+                      "content": "Depth 1",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-92",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime-depth-1",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pWAIZ",
+                  "name": "Depth 2",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "depth-2-tile-94",
+                      "name": "Depth 2 tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-depth-2",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-95",
+                      "fill": "$ui-color-text",
+                      "content": "Depth 2",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-96",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime-depth-2",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "VZzpo",
+                  "name": "Depth 3",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "depth-3-tile-98",
+                      "name": "Depth 3 tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-depth-3",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-99",
+                      "fill": "$ui-color-text",
+                      "content": "Depth 3",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-100",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime-depth-3",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "b6ufT",
+                  "name": "Depth 4",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "depth-4-tile-102",
+                      "name": "Depth 4 tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-depth-4",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-103",
+                      "fill": "$ui-color-text",
+                      "content": "Depth 4",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-104",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime-depth-4",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "wFpEM",
+                  "name": "Depth 5",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "depth-5-tile-106",
+                      "name": "Depth 5 tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-depth-5",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-107",
+                      "fill": "$ui-color-text",
+                      "content": "Depth 5",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-108",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime-depth-5",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DvbOd",
+                  "name": "Depth 6",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "depth-6-tile-110",
+                      "name": "Depth 6 tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-depth-6",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-111",
+                      "fill": "$ui-color-text",
+                      "content": "Depth 6",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-112",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime-depth-6",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "glpnV",
+              "name": "Connection palette",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "fHuCt",
+                  "name": "User flows",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "user-flows-tile-115",
+                      "name": "User flows tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-connection-userFlows",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-116",
+                      "fill": "$ui-color-text",
+                      "content": "User flows",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-117",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime.connectionPalette.userFlows",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "iyIEo",
+                  "name": "Cross links",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "cross-links-tile-119",
+                      "name": "Cross links tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-connection-crossLinks",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-120",
+                      "fill": "$ui-color-text",
+                      "content": "Cross links",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-121",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime.connectionPalette.crossLinks",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "jgHb1",
+                  "name": "Broken links",
+                  "width": 140,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "broken-links-tile-123",
+                      "name": "Broken links tile",
+                      "width": 140,
+                      "height": 72,
+                      "fill": "$runtime-connection-brokenLinks",
+                      "cornerRadius": 10,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-124",
+                      "fill": "$ui-color-text",
+                      "content": "Broken links",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-125",
+                      "fill": "$ui-color-muted",
+                      "content": "runtime.connectionPalette.brokenLinks",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "jTgcy",
+              "name": "Type scale",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "xB5uS",
+                  "name": "Brand 32 / 800",
+                  "width": 200,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-128",
+                      "fill": "$ui-color-text",
+                      "content": "Brand 32 / 800",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-129",
+                      "fill": "$ui-color-muted",
+                      "content": "Topbar brand text in the app.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "k36NV",
+                  "name": "Section 20 / 700",
+                  "width": 200,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-131",
+                      "fill": "$ui-color-text",
+                      "content": "Section 20 / 700",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-132",
+                      "fill": "$ui-color-muted",
+                      "content": "Board and drawer section titles.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "9Eo3m",
+                  "name": "Title 18 / 600",
+                  "width": 200,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-134",
+                      "fill": "$ui-color-text",
+                      "content": "Title 18 / 600",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-135",
+                      "fill": "$ui-color-muted",
+                      "content": "Modal and drawer titles.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "6xQzL",
+                  "name": "Body 14 / 500-600",
+                  "width": 200,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-137",
+                      "fill": "$ui-color-text",
+                      "content": "Body 14 / 500-600",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-138",
+                      "fill": "$ui-color-muted",
+                      "content": "Buttons, tabs, and input text.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "UEZgo",
+                  "name": "Support 12 / 400-600",
+                  "width": 200,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-140",
+                      "fill": "$ui-color-text",
+                      "content": "Support 12 / 400-600",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-141",
+                      "fill": "$ui-color-muted",
+                      "content": "Hints and helper text.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "AvzLi",
+                  "name": "Badge 10-11 / 600-700",
+                  "width": 200,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-143",
+                      "fill": "$ui-color-text",
+                      "content": "Badge 10-11 / 600-700",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "text-144",
+                      "fill": "$ui-color-muted",
+                      "content": "Inline badges and status chips.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "mo10J",
+          "name": "Badges And Tags",
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-158",
+              "fill": "$ui-color-text",
+              "content": "Badges And Tags",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-159",
+              "fill": "$ui-color-muted",
+              "content": "Current app badge patterns from CSS: inline badge, node badge, and node status badge.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "EYxsr",
+              "name": "Masters",
+              "gap": 20,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "inline-badge",
+                  "name": "InlineBadge",
+                  "reusable": true,
+                  "width": 82,
+                  "height": 24,
+                  "fill": "$ui-inline-badge-bg",
+                  "cornerRadius": 999,
+                  "gap": 6,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "inline-badge-icon",
+                      "width": 12,
+                      "height": 12,
+                      "iconFontName": "sparkles",
+                      "iconFontFamily": "lucide",
+                      "fill": "$ui-inline-badge-text"
+                    },
+                    {
+                      "type": "text",
+                      "id": "inline-badge-label",
+                      "fill": "$ui-inline-badge-text",
+                      "content": "Beta",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 10,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "node-badge",
+                  "name": "NodeBadge",
+                  "reusable": true,
+                  "width": 72,
+                  "height": 24,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 12,
+                  "padding": [
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "node-badge-label",
+                      "fill": "$ui-color-muted",
+                      "content": "Site map",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "status-badge",
+                  "name": "StatusBadge",
+                  "reusable": true,
+                  "width": 78,
+                  "height": 24,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 6,
+                  "padding": [
+                    2,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "status-badge-dot",
+                      "name": "Dot",
+                      "width": 6,
+                      "height": 6,
+                      "fill": "$ui-color-muted",
+                      "cornerRadius": 999
+                    },
+                    {
+                      "type": "text",
+                      "id": "status-badge-label",
+                      "fill": "$ui-color-text",
+                      "content": "New",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "pfxBf",
+              "name": "Examples",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "badge-ref-1-151",
+                  "type": "ref",
+                  "ref": "inline-badge",
+                  "descendants": {
+                    "inline-badge-icon": {
+                      "iconFontName": "sparkles"
+                    },
+                    "inline-badge-label": {
+                      "content": "Default"
+                    }
+                  }
+                },
+                {
+                  "id": "badge-ref-2-152",
+                  "type": "ref",
+                  "ref": "inline-badge",
+                  "descendants": {
+                    "inline-badge-icon": {
+                      "iconFontName": "users"
+                    },
+                    "inline-badge-label": {
+                      "content": "Shared"
+                    }
+                  }
+                },
+                {
+                  "id": "badge-ref-3-153",
+                  "type": "ref",
+                  "ref": "node-badge",
+                  "descendants": {
+                    "node-badge-label": {
+                      "content": "Marketing"
+                    }
+                  }
+                },
+                {
+                  "id": "badge-ref-4-154",
+                  "type": "ref",
+                  "ref": "node-badge",
+                  "descendants": {
+                    "node-badge-label": {
+                      "content": "L2"
+                    }
+                  }
+                },
+                {
+                  "id": "badge-ref-5-155",
+                  "type": "ref",
+                  "ref": "status-badge",
+                  "fill": "$ui-status-info-bg",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-status-info-border"
+                  },
+                  "descendants": {
+                    "status-badge-dot": {
+                      "fill": "$ui-status-info-icon"
+                    },
+                    "status-badge-label": {
+                      "content": "New"
+                    }
+                  }
+                },
+                {
+                  "id": "badge-ref-6-156",
+                  "type": "ref",
+                  "ref": "status-badge",
+                  "fill": "$ui-status-danger-bg",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-status-danger-border"
+                  },
+                  "descendants": {
+                    "status-badge-dot": {
+                      "fill": "$ui-status-danger-icon"
+                    },
+                    "status-badge-label": {
+                      "content": "To delete"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "H1FcE",
+          "name": "Buttons",
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-195",
+              "fill": "$ui-color-text",
+              "content": "Buttons",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-196",
+              "fill": "$ui-color-muted",
+              "content": "Canonical button and icon button primitives with the current variants and size matrix.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "7uH98",
+              "name": "Masters",
+              "gap": 20,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "button",
+                  "name": "Button",
+                  "reusable": true,
+                  "width": 132,
+                  "height": 40,
+                  "fill": "$ui-color-primary",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    16
+                  ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "button-spinner",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "loader-circle",
+                      "iconFontFamily": "lucide",
+                      "fill": "#ffffff"
+                    },
+                    {
+                      "type": "text",
+                      "id": "button-label",
+                      "fill": "#ffffff",
+                      "content": "Create map",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "icon-button",
+                  "name": "IconButton",
+                  "reusable": true,
+                  "width": 36,
+                  "height": 36,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "icon-button-icon",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "plus",
+                      "iconFontFamily": "lucide",
+                      "fill": "$ui-color-muted"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "2LSaD",
+              "name": "Small",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "text-162",
+                  "fill": "$ui-color-muted",
+                  "content": "sm",
+                  "fontFamily": "Nata Sans",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "id": "button-sm-p-163",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 92,
+                  "height": 32,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "descendants": {
+                    "button-label": {
+                      "content": "Create",
+                      "fontSize": 12
+                    }
+                  }
+                },
+                {
+                  "id": "button-sm-s-164",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 92,
+                  "height": 32,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "fill": "$ui-color-surface",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "button-spinner": {
+                      "fill": "$ui-color-muted"
+                    },
+                    "button-label": {
+                      "content": "Cancel",
+                      "fontSize": 12,
+                      "fill": "$ui-color-muted"
+                    }
+                  }
+                },
+                {
+                  "id": "button-sm-d-165",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 98,
+                  "height": 32,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "fill": "$ui-color-danger",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-danger"
+                  },
+                  "descendants": {
+                    "button-label": {
+                      "content": "Delete",
+                      "fontSize": 12
+                    }
+                  }
+                },
+                {
+                  "id": "button-sm-g-166",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 96,
+                  "height": 32,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "fill": "rgba(255,255,255,0)",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "button-spinner": {
+                      "fill": "$ui-color-muted"
+                    },
+                    "button-label": {
+                      "content": "Ghost",
+                      "fontSize": 12,
+                      "fill": "$ui-color-muted"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "uh9EG",
+              "name": "Medium",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "text-168",
+                  "fill": "$ui-color-muted",
+                  "content": "md",
+                  "fontFamily": "Nata Sans",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "id": "button-md-p-169",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 124,
+                  "descendants": {
+                    "button-label": {
+                      "content": "Create map"
+                    }
+                  }
+                },
+                {
+                  "id": "button-md-s-170",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 110,
+                  "fill": "$ui-color-surface",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "button-spinner": {
+                      "fill": "$ui-color-muted"
+                    },
+                    "button-label": {
+                      "content": "Back",
+                      "fill": "$ui-color-muted"
+                    }
+                  }
+                },
+                {
+                  "id": "button-md-d-171",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 136,
+                  "fill": "$ui-color-danger",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-danger"
+                  },
+                  "descendants": {
+                    "button-label": {
+                      "content": "Delete map"
+                    }
+                  }
+                },
+                {
+                  "id": "button-md-g-172",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 120,
+                  "fill": "rgba(255,255,255,0)",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "button-spinner": {
+                      "fill": "$ui-color-muted"
+                    },
+                    "button-label": {
+                      "content": "View details",
+                      "fill": "$ui-color-muted"
+                    }
+                  }
+                },
+                {
+                  "id": "button-md-loading-173",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 110,
+                  "descendants": {
+                    "button-label": {
+                      "content": "Saving..."
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "cCHl9",
+              "name": "Large",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "text-175",
+                  "fill": "$ui-color-muted",
+                  "content": "lg",
+                  "fontFamily": "Nata Sans",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "id": "button-lg-p-176",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 140,
+                  "height": 48,
+                  "padding": [
+                    14,
+                    18
+                  ],
+                  "descendants": {
+                    "button-label": {
+                      "content": "Continue"
+                    }
+                  }
+                },
+                {
+                  "id": "button-lg-s-177",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 132,
+                  "height": 48,
+                  "padding": [
+                    14,
+                    18
+                  ],
+                  "fill": "$ui-color-surface",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "button-spinner": {
+                      "fill": "$ui-color-muted"
+                    },
+                    "button-label": {
+                      "content": "Secondary",
+                      "fill": "$ui-color-muted"
+                    }
+                  }
+                },
+                {
+                  "id": "button-lg-d-178",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 148,
+                  "height": 48,
+                  "padding": [
+                    14,
+                    18
+                  ],
+                  "fill": "$ui-color-danger",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-danger"
+                  },
+                  "descendants": {
+                    "button-label": {
+                      "content": "Remove access"
+                    }
+                  }
+                },
+                {
+                  "id": "button-lg-g-179",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 126,
+                  "height": 48,
+                  "padding": [
+                    14,
+                    18
+                  ],
+                  "fill": "rgba(255,255,255,0)",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "button-spinner": {
+                      "fill": "$ui-color-muted"
+                    },
+                    "button-label": {
+                      "content": "Ghost",
+                      "fill": "$ui-color-muted"
+                    }
+                  }
+                },
+                {
+                  "id": "button-lg-disabled-180",
+                  "type": "ref",
+                  "ref": "button",
+                  "width": 126,
+                  "height": 48,
+                  "padding": [
+                    14,
+                    18
+                  ],
+                  "fill": "$ui-color-surface-muted",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "button-spinner": {
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "button-label": {
+                      "content": "Unavailable",
+                      "fill": "$ui-color-input-placeholder"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "LKfrc",
+              "name": "Icon buttons",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "text-182",
+                  "fill": "$ui-color-muted",
+                  "content": "sm",
+                  "fontFamily": "Nata Sans",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "id": "icon-sm-default-183",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "width": 32,
+                  "height": 32,
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "plus"
+                    }
+                  }
+                },
+                {
+                  "id": "icon-sm-primary-184",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "width": 32,
+                  "height": 32,
+                  "fill": "$ui-color-primary",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "plus",
+                      "fill": "#ffffff"
+                    }
+                  }
+                },
+                {
+                  "id": "icon-sm-danger-185",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "width": 32,
+                  "height": 32,
+                  "fill": "$ui-color-danger",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-danger"
+                  },
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "trash-2",
+                      "fill": "#ffffff"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "text-186",
+                  "fill": "$ui-color-muted",
+                  "content": "md",
+                  "fontFamily": "Nata Sans",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "id": "icon-md-default-187",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "search"
+                    }
+                  }
+                },
+                {
+                  "id": "icon-md-primary-188",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "fill": "$ui-color-primary",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "plus",
+                      "fill": "#ffffff"
+                    }
+                  }
+                },
+                {
+                  "id": "icon-md-ghost-189",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "fill": "rgba(255,255,255,0)",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "x",
+                      "fill": "$ui-color-muted"
+                    }
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "text-190",
+                  "fill": "$ui-color-muted",
+                  "content": "lg",
+                  "fontFamily": "Nata Sans",
+                  "fontSize": 12,
+                  "fontWeight": "700"
+                },
+                {
+                  "id": "icon-lg-default-191",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "width": 48,
+                  "height": 48,
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "panel-left",
+                      "width": 18,
+                      "height": 18
+                    }
+                  }
+                },
+                {
+                  "id": "icon-lg-primary-192",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "width": 48,
+                  "height": 48,
+                  "fill": "$ui-color-primary",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "check",
+                      "fill": "#ffffff",
+                      "width": 18,
+                      "height": 18
+                    }
+                  }
+                },
+                {
+                  "id": "icon-lg-danger-193",
+                  "type": "ref",
+                  "ref": "icon-button",
+                  "width": 48,
+                  "height": 48,
+                  "fill": "$ui-color-danger",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-danger"
+                  },
+                  "descendants": {
+                    "icon-button-icon": {
+                      "iconFontName": "trash-2",
+                      "fill": "#ffffff",
+                      "width": 18,
+                      "height": 18
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "RIHXG",
+          "name": "Forms",
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-210",
+              "fill": "$ui-color-text",
+              "content": "Forms",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-211",
+              "fill": "$ui-color-muted",
+              "content": "Field shell, shared inputs, checkboxes, toggles, and radio cards from the current code.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "E7uyL",
+              "name": "Row one",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "field",
+                  "name": "Field",
+                  "reusable": true,
+                  "width": 248,
+                  "layout": "vertical",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "cP3IY",
+                      "name": "Label",
+                      "width": 248,
+                      "gap": 4,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "field-label",
+                          "fill": "$ui-color-text",
+                          "content": "Map name",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "field-required",
+                          "fill": "$ui-color-danger",
+                          "content": "*",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "field-hint",
+                      "fill": "$ui-color-muted",
+                      "content": "Optional helper copy for collaborators",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "text-input",
+                  "name": "TextInput",
+                  "reusable": true,
+                  "width": 248,
+                  "height": 40,
+                  "fill": "$ui-color-input-bg",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 12,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-input-placeholder",
+                      "fill": "$ui-color-input-placeholder",
+                      "content": "Search maps",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "select-input",
+                  "name": "SelectInput",
+                  "reusable": true,
+                  "width": 248,
+                  "height": 40,
+                  "fill": "$ui-color-input-bg",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 12,
+                  "padding": [
+                    10,
+                    14
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "select-input-placeholder",
+                      "fill": "$ui-color-input-placeholder",
+                      "content": "Choose workspace",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "icon_font",
+                      "id": "select-input-icon",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "chevron-down",
+                      "iconFontFamily": "lucide",
+                      "fill": "$ui-color-muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "textarea-input",
+                  "name": "TextareaInput",
+                  "reusable": true,
+                  "width": 248,
+                  "height": 84,
+                  "fill": "$ui-color-input-bg",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 12,
+                  "padding": [
+                    12,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "textarea-input-placeholder",
+                      "fill": "$ui-color-input-placeholder",
+                      "content": "Describe the map purpose",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Trt7w",
+              "name": "States",
+              "gap": 12,
+              "children": [
+                {
+                  "id": "field-required-199",
+                  "type": "ref",
+                  "ref": "field",
+                  "descendants": {
+                    "field-label": {
+                      "content": "Map name"
+                    },
+                    "field-hint": {
+                      "content": "Required before collaborators can join"
+                    }
+                  }
+                },
+                {
+                  "id": "input-focus-200",
+                  "type": "ref",
+                  "ref": "text-input",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "descendants": {
+                    "text-input-placeholder": {
+                      "content": "Untitled map",
+                      "fill": "$ui-color-text"
+                    }
+                  }
+                },
+                {
+                  "id": "input-invalid-201",
+                  "type": "ref",
+                  "ref": "text-input",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-danger"
+                  },
+                  "descendants": {
+                    "text-input-placeholder": {
+                      "content": "Name is required",
+                      "fill": "$ui-color-danger"
+                    }
+                  }
+                },
+                {
+                  "id": "select-invalid-202",
+                  "type": "ref",
+                  "ref": "select-input",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-danger"
+                  },
+                  "descendants": {
+                    "select-input-placeholder": {
+                      "content": "Select a workspace",
+                      "fill": "$ui-color-danger"
+                    },
+                    "select-input-icon": {
+                      "fill": "$ui-color-danger"
+                    }
+                  }
+                },
+                {
+                  "id": "textarea-focus-203",
+                  "type": "ref",
+                  "ref": "textarea-input",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-primary"
+                  },
+                  "descendants": {
+                    "textarea-input-placeholder": {
+                      "content": "Outline key flows\nCapture structure before review",
+                      "fill": "$ui-color-text"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WutfA",
+              "name": "Row two",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "checkbox-field",
+                  "name": "CheckboxField",
+                  "reusable": true,
+                  "width": 260,
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "checkbox-box",
+                      "name": "Box",
+                      "width": 16,
+                      "height": 16,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 4,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "2dBf9",
+                      "name": "Copy",
+                      "width": 220,
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "checkbox-label",
+                          "fill": "$ui-color-text",
+                          "content": "Email me updates",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "checkbox-description",
+                          "fill": "$ui-color-muted",
+                          "content": "Get notified about map changes",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "checkbox-disabled-205",
+                  "type": "ref",
+                  "ref": "checkbox-field",
+                  "descendants": {
+                    "checkbox-box": {
+                      "fill": "$ui-color-surface-muted"
+                    },
+                    "checkbox-label": {
+                      "content": "Shared externally",
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "checkbox-description": {
+                      "content": "Unavailable on this plan"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "toggle-switch",
+                  "name": "ToggleSwitch",
+                  "reusable": true,
+                  "width": 240,
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "kD26j",
+                      "name": "Copy",
+                      "width": 180,
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "toggle-label",
+                          "fill": "$ui-color-text",
+                          "content": "Auto-save",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "toggle-description",
+                          "fill": "$ui-color-muted",
+                          "content": "Changes save every few seconds",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "toggle-track",
+                      "name": "Track",
+                      "width": 38,
+                      "height": 22,
+                      "fill": "$ui-color-border",
+                      "cornerRadius": 999,
+                      "padding": 2,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "toggle-thumb",
+                          "name": "Thumb",
+                          "width": 18,
+                          "height": 18,
+                          "fill": "#ffffff",
+                          "cornerRadius": 999
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "toggle-on-206",
+                  "type": "ref",
+                  "ref": "toggle-switch",
+                  "descendants": {
+                    "toggle-label": {
+                      "content": "Auto-save"
+                    },
+                    "toggle-description": {
+                      "content": "Changes save every few seconds"
+                    },
+                    "toggle-track": {
+                      "fill": "$ui-color-primary"
+                    }
+                  }
+                },
+                {
+                  "id": "toggle-disabled-207",
+                  "type": "ref",
+                  "ref": "toggle-switch",
+                  "descendants": {
+                    "toggle-label": {
+                      "content": "Locked by permissions",
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "toggle-description": {
+                      "content": "Only owners can change this"
+                    },
+                    "toggle-track": {
+                      "fill": "$ui-color-surface-muted"
+                    },
+                    "toggle-thumb": {
+                      "fill": "$ui-color-border"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "G9z7a",
+              "name": "Row three",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "radio-card-group",
+                  "name": "RadioCardGroup",
+                  "reusable": true,
+                  "width": 290,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "radio-selected-option",
+                      "name": "Selected",
+                      "width": 290,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-primary"
+                      },
+                      "gap": 10,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "radio-selected-ring",
+                          "name": "Ring",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "$ui-color-surface",
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 2,
+                            "fill": "$ui-color-primary"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "radio-selected-dot",
+                              "name": "Dot",
+                              "width": 6,
+                              "height": 6,
+                              "fill": "$ui-color-primary",
+                              "cornerRadius": 999
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "9zs7p",
+                          "name": "Copy",
+                          "width": 220,
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "radio-selected-label",
+                              "fill": "$ui-color-text",
+                              "content": "Invite by email",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 13,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "radio-selected-description",
+                              "fill": "$ui-color-muted",
+                              "content": "Best for specific collaborators",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "radio-default-option",
+                      "name": "Default",
+                      "width": 290,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "gap": 10,
+                      "padding": [
+                        10,
+                        12
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "radio-default-ring",
+                          "name": "Ring",
+                          "width": 16,
+                          "height": 16,
+                          "fill": "$ui-color-surface",
+                          "cornerRadius": 999,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          }
+                        },
+                        {
+                          "type": "frame",
+                          "id": "pFNtl",
+                          "name": "Copy",
+                          "width": 220,
+                          "layout": "vertical",
+                          "gap": 2,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "radio-default-label",
+                              "fill": "$ui-color-text",
+                              "content": "Share link",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "text",
+                              "id": "radio-default-description",
+                              "fill": "$ui-color-muted",
+                              "content": "Anyone with the link can request access",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 11,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "20Mwa",
+          "name": "Selection And Search",
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-224",
+              "fill": "$ui-color-text",
+              "content": "Selection And Search",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-225",
+              "fill": "$ui-color-muted",
+              "content": "Segmented controls, option cards, and topbar search all mapped from current app patterns.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "lwB7I",
+              "name": "Segmented",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "segmented-control",
+                  "name": "SegmentedControl",
+                  "reusable": true,
+                  "width": 278,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 6,
+                  "padding": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "seg-active",
+                      "name": "Active",
+                      "width": 86,
+                      "height": 32,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 999,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "seg-active-label",
+                          "fill": "$ui-color-text",
+                          "content": "General",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "seg-idle-1",
+                      "name": "Idle",
+                      "width": 86,
+                      "height": 32,
+                      "fill": "rgba(255,255,255,0)",
+                      "cornerRadius": 999,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "seg-idle-1-label",
+                          "fill": "$ui-color-muted",
+                          "content": "Sharing",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "seg-idle-2",
+                      "name": "Idle",
+                      "width": 86,
+                      "height": 32,
+                      "fill": "rgba(255,255,255,0)",
+                      "cornerRadius": 999,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "seg-idle-2-label",
+                          "fill": "$ui-color-muted",
+                          "content": "History",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 12,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "seg-tabs-213",
+                  "type": "ref",
+                  "ref": "segmented-control",
+                  "fill": "rgba(255,255,255,0)",
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "cornerRadius": 0,
+                  "descendants": {
+                    "seg-active": {
+                      "width": 86,
+                      "fill": "rgba(255,255,255,0)",
+                      "stroke": {}
+                    },
+                    "seg-active-label": {
+                      "fill": "$ui-color-primary"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "RVG10",
+                  "name": "Grid",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "general-215",
+                      "name": "General",
+                      "width": 116,
+                      "height": 40,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-214",
+                          "fill": "$ui-color-text",
+                          "content": "General",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "blank-map-217",
+                      "name": "Blank map",
+                      "width": 116,
+                      "height": 40,
+                      "fill": "$ui-color-accent-soft",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-primary"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-216",
+                          "fill": "$ui-color-text",
+                          "content": "Blank map",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "import-csv-219",
+                      "name": "Import CSV",
+                      "width": 116,
+                      "height": 40,
+                      "fill": "$ui-color-surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-218",
+                          "fill": "$ui-color-muted",
+                          "content": "Import CSV",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "vRp76",
+              "name": "Cards and search",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "option-card",
+                  "name": "OptionCard",
+                  "reusable": true,
+                  "width": 360,
+                  "fill": "$ui-color-surface-muted",
+                  "cornerRadius": 10,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 16,
+                  "padding": 16,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "option-card-icon",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "plus",
+                      "iconFontFamily": "lucide",
+                      "fill": "$ui-color-muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "DuDw2",
+                      "name": "Copy",
+                      "width": 228,
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "option-card-title",
+                          "fill": "$ui-color-text",
+                          "content": "Create blank map",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "option-card-description",
+                          "fill": "$ui-color-muted",
+                          "content": "Start with an empty canvas and add structure manually",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "option-card-badge-7",
+                      "type": "ref",
+                      "ref": "inline-badge",
+                      "descendants": {
+                        "inline-badge-icon": {
+                          "iconFontName": "sparkles"
+                        },
+                        "inline-badge-label": {
+                          "content": "Default"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "option-card-disabled-222",
+                  "type": "ref",
+                  "ref": "option-card",
+                  "fill": "$ui-color-surface",
+                  "descendants": {
+                    "option-card-icon": {
+                      "iconFontName": "upload",
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "option-card-title": {
+                      "content": "Import Miro board",
+                      "fill": "$ui-color-input-placeholder"
+                    },
+                    "option-card-description": {
+                      "content": "Coming soon",
+                      "fill": "$ui-color-input-placeholder"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "search-bar",
+                  "name": "SearchBar",
+                  "reusable": true,
+                  "width": 496,
+                  "height": 40,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 6,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1.5,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 10,
+                  "padding": [
+                    4,
+                    10
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "search-icon",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "search",
+                      "iconFontFamily": "lucide",
+                      "fill": "$ui-color-muted"
+                    },
+                    {
+                      "type": "text",
+                      "id": "search-placeholder",
+                      "fill": "$ui-color-input-placeholder",
+                      "content": "Search maps",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "4wRrf",
+          "name": "Menus, Nodes, And Shells",
+          "width": 1640,
+          "fill": "$ui-color-surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$ui-color-border"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 20,
+          "children": [
+            {
+              "type": "text",
+              "id": "text-230",
+              "fill": "$ui-color-text",
+              "content": "Menus, Nodes, And Shells",
+              "fontFamily": "Nata Sans",
+              "fontSize": 20,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "text-231",
+              "fill": "$ui-color-muted",
+              "content": "Current menu surfaces, topbar, node cards, and reusable shells.",
+              "fontFamily": "Nata Sans",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "iRTxP",
+              "name": "Menus",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "account-menu",
+                  "name": "AccountMenu",
+                  "reusable": true,
+                  "width": 204,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 10,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": 8,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "fnYMw",
+                      "name": "Item",
+                      "width": 188,
+                      "cornerRadius": 8,
+                      "gap": 12,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "icon-8",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "bell",
+                          "iconFontFamily": "lucide",
+                          "fill": "$ui-color-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-9",
+                          "fill": "$ui-color-muted",
+                          "content": "Notifications",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "badge-11",
+                          "name": "Badge",
+                          "width": 18,
+                          "height": 18,
+                          "fill": "$ui-color-danger",
+                          "cornerRadius": 999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "text-10",
+                              "fill": "#ffffff",
+                              "content": "2",
+                              "lineHeight": 1,
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 10,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "fJJ3v",
+                      "name": "Item",
+                      "width": 188,
+                      "cornerRadius": 8,
+                      "gap": 12,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "icon-13",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "settings-2",
+                          "iconFontFamily": "lucide",
+                          "fill": "$ui-color-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-14",
+                          "fill": "$ui-color-muted",
+                          "content": "Settings",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "badge-16",
+                          "name": "Badge",
+                          "width": 22,
+                          "height": 18,
+                          "fill": "$ui-color-accent-soft",
+                          "cornerRadius": 999,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "text-15",
+                              "fill": "$ui-color-primary-hover",
+                              "content": "New",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 10,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "divider-18",
+                      "name": "Divider",
+                      "width": 188,
+                      "height": 1,
+                      "fill": "$ui-color-border"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "fksvT",
+                      "name": "Item",
+                      "width": 188,
+                      "cornerRadius": 8,
+                      "gap": 12,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "icon-19",
+                          "width": 16,
+                          "height": 16,
+                          "iconFontName": "log-out",
+                          "iconFontFamily": "lucide",
+                          "fill": "$ui-color-muted"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-20",
+                          "fill": "$ui-color-muted",
+                          "content": "Log out",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "node-menu",
+                  "name": "NodeMenu",
+                  "reusable": true,
+                  "width": 206,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 4,
+                  "padding": 6,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "text-22",
+                      "fill": "$ui-color-input-placeholder",
+                      "content": "NODE STATUS",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 11,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jha5j",
+                      "name": "Item",
+                      "width": 190,
+                      "fill": "$ui-color-accent-soft",
+                      "cornerRadius": 6,
+                      "gap": 12,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-23",
+                          "fill": "$ui-color-primary-hover",
+                          "content": "New",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-24",
+                          "fill": "$ui-color-muted",
+                          "content": "⌘1",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "qqKPI",
+                      "name": "Item",
+                      "width": 190,
+                      "cornerRadius": 6,
+                      "gap": 12,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-26",
+                          "fill": "$ui-color-text",
+                          "content": "Needs move",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-27",
+                          "fill": "$ui-color-muted",
+                          "content": "⌘2",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "divider-29",
+                      "name": "Divider",
+                      "width": 190,
+                      "height": 1,
+                      "fill": "$ui-color-border"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "6SMT7",
+                      "name": "Item",
+                      "width": 190,
+                      "cornerRadius": 6,
+                      "gap": 12,
+                      "padding": [
+                        8,
+                        10
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-30",
+                          "fill": "$ui-color-danger-hover",
+                          "content": "Clear status",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "iU1TF",
+              "name": "Topbar and node",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "topbar",
+                  "name": "Topbar",
+                  "reusable": true,
+                  "width": 1280,
+                  "height": 60,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 10,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "gap": 12,
+                  "padding": [
+                    0,
+                    20
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "7m6C2",
+                      "name": "Brand",
+                      "width": 180,
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-32",
+                          "fill": "#2563eb",
+                          "content": "MapMat",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 32,
+                          "fontWeight": "800"
+                        }
+                      ]
+                    },
+                    {
+                      "id": "topbar-search-34",
+                      "type": "ref",
+                      "ref": "search-bar"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "ssGUI",
+                      "name": "Right",
+                      "width": 320,
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "topbar-badge-35",
+                          "type": "ref",
+                          "ref": "inline-badge",
+                          "descendants": {
+                            "inline-badge-icon": {
+                              "iconFontName": "users"
+                            },
+                            "inline-badge-label": {
+                              "content": "Shared"
+                            }
+                          }
+                        },
+                        {
+                          "type": "frame",
+                          "id": "user-button",
+                          "name": "UserButton",
+                          "width": 110,
+                          "height": 32,
+                          "fill": "$ui-color-surface-muted",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          },
+                          "gap": 6,
+                          "padding": [
+                            6,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "user-btn-avatar",
+                              "name": "Avatar",
+                              "width": 18,
+                              "height": 18,
+                              "fill": "$ui-color-primary",
+                              "cornerRadius": 999
+                            },
+                            {
+                              "type": "text",
+                              "id": "user-btn-label",
+                              "fill": "$ui-color-muted",
+                              "content": "Matthew",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 13,
+                              "fontWeight": "500"
+                            },
+                            {
+                              "type": "icon_font",
+                              "id": "user-btn-icon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "chevron-down",
+                              "iconFontFamily": "lucide",
+                              "fill": "$ui-color-primary"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "node-card",
+                  "name": "NodeCard",
+                  "reusable": true,
+                  "width": 288,
+                  "height": 200,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "oZb6e",
+                      "name": "Header",
+                      "width": 256,
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "node-card-title",
+                          "fill": "$ui-color-text",
+                          "content": "Pricing Page",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 15,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "id": "comment-badge-ref-37",
+                          "type": "ref",
+                          "ref": "inline-badge",
+                          "descendants": {
+                            "inline-badge-icon": {
+                              "iconFontName": "message-circle"
+                            },
+                            "inline-badge-label": {
+                              "content": "3 comments"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "node-card-body",
+                      "fill": "$ui-color-muted",
+                      "content": "Primary conversion surface for enterprise plans and self-serve onboarding.",
+                      "fontFamily": "Nata Sans",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "spacer-39",
+                      "name": "Spacer",
+                      "width": 1,
+                      "height": 48,
+                      "fill": "rgba(255,255,255,0)"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BPOMb",
+                      "name": "StatusRow",
+                      "width": 256,
+                      "gap": 12,
+                      "children": [
+                        {
+                          "id": "node-status-ref-40",
+                          "type": "ref",
+                          "ref": "status-badge",
+                          "fill": "$ui-status-warning-bg",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-status-warning-border"
+                          },
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "padding": [
+                            4,
+                            8
+                          ],
+                          "gap": 4,
+                          "descendants": {
+                            "status-badge-dot": {
+                              "fill": "$ui-status-warning-icon"
+                            },
+                            "status-badge-label": {
+                              "content": "Needs move",
+                              "textAlignVertical": "top",
+                              "lineHeight": 0.9090909090909091,
+                              "letterSpacing": 0
+                            }
+                          }
+                        },
+                        {
+                          "type": "frame",
+                          "id": "3M82K",
+                          "name": "Badges",
+                          "gap": 4,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "id": "node-badge-ref-1-41",
+                              "type": "ref",
+                              "ref": "node-badge",
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "descendants": {
+                                "node-badge-label": {
+                                  "content": "Marketing",
+                                  "lineHeight": 0.9090909090909091,
+                                  "letterSpacing": 0
+                                }
+                              }
+                            },
+                            {
+                              "id": "node-badge-ref-2-42",
+                              "type": "ref",
+                              "ref": "node-badge",
+                              "descendants": {
+                                "node-badge-label": {
+                                  "content": "L2"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "rhBxG",
+              "name": "Shells",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "modal",
+                  "name": "Modal",
+                  "reusable": true,
+                  "width": 520,
+                  "fill": "$modal-bg",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "xtn5m",
+                      "name": "Header",
+                      "width": 472,
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "OyOSX",
+                          "name": "Copy",
+                          "width": 320,
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "modal-title",
+                              "fill": "$ui-color-text",
+                              "content": "Create map",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 18,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "modal-subtitle",
+                              "fill": "$ui-color-muted",
+                              "content": "Choose how you want to start",
+                              "fontFamily": "Nata Sans",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "id": "modal-close-46",
+                          "type": "ref",
+                          "ref": "icon-button",
+                          "width": 32,
+                          "height": 32,
+                          "descendants": {
+                            "icon-button-icon": {
+                              "iconFontName": "x"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "9QLjX",
+                      "name": "Body slot",
+                      "width": 472,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 12,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-48",
+                          "fill": "$ui-color-text",
+                          "content": "Body slot",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-49",
+                          "fill": "$ui-color-muted",
+                          "content": "Compose current modal content from shared inputs, segmented controls, and option cards.",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Gn5x0",
+                      "name": "Footer",
+                      "width": 472,
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "id": "modal-cancel-51",
+                          "type": "ref",
+                          "ref": "button",
+                          "name": "Button / secondary",
+                          "fill": "$ui-color-surface",
+                          "stroke": {
+                            "align": "inside",
+                            "thickness": 1,
+                            "fill": "$ui-color-border"
+                          },
+                          "width": 100,
+                          "descendants": {
+                            "button-spinner": {
+                              "fill": "$ui-color-muted"
+                            },
+                            "button-label": {
+                              "content": "Cancel",
+                              "fill": "$ui-color-muted"
+                            }
+                          }
+                        },
+                        {
+                          "id": "modal-primary-52",
+                          "type": "ref",
+                          "ref": "button",
+                          "width": 124,
+                          "descendants": {
+                            "button-label": {
+                              "content": "Create map"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "account-drawer",
+                  "name": "AccountDrawer",
+                  "reusable": true,
+                  "width": 420,
+                  "fill": "$ui-color-surface",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$ui-color-border"
+                  },
+                  "layout": "vertical",
+                  "gap": 16,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Gvz82",
+                      "name": "Header",
+                      "width": 392,
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "FQ7pt",
+                          "name": "Title",
+                          "gap": 12,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "icon-54",
+                              "width": 16,
+                              "height": 16,
+                              "iconFontName": "settings-2",
+                              "iconFontFamily": "lucide",
+                              "fill": "$ui-color-primary"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "gsYCE",
+                              "name": "Copy",
+                              "width": 280,
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "drawer-title",
+                                  "fill": "$ui-color-text",
+                                  "content": "Project settings",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 18,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "drawer-subtitle",
+                                  "fill": "$ui-color-muted",
+                                  "content": "Manage access, sharing, and defaults",
+                                  "fontFamily": "Nata Sans",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "id": "drawer-close-57",
+                          "type": "ref",
+                          "ref": "icon-button",
+                          "width": 32,
+                          "height": 32,
+                          "descendants": {
+                            "icon-button-icon": {
+                              "iconFontName": "x"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kOmEL",
+                      "name": "Panel",
+                      "width": 392,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 12,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-59",
+                          "fill": "$ui-color-text",
+                          "content": "Panel",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-60",
+                          "fill": "$ui-color-muted",
+                          "content": "Workspace access, theme defaults, and activity cards use the same shared surface rules.",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "gBg8h",
+                      "name": "Panel",
+                      "width": 392,
+                      "fill": "$ui-color-surface-muted",
+                      "cornerRadius": 12,
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$ui-color-border"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "text-62",
+                          "fill": "$ui-color-text",
+                          "content": "Panel",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "text-63",
+                          "fill": "$ui-color-muted",
+                          "content": "Drawer content stays stacked and should scroll inside the body when needed.",
+                          "fontFamily": "Nata Sans",
+                          "fontSize": 11,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "themes": {
+    "theme": [
+      "light",
+      "dark"
+    ]
+  },
+  "variables": {
+    "bus-y-gap": {
+      "type": "string",
+      "value": "80px"
+    },
+    "color-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-bg-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-bg-primary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-bg-secondary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#e2e8f0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#3d2a52",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-danger": {
+      "type": "color",
+      "value": "#ef4444"
+    },
+    "color-primary": {
+      "type": "color",
+      "value": "#6366f1"
+    },
+    "color-primary-hover": {
+      "type": "color",
+      "value": "#4f46e5"
+    },
+    "color-text-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#9f8fb8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-text-primary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1e293b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#e2e0e8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "color-text-secondary": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#9f8fb8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-bg": {
+      "type": "string",
+      "value": [
+        {
+          "value": "linear-gradient(180deg, rgba(234, 247, 255, 0.98) 0%, rgba(225, 241, 251, 0.98) 100%)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "linear-gradient(180deg, rgba(39, 27, 53, 0.98) 0%, rgba(28, 18, 39, 0.98) 100%)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-bg-hover": {
+      "type": "string",
+      "value": [
+        {
+          "value": "linear-gradient(180deg, rgba(240, 250, 255, 1) 0%, rgba(230, 244, 253, 1) 100%)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "linear-gradient(180deg, rgba(49, 34, 67, 1) 0%, rgba(35, 23, 48, 1) 100%)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(184, 213, 235, 0.92)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(86, 69, 110, 0.9)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#b8add1",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-shadow": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(112, 144, 176, 0.18)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(4, 1, 8, 0.34)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-shadow-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(112, 144, 176, 0.22)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(4, 1, 8, 0.42)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "feedback-tab-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1f2937",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#e2e0e8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "gap-l1-x": {
+      "type": "string",
+      "value": "80px"
+    },
+    "gap-stack-y": {
+      "type": "string",
+      "value": "56px"
+    },
+    "indent-x": {
+      "type": "string",
+      "value": "40px"
+    },
+    "modal-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#0d0812",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-bg-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1025",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#e2e8f0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#301E3F",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-card-padding": {
+      "type": "string",
+      "value": "16px"
+    },
+    "modal-card-radius": {
+      "type": "string",
+      "value": "10px"
+    },
+    "modal-footer-padding": {
+      "type": "string",
+      "value": "24px"
+    },
+    "modal-gap": {
+      "type": "string",
+      "value": "16px"
+    },
+    "modal-header-padding": {
+      "type": "string",
+      "value": "24px"
+    },
+    "modal-overlay-bg": {
+      "type": "color",
+      "value": "rgba(0, 0, 0, 0.5)"
+    },
+    "modal-padding": {
+      "type": "string",
+      "value": "24px"
+    },
+    "modal-shadow": {
+      "type": "string",
+      "value": [
+        {
+          "value": "0 20px 25px rgba(0, 0, 0, 0.15)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "0 20px 25px rgba(var(--shadow-rgb), 0.12)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "modal-subtitle-size": {
+      "type": "string",
+      "value": "0.875rem"
+    },
+    "modal-title-size": {
+      "type": "string",
+      "value": "1.125rem"
+    },
+    "modal-title-weight": {
+      "type": "string",
+      "value": "600"
+    },
+    "modal-width-lg": {
+      "type": "string",
+      "value": "520px"
+    },
+    "modal-width-md": {
+      "type": "string",
+      "value": "480px"
+    },
+    "modal-width-sm": {
+      "type": "string",
+      "value": "400px"
+    },
+    "node-h-collapsed": {
+      "type": "string",
+      "value": "200px"
+    },
+    "node-h-thumb": {
+      "type": "string",
+      "value": "262px"
+    },
+    "node-w": {
+      "type": "string",
+      "value": "288px"
+    },
+    "orphan-group-gap": {
+      "type": "string",
+      "value": "160px"
+    },
+    "radius-lg": {
+      "type": "string",
+      "value": "8px"
+    },
+    "radius-md": {
+      "type": "string",
+      "value": "6px"
+    },
+    "radius-sm": {
+      "type": "string",
+      "value": "6px"
+    },
+    "radius-xl": {
+      "type": "string",
+      "value": "12px"
+    },
+    "root-y": {
+      "type": "string",
+      "value": "0px"
+    },
+    "shadow-rgb": {
+      "type": "string",
+      "value": [
+        {
+          "value": "0, 0, 0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "180, 180, 180",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "shadow-rgb-deep": {
+      "type": "string",
+      "value": [
+        {
+          "value": "15, 23, 42",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "160, 160, 160",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "shadow-soft": {
+      "type": "string",
+      "value": "0 4px 12px rgba(var(--shadow-rgb), 0.12)"
+    },
+    "shadow-strong": {
+      "type": "string",
+      "value": "0 12px 24px rgba(var(--shadow-rgb-deep), 0.18)"
+    },
+    "space-lg": {
+      "type": "string",
+      "value": "16px"
+    },
+    "space-md": {
+      "type": "string",
+      "value": "12px"
+    },
+    "space-sm": {
+      "type": "string",
+      "value": "8px"
+    },
+    "space-xl": {
+      "type": "string",
+      "value": "24px"
+    },
+    "stroke-pad-x": {
+      "type": "string",
+      "value": "20px"
+    },
+    "ui-canvas-scrim": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(248, 250, 252, 0.92)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(13, 8, 18, 0.9)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-accent-soft": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(99, 102, 241, 0.12)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(99, 102, 241, 0.18)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-accent-soft-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(99, 102, 241, 0.28)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(129, 140, 248, 0.36)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#e2e8f0",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#3d2a52",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-border-strong": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#cbd5e1",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#4d3a62",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-danger": {
+      "type": "color",
+      "value": "#ef4444"
+    },
+    "ui-color-danger-hover": {
+      "type": "color",
+      "value": "#dc2626"
+    },
+    "ui-color-icon-hover": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f1f5f9",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#301E3F",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-input-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-input-placeholder": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#94a3b8",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#6b5a80",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#64748b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#9f8fb8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-primary": {
+      "type": "color",
+      "value": "#6366f1"
+    },
+    "ui-color-primary-hover": {
+      "type": "color",
+      "value": "#4f46e5"
+    },
+    "ui-color-surface": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#ffffff",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1a1022",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-surface-muted": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#f8fafc",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1f3d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-color-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1e293b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#e2e0e8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-focus-ring": {
+      "type": "string",
+      "value": "0 0 0 3px rgba(99, 102, 241, 0.1)"
+    },
+    "ui-inline-badge-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(99, 102, 241, 0.12)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(167, 139, 250, 0.16)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-inline-badge-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#4f46e5",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#c4b5fd",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-overlay-shadow": {
+      "type": "string",
+      "value": [
+        {
+          "value": "0 12px 24px rgba(15, 23, 42, 0.12)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "0 12px 24px rgba(0, 0, 0, 0.4)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-radius-lg": {
+      "type": "string",
+      "value": "12px"
+    },
+    "ui-radius-md": {
+      "type": "string",
+      "value": "8px"
+    },
+    "ui-radius-sm": {
+      "type": "string",
+      "value": "6px"
+    },
+    "ui-route-gate-surface": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(255, 255, 255, 0.96)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(26, 16, 34, 0.96)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-route-gate-warning-surface": {
+      "type": "string",
+      "value": [
+        {
+          "value": "linear-gradient(180deg, rgba(255, 251, 235, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "linear-gradient(180deg, rgba(42, 29, 8, 0.98) 0%, rgba(26, 16, 34, 0.98) 100%)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-selection-highlight-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(14, 165, 233, 0.08)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(14, 165, 233, 0.12)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-selection-highlight-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(14, 165, 233, 0.65)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(56, 189, 248, 0.8)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-selection-highlight-inset": {
+      "type": "color",
+      "value": [
+        {
+          "value": "rgba(255, 255, 255, 0.72)",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "rgba(15, 23, 42, 0.88)",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fee2e2",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2d1313",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fca5a5",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#7f1d1d",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#dc2626",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#f87171",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-danger-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#991b1b",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#fecaca",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#dbeafe",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#0f1d3a",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#93c5fd",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#1d4ed8",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#2563eb",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#60a5fa",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-info-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#1e3a8a",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#bfdbfe",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#dcfce7",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#102417",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#86efac",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#166534",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#16a34a",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#4ade80",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-success-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#166534",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#bbf7d0",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-bg": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fef3c7",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#2a1d08",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-border": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#fbbf24",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#d97706",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-icon": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#d97706",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#fbbf24",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "ui-status-warning-text": {
+      "type": "color",
+      "value": [
+        {
+          "value": "#92400e",
+          "theme": {
+            "theme": "light"
+          }
+        },
+        {
+          "value": "#fde68a",
+          "theme": {
+            "theme": "dark"
+          }
+        }
+      ]
+    },
+    "runtime-depth-1": {
+      "type": "color",
+      "value": "#6366f1"
+    },
+    "runtime-depth-2": {
+      "type": "color",
+      "value": "#0ea5e9"
+    },
+    "runtime-depth-3": {
+      "type": "color",
+      "value": "#10b981"
+    },
+    "runtime-depth-4": {
+      "type": "color",
+      "value": "#f59e0b"
+    },
+    "runtime-depth-5": {
+      "type": "color",
+      "value": "#ef4444"
+    },
+    "runtime-depth-6": {
+      "type": "color",
+      "value": "#8b5cf6"
+    },
+    "runtime-connection-userFlows": {
+      "type": "color",
+      "value": "#14b8a6"
+    },
+    "runtime-connection-crossLinks": {
+      "type": "color",
+      "value": "#f97316"
+    },
+    "runtime-connection-brokenLinks": {
+      "type": "color",
+      "value": "#fca5a5"
+    },
+    "runtime-layout-nodeW": {
+      "type": "string",
+      "value": "288"
+    },
+    "runtime-layout-nodeHCollapsed": {
+      "type": "string",
+      "value": "200"
+    },
+    "runtime-layout-nodeHThumb": {
+      "type": "string",
+      "value": "262"
+    },
+    "runtime-layout-gapL1X": {
+      "type": "string",
+      "value": "80"
+    },
+    "runtime-layout-gapStackY": {
+      "type": "string",
+      "value": "56"
+    },
+    "runtime-layout-indentX": {
+      "type": "string",
+      "value": "40"
+    },
+    "runtime-layout-busYGap": {
+      "type": "string",
+      "value": "80"
+    },
+    "runtime-layout-orphanGroupGap": {
+      "type": "string",
+      "value": "160"
+    },
+    "runtime-layout-strokePadX": {
+      "type": "string",
+      "value": "20"
+    },
+    "runtime-layout-rootY": {
+      "type": "string",
+      "value": "0"
+    },
+    "landing-bg": {
+      "type": "color",
+      "value": "#f6f8fc"
+    },
+    "landing-surface": {
+      "type": "color",
+      "value": "rgba(255, 255, 255, 0.86)"
+    },
+    "landing-surface-strong": {
+      "type": "color",
+      "value": "#ffffff"
+    },
+    "landing-surface-alt": {
+      "type": "color",
+      "value": "#eef3ff"
+    },
+    "landing-border": {
+      "type": "color",
+      "value": "rgba(99, 102, 241, 0.16)"
+    },
+    "landing-border-strong": {
+      "type": "color",
+      "value": "rgba(99, 102, 241, 0.26)"
+    },
+    "landing-text": {
+      "type": "color",
+      "value": "#172033"
+    },
+    "landing-text-muted": {
+      "type": "color",
+      "value": "#5a6478"
+    },
+    "landing-title": {
+      "type": "color",
+      "value": "#0f172a"
+    },
+    "landing-primary": {
+      "type": "color",
+      "value": "#4f46e5"
+    },
+    "landing-primary-strong": {
+      "type": "color",
+      "value": "#3730a3"
+    },
+    "landing-primary-soft": {
+      "type": "color",
+      "value": "rgba(79, 70, 229, 0.12)"
+    },
+    "landing-accent": {
+      "type": "color",
+      "value": "#0f766e"
+    },
+    "landing-success": {
+      "type": "color",
+      "value": "#15803d"
+    },
+    "landing-success-soft": {
+      "type": "color",
+      "value": "rgba(21, 128, 61, 0.12)"
+    },
+    "landing-warning": {
+      "type": "color",
+      "value": "#a16207"
+    },
+    "landing-warning-soft": {
+      "type": "color",
+      "value": "rgba(161, 98, 7, 0.14)"
+    },
+    "landing-muted-soft": {
+      "type": "color",
+      "value": "rgba(71, 85, 105, 0.14)"
+    },
+    "landing-shadow": {
+      "type": "string",
+      "value": "0 24px 80px rgba(15, 23, 42, 0.08)"
+    },
+    "landing-radius-xl": {
+      "type": "string",
+      "value": "28px"
+    },
+    "landing-radius-lg": {
+      "type": "string",
+      "value": "20px"
+    },
+    "landing-radius-md": {
+      "type": "string",
+      "value": "16px"
+    }
+  }
+}

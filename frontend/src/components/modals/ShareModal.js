@@ -150,8 +150,8 @@ const ShareModal = ({
         <div className="share-collab-main">
           <div className="share-collab-name">
             {member.userName || member.userEmail || 'Member'}
-            {isSelf ? <span className="share-collab-inline-badge">You</span> : null}
-            {isImplicitOwner ? <span className="share-collab-inline-badge">Primary owner</span> : null}
+            {isSelf ? <span className="ui-inline-badge share-collab-inline-badge">You</span> : null}
+            {isImplicitOwner ? <span className="ui-inline-badge share-collab-inline-badge">Primary owner</span> : null}
           </div>
           <div className="share-collab-meta">{member.userEmail || ''}</div>
         </div>
