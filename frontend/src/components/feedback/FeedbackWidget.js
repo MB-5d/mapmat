@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Crosshair,
+  MessageSquarePlus,
   X,
 } from 'lucide-react';
 
@@ -31,28 +32,6 @@ const SCOPE_OPTIONS = [
   { value: 'flow', label: 'This flow' },
   { value: 'specific_thing', label: 'Specific thing' },
 ];
-
-function MessageSquareShareIcon({ size = 14, strokeWidth = 2, ...props }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h9" />
-      <path d="M15 5h6" />
-      <path d="m18 2 3 3-3 3" />
-    </svg>
-  );
-}
 
 function getActiveSurfaceList(activeSurfaces = {}) {
   return Object.entries(activeSurfaces)
@@ -295,7 +274,7 @@ export default function FeedbackWidget({
           >
             <span className="feedback-widget-tab-label">Feedback</span>
             <span className="feedback-widget-tab-icon" aria-hidden="true">
-              <MessageSquareShareIcon size={14} />
+              <MessageSquarePlus size={14} />
             </span>
           </button>
         ) : null}

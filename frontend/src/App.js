@@ -12,8 +12,11 @@ import {
   Info,
   Loader2,
   MessageSquare,
+  PencilLine,
   RefreshCw,
+  Sparkles,
   Trash2,
+  Upload,
   Wifi,
   WifiOff,
   X,
@@ -10681,16 +10684,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onClick={() => openCreateMapFlow()}
                 >
                   <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
-                    <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
-                      <path d="M48 16L57 39L80 48L57 57L48 80L39 57L16 48L39 39L48 16Z" fill="currentColor" opacity="0.1" />
-                      <path
-                        d="M48 24L55.5 40.5L72 48L55.5 55.5L48 72L40.5 55.5L24 48L40.5 40.5L48 24Z"
-                        stroke="currentColor"
-                        strokeWidth="3.25"
-                        strokeLinejoin="round"
-                      />
-                      <circle cx="48" cy="48" r="6" fill="currentColor" opacity="0.2" />
-                    </svg>
+                    <Sparkles size={96} />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Create</span>
@@ -10713,26 +10707,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   }}
                 >
                   <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
-                    <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
-                      <rect x="24" y="56" width="18" height="18" rx="6" fill="currentColor" opacity="0.14" />
-                      <rect x="43" y="38" width="20" height="20" rx="7" fill="currentColor" opacity="0.18" />
-                      <rect x="64" y="19" width="14" height="14" rx="5" fill="currentColor" opacity="0.22" />
-                      <path
-                        d="M33 65L53 45L71 27"
-                        stroke="currentColor"
-                        strokeWidth="3.25"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                      <path
-                        d="M60 27H71V38"
-                        stroke="currentColor"
-                        strokeWidth="3.25"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        opacity="0.82"
-                      />
-                    </svg>
+                    <PencilLine size={96} />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Modify</span>
@@ -10753,14 +10728,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     {importLoading ? (
                       <Loader2 size={32} className="spin" />
                     ) : (
-                      <svg width="96" height="96" viewBox="0 0 96 96" fill="none">
-                        <path d="M29 69H67" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" />
-                        <path d="M34 58H62" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" opacity="0.72" />
-                        <path d="M39 47H57" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" opacity="0.45" />
-                        <path d="M48 20V51" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" />
-                        <path d="M34 34L48 20L62 34" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M48 51L48 65" stroke="currentColor" strokeWidth="3.25" strokeLinecap="round" opacity="0.3" />
-                      </svg>
+                      <Upload size={96} />
                     )}
                   </div>
                   <div className="blank-card-title-row">

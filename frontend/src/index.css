@@ -24,6 +24,10 @@ textarea {
   font-family: inherit;
 }
 
+.lucide {
+  stroke-width: 1.5;
+}
+
 #root {
   min-height: 100%;
   height: auto;
