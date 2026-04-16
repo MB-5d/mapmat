@@ -36,14 +36,22 @@ const WelcomeModal = ({
       className="welcome-modal"
       titleId="welcome-modal-title"
       footer={(
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Close
-          </Button>
-          <Button variant="primary" onClick={onConfirm}>
-            OK
-          </Button>
-        </>
+        <div className="welcome-modal-footer">
+          <CheckboxField
+            className="welcome-modal-checkbox"
+            checked={dontShowAgain}
+            onChange={onToggleDontShowAgain}
+            label="Don't show this again on this browser"
+          />
+          <div className="welcome-modal-actions">
+            <Button variant="secondary" onClick={onClose}>
+              Close
+            </Button>
+            <Button variant="primary" onClick={onConfirm}>
+              OK
+            </Button>
+          </div>
+        </div>
       )}
     >
       <div className="welcome-modal-logo-wrap">
@@ -51,35 +59,17 @@ const WelcomeModal = ({
       </div>
 
       <div className="welcome-modal-copy">
-        <div className="welcome-modal-intro">
-          <h2 id="welcome-modal-title">Welcome to Map Mat</h2>
-          <p className="welcome-modal-lead">
-            Map Mat turns a site&apos;s structure into a visual map you can scan, review, and share.
-          </p>
-        </div>
-
-        <div className="welcome-modal-section">
-          <h3>What this is</h3>
-          <p>A visual site-mapping workspace for audits, redesign planning, and stakeholder review.</p>
-        </div>
-
-        <div className="welcome-modal-section">
-          <h3>Why it&apos;s useful</h3>
-          <p>It makes hierarchy, gaps, screenshots, and comments easier to review than spreadsheets or flat crawl results.</p>
-        </div>
-
-        <div className="welcome-modal-section">
-          <h3>How it helps</h3>
-          <p>Scan a public site, create a blank map, or import a sitemap/file, then organize pages and export what you need.</p>
-        </div>
+        <h2 id="welcome-modal-title">Welcome to Map Mat</h2>
+        <p className="welcome-modal-lead">
+          Make site or software structure visual, actionable, and easy to review
+          without the mess of flat crawl data or spreadsheets.
+        </p>
+        <p className="welcome-modal-lead">
+          Scan a site, import a sitemap, or start from scratch to spot issues,
+          organize pages, make connections, and gather screenshots to get content,
+          UX, product, and dev aligned faster together.
+        </p>
       </div>
-
-      <CheckboxField
-        className="welcome-modal-checkbox"
-        checked={dontShowAgain}
-        onChange={onToggleDontShowAgain}
-        label="Don't show this again on this browser"
-      />
     </Modal>
   );
 };

@@ -5202,17 +5202,11 @@ body {
 .welcome-modal-copy {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.welcome-modal-intro {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   text-align: center;
 }
 
-.welcome-modal-intro h2 {
+.welcome-modal-copy h2 {
   margin: 0;
   font-size: 1.4rem;
   color: var(--color-text-primary);
@@ -5225,38 +5219,32 @@ body {
   line-height: 1.6;
 }
 
-.welcome-modal-section {
+.welcome-modal-footer {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px;
-  background: var(--modal-card-bg);
-  border: 1px solid var(--modal-card-border);
-  border-radius: var(--radius-lg);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
 }
 
-.welcome-modal-section h3 {
-  margin: 0;
-  font-size: 0.95rem;
-  color: var(--color-text-primary);
-}
-
-.welcome-modal-section p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  line-height: 1.55;
+.welcome-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--modal-gap);
+  flex-shrink: 0;
 }
 
 .welcome-modal-checkbox {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   color: var(--color-text-secondary);
   cursor: pointer;
+  min-width: 0;
 }
 
 .welcome-modal-checkbox input {
-  margin-top: 3px;
   accent-color: var(--color-primary);
 }
 
@@ -5265,14 +5253,26 @@ body {
     max-width: 100%;
   }
 
-  .welcome-modal-intro {
+  .welcome-modal-copy {
     text-align: left;
   }
 
   .welcome-modal .modal-footer {
-    flex-direction: column-reverse;
+    justify-content: stretch;
   }
 
+  .welcome-modal-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .welcome-modal-actions {
+    justify-content: stretch;
+  }
+
+  .welcome-modal-actions > * {
+    flex: 1;
+  }
 }
 
 /* Edit Node Modal */

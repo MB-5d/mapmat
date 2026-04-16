@@ -131,7 +131,8 @@ describe('App blank home and welcome modal', () => {
 
     expect(getWelcomeModal()).not.toBeNull();
     expect(container.textContent).toContain('Welcome to Map Mat');
-    expect(container.textContent).toContain('Plan your site or software');
+    expect(container.textContent).toContain('Make site or software structure visual, actionable, and easy to review');
+    expect(container.textContent).toContain('Scan a site, import a sitemap, or start from scratch');
   });
 
   test('renders updated blank-home copy and an enabled modify card', async () => {
