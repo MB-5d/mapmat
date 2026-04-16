@@ -133,6 +133,8 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).toContain('Welcome to Map Mat');
     expect(container.textContent).toContain('Make site or software structure visual, actionable, and easy to review');
     expect(container.textContent).toContain('Scan a site, import a sitemap, or start from scratch');
+    expect(container.querySelector('.welcome-modal .modal-header h3')?.textContent).toBe('Welcome to Map Mat');
+    expect(container.querySelector('.welcome-modal-copy h2')).toBeNull();
   });
 
   test('renders updated blank-home copy and an enabled modify card', async () => {

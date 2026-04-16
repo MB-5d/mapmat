@@ -31,10 +31,10 @@ const WelcomeModal = ({
     <Modal
       show={show}
       onClose={onClose}
+      title="Welcome to Map Mat"
       size="md"
       scrollable
       className="welcome-modal"
-      titleId="welcome-modal-title"
       footer={(
         <div className="welcome-modal-footer">
           <CheckboxField
@@ -59,7 +59,6 @@ const WelcomeModal = ({
       </div>
 
       <div className="welcome-modal-copy">
-        <h2 id="welcome-modal-title">Welcome to Map Mat</h2>
         <p className="welcome-modal-lead">
           Make site or software structure visual, actionable, and easy to review
           without the mess of flat crawl data or spreadsheets.

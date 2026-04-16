@@ -5203,13 +5203,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  text-align: center;
-}
-
-.welcome-modal-copy h2 {
-  margin: 0;
-  font-size: 1.4rem;
-  color: var(--color-text-primary);
 }
 
 .welcome-modal-lead {
@@ -5251,10 +5244,6 @@ body {
 @media (max-width: 640px) {
   .welcome-modal {
     max-width: 100%;
-  }
-
-  .welcome-modal-copy {
-    text-align: left;
   }
 
   .welcome-modal .modal-footer {
