@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Loader2, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Check, RefreshCw, ShieldCheck } from 'lucide-react';
+
+import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+import SelectInput from '../ui/SelectInput';
 
 const ROLE_OPTIONS = [
   { value: 'viewer', label: 'Viewer' },
@@ -43,29 +47,28 @@ const AccessRequestInboxModal = ({
   if (!show) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md modal-scrollable invite-inbox-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Access Requests</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      show={show}
+      onClose={onClose}
+      title="Access Requests"
+      size="md"
+      scrollable
+      className="invite-inbox-modal"
+    >
           <div className="invite-inbox-actions">
             <div className="invite-inbox-subtitle">
               Review pending map access requests that require an owner decision.
             </div>
-            <button
+            <Button
               type="button"
               className="share-email-btn"
+              size="sm"
               onClick={onRefresh}
-              disabled={loading}
+              loading={loading}
             >
-              {loading ? <Loader2 size={14} className="btn-spinner" /> : <RefreshCw size={14} />}
+              {!loading ? <RefreshCw size={14} /> : null}
               <span>Refresh</span>
-            </button>
+            </Button>
           </div>
 
           {error ? (
@@ -96,7 +99,7 @@ const AccessRequestInboxModal = ({
                     </div>
                   </div>
                   <div className="invite-inbox-item-actions invite-inbox-item-actions-stacked">
-                    <select
+                    <SelectInput
                       className="share-collab-role-select"
                       value={roleSelections[request.id] || request.requestedRole || 'viewer'}
                       disabled={loading}
@@ -110,34 +113,32 @@ const AccessRequestInboxModal = ({
                           {option.label}
                         </option>
                       ))}
-                    </select>
+                    </SelectInput>
                     <div className="invite-inbox-item-action-row">
-                      <button
+                      <Button
                         type="button"
-                        className="modal-btn secondary"
+                        variant="secondary"
                         onClick={() => onDeny?.(request)}
                         disabled={loading}
                       >
                         Deny
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         type="button"
-                        className="modal-btn primary"
+                        variant="primary"
                         onClick={() => onApprove?.(request, roleSelections[request.id] || request.requestedRole || 'viewer')}
                         disabled={loading}
                       >
                         <Check size={16} />
                         <span>Approve</span>
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
               ))
             )}
           </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

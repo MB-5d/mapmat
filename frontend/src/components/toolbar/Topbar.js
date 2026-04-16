@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import ScanBar from '../scan/ScanBar';
+import Button from '../ui/Button';
 import { useAuth } from '../../contexts/AuthContext';
 import mapmatLogo from '../../assets/MM-Logo.svg';
 import { APP_BRAND_NAME, APP_ONLY_MODE } from '../../utils/constants';
@@ -232,10 +233,10 @@ const Topbar = ({
             )}
           </div>
         ) : (
-          <button className="topbar-login-btn" title="Log In" onClick={onLogin}>
+          <Button className="topbar-login-btn" title="Log In" onClick={onLogin}>
             <LogIn size={18} />
             <span>Log In</span>
-          </button>
+          </Button>
         )}
       </div>
     </div>

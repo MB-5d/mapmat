@@ -52,6 +52,8 @@ import SaveVersionModal from './components/modals/SaveVersionModal';
 import ShareModal from './components/modals/ShareModal';
 import ScanProgressModal from './components/scan/ScanProgressModal';
 import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
+import Button from './components/ui/Button';
+import Modal from './components/ui/Modal';
 import ColorKey from './components/toolbar/ColorKey';
 import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
@@ -12181,33 +12183,28 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       {/* Generic Confirmation Modal */}
       {confirmModal && (
-        <div className="modal-overlay" onClick={confirmModal.onCancel}>
-          <div className="modal-card modal-sm confirm-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>{confirmModal.title}</h3>
-              <button className="modal-close" onClick={confirmModal.onCancel}>
-                <X size={24} />
-              </button>
-            </div>
-            <div className="modal-body">
-              <p>{confirmModal.message}</p>
-            </div>
-            <div className="modal-footer">
-              <button
-                className="modal-btn secondary"
-                onClick={confirmModal.onCancel}
-              >
+        <Modal
+          show={!!confirmModal}
+          onClose={confirmModal.onCancel}
+          title={confirmModal.title}
+          size="sm"
+          className="confirm-modal"
+          footer={(
+            <>
+              <Button variant="secondary" onClick={confirmModal.onCancel}>
                 {confirmModal.cancelText}
-              </button>
-              <button
-                className={confirmModal.danger ? 'modal-btn danger' : 'modal-btn primary'}
+              </Button>
+              <Button
+                variant={confirmModal.danger ? 'danger' : 'primary'}
                 onClick={confirmModal.onConfirm}
               >
                 {confirmModal.confirmText}
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </>
+          )}
+        >
+          <p>{confirmModal.message}</p>
+        </Modal>
       )}
 
       {/* Generic Prompt Modal */}

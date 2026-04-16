@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { FolderPlus, X } from 'lucide-react';
+import { FolderPlus } from 'lucide-react';
+
+import Button from '../ui/Button';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
+import TextareaInput from '../ui/TextareaInput';
 
 const isVirtualProject = (project) => (
   !!project?.isVirtual
@@ -61,19 +68,17 @@ const SaveMapForm = ({
 
   return (
     <div className="save-map-form">
-      <div className="form-group">
-        <label>Map Name</label>
-        <input
+      <Field label="Map Name" required>
+        <TextInput
           type="text"
           value={mapName}
           onChange={(e) => setMapName(e.target.value)}
           placeholder="Enter map name..."
           autoFocus
         />
-      </div>
-      <div className="form-group">
-        <label>Save to Project (optional)</label>
-        <select
+      </Field>
+      <Field label="Save to Project (optional)">
+        <SelectInput
           value={selectedProject}
           onChange={(e) => setSelectedProject(e.target.value)}
         >
@@ -81,16 +86,16 @@ const SaveMapForm = ({
           {selectableProjects.map(p => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </select>
-      </div>
+        </SelectInput>
+      </Field>
       {!showNewProject ? (
-        <button className="new-project-link" onClick={() => setShowNewProject(true)}>
+        <Button type="button" variant="ghost" size="sm" className="new-project-link" onClick={() => setShowNewProject(true)}>
           <FolderPlus size={14} />
           Create new project
-        </button>
+        </Button>
       ) : (
         <div className="new-project-inline">
-          <input
+          <TextInput
             type="text"
             value={newProjectName}
             onChange={(e) => setNewProjectName(e.target.value)}
@@ -100,26 +105,25 @@ const SaveMapForm = ({
               if (e.key === 'Escape') setShowNewProject(false);
             }}
           />
-          <button onClick={handleCreateProject}>Create</button>
-          <button className="cancel" onClick={() => setShowNewProject(false)}>Cancel</button>
+          <Button size="sm" onClick={handleCreateProject}>Create</Button>
+          <Button size="sm" variant="secondary" className="cancel" onClick={() => setShowNewProject(false)}>Cancel</Button>
         </div>
       )}
-      <div className="form-group">
-        <label>Notes (optional)</label>
-        <textarea
+      <Field label="Notes (optional)">
+        <TextareaInput
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Add notes about this map..."
           rows={3}
         />
-      </div>
+      </Field>
       <div className="modal-footer">
-        <button className="modal-btn secondary" onClick={onCancel}>
+        <Button variant="secondary" onClick={onCancel}>
           Cancel
-        </button>
-        <button className="modal-btn primary" onClick={handleSave} disabled={!mapName.trim()}>
+        </Button>
+        <Button variant="primary" onClick={handleSave} disabled={!mapName.trim()}>
           {submitLabel}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -144,43 +148,29 @@ const SaveMapModal = ({
   if (!show) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md save-map-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          {!isLoggedIn ? (
-            <div className="login-prompt">
-              <p>Please sign in to save your maps</p>
-              <button
-                className="modal-btn primary"
-                onClick={onRequireLogin}
-              >
+    <Modal show={show} onClose={onClose} title={title} className="save-map-modal">
+      {!isLoggedIn ? (
+        <div className="login-prompt">
+          <p>Please sign in to save your maps</p>
+          <Button variant="primary" onClick={onRequireLogin}>
                 Sign In
-              </button>
-            </div>
-          ) : (
-            <SaveMapForm
-              projects={projects}
-              currentMap={currentMap}
-              rootUrl={rootUrl}
-              defaultProjectId={defaultProjectId}
-              defaultName={defaultName}
-              defaultNotes={defaultNotes}
-              onSave={onSave}
-              onCreateProject={onCreateProject}
-              onCancel={onClose}
-              submitLabel={submitLabel}
-            />
-          )}
+          </Button>
         </div>
-      </div>
-    </div>
+      ) : (
+        <SaveMapForm
+          projects={projects}
+          currentMap={currentMap}
+          rootUrl={rootUrl}
+          defaultProjectId={defaultProjectId}
+          defaultName={defaultName}
+          defaultNotes={defaultNotes}
+          onSave={onSave}
+          onCreateProject={onCreateProject}
+          onCancel={onClose}
+          submitLabel={submitLabel}
+        />
+      )}
+    </Modal>
   );
 };
 

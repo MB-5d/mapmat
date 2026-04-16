@@ -1,5 +1,9 @@
 # Figma Parity Map
 
+Active working contract: [figma-code-first-handoff.md](/Users/matthewbraun/Desktop/mapmat/docs/design-system/figma-code-first-handoff.md)
+
+Use this parity map as the audit baseline. Use the handoff contract for day-to-day Figma naming, repo ownership, and design-change workflow.
+
 Audit basis: code-only review of the current frontend on 2026-04-11. No Figma file metadata, design library inventory, or Code Connect mappings exist in this repo, so the "Figma item" column is inferred from current code naming and reusable UI patterns.
 
 ## Comments Pilot Update
@@ -19,7 +23,7 @@ Status legend:
 - `Missing in Code`: strong Figma-worthy primitive is repeated inline and has no shared code abstraction yet.
 
 ## Top Priorities
-- Complete the semantic token contract before binding more surfaces to Figma. `App.css` currently references undefined tokens such as `--color-bg`, `--color-bg-secondary`, `--color-text-muted`, and `--radius-sm`.
+- Continue the semantic token cleanup before binding more surfaces to Figma. `App.css` now defines the legacy aliases `--color-bg`, `--color-bg-secondary`, `--color-text-muted`, and `--radius-sm`, but the longer-term goal is to reduce alias usage and move more surfaces directly onto `--ui-*`.
 - Extract shared code primitives for tabs/segmented controls, badges/pills, option cards, and menus/dropdowns. Those patterns already repeat across the product.
 - Create explicit Figma components for the highest-value custom surfaces: `ScanBar`, `CanvasToolbar`, `MinimapNavigator`, `FeedbackWidget`, `ReportDrawer`, and admin surfaces.
 - Move global chrome and core workspace surfaces off direct hex/rgba styling and onto semantic tokens, especially `Topbar`, `CanvasMapHeader`, `NodeCard`, and `ShareModal`.
@@ -29,7 +33,7 @@ Status legend:
 ## Parity Map
 | Area | Figma item | Code component/file | Props / variants / states | Token dependencies | Notes | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| Foundations | App Tokens / Light + Dark | `frontend/src/App.css` | Light theme, dark theme, focus ring, spacing, radius, shadow | `--ui-color-*`, `--ui-radius-*`, `--space-*`, `--color-*`, `--ui-focus-ring` | Primary semantic token source for the app shell. Downstream CSS still references a few undefined semantic vars, so parity is not clean end-to-end. | Matched |
+| Foundations | App Tokens / Light + Dark | `frontend/src/App.css` | Light theme, dark theme, focus ring, spacing, radius, shadow | `--ui-color-*`, `--ui-radius-*`, `--space-*`, `--color-*`, `--ui-focus-ring` | Primary semantic token source for the app shell. Legacy aliases now exist for older `--color-*` and `--radius-*` references, but the long-term cleanup is still to reduce alias reliance. | Matched |
 | Foundations | Canvas Layout Tokens | `frontend/src/App.css` | Node/card sizing, connector spacing, indentation, root offsets, contextual panel overlap spacing, comment-focus positioning | `--node-w`, `--node-h-*`, `--gap-*`, `--indent-x`, `--bus-y-gap`, `--root-y` | Should exist in Figma as layout/grid tokens for the sitemap canvas. The comments-pilot captures show these tokens also need an explicit mapping for selected comment focus and side-panel-aware workspace spacing. | Partial |
 | Foundations | Canvas Surface | `frontend/src/App.css; frontend/src/App.js` | Dotted grid, neutral workspace surface, selected focus halo, docked bottom toolbar, zoom rail, right-rail overlap | `--color-bg-primary`, `--color-border`, hardcoded radial-gradient dots, hardcoded focus/shadow rgba values | The previous parity map only tracked canvas geometry. The captured comments flow makes the canvas background, halo, and docked-control treatment part of the visible screen contract. | Partial |
 | Foundations | Landing Tokens | `frontend/src/LandingPage.css` | Marketing palette, surface, radius, shadow, success/warning, mobile nav | `--landing-*` | Separate token system from the app. Good internal consistency, but no shared naming bridge to app tokens. | Partial |
@@ -65,7 +69,7 @@ Status legend:
 | Workflows | Save Map Modal | `frontend/src/components/modals/SaveMapModal.js; frontend/src/App.css` | Logged-out prompt, save form, new-project inline, disabled save | Modal tokens, native form styles, `modal-btn` | Works inside the modal shell, but form controls do not consistently use the `ui/*` input primitives. | Partial |
 | Workflows | Create / Export Option Flows | `frontend/src/components/modals/CreateMapModal.js; frontend/src/components/modals/ExportModal.js; frontend/src/App.css` | Default, hover, disabled, coming-soon | Custom `create-map-option`/`export-btn` styles plus modal shell tokens | These two modals are parallel option-list surfaces and should converge on one Figma/code option-card pattern. | Partial |
 | Workflows | Scan Progress Modal | `frontend/src/components/scan/ScanProgressModal.js; frontend/src/App.css` | Loading, error, cancel confirm, stop confirm, stopping, disabled | Modal shell tokens plus hardcoded progress/warning/error accents | Key transition flow; Figma should explicitly model its multi-state modal variants. | Partial |
-| Workflows | Settings + Version History Drawers | `frontend/src/components/drawers/SettingsDrawer.js; frontend/src/components/drawers/VersionHistoryDrawer.js; frontend/src/App.css` | Theme option active, switch on/off, versions/activity tabs, current version, back-to-top | Drawer tokens; downstream refs to undefined `--color-bg`, `--color-bg-secondary`, `--color-text-muted`, `--radius-sm` | Shared drawer family is strong, but the token contract is incomplete and should be fixed before Figma token binding. | Partial |
+| Workflows | Settings + Version History Drawers | `frontend/src/components/drawers/SettingsDrawer.js; frontend/src/components/drawers/VersionHistoryDrawer.js; frontend/src/App.css` | Theme option active, switch on/off, versions/activity tabs, current version, back-to-top | Drawer tokens; downstream refs to legacy aliases `--color-bg`, `--color-bg-secondary`, `--color-text-muted`, `--radius-sm` | Shared drawer family is strong. The missing aliases are fixed; the next step is replacing remaining legacy references with direct semantic tokens. | Partial |
 | Admin | Admin Console + Feedback Console | `frontend/src/components/admin/AdminConsole.js; frontend/src/components/admin/FeedbackConsole.js; frontend/src/components/admin/AdminConsole.css` | Auth/session, loading/error/success, filter/sort, detail drawer, theme editor | Drawer tokens plus standalone admin button/table/form styles | Admin-only surfaces reuse the drawer shell but otherwise form a separate style system with no Figma mapping evidence. | Missing in Figma |
 | Marketing | Landing Buttons | `frontend/src/LandingPage.css` | Primary, secondary, large, hover, nav CTA | `--landing-primary*`, `--landing-border*` | Consistent inside marketing, but intentionally separate from the app button system; decide whether that split is strategic or temporary. | Partial |
 | Marketing | Landing Cards / Compare / FAQ / Legal | `frontend/src/LandingPage.css` | Card variants, compare chips, FAQ open/closed, legal modal, mobile nav | `--landing-*`, plus many rgba literals | Marketing surfaces are internally cohesive but operate as a second design-system track rather than a shared extension of the app system. | Partial |

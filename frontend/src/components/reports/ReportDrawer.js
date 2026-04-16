@@ -12,6 +12,9 @@ import {
   X,
 } from 'lucide-react';
 
+import Button from '../ui/Button';
+import CheckboxField from '../ui/CheckboxField';
+import TextInput from '../ui/TextInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
 const ReportDrawer = ({
@@ -230,10 +233,10 @@ const ReportDrawer = ({
           <div className="report-drawer-subtitle">{reportTimestamp || '—'}</div>
         </div>
         <div className="report-header-actions">
-          <button className="report-open-link" onClick={onDownload}>
+          <Button className="report-open-link" variant="secondary" size="sm" onClick={onDownload}>
             <Download size={14} />
             Download report
-          </button>
+          </Button>
           <button className="report-drawer-close" onClick={onClose} aria-label="Close report">
             <X size={22} />
           </button>
@@ -287,8 +290,9 @@ const ReportDrawer = ({
             </button>
             <label className="report-search">
               <Search size={16} />
-              <input
+              <TextInput
                 type="text"
+                className="report-search-input"
                 placeholder="Search by page name, number, or URL"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -297,22 +301,18 @@ const ReportDrawer = ({
           </div>
           {showFilters && (
             <div className="report-filter-list">
-              {visibleFilterOptions.map(option => (
-              <label
-                key={option.key}
-                className="report-filter-item"
-              >
-                <input
-                  type="checkbox"
-                  checked={filters[option.key] || false}
-                  onChange={() => {
-                    setFilters(prev => ({ ...prev, [option.key]: !prev[option.key] }));
-                  }}
-                />
-                <span>{option.label}</span>
-                <span className="report-filter-count">{filterCounts[option.key] || 0}</span>
-              </label>
-            ))}
+              {visibleFilterOptions.map((option) => (
+                <div key={option.key} className="report-filter-item">
+                  <CheckboxField
+                    checked={filters[option.key] || false}
+                    onChange={() => {
+                      setFilters((prev) => ({ ...prev, [option.key]: !prev[option.key] }));
+                    }}
+                    label={option.label}
+                  />
+                  <span className="report-filter-count">{filterCounts[option.key] || 0}</span>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -384,14 +384,16 @@ const ReportDrawer = ({
                       )}
                       <div className="report-detail-right">
                         <div className="report-detail-info">
-                          <button
+                          <Button
                             type="button"
                             className="report-open-link"
+                            variant="secondary"
+                            size="sm"
                             onClick={() => window.open(entry.url, '_blank', 'noopener')}
                           >
                             Open page
                             <ExternalLink size={14} />
-                          </button>
+                          </Button>
                           <div className="report-detail-badges">
                             {entry.types.map(type => (
                               <span key={type} className="report-badge">

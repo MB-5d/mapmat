@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { BookmarkPlus, X } from 'lucide-react';
+import { BookmarkPlus } from 'lucide-react';
+
+import Button from '../ui/Button';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import TextInput from '../ui/TextInput';
+import TextareaInput from '../ui/TextareaInput';
 
 const SaveVersionModal = ({
   show,
@@ -32,63 +38,53 @@ const SaveVersionModal = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md save-version-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Save Version</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          <div className="version-meta-row">
-            <div className="version-meta-pill">
-              <BookmarkPlus size={14} />
-              <span>v{versionNumber}</span>
-            </div>
-            <div className="version-meta-date">{timestamp}</div>
-          </div>
-
-          <div className="form-group">
-            <label>Title</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                if (error && e.target.value.trim()) setError('');
-              }}
-              placeholder="Updated"
-              autoFocus
-            />
-            {error ? <div className="form-error">{error}</div> : null}
-          </div>
-
-          <div className="form-group">
-            <label>Notes (optional)</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add context or details…"
-              rows={4}
-            />
-          </div>
-        </div>
-
-        <div className="modal-footer">
-          <button className="modal-btn secondary" onClick={onClose}>
+    <Modal
+      show={show}
+      onClose={onClose}
+      title="Save Version"
+      className="save-version-modal"
+      footer={(
+        <>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="modal-btn primary"
-            onClick={handleSave}
-          >
+          </Button>
+          <Button variant="primary" onClick={handleSave}>
             Save Version
-          </button>
+          </Button>
+        </>
+      )}
+    >
+      <div className="version-meta-row">
+        <div className="version-meta-pill">
+          <BookmarkPlus size={14} />
+          <span>v{versionNumber}</span>
         </div>
+        <div className="version-meta-date">{timestamp}</div>
       </div>
-    </div>
+
+      <Field label="Title" required error={error}>
+        <TextInput
+          type="text"
+          value={name}
+          invalid={!!error}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (error && e.target.value.trim()) setError('');
+          }}
+          placeholder="Updated"
+          autoFocus
+        />
+      </Field>
+
+      <Field label="Notes (optional)">
+        <TextareaInput
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Add context or details…"
+          rows={4}
+        />
+      </Field>
+    </Modal>
   );
 };
 

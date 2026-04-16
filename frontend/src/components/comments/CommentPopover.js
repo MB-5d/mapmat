@@ -86,36 +86,45 @@ const CommentPopover = ({
   const CommentItem = ({ comment, depth = 0 }) => (
     <div className={`comment-item ${comment.completed ? 'completed' : ''}`} style={{ marginLeft: depth * 16 }}>
       <div className="comment-header">
-        <button
+        <IconButton
+          size="sm"
+          variant="ghost"
           className={`comment-checkbox ${comment.completed ? 'checked' : ''}`}
           onClick={() => onToggleCompleted(node.id, comment.id)}
           title={comment.completed ? 'Mark as incomplete' : 'Mark as complete'}
+          aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
         >
           {comment.completed ? <CheckSquare size={16} /> : <Square size={16} />}
-        </button>
+        </IconButton>
         <div className="comment-meta">
           <span className="comment-author">{comment.author}</span>
           <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
         </div>
         {canComment && (
           <div className="comment-actions">
-            <button
+            <IconButton
+              size="sm"
+              variant="ghost"
               className="comment-action-btn"
               onClick={() => {
                 setReplyingTo(comment.id);
                 inputRef.current?.focus();
               }}
               title="Reply"
+              aria-label="Reply to comment"
             >
               <CornerDownRight size={14} />
-            </button>
-            <button
+            </IconButton>
+            <IconButton
+              size="sm"
+              variant="ghost"
               className="comment-action-btn delete"
               onClick={() => onDeleteComment(node.id, comment.id)}
               title="Delete"
+              aria-label="Delete comment"
             >
               <Trash2 size={14} />
-            </button>
+            </IconButton>
           </div>
         )}
       </div>
@@ -171,9 +180,14 @@ const CommentPopover = ({
             {replyingTo && (
               <div className="replying-to-banner">
                 <span>Replying to comment</span>
-                <button onClick={() => setReplyingTo(null)}>
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setReplyingTo(null)}
+                  aria-label="Cancel reply"
+                >
                   <X size={14} />
-                </button>
+                </IconButton>
               </div>
             )}
             <div className="comment-input-wrapper">
@@ -203,6 +217,7 @@ const CommentPopover = ({
                 <div className="mention-dropdown">
                   {filteredCollaborators.map(name => (
                     <button
+                      type="button"
                       key={name}
                       className="mention-option"
                       onClick={() => insertMention(name)}

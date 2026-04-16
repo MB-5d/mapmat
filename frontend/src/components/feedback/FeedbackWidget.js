@@ -3,11 +3,13 @@ import {
   AlertCircle,
   CheckCircle2,
   Crosshair,
-  Loader2,
   X,
 } from 'lucide-react';
 
 import * as api from '../../api';
+import Button from '../ui/Button';
+import CheckboxField from '../ui/CheckboxField';
+import TextareaInput from '../ui/TextareaInput';
 import { trackEvent } from '../../utils/analytics';
 import {
   captureFeedbackTargetContext,
@@ -391,9 +393,10 @@ export default function FeedbackWidget({
 
               <section className="feedback-field-group">
                 <label className="feedback-label" htmlFor="feedback-message">Tell us more</label>
-                <textarea
+                <TextareaInput
                   id="feedback-message"
-                  className="ui-textarea ui-textarea--lg feedback-textarea"
+                  className="feedback-textarea"
+                  size="lg"
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   placeholder="What happened, what you expected, or what felt unclear."
@@ -402,14 +405,12 @@ export default function FeedbackWidget({
                 />
               </section>
 
-              <label className="feedback-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={allowFollowUp}
-                  onChange={(event) => setAllowFollowUp(event.target.checked)}
-                />
-                <span>Okay to follow up with me</span>
-              </label>
+              <CheckboxField
+                className="feedback-checkbox-row"
+                checked={allowFollowUp}
+                onChange={(event) => setAllowFollowUp(event.target.checked)}
+                label="Okay to follow up with me"
+              />
 
               {error ? (
                 <div className="feedback-inline-error">
@@ -419,22 +420,21 @@ export default function FeedbackWidget({
               ) : null}
 
               <div className="feedback-drawer-actions">
-                <button
+                <Button
                   type="button"
-                  className="modal-btn secondary"
+                  variant="secondary"
                   onClick={handleClose}
                   disabled={submitting}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="modal-btn primary"
-                  disabled={submitting}
+                  variant="primary"
+                  loading={submitting}
                 >
-                  {submitting ? <Loader2 size={16} className="feedback-spin" /> : null}
                   <span>{submitting ? 'Sending' : 'Send feedback'}</span>
-                </button>
+                </Button>
               </div>
             </form>
           </aside>

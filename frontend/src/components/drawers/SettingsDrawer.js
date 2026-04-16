@@ -2,6 +2,7 @@ import React from 'react';
 import { Sun, Moon, Monitor } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
+import ToggleSwitch from '../ui/ToggleSwitch';
 
 const SettingsDrawer = ({
   isOpen,
@@ -46,18 +47,13 @@ const SettingsDrawer = ({
 
       <section className="drawer-card">
         <div className="drawer-card-title">Canvas</div>
-        <label className="settings-toggle-row">
-          <span className="settings-toggle-text">
-            <span className="settings-toggle-title">Show page numbers</span>
-            <span className="settings-toggle-subtitle">Keep numbering visible in every view.</span>
-          </span>
-          <input
-            type="checkbox"
-            className="settings-switch"
-            checked={showPageNumbers}
-            onChange={() => onTogglePageNumbers?.()}
-          />
-        </label>
+        <ToggleSwitch
+          className="settings-toggle-row"
+          checked={showPageNumbers}
+          onChange={() => onTogglePageNumbers?.()}
+          label="Show page numbers"
+          description="Keep numbering visible in every view."
+        />
       </section>
     </AccountDrawer>
   );

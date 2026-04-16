@@ -139,4 +139,41 @@ describe('ProjectsModal', () => {
     expect(props.onRenameProject).toHaveBeenCalledWith('project-1', 'Renamed Project');
     expect(props.onRenameMap).toHaveBeenCalledWith('project-1', 'map-1', 'Renamed Map');
   });
+
+  test('uses shared button, input, and select primitives for standard project controls', () => {
+    renderModal({
+      expandedProjects: { 'project-1': true },
+      editingProjectId: 'project-1',
+      editingProjectName: 'Renamed Project',
+      editingMapId: 'map-1',
+      editingMapName: 'Renamed Map',
+    });
+
+    const addMapButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.replace(/\s+/g, ' ').trim() === 'Add map'
+    );
+    const addProjectButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.replace(/\s+/g, ' ').trim() === 'Add Project'
+    );
+    const projectInput = container.querySelector('.project-name-input');
+    const mapInput = container.querySelector('.project-map-name-input');
+
+    expect(addMapButton.className).toContain('ui-btn');
+    expect(addProjectButton.className).toContain('ui-btn');
+    expect(projectInput.className).toContain('ui-input');
+    expect(mapInput.className).toContain('ui-input');
+
+    const moveButton = container.querySelector('.map-move');
+    act(() => {
+      moveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const moveSelect = container.querySelector('.map-move-row select');
+    const confirmMoveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Move')
+    );
+
+    expect(moveSelect.className).toContain('ui-select');
+    expect(confirmMoveButton.className).toContain('ui-btn');
+  });
 });

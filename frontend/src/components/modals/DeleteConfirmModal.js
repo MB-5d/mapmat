@@ -1,27 +1,27 @@
 import React from 'react';
-import { X } from 'lucide-react';
+
+import Button from '../ui/Button';
+import Modal from '../ui/Modal';
 
 const DeleteConfirmModal = ({ node, onCancel, onConfirm }) => {
   if (!node) return null;
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card modal-sm confirm-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Delete Page</h3>
-          <button className="modal-close" onClick={onCancel}>
-            <X size={24} />
-          </button>
-        </div>
-        <div className="modal-body">
-          <p>Delete "{node.title || node.url || 'this page'}"?</p>
-        </div>
-        <div className="modal-footer">
-          <button className="modal-btn secondary" onClick={onCancel}>Cancel</button>
-          <button className="modal-btn danger" onClick={onConfirm}>Delete</button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      show={!!node}
+      onClose={onCancel}
+      title="Delete Page"
+      size="sm"
+      className="confirm-modal"
+      footer={(
+        <>
+          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+          <Button variant="danger" onClick={onConfirm}>Delete</Button>
+        </>
+      )}
+    >
+      <p>Delete "{node.title || node.url || 'this page'}"?</p>
+    </Modal>
   );
 };
 

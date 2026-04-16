@@ -1,5 +1,8 @@
 import React from 'react';
-import { Check, Loader2, Mail, RefreshCw, X } from 'lucide-react';
+import { Check, Mail, RefreshCw } from 'lucide-react';
+
+import Button from '../ui/Button';
+import Modal from '../ui/Modal';
 
 const formatRoleLabel = (role) => {
   const value = String(role || '').trim();
@@ -27,29 +30,28 @@ const InviteInboxModal = ({
   if (!show) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md modal-scrollable invite-inbox-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Pending Invites</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      show={show}
+      onClose={onClose}
+      title="Pending Invites"
+      size="md"
+      scrollable
+      className="invite-inbox-modal"
+    >
           <div className="invite-inbox-actions">
             <div className="invite-inbox-subtitle">
               Review collaboration invites linked to your account.
             </div>
-            <button
+            <Button
               type="button"
               className="share-email-btn"
+              size="sm"
               onClick={onRefresh}
-              disabled={loading}
+              loading={loading}
             >
-              {loading ? <Loader2 size={14} className="btn-spinner" /> : <RefreshCw size={14} />}
+              {!loading ? <RefreshCw size={14} /> : null}
               <span>Refresh</span>
-            </button>
+            </Button>
           </div>
 
           {error ? (
@@ -77,31 +79,29 @@ const InviteInboxModal = ({
                     </div>
                   </div>
                   <div className="invite-inbox-item-actions">
-                    <button
+                    <Button
                       type="button"
-                      className="modal-btn secondary"
+                      variant="secondary"
                       onClick={() => onDecline?.(invite)}
                       disabled={loading}
                     >
                       Decline
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       type="button"
-                      className="modal-btn primary"
+                      variant="primary"
                       onClick={() => onAccept?.(invite)}
                       disabled={loading}
                     >
                       <Check size={16} />
                       <span>Accept</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ))
             )}
           </div>
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

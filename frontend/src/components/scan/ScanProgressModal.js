@@ -1,6 +1,8 @@
 import React from 'react';
 import { AlertTriangle, Globe, Loader2 } from 'lucide-react';
 
+import Button from '../ui/Button';
+import Modal from '../ui/Modal';
 import { APP_ONLY_MODE, SCAN_MAX_PAGES_UI } from '../../utils/constants';
 
 const ScanProgressModal = ({
@@ -27,8 +29,13 @@ const ScanProgressModal = ({
     : scanMessage;
 
   return (
-    <div className="modal-overlay scanning-overlay">
-      <div className="modal-card scanning-modal" onClick={(e) => e.stopPropagation()}>
+    <Modal
+      show
+      onClose={() => {}}
+      hideCloseButton
+      className="scanning-modal"
+      bodyClassName="scanning-modal-body"
+    >
         {scanErrorMessage ? (
           <>
             <div className="cancel-confirm scan-error-state">
@@ -37,9 +44,9 @@ const ScanProgressModal = ({
               <p>{scanErrorMessage}</p>
             </div>
             <div className="cancel-actions">
-              <button className="modal-btn primary" onClick={onDismissScanError}>
+              <Button variant="primary" onClick={onDismissScanError}>
                 Close
-              </button>
+              </Button>
             </div>
           </>
         ) : !showCancelConfirm && !showStopConfirm ? (
@@ -94,20 +101,20 @@ const ScanProgressModal = ({
               </div>
             </div>
             <div className="scan-actions">
-              <button
-                className="modal-btn secondary"
+              <Button
+                variant="secondary"
                 onClick={onRequestCancel}
                 disabled={isStoppingScan}
               >
                 Cancel
-              </button>
-              <button
-                className="modal-btn primary"
+              </Button>
+              <Button
+                variant="primary"
                 onClick={onRequestStop}
-                disabled={isStoppingScan}
+                loading={isStoppingScan}
               >
                 {isStoppingScan ? 'Stopping...' : 'Stop'}
-              </button>
+              </Button>
             </div>
           </>
         ) : showCancelConfirm ? (
@@ -118,16 +125,16 @@ const ScanProgressModal = ({
               <p>Are you sure you want to cancel the current scan?</p>
             </div>
             <div className="cancel-actions">
-              <button className="modal-btn danger" onClick={onCancelScan} disabled={isStoppingScan}>
+              <Button variant="danger" onClick={onCancelScan} disabled={isStoppingScan}>
                 Yes, Cancel Scan
-              </button>
-              <button
-                className="modal-btn secondary"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={onContinueScan}
                 disabled={isStoppingScan}
               >
                 No, Continue Scanning
-              </button>
+              </Button>
             </div>
           </>
         ) : (
@@ -138,21 +145,20 @@ const ScanProgressModal = ({
               <p>Stop scanning and show current progress?</p>
             </div>
             <div className="cancel-actions">
-              <button className="modal-btn primary" onClick={onStopScan} disabled={isStoppingScan}>
+              <Button variant="primary" onClick={onStopScan} disabled={isStoppingScan}>
                 Yes
-              </button>
-              <button
-                className="modal-btn secondary"
+              </Button>
+              <Button
+                variant="secondary"
                 onClick={onContinueScan}
                 disabled={isStoppingScan}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 };
 

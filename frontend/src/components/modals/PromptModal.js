@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+
+import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+import TextInput from '../ui/TextInput';
 
 const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onCancel }) => {
   const [value, setValue] = useState(defaultValue);
@@ -18,37 +21,35 @@ const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onC
   };
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-card modal-sm confirm-modal" onClick={e => e.stopPropagation()}>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-header">
-            <h3>{title}</h3>
-            <button className="modal-close" onClick={onCancel}>
-              <X size={24} />
-            </button>
-          </div>
-          <div className="modal-body">
-            {message && <p>{message}</p>}
-            <input
-              ref={inputRef}
-              type="text"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder={placeholder}
-              className="prompt-input"
-            />
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="modal-btn secondary" onClick={onCancel}>
-              Cancel
-            </button>
-            <button type="submit" className="modal-btn primary" disabled={!value.trim()}>
-              OK
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal
+      show
+      onClose={onCancel}
+      title={title}
+      size="sm"
+      className="confirm-modal"
+      footer={(
+        <>
+          <Button type="button" variant="secondary" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" form="prompt-modal-form" variant="primary" disabled={!value.trim()}>
+            OK
+          </Button>
+        </>
+      )}
+    >
+      <form id="prompt-modal-form" onSubmit={handleSubmit}>
+        {message && <p>{message}</p>}
+        <TextInput
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
+          className="prompt-input"
+        />
+      </form>
+    </Modal>
   );
 };
 

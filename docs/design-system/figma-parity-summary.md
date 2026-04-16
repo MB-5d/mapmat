@@ -1,5 +1,9 @@
 # Figma Parity Summary
 
+Active working contract: [figma-code-first-handoff.md](/Users/matthewbraun/Desktop/mapmat/docs/design-system/figma-code-first-handoff.md)
+
+This summary remains the audit snapshot. The new handoff doc is the live reference for Figma variable names, component ownership, state mapping, and the code-first workflow.
+
 This summary is based on a code-only frontend audit completed on 2026-04-11. No Figma file metadata, design library inventory, or Code Connect mappings exist in the repo, so the Figma side is inferred from current naming, CSS contracts, and repeated UI patterns.
 
 ## Totals
@@ -12,11 +16,11 @@ This summary is based on a code-only frontend audit completed on 2026-04-11. No 
 - The strongest existing parity is at the primitive and shell level: `Button`, `IconButton`, `TextInput`, `SelectInput`, `TextareaInput`, the base modal contract, and `AccountDrawer`.
 - The biggest parity gap is not visual inconsistency alone; it is missing abstraction. Tabs, badges, option cards, and menus are repeated often enough to deserve shared code primitives and named Figma component sets.
 - The highest-risk product surfaces for Figma alignment are `ScanBar`, `CanvasToolbar`, `MinimapNavigator`, `FeedbackWidget`, `ReportDrawer`, and admin surfaces. They are important, bespoke, and not clearly represented as reusable Figma counterparts yet.
-- The token layer is close, but not safe enough to use as a source of truth until undefined variables are removed or defined. The current gaps are `--color-bg`, `--color-bg-secondary`, `--color-text-muted`, and `--radius-sm`.
+- The token layer is safer than the first audit pass: legacy aliases for `--color-bg`, `--color-bg-secondary`, `--color-text-muted`, and `--radius-sm` now exist in `App.css`. The next cleanup step is reducing reliance on those aliases and moving more surfaces onto the `--ui-*` token set directly.
 - The marketing site is internally consistent, but it currently behaves like a second design system rather than a themed extension of the app system.
 
 ## Top 10 Cleanup Priorities
-1. Finish the semantic token contract in `frontend/src/App.css`. Define or remove `--color-bg`, `--color-bg-secondary`, `--color-text-muted`, and `--radius-sm`, then replace shared-surface hardcoded values that should be semantic tokens.
+1. Continue the semantic token cleanup in `frontend/src/App.css`. The missing legacy aliases now exist, so the next step is replacing those aliases and shared-surface hardcoded values with direct `--ui-*` semantic tokens.
 2. Extract a shared segmented control or tabs primitive and map it to a single Figma component set. Current drift shows up in `AuthModal`, `SettingsDrawer`, `VersionHistoryDrawer`, and `FeedbackWidget`.
 3. Extract a shared badge or pill primitive with semantic variants for status, role, count, and comparison states. This would simplify `NodeCard`, `ShareModal`, `VersionHistoryDrawer`, `AdminConsole`, and landing compare chips.
 4. Extract a shared option-card primitive for selectable cards. This should absorb `modal-option-card`, `create-map-option`, `export-btn`, and `share-permission-option`.

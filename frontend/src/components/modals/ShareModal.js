@@ -9,8 +9,14 @@ import {
   Send,
   Trash2,
   Users,
-  X,
 } from 'lucide-react';
+
+import Button from '../ui/Button';
+import CheckboxField from '../ui/CheckboxField';
+import Modal from '../ui/Modal';
+import RadioCardGroup from '../ui/RadioCardGroup';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
 
 const ROLE_OPTIONS = [
   { value: 'viewer', label: 'Viewer' },
@@ -107,6 +113,27 @@ const ShareModal = ({
     onUpdateCollaborationSettings?.({ [key]: value });
   };
 
+  const permissionOptions = [
+    {
+      value: accessLevels.VIEW,
+      label: 'View only',
+      description: 'Can view the sitemap',
+      icon: <Eye size={16} />,
+    },
+    {
+      value: accessLevels.COMMENT,
+      label: 'Can comment',
+      description: 'View and add comments',
+      icon: <MessageSquare size={16} />,
+    },
+    {
+      value: accessLevels.EDIT,
+      label: 'Can edit',
+      description: 'Full editing access',
+      icon: <Edit2 size={16} />,
+    },
+  ];
+
   const renderMembershipRow = (member) => {
     const isSelf = sameId(member.userId, currentUserId);
     const isImplicitOwner = !!member.implicitOwner;
@@ -130,7 +157,7 @@ const ShareModal = ({
         </div>
         <div className="share-collab-controls">
           {canEditMember ? (
-            <select
+            <SelectInput
               className="share-collab-role-select"
               value={member.role}
               disabled={collaborationLoading}
@@ -141,7 +168,7 @@ const ShareModal = ({
                   {option.label}
                 </option>
               ))}
-            </select>
+            </SelectInput>
           ) : (
             <div className="share-collab-role">{formatRole(member.role)}</div>
           )}
@@ -161,77 +188,37 @@ const ShareModal = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal-card modal-md modal-scrollable share-modal"
-        data-feedback-id="share-modal"
-        data-feedback-label="Share modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h3>Share Sitemap</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="modal-body">
+    <Modal
+      show={show}
+      onClose={onClose}
+      title="Share Sitemap"
+      size="md"
+      scrollable
+      className="share-modal"
+    >
           {canShareLinks ? (
             <>
               <div className="share-section">
                 <div className="share-section-title">Permission Level</div>
-                <div className="share-permission-options">
-                  <label className={`share-permission-option ${sharePermission === accessLevels.VIEW ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="sharePermission"
-                      checked={sharePermission === accessLevels.VIEW}
-                      onChange={() => onChangePermission(accessLevels.VIEW)}
-                    />
-                    <Eye size={16} />
-                    <div className="share-permission-text">
-                      <span className="share-permission-label">View only</span>
-                      <span className="share-permission-desc">Can view the sitemap</span>
-                    </div>
-                  </label>
-                  <label className={`share-permission-option ${sharePermission === accessLevels.COMMENT ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="sharePermission"
-                      checked={sharePermission === accessLevels.COMMENT}
-                      onChange={() => onChangePermission(accessLevels.COMMENT)}
-                    />
-                    <MessageSquare size={16} />
-                    <div className="share-permission-text">
-                      <span className="share-permission-label">Can comment</span>
-                      <span className="share-permission-desc">View and add comments</span>
-                    </div>
-                  </label>
-                  <label className={`share-permission-option ${sharePermission === accessLevels.EDIT ? 'selected' : ''}`}>
-                    <input
-                      type="radio"
-                      name="sharePermission"
-                      checked={sharePermission === accessLevels.EDIT}
-                      onChange={() => onChangePermission(accessLevels.EDIT)}
-                    />
-                    <Edit2 size={16} />
-                    <div className="share-permission-text">
-                      <span className="share-permission-label">Can edit</span>
-                      <span className="share-permission-desc">Full editing access</span>
-                    </div>
-                  </label>
-                </div>
+                <RadioCardGroup
+                  className="share-permission-options"
+                  name="sharePermission"
+                  value={sharePermission}
+                  onChange={onChangePermission}
+                  options={permissionOptions}
+                />
               </div>
 
               <div className="share-section">
-                <button
+                <Button
                   className={`share-link-btn ${linkCopied ? 'copied' : ''}`}
+                  variant={linkCopied ? 'secondary' : 'primary'}
                   onClick={onCopyLink}
                   disabled={!canShareLinks}
                 >
                   {linkCopied ? <Check size={18} /> : <Copy size={18} />}
                   <span>{linkCopied ? 'Link Copied!' : 'Copy Share Link'}</span>
-                </button>
+                </Button>
               </div>
 
               <div className="share-section">
@@ -239,16 +226,17 @@ const ShareModal = ({
                 <div className="share-email-section">
                   <div className="share-email-input">
                     <Mail size={18} />
-                    <input
+                    <TextInput
                       type="text"
+                      className="share-email-text-input"
                       placeholder="Enter email addresses..."
                       value={shareEmails}
                       onChange={(e) => onShareEmailsChange(e.target.value)}
                     />
                   </div>
-                  <button className="share-email-btn" onClick={onSendEmail}>
+                  <Button className="share-email-btn" size="sm" onClick={onSendEmail}>
                     Send
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>
@@ -270,7 +258,7 @@ const ShareModal = ({
                       <div className="share-collab-settings-grid">
                         <label className="share-collab-setting">
                           <span className="share-collab-setting-label">Access mode</span>
-                          <select
+                          <SelectInput
                             className="share-collab-role-select"
                             value={settings.accessPolicy}
                             disabled={!canManageCollaborationSettings || collaborationLoading}
@@ -278,11 +266,11 @@ const ShareModal = ({
                           >
                             <option value="private">Private</option>
                             <option value="viewer_invites_open">Open viewer invites</option>
-                          </select>
+                          </SelectInput>
                         </label>
                         <label className="share-collab-setting">
                           <span className="share-collab-setting-label">Presence names</span>
-                          <select
+                          <SelectInput
                             className="share-collab-role-select"
                             value={settings.presenceIdentityMode}
                             disabled={!canManageCollaborationSettings || collaborationLoading}
@@ -290,27 +278,23 @@ const ShareModal = ({
                           >
                             <option value="named">Named</option>
                             <option value="anonymous">Anonymous</option>
-                          </select>
+                          </SelectInput>
                         </label>
                       </div>
-                      <label className="share-collab-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={!!settings.nonViewerInvitesRequireOwner}
-                          disabled={!canManageCollaborationSettings || collaborationLoading}
-                          onChange={(event) => handleSettingToggle('non_viewer_invites_require_owner', event.target.checked)}
-                        />
-                        <span>Require owner approval for editor and commenter invites</span>
-                      </label>
-                      <label className="share-collab-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={!!settings.accessRequestsEnabled}
-                          disabled={!canManageCollaborationSettings || collaborationLoading}
-                          onChange={(event) => handleSettingToggle('access_requests_enabled', event.target.checked)}
-                        />
-                        <span>Allow access requests from removed or outside users</span>
-                      </label>
+                      <CheckboxField
+                        className="share-collab-checkbox"
+                        checked={!!settings.nonViewerInvitesRequireOwner}
+                        disabled={!canManageCollaborationSettings || collaborationLoading}
+                        onChange={(event) => handleSettingToggle('non_viewer_invites_require_owner', event.target.checked)}
+                        label="Require owner approval for editor and commenter invites"
+                      />
+                      <CheckboxField
+                        className="share-collab-checkbox"
+                        checked={!!settings.accessRequestsEnabled}
+                        disabled={!canManageCollaborationSettings || collaborationLoading}
+                        onChange={(event) => handleSettingToggle('access_requests_enabled', event.target.checked)}
+                        label="Allow access requests from removed or outside users"
+                      />
                       {!canManageCollaborationSettings ? (
                         <div className="share-collab-empty">Only owners can change collaboration settings.</div>
                       ) : null}
@@ -340,15 +324,16 @@ const ShareModal = ({
                     <div className="share-collab-invite-row">
                       <div className="share-email-input">
                         <Mail size={18} />
-                        <input
+                        <TextInput
                           type="text"
+                          className="share-email-text-input"
                           placeholder="Invite by email..."
                           value={collaborationInviteEmail}
                           onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
                           disabled={!canSendCollaborationInvites}
                         />
                       </div>
-                      <select
+                      <SelectInput
                         className="share-collab-role-select"
                         value={collaborationInviteRole}
                         onChange={(e) => onCollaborationInviteRoleChange?.(e.target.value)}
@@ -359,15 +344,18 @@ const ShareModal = ({
                             {option.label}
                           </option>
                         ))}
-                      </select>
-                      <button
-                        className="modal-btn secondary share-collab-send"
+                      </SelectInput>
+                      <Button
+                        className="share-collab-send"
+                        variant="secondary"
+                        size="sm"
                         onClick={onSendCollaborationInvite}
                         disabled={collaborationLoading || !canSendCollaborationInvites}
+                        loading={collaborationLoading}
                       >
-                        <Send size={14} />
-                        <span>{collaborationLoading ? 'Sending...' : 'Invite'}</span>
-                      </button>
+                        {!collaborationLoading ? <Send size={14} /> : null}
+                        <span>Invite</span>
+                      </Button>
                     </div>
                   ) : null}
 
@@ -450,7 +438,7 @@ const ShareModal = ({
                                 </div>
                               </div>
                               <div className="share-collab-request-actions">
-                                <select
+                                <SelectInput
                                   className="share-collab-role-select"
                                   value={requestRoleSelections[request.id] || request.requestedRole || 'viewer'}
                                   onChange={(event) => setRequestRoleSelections((prev) => ({
@@ -464,9 +452,10 @@ const ShareModal = ({
                                       {option.label}
                                     </option>
                                   ))}
-                                </select>
-                                <button
+                                </SelectInput>
+                                <Button
                                   className="share-email-btn"
+                                  size="sm"
                                   onClick={() => onReviewCollaborationAccessRequest?.(
                                     request.id,
                                     'approved',
@@ -475,14 +464,16 @@ const ShareModal = ({
                                   disabled={collaborationLoading}
                                 >
                                   Approve
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                   className="share-collab-deny"
+                                  variant="secondary"
+                                  size="sm"
                                   onClick={() => onReviewCollaborationAccessRequest?.(request.id, 'denied')}
                                   disabled={collaborationLoading}
                                 >
                                   Deny
-                                </button>
+                                </Button>
                               </div>
                             </div>
                           ))
@@ -494,9 +485,7 @@ const ShareModal = ({
               )}
             </div>
           )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

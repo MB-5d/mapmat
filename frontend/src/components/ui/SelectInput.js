@@ -3,10 +3,10 @@ import React from 'react';
 import classNames from '../../utils/classNames';
 
 const SelectInput = React.forwardRef(
-  ({ size = 'md', className, ...props }, ref) => (
+  ({ size = 'md', invalid = false, className, ...props }, ref) => (
     <select
       ref={ref}
-      className={classNames('ui-select', `ui-select--${size}`, className)}
+      className={classNames('ui-select', `ui-select--${size}`, invalid && 'ui-select--invalid', className)}
       {...props}
     />
   )

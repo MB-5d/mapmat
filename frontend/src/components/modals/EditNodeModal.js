@@ -1,9 +1,14 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X } from 'lucide-react';
 
+import Button from '../ui/Button';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
+import TextareaInput from '../ui/TextareaInput';
 import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
 
-// Page types for dropdown
 const PAGE_TYPES = [
   'Page',
   'Blog Post',
@@ -17,11 +22,10 @@ const PAGE_TYPES = [
   'Portfolio',
 ];
 
-// Helper to get all descendant IDs of a node
 const getDescendantIds = (node, ids = new Set()) => {
   if (!node) return ids;
   if (node.children) {
-    node.children.forEach(child => {
+    node.children.forEach((child) => {
       ids.add(child.id);
       getDescendantIds(child, ids);
     });
@@ -45,8 +49,6 @@ const EditNodeModal = ({
   const [pageType, setPageType] = useState(node?.pageType || 'Page');
   const [newTypeName, setNewTypeName] = useState('');
   const [showNewTypeInput, setShowNewTypeInput] = useState(false);
-
-  // Combined list of all page types
   const allPageTypes = [...PAGE_TYPES, ...customPageTypes];
   const [parentId, setParentId] = useState(
     node?.parentId ?? specialParentOptions[0]?.value ?? ''
@@ -60,13 +62,14 @@ const EditNodeModal = ({
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = (event) => {
+    event.preventDefault();
     const trimmedNote = annotationNote.trim();
     const tags = annotationTags
       .split(',')
-      .map(tag => tag.trim())
+      .map((tag) => tag.trim())
       .filter(Boolean);
+
     onSave({
       ...node,
       title,
@@ -95,29 +98,23 @@ const EditNodeModal = ({
     setShowNewTypeInput(false);
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
+  const handleFileUpload = (event) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      setThumbnailUrl(event.target.result);
+    reader.onload = (loadEvent) => {
+      setThumbnailUrl(loadEvent.target.result);
     };
     reader.readAsDataURL(file);
   };
 
   const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
-
-  // Form validation - check if required fields are filled
-  // For edit/duplicate: parentId can be empty (orphan pages are valid)
-  // For add: parentId is optional (user can create orphans)
   const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
 
-  // Filter out current node and its descendants from parent options
-  // (can't be parent of itself or create circular reference)
   const getExcludeIds = () => {
     if (!node?.id || !rootTree) return new Set();
-    // Find the full node in tree to get its descendants
+
     const findNode = (tree, id) => {
       if (!tree) return null;
       if (tree.id === id) return tree;
@@ -127,14 +124,15 @@ const EditNodeModal = ({
       }
       return null;
     };
+
     const fullNode = findNode(rootTree, node.id);
     const descendants = fullNode ? getDescendantIds(fullNode) : new Set();
-    descendants.add(node.id); // Also exclude self
+    descendants.add(node.id);
     return descendants;
   };
 
   const excludeIds = getExcludeIds();
-  const parentOptions = allNodes.filter(n => !excludeIds.has(n.id));
+  const parentOptions = allNodes.filter((candidate) => !excludeIds.has(candidate.id));
   const hasSubdomainOption = specialParentOptions.some((option) => option.type === 'subdomain');
   const disableSubdomainOption = hasSubdomainOption && trimmedUrl.length > 0;
   const getSpecialOptionLabel = (option) => {
@@ -145,250 +143,241 @@ const EditNodeModal = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-lg modal-scrollable edit-node-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{modalTitle}</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
+    <Modal
+      show={!!node}
+      onClose={onClose}
+      title={modalTitle}
+      size="lg"
+      scrollable
+      className="edit-node-modal"
+      bodyClassName="edit-node-form-content"
+      footer={(
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="edit-node-form"
+            variant="primary"
+            disabled={!isFormValid}
+          >
+            {mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
+          </Button>
+        </>
+      )}
+    >
+      <form onSubmit={handleSubmit} className="edit-node-form" id="edit-node-form">
+        <Field label="Page Title" required>
+          <TextInput
+            type="text"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Enter page title"
+            required
+          />
+        </Field>
 
-        <form onSubmit={handleSubmit} className="edit-node-form">
-          <div className="modal-body edit-node-form-content">
-            <div className="form-group">
-              <label>Page Title<span className="required-asterisk">*</span></label>
-              <input
+        <Field label="URL">
+          <TextInput
+            type="url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="https://example.com/page"
+          />
+        </Field>
+
+        <Field label="Page Type" required>
+          <SelectInput
+            value={pageType}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              if (nextValue === '__addnew__') {
+                setShowNewTypeInput(true);
+              } else {
+                setPageType(nextValue);
+                setShowNewTypeInput(false);
+              }
+            }}
+            required
+          >
+            {allPageTypes.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+            <option value="__addnew__">Add New Type...</option>
+          </SelectInput>
+          {showNewTypeInput ? (
+            <TextInput
+              type="text"
+              className="new-type-input"
+              value={newTypeName}
+              onChange={(event) => setNewTypeName(event.target.value)}
+              onBlur={handleAddNewType}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  handleAddNewType();
+                }
+              }}
+              placeholder="Enter new type name"
+              autoFocus
+            />
+          ) : null}
+        </Field>
+
+        <Field
+          label="Parent Page"
+          hint={disableSubdomainOption ? 'Subdomain parent requires the URL to be blank.' : ''}
+        >
+          <SelectInput
+            value={parentId}
+            onChange={(event) => setParentId(event.target.value)}
+          >
+            {specialParentOptions.map((option) => {
+              const isSubdomain = option.type === 'subdomain';
+              const isDisabled = option.disabled || (isSubdomain && disableSubdomainOption);
+              return (
+                <option key={option.value} value={option.value} disabled={isDisabled}>
+                  {getSpecialOptionLabel(option)}
+                </option>
+              );
+            })}
+            {parentOptions.map((candidate) => {
+              const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(candidate.depth);
+              const displayTitle = candidate.title || candidate.url || 'Untitled';
+              return (
+                <option key={candidate.id} value={candidate.id}>
+                  {indent}{candidate.pageNumber} - {displayTitle}
+                </option>
+              );
+            })}
+          </SelectInput>
+        </Field>
+
+        <Field label="Thumbnail / Image">
+          {thumbnailUrl ? (
+            <div className="thumbnail-preview">
+              <img src={thumbnailUrl} alt="Thumbnail preview" />
+              <button
+                type="button"
+                className="btn-remove-thumb"
+                onClick={() => setThumbnailUrl('')}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div
+              className="image-upload-zone"
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.currentTarget.classList.add('drag-over');
+              }}
+              onDragLeave={(event) => {
+                event.currentTarget.classList.remove('drag-over');
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.currentTarget.classList.remove('drag-over');
+                const file = event.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                  const reader = new FileReader();
+                  reader.onload = (loadEvent) => setThumbnailUrl(loadEvent.target.result);
+                  reader.readAsDataURL(file);
+                }
+              }}
+            >
+              <Upload size={24} className="upload-icon" />
+              <span className="upload-text">Drag image here or</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="btn-browse"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Browse files
+              </Button>
+              <span className="upload-text-small">or enter URL</span>
+              <TextInput
                 type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter page title"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label>URL</label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/page"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Page Type<span className="required-asterisk">*</span></label>
-              <select
-                value={pageType}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '__addnew__') {
-                    setShowNewTypeInput(true);
-                  } else {
-                    setPageType(val);
-                    setShowNewTypeInput(false);
+                className="url-input-small"
+                placeholder="https://example.com/image.jpg"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const urlValue = event.target.value.trim();
+                    if (urlValue) setThumbnailUrl(urlValue);
                   }
                 }}
-                required
-              >
-                {allPageTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-                <option value="__addnew__">➕ Add New Type...</option>
-              </select>
-              {showNewTypeInput && (
-                <input
-                  type="text"
-                  className="new-type-input"
-                  value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
-                  onBlur={handleAddNewType}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddNewType();
-                    }
-                  }}
-                  placeholder="Enter new type name"
-                  autoFocus
-                />
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Parent Page</label>
-              <select
-                value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-              >
-                {specialParentOptions.map((option) => {
-                  const isSubdomain = option.type === 'subdomain';
-                  const isDisabled = option.disabled || (isSubdomain && disableSubdomainOption);
-                  return (
-                    <option key={option.value} value={option.value} disabled={isDisabled}>
-                      {getSpecialOptionLabel(option)}
-                    </option>
-                  );
-                })}
-                {parentOptions.map(n => {
-                  const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(n.depth);
-                  const displayTitle = n.title || n.url || 'Untitled';
-                  return (
-                    <option key={n.id} value={n.id}>
-                      {indent}{n.pageNumber} - {displayTitle}
-                    </option>
-                  );
-                })}
-              </select>
-              {disableSubdomainOption && (
-                <div className="form-helper">
-                  Subdomain parent requires the URL to be blank.
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Thumbnail / Image</label>
-              {thumbnailUrl ? (
-                <div className="thumbnail-preview">
-                  <img src={thumbnailUrl} alt="Thumbnail preview" />
-                  <button
-                    type="button"
-                    className="btn-remove-thumb"
-                    onClick={() => setThumbnailUrl('')}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="image-upload-zone"
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.add('drag-over');
-                  }}
-                  onDragLeave={(e) => {
-                    e.currentTarget.classList.remove('drag-over');
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.remove('drag-over');
-                    const file = e.dataTransfer.files[0];
-                    if (file && file.type.startsWith('image/')) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => setThumbnailUrl(event.target.result);
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                >
-                  <Upload size={24} className="upload-icon" />
-                  <span className="upload-text">Drag image here or</span>
-                  <button
-                    type="button"
-                    className="btn-browse"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Browse files
-                  </button>
-                  <span className="upload-text-small">or enter URL</span>
-                  <input
-                    type="text"
-                    className="url-input-small"
-                    placeholder="https://example.com/image.jpg"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const urlValue = e.target.value.trim();
-                        if (urlValue) setThumbnailUrl(urlValue);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const urlValue = e.target.value.trim();
-                      if (urlValue) setThumbnailUrl(urlValue);
-                    }}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.gif,.webp"
-                    onChange={handleFileUpload}
-                    style={{ display: 'none' }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Page description (meta description)"
-                rows={3}
+                onBlur={(event) => {
+                  const urlValue = event.target.value.trim();
+                  if (urlValue) setThumbnailUrl(urlValue);
+                }}
               />
-            </div>
-
-            <div className="form-group">
-              <label>Meta Tags</label>
-              <textarea
-                value={metaTags}
-                onChange={(e) => setMetaTags(e.target.value)}
-                placeholder="Comma-separated tags: seo, marketing, landing"
-                rows={2}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Marker</label>
-              <select
-                value={annotationStatus}
-                onChange={(e) => setAnnotationStatus(e.target.value)}
-              >
-                <option value="none">None</option>
-                {ANNOTATION_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Tags</label>
               <input
-                type="text"
-                value={annotationTags}
-                onChange={(e) => setAnnotationTags(e.target.value)}
-                placeholder="Comma-separated tags"
-              />
-              <div className="form-helper">Optional labels for filtering and collaboration.</div>
-            </div>
-
-            <div className="form-group">
-              <label>Note</label>
-              <textarea
-                value={annotationNote}
-                onChange={(e) => setAnnotationNote(e.target.value)}
-                placeholder="Short note shown on the node"
-                rows={2}
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.gif,.webp"
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
               />
             </div>
-          </div>
+          )}
+        </Field>
 
-          <div className="modal-footer">
-            <button type="button" className="modal-btn secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`modal-btn primary ${!isFormValid ? 'disabled' : ''}`}
-              disabled={!isFormValid}
-            >
-              {mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <Field label="Description">
+          <TextareaInput
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Page description (meta description)"
+            rows={3}
+          />
+        </Field>
+
+        <Field label="Meta Tags">
+          <TextareaInput
+            value={metaTags}
+            onChange={(event) => setMetaTags(event.target.value)}
+            placeholder="Comma-separated tags: seo, marketing, landing"
+            rows={2}
+          />
+        </Field>
+
+        <Field label="Marker">
+          <SelectInput
+            value={annotationStatus}
+            onChange={(event) => setAnnotationStatus(event.target.value)}
+          >
+            <option value="none">None</option>
+            {ANNOTATION_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </SelectInput>
+        </Field>
+
+        <Field
+          label="Tags"
+          hint="Optional labels for filtering and collaboration."
+        >
+          <TextInput
+            type="text"
+            value={annotationTags}
+            onChange={(event) => setAnnotationTags(event.target.value)}
+            placeholder="Comma-separated tags"
+          />
+        </Field>
+
+        <Field label="Note">
+          <TextareaInput
+            value={annotationNote}
+            onChange={(event) => setAnnotationNote(event.target.value)}
+            placeholder="Short note shown on the node"
+            rows={2}
+          />
+        </Field>
+      </form>
+    </Modal>
   );
 };
 

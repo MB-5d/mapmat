@@ -1,5 +1,7 @@
 import React from 'react';
-import { AlertTriangle, ArrowLeft, Loader2, LogIn, MailCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, LogIn, MailCheck } from 'lucide-react';
+
+import Button from '../ui/Button';
 
 export default function InviteAcceptGate({
   status = 'idle',
@@ -36,26 +38,25 @@ export default function InviteAcceptGate({
         <p>{description}</p>
 
         <div className="route-gate-actions">
-          <button type="button" className="modal-btn secondary" onClick={onGoHome}>
+          <Button type="button" variant="secondary" onClick={onGoHome}>
             <ArrowLeft size={16} />
             <span>Back to App</span>
-          </button>
+          </Button>
 
           {status === 'auth_required' ? (
-            <button type="button" className="modal-btn primary" onClick={onLogin}>
+            <Button type="button" variant="primary" onClick={onLogin}>
               <LogIn size={16} />
               <span>Sign In</span>
-            </button>
+            </Button>
           ) : status === 'processing' ? (
-            <button type="button" className="modal-btn primary" disabled>
-              <Loader2 size={16} className="btn-spinner" />
+            <Button type="button" variant="primary" loading disabled>
               <span>Accepting…</span>
-            </button>
+            </Button>
           ) : (
-            <button type="button" className="modal-btn primary" onClick={onShowInvites}>
+            <Button type="button" variant="primary" onClick={onShowInvites}>
               <MailCheck size={16} />
               <span>Open Invite Inbox</span>
-            </button>
+            </Button>
           )}
         </div>
       </div>

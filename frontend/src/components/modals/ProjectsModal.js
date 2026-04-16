@@ -11,6 +11,9 @@ import {
 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
+import Button from '../ui/Button';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
 
 const isVirtualProject = (project) => (
   !!project?.isVirtual
@@ -106,7 +109,7 @@ const ProjectsModal = ({
                               <Folder size={18} />
                             </div>
                             {editingProjectId === project.id && !projectIsVirtual ? (
-                              <input
+                              <TextInput
                                 className="project-name-input"
                                 value={editingProjectName}
                                 onChange={(event) => onEditProjectNameChange(event.target.value)}
@@ -141,9 +144,11 @@ const ProjectsModal = ({
                           <div className="project-folder-meta">
                             <span className="project-map-count">{project.maps?.length || 0} maps</span>
                             {!projectIsVirtual && (
-                              <button
+                              <Button
                                 type="button"
                                 className="project-add-map-btn"
+                                size="sm"
+                                variant="ghost"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   onAddMap(project.id);
@@ -151,7 +156,7 @@ const ProjectsModal = ({
                               >
                                 <FolderPlus size={14} />
                                 Add map
-                              </button>
+                              </Button>
                             )}
                             <div className="project-chevron">
                               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -185,7 +190,7 @@ const ProjectsModal = ({
                                         <Network size={16} />
                                         <div className="map-main">
                                           {editingMapId === map.id && !mapIsReadOnly ? (
-                                            <input
+                                            <TextInput
                                               className="project-map-name-input"
                                               value={editingMapName}
                                               onChange={(event) => onEditMapNameChange(event.target.value)}
@@ -245,7 +250,7 @@ const ProjectsModal = ({
 
                                       {movingMapId === map.id && (
                                         <div className="map-move-row" onClick={(event) => event.stopPropagation()}>
-                                          <select
+                                          <SelectInput
                                             value={moveTarget}
                                             onChange={(event) => setMoveTarget(event.target.value)}
                                           >
@@ -257,22 +262,26 @@ const ProjectsModal = ({
                                                   {candidate.name}
                                                 </option>
                                               ))}
-                                          </select>
-                                          <button
+                                          </SelectInput>
+                                          <Button
                                             className="map-move-confirm"
+                                            size="sm"
+                                            variant="secondary"
                                             onClick={() => {
                                               onMoveMap(map.id, moveTarget || null);
                                               setMovingMapId(null);
                                             }}
                                           >
                                             Move
-                                          </button>
-                                          <button
+                                          </Button>
+                                          <Button
                                             className="map-move-cancel"
+                                            size="sm"
+                                            variant="secondary"
                                             onClick={() => setMovingMapId(null)}
                                           >
                                             Cancel
-                                          </button>
+                                          </Button>
                                         </div>
                                       )}
                                     </div>
@@ -283,14 +292,16 @@ const ProjectsModal = ({
 
                             {!projectIsVirtual && (
                               <div className="project-folder-footer">
-                                <button
+                                <Button
                                   type="button"
                                   className="project-delete-btn"
+                                  size="sm"
+                                  variant="danger"
                                   onClick={() => onDeleteProject(project.id)}
                                 >
                                   <Trash2 size={14} />
                                   Delete project
-                                </button>
+                                </Button>
                               </div>
                             )}
                           </div>
@@ -301,13 +312,14 @@ const ProjectsModal = ({
                 )}
               </div>
 
-              <button
+              <Button
                 className="add-project-btn"
+                variant="secondary"
                 onClick={onAddProject}
               >
                 <FolderPlus size={18} />
                 Add Project
-              </button>
+              </Button>
             </>
           )}
         </div>

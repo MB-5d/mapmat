@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 
 import IconButton from '../ui/IconButton';
+import CheckboxField from '../ui/CheckboxField';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
@@ -104,14 +105,12 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
             <option value="mention">By Mention</option>
           </SelectInput>
         </div>
-        <label className="comments-filter-toggle">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={(e) => setShowCompleted(e.target.checked)}
-          />
-          <span>Show completed</span>
-        </label>
+        <CheckboxField
+          className="comments-filter-toggle"
+          checked={showCompleted}
+          onChange={(e) => setShowCompleted(e.target.checked)}
+          label="Show completed"
+        />
       </div>
 
       <div className="comments-panel-body">

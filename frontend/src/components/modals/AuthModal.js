@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Loader2, X } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 
 import * as api from '../../api';
+import Button from '../ui/Button';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import TextInput from '../ui/TextInput';
 import { SHOW_DEMO_AUTH } from '../../utils/constants';
 import { trackEvent } from '../../utils/analytics';
 
@@ -56,125 +60,116 @@ const AuthModal = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal-card modal-md modal-scrollable auth-modal"
-        data-feedback-id="auth-modal"
-        data-feedback-label="Account modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h3>Account</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
+    <Modal
+      show
+      onClose={onClose}
+      title="Account"
+      size="md"
+      scrollable
+      className="auth-modal"
+    >
+      {contextMessage ? (
+        <div className="auth-context-message">{contextMessage}</div>
+      ) : null}
 
-        <div className="modal-body">
-          {contextMessage ? (
-            <div className="auth-context-message">{contextMessage}</div>
-          ) : null}
-
-          <div className="auth-tabs">
-            <button
-              className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
-              onClick={() => { setMode('login'); setError(''); }}
-            >
-              Log In
-            </button>
-            <button
-              className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
-              onClick={() => { setMode('signup'); setError(''); }}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="auth-form">
-            {error && <div className="auth-error">{error}</div>}
-
-            {mode === 'signup' && (
-              <div className="form-group">
-                <label>Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your name"
-                  autoComplete="name"
-                />
-              </div>
-            )}
-
-            <div className="form-group">
-              <label>Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                autoComplete="email"
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Password</label>
-              <div className="password-input">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
-                  required
-                  minLength={mode === 'signup' ? 6 : undefined}
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="modal-btn primary auth-submit"
-              disabled={loading}
-            >
-              {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
-              {mode === 'login' ? 'Log In' : 'Create Account'}
-            </button>
-          </form>
-
-          {SHOW_DEMO_AUTH ? (
-            <div className="auth-demo">
-              <div className="auth-demo-label">Quick access</div>
-              <button
-                type="button"
-                className="modal-btn secondary auth-demo-btn"
-                onClick={handleDemoLogin}
-                disabled={loading}
-              >
-                Continue as demo
-              </button>
-              <div className="auth-demo-hint">Bypasses login during build/test.</div>
-            </div>
-          ) : null}
-
-          <div className="auth-footer">
-            {mode === 'login' ? (
-              <span>Don't have an account? <button onClick={() => setMode('signup')}>Sign up</button></span>
-            ) : (
-              <span>Already have an account? <button onClick={() => setMode('login')}>Log in</button></span>
-            )}
-          </div>
-        </div>
+      <div className="auth-tabs">
+        <button
+          type="button"
+          className={`auth-tab ${mode === 'login' ? 'active' : ''}`}
+          onClick={() => { setMode('login'); setError(''); }}
+        >
+          Log In
+        </button>
+        <button
+          type="button"
+          className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
+          onClick={() => { setMode('signup'); setError(''); }}
+        >
+          Sign Up
+        </button>
       </div>
-    </div>
+
+      <form onSubmit={handleSubmit} className="auth-form">
+        {error && <div className="auth-error">{error}</div>}
+
+        {mode === 'signup' && (
+          <Field label="Name">
+            <TextInput
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              autoComplete="name"
+            />
+          </Field>
+        )}
+
+        <Field label="Email">
+          <TextInput
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            required
+            autoComplete="email"
+          />
+        </Field>
+
+        <Field label="Password">
+          <div className="password-input">
+            <TextInput
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
+              required
+              minLength={mode === 'signup' ? 6 : undefined}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            />
+            <button
+              type="button"
+              className="password-toggle"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+        </Field>
+
+        <Button
+          type="submit"
+          variant="primary"
+          className="auth-submit"
+          loading={loading}
+        >
+          {mode === 'login' ? 'Log In' : 'Create Account'}
+        </Button>
+      </form>
+
+      {SHOW_DEMO_AUTH ? (
+        <div className="auth-demo">
+          <div className="auth-demo-label">Quick access</div>
+          <Button
+            type="button"
+            variant="secondary"
+            className="auth-demo-btn"
+            onClick={handleDemoLogin}
+            disabled={loading}
+          >
+            Continue as demo
+          </Button>
+          <div className="auth-demo-hint">Bypasses login during build/test.</div>
+        </div>
+      ) : null}
+
+      <div className="auth-footer">
+        {mode === 'login' ? (
+          <span>Don't have an account? <button type="button" onClick={() => setMode('signup')}>Sign up</button></span>
+        ) : (
+          <span>Already have an account? <button type="button" onClick={() => setMode('login')}>Log in</button></span>
+        )}
+      </div>
+    </Modal>
   );
 };
 

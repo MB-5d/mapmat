@@ -2,12 +2,14 @@ import React from 'react';
 import {
   ArrowLeft,
   CheckCircle2,
-  Loader2,
   Lock,
   LogIn,
   Mail,
   Send,
 } from 'lucide-react';
+
+import Button from '../ui/Button';
+import TextareaInput from '../ui/TextareaInput';
 
 const formatRoleLabel = (role) => {
   const normalized = String(role || '').trim().toLowerCase();
@@ -90,7 +92,7 @@ export default function MapAccessGate({
             <label className="route-gate-label" htmlFor="access-request-message">
               Message to owners (optional)
             </label>
-            <textarea
+            <TextareaInput
               id="access-request-message"
               className="route-gate-textarea"
               rows={4}
@@ -113,51 +115,52 @@ export default function MapAccessGate({
         ) : null}
 
         <div className="route-gate-actions">
-          <button type="button" className="modal-btn secondary" onClick={onGoHome}>
+          <Button type="button" variant="secondary" onClick={onGoHome}>
             <ArrowLeft size={16} />
             <span>Back to App</span>
-          </button>
+          </Button>
 
           {!isLoggedIn ? (
-            <button
+            <Button
               type="button"
-              className="modal-btn primary"
+              variant="primary"
               onClick={onLogin}
-              disabled={authLoading}
+              loading={authLoading}
             >
-              {authLoading ? <Loader2 size={16} className="btn-spinner" /> : <LogIn size={16} />}
+              {!authLoading ? <LogIn size={16} /> : null}
               <span>Sign In</span>
-            </button>
+            </Button>
           ) : hasPendingInvite ? (
             <>
-              <button
+              <Button
                 type="button"
-                className="modal-btn secondary"
+                variant="secondary"
                 onClick={() => onDeclineInvite?.(invite)}
                 disabled={loading}
               >
                 Decline
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="modal-btn primary"
+                variant="primary"
                 onClick={() => onAcceptInvite?.(invite)}
-                disabled={loading}
+                loading={loading}
               >
-                {loading ? <Loader2 size={16} className="btn-spinner" /> : <Mail size={16} />}
+                {!loading ? <Mail size={16} /> : null}
                 <span>Accept Invite</span>
-              </button>
+              </Button>
             </>
           ) : (
-            <button
+            <Button
               type="button"
-              className="modal-btn primary"
+              variant="primary"
               onClick={onRequestAccess}
-              disabled={requestPending || requestSubmitted || requestDisabled}
+              disabled={requestSubmitted || requestDisabled}
+              loading={requestPending}
             >
-              {requestPending ? <Loader2 size={16} className="btn-spinner" /> : <Send size={16} />}
+              {!requestPending ? <Send size={16} /> : null}
               <span>{requestSubmitted ? 'Request Sent' : 'Request Viewer Access'}</span>
-            </button>
+            </Button>
           )}
         </div>
       </div>

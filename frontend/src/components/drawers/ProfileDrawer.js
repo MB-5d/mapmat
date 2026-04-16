@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ImagePlus, Loader2, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
+import Button from '../ui/Button';
+import Field from '../ui/Field';
+import TextInput from '../ui/TextInput';
 import { resolveApiAssetUrl } from '../../utils/assets';
 
 const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast }) => {
@@ -191,24 +194,26 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           <div className="form-section">
             <h4>Profile</h4>
             <div className="profile-avatar-controls">
-              <button
+              <Button
                 type="button"
-                className="modal-btn secondary"
+                variant="secondary"
                 onClick={() => avatarInputRef.current?.click()}
                 disabled={!user || avatarLoading}
+                loading={avatarLoading}
               >
-                {avatarLoading ? <Loader2 size={18} className="btn-spinner" /> : <ImagePlus size={16} />}
+                {!avatarLoading ? <ImagePlus size={16} /> : null}
                 Upload Avatar
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="modal-btn secondary"
+                variant="secondary"
                 onClick={handleRemoveAvatar}
                 disabled={!user || avatarLoading || !avatarUrl}
+                loading={avatarLoading}
               >
-                {avatarLoading ? <Loader2 size={18} className="btn-spinner" /> : <Trash2 size={16} />}
+                {!avatarLoading ? <Trash2 size={16} /> : null}
                 Remove Avatar
-              </button>
+              </Button>
               <input
                 ref={avatarInputRef}
                 type="file"
@@ -217,41 +222,37 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
                 onChange={handleAvatarFile}
               />
             </div>
-            <div className="form-group">
-              <label>Name</label>
-              <input
+            <Field label="Name">
+              <TextInput
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
                 disabled={!user || loading}
               />
-            </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input
+            </Field>
+            <Field label="Email">
+              <TextInput
                 type="email"
                 value={user?.email || ''}
                 disabled
               />
-            </div>
+            </Field>
           </div>
 
           <div className="form-section">
             <h4>Change Password</h4>
-            <div className="form-group">
-              <label>Current Password</label>
-              <input
+            <Field label="Current Password">
+              <TextInput
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password"
                 disabled={!user || loading}
               />
-            </div>
-            <div className="form-group">
-              <label>New Password</label>
-              <input
+            </Field>
+            <Field label="New Password">
+              <TextInput
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -259,39 +260,38 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
                 minLength={6}
                 disabled={!user || loading}
               />
-            </div>
-            <div className="form-group">
-              <label>Confirm New Password</label>
-              <input
+            </Field>
+            <Field label="Confirm New Password">
+              <TextInput
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
                 disabled={!user || loading}
               />
-            </div>
+            </Field>
           </div>
 
-          <button
+          <Button
             type="submit"
-            className="modal-btn primary"
+            variant="primary"
             disabled={loading || !user}
+            loading={loading}
           >
-            {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
             Save Changes
-          </button>
+          </Button>
 
           <div className="form-section danger-zone">
             <h4>Delete account</h4>
             <p>Deleting your account will permanently remove all your projects, maps, and data.</p>
-            <button
+            <Button
               type="button"
-              className="modal-btn danger"
+              variant="danger"
               onClick={() => setShowDeleteConfirm(true)}
               disabled={loading || !user}
             >
               Delete Account
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
@@ -306,9 +306,8 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
             </div>
           </div>
           {error && <div className="auth-error">{error}</div>}
-          <div className="form-group">
-            <label>Enter your password to confirm</label>
-            <input
+          <Field label="Enter your password to confirm">
+            <TextInput
               type="password"
               value={deletePassword}
               onChange={(e) => setDeletePassword(e.target.value)}
@@ -316,20 +315,20 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
               autoFocus
               disabled={loading}
             />
-          </div>
+          </Field>
           <div className="account-danger-actions">
-            <button
+            <Button
               type="button"
-              className="modal-btn danger"
+              variant="danger"
               onClick={handleDeleteAccount}
               disabled={loading || !deletePassword}
+              loading={loading}
             >
-              {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
               Yes, Delete My Account
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="modal-btn secondary"
+              variant="secondary"
               onClick={() => {
                 setShowDeleteConfirm(false);
                 setDeletePassword('');
@@ -338,7 +337,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
               disabled={loading}
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

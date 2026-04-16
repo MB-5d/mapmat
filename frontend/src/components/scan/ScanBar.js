@@ -1,6 +1,9 @@
 import React from 'react';
 import { RotateCcw, Scan, SlidersHorizontal } from 'lucide-react';
 
+import Button from '../ui/Button';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
 import {
   APP_ONLY_MODE,
   SCAN_MAX_DEPTH_UI,
@@ -42,7 +45,7 @@ const ScanBar = ({
   return (
     <>
       <Scan size={18} className="search-icon" />
-      <input
+      <TextInput
         value={urlInput}
         onChange={onUrlInputChange}
         onKeyDown={onUrlKeyDown}
@@ -77,8 +80,9 @@ const ScanBar = ({
             <div className="layers-panel-list">
               <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
                 <span>Levels</span>
-                <select
+                <SelectInput
                   className="layers-panel-select-input"
+                  size="sm"
                   value={scanDepth}
                   onChange={(e) => onScanDepthChange(e.target.value)}
                   disabled={optionsDisabled}
@@ -87,7 +91,7 @@ const ScanBar = ({
                   {Array.from({ length: SCAN_MAX_DEPTH_UI }, (_, index) => index + 1).map((value) => (
                     <option key={value} value={value}>{value}</option>
                   ))}
-                </select>
+                </SelectInput>
               </label>
               <div className="layers-panel-hint">
                 Max {SCAN_MAX_DEPTH_UI} levels during testing
@@ -190,14 +194,15 @@ const ScanBar = ({
         )}
       </div>
 
-      <button
+      <Button
         className="scan-btn"
         onClick={onScan}
         disabled={scanDisabled}
         title={scanTitle}
+        size="sm"
       >
         {scanLabel}
-      </button>
+      </Button>
     </>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import TextInput from '../ui/TextInput';
 import { resolveApiAssetUrl } from '../../utils/assets';
 
 const CanvasMapHeader = ({
@@ -33,7 +34,7 @@ const CanvasMapHeader = ({
     <div className="canvas-map-header">
       <div className="canvas-map-pill">
         {isEditingMapName ? (
-          <input
+          <TextInput
             className="canvas-map-name-input"
             value={mapName}
             onChange={onMapNameChange}

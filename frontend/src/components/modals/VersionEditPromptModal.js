@@ -1,5 +1,8 @@
 import React from 'react';
 
+import Button from '../ui/Button';
+import Modal from '../ui/Modal';
+
 const VersionEditPromptModal = ({
   show,
   onSaveCopy,
@@ -8,27 +11,29 @@ const VersionEditPromptModal = ({
   if (!show) return null;
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-card modal-md version-edit-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Edit Older Version?</h3>
-        </div>
-        <div className="modal-body">
-          <p className="version-edit-text">
-            You’re editing a previous version. Do you want to save these changes as a copy
-            or override the latest map?
-          </p>
-        </div>
-        <div className="modal-footer">
-          <button className="modal-btn secondary" onClick={onOverride}>
+    <Modal
+      show={show}
+      onClose={onOverride}
+      title="Edit Older Version?"
+      size="md"
+      className="version-edit-modal"
+      hideCloseButton
+      footer={(
+        <>
+          <Button variant="secondary" onClick={onOverride}>
             Override Latest
-          </button>
-          <button className="modal-btn primary" onClick={onSaveCopy}>
+          </Button>
+          <Button variant="primary" onClick={onSaveCopy}>
             Save as Copy
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      )}
+    >
+      <p className="version-edit-text">
+        You’re editing a previous version. Do you want to save these changes as a copy
+        or override the latest map?
+      </p>
+    </Modal>
   );
 };
 

@@ -19,7 +19,7 @@ const IconButton = React.forwardRef(
       className={classNames(
         'ui-icon-btn',
         `ui-icon-btn--${size}`,
-        variant !== 'default' && `ui-icon-btn--${variant}`,
+        `ui-icon-btn--${variant}`,
         className
       )}
       {...props}
