@@ -10463,16 +10463,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     && !showMapAccessGate;
   const showWelcomeModal = isWelcomeModalEligible
     && !welcomeModalDismissedForSession
-    && !welcomeModalHidden;
+    && (!isLoggedIn || !welcomeModalHidden);
 
   const dismissWelcomeModal = useCallback(() => {
-    if (welcomeDontShowAgain) {
+    if (isLoggedIn && welcomeDontShowAgain) {
       writeWelcomeModalHidden(true);
       setWelcomeModalHidden(true);
     }
     setWelcomeModalDismissedForSession(true);
     setWelcomeDontShowAgain(false);
-  }, [welcomeDontShowAgain]);
+  }, [isLoggedIn, welcomeDontShowAgain]);
   const saveMapModalProjectId = createMapMode
     ? createMapDefaults?.projectId || null
     : duplicateMapConfig?.projectId || null;
@@ -12036,8 +12036,12 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       <WelcomeModal
         show={showWelcomeModal}
-        dontShowAgain={welcomeDontShowAgain}
-        onToggleDontShowAgain={() => setWelcomeDontShowAgain((prev) => !prev)}
+        dontShowAgain={isLoggedIn ? welcomeDontShowAgain : false}
+        disableDontShowAgain={!isLoggedIn}
+        onToggleDontShowAgain={() => {
+          if (!isLoggedIn) return;
+          setWelcomeDontShowAgain((prev) => !prev);
+        }}
         onClose={dismissWelcomeModal}
         onConfirm={dismissWelcomeModal}
       />

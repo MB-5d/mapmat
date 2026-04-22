@@ -8,6 +8,7 @@ import Modal from '../ui/Modal';
 const WelcomeModal = ({
   show,
   dontShowAgain,
+  disableDontShowAgain = false,
   onToggleDontShowAgain,
   onClose,
   onConfirm,
@@ -41,6 +42,7 @@ const WelcomeModal = ({
             className="welcome-modal-checkbox"
             checked={dontShowAgain}
             onChange={onToggleDontShowAgain}
+            disabled={disableDontShowAgain}
             label="Don't show this again on this browser"
           />
           <div className="welcome-modal-actions">

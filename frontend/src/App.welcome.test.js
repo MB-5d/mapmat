@@ -211,6 +211,7 @@ describe('App blank home and welcome modal', () => {
   });
 
   test('does not appear once dismissal is persisted', async () => {
+    api.getMe.mockResolvedValue({ user: defaultUser });
     window.localStorage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
 
     await renderApp();
@@ -218,7 +219,17 @@ describe('App blank home and welcome modal', () => {
     expect(getWelcomeModal()).toBeNull();
   });
 
-  test('checking the box and clicking Close persists dismissal', async () => {
+  test('logged-out users still see the modal even if dismissal is persisted', async () => {
+    window.localStorage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+
+    await renderApp();
+
+    expect(getWelcomeModal()).not.toBeNull();
+    expect(getDontShowAgainCheckbox().disabled).toBe(true);
+  });
+
+  test('checking the box and clicking Close persists dismissal for logged-in users', async () => {
+    api.getMe.mockResolvedValue({ user: defaultUser });
     await renderApp();
 
     await click(getDontShowAgainCheckbox());
@@ -228,7 +239,8 @@ describe('App blank home and welcome modal', () => {
     expect(getWelcomeModal()).toBeNull();
   });
 
-  test('checking the box and clicking OK persists dismissal', async () => {
+  test('checking the box and clicking OK persists dismissal for logged-in users', async () => {
+    api.getMe.mockResolvedValue({ user: defaultUser });
     await renderApp();
 
     await click(getDontShowAgainCheckbox());
