@@ -1,6 +1,8 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 
+import { MenuSectionHeader } from '../ui/Menu';
+
 const LayersPanel = ({
   layers,
   connectionTool,
@@ -35,7 +37,7 @@ const LayersPanel = ({
   const LayerToggle = ({ label, active, onToggle, disabled = false }) => (
     <button
       type="button"
-      className={`layers-panel-item${disabled ? ' disabled' : ''}`}
+      className={`layers-panel-item ui-menu-item${disabled ? ' disabled' : ''}`}
       onClick={disabled ? undefined : onToggle}
       aria-pressed={active}
       disabled={disabled}
@@ -53,7 +55,7 @@ const LayersPanel = ({
             <>
               {hasPlacementLayers && (
                 <>
-                  <div className="layers-panel-section">Placement</div>
+                  <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
                   <LayerToggle
                     label="Primary"
                     active={scanLayerVisibility.placementPrimary}
@@ -77,7 +79,7 @@ const LayersPanel = ({
 
               {showTypeLayers && (
                 <>
-                  <div className="layers-panel-section">Type</div>
+                  <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
                   {scanLayerAvailability?.typePages && (
                     <LayerToggle
                       label="Pages"
@@ -97,7 +99,7 @@ const LayersPanel = ({
 
               {hasStatusLayers && (
                 <>
-                  <div className="layers-panel-section">Status</div>
+                  <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
                   {scanLayerAvailability?.statusBroken && (
                     <LayerToggle
                       label="Broken Link"
@@ -138,7 +140,7 @@ const LayersPanel = ({
 
               {showConnectionLayers && (
                 <>
-                  <div className="layers-panel-section">Connections</div>
+                  <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
                   {connectionAvailability?.userFlows && (
                     <LayerToggle
                       label="User Flows"
@@ -167,7 +169,7 @@ const LayersPanel = ({
 
           {showChangeSection && (
             <>
-              <div className="layers-panel-section">Markers</div>
+              <MenuSectionHeader className="layers-panel-section">Markers</MenuSectionHeader>
               {changeStatusOptions.map((option) => (
                 <LayerToggle
                   key={option.value}

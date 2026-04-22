@@ -13,6 +13,7 @@ import {
 
 import ScanBar from '../scan/ScanBar';
 import Button from '../ui/Button';
+import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import { useAuth } from '../../contexts/AuthContext';
 import mapmatLogo from '../../assets/MM-Logo.svg';
 import { APP_BRAND_NAME, APP_ONLY_MODE } from '../../utils/constants';
@@ -66,8 +67,15 @@ const Topbar = ({
 
   const handleAccountToggle = () => setShowAccountMenu((prev) => !prev);
   const closeMenu = () => setShowAccountMenu(false);
-
-  const totalPendingCount = pendingInviteCount + pendingAccessRequestCount;
+  const accountTriggerIcon = resolveApiAssetUrl(currentUser?.avatarUrl) ? (
+    <img
+      className="user-btn-avatar"
+      src={resolveApiAssetUrl(currentUser?.avatarUrl)}
+      alt=""
+    />
+  ) : (
+    <User size={18} />
+  );
 
   return (
     <div className="topbar" data-feedback-id="topbar" data-feedback-label="Top navigation">
@@ -83,7 +91,7 @@ const Topbar = ({
 
       <div className="topbar-center">
         {showScanBar ? (
-          <div className="search-container">
+          <div className="search-container scan-bar-shell">
             <ScanBar
               canEdit={canEdit}
               urlInput={urlInput}
@@ -117,125 +125,114 @@ const Topbar = ({
       <div className="topbar-right">
         {isLoggedIn ? (
           <div className="account-menu-wrapper" ref={accountMenuRef}>
-            <button
-              className="user-btn"
+            <Button
+              className="topbar-account-trigger"
+              type="ghost"
+              buttonStyle="mono"
+              size="sm"
               onClick={handleAccountToggle}
               title="Account Menu"
               aria-expanded={showAccountMenu}
               aria-haspopup="menu"
-            >
-              {resolveApiAssetUrl(currentUser?.avatarUrl) ? (
-                <img
-                  className="user-btn-avatar"
-                  src={resolveApiAssetUrl(currentUser?.avatarUrl)}
-                  alt=""
-                />
-              ) : (
-                <User size={18} />
-              )}
-              <span>{currentUser?.name}</span>
-              {totalPendingCount > 0 ? (
-                <span className="account-menu-badge" aria-label={`${totalPendingCount} pending collaboration items`}>
-                  {totalPendingCount > 9 ? '9+' : totalPendingCount}
-                </span>
-              ) : null}
-            </button>
+              startIcon={accountTriggerIcon}
+              label={currentUser?.name || 'Account'}
+            />
             {showAccountMenu && (
-              <div className="account-menu" role="menu">
-                <button
-                  className="account-menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    onShowInvites?.();
-                  }}
-                >
-                  <Mail size={16} />
-                  <span>Invites</span>
-                  {pendingInviteCount > 0 ? (
-                    <span className="account-menu-item-badge">{pendingInviteCount > 9 ? '9+' : pendingInviteCount}</span>
-                  ) : null}
-                </button>
-                <button
-                  className="account-menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    onShowAccessRequests?.();
-                  }}
-                >
-                  <ShieldCheck size={16} />
-                  <span>Requests</span>
-                  {pendingAccessRequestCount > 0 ? (
-                    <span className="account-menu-item-badge">{pendingAccessRequestCount > 9 ? '9+' : pendingAccessRequestCount}</span>
-                  ) : null}
-                </button>
-                <div className="account-menu-divider" />
-                <button
-                  className="account-menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    onShowProjects();
-                  }}
-                >
-                  <Folder size={16} />
-                  <span>Projects</span>
-                </button>
-                <button
-                  className="account-menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    onShowHistory();
-                  }}
-                >
-                  <History size={16} />
-                  <span>History</span>
-                </button>
-                <div className="account-menu-divider" />
-                <button
-                  className="account-menu-item"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    onShowProfile();
-                  }}
-                >
-                  <UserCircle size={16} />
-                  <span>Profile</span>
-                </button>
-                <button
-                  className="account-menu-item"
-                  role="menuitem"
-                  type="button"
-                  onClick={() => {
-                    closeMenu();
-                    onShowSettings();
-                  }}
-                >
-                  <Settings2 size={16} />
-                  <span>Settings</span>
-                </button>
-                <div className="account-menu-divider" />
-                <button
-                  className="account-menu-item account-menu-logout"
-                  role="menuitem"
-                  onClick={() => {
-                    closeMenu();
-                    onLogout();
-                  }}
-                >
-                  <LogOut size={16} />
-                  <span>Log out</span>
-                </button>
-              </div>
+              <MenuPanel className="account-menu" role="menu">
+                <div className="ui-menu-section" role="group" aria-label="Collaboration">
+                  <MenuSectionHeader>Collaboration</MenuSectionHeader>
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<Mail size={16} />}
+                    label="Invites"
+                    badge={pendingInviteCount > 0 ? (
+                      <span className="account-menu-item-badge">{pendingInviteCount > 9 ? '9+' : pendingInviteCount}</span>
+                    ) : null}
+                    onClick={() => {
+                      closeMenu();
+                      onShowInvites?.();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<ShieldCheck size={16} />}
+                    label="Requests"
+                    badge={pendingAccessRequestCount > 0 ? (
+                      <span className="account-menu-item-badge">{pendingAccessRequestCount > 9 ? '9+' : pendingAccessRequestCount}</span>
+                    ) : null}
+                    onClick={() => {
+                      closeMenu();
+                      onShowAccessRequests?.();
+                    }}
+                  />
+                </div>
+                <MenuDivider className="account-menu-divider" />
+                <div className="ui-menu-section" role="group" aria-label="Workspace">
+                  <MenuSectionHeader>Workspace</MenuSectionHeader>
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<Folder size={16} />}
+                    label="Projects"
+                    onClick={() => {
+                      closeMenu();
+                      onShowProjects();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<History size={16} />}
+                    label="History"
+                    onClick={() => {
+                      closeMenu();
+                      onShowHistory();
+                    }}
+                  />
+                </div>
+                <MenuDivider className="account-menu-divider" />
+                <div className="ui-menu-section" role="group" aria-label="Account">
+                  <MenuSectionHeader>Account</MenuSectionHeader>
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<UserCircle size={16} />}
+                    label="Profile"
+                    onClick={() => {
+                      closeMenu();
+                      onShowProfile();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<Settings2 size={16} />}
+                    label="Settings"
+                    onClick={() => {
+                      closeMenu();
+                      onShowSettings();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item account-menu-logout"
+                    role="menuitem"
+                    icon={<LogOut size={16} />}
+                    label="Log out"
+                    danger
+                    onClick={() => {
+                      closeMenu();
+                      onLogout();
+                    }}
+                  />
+                </div>
+              </MenuPanel>
             )}
           </div>
         ) : (
-          <Button className="topbar-login-btn" title="Log In" onClick={onLogin}>
-            <LogIn size={18} />
-            <span>Log In</span>
+          <Button className="topbar-login-btn" title="Log In" onClick={onLogin} startIcon={<LogIn size={18} />}>
+            Log In
           </Button>
         )}
       </div>

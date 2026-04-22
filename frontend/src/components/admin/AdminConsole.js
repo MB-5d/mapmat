@@ -67,6 +67,13 @@ function formatTableTimestamp(value) {
   });
 }
 
+function formatAdminRole(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'platform_owner') return 'Platform owner';
+  if (normalized === 'support') return 'Support';
+  return 'Admin';
+}
+
 function SortIcon({ active, direction }) {
   if (!active) return <ChevronsUpDown size={14} />;
   return direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
@@ -241,10 +248,10 @@ function AdminConsole({ route, navigateToRoute }) {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionError, setSessionError] = useState('');
-  const [operatorLabel, setOperatorLabel] = useState('');
-  const [loginOperatorLabel, setLoginOperatorLabel] = useState('');
-  const [adminKey, setAdminKey] = useState('');
-  const [showAdminKey, setShowAdminKey] = useState(false);
+  const [sessionUser, setSessionUser] = useState(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [activePanel, setActivePanel] = useState('users');
 
@@ -275,7 +282,7 @@ function AdminConsole({ route, navigateToRoute }) {
 
   const handleSessionExpired = useCallback((message = 'Admin session expired. Sign in again.') => {
     setIsAuthenticated(false);
-    setOperatorLabel('');
+    setSessionUser(null);
     setSessionError(message);
     setTotalUsers(0);
     setUsers([]);
@@ -308,17 +315,18 @@ function AdminConsole({ route, navigateToRoute }) {
         const data = await getAdminSession();
         if (cancelled) return;
         if (data?.authenticated) {
-          setIsAuthenticated(true);
-          setOperatorLabel(data.operatorLabel || '');
+          const nextUser = data?.user || null;
+          setIsAuthenticated(!!nextUser);
+          setSessionUser(nextUser);
         } else {
           setIsAuthenticated(false);
-          setOperatorLabel('');
+          setSessionUser(null);
         }
       } catch (error) {
         if (cancelled) return;
         setSessionError(error.message || 'Failed to load admin session.');
         setIsAuthenticated(false);
-        setOperatorLabel('');
+        setSessionUser(null);
       } finally {
         if (!cancelled) {
           setSessionChecked(true);
@@ -433,18 +441,21 @@ function AdminConsole({ route, navigateToRoute }) {
     setSessionError('');
 
     try {
+      const normalizedEmail = loginEmail.trim().toLowerCase();
       const data = await createAdminSession({
-        operatorLabel: loginOperatorLabel,
-        adminKey,
+        email: normalizedEmail,
+        password: loginPassword,
       });
-      setIsAuthenticated(true);
-      setOperatorLabel(data?.operatorLabel || loginOperatorLabel.trim());
-      setAdminKey('');
-      setLoginOperatorLabel((current) => current.trim());
+      const nextUser = data?.user || null;
+      setIsAuthenticated(!!nextUser);
+      setSessionUser(nextUser);
+      setLoginPassword('');
+      setShowLoginPassword(false);
+      setLoginEmail(normalizedEmail);
     } catch (error) {
       setSessionError(error.message || 'Failed to start support session.');
       setIsAuthenticated(false);
-      setOperatorLabel('');
+      setSessionUser(null);
     } finally {
       setLoginLoading(false);
     }
@@ -458,7 +469,7 @@ function AdminConsole({ route, navigateToRoute }) {
     }
 
     setIsAuthenticated(false);
-    setOperatorLabel('');
+    setSessionUser(null);
     setSessionError('');
     setTotalUsers(0);
     setSelectedUser(null);
@@ -466,6 +477,7 @@ function AdminConsole({ route, navigateToRoute }) {
     setUsersError('');
     setActionMessage('');
     setActionError('');
+    setLoginPassword('');
     navigateToRoute(createAdminHomeRoute(), { replace: true });
   }
 
@@ -623,50 +635,49 @@ function AdminConsole({ route, navigateToRoute }) {
           <div className="admin-console-badge">Private Surface</div>
           <h1>Support Console</h1>
           <p>
-            Separate from the tester app. Sign in with the operator label you want
-            recorded in audit logs and the backend admin key.
+            Use an existing app account that has support console access.
           </p>
           <form className="admin-console-auth-form" onSubmit={handleLoginSubmit}>
             <label>
-              <span>Operator name or email</span>
+              <span>Email</span>
               <input
-                type="text"
-                value={loginOperatorLabel}
-                onChange={(event) => setLoginOperatorLabel(event.target.value)}
+                type="email"
+                value={loginEmail}
+                onChange={(event) => setLoginEmail(event.target.value)}
                 placeholder="support@example.com"
                 autoComplete="username"
                 disabled={loginLoading}
               />
             </label>
             <label>
-              <span>Admin key</span>
+              <span>Password</span>
               <div className="admin-console-password-field">
                 <input
-                  type={showAdminKey ? 'text' : 'password'}
-                  value={adminKey}
-                  onChange={(event) => setAdminKey(event.target.value)}
-                  placeholder="Enter the backend admin key"
+                  type={showLoginPassword ? 'text' : 'password'}
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  placeholder="Enter your account password"
                   autoComplete="current-password"
                   disabled={loginLoading}
                 />
                 <button
                   type="button"
                   className="admin-console-password-toggle"
-                  onClick={() => setShowAdminKey((current) => !current)}
+                  onClick={() => setShowLoginPassword((current) => !current)}
                   disabled={loginLoading}
                 >
-                  {showAdminKey ? 'Hide' : 'Show'}
+                  {showLoginPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
             </label>
             <div className="admin-console-field-note">
-              This is the backend operator key, not a normal user password.
+              This uses your normal app credentials, but creates a separate support session.
             </div>
             {sessionError ? <div className="admin-console-error">{sessionError}</div> : null}
             <button
               type="submit"
               className="admin-console-primary-btn"
-              disabled={loginLoading || !loginOperatorLabel.trim() || !adminKey}
+              disabled={loginLoading || !loginEmail.trim() || !loginPassword}
             >
               {loginLoading ? <Loader2 size={16} className="admin-console-spinner" /> : <KeyRound size={16} />}
               Start support session
@@ -707,7 +718,14 @@ function AdminConsole({ route, navigateToRoute }) {
           <div className="admin-console-header-actions">
             <div className="admin-console-operator">
               <Shield size={16} />
-              <span>{operatorLabel}</span>
+              <div className="admin-console-operator-copy">
+                <span>{sessionUser?.name || sessionUser?.email || 'Admin'}</span>
+                <small>
+                  {sessionUser?.name
+                    ? `${sessionUser.email} · ${formatAdminRole(sessionUser?.adminRole)}`
+                    : formatAdminRole(sessionUser?.adminRole)}
+                </small>
+              </div>
             </div>
             <button type="button" className="admin-console-secondary-btn" onClick={handleLogout}>
               <LogOut size={16} />

@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Nata+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+@import './design-system.generated.css';
 
 html {
   height: 100%;
@@ -11,8 +12,9 @@ body {
   min-height: 100%;
   height: auto;
   overflow-y: visible;
-  font-family: 'Nata Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-sans);
+  background: var(--ui-color-surface-muted);
+  color: var(--ui-color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

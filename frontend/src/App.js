@@ -56,6 +56,7 @@ import ShareModal from './components/modals/ShareModal';
 import ScanProgressModal from './components/scan/ScanProgressModal';
 import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
 import Button from './components/ui/Button';
+import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from './components/ui/Menu';
 import Modal from './components/ui/Modal';
 import ColorKey from './components/toolbar/ColorKey';
 import LayersPanel from './components/toolbar/LayersPanel';
@@ -11256,7 +11257,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
               {/* Connection context menu */}
               {connectionMenu && (
-                <div
+                <MenuPanel
                   className="connection-menu"
                   style={{
                     position: 'absolute',
@@ -11265,8 +11266,10 @@ export default function App({ currentRoute, navigateToRoute }) {
                     zIndex: 1000,
                   }}
                 >
-                  <button
+                  <MenuItem
                     className="connection-menu-item"
+                    icon={<MessageSquare size={14} />}
+                    label="Add Comment"
                     title={APP_ONLY_MODE ? `${TESTER_NOT_READY_MESSAGE}: connection comments` : 'Add comment'}
                     onClick={() => {
                       showToast(
@@ -11277,26 +11280,23 @@ export default function App({ currentRoute, navigateToRoute }) {
                       );
                       setConnectionMenu(null);
                     }}
-                  >
-                    <MessageSquare size={14} />
-                    <span>Add Comment</span>
-                  </button>
-                  <button
+                  />
+                  <MenuItem
                     className="connection-menu-item delete"
+                    icon={<Trash2 size={14} />}
+                    label="Delete"
+                    danger
                     onClick={() => {
                       deleteConnection(connectionMenu.connectionId);
                       setConnectionMenu(null);
                     }}
-                  >
-                    <Trash2 size={14} />
-                    <span>Delete</span>
-                  </button>
-                </div>
+                  />
+                </MenuPanel>
               )}
 
               {/* Node annotation context menu */}
               {nodeMenu && (
-                <div
+                <MenuPanel
                   className="node-menu"
                   style={{
                     position: 'absolute',
@@ -11305,32 +11305,32 @@ export default function App({ currentRoute, navigateToRoute }) {
                     zIndex: 1000,
                   }}
                 >
-                  <div className="node-menu-title">
+                  <MenuSectionHeader className="node-menu-title">
                     Mark as{nodeMenu.targetIds?.length > 1 ? ` (${nodeMenu.targetIds.length})` : ''}
-                  </div>
+                  </MenuSectionHeader>
                   {ANNOTATION_STATUS_OPTIONS.map((option) => (
-                    <button
+                    <MenuItem
                       key={option.value}
                       className={`node-menu-item${nodeMenuStatus === option.value ? ' active' : ''}`}
+                      label={option.label}
+                      selected={nodeMenuStatus === option.value}
                       onClick={() => {
                         applyAnnotationStatus(nodeMenu.targetIds || [], option.value);
                         setNodeMenu(null);
                       }}
-                    >
-                      <span>{option.label}</span>
-                    </button>
+                    />
                   ))}
-                  <div className="node-menu-divider" />
-                  <button
+                  <MenuDivider className="node-menu-divider" />
+                  <MenuItem
                     className="node-menu-item clear"
+                    label="Clear"
+                    danger
                     onClick={() => {
                       applyAnnotationStatus(nodeMenu.targetIds || [], 'none', { clear: true });
                       setNodeMenu(null);
                     }}
-                  >
-                    <span>Clear</span>
-                  </button>
-                </div>
+                  />
+                </MenuPanel>
               )}
 
               {/* Comment Popover - positioned next to node */}

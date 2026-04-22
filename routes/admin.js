@@ -8,7 +8,6 @@ const feedbackStore = require('../stores/feedbackStore');
 const router = express.Router();
 
 const isProd = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_PUBLIC_DOMAIN;
-const ADMIN_API_KEY = String(process.env.ADMIN_API_KEY || '').trim();
 const ADMIN_CONSOLE_ENABLED = parseEnvBool(process.env.ADMIN_CONSOLE_ENABLED, false);
 const ADMIN_SESSION_COOKIE = 'admin_session';
 const ADMIN_SESSION_TTL_MS = Math.max(
@@ -17,7 +16,7 @@ const ADMIN_SESSION_TTL_MS = Math.max(
 );
 const ADMIN_SESSION_TTL_SECONDS = Math.max(300, Math.floor(ADMIN_SESSION_TTL_MS / 1000));
 const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET
-  || `${process.env.JWT_SECRET || 'mapmat-dev-secret-change-in-production'}:${ADMIN_API_KEY || 'unset-admin-key'}`;
+  || `${process.env.JWT_SECRET || 'mapmat-dev-secret-change-in-production'}:admin-session`;
 const ADMIN_SESSION_AUDIENCE = 'mapmat-admin-console';
 const ADMIN_LOGIN_RATE_WINDOW_MS = Math.max(
   1000,
@@ -27,6 +26,12 @@ const ADMIN_LOGIN_RATE_LIMIT = Math.max(
   1,
   Number(process.env.ADMIN_LOGIN_RATE_LIMIT ?? (isProd ? 10 : 30))
 );
+
+const ADMIN_ROLES = Object.freeze({
+  NONE: 'none',
+  SUPPORT: 'support',
+  PLATFORM_OWNER: 'platform_owner',
+});
 
 const COOKIE_SAMESITE = process.env.COOKIE_SAMESITE || (isProd ? 'none' : 'lax');
 const COOKIE_SECURE = process.env.COOKIE_SECURE
@@ -51,6 +56,25 @@ function parseEnvBool(value, fallback = false) {
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return fallback;
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeAdminRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  if (normalized === ADMIN_ROLES.SUPPORT || normalized === ADMIN_ROLES.PLATFORM_OWNER) {
+    return normalized;
+  }
+  return ADMIN_ROLES.NONE;
+}
+
+function hasAdminConsoleAccess(userOrRole) {
+  const role = typeof userOrRole === 'string'
+    ? userOrRole
+    : userOrRole?.admin_role;
+  return normalizeAdminRole(role) !== ADMIN_ROLES.NONE;
 }
 
 function normalizeIp(ip) {
@@ -105,9 +129,6 @@ function ensureAdminConsoleEnabled(req, res, next) {
   if (!ADMIN_CONSOLE_ENABLED) {
     return res.status(404).json({ error: 'Admin console is not enabled in this environment.' });
   }
-  if (!ADMIN_API_KEY) {
-    return res.status(503).json({ error: 'Admin console is not configured.' });
-  }
   return next();
 }
 
@@ -117,11 +138,27 @@ async function ensureAdminSupportSchemaAsync() {
   await feedbackStore.ensureFeedbackSchemaAsync();
 }
 
-function createAdminSessionToken({ operatorLabel }) {
+function isAccountDisabled(user) {
+  return String(user?.account_status || 'active').trim().toLowerCase() === 'disabled';
+}
+
+function buildAdminSessionUser(user) {
+  return {
+    id: user.id,
+    email: normalizeEmail(user.email),
+    name: String(user.name || '').trim(),
+    adminRole: normalizeAdminRole(user.admin_role),
+  };
+}
+
+function createAdminSessionToken({ userId, email, name, adminRole }) {
   return jwt.sign(
     {
       type: 'admin_session',
-      operatorLabel,
+      userId,
+      email,
+      name,
+      adminRole,
     },
     ADMIN_SESSION_SECRET,
     {
@@ -145,10 +182,6 @@ function getAdminSessionCookie(req) {
   return req.cookies?.[ADMIN_SESSION_COOKIE] || null;
 }
 
-function sanitizeOperatorLabel(value) {
-  return String(value || '').trim().slice(0, 120);
-}
-
 async function authenticateAdminSession(req, res, next) {
   const token = getAdminSessionCookie(req);
   if (!token) {
@@ -157,14 +190,23 @@ async function authenticateAdminSession(req, res, next) {
   }
 
   const decoded = verifyAdminSessionToken(token);
-  if (!decoded?.operatorLabel || decoded.type !== 'admin_session') {
+  if (!decoded?.userId || decoded.type !== 'admin_session') {
     res.clearCookie(ADMIN_SESSION_COOKIE, CLEAR_COOKIE_OPTIONS);
     req.adminSession = null;
     return next();
   }
 
+  const user = await authStore.getUserByIdAsync(decoded.userId);
+  if (!user || isAccountDisabled(user) || !hasAdminConsoleAccess(user)) {
+    res.clearCookie(ADMIN_SESSION_COOKIE, CLEAR_COOKIE_OPTIONS);
+    req.adminSession = null;
+    return next();
+  }
+
+  const sessionUser = buildAdminSessionUser(user);
   req.adminSession = {
-    operatorLabel: sanitizeOperatorLabel(decoded.operatorLabel),
+    ...sessionUser,
+    actorLabel: sessionUser.email,
     expiresAt: decoded.exp ? new Date(decoded.exp * 1000).toISOString() : null,
   };
   return next();
@@ -210,6 +252,7 @@ function serializeUserSummary(user) {
     avatarUrl: user.avatar_path || null,
     avatarPresent: !!user.avatar_path,
     accountStatus: user.account_status || 'active',
+    adminRole: normalizeAdminRole(user.admin_role),
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   };
@@ -347,48 +390,102 @@ router.get('/session', authenticateAdminSession, (req, res) => {
 
   return res.json({
     authenticated: true,
-    operatorLabel: req.adminSession.operatorLabel,
+    user: {
+      id: req.adminSession.id,
+      email: req.adminSession.email,
+      name: req.adminSession.name,
+      adminRole: req.adminSession.adminRole,
+    },
     expiresAt: req.adminSession.expiresAt,
   });
 });
 
 router.post('/session', adminLoginLimiter, async (req, res) => {
   try {
-    const operatorLabel = sanitizeOperatorLabel(req.body?.operatorLabel);
-    const adminKey = String(req.body?.adminKey || '');
+    const email = normalizeEmail(req.body?.email);
+    const password = String(req.body?.password || '');
     const actorIp = getClientIp(req);
 
-    if (!operatorLabel) {
-      return res.status(400).json({ error: 'Operator label is required.' });
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required.' });
     }
-    if (!adminKey) {
-      return res.status(400).json({ error: 'Admin key is required.' });
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required.' });
     }
 
-    if (adminKey !== ADMIN_API_KEY) {
+    const user = await authStore.getUserByEmailAsync(email);
+    if (!user) {
       await adminAuditStore.logAdminActionAsync({
-        actorLabel: operatorLabel,
+        actorLabel: email,
         actorIp,
         action: 'session_login_failed',
         metadata: {
-          reason: 'invalid_admin_key',
+          reason: 'invalid_credentials',
         },
       });
-      return res.status(401).json({ error: 'Invalid admin key.' });
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const token = createAdminSessionToken({ operatorLabel });
+    if (isAccountDisabled(user)) {
+      await adminAuditStore.logAdminActionAsync({
+        actorLabel: email,
+        actorIp,
+        action: 'session_login_failed',
+        targetUserId: user.id,
+        metadata: {
+          reason: 'disabled_account',
+        },
+      });
+      return res.status(403).json({
+        error: 'This account has been disabled. Contact support for help reactivating it.',
+      });
+    }
+
+    const isValid = await bcrypt.compare(password, user.password_hash || '');
+    if (!isValid) {
+      await adminAuditStore.logAdminActionAsync({
+        actorLabel: email,
+        actorIp,
+        action: 'session_login_failed',
+        targetUserId: user.id,
+        metadata: {
+          reason: 'invalid_credentials',
+        },
+      });
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    if (!hasAdminConsoleAccess(user)) {
+      await adminAuditStore.logAdminActionAsync({
+        actorLabel: email,
+        actorIp,
+        action: 'session_login_failed',
+        targetUserId: user.id,
+        metadata: {
+          reason: 'missing_admin_role',
+          adminRole: normalizeAdminRole(user.admin_role),
+        },
+      });
+      return res.status(403).json({ error: 'This account does not have support console access.' });
+    }
+
+    const sessionUser = buildAdminSessionUser(user);
+    const token = createAdminSessionToken(sessionUser);
     res.cookie(ADMIN_SESSION_COOKIE, token, COOKIE_OPTIONS);
 
     await adminAuditStore.logAdminActionAsync({
-      actorLabel: operatorLabel,
+      actorLabel: sessionUser.email,
       actorIp,
       action: 'session_login_success',
+      targetUserId: sessionUser.id,
+      metadata: {
+        adminRole: sessionUser.adminRole,
+      },
     });
 
     return res.json({
       authenticated: true,
-      operatorLabel,
+      user: sessionUser,
       expiresInMs: ADMIN_SESSION_TTL_MS,
     });
   } catch (error) {
@@ -399,11 +496,12 @@ router.post('/session', adminLoginLimiter, async (req, res) => {
 
 router.delete('/session', authenticateAdminSession, async (req, res) => {
   try {
-    if (req.adminSession?.operatorLabel) {
+    if (req.adminSession?.actorLabel) {
       await adminAuditStore.logAdminActionAsync({
-        actorLabel: req.adminSession.operatorLabel,
+        actorLabel: req.adminSession.actorLabel,
         actorIp: getClientIp(req),
         action: 'session_logout',
+        targetUserId: req.adminSession.id,
       });
     }
     res.clearCookie(ADMIN_SESSION_COOKIE, CLEAR_COOKIE_OPTIONS);
@@ -484,7 +582,7 @@ router.patch('/feedback/:id', async (req, res) => {
     await feedbackStore.syncFeedbackThemeCountsAsync([oldThemeId, newThemeId]);
 
     await adminAuditStore.logAdminActionAsync({
-      actorLabel: req.adminSession.operatorLabel,
+      actorLabel: req.adminSession.actorLabel,
       actorIp: getClientIp(req),
       action: 'feedback_item_updated',
       metadata: {
@@ -569,7 +667,7 @@ router.post('/feedback/themes', async (req, res) => {
     });
 
     await adminAuditStore.logAdminActionAsync({
-      actorLabel: req.adminSession.operatorLabel,
+      actorLabel: req.adminSession.actorLabel,
       actorIp: getClientIp(req),
       action: 'feedback_theme_created',
       metadata: {
@@ -639,7 +737,7 @@ router.patch('/feedback/themes/:id', async (req, res) => {
     const updated = await feedbackStore.updateFeedbackThemeAsync(req.params.id, updates);
 
     await adminAuditStore.logAdminActionAsync({
-      actorLabel: req.adminSession.operatorLabel,
+      actorLabel: req.adminSession.actorLabel,
       actorIp: getClientIp(req),
       action: 'feedback_theme_updated',
       metadata: {
@@ -780,7 +878,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
     const updatedUser = await authStore.getAdminUserByIdAsync(user.id);
 
     await adminAuditStore.logAdminActionAsync({
-      actorLabel: req.adminSession.operatorLabel,
+      actorLabel: req.adminSession.actorLabel,
       actorIp: getClientIp(req),
       action: 'user_password_reset',
       targetUserId: user.id,
@@ -811,7 +909,7 @@ router.post('/users/:id/disable', async (req, res) => {
     const updatedUser = await authStore.getAdminUserByIdAsync(user.id);
 
     await adminAuditStore.logAdminActionAsync({
-      actorLabel: req.adminSession.operatorLabel,
+      actorLabel: req.adminSession.actorLabel,
       actorIp: getClientIp(req),
       action: 'user_disabled',
       targetUserId: user.id,
@@ -842,7 +940,7 @@ router.post('/users/:id/reactivate', async (req, res) => {
     const updatedUser = await authStore.getAdminUserByIdAsync(user.id);
 
     await adminAuditStore.logAdminActionAsync({
-      actorLabel: req.adminSession.operatorLabel,
+      actorLabel: req.adminSession.actorLabel,
       actorIp: getClientIp(req),
       action: 'user_reactivated',
       targetUserId: user.id,

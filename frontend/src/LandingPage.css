@@ -1,28 +1,3 @@
-:root {
-  --landing-bg: #f6f8fc;
-  --landing-surface: rgba(255, 255, 255, 0.86);
-  --landing-surface-strong: #ffffff;
-  --landing-surface-alt: #eef3ff;
-  --landing-border: rgba(99, 102, 241, 0.16);
-  --landing-border-strong: rgba(99, 102, 241, 0.26);
-  --landing-text: #172033;
-  --landing-text-muted: #5a6478;
-  --landing-title: #0f172a;
-  --landing-primary: #4f46e5;
-  --landing-primary-strong: #3730a3;
-  --landing-primary-soft: rgba(79, 70, 229, 0.12);
-  --landing-accent: #0f766e;
-  --landing-success: #15803d;
-  --landing-success-soft: rgba(21, 128, 61, 0.12);
-  --landing-warning: #a16207;
-  --landing-warning-soft: rgba(161, 98, 7, 0.14);
-  --landing-muted-soft: rgba(71, 85, 105, 0.14);
-  --landing-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
-  --landing-radius-xl: 28px;
-  --landing-radius-lg: 20px;
-  --landing-radius-md: 16px;
-}
-
 html:has(.landing),
 body:has(.landing) {
   overflow-y: auto !important;
@@ -37,7 +12,7 @@ body:has(.landing) {
     radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.08), transparent 28%),
     linear-gradient(180deg, #f8fbff 0%, #f4f7fb 48%, #eef2f8 100%);
   color: var(--landing-text);
-  font-family: 'Nata Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .landing button,
@@ -224,9 +199,10 @@ body:has(.landing) {
 
 .hero-copy h1 {
   margin: 0;
-  font-size: clamp(2.9rem, 5vw, 4.7rem);
-  line-height: 1.02;
-  letter-spacing: -0.04em;
+  font-size: var(--type-display-xl-size);
+  line-height: var(--type-display-xl-line-height);
+  font-weight: var(--type-display-xl-weight);
+  letter-spacing: var(--type-display-xl-letter-spacing);
 }
 
 .section-eyebrow {
@@ -238,9 +214,9 @@ body:has(.landing) {
   background: rgba(255, 255, 255, 0.66);
   border: 1px solid var(--landing-border);
   color: var(--landing-primary-strong);
-  font-size: 0.83rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: var(--type-badge-md-size);
+  font-weight: var(--type-badge-md-weight);
+  letter-spacing: var(--type-badge-md-letter-spacing);
   text-transform: uppercase;
 }
 
@@ -259,7 +235,8 @@ body:has(.landing) {
 .hero-subtitle {
   max-width: 42rem;
   margin: 1.5rem 0 0;
-  font-size: 1.13rem;
+  font-size: var(--type-body-lg-size);
+  line-height: var(--type-body-lg-line-height);
 }
 
 .hero-actions {
@@ -285,7 +262,8 @@ body:has(.landing) {
   background: rgba(255, 255, 255, 0.74);
   border: 1px solid rgba(99, 102, 241, 0.14);
   color: var(--landing-title);
-  font-size: 0.94rem;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
 }
 
 .hero-proof-list svg {
@@ -517,14 +495,16 @@ body:has(.landing) {
 
 .section-header h2 {
   margin: 0;
-  font-size: clamp(2rem, 3vw, 3rem);
-  line-height: 1.08;
-  letter-spacing: -0.03em;
+  font-size: var(--type-heading-xl-size);
+  line-height: var(--type-heading-xl-line-height);
+  font-weight: var(--type-heading-xl-weight);
+  letter-spacing: var(--type-heading-xl-letter-spacing);
 }
 
 .section-header p {
   margin-top: 1rem;
-  font-size: 1.02rem;
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
 }
 
 .section-subgroup {
@@ -557,7 +537,9 @@ body:has(.landing) {
 .workflow-card h3,
 .contact-card h3 {
   margin: 0;
-  font-size: 1.16rem;
+  font-size: var(--type-title-lg-size);
+  line-height: var(--type-title-lg-line-height);
+  font-weight: var(--type-title-lg-weight);
 }
 
 .info-card p,
@@ -604,7 +586,8 @@ body:has(.landing) {
   background: linear-gradient(135deg, var(--landing-primary) 0%, var(--landing-primary-strong) 100%);
   color: #ffffff;
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: var(--type-title-md-size);
+  line-height: var(--type-title-md-line-height);
 }
 
 .compare-table-shell {
@@ -638,7 +621,8 @@ body:has(.landing) {
   position: sticky;
   top: 0;
   z-index: 1;
-  font-size: 0.94rem;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
   color: var(--landing-title);
 }
 
@@ -660,8 +644,8 @@ body:has(.landing) {
   align-items: center;
   padding: 0.44rem 0.7rem;
   border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: var(--type-badge-md-size);
+  font-weight: var(--type-badge-md-weight);
   white-space: nowrap;
 }
 
@@ -683,7 +667,8 @@ body:has(.landing) {
 
 .compare-note {
   margin: 1rem 0 0;
-  font-size: 0.92rem;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
 }
 
 .faq-list {

@@ -1,13 +1,18 @@
 {
   "meta": {
-    "generatedOn": "2026-04-16",
+    "generatedOn": "2026-04-20",
     "sources": [
       "frontend/src/components/ui",
-      "frontend/src/components/drawers/AccountDrawer.js"
+      "frontend/src/components/drawers/AccountDrawer.js",
+      "frontend/src/components/nodes/NodeCard.js",
+      "frontend/src/components/toolbar/Topbar.js",
+      "frontend/src/App.js"
     ],
     "notes": [
-      "Only shared components that exist in the repo are exported here.",
-      "Page-specific surfaces that still rely on bespoke CSS are intentionally omitted instead of guessed into shared variants."
+      "Only code-backed shared components and shared surfaces are exported here.",
+      "Browser/CSS interaction states are included only when the live app defines them today.",
+      "Button and IconButton keep legacy variant compatibility in code, but type + style + size is the canonical model.",
+      "Selected/on states are reserved for selected controls and menu rows, not standard buttons."
     ]
   },
   "components": [
@@ -16,52 +21,164 @@
       "kind": "primitive",
       "source": "frontend/src/components/ui/Button.js",
       "props": {
-        "variant": ["primary", "secondary", "danger", "ghost"],
-        "size": ["sm", "md", "lg"],
+        "type": [
+          "primary",
+          "secondary",
+          "ghost",
+          "link"
+        ],
+        "style": [
+          "brand",
+          "mono",
+          "danger"
+        ],
+        "variant": "legacy alias: primary | secondary | danger | ghost",
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "label": "string",
+        "startIcon": "node",
+        "endIcon": "node",
+        "iconOnly": "boolean",
+        "htmlType": "native button type override",
         "loading": "boolean",
         "disabled": "native button prop"
       },
-      "states": ["default", "disabled", "loading"]
+      "states": [
+        "rest",
+        "hover",
+        "focus-visible",
+        "disabled",
+        "loading"
+      ]
     },
     {
       "name": "IconButton",
       "kind": "primitive",
       "source": "frontend/src/components/ui/IconButton.js",
       "props": {
-        "variant": ["default", "primary", "danger", "ghost"],
-        "size": ["sm", "md", "lg"]
+        "type": [
+          "primary",
+          "secondary",
+          "ghost",
+          "link"
+        ],
+        "style": [
+          "brand",
+          "mono",
+          "danger"
+        ],
+        "variant": "legacy alias: default | primary | danger | ghost",
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "icon": "node",
+        "label": "string",
+        "htmlType": "native button type override",
+        "loading": "boolean"
       },
-      "states": ["default", "disabled"]
+      "states": [
+        "rest",
+        "hover",
+        "focus-visible",
+        "disabled",
+        "loading"
+      ]
+    },
+    {
+      "name": "MenuItem",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Menu.js",
+      "props": {
+        "icon": "node",
+        "label": "string",
+        "description": "string",
+        "badge": "node",
+        "endSlot": "node",
+        "selected": "boolean",
+        "danger": "boolean",
+        "disabled": "boolean"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focus-visible",
+        "disabled"
+      ]
+    },
+    {
+      "name": "MenuSectionHeader",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Menu.js",
+      "props": {
+        "children": "string"
+      },
+      "states": [
+        "rest",
+        "dark theme"
+      ]
     },
     {
       "name": "TextInput",
       "kind": "form",
       "source": "frontend/src/components/ui/TextInput.js",
       "props": {
-        "size": ["sm", "md", "lg"],
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
         "invalid": "boolean"
       },
-      "states": ["default", "focus", "invalid", "disabled via native input props"]
+      "states": [
+        "rest",
+        "focus",
+        "invalid",
+        "disabled via native input props"
+      ]
     },
     {
       "name": "SelectInput",
       "kind": "form",
       "source": "frontend/src/components/ui/SelectInput.js",
       "props": {
-        "size": ["sm", "md", "lg"],
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
         "invalid": "boolean"
       },
-      "states": ["default", "focus", "invalid", "disabled via native select props"]
+      "states": [
+        "rest",
+        "focus",
+        "invalid",
+        "disabled via native select props"
+      ]
     },
     {
       "name": "TextareaInput",
       "kind": "form",
       "source": "frontend/src/components/ui/TextareaInput.js",
       "props": {
-        "size": ["sm", "md", "lg"],
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
         "invalid": "boolean"
       },
-      "states": ["default", "focus", "invalid", "disabled via native textarea props"]
+      "states": [
+        "rest",
+        "focus",
+        "invalid",
+        "disabled via native textarea props"
+      ]
     },
     {
       "name": "Field",
@@ -74,11 +191,15 @@
         "hint": "string",
         "error": "string"
       },
-      "subparts": ["FieldHint", "FieldError"]
+      "subparts": [
+        "FieldLabel",
+        "FieldHint",
+        "FieldError"
+      ]
     },
     {
       "name": "CheckboxField",
-      "kind": "form",
+      "kind": "selection",
       "source": "frontend/src/components/ui/CheckboxField.js",
       "props": {
         "label": "string",
@@ -86,18 +207,29 @@
         "disabled": "boolean",
         "indeterminate": "boolean"
       },
-      "states": ["default", "disabled", "indeterminate"]
+      "states": [
+        "unchecked",
+        "checked",
+        "indeterminate",
+        "focus-visible",
+        "disabled"
+      ]
     },
     {
       "name": "ToggleSwitch",
-      "kind": "form",
+      "kind": "selection",
       "source": "frontend/src/components/ui/ToggleSwitch.js",
       "props": {
         "label": "string",
         "description": "string",
         "disabled": "boolean"
       },
-      "states": ["off", "on", "disabled"]
+      "states": [
+        "off",
+        "on",
+        "focus-visible",
+        "disabled"
+      ]
     },
     {
       "name": "RadioCardGroup",
@@ -108,24 +240,45 @@
         "value": "selected option value",
         "name": "string"
       },
-      "states": ["default", "selected", "disabled"]
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focus-visible",
+        "disabled"
+      ]
     },
     {
       "name": "SegmentedControl",
-      "kind": "selection",
+      "kind": "choice",
       "source": "frontend/src/components/ui/SegmentedControl.js",
       "props": {
-        "variant": ["pill", "tabs", "grid"],
-        "size": ["sm", "md"],
+        "variant": [
+          "pill",
+          "tabs",
+          "grid"
+        ],
+        "size": [
+          "sm",
+          "md"
+        ],
         "fullWidth": "boolean",
         "options": "array of { value, label, icon?, disabled? }",
-        "optionRole": ["tab"]
+        "optionRole": [
+          "tab"
+        ]
       },
-      "states": ["default", "active", "disabled"]
+      "states": [
+        "rest",
+        "hover",
+        "active",
+        "focus-visible",
+        "disabled"
+      ]
     },
     {
       "name": "OptionCard",
-      "kind": "action-card",
+      "kind": "choice",
       "source": "frontend/src/components/ui/OptionCard.js",
       "props": {
         "title": "string",
@@ -134,19 +287,31 @@
         "badge": "node",
         "disabled": "native button prop"
       },
-      "states": ["default", "hover", "disabled"]
+      "states": [
+        "rest",
+        "hover",
+        "focus-visible",
+        "disabled"
+      ]
     },
     {
       "name": "Modal",
       "kind": "shell",
       "source": "frontend/src/components/ui/Modal.js",
       "props": {
-        "size": ["sm", "md", "lg"],
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
         "scrollable": "boolean",
         "hideCloseButton": "boolean",
         "footer": "node"
       },
-      "states": ["open", "closed"]
+      "states": [
+        "open",
+        "dark theme"
+      ]
     },
     {
       "name": "AccountDrawer",
@@ -160,12 +325,169 @@
         "bodyRef": "ref",
         "onBodyScroll": "function"
       },
-      "states": ["open", "closing", "closed"]
+      "states": [
+        "open",
+        "closing",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "ScanBar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/scan/ScanBar.js",
+      "props": {
+        "canEdit": "boolean",
+        "urlInput": "string",
+        "showOptions": "boolean",
+        "showClearUrl": "boolean",
+        "scanDisabled": "boolean",
+        "sharedTitle": "string"
+      },
+      "states": [
+        "rest",
+        "focus",
+        "options open",
+        "scan disabled",
+        "read-only title"
+      ]
+    },
+    {
+      "name": "Topbar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/toolbar/Topbar.js",
+      "props": {
+        "title": "string",
+        "urlInput": "string",
+        "authenticated": "boolean",
+        "collaborators": "array"
+      },
+      "states": [
+        "default",
+        "signed out",
+        "account menu open",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "AccountMenu",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/toolbar/Topbar.js",
+      "props": {
+        "pendingInviteCount": "number",
+        "pendingAccessRequestCount": "number",
+        "isOpen": "boolean"
+      },
+      "states": [
+        "closed",
+        "open",
+        "section headers",
+        "item hover",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "InlineBadge",
+      "kind": "shared-surface",
+      "source": "frontend/src/App.css",
+      "props": {
+        "label": "string"
+      },
+      "states": [
+        "rest",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "NodeMenu",
+      "kind": "shared-surface",
+      "source": "frontend/src/App.js",
+      "props": {
+        "nodeId": "string",
+        "activeStatus": "annotation state"
+      },
+      "states": [
+        "open",
+        "active row",
+        "clear action hover",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "NodeCard",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeCard.js",
+      "props": {
+        "showThumbnails": "boolean",
+        "showCommentBadges": "boolean",
+        "showPageNumbers": "boolean",
+        "showAnnotations": "boolean",
+        "isGhosted": "boolean",
+        "isSelected": "boolean",
+        "stackInfo": "object"
+      },
+      "states": [
+        "collapsed",
+        "with thumbnail",
+        "selected",
+        "ghosted",
+        "deleted",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "NodeBadge",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeCard.js",
+      "props": {
+        "label": "string"
+      },
+      "states": [
+        "rest",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "NodeStatusBadge",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeCard.js",
+      "props": {
+        "status": [
+          "new",
+          "to_move",
+          "moved",
+          "to_delete",
+          "deleted",
+          "note"
+        ],
+        "label": "string"
+      },
+      "states": [
+        "new",
+        "to_move",
+        "moved",
+        "to_delete",
+        "deleted",
+        "note",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "CommentBadge",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeCard.js",
+      "props": {
+        "count": "number"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "dark theme"
+      ]
     }
   ],
   "omittedDueToAmbiguity": [
-    "Admin console pills and tabs remain page-specific CSS classes.",
-    "MinimapNavigator palette values are still component-local rather than shared app primitives.",
-    "Landing page controls remain part of a separate marketing token track and are not exported as shared app primitives."
+    "Admin console pills, tabs, and table presentation remain page-specific.",
+    "Canvas connector layout logic and minimap internals are still product-level systems rather than shared primitives.",
+    "Landing-only section compositions remain part of the marketing track rather than the shared app component library."
   ]
 }

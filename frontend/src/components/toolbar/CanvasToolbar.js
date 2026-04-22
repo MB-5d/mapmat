@@ -21,6 +21,8 @@ import {
   Workflow,
 } from 'lucide-react';
 
+import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
+
 const CanvasToolbar = ({
   canEdit,
   canViewComments,
@@ -126,87 +128,75 @@ const CanvasToolbar = ({
         <Image size={20} />
       </button>
       {showImageMenu && (
-        <div className="canvas-tool-menu" role="menu">
+        <MenuPanel className="canvas-tool-menu" role="menu">
           {hasAnyThumbnails && (
             <>
-              <button
+              <MenuItem
                 className="canvas-tool-menu-toggle"
+                label="View thumbnails"
+                endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
                 onClick={onToggleThumbnails}
-                type="button"
-              >
-                <span>View thumbnails</span>
-                <span className="canvas-tool-menu-toggle-icon">
-                  {showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
-                </span>
-              </button>
-              <div className="canvas-tool-menu-divider" />
+              />
+              <MenuDivider className="canvas-tool-menu-divider" />
             </>
           )}
           <div className="canvas-tool-menu-section">
-            <div className="canvas-tool-menu-label">Thumbnails</div>
-            <button
+            <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails</MenuSectionHeader>
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Get thumbnails (All)"
               onClick={onGetThumbnailsAll}
               disabled={!hasMap || allThumbnailsCaptured}
-            >
-              Get thumbnails (All)
-            </button>
-            <button
+            />
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Get thumbnails (Selected)"
               onClick={onGetThumbnailsSelected}
               disabled={!hasSelection || !hasMap}
-            >
-              Get thumbnails (Selected)
-            </button>
-            <button
+            />
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Download thumbnails (All)"
               onClick={onDownloadThumbnailsAll}
               disabled={!hasMap || !hasDownloadableThumbnails}
-            >
-              Download thumbnails (All)
-            </button>
-            <button
+            />
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Download thumbnails (Selected)"
               onClick={onDownloadThumbnailsSelected}
               disabled={!hasSelection || !hasDownloadableSelectedThumbnails}
-            >
-              Download thumbnails (Selected)
-            </button>
+            />
           </div>
-          <div className="canvas-tool-menu-divider" />
+          <MenuDivider className="canvas-tool-menu-divider" />
           <div className="canvas-tool-menu-section">
-            <div className="canvas-tool-menu-label">Full screenshots</div>
-            <button
+            <MenuSectionHeader className="canvas-tool-menu-label">Full screenshots</MenuSectionHeader>
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Get full screenshots (All)"
               onClick={onGetFullScreenshotsAll}
               disabled={!hasMap}
-            >
-              Get full screenshots (All)
-            </button>
-            <button
+            />
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Get full screenshots (Selected)"
               onClick={onGetFullScreenshotsSelected}
               disabled={!hasSelection || !hasMap}
-            >
-              Get full screenshots (Selected)
-            </button>
-            <button
+            />
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Download full screenshots (All)"
               onClick={onDownloadFullScreenshotsAll}
               disabled={!hasMap || !hasFullScreenshotAssets}
-            >
-              Download full screenshots (All)
-            </button>
-            <button
+            />
+            <MenuItem
               className="canvas-tool-menu-item"
+              label="Download full screenshots (Selected)"
               onClick={onDownloadFullScreenshotsSelected}
               disabled={!hasSelection || !hasSelectedFullScreenshotAssets}
-            >
-              Download full screenshots (Selected)
-            </button>
+            />
             <div className="canvas-tool-menu-hint">Saves a full-page asset per page</div>
           </div>
-        </div>
+        </MenuPanel>
       )}
     </div>
 
@@ -237,9 +227,9 @@ const CanvasToolbar = ({
         <Layers size={20} />
       </button>
       {showLayersMenu && (
-        <div className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+        <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
           {layersPanel}
-        </div>
+        </MenuPanel>
       )}
     </div>
     <div className="canvas-tool-menu-wrapper" ref={legendMenuRef}>
@@ -252,9 +242,9 @@ const CanvasToolbar = ({
         <Palette size={20} />
       </button>
       {showLegendMenu && (
-        <div className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+        <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
           {legendPanel}
-        </div>
+        </MenuPanel>
       )}
     </div>
 

@@ -3,7 +3,9 @@ import { createRoot } from 'react-dom/client';
 
 import Button from './Button';
 import CheckboxField from './CheckboxField';
+import IconButton from './IconButton';
 import Modal from './Modal';
+import { MenuItem } from './Menu';
 import OptionCard from './OptionCard';
 import RadioCardGroup from './RadioCardGroup';
 import SegmentedControl from './SegmentedControl';
@@ -39,6 +41,86 @@ describe('ui primitives', () => {
     expect(button.getAttribute('aria-busy')).toBe('true');
     expect(button.textContent).toContain('Save');
     expect(container.querySelector('.ui-btn__spinner')).not.toBeNull();
+  });
+
+  test('Button supports label and icon slots', () => {
+    act(() => {
+      root.render(
+        <Button
+          type="secondary"
+          style="danger"
+          size="sm"
+          label="Scan"
+          startIcon={<span className="start-icon-marker">S</span>}
+          endIcon={<span className="end-icon-marker">E</span>}
+        />
+      );
+    });
+
+    const button = container.querySelector('button');
+    expect(button.textContent).toContain('Scan');
+    expect(button.getAttribute('aria-label')).toBe('Scan');
+    expect(button.className).toContain('ui-btn--type-secondary');
+    expect(button.className).toContain('ui-btn--style-danger');
+    expect(button.className).toContain('ui-btn--sm');
+    expect(container.querySelector('.ui-btn__icon--start .start-icon-marker')).not.toBeNull();
+    expect(container.querySelector('.ui-btn__icon--end .end-icon-marker')).not.toBeNull();
+  });
+
+  test('Button keeps legacy variant mapping and native submit behavior', () => {
+    act(() => {
+      root.render(
+        <Button type="submit" variant="danger" label="Delete map" />
+      );
+    });
+
+    const button = container.querySelector('button');
+    expect(button.getAttribute('type')).toBe('submit');
+    expect(button.className).toContain('ui-btn--danger');
+    expect(button.className).toContain('ui-btn--type-primary');
+    expect(button.className).toContain('ui-btn--style-danger');
+  });
+
+  test('IconButton supports canonical taxonomy, icon content, and loading state', () => {
+    act(() => {
+      root.render(
+        <div>
+          <IconButton
+            type="secondary"
+            style="brand"
+            size="lg"
+            icon={<span className="icon-button-marker">+</span>}
+            label="Add node"
+          />
+          <IconButton label="Saving" loading />
+        </div>
+      );
+    });
+
+    const [styledButton, loadingButton] = container.querySelectorAll('button');
+    expect(styledButton.getAttribute('aria-label')).toBe('Add node');
+    expect(styledButton.className).toContain('ui-icon-btn--type-secondary');
+    expect(styledButton.className).toContain('ui-icon-btn--style-brand');
+    expect(styledButton.className).toContain('ui-icon-btn--lg');
+    expect(styledButton.querySelector('.ui-icon-btn__icon .icon-button-marker')).not.toBeNull();
+    expect(loadingButton.disabled).toBe(true);
+    expect(loadingButton.getAttribute('aria-busy')).toBe('true');
+    expect(loadingButton.querySelector('.ui-icon-btn__spinner')).not.toBeNull();
+  });
+
+  test('MenuItem supports selected and danger states', () => {
+    act(() => {
+      root.render(
+        <div>
+          <MenuItem label="Active item" selected />
+          <MenuItem label="Delete item" danger />
+        </div>
+      );
+    });
+
+    const [selectedItem, dangerItem] = container.querySelectorAll('button');
+    expect(selectedItem.className).toContain('ui-menu-item--selected');
+    expect(dangerItem.className).toContain('ui-menu-item--danger');
   });
 
   test('Modal closes on Escape', () => {

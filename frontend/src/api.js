@@ -193,10 +193,10 @@ export async function getAdminSession() {
   return fetchAdminApi('/api/admin/session');
 }
 
-export async function createAdminSession({ operatorLabel, adminKey }) {
+export async function createAdminSession({ email, password }) {
   return fetchAdminApi('/api/admin/session', {
     method: 'POST',
-    body: JSON.stringify({ operatorLabel, adminKey }),
+    body: JSON.stringify({ email, password }),
   });
 }
 
