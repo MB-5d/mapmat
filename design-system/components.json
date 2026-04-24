@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedOn": "2026-04-20",
+    "generatedOn": "2026-04-24",
     "sources": [
       "frontend/src/components/ui",
       "frontend/src/components/drawers/AccountDrawer.js",
@@ -16,6 +16,65 @@
     ]
   },
   "components": [
+    {
+      "name": "Avatar",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Avatar.js",
+      "props": {
+        "src": "string",
+        "label": "string",
+        "icon": "node",
+        "size": [
+          "xs",
+          "sm",
+          "md",
+          "lg",
+          "xl"
+        ],
+        "shape": [
+          "circle",
+          "rounded"
+        ],
+        "tone": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "bordered": "boolean"
+      },
+      "states": [
+        "image",
+        "fallback label",
+        "fallback icon"
+      ]
+    },
+    {
+      "name": "Icon",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Icon.js",
+      "props": {
+        "icon": "node",
+        "size": [
+          "xs",
+          "sm",
+          "md",
+          "lg",
+          "xl"
+        ],
+        "tone": [
+          "inherit",
+          "default",
+          "muted",
+          "brand",
+          "danger",
+          "inverse"
+        ]
+      },
+      "states": [
+        "rest"
+      ]
+    },
     {
       "name": "Button",
       "kind": "primitive",
@@ -133,10 +192,23 @@
           "md",
           "lg"
         ],
-        "invalid": "boolean"
+        "inputStyle": [
+          "brand",
+          "mono"
+        ],
+        "invalid": "boolean",
+        "label": "string",
+        "labelHidden": "boolean",
+        "hint": "string",
+        "error": "string",
+        "leftIcon": "node",
+        "rightIcon": "node",
+        "placeholder": "string",
+        "framed": "boolean"
       },
       "states": [
         "rest",
+        "hover",
         "focus",
         "invalid",
         "disabled via native input props"
@@ -152,13 +224,27 @@
           "md",
           "lg"
         ],
-        "invalid": "boolean"
+        "inputStyle": [
+          "brand",
+          "mono"
+        ],
+        "invalid": "boolean",
+        "label": "string",
+        "labelHidden": "boolean",
+        "hint": "string",
+        "error": "string",
+        "leftIcon": "node",
+        "placeholder": "native select placeholder option"
       },
       "states": [
         "rest",
+        "hover",
         "focus",
         "invalid",
         "disabled via native select props"
+      ],
+      "notes": [
+        "Native select implementation does not expose a shared expanded menu state."
       ]
     },
     {
@@ -186,6 +272,7 @@
       "source": "frontend/src/components/ui/Field.js",
       "props": {
         "label": "string",
+        "labelHidden": "boolean",
         "htmlFor": "string",
         "required": "boolean",
         "hint": "string",
@@ -304,6 +391,7 @@
           "md",
           "lg"
         ],
+        "subtitle": "string",
         "scrollable": "boolean",
         "hideCloseButton": "boolean",
         "footer": "node"
@@ -388,9 +476,23 @@
     {
       "name": "InlineBadge",
       "kind": "shared-surface",
-      "source": "frontend/src/App.css",
+      "source": "frontend/src/components/ui/InlineBadge.js",
       "props": {
         "label": "string"
+      },
+      "states": [
+        "rest",
+        "dark theme"
+      ]
+    },
+    {
+      "name": "Tag",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/ui/Tag.js",
+      "props": {
+        "label": "string",
+        "startIcon": "icon",
+        "endIcon": "icon"
       },
       "states": [
         "rest",
@@ -437,7 +539,7 @@
     {
       "name": "NodeBadge",
       "kind": "shared-surface",
-      "source": "frontend/src/components/nodes/NodeCard.js",
+      "source": "frontend/src/components/nodes/NodeBadge.js",
       "props": {
         "label": "string"
       },
@@ -449,7 +551,7 @@
     {
       "name": "NodeStatusBadge",
       "kind": "shared-surface",
-      "source": "frontend/src/components/nodes/NodeCard.js",
+      "source": "frontend/src/components/nodes/NodeStatusBadge.js",
       "props": {
         "status": [
           "new",
@@ -459,7 +561,8 @@
           "deleted",
           "note"
         ],
-        "label": "string"
+        "label": "string",
+        "note": "boolean"
       },
       "states": [
         "new",
@@ -474,13 +577,14 @@
     {
       "name": "CommentBadge",
       "kind": "shared-surface",
-      "source": "frontend/src/components/nodes/NodeCard.js",
+      "source": "frontend/src/components/nodes/CommentBadge.js",
       "props": {
         "count": "number"
       },
       "states": [
         "rest",
         "hover",
+        "icon only",
         "dark theme"
       ]
     }

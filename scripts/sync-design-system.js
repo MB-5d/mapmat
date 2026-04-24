@@ -3,15 +3,31 @@ const path = require('path');
 
 const {
   COLOR_STEPS,
+  colorAliases,
   primitiveColors,
   spacing,
+  icon,
+  unitScale,
+  border,
   radius,
   elevation,
+  typePrimitives,
+  typeSemantic,
   typography,
   appSemantics,
+  semanticColorNames,
+  semanticColorBindings,
+  semanticColorVariables,
+  semanticColors,
+  runtimeColorNames,
+  runtimeColorBindings,
+  runtimeColorVariables,
+  runtimeColors,
+  runtimeColorTokens,
   landing,
   layout,
   runtimePalettes,
+  figmaCollections,
   components,
   omittedDueToAmbiguity,
 } = require('./design-system-source');
@@ -21,6 +37,21 @@ const frontendCssPath = path.join(rootDir, 'frontend', 'src', 'design-system.gen
 const tokensCssPath = path.join(rootDir, 'design-system', 'tokens.css');
 const tokensJsonPath = path.join(rootDir, 'design-system', 'tokens.json');
 const componentsJsonPath = path.join(rootDir, 'design-system', 'components.json');
+
+function resolveCanonicalFamily(family) {
+  return colorAliases.family?.[family] || family;
+}
+
+function resolveTokenKey(family, token) {
+  return colorAliases.token?.[family]?.[token] || token;
+}
+
+function resolveScaleValue(family, token) {
+  const canonicalFamily = resolveCanonicalFamily(family);
+  const scale = primitiveColors[canonicalFamily];
+  if (!scale) return undefined;
+  return scale[resolveTokenKey(canonicalFamily, token)];
+}
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -38,8 +69,30 @@ function cssVarBlock(selector, entries) {
 
 function typographyCssEntries() {
   const entries = {
-    'font-sans': "'Nata Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif",
+    'font-sans': "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif",
   };
+
+  for (const [name, value] of Object.entries(typePrimitives.family)) {
+    entries[`type-family-${name}`] = value === 'Sora'
+      ? "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif"
+      : value;
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.size)) {
+    entries[`type-size-${name}`] = `${value}px`;
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.lineHeight)) {
+    entries[`type-line-height-${name}`] = typeof value === 'number' ? `${value}px` : value;
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.weight)) {
+    entries[`type-weight-${name}`] = String(value);
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.tracking)) {
+    entries[`type-tracking-${name}`] = value;
+  }
 
   for (const [groupName, groupValues] of Object.entries(typography)) {
     for (const [sizeName, token] of Object.entries(groupValues)) {
@@ -57,12 +110,42 @@ function typographyCssEntries() {
 function primitiveCssEntries() {
   const entries = {};
   for (const [family, scale] of Object.entries(primitiveColors)) {
+    for (const [token, value] of Object.entries(scale)) {
+      entries[`color-${family}-${token}`] = value;
+    }
     for (const step of COLOR_STEPS) {
-      entries[`color-${family}-${step}`] = scale[step];
+      const value = resolveScaleValue(family, step);
+      if (value !== undefined) {
+        entries[`color-${family}-${step}`] = value;
+      }
+    }
+  }
+  for (const legacyFamily of Object.keys(colorAliases.family || {})) {
+    const canonicalFamily = resolveCanonicalFamily(legacyFamily);
+    const scale = primitiveColors[canonicalFamily];
+    if (!scale) continue;
+    for (const [token, value] of Object.entries(scale)) {
+      entries[`color-${legacyFamily}-${token}`] = value;
+    }
+    for (const step of COLOR_STEPS) {
+      const value = resolveScaleValue(legacyFamily, step);
+      if (value !== undefined) {
+        entries[`color-${legacyFamily}-${step}`] = value;
+      }
     }
   }
   for (const [name, value] of Object.entries(spacing)) {
     entries[`space-${name}`] = value;
+  }
+  for (const [name, value] of Object.entries(icon.size)) {
+    entries[`icon-size-${name}`] = `${value}px`;
+    entries[`ui-icon-size-${name}`] = `${value}px`;
+  }
+  for (const [name, value] of Object.entries(unitScale)) {
+    entries[`unit-${name}`] = `${value}px`;
+  }
+  for (const [name, value] of Object.entries(border.width)) {
+    entries[`border-width-${name}`] = value;
   }
   for (const [name, value] of Object.entries(radius)) {
     entries[`radius-${name}`] = value;
@@ -93,7 +176,6 @@ function primitiveCssEntries() {
   entries['color-text-muted'] = 'var(--color-text-secondary)';
   entries['color-primary'] = 'var(--ui-color-primary)';
   entries['color-primary-hover'] = 'var(--ui-color-primary-hover)';
-  entries['color-danger'] = 'var(--ui-color-danger)';
   entries['modal-width-sm'] = '400px';
   entries['modal-width-md'] = '480px';
   entries['modal-width-lg'] = '520px';
@@ -109,6 +191,12 @@ function primitiveCssEntries() {
   return entries;
 }
 
+function runtimeCssEntries() {
+  return Object.fromEntries(
+    Object.entries(runtimeColorTokens).map(([name, value]) => [name, value])
+  );
+}
+
 function buildGeneratedCss() {
   const comment = [
     '/*',
@@ -122,6 +210,7 @@ function buildGeneratedCss() {
     cssVarBlock(':root', {
       ...primitiveCssEntries(),
       ...typographyCssEntries(),
+      ...runtimeCssEntries(),
       ...appSemantics.light,
       ...landing,
     }),
@@ -145,22 +234,50 @@ function buildTokensJson() {
       notes: [
         'This file is generated from the shared design-system source used to emit live CSS variables.',
         'Semantic app tokens are the source of truth for light and dark mode; Figma should mirror these values instead of redefining them.',
+        'Primitive color scales use canonical names in source; compatibility aliases remain emitted in CSS for the live app.',
+        'Runtime reference colors for page depth and connection lines are exported separately from semantic UI colors.',
+        'Figma collection metadata, primitive alias bindings, and semantic naming maps are exported here so the library structure can be regenerated from code without changing live app consumers.',
       ],
     },
     primitives: {
       colorScales: primitiveColors,
+      colorAliases,
       spacing,
+      icon,
+      unitScale,
+      border,
+      typePrimitives,
       radius,
       elevation,
       typography,
     },
     semantics: {
       app: appSemantics,
+      color: semanticColors,
+      type: typeSemantic,
       landing,
     },
     runtime: {
       layout,
       palette: runtimePalettes,
+      colors: runtimeColors,
+      colorBindings: runtimeColorBindings,
+    },
+    figma: {
+      collections: figmaCollections,
+      variables: {
+        colorPrimitives: primitiveColors,
+        colorSemantic: semanticColors,
+        colorSemanticBindings: semanticColorBindings,
+        colorSemanticFlat: semanticColorVariables,
+        colorSemanticNames: semanticColorNames,
+        runtimeMap: runtimeColors,
+        runtimeMapBindings: runtimeColorBindings,
+        runtimeMapFlat: runtimeColorVariables,
+        runtimeMapNames: runtimeColorNames,
+        typePrimitives,
+        typeSemantic,
+      },
     },
   };
 }

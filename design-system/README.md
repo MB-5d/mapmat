@@ -6,7 +6,7 @@
 - The export reflects the repo as it exists now. It does not add guessed tokens, guessed variants, or guessed components.
 
 ## Files
-- `tokens.json`: structured app tokens, landing tokens, and runtime layout/color constants that live in JavaScript.
+- `tokens.json`: structured app tokens, landing tokens, runtime layout/reference color constants, and Figma-friendly grouped token exports that live in JavaScript.
 - `tokens.css`: raw CSS custom properties exactly as defined in code.
 - `components.json`: current canonical shared components and their real APIs.
 - `../scripts/design-system-source.js`: the shared primitive, semantic, runtime, and component contract source.
@@ -20,16 +20,19 @@
 - Dark theme overrides from `frontend/src/App.css`.
 - Landing-only tokens from `frontend/src/LandingPage.css`.
 - Runtime palettes and layout constants from `frontend/src/utils/constants.js`.
+- Dedicated runtime/reference color tokens for page depth and editable connection palettes, exported separately from semantic UI colors.
+- Grouped semantic color exports for Figma, while keeping the live app’s flat CSS variable contract intact.
 - Shared primitives and shells from `frontend/src/components/ui` plus `AccountDrawer`.
 - Dedicated button typography tokens plus canonical `Button` / `IconButton` `type + style + size` support from the shared UI layer.
 - Shared `MenuItem` and `MenuSectionHeader` primitives, now reused by account, node, connection, canvas-tool, and layer-related menu surfaces.
 - `ScanBar` as the real compound topbar scan surface, instead of documenting it as a generic search field.
-- Nata Sans as the design file typeface, matching the app.
+- Sora as the design file typeface, matching the app.
 - Lucide icons through Pencil `icon_font` nodes, matching the app icon source.
 
 ## Ambiguities
 - The landing page still operates as a separate token track. It is exported under `landing` instead of being merged into the app token vocabulary.
-- Runtime palettes (`DEFAULT_COLORS`, `DEFAULT_CONNECTION_COLORS`) and layout values (`LAYOUT`) are real code-side tokens, but they are not CSS vars. They appear only in `tokens.json`.
+- Runtime palettes (`DEFAULT_COLORS`, `DEFAULT_CONNECTION_COLORS`) and layout values (`LAYOUT`) are real code-side tokens. Layout values remain JSON-only, while runtime reference colors are now exported in both `tokens.json` and CSS.
+- Default connector meanings still remain in the semantic UI token layer for app/UI usage, even though the editable map palette is exported separately as runtime/reference tokens.
 - Some surfaces still exist as bespoke page-level implementations rather than canonical shared components, so they are flagged instead of guessed into `components.json`.
 - `variant` still works in code as a compatibility alias for older button calls, but the exported canonical button model is `type + style + size`.
 
