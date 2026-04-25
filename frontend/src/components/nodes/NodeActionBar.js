@@ -51,7 +51,7 @@ const NodeActionBar = ({
           <IconButton
             className="node-card-action"
             type="link"
-            buttonStyle="danger"
+            buttonStyle="mono"
             size="md"
             icon={<Trash2 />}
             label="Delete"

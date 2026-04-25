@@ -373,7 +373,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--ui-radius-md);
+  border-radius: var(--ui-radius-sm);
   border: 1px solid transparent;
   background: transparent;
   font-family: var(--font-sans);
@@ -3355,7 +3355,6 @@ body {
   text-transform: uppercase;
   max-width: 100%;
   align-self: flex-start;
-  box-shadow: var(--shadow-soft);
 }
 
 .node-status-text {
@@ -3425,7 +3424,6 @@ body {
   padding: 2px 4px;
   border-radius: 999px;
   z-index: 10;
-  box-shadow: var(--shadow-raised);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3662,7 +3660,7 @@ body {
 .node-action-bar__left {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .node-card:hover .card-actions {

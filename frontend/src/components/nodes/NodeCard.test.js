@@ -63,5 +63,8 @@ describe('NodeCard', () => {
     expect(container.querySelector('.node-badge')).not.toBeNull();
     expect(container.querySelector('.page-number')?.textContent).toBe('s1.4');
     expect(container.querySelectorAll('.node-card-action.ui-icon-btn')).toHaveLength(4);
+    const deleteAction = container.querySelector('.node-card-action[aria-label="Delete"]');
+    expect(deleteAction?.className).toContain('ui-icon-btn--style-mono');
+    expect(deleteAction?.className).not.toContain('ui-icon-btn--style-danger');
   });
 });
