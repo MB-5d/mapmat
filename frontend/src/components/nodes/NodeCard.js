@@ -3,15 +3,14 @@ import { useDraggable } from '@dnd-kit/core';
 import {
   ChevronDown,
   ChevronUp,
-  Copy,
-  Edit2,
-  ExternalLink,
   ImageOff,
   Loader2,
   Maximize2,
-  MessageSquare,
-  Trash2,
 } from 'lucide-react';
+import CommentBadge from './CommentBadge';
+import NodeActionBar from './NodeActionBar';
+import NodeBadge from './NodeBadge';
+import NodeStatusBadge from './NodeStatusBadge';
 
 import { getHostname } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS } from '../../utils/constants';
@@ -82,6 +81,11 @@ const NodeCard = ({
   const isDeleted = showAnnotations && status === 'deleted';
   const shouldGhost = isGhosted || isDeleted;
   const showActionBar = canEdit || showCommentAction || (showExternalLinkAction && !!node.url);
+  const actionBarPermission = canEdit
+    ? 'Owner / Editor'
+    : showCommentAction
+      ? 'Commenter'
+      : 'Viewer';
 
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
@@ -182,6 +186,8 @@ const NodeCard = ({
   if (shouldGhost) classNames.push('ghosted');
   if (isDeleted) classNames.push('deleted');
   if (isSelected) classNames.push('selected');
+  if (showActionBar) classNames.push('has-action-bar');
+  if (showCommentBadges && node.comments?.length > 0) classNames.push('has-comment-badge');
 
   // Anchor color based on connection tool type
   const anchorColor = connectionTool === 'userflow'
@@ -240,14 +246,10 @@ const NodeCard = ({
 
       {/* Comment badge - show if node has comments and comments mode is active */}
       {showCommentBadges && node.comments?.length > 0 && (
-        <button
-          className="comment-badge"
+        <CommentBadge
+          count={node.comments.length}
           onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
-          title="View notes"
-        >
-          <MessageSquare size={12} />
-          {node.comments.length > 1 && <span>{node.comments.length}</span>}
-        </button>
+        />
       )}
 
       {showThumbnails && (
@@ -305,14 +307,12 @@ const NodeCard = ({
             {node.title}
           </div>
           {showBadge && (
-            <div
-              className={`node-status-badge ${hasStatus ? `status-${status}` : 'status-note'}`}
+            <NodeStatusBadge
+              status={hasStatus ? status : 'note'}
+              label={badgeLabel}
+              note={note}
               title={badgeTitle}
-              aria-hidden="true"
-            >
-              <span className="node-status-text">{badgeLabel}</span>
-              {note && <span className="node-status-note-dot" />}
-            </div>
+            />
           )}
         </div>
 
@@ -321,40 +321,19 @@ const NodeCard = ({
 
       {showActionBar && (
         <div className="card-actions">
-          <div className="card-actions-left">
-            {canEdit && (
-              <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
-                <Edit2 size={18} />
-              </button>
-            )}
-            {canEdit && !isRoot && (
-              <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
-                <Trash2 size={18} />
-              </button>
-            )}
-            {canEdit && (
-              <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
-                <Copy size={18} />
-              </button>
-            )}
-            {showCommentAction && (
-              <button className="btn-icon-flat" title={commentActionLabel} onClick={() => onAddNote?.(node)}>
-                <MessageSquare size={18} />
-              </button>
-            )}
-          </div>
-          {showExternalLinkAction && node.url && (
-            <a
-              href={node.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-icon-flat external-link-btn"
-              title="Open in new tab"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ExternalLink size={18} />
-            </a>
-          )}
+          <NodeActionBar
+            node={node}
+            permission={actionBarPermission}
+            canEdit={canEdit}
+            isRoot={isRoot}
+            showCommentAction={showCommentAction}
+            commentActionLabel={commentActionLabel}
+            showExternalLinkAction={showExternalLinkAction}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            onDuplicate={onDuplicate}
+            onAddNote={onAddNote}
+          />
         </div>
       )}
 
@@ -377,9 +356,7 @@ const NodeCard = ({
       {badges.length > 0 && (
         <div className="node-badges" aria-hidden="true">
           {badges.map((badge) => (
-            <span key={badge} className="node-badge">
-              {badge}
-            </span>
+            <NodeBadge key={badge} label={badge} />
           ))}
         </div>
       )}

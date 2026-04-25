@@ -1,11 +1,11 @@
 export const BUTTON_TYPES = ['primary', 'secondary', 'ghost', 'link'];
 export const BUTTON_STYLES = ['brand', 'mono', 'danger'];
 export const BUTTON_SIZES = ['sm', 'md', 'lg'];
+export const ICON_BUTTON_SIZES = ['sm', 'md', 'lg', 'xl', 'xxl'];
 
 const VISUAL_BUTTON_TYPES = new Set(BUTTON_TYPES);
 const HTML_BUTTON_TYPES = new Set(['button', 'submit', 'reset']);
 const VALID_BUTTON_STYLES = new Set(BUTTON_STYLES);
-const VALID_BUTTON_SIZES = new Set(BUTTON_SIZES);
 
 const DEFAULT_STYLE_BY_TYPE = {
   primary: 'brand',
@@ -57,6 +57,8 @@ export const resolveButtonModel = ({
   defaultVariant = 'primary',
   size = 'md',
   variantMap = BUTTON_VARIANT_MAP,
+  validSizes = BUTTON_SIZES,
+  fallbackSize = 'md',
 }) => ({
   nativeType: resolveNativeType(type, htmlType),
   visual: resolveVisualModel({
@@ -66,6 +68,6 @@ export const resolveButtonModel = ({
     variantMap,
     defaultVariant,
   }),
-  size: VALID_BUTTON_SIZES.has(size) ? size : 'md',
+  size: new Set(validSizes).has(size) ? size : fallbackSize,
   legacyVariantClass: Object.prototype.hasOwnProperty.call(variantMap, variant) ? variant : null,
 });
