@@ -5,6 +5,8 @@ const EMAIL_TEMPLATE_KEYS = Object.freeze({
   COLLABORATION_ACCESS_REQUEST_DENIED: 'collaboration.access_request.denied',
   COLLABORATION_ROLE_CHANGED: 'collaboration.role.changed',
   COLLABORATION_ACCESS_REMOVED: 'collaboration.access.removed',
+  AUTH_EMAIL_VERIFICATION: 'auth.email_verification',
+  AUTH_PASSWORD_RESET: 'auth.password_reset',
 });
 
 function normalizeBaseUrl(value) {
@@ -83,7 +85,7 @@ function renderActionEmail({
   instructions,
   appBaseUrl,
   actionUrl = null,
-  actionLabel = 'Open Map Mat',
+  actionLabel = 'Open Vellic',
   footer = 'If you were not expecting this email, you can safely ignore it.',
 }) {
   const safeSubject = escapeHtml(subject);
@@ -134,6 +136,67 @@ function renderActionEmail({
   };
 }
 
+function renderCodeEmail({
+  subject,
+  intro,
+  code,
+  expiresMinutes,
+  instructions = 'Enter this code in Vellic to continue.',
+  footer = 'If you were not expecting this email, you can safely ignore it.',
+  appBaseUrl = getDefaultAppBaseUrl(),
+}) {
+  const safeSubject = escapeHtml(subject);
+  const safeIntro = escapeHtml(intro);
+  const safeCode = escapeHtml(String(code || '').trim());
+  const safeInstructions = escapeHtml(instructions);
+  const safeFooter = footer ? escapeHtml(footer) : null;
+  const expiryLabel = Number.isFinite(Number(expiresMinutes)) && Number(expiresMinutes) > 0
+    ? `This code expires in ${Number(expiresMinutes)} minutes.`
+    : null;
+  const safeExpiryLabel = expiryLabel ? escapeHtml(expiryLabel) : null;
+  const safeAppBaseUrl = escapeHtml(appBaseUrl);
+
+  const textLines = [
+    intro,
+    '',
+    `Your code: ${String(code || '').trim()}`,
+  ];
+
+  if (expiryLabel) {
+    textLines.push(expiryLabel);
+  }
+
+  textLines.push('');
+  textLines.push(instructions);
+  textLines.push(safeAppBaseUrl);
+
+  if (footer) {
+    textLines.push('');
+    textLines.push(footer);
+  }
+
+  return {
+    subject,
+    text: textLines.join('\n'),
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937; line-height: 1.5;">
+        <h1 style="font-size: 22px; margin-bottom: 16px;">${safeSubject}</h1>
+        <p style="margin: 0 0 12px;">${safeIntro}</p>
+        <div style="margin: 20px 0; padding: 20px; border-radius: 12px; background: #f3f4f6; border: 1px solid #e5e7eb; text-align: center;">
+          <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-bottom: 8px;">Verification code</div>
+          <div style="font-size: 34px; font-weight: 700; letter-spacing: 0.28em; color: #111827;">${safeCode}</div>
+        </div>
+        ${safeExpiryLabel ? `<p style="margin: 0 0 8px; color: #6b7280;">${safeExpiryLabel}</p>` : ''}
+        <p style="margin: 0 0 16px;">${safeInstructions}</p>
+        <p style="margin: 0 0 20px;">
+          <a href="${safeAppBaseUrl}" style="display: inline-block; padding: 10px 16px; background: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 8px;">Open Vellic</a>
+        </p>
+        ${safeFooter ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${safeFooter}</p>` : ''}
+      </div>
+    `.trim(),
+  };
+}
+
 function renderCollaborationInviteEmail(payload = {}) {
   const inviterLabel = formatInviterLabel(payload);
   const mapName = trimText(payload.mapName, 120) || 'Untitled map';
@@ -142,11 +205,11 @@ function renderCollaborationInviteEmail(payload = {}) {
   const appBaseUrl = normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl();
   const mapUrlLabel = trimText(payload.mapUrl, 160);
   const inviteeEmail = trimText(payload.inviteeEmail, 160);
-  const subject = `${inviterLabel} invited you to ${mapName} on Map Mat`;
+  const subject = `${inviterLabel} invited you to ${mapName} on Vellic`;
   const actionUrl = buildAppUrl(appBaseUrl, `/app/invites/accept/${encodeURIComponent(String(payload.inviteToken || ''))}`);
 
   const textLines = [
-    `${inviterLabel} invited you to collaborate on "${mapName}" as ${roleLabel} in Map Mat.`,
+    `${inviterLabel} invited you to collaborate on "${mapName}" as ${roleLabel} in Vellic.`,
   ];
 
   if (mapUrlLabel) {
@@ -167,7 +230,7 @@ function renderCollaborationInviteEmail(payload = {}) {
 
   return renderActionEmail({
     subject,
-    intro: `${inviterLabel} invited you to collaborate on "${mapName}" as ${roleLabel} in Map Mat.`,
+    intro: `${inviterLabel} invited you to collaborate on "${mapName}" as ${roleLabel} in Vellic.`,
     detailPairs: [
       mapUrlLabel ? { label: 'Map URL', value: mapUrlLabel } : null,
       expiresLabel ? { label: 'Invite expires', value: expiresLabel } : null,
@@ -221,11 +284,11 @@ function renderAccessRequestDecisionEmail(payload = {}, approved) {
       ? `${actorLabel} approved your request for ${decisionRole} access to "${mapName}".`
       : `${actorLabel} denied your request for ${requestedRole} access to "${mapName}".`,
     instructions: approved
-      ? 'Open Map Mat to access the shared map.'
-      : 'If you still need access, you can request it again from Map Mat.',
+      ? 'Open Vellic to access the shared map.'
+      : 'If you still need access, you can request it again from Vellic.',
     appBaseUrl: normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(),
     actionUrl: buildAppUrl(normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(), `/app/maps/${encodeURIComponent(String(payload.mapId || ''))}`),
-    actionLabel: approved ? 'Open Shared Map' : 'Open Map Mat',
+    actionLabel: approved ? 'Open Shared Map' : 'Open Vellic',
   });
 }
 
@@ -242,7 +305,7 @@ function renderRoleChangedEmail(payload = {}) {
   return renderActionEmail({
     subject,
     intro: `${actorLabel} changed your access on "${mapName}" from ${previousRole} to ${nextRole}.`,
-    instructions: 'Open Map Mat to review your updated access.',
+    instructions: 'Open Vellic to review your updated access.',
     appBaseUrl: normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(),
     actionUrl: buildAppUrl(normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(), `/app/maps/${encodeURIComponent(String(payload.mapId || ''))}`),
     actionLabel: 'Open Shared Map',
@@ -261,10 +324,44 @@ function renderAccessRemovedEmail(payload = {}) {
   return renderActionEmail({
     subject,
     intro: `${actorLabel} removed your ${previousRole} access to "${mapName}".`,
-    instructions: 'If you still need access, open Map Mat and submit an access request if the map allows it.',
+    instructions: 'If you still need access, open Vellic and submit an access request if the map allows it.',
     appBaseUrl: normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(),
     actionUrl: buildAppUrl(normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl(), `/app/maps/${encodeURIComponent(String(payload.mapId || ''))}`),
     actionLabel: 'Open Map Access',
+  });
+}
+
+function renderAuthEmailVerificationEmail(payload = {}) {
+  const appBaseUrl = normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl();
+  const name = trimText(payload.name, 80);
+  const intro = name
+    ? `${name}, use this code to verify your email address for Vellic.`
+    : 'Use this code to verify your email address for Vellic.';
+
+  return renderCodeEmail({
+    subject: 'Verify your Vellic email',
+    intro,
+    code: payload.code,
+    expiresMinutes: payload.expiresMinutes,
+    instructions: 'Enter this code in the verification step to finish setting up your account.',
+    appBaseUrl,
+  });
+}
+
+function renderAuthPasswordResetEmail(payload = {}) {
+  const appBaseUrl = normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl();
+  const name = trimText(payload.name, 80);
+  const intro = name
+    ? `${name}, use this code to reset your Vellic password.`
+    : 'Use this code to reset your Vellic password.';
+
+  return renderCodeEmail({
+    subject: 'Reset your Vellic password',
+    intro,
+    code: payload.code,
+    expiresMinutes: payload.expiresMinutes,
+    instructions: 'Enter this code with your new password to finish resetting your account.',
+    appBaseUrl,
   });
 }
 
@@ -282,6 +379,10 @@ function renderTemplatedEmail({ templateKey, payload }) {
       return renderRoleChangedEmail(payload);
     case EMAIL_TEMPLATE_KEYS.COLLABORATION_ACCESS_REMOVED:
       return renderAccessRemovedEmail(payload);
+    case EMAIL_TEMPLATE_KEYS.AUTH_EMAIL_VERIFICATION:
+      return renderAuthEmailVerificationEmail(payload);
+    case EMAIL_TEMPLATE_KEYS.AUTH_PASSWORD_RESET:
+      return renderAuthPasswordResetEmail(payload);
     default:
       throw new Error(`Unknown email template: ${templateKey}`);
   }

@@ -1,7 +1,7 @@
 {
-  "name": "mapmat-backend",
+  "name": "vellic-backend",
   "version": "1.0.0",
-  "description": "Map Mat - Visual sitemap generator backend",
+  "description": "Vellic - Visual sitemap generator backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,6 +12,7 @@
     "check:coediting:transport-chaos": "node scripts/check-coediting-transport-chaos.js",
     "check:coediting:recovery": "node scripts/check-coediting-recovery.js",
     "check:coediting:soak": "node scripts/check-coediting-soak.js",
+    "check:auth-flows": "node scripts/check-auth-flows.js",
     "check:backend:postgres": "DB_PROVIDER=postgres npm run check:backend",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:db-health": "node scripts/check-db-health.js",

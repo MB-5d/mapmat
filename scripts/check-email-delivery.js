@@ -73,6 +73,22 @@ async function main() {
         previousRole: 'commenter',
       },
     },
+    {
+      templateKey: EMAIL_TEMPLATE_KEYS.AUTH_EMAIL_VERIFICATION,
+      payload: {
+        name: 'QA Auth User',
+        code: '123456',
+        expiresMinutes: 10,
+      },
+    },
+    {
+      templateKey: EMAIL_TEMPLATE_KEYS.AUTH_PASSWORD_RESET,
+      payload: {
+        name: 'QA Auth User',
+        code: '654321',
+        expiresMinutes: 15,
+      },
+    },
   ];
 
   const results = [];

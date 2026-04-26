@@ -20,8 +20,8 @@ function normalizeOptionalText(value) {
 
 function getEmailConfigSnapshot() {
   const provider = normalizeProviderName(process.env.EMAIL_PROVIDER);
-  const fromAddress = normalizeEmailAddress(process.env.EMAIL_FROM_ADDRESS || 'noreply@mapmat.local');
-  const fromName = normalizeOptionalText(process.env.EMAIL_FROM_NAME || 'Map Mat');
+  const fromAddress = normalizeEmailAddress(process.env.EMAIL_FROM_ADDRESS || 'noreply@vellic.local');
+  const fromName = normalizeOptionalText(process.env.EMAIL_FROM_NAME || 'Vellic');
   const replyToAddress = normalizeEmailAddress(process.env.EMAIL_REPLY_TO_ADDRESS || '');
   const appBaseUrl = getDefaultAppBaseUrl();
   const resendWebhookSecret = normalizeOptionalText(process.env.RESEND_WEBHOOK_SECRET);

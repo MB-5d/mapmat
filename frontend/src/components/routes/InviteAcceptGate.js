@@ -16,7 +16,7 @@ export default function InviteAcceptGate({
 
   if (status === 'auth_required') {
     title = 'Sign in to accept this invite';
-    description = 'This invite is tied to a specific Map Mat account email. Sign in with that account to continue.';
+    description = 'This invite is tied to a specific Vellic account email. Sign in with that account to continue.';
   } else if (status === 'processing') {
     title = 'Accepting invite…';
     description = 'We are verifying the invite and opening the map for your account.';

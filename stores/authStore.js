@@ -14,6 +14,8 @@ const ADMIN_CONSOLE_ROLES = new Set([
   ADMIN_ROLES.PLATFORM_OWNER,
 ]);
 
+const AUTH_PROVIDERS = new Set(['password', 'google', 'password+google']);
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
@@ -24,6 +26,11 @@ function normalizeAdminRole(role) {
     return normalized;
   }
   return ADMIN_ROLES.NONE;
+}
+
+function normalizeAuthProvider(provider) {
+  const normalized = String(provider || '').trim().toLowerCase();
+  return AUTH_PROVIDERS.has(normalized) ? normalized : 'password';
 }
 
 function hasAdminConsoleAccess(userOrRole) {
@@ -40,6 +47,21 @@ function parseAdminBootstrapEmails(rawValue = process.env.ADMIN_BOOTSTRAP_EMAILS
       .map((value) => normalizeEmail(value))
       .filter(Boolean)
   ));
+}
+
+function toDbBoolean(value) {
+  return value ? 1 : 0;
+}
+
+function normalizeTimestamp(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function isUserEmailVerified(user) {
+  if (!user) return false;
+  return !!user.email_verified_at || !Boolean(Number(user.email_verification_required || 0));
 }
 
 async function syncBootstrapAdminRolesAsync() {
@@ -106,17 +128,36 @@ async function ensureAuthSchemaAsync() {
     await ensureColumnAsync('users', 'disabled_at', 'TIMESTAMP');
     await ensureColumnAsync('users', 'disabled_reason', 'TEXT');
     await ensureColumnAsync('users', 'admin_role', "TEXT NOT NULL DEFAULT 'none'");
+    await ensureColumnAsync('users', 'email_verified_at', 'TIMESTAMP');
+    await ensureColumnAsync('users', 'email_verification_required', 'INTEGER NOT NULL DEFAULT 0');
+    await ensureColumnAsync('users', 'google_sub', 'TEXT');
+    await ensureColumnAsync('users', 'auth_provider', "TEXT NOT NULL DEFAULT 'password'");
+
     await adapter.executeAsync(
       "UPDATE users SET account_status = 'active' WHERE account_status IS NULL OR TRIM(account_status) = ''"
     );
     await adapter.executeAsync(
       "UPDATE users SET admin_role = 'none' WHERE admin_role IS NULL OR TRIM(admin_role) = ''"
     );
+    await adapter.executeAsync(
+      "UPDATE users SET email_verification_required = 0 WHERE email_verification_required IS NULL"
+    );
+    await adapter.executeAsync(
+      "UPDATE users SET auth_provider = 'password' WHERE auth_provider IS NULL OR TRIM(auth_provider) = ''"
+    );
+
     await syncBootstrapAdminRolesAsync();
     await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status)');
     await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_admin_role ON users(admin_role)');
     await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at)');
     await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_name ON users(name)');
+    await adapter.executeAsync('CREATE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub)');
+    await adapter.executeAsync(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub_unique ON users(google_sub) WHERE google_sub IS NOT NULL'
+    );
+    await adapter.executeAsync(
+      'CREATE INDEX IF NOT EXISTS idx_users_email_verification_required ON users(email_verification_required)'
+    );
   })();
 
   try {
@@ -143,9 +184,24 @@ async function getUserByIdAsync(userId) {
 async function getPublicUserByIdAsync(userId) {
   await ensureAuthSchemaAsync();
   return await adapter.queryOneAsync(
-    `SELECT id, email, name, avatar_path, account_status, disabled_at, disabled_reason, created_at, updated_at
-     FROM users
-     WHERE id = ?`,
+    `
+      SELECT
+        id,
+        email,
+        name,
+        avatar_path,
+        account_status,
+        disabled_at,
+        disabled_reason,
+        email_verified_at,
+        email_verification_required,
+        auth_provider,
+        CASE WHEN COALESCE(password_hash, '') <> '' THEN 1 ELSE 0 END AS has_password,
+        created_at,
+        updated_at
+      FROM users
+      WHERE id = ?
+    `,
     [userId]
   );
 }
@@ -157,30 +213,76 @@ async function getUserByEmailAsync(email) {
   return await adapter.queryOneAsync('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
 }
 
-async function createUserAsync({ email, passwordHash, name }) {
+async function getUserByGoogleSubAsync(googleSub) {
+  await ensureAuthSchemaAsync();
+  const normalizedGoogleSub = String(googleSub || '').trim();
+  if (!normalizedGoogleSub) return null;
+  return await adapter.queryOneAsync('SELECT * FROM users WHERE google_sub = ?', [normalizedGoogleSub]);
+}
+
+async function createUserAsync({
+  email,
+  passwordHash = '',
+  name,
+  emailVerifiedAt = null,
+  emailVerificationRequired = false,
+  googleSub = null,
+  authProvider = 'password',
+}) {
   await ensureAuthSchemaAsync();
   const id = uuidv4();
   const normalizedEmail = normalizeEmail(email);
-  await adapter.executeAsync(`
-    INSERT INTO users (id, email, password_hash, name, account_status)
-    VALUES (?, ?, ?, ?, 'active')
-  `, [id, normalizedEmail, passwordHash, name]);
+  await adapter.executeAsync(
+    `
+      INSERT INTO users (
+        id,
+        email,
+        password_hash,
+        name,
+        account_status,
+        email_verified_at,
+        email_verification_required,
+        google_sub,
+        auth_provider
+      )
+      VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)
+    `,
+    [
+      id,
+      normalizedEmail,
+      String(passwordHash || ''),
+      name,
+      normalizeTimestamp(emailVerifiedAt),
+      toDbBoolean(emailVerificationRequired),
+      String(googleSub || '').trim() || null,
+      normalizeAuthProvider(authProvider),
+    ]
+  );
   await syncBootstrapAdminRoleForEmailAsync(normalizedEmail);
   return await getUserByIdAsync(id);
 }
 
 async function updateSeedUserCredentialsAsync({ userId, passwordHash, name }) {
   await ensureAuthSchemaAsync();
-  await adapter.executeAsync(`
-    UPDATE users
-    SET password_hash = ?,
-        name = ?,
-        account_status = 'active',
-        disabled_at = NULL,
-        disabled_reason = NULL,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `, [passwordHash, name, userId]);
+  await adapter.executeAsync(
+    `
+      UPDATE users
+      SET password_hash = ?,
+          name = ?,
+          account_status = 'active',
+          disabled_at = NULL,
+          disabled_reason = NULL,
+          email_verification_required = 0,
+          email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP),
+          auth_provider = CASE
+            WHEN COALESCE(NULLIF(google_sub, ''), '') <> '' THEN 'password+google'
+            ELSE 'password'
+          END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [String(passwordHash || ''), name, userId]
+  );
   const user = await getUserByIdAsync(userId);
   await syncBootstrapAdminRoleForEmailAsync(user?.email || '');
   return user;
@@ -189,9 +291,64 @@ async function updateSeedUserCredentialsAsync({ userId, passwordHash, name }) {
 async function updateUserPasswordAsync(userId, passwordHash) {
   await ensureAuthSchemaAsync();
   return await adapter.executeAsync(
-    'UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [passwordHash, userId]
+    `
+      UPDATE users
+      SET password_hash = ?,
+          auth_provider = CASE
+            WHEN COALESCE(NULLIF(google_sub, ''), '') <> '' THEN 'password+google'
+            ELSE 'password'
+          END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [String(passwordHash || ''), userId]
   );
+}
+
+async function markUserEmailVerifiedAsync(userId, verifiedAt = null) {
+  await ensureAuthSchemaAsync();
+  await adapter.executeAsync(
+    `
+      UPDATE users
+      SET email_verified_at = COALESCE(?, CURRENT_TIMESTAMP),
+          email_verification_required = 0,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [normalizeTimestamp(verifiedAt), userId]
+  );
+  return getUserByIdAsync(userId);
+}
+
+async function linkGoogleIdentityAsync(userId, {
+  googleSub,
+  verifiedAt = null,
+  name = null,
+} = {}) {
+  await ensureAuthSchemaAsync();
+  const normalizedGoogleSub = String(googleSub || '').trim();
+  if (!normalizedGoogleSub) {
+    throw new Error('googleSub is required to link a Google identity.');
+  }
+
+  await adapter.executeAsync(
+    `
+      UPDATE users
+      SET google_sub = ?,
+          email_verified_at = COALESCE(email_verified_at, ?, CURRENT_TIMESTAMP),
+          email_verification_required = 0,
+          auth_provider = CASE
+            WHEN COALESCE(NULLIF(password_hash, ''), '') <> '' THEN 'password+google'
+            ELSE 'google'
+          END,
+          name = COALESCE(NULLIF(?, ''), name),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [normalizedGoogleSub, normalizeTimestamp(verifiedAt), String(name || '').trim(), userId]
+  );
+
+  return getUserByIdAsync(userId);
 }
 
 async function updateUserNameAsync(userId, name) {
@@ -291,6 +448,9 @@ async function listUsersForAdminAsync({
         avatar_path,
         account_status,
         admin_role,
+        email_verified_at,
+        email_verification_required,
+        auth_provider,
         disabled_at,
         disabled_reason,
         created_at,
@@ -332,6 +492,9 @@ async function getAdminUserByIdAsync(userId) {
         avatar_path,
         account_status,
         admin_role,
+        email_verified_at,
+        email_verification_required,
+        auth_provider,
         disabled_at,
         disabled_reason,
         created_at,
@@ -379,9 +542,12 @@ module.exports = {
   getUserByIdAsync,
   getPublicUserByIdAsync,
   getUserByEmailAsync,
+  getUserByGoogleSubAsync,
   createUserAsync,
   updateSeedUserCredentialsAsync,
   updateUserPasswordAsync,
+  markUserEmailVerifiedAsync,
+  linkGoogleIdentityAsync,
   updateUserNameAsync,
   updateUserAvatarPathAsync,
   getUserPasswordHashAsync,

@@ -1,5 +1,5 @@
 /**
- * API service for Map Mat frontend
+ * API service for Vellic frontend
  */
 
 import { API_BASE } from './utils/constants';
@@ -131,12 +131,10 @@ function buildWebSocketUrl(endpoint) {
 // ============================================
 
 export async function signup(email, password, name) {
-  const result = await fetchApi('/auth/signup', {
+  return fetchApi('/auth/signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, name }),
   });
-  if (result?.token) setStoredAuthToken(result.token);
-  return result;
 }
 
 export async function login(email, password) {
@@ -146,6 +144,51 @@ export async function login(email, password) {
   });
   if (result?.token) setStoredAuthToken(result.token);
   return result;
+}
+
+export async function verifyEmail(email, code) {
+  const result = await fetchApi('/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
+}
+
+export async function resendVerification(email) {
+  return fetchApi('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function forgotPassword(email) {
+  return fetchApi('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(email, code, newPassword) {
+  const result = await fetchApi('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, newPassword }),
+  });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
+}
+
+export async function getAuthConfig() {
+  return fetchJson('/auth/config', {}, { includeUserToken: false });
+}
+
+export function getGoogleAuthStartUrl(nextPath = null) {
+  const params = new URLSearchParams();
+  if (nextPath) {
+    params.set('next', nextPath);
+  }
+  const search = params.toString();
+  return `${API_BASE}/auth/google/start${search ? `?${search}` : ''}`;
 }
 
 export async function logout() {
@@ -180,7 +223,7 @@ export async function removeMyAvatar() {
   });
 }
 
-export async function deleteAccount(password) {
+export async function deleteAccount(password = '') {
   const result = await fetchApi('/auth/me', {
     method: 'DELETE',
     body: JSON.stringify({ password }),
@@ -309,12 +352,12 @@ export async function updateAdminFeedbackTheme(themeId, payload = {}) {
 
 export async function downloadAdminFeedbackExport() {
   const blob = await fetchBlob('/api/admin/feedback/export.csv', { includeUserToken: false });
-  triggerBlobDownload(blob, 'mapmat-feedback-items.csv');
+  triggerBlobDownload(blob, 'vellic-feedback-items.csv');
 }
 
 export async function downloadAdminFeedbackThemeExport() {
   const blob = await fetchBlob('/api/admin/feedback/themes/export.csv', { includeUserToken: false });
-  triggerBlobDownload(blob, 'mapmat-feedback-themes.csv');
+  triggerBlobDownload(blob, 'vellic-feedback-themes.csv');
 }
 
 export async function submitFeedback(payload = {}) {
