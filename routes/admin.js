@@ -783,7 +783,7 @@ router.get('/feedback/export.csv', async (req, res) => {
     ], items);
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="mapmat-feedback-items.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="vellic-feedback-items.csv"');
     return res.send(csv);
   } catch (error) {
     console.error('Admin export feedback items error:', error);
@@ -812,7 +812,7 @@ router.get('/feedback/themes/export.csv', async (req, res) => {
     ], themes);
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="mapmat-feedback-themes.csv"');
+    res.setHeader('Content-Disposition', 'attachment; filename="vellic-feedback-themes.csv"');
     return res.send(csv);
   } catch (error) {
     console.error('Admin export feedback themes error:', error);
