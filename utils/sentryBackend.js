@@ -39,7 +39,7 @@ function isBackendSentryEnabled() {
 function buildStorePath() {
   if (!SENTRY_CONFIG) return null;
   const base = SENTRY_CONFIG.pathPrefix ? `${SENTRY_CONFIG.pathPrefix}` : '';
-  return `${base}/api/${SENTRY_CONFIG.projectId}/store/?sentry_version=7&sentry_key=${encodeURIComponent(SENTRY_CONFIG.publicKey)}&sentry_client=mapmat-backend/1.0`;
+  return `${base}/api/${SENTRY_CONFIG.projectId}/store/?sentry_version=7&sentry_key=${encodeURIComponent(SENTRY_CONFIG.publicKey)}&sentry_client=vellic-backend/1.0`;
 }
 
 function captureBackendException(error, context = {}) {
@@ -51,7 +51,7 @@ function captureBackendException(error, context = {}) {
       level: context.level || 'error',
       platform: 'node',
       environment: SENTRY_ENVIRONMENT,
-      logger: 'mapmat-backend',
+      logger: 'vellic-backend',
       tags: context.tags || {},
       extra: {
         ...context.extra,

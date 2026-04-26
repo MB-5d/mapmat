@@ -1,4 +1,4 @@
-# Map Mat Deployment Workflow
+# Vellic Deployment Workflow
 
 This repository uses separate branches and separate infrastructure for safe releases:
 

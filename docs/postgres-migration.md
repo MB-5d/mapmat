@@ -206,7 +206,7 @@ Goal:
 Important shell context:
 
 - Commands run at `root@...:/app#` are **inside Railway service container**.
-- Commands run at `matthewbraun@... MapMat %` are **local machine**.
+- Commands run at `matthewbraun@... Vellic %` are **local machine**.
 
 Canary validation command (run from local machine):
 

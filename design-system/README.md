@@ -12,7 +12,7 @@
 - `../scripts/design-system-source.js`: the shared primitive, semantic, runtime, and component contract source.
 - `../scripts/sync-design-system.js`: generator that writes the export files and the live CSS token bundle used by the app.
 - `design.pen`: small Pencil index file that points to the right working files in this folder.
-- `design.lib.pen`: reusable Pencil library file for the shared MapMat primitives and shells.
+- `design.lib.pen`: reusable Pencil library file for the shared Vellic primitives and shells.
 - `app-components.pen`: composed current app component examples built against the same shared tokens and patterns.
 
 ## Included
@@ -48,7 +48,7 @@
 
 ## Pencil Setup
 - Open `design-system/design.pen` first if you want the folder index and file guide.
-- Open `design-system/design.lib.pen` when you want the reusable MapMat library.
+- Open `design-system/design.lib.pen` when you want the reusable Vellic library.
 - Open `design-system/app-components.pen` when you want the composed current app component examples.
 - Use the Pencil theme axis to switch `theme` between `light` and `dark` for app-token previews.
 - Landing tokens remain namespaced in the JSON export, but the Pencil library and app component files stay focused on the shared app UI layer.

@@ -107,6 +107,8 @@ const primitiveColors = {
 };
 
 const spacing = {
+  none: '0px',
+  xxs: '2px',
   xs: '4px',
   sm: '8px',
   md: '12px',
@@ -116,6 +118,9 @@ const spacing = {
 };
 
 const radius = {
+  none: '0px',
+  xxs: '2px',
+  xs: '4px',
   sm: '6px',
   md: '8px',
   lg: '12px',
@@ -296,11 +301,18 @@ const typography = {
     },
   },
   tag: {
+    sm: {
+      cssSize: '12px',
+      figmaSize: 12,
+      lineHeight: '16px',
+      weight: 600,
+      letterSpacing: '0',
+    },
     md: {
       cssSize: '14px',
       figmaSize: 14,
       lineHeight: '20px',
-      weight: 500,
+      weight: 600,
       letterSpacing: '0',
     },
   },
@@ -388,6 +400,18 @@ const appSemantics = {
     'ui-tag-border': 'var(--ui-color-border)',
     'ui-tag-text': 'var(--ui-color-muted)',
     'ui-tag-icon': 'var(--ui-color-muted)',
+    'ui-tag-brand-fill': 'var(--ui-button-brand-fill)',
+    'ui-tag-brand-border': 'var(--ui-button-brand-fill)',
+    'ui-tag-brand-text': 'var(--ui-button-brand-contrast)',
+    'ui-tag-brand-icon': 'var(--ui-button-brand-contrast)',
+    'ui-tag-brand-hollow-bg': 'var(--ui-color-accent-soft)',
+    'ui-tag-brand-hollow-border': 'var(--ui-color-accent-soft-border)',
+    'ui-tag-brand-hollow-text': 'var(--ui-button-brand-quiet)',
+    'ui-tag-brand-hollow-icon': 'var(--ui-button-brand-quiet)',
+    'ui-tag-mono-fill': 'var(--ui-button-mono-fill)',
+    'ui-tag-mono-border': 'var(--ui-button-mono-fill)',
+    'ui-tag-mono-text': 'var(--ui-button-mono-contrast)',
+    'ui-tag-mono-icon': 'var(--ui-button-mono-contrast)',
     'ui-node-badge-bg': 'var(--ui-tag-bg)',
     'ui-node-badge-border': 'var(--ui-tag-border)',
     'ui-node-badge-text': 'var(--ui-tag-text)',
@@ -515,6 +539,18 @@ const appSemantics = {
     'ui-tag-border': 'var(--ui-color-border-strong)',
     'ui-tag-text': 'var(--ui-color-muted)',
     'ui-tag-icon': 'var(--ui-color-muted)',
+    'ui-tag-brand-fill': 'var(--ui-button-brand-fill)',
+    'ui-tag-brand-border': 'var(--ui-button-brand-fill)',
+    'ui-tag-brand-text': 'var(--ui-button-brand-contrast)',
+    'ui-tag-brand-icon': 'var(--ui-button-brand-contrast)',
+    'ui-tag-brand-hollow-bg': 'var(--ui-color-accent-soft)',
+    'ui-tag-brand-hollow-border': 'var(--ui-color-accent-soft-border)',
+    'ui-tag-brand-hollow-text': 'var(--ui-button-brand-quiet)',
+    'ui-tag-brand-hollow-icon': 'var(--ui-button-brand-quiet)',
+    'ui-tag-mono-fill': 'var(--ui-button-mono-fill)',
+    'ui-tag-mono-border': 'var(--ui-button-mono-fill)',
+    'ui-tag-mono-text': 'var(--ui-button-mono-contrast)',
+    'ui-tag-mono-icon': 'var(--ui-button-mono-contrast)',
     'ui-node-badge-bg': 'var(--ui-tag-bg)',
     'ui-node-badge-border': 'var(--ui-tag-border)',
     'ui-node-badge-text': 'var(--ui-tag-text)',
@@ -622,7 +658,7 @@ function parsePixelValue(value) {
 }
 
 function collectUnitScale() {
-  const values = new Set([0, 1, 2]);
+  const values = new Set([0, 1, 2, 3, 28]);
 
   const add = (candidate) => {
     const numeric = parsePixelValue(candidate);
@@ -810,6 +846,18 @@ const semanticColorNames = {
   'ui-tag-border': 'Tag/Default/Border',
   'ui-tag-text': 'Tag/Default/Content',
   'ui-tag-icon': 'Tag/Default/Icon',
+  'ui-tag-brand-fill': 'Tag/Brand/Fill',
+  'ui-tag-brand-border': 'Tag/Brand/Border',
+  'ui-tag-brand-text': 'Tag/Brand/Text',
+  'ui-tag-brand-icon': 'Tag/Brand/Icon',
+  'ui-tag-brand-hollow-bg': 'Tag/Brand Hollow/Surface',
+  'ui-tag-brand-hollow-border': 'Tag/Brand Hollow/Border',
+  'ui-tag-brand-hollow-text': 'Tag/Brand Hollow/Content',
+  'ui-tag-brand-hollow-icon': 'Tag/Brand Hollow/Icon',
+  'ui-tag-mono-fill': 'Tag/Mono/Fill',
+  'ui-tag-mono-border': 'Tag/Mono/Border',
+  'ui-tag-mono-text': 'Tag/Mono/Text',
+  'ui-tag-mono-icon': 'Tag/Mono/Icon',
   'ui-node-badge-bg': 'Node/Badge/Surface',
   'ui-node-badge-border': 'Node/Badge/Border',
   'ui-node-badge-text': 'Node/Badge/Content',
@@ -1077,13 +1125,44 @@ const components = [
       type: ['primary', 'secondary', 'ghost', 'link'],
       style: ['brand', 'mono', 'danger'],
       variant: 'legacy alias: default | primary | danger | ghost',
-      size: ['sm', 'md', 'lg'],
+      size: ['sm', 'md', 'lg', 'xl', 'xxl'],
       icon: 'node',
       label: 'string',
       htmlType: 'native button type override',
       loading: 'boolean',
     },
     states: ['rest', 'hover', 'focus-visible', 'disabled', 'loading'],
+  },
+  {
+    name: 'StatusAlert',
+    kind: 'primitive',
+    source: 'frontend/src/components/ui/StatusAlert.js',
+    props: {
+      tone: ['info', 'success', 'warning', 'danger'],
+      icon: 'node | false',
+      iconSize: 'number',
+      title: 'string',
+      children: 'node',
+      actions: 'node',
+      role: 'status | alert',
+    },
+    states: ['info', 'success', 'warning', 'danger', 'theme via semantic token modes'],
+    notes: ['Composes the shared Icon primitive and status semantic color tokens.'],
+  },
+  {
+    name: 'Toast',
+    kind: 'shared-surface',
+    source: 'frontend/src/components/ui/Toast.js',
+    props: {
+      type: ['info', 'success', 'warning', 'error', 'loading'],
+      title: 'string',
+      message: 'string',
+      children: 'node',
+      onDismiss: 'function',
+      action: 'node',
+    },
+    states: ['info', 'success', 'warning', 'error', 'loading'],
+    notes: ['Composes StatusAlert and IconButton for the dismiss action.'],
   },
   {
     name: 'MenuItem',
@@ -1108,7 +1187,7 @@ const components = [
     props: {
       children: 'string',
     },
-    states: ['rest', 'dark theme'],
+    states: ['rest', 'theme via semantic token modes'],
   },
   {
     name: 'TextInput',
@@ -1242,7 +1321,7 @@ const components = [
       hideCloseButton: 'boolean',
       footer: 'node',
     },
-    states: ['open', 'dark theme'],
+    states: ['open', 'theme via semantic token modes'],
   },
   {
     name: 'AccountDrawer',
@@ -1256,7 +1335,7 @@ const components = [
       bodyRef: 'ref',
       onBodyScroll: 'function',
     },
-    states: ['open', 'closing', 'dark theme'],
+    states: ['open', 'closing', 'theme via semantic token modes'],
   },
   {
     name: 'ScanBar',
@@ -1282,7 +1361,24 @@ const components = [
       authenticated: 'boolean',
       collaborators: 'array',
     },
-    states: ['default', 'signed out', 'account menu open', 'dark theme'],
+    states: ['default', 'signed out', 'account menu open', 'theme via semantic token modes'],
+  },
+  {
+    name: 'CanvasToolbar',
+    kind: 'shared-surface',
+    source: 'frontend/src/components/toolbar/CanvasToolbar.js',
+    props: {
+      canEdit: 'boolean',
+      activeTool: 'select | comments',
+      connectionTool: 'userflow | crosslink | null',
+      showImageMenu: 'boolean',
+      showLayersMenu: 'boolean',
+      showLegendMenu: 'boolean',
+      showVersionHistory: 'boolean',
+      hasMap: 'boolean',
+    },
+    states: ['rest', 'active tool', 'menu open', 'disabled action', 'theme via semantic token modes'],
+    notes: ['Toolbar actions are composed from the shared IconButton primitive.'],
   },
   {
     name: 'AccountMenu',
@@ -1293,27 +1389,38 @@ const components = [
       pendingAccessRequestCount: 'number',
       isOpen: 'boolean',
     },
-    states: ['closed', 'open', 'section headers', 'item hover', 'dark theme'],
+    states: ['closed', 'open', 'section headers', 'item hover', 'theme via semantic token modes'],
   },
   {
-    name: 'InlineBadge',
-    kind: 'shared-surface',
-    source: 'frontend/src/components/ui/InlineBadge.js',
+    name: 'Badge',
+    kind: 'primitive',
+    source: 'frontend/src/components/ui/Badge.js',
     props: {
+      type: ['fill', 'hollow'],
+      style: ['brand', 'mono', 'info', 'error', 'warning', 'success', 'neutral'],
+      size: ['sm', 'md'],
       label: 'string',
+      startIcon: 'icon',
+      endIcon: 'icon',
     },
-    states: ['rest', 'dark theme'],
+    states: ['fill', 'hollow', 'theme via semantic token modes'],
+    notes: ['Informational only. Replaces inline badge/label variants.'],
   },
   {
     name: 'Tag',
     kind: 'shared-surface',
     source: 'frontend/src/components/ui/Tag.js',
     props: {
+      type: ['fill', 'hollow'],
+      style: ['brand', 'mono'],
+      size: ['sm', 'md'],
+      state: ['rest', 'hover', 'focus'],
       label: 'string',
       startIcon: 'icon',
       endIcon: 'icon',
     },
-    states: ['rest', 'dark theme'],
+    states: ['rest', 'hover', 'focus', 'theme via semantic token modes'],
+    notes: ['Functional larger chip with 6px radius. Uses label typography and button color behavior.'],
   },
   {
     name: 'NodeMenu',
@@ -1323,7 +1430,7 @@ const components = [
       nodeId: 'string',
       activeStatus: 'annotation state',
     },
-    states: ['open', 'active row', 'clear action hover', 'dark theme'],
+    states: ['open', 'active row', 'clear action hover', 'theme via semantic token modes'],
   },
   {
     name: 'NodeCard',
@@ -1338,7 +1445,20 @@ const components = [
       isSelected: 'boolean',
       stackInfo: 'object',
     },
-    states: ['collapsed', 'with thumbnail', 'selected', 'ghosted', 'deleted', 'dark theme'],
+    states: ['rest', 'hover', 'with thumbnail', 'selected', 'ghosted', 'deleted', 'theme via semantic token modes'],
+  },
+  {
+    name: 'NodeActionBar',
+    kind: 'shared-surface',
+    source: 'frontend/src/components/nodes/NodeActionBar.js',
+    props: {
+      canEdit: 'boolean',
+      isRoot: 'boolean',
+      showCommentAction: 'boolean',
+      showExternalLinkAction: 'boolean',
+      commentActionLabel: 'string',
+    },
+    states: ['owner / editor', 'commenter', 'viewer', 'theme via semantic token modes'],
   },
   {
     name: 'NodeBadge',
@@ -1347,18 +1467,7 @@ const components = [
     props: {
       label: 'string',
     },
-    states: ['rest', 'dark theme'],
-  },
-  {
-    name: 'NodeStatusBadge',
-    kind: 'shared-surface',
-    source: 'frontend/src/components/nodes/NodeStatusBadge.js',
-    props: {
-      status: ['new', 'to_move', 'moved', 'to_delete', 'deleted', 'note'],
-      label: 'string',
-      note: 'boolean',
-    },
-    states: ['new', 'to_move', 'moved', 'to_delete', 'deleted', 'note', 'dark theme'],
+    states: ['rest', 'theme via semantic token modes'],
   },
   {
     name: 'CommentBadge',
@@ -1367,7 +1476,7 @@ const components = [
     props: {
       count: 'number',
     },
-    states: ['rest', 'hover', 'icon only', 'dark theme'],
+    states: ['rest', 'hover', 'icon only', 'theme via semantic token modes'],
   },
 ];
 

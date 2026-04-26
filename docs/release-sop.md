@@ -1,4 +1,4 @@
-# Map Mat Release SOP
+# Vellic Release SOP
 
 This is the operational playbook for shipping safely from `staging` to `main`.
 

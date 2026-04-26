@@ -4,7 +4,7 @@
     {
       "type": "frame",
       "id": "design-index-canvas",
-      "name": "MapMat Design System",
+      "name": "Vellic Design System",
       "layout": "vertical",
       "gap": 24,
       "width": 1280,
@@ -37,7 +37,7 @@
               "id": "text-14",
               "fill": "$ui-color-text",
               "content": "Index",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -46,7 +46,7 @@
               "id": "text-15",
               "fill": "$ui-color-muted",
               "content": "Open the right Pencil file for the job.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -77,7 +77,7 @@
                       "id": "text-1",
                       "fill": "$ui-color-text",
                       "content": "design.lib.pen",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -85,8 +85,8 @@
                       "type": "text",
                       "id": "text-2",
                       "fill": "$ui-color-muted",
-                      "content": "Reusable MapMat library: buttons, forms, badges, search, menus, nodes, shells, scales.",
-                      "fontFamily": "Nata Sans",
+                      "content": "Reusable Vellic library: buttons, forms, badges, search, menus, nodes, shells, scales.",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -112,7 +112,7 @@
                       "id": "text-4",
                       "fill": "$ui-color-text",
                       "content": "app-components.pen",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -121,7 +121,7 @@
                       "id": "text-5",
                       "fill": "$ui-color-muted",
                       "content": "Current composed app surfaces built from those patterns.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -147,7 +147,7 @@
                       "id": "text-7",
                       "fill": "$ui-color-text",
                       "content": "tokens.json / components.json",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -156,7 +156,7 @@
                       "id": "text-8",
                       "fill": "$ui-color-muted",
                       "content": "Code-side exports that back the Pencil bridge.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -184,7 +184,7 @@
                   "id": "text-11",
                   "fill": "$ui-color-text",
                   "content": "Shared components in scope",
-                  "fontFamily": "Nata Sans",
+                  "fontFamily": "Sora",
                   "fontSize": 13,
                   "fontWeight": "600"
                 },
@@ -193,7 +193,7 @@
                   "id": "text-12",
                   "fill": "$ui-color-muted",
                   "content": "Button, IconButton, TextInput, SelectInput, TextareaInput, Field, CheckboxField, ToggleSwitch, RadioCardGroup, SegmentedControl, OptionCard, Modal, AccountDrawer",
-                  "fontFamily": "Nata Sans",
+                  "fontFamily": "Sora",
                   "fontSize": 11,
                   "fontWeight": "normal"
                 }

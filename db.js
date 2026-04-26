@@ -1,5 +1,5 @@
 /**
- * Database setup for Map Mat
+ * Database setup for Vellic
  * Uses SQLite for simplicity - can migrate to PostgreSQL later
  */
 

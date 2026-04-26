@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedOn": "2026-04-24",
+    "generatedOn": "2026-04-26",
     "sources": [
       "frontend/src/components/ui",
       "frontend/src/components/drawers/AccountDrawer.js",
@@ -133,7 +133,9 @@
         "size": [
           "sm",
           "md",
-          "lg"
+          "lg",
+          "xl",
+          "xxl"
         ],
         "icon": "node",
         "label": "string",
@@ -146,6 +148,64 @@
         "focus-visible",
         "disabled",
         "loading"
+      ]
+    },
+    {
+      "name": "StatusAlert",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/StatusAlert.js",
+      "props": {
+        "tone": [
+          "info",
+          "success",
+          "warning",
+          "danger"
+        ],
+        "icon": "node | false",
+        "iconSize": "number",
+        "title": "string",
+        "children": "node",
+        "actions": "node",
+        "role": "status | alert"
+      },
+      "states": [
+        "info",
+        "success",
+        "warning",
+        "danger",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Composes the shared Icon primitive and status semantic color tokens."
+      ]
+    },
+    {
+      "name": "Toast",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/ui/Toast.js",
+      "props": {
+        "type": [
+          "info",
+          "success",
+          "warning",
+          "error",
+          "loading"
+        ],
+        "title": "string",
+        "message": "string",
+        "children": "node",
+        "onDismiss": "function",
+        "action": "node"
+      },
+      "states": [
+        "info",
+        "success",
+        "warning",
+        "error",
+        "loading"
+      ],
+      "notes": [
+        "Composes StatusAlert and IconButton for the dismiss action."
       ]
     },
     {
@@ -179,7 +239,7 @@
       },
       "states": [
         "rest",
-        "dark theme"
+        "theme via semantic token modes"
       ]
     },
     {
@@ -398,7 +458,7 @@
       },
       "states": [
         "open",
-        "dark theme"
+        "theme via semantic token modes"
       ]
     },
     {
@@ -416,7 +476,7 @@
       "states": [
         "open",
         "closing",
-        "dark theme"
+        "theme via semantic token modes"
       ]
     },
     {
@@ -453,7 +513,32 @@
         "default",
         "signed out",
         "account menu open",
-        "dark theme"
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "CanvasToolbar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/toolbar/CanvasToolbar.js",
+      "props": {
+        "canEdit": "boolean",
+        "activeTool": "select | comments",
+        "connectionTool": "userflow | crosslink | null",
+        "showImageMenu": "boolean",
+        "showLayersMenu": "boolean",
+        "showLegendMenu": "boolean",
+        "showVersionHistory": "boolean",
+        "hasMap": "boolean"
+      },
+      "states": [
+        "rest",
+        "active tool",
+        "menu open",
+        "disabled action",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Toolbar actions are composed from the shared IconButton primitive."
       ]
     },
     {
@@ -470,19 +555,42 @@
         "open",
         "section headers",
         "item hover",
-        "dark theme"
+        "theme via semantic token modes"
       ]
     },
     {
-      "name": "InlineBadge",
-      "kind": "shared-surface",
-      "source": "frontend/src/components/ui/InlineBadge.js",
+      "name": "Badge",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Badge.js",
       "props": {
-        "label": "string"
+        "type": [
+          "fill",
+          "hollow"
+        ],
+        "style": [
+          "brand",
+          "mono",
+          "info",
+          "error",
+          "warning",
+          "success",
+          "neutral"
+        ],
+        "size": [
+          "sm",
+          "md"
+        ],
+        "label": "string",
+        "startIcon": "icon",
+        "endIcon": "icon"
       },
       "states": [
-        "rest",
-        "dark theme"
+        "fill",
+        "hollow",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Informational only. Replaces inline badge/label variants."
       ]
     },
     {
@@ -490,13 +598,35 @@
       "kind": "shared-surface",
       "source": "frontend/src/components/ui/Tag.js",
       "props": {
+        "type": [
+          "fill",
+          "hollow"
+        ],
+        "style": [
+          "brand",
+          "mono"
+        ],
+        "size": [
+          "sm",
+          "md"
+        ],
+        "state": [
+          "rest",
+          "hover",
+          "focus"
+        ],
         "label": "string",
         "startIcon": "icon",
         "endIcon": "icon"
       },
       "states": [
         "rest",
-        "dark theme"
+        "hover",
+        "focus",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Functional larger chip with 6px radius. Uses label typography and button color behavior."
       ]
     },
     {
@@ -511,7 +641,7 @@
         "open",
         "active row",
         "clear action hover",
-        "dark theme"
+        "theme via semantic token modes"
       ]
     },
     {
@@ -528,12 +658,31 @@
         "stackInfo": "object"
       },
       "states": [
-        "collapsed",
+        "rest",
+        "hover",
         "with thumbnail",
         "selected",
         "ghosted",
         "deleted",
-        "dark theme"
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "NodeActionBar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeActionBar.js",
+      "props": {
+        "canEdit": "boolean",
+        "isRoot": "boolean",
+        "showCommentAction": "boolean",
+        "showExternalLinkAction": "boolean",
+        "commentActionLabel": "string"
+      },
+      "states": [
+        "owner / editor",
+        "commenter",
+        "viewer",
+        "theme via semantic token modes"
       ]
     },
     {
@@ -545,33 +694,7 @@
       },
       "states": [
         "rest",
-        "dark theme"
-      ]
-    },
-    {
-      "name": "NodeStatusBadge",
-      "kind": "shared-surface",
-      "source": "frontend/src/components/nodes/NodeStatusBadge.js",
-      "props": {
-        "status": [
-          "new",
-          "to_move",
-          "moved",
-          "to_delete",
-          "deleted",
-          "note"
-        ],
-        "label": "string",
-        "note": "boolean"
-      },
-      "states": [
-        "new",
-        "to_move",
-        "moved",
-        "to_delete",
-        "deleted",
-        "note",
-        "dark theme"
+        "theme via semantic token modes"
       ]
     },
     {
@@ -585,7 +708,7 @@
         "rest",
         "hover",
         "icon only",
-        "dark theme"
+        "theme via semantic token modes"
       ]
     }
   ],

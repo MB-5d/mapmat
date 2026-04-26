@@ -37,7 +37,7 @@
               "id": "text-75",
               "fill": "$ui-color-text",
               "content": "Overview",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -46,7 +46,7 @@
               "id": "text-76",
               "fill": "$ui-color-muted",
               "content": "Composed current app examples built from the shared visual patterns.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -77,7 +77,7 @@
                       "id": "text-65",
                       "fill": "$ui-color-text",
                       "content": "What this file is",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -86,7 +86,7 @@
                       "id": "text-66",
                       "fill": "$ui-color-muted",
                       "content": "Use this when you want current composed app surfaces, not just the base library.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -112,7 +112,7 @@
                       "id": "text-68",
                       "fill": "$ui-color-text",
                       "content": "Shared source",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -121,7 +121,7 @@
                       "id": "text-69",
                       "fill": "$ui-color-muted",
                       "content": "All examples reflect current code tokens and the existing shared component APIs.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -147,7 +147,7 @@
                       "id": "text-71",
                       "fill": "$ui-color-text",
                       "content": "Still separate",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -156,7 +156,7 @@
                       "id": "text-72",
                       "fill": "$ui-color-muted",
                       "content": "The library stays in design.lib.pen. This file is the consumer layer.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -186,7 +186,7 @@
               "id": "text-79",
               "fill": "$ui-color-text",
               "content": "Topbar, Search, And Menu",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -195,7 +195,7 @@
               "id": "text-80",
               "fill": "$ui-color-muted",
               "content": "Current topbar structure, centered search, and account menu patterns.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -234,8 +234,8 @@
                       "type": "text",
                       "id": "text-32",
                       "fill": "#2563eb",
-                      "content": "MapMat",
-                      "fontFamily": "Nata Sans",
+                      "content": "Vellic",
+                      "fontFamily": "Sora",
                       "fontSize": 32,
                       "fontWeight": "800"
                     }
@@ -303,7 +303,7 @@
                           "id": "user-btn-label",
                           "fill": "$ui-color-muted",
                           "content": "Matthew",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "500"
                         },
@@ -365,7 +365,7 @@
                       "id": "search-placeholder",
                       "fill": "$ui-color-input-placeholder",
                       "content": "Search maps",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 14,
                       "fontWeight": "normal"
                     }
@@ -406,7 +406,7 @@
                       "id": "user-btn-label",
                       "fill": "$ui-color-muted",
                       "content": "Matthew",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "500"
                     },
@@ -466,7 +466,7 @@
                           "id": "text-9",
                           "fill": "$ui-color-muted",
                           "content": "Notifications",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "500"
                         },
@@ -487,7 +487,7 @@
                               "id": "text-10",
                               "fill": "#ffffff",
                               "content": "2",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 10,
                               "fontWeight": "700"
                             }
@@ -523,7 +523,7 @@
                           "id": "text-14",
                           "fill": "$ui-color-muted",
                           "content": "Settings",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "500"
                         },
@@ -544,7 +544,7 @@
                               "id": "text-15",
                               "fill": "$ui-color-primary-hover",
                               "content": "New",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 10,
                               "fontWeight": "700"
                             }
@@ -587,7 +587,7 @@
                           "id": "text-20",
                           "fill": "$ui-color-muted",
                           "content": "Log out",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "500"
                         }
@@ -617,7 +617,7 @@
                       "id": "text-22",
                       "fill": "$ui-color-input-placeholder",
                       "content": "NODE STATUS",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "700"
                     },
@@ -641,7 +641,7 @@
                           "id": "text-23",
                           "fill": "$ui-color-primary-hover",
                           "content": "New",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "500"
                         },
@@ -650,7 +650,7 @@
                           "id": "text-24",
                           "fill": "$ui-color-muted",
                           "content": "⌘1",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 11,
                           "fontWeight": "normal"
                         }
@@ -675,7 +675,7 @@
                           "id": "text-26",
                           "fill": "$ui-color-text",
                           "content": "Needs move",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "500"
                         },
@@ -684,7 +684,7 @@
                           "id": "text-27",
                           "fill": "$ui-color-muted",
                           "content": "⌘2",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 11,
                           "fontWeight": "normal"
                         }
@@ -716,7 +716,7 @@
                           "id": "text-30",
                           "fill": "$ui-color-danger-hover",
                           "content": "Clear status",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "500"
                         }
@@ -748,7 +748,7 @@
               "id": "text-95",
               "fill": "$ui-color-text",
               "content": "Create Map",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -757,7 +757,7 @@
               "id": "text-96",
               "fill": "$ui-color-muted",
               "content": "Current modal pattern using shared inputs, option cards, and footer actions.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -796,7 +796,7 @@
                           "id": "text-82",
                           "fill": "$ui-color-text",
                           "content": "Create map",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 18,
                           "fontWeight": "600"
                         },
@@ -805,7 +805,7 @@
                           "id": "text-83",
                           "fill": "$ui-color-muted",
                           "content": "Choose how you want to start",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 12,
                           "fontWeight": "normal"
                         }
@@ -981,7 +981,7 @@
               "id": "text-123",
               "fill": "$ui-color-text",
               "content": "Drawers And Share",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -990,7 +990,7 @@
               "id": "text-124",
               "fill": "$ui-color-muted",
               "content": "Current drawer cards, segmented tabs, search, and radio-card sharing flow.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -1052,7 +1052,7 @@
                                   "id": "text-99",
                                   "fill": "$ui-color-text",
                                   "content": "Project settings",
-                                  "fontFamily": "Nata Sans",
+                                  "fontFamily": "Sora",
                                   "fontSize": 18,
                                   "fontWeight": "600"
                                 },
@@ -1061,7 +1061,7 @@
                                   "id": "text-100",
                                   "fill": "$ui-color-muted",
                                   "content": "Manage access, sharing, and defaults",
-                                  "fontFamily": "Nata Sans",
+                                  "fontFamily": "Sora",
                                   "fontSize": 12,
                                   "fontWeight": "normal"
                                 }
@@ -1103,7 +1103,7 @@
                           "id": "text-105",
                           "fill": "$ui-color-text",
                           "content": "Workspace access",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "600"
                         },
@@ -1112,7 +1112,7 @@
                           "id": "text-106",
                           "fill": "$ui-color-muted",
                           "content": "Editors can update content and structure",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 11,
                           "fontWeight": "normal"
                         }
@@ -1138,7 +1138,7 @@
                           "id": "text-108",
                           "fill": "$ui-color-text",
                           "content": "Default theme",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "600"
                         },
@@ -1147,7 +1147,7 @@
                           "id": "text-109",
                           "fill": "$ui-color-muted",
                           "content": "Use shared UI tokens for all canvases",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 11,
                           "fontWeight": "normal"
                         }
@@ -1173,7 +1173,7 @@
                           "id": "text-111",
                           "fill": "$ui-color-text",
                           "content": "Recent activity",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 13,
                           "fontWeight": "600"
                         },
@@ -1182,7 +1182,7 @@
                           "id": "text-112",
                           "fill": "$ui-color-muted",
                           "content": "Jane updated map permissions two minutes ago",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 11,
                           "fontWeight": "normal"
                         }
@@ -1211,7 +1211,7 @@
                       "id": "text-115",
                       "fill": "$ui-color-text",
                       "content": "Share Access",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 18,
                       "fontWeight": "600"
                     },
@@ -1220,7 +1220,7 @@
                       "id": "text-116",
                       "fill": "$ui-color-muted",
                       "content": "Composed from the current shared form and selection patterns.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
@@ -1264,7 +1264,7 @@
                               "id": "seg-active-label",
                               "fill": "$ui-color-text",
                               "content": "General",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 12,
                               "fontWeight": "600"
                             }
@@ -1287,7 +1287,7 @@
                               "id": "seg-idle-1-label",
                               "fill": "$ui-color-muted",
                               "content": "Sharing",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 12,
                               "fontWeight": "600"
                             }
@@ -1310,7 +1310,7 @@
                               "id": "seg-idle-2-label",
                               "fill": "$ui-color-muted",
                               "content": "History",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 12,
                               "fontWeight": "600"
                             }
@@ -1398,7 +1398,7 @@
                                   "id": "radio-selected-label",
                                   "fill": "$ui-color-text",
                                   "content": "Invite by email",
-                                  "fontFamily": "Nata Sans",
+                                  "fontFamily": "Sora",
                                   "fontSize": 13,
                                   "fontWeight": "600"
                                 },
@@ -1407,7 +1407,7 @@
                                   "id": "radio-selected-description",
                                   "fill": "$ui-color-muted",
                                   "content": "Best for specific collaborators",
-                                  "fontFamily": "Nata Sans",
+                                  "fontFamily": "Sora",
                                   "fontSize": 11,
                                   "fontWeight": "normal"
                                 }
@@ -1461,7 +1461,7 @@
                                   "id": "radio-default-label",
                                   "fill": "$ui-color-text",
                                   "content": "Share link",
-                                  "fontFamily": "Nata Sans",
+                                  "fontFamily": "Sora",
                                   "fontSize": 13,
                                   "fontWeight": "500"
                                 },
@@ -1470,7 +1470,7 @@
                                   "id": "radio-default-description",
                                   "fill": "$ui-color-muted",
                                   "content": "Anyone with the link can request access",
-                                  "fontFamily": "Nata Sans",
+                                  "fontFamily": "Sora",
                                   "fontSize": 11,
                                   "fontWeight": "normal"
                                 }
@@ -1549,7 +1549,7 @@
               "id": "text-144",
               "fill": "$ui-color-text",
               "content": "Form States",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -1558,7 +1558,7 @@
               "id": "text-145",
               "fill": "$ui-color-muted",
               "content": "Focused, default, invalid, and disabled samples from the current shared inputs and controls.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -1734,7 +1734,7 @@
                               "id": "checkbox-label",
                               "fill": "$ui-color-text",
                               "content": "Email me updates",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 13,
                               "fontWeight": "500"
                             },
@@ -1743,7 +1743,7 @@
                               "id": "checkbox-description",
                               "fill": "$ui-color-muted",
                               "content": "Get notified about map changes",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 11,
                               "fontWeight": "normal"
                             }
@@ -1801,7 +1801,7 @@
                               "id": "toggle-label",
                               "fill": "$ui-color-text",
                               "content": "Auto-save",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 13,
                               "fontWeight": "500"
                             },
@@ -1810,7 +1810,7 @@
                               "id": "toggle-description",
                               "fill": "$ui-color-muted",
                               "content": "Changes save every few seconds",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 11,
                               "fontWeight": "normal"
                             }
@@ -1930,7 +1930,7 @@
               "id": "text-160",
               "fill": "$ui-color-text",
               "content": "Nodes",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -1939,7 +1939,7 @@
               "id": "text-161",
               "fill": "$ui-color-muted",
               "content": "Current node card patterns, status chips, comments, and tag combinations.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -1982,7 +1982,7 @@
                           "id": "node-card-title",
                           "fill": "$ui-color-text",
                           "content": "Pricing Page",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 15,
                           "fontWeight": "600"
                         },
@@ -2006,7 +2006,7 @@
                       "id": "node-card-body",
                       "fill": "$ui-color-muted",
                       "content": "Primary conversion surface for enterprise plans and self-serve onboarding.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     },
@@ -2154,7 +2154,7 @@
                       "id": "text-150",
                       "fill": "$ui-color-text",
                       "content": "Node size",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -2163,7 +2163,7 @@
                       "id": "text-151",
                       "fill": "$ui-color-muted",
                       "content": "288px wide, 200px collapsed height, with thumbnail state extending taller.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -2189,7 +2189,7 @@
                       "id": "text-153",
                       "fill": "$ui-color-text",
                       "content": "Status chips",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -2198,7 +2198,7 @@
                       "id": "text-154",
                       "fill": "$ui-color-muted",
                       "content": "New, needs move, moved, to delete, deleted, and note styles exist in CSS today.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -2224,7 +2224,7 @@
                       "id": "text-156",
                       "fill": "$ui-color-text",
                       "content": "Menus",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -2233,7 +2233,7 @@
                       "id": "text-157",
                       "fill": "$ui-color-muted",
                       "content": "Context menus exist for node status and connection actions; this file shows the node menu surface.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }
@@ -2263,7 +2263,7 @@
               "id": "text-171",
               "fill": "$ui-color-text",
               "content": "Selection Patterns",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -2272,7 +2272,7 @@
               "id": "text-172",
               "fill": "$ui-color-muted",
               "content": "Current segmented, grid-style choices, and option-card actions used across modals and drawers.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -2323,7 +2323,7 @@
                           "id": "seg-active-label",
                           "fill": "$ui-color-text",
                           "content": "General",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 12,
                           "fontWeight": "600"
                         }
@@ -2346,7 +2346,7 @@
                           "id": "seg-idle-1-label",
                           "fill": "$ui-color-muted",
                           "content": "Sharing",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 12,
                           "fontWeight": "600"
                         }
@@ -2369,7 +2369,7 @@
                           "id": "seg-idle-2-label",
                           "fill": "$ui-color-muted",
                           "content": "History",
-                          "fontFamily": "Nata Sans",
+                          "fontFamily": "Sora",
                           "fontSize": 12,
                           "fontWeight": "600"
                         }
@@ -2389,7 +2389,7 @@
                       "id": "text-163",
                       "fill": "$ui-color-primary",
                       "content": "Account",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 12,
                       "fontWeight": "600"
                     },
@@ -2398,7 +2398,7 @@
                       "id": "text-164",
                       "fill": "$ui-color-muted",
                       "content": "Security",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 12,
                       "fontWeight": "600"
                     },
@@ -2407,7 +2407,7 @@
                       "id": "text-165",
                       "fill": "$ui-color-muted",
                       "content": "Billing",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 12,
                       "fontWeight": "600"
                     }
@@ -2535,7 +2535,7 @@
                               "id": "radio-selected-label",
                               "fill": "$ui-color-text",
                               "content": "Invite by email",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 13,
                               "fontWeight": "600"
                             },
@@ -2544,7 +2544,7 @@
                               "id": "radio-selected-description",
                               "fill": "$ui-color-muted",
                               "content": "Best for specific collaborators",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 11,
                               "fontWeight": "normal"
                             }
@@ -2598,7 +2598,7 @@
                               "id": "radio-default-label",
                               "fill": "$ui-color-text",
                               "content": "Share link",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 13,
                               "fontWeight": "500"
                             },
@@ -2607,7 +2607,7 @@
                               "id": "radio-default-description",
                               "fill": "$ui-color-muted",
                               "content": "Anyone with the link can request access",
-                              "fontFamily": "Nata Sans",
+                              "fontFamily": "Sora",
                               "fontSize": 11,
                               "fontWeight": "normal"
                             }
@@ -2641,7 +2641,7 @@
               "id": "text-218",
               "fill": "$ui-color-text",
               "content": "Color And Type Boards",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 20,
               "fontWeight": "700"
             },
@@ -2650,7 +2650,7 @@
               "id": "text-219",
               "fill": "$ui-color-muted",
               "content": "Reference-only boards for the current app palette and typography steps.",
-              "fontFamily": "Nata Sans",
+              "fontFamily": "Sora",
               "fontSize": 12,
               "fontWeight": "normal"
             },
@@ -2687,7 +2687,7 @@
                       "id": "text-175",
                       "fill": "$ui-color-text",
                       "content": "Primary",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2696,7 +2696,7 @@
                       "id": "text-176",
                       "fill": "$ui-color-muted",
                       "content": "#6366f1",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2728,7 +2728,7 @@
                       "id": "text-179",
                       "fill": "$ui-color-text",
                       "content": "Primary hover",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2737,7 +2737,7 @@
                       "id": "text-180",
                       "fill": "$ui-color-muted",
                       "content": "#4f46e5",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2769,7 +2769,7 @@
                       "id": "text-183",
                       "fill": "$ui-color-text",
                       "content": "Surface",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2778,7 +2778,7 @@
                       "id": "text-184",
                       "fill": "$ui-color-muted",
                       "content": "theme-aware",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2810,7 +2810,7 @@
                       "id": "text-187",
                       "fill": "$ui-color-text",
                       "content": "Muted surface",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2819,7 +2819,7 @@
                       "id": "text-188",
                       "fill": "$ui-color-muted",
                       "content": "theme-aware",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2851,7 +2851,7 @@
                       "id": "text-191",
                       "fill": "$ui-color-text",
                       "content": "Danger",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2860,7 +2860,7 @@
                       "id": "text-192",
                       "fill": "$ui-color-muted",
                       "content": "#ef4444",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2892,7 +2892,7 @@
                       "id": "text-195",
                       "fill": "$ui-color-text",
                       "content": "Warning",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2901,7 +2901,7 @@
                       "id": "text-196",
                       "fill": "$ui-color-muted",
                       "content": "status background",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2933,7 +2933,7 @@
                       "id": "text-199",
                       "fill": "$ui-color-text",
                       "content": "Success",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2942,7 +2942,7 @@
                       "id": "text-200",
                       "fill": "$ui-color-muted",
                       "content": "status background",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -2974,7 +2974,7 @@
                       "id": "text-203",
                       "fill": "$ui-color-text",
                       "content": "Info",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "600"
                     },
@@ -2983,7 +2983,7 @@
                       "id": "text-204",
                       "fill": "$ui-color-muted",
                       "content": "status background",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -3009,8 +3009,8 @@
                       "type": "text",
                       "id": "text-207",
                       "fill": "#2563eb",
-                      "content": "MapMat",
-                      "fontFamily": "Nata Sans",
+                      "content": "Vellic",
+                      "fontFamily": "Sora",
                       "fontSize": 32,
                       "fontWeight": "800"
                     },
@@ -3019,7 +3019,7 @@
                       "id": "text-208",
                       "fill": "$ui-color-text",
                       "content": "Modal title 18 / 600",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 18,
                       "fontWeight": "600"
                     },
@@ -3028,7 +3028,7 @@
                       "id": "text-209",
                       "fill": "$ui-color-text",
                       "content": "Button and label 14 / 600",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 14,
                       "fontWeight": "600"
                     },
@@ -3037,7 +3037,7 @@
                       "id": "text-210",
                       "fill": "$ui-color-text",
                       "content": "Menu body 13 / 500",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "500"
                     },
@@ -3046,7 +3046,7 @@
                       "id": "text-211",
                       "fill": "$ui-color-muted",
                       "content": "Helper copy 12 / 400",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 12,
                       "fontWeight": "400"
                     },
@@ -3055,7 +3055,7 @@
                       "id": "text-212",
                       "fill": "$ui-inline-badge-text",
                       "content": "Badge 10 / 700",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 10,
                       "fontWeight": "700"
                     }
@@ -3081,7 +3081,7 @@
                       "id": "text-214",
                       "fill": "$ui-color-text",
                       "content": "Notes",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 13,
                       "fontWeight": "600"
                     },
@@ -3090,7 +3090,7 @@
                       "id": "text-215",
                       "fill": "$ui-color-muted",
                       "content": "These are reference steps taken from the current app CSS, not a guessed new type system.",
-                      "fontFamily": "Nata Sans",
+                      "fontFamily": "Sora",
                       "fontSize": 11,
                       "fontWeight": "normal"
                     }

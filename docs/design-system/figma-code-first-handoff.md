@@ -4,7 +4,7 @@ Last updated: 2026-04-14
 
 ## Purpose
 
-This file defines how the new `MapMat - DS Library` Figma file maps to the current repo.
+This file defines how the new `Vellic - DS Library` Figma file maps to the current repo.
 
 Use this contract when:
 
@@ -83,13 +83,22 @@ Use these Figma names going forward. They map to the current repo variables or t
 | `color/input/background` | `--ui-color-input-bg` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `color/input/placeholder` | `--ui-color-input-placeholder` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `color/focus/ring` | `--ui-focus-ring` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
+| `radius/none` | `--radius-none` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
+| `radius/xxs` | `--radius-xxs` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
+| `radius/xs` | `--radius-xs` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
 | `radius/sm` | `--ui-radius-sm` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `radius/md` | `--ui-radius-md` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `radius/lg` | `--ui-radius-lg` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
+| `radius/xl` | `--ui-radius-xl` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
+| `radius/full` | `--radius-full` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
+| `space/none` | `--space-none` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
+| `space/xxs` | `--space-xxs` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
+| `space/xs` | `--space-xs` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
 | `space/sm` | `--space-sm` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `space/md` | `--space-md` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `space/lg` | `--space-lg` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `space/xl` | `--space-xl` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
+| `space/2xl` | `--space-2xl` | [scripts/design-system-source.js](/Users/matthewbraun/Desktop/mapmat/scripts/design-system-source.js) | Active |
 | `canvas/node/width` | `--node-w` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `canvas/node/height/collapsed` | `--node-h-collapsed` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
 | `canvas/node/height/thumbnail` | `--node-h-thumb` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Active |
@@ -109,30 +118,34 @@ Use stable component names in Figma. When a component changes, update the mapped
 
 | Figma component | Repo owner | Code status | Notes |
 | --- | --- | --- | --- |
-| `MM / UI / Button` | [frontend/src/components/ui/Button.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/Button.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | Primary, secondary, danger; `sm/md/lg` |
-| `MM / UI / Icon Button` | [frontend/src/components/ui/IconButton.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/IconButton.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | Default, primary, danger; `sm/md/lg` |
-| `MM / UI / Input` | [frontend/src/components/ui/TextInput.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/TextInput.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | `sm/md/lg` |
-| `MM / UI / Select` | [frontend/src/components/ui/SelectInput.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/SelectInput.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | `sm/md/lg` |
-| `MM / UI / Textarea` | [frontend/src/components/ui/TextareaInput.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/TextareaInput.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | `sm/md/lg` |
-| `MM / Navigation / Topbar` | [frontend/src/components/toolbar/Topbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/Topbar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Includes account entry and scan-row container |
-| `MM / Navigation / Scan Row` | [frontend/src/components/scan/ScanBar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/scan/ScanBar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Editable vs shared title, clear state, options menu |
-| `MM / Navigation / Account Menu` | [frontend/src/components/toolbar/Topbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/Topbar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Menu surface still embedded in Topbar |
-| `MM / Navigation / Toolbar Button` | [frontend/src/components/toolbar/CanvasToolbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/CanvasToolbar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Keep Figma naming stable even if code still inlines it |
-| `MM / Shell / Modal` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css), modal files in [frontend/src/components/modals](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals) | Shared shell exists | Base shell for share/save/create/scan progress |
-| `MM / Shell / Drawer` | [frontend/src/components/drawers/AccountDrawer.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/drawers/AccountDrawer.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared shell exists | Also informs settings/version/admin drawer work |
-| `MM / Shell / Panel` | [frontend/src/components/comments/CommentsPanel.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentsPanel.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Treat as contextual right-rail shell |
-| `MM / Shell / Popover` | [frontend/src/components/comments/CommentPopover.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentPopover.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Also informs future mention/context menus |
-| `MM / Shell / Menu Surface` | [frontend/src/components/toolbar/Topbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/Topbar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Current code still has repeated dropdown/menu patterns |
-| `MM / Content / Node Card` | [frontend/src/components/nodes/NodeCard.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/nodes/NodeCard.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Core canvas surface; thumbnails and action bar still mixed with hardcoded styling |
-| `MM / Content / Welcome Option Card` | [frontend/src/components/modals/CreateMapModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/CreateMapModal.js), [frontend/src/components/modals/ExportModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/ExportModal.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Figma set is stable before code is |
-| `MM / Status / Banner` | [frontend/src/App.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Read-only, conflict, presence, connected |
-| `MM / Collaboration / Presence Chip` | [frontend/src/App.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Used in banners and selection states |
-| `MM / Collaboration / Share Permission Option` | [frontend/src/components/modals/ShareModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/ShareModal.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Viewer, commenter, editor permissions |
-| `MM / Pattern / Comments Panel` | [frontend/src/components/comments/CommentsPanel.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentsPanel.js) | Partial | Feature-level composition built from shell + form primitives |
-| `MM / Pattern / Comment Popover` | [frontend/src/components/comments/CommentPopover.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentPopover.js) | Partial | Feature-level composition with reply and mention states |
-| `MM / Pattern / Share Modal` | [frontend/src/components/modals/ShareModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/ShareModal.js) | Partial | Permission flow, invite flow, requests |
-| `MM / Pattern / Save Map Modal` | [frontend/src/components/modals/SaveMapModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/SaveMapModal.js) | Partial | Form uses modal shell but not all shared control wrappers |
-| `MM / Pattern / Create Map Modal` | [frontend/src/components/modals/CreateMapModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/CreateMapModal.js) | Partial | Still coupled to inline option-card styling |
+| `Vellic / UI / Button` | [frontend/src/components/ui/Button.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/Button.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | Primary, secondary, danger; `sm/md/lg` |
+| `Vellic / UI / Icon Button` | [frontend/src/components/ui/IconButton.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/IconButton.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | Default, primary, danger; `sm/md/lg` |
+| `Vellic / UI / Input` | [frontend/src/components/ui/TextInput.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/TextInput.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | `sm/md/lg` |
+| `Vellic / UI / Select` | [frontend/src/components/ui/SelectInput.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/SelectInput.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | `sm/md/lg` |
+| `Vellic / UI / Textarea` | [frontend/src/components/ui/TextareaInput.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/TextareaInput.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | `sm/md/lg` |
+| `Vellic / UI / Badge` | [frontend/src/components/ui/Badge.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/Badge.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | Informational only; `sm/md`, fill/hollow, brand/mono/info/error/warning/success/neutral |
+| `Vellic / UI / Tag` | [frontend/src/components/ui/Tag.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/Tag.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | Functional chip; fill/hollow, brand/mono, 6px radius |
+| `Vellic / Navigation / Topbar` | [frontend/src/components/toolbar/Topbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/Topbar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Includes account entry and scan-row container |
+| `Vellic / Navigation / Scan Row` | [frontend/src/components/scan/ScanBar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/scan/ScanBar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Editable vs shared title, clear state, options menu |
+| `Vellic / Navigation / Account Menu` | [frontend/src/components/toolbar/Topbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/Topbar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Menu surface still embedded in Topbar |
+| `Vellic / Navigation / Toolbar Button` | [frontend/src/components/toolbar/CanvasToolbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/CanvasToolbar.js), [frontend/src/components/ui/IconButton.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/IconButton.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Composed from shared primitive | Canvas toolbar actions use `IconButton` with toolbar-specific placement styles |
+| `Vellic / Shell / Modal` | [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css), modal files in [frontend/src/components/modals](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals) | Shared shell exists | Base shell for share/save/create/scan progress |
+| `Vellic / Shell / Drawer` | [frontend/src/components/drawers/AccountDrawer.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/drawers/AccountDrawer.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared shell exists | Also informs settings/version/admin drawer work |
+| `Vellic / Shell / Panel` | [frontend/src/components/comments/CommentsPanel.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentsPanel.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Treat as contextual right-rail shell |
+| `Vellic / Shell / Popover` | [frontend/src/components/comments/CommentPopover.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentPopover.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Also informs future mention/context menus |
+| `Vellic / Shell / Menu Surface` | [frontend/src/components/toolbar/Topbar.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/toolbar/Topbar.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Current code still has repeated dropdown/menu patterns |
+| `Vellic / Content / Node Card` | [frontend/src/components/nodes/NodeCard.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/nodes/NodeCard.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Core canvas surface; thumbnails and action bar still mixed with hardcoded styling |
+| `Vellic / Content / Welcome Option Card` | [frontend/src/components/modals/CreateMapModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/CreateMapModal.js), [frontend/src/components/modals/ExportModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/ExportModal.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Figma set is stable before code is |
+| `Vellic / Status / Alert` | [frontend/src/components/ui/StatusAlert.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/StatusAlert.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared primitive exists | Info, success, warning, danger |
+| `Vellic / Status / Toast` | [frontend/src/components/ui/Toast.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/Toast.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Shared surface exists | Composes `StatusAlert` and `IconButton` |
+| `Vellic / Status / Banner` | [frontend/src/App.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.js), [frontend/src/components/ui/StatusAlert.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/ui/StatusAlert.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Composed from shared primitive | Read-only, conflict, presence, connected |
+| `Vellic / Collaboration / Presence Chip` | [frontend/src/App.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Missing shared primitive | Used in banners and selection states |
+| `Vellic / Collaboration / Share Permission Option` | [frontend/src/components/modals/ShareModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/ShareModal.js), [frontend/src/App.css](/Users/matthewbraun/Desktop/mapmat/frontend/src/App.css) | Partial | Viewer, commenter, editor permissions |
+| `Vellic / Pattern / Comments Panel` | [frontend/src/components/comments/CommentsPanel.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentsPanel.js) | Partial | Feature-level composition built from shell + form primitives |
+| `Vellic / Pattern / Comment Popover` | [frontend/src/components/comments/CommentPopover.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/comments/CommentPopover.js) | Partial | Feature-level composition with reply and mention states |
+| `Vellic / Pattern / Share Modal` | [frontend/src/components/modals/ShareModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/ShareModal.js) | Partial | Permission flow, invite flow, requests |
+| `Vellic / Pattern / Save Map Modal` | [frontend/src/components/modals/SaveMapModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/SaveMapModal.js) | Partial | Form uses modal shell but not all shared control wrappers |
+| `Vellic / Pattern / Create Map Modal` | [frontend/src/components/modals/CreateMapModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/CreateMapModal.js) | Partial | Still coupled to inline option-card styling |
 
 ## State And Variant Contract
 
@@ -197,7 +210,7 @@ Use this checklist for any design-system change.
 
 ## Current Known Limits
 
-- `Nata Sans` is still blocked on the current MCP write path, so library write automation is using `Inter` for now.
+- `Sora` is still blocked on the current MCP write path, so library write automation is using `Inter` for now.
 - Some preview/image-backed specimens can fail to render through MCP even when the live app is correct. When that happens, keep a visible manual-polish marker in Figma instead of pretending the specimen is final.
 - Local text styles and effect styles are still safer to polish manually in Figma than through the current write path.
 

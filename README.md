@@ -1,11 +1,11 @@
-# Map Mat - Visual Sitemap Generator
+# Vellic - Visual Sitemap Generator
 
 A visual sitemap generator that crawls websites and creates interactive tree diagrams.
 
 ## Features
 
 - 🕷️ Intelligent site crawler with progress tracking
-- 🔐 User authentication (signup/login)
+- 🔐 User authentication (email verification, password reset, Google sign-in)
 - 📁 Projects and saved maps
 - 🔗 Share links with expiration
 - 📜 Scan history
@@ -16,20 +16,20 @@ A visual sitemap generator that crawls websites and creates interactive tree dia
 
 ### Backend (Port 4002)
 ```bash
-cd mapmat
+cd vellic
 npm install
 node server.js
 ```
 
 ### Worker (Jobs)
 ```bash
-cd mapmat
+cd vellic
 npm run start:worker
 ```
 
 ### Frontend (Port 3000)
 ```bash
-cd mapmat/frontend
+cd vellic/frontend
 npm install
 npm start
 ```
@@ -131,7 +131,7 @@ CI checks for PRs are in `.github/workflows/pr-checks.yml`.
 railway login
 
 # Initialize and deploy
-cd mapmat
+cd vellic
 railway init
 railway up
 
@@ -153,7 +153,7 @@ Railway runtime config in `railway.json` uses:
 vercel login
 
 # Deploy frontend
-cd mapmat/frontend
+cd vellic/frontend
 vercel
 
 # Set environment variable:
@@ -196,6 +196,19 @@ Optional:
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |
 | `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Matt Test |
 | `AUTH_HEADER_FALLBACK` | Allows bearer token auth header fallback when cross-site cookies fail | same default as `TEST_AUTH_ENABLED` |
+| `AUTH_EMAIL_VERIFICATION_TTL_MINUTES` | Minutes before a signup verification code expires | 10 |
+| `AUTH_PASSWORD_RESET_TTL_MINUTES` | Minutes before a password reset code expires | 15 |
+| `AUTH_CHALLENGE_MAX_ATTEMPTS` | Max wrong-code attempts before a new code is required | 5 |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID for Sign in with Google | (unset) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret for Sign in with Google | (unset) |
+| `GOOGLE_REDIRECT_URI` | Optional explicit backend callback URL for Google OAuth | derived from backend URL |
+| `EMAIL_PROVIDER` | Transactional email provider: `log`, `disabled`, `resend`, `postmark` | `log` locally, `disabled` in prod until configured |
+| `EMAIL_FROM_ADDRESS` | From address for transactional auth/collaboration email | `noreply@vellic.local` |
+| `EMAIL_FROM_NAME` | From name for transactional auth/collaboration email | `Vellic` |
+| `EMAIL_REPLY_TO_ADDRESS` | Optional reply-to address for transactional email | (unset) |
+| `APP_BASE_URL` | Frontend base URL used in auth and collaboration emails | first `FRONTEND_URL` entry or `http://localhost:3001` |
+| `RESEND_API_KEY` | API key when `EMAIL_PROVIDER=resend` | (unset) |
+| `POSTMARK_SERVER_TOKEN` | Server token when `EMAIL_PROVIDER=postmark` | (unset) |
 | `COLLABORATION_BACKEND_ENABLED` | Enables Phase 9B collaboration API endpoints | false |
 | `COLLAB_INVITE_DEFAULT_DAYS` | Default invite expiration in days | 7 |
 | `COLLAB_INVITE_MAX_DAYS` | Max invite expiration accepted by API | 30 |
@@ -248,6 +261,7 @@ Optional:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `REACT_APP_API_BASE` | Backend API URL | http://localhost:4002 |
+| `REACT_APP_GOOGLE_AUTH_ENABLED` | Allows the Google sign-in button in the auth modal when the backend is also configured | false |
 | `REACT_APP_COLLABORATION_UI_ENABLED` | Enables Phase 9C collaboration panel in Share modal | false |
 | `REACT_APP_REALTIME_BASELINE_ENABLED` | Enables Phase 9D presence/session awareness UI | false |
 | `REACT_APP_REALTIME_PRESENCE_HEARTBEAT_SEC` | Frontend heartbeat cadence (seconds) for presence baseline | 20 |
@@ -262,9 +276,11 @@ Temporary testing note:
 - Accepted truthy values for `TEST_AUTH_ENABLED`: `true`, `1`, `yes`, `on` (case-insensitive).
 - `AUTH_HEADER_FALLBACK=true` lets the frontend send `Authorization: Bearer ...` if browser cross-site cookies are blocked.
 - Set `TEST_AUTH_ENABLED=false` before launch.
+- For real-account auth in production, configure a transactional email provider and SPF/DKIM for the sender domain before enabling signups.
+- To enable Google sign-in end to end, set both backend Google OAuth variables and `REACT_APP_GOOGLE_AUTH_ENABLED=true` on the frontend. The frontend now also checks `/auth/config`, so the button stays hidden until the backend is actually configured.
 
 ## Tech Stack
 
 - **Backend**: Node.js, Express, PostgreSQL (runtime), SQLite (local/dev), Playwright
 - **Frontend**: React, Lucide Icons
-- **Auth**: JWT + HTTP-only cookies
+- **Auth**: JWT + HTTP-only cookies, email verification codes, password reset codes, Google OAuth

@@ -1,5 +1,5 @@
 /**
- * API routes for Map Mat - Projects, Maps, History, Shares
+ * API routes for Vellic - Projects, Maps, History, Shares
  */
 
 const express = require('express');
