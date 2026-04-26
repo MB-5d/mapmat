@@ -14,6 +14,7 @@ import {
 
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
+import IconButton from '../ui/IconButton';
 import TextInput from '../ui/TextInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
@@ -237,9 +238,14 @@ const ReportDrawer = ({
             <Download size={14} />
             Download report
           </Button>
-          <button className="report-drawer-close" onClick={onClose} aria-label="Close report">
-            <X size={22} />
-          </button>
+          <IconButton
+            className="report-drawer-close"
+            size="lg"
+            variant="ghost"
+            icon={<X />}
+            label="Close report"
+            onClick={onClose}
+          />
         </div>
       </header>
 
@@ -293,6 +299,7 @@ const ReportDrawer = ({
               <TextInput
                 type="text"
                 className="report-search-input"
+                framed={false}
                 placeholder="Search by page name, number, or URL"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -334,6 +341,18 @@ const ReportDrawer = ({
           >
           {sortedEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
+            const seoRows = [
+              ['Description', entry.description],
+              ['Meta keywords', entry.metaKeywords],
+              ['Canonical', entry.canonicalUrl],
+              ['H1', entry.h1],
+              ['H2', entry.h2],
+              ['Robots', entry.robots],
+              ['Language', entry.language],
+              ['Open Graph title', entry.openGraph?.title],
+              ['Open Graph description', entry.openGraph?.description],
+              ['Twitter card', entry.twitter?.card],
+            ].filter(([, value]) => value);
             return (
               <div key={entry.id} className="report-row">
                 <div
@@ -439,6 +458,12 @@ const ReportDrawer = ({
                               </button>
                             </div>
                           )}
+                          {seoRows.map(([label, value]) => (
+                            <div className="report-detail-link-row" key={label}>
+                              <strong>{label}:</strong>
+                              <span>{value}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>

@@ -18,6 +18,15 @@ describe('ReportDrawer', () => {
       duplicateOf: '',
       parentUrl: '',
       referrerUrl: '',
+      description: 'Plans and pricing metadata',
+      metaKeywords: 'pricing, plans',
+      canonicalUrl: 'https://example.com/pricing',
+      h1: 'Pricing',
+      h2: '',
+      robots: 'index, follow',
+      language: 'en',
+      openGraph: { title: 'Pricing OG' },
+      twitter: { card: 'summary_large_image' },
       pageType: 'Standard',
       levelColor: '#818cf8',
       thumbnailUrl: '',
@@ -31,6 +40,15 @@ describe('ReportDrawer', () => {
       duplicateOf: '',
       parentUrl: '',
       referrerUrl: '',
+      description: '',
+      metaKeywords: '',
+      canonicalUrl: '',
+      h1: '',
+      h2: '',
+      robots: '',
+      language: '',
+      openGraph: {},
+      twitter: {},
       pageType: 'Standard',
       levelColor: '#60a5fa',
       thumbnailUrl: '',
@@ -44,6 +62,15 @@ describe('ReportDrawer', () => {
       duplicateOf: '',
       parentUrl: '',
       referrerUrl: '',
+      description: '',
+      metaKeywords: '',
+      canonicalUrl: '',
+      h1: '',
+      h2: '',
+      robots: '',
+      language: '',
+      openGraph: {},
+      twitter: {},
       pageType: 'Missing',
       levelColor: '#38bdf8',
       thumbnailUrl: '',
@@ -137,5 +164,26 @@ describe('ReportDrawer', () => {
     });
 
     expect(getVisibleTitles()).toEqual(['contact']);
+  });
+
+  test('shows SEO metadata in expanded report details', () => {
+    renderDrawer();
+
+    const pricingRow = Array.from(container.querySelectorAll('.report-row-main')).find((row) =>
+      row.textContent.includes('pricing')
+    );
+
+    act(() => {
+      pricingRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Description:');
+    expect(container.textContent).toContain('Plans and pricing metadata');
+    expect(container.textContent).toContain('Meta keywords:');
+    expect(container.textContent).toContain('pricing, plans');
+    expect(container.textContent).toContain('Canonical:');
+    expect(container.textContent).toContain('https://example.com/pricing');
+    expect(container.textContent).toContain('Open Graph title:');
+    expect(container.textContent).toContain('Pricing OG');
   });
 });

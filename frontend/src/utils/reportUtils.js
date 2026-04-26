@@ -1,3 +1,5 @@
+import { getSeoValue } from './seoMetadata';
+
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
   if (!node) return [];
@@ -61,6 +63,15 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
       duplicateOf: node.duplicateOf || '',
       parentUrl: node.parentUrl || '',
       referrerUrl: node.referrerUrl || '',
+      description: getSeoValue(node, 'description'),
+      metaKeywords: getSeoValue(node, 'keywords'),
+      canonicalUrl: getSeoValue(node, 'canonicalUrl'),
+      h1: getSeoValue(node, 'h1'),
+      h2: getSeoValue(node, 'h2'),
+      robots: getSeoValue(node, 'robots'),
+      language: getSeoValue(node, 'language'),
+      openGraph: node.seoMetadata?.openGraph || {},
+      twitter: node.seoMetadata?.twitter || {},
       pageType: getReportPageType(node, { isSubdomain, orphanType }),
       levelColor,
       thumbnailUrl: node.thumbnailUrl || '',

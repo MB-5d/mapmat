@@ -48,6 +48,11 @@ const { buildHealthSnapshot: getEmailHealthSnapshot } = require('./utils/emailPr
 const { JOB_TYPES: EMAIL_JOB_TYPES, processEmailDeliveryJobAsync } = require('./utils/emailDelivery');
 const { AVATAR_PUBLIC_BASE, AVATAR_STORAGE_DIR } = require('./utils/avatarStorage');
 const { FEEDBACK_PUBLIC_BASE, FEEDBACK_STORAGE_DIR } = require('./utils/feedbackStorage');
+const {
+  extractSeoMetadata,
+  getPrimaryDescription,
+  getPrimaryMetaTags,
+} = require('./utils/scanMetadata');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -153,6 +158,7 @@ app.use('/api', realtimeRouter);
 app.use('/api', coeditingRouter);
 
 const PORT = process.env.PORT || 4002;
+const HOST = String(process.env.HOST || '').trim();
 const DB_RUNTIME = db.runtime || {
   requestedProvider: (process.env.DB_PROVIDER || 'sqlite').trim().toLowerCase(),
   activeProvider: 'sqlite',
@@ -1347,11 +1353,7 @@ function extractTitle(html, fallbackUrl) {
 
 function extractCanonicalUrl(html, baseUrl) {
   try {
-    const $ = cheerio.load(html);
-    const href = ($('link[rel="canonical"]').attr('href') || '').trim();
-    if (!href) return null;
-    const abs = new URL(href, baseUrl).toString();
-    return normalizeUrl(abs);
+    return normalizeUrl(extractSeoMetadata(html, baseUrl).canonicalUrl) || null;
   } catch {
     return null;
   }
@@ -1394,7 +1396,7 @@ async function fetchPage(url, extraHeaders = {}) {
     timeout: 20000,
     maxRedirects: 5,
     headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; MapMatBot/1.0)',
+      'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.5',
       ...extraHeaders,
@@ -1417,7 +1419,7 @@ async function checkLinkStatus(url, extraHeaders = {}) {
       timeout: 10000,
       maxRedirects: 5,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; MapMatBot/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
         ...extraHeaders,
       },
       validateStatus: () => true,
@@ -1434,7 +1436,7 @@ async function checkLinkStatus(url, extraHeaders = {}) {
       timeout: 10000,
       maxRedirects: 5,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; MapMatBot/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
         Accept: '*/*',
         ...extraHeaders,
       },
@@ -1518,7 +1520,7 @@ const collectSitemapUrls = async (origin, hostNormalized, protocol, abortCheck =
     try {
       const sitemapRes = await axios.get(sitemapUrl, {
         timeout: 10000,
-        headers: { 'User-Agent': 'MapMatBot/1.0' },
+        headers: { 'User-Agent': 'VellicBot/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
 
@@ -1828,7 +1830,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     try {
       const sitemapRes = await axios.get(sitemapUrl, {
         timeout: 10000,
-        headers: { 'User-Agent': 'MapMatBot/1.0' },
+        headers: { 'User-Agent': 'VellicBot/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
 
@@ -1960,17 +1962,23 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       continue;
     }
 
+    const seoMetadata = extractSeoMetadata(html, finalUrl || url);
     const title = extractTitle(html, finalUrl || url);
     const parentUrl = getParentUrl(finalUrl || url);
-    const canonicalUrl = extractCanonicalUrl(html, finalUrl || url);
+    const canonicalUrl = normalizeUrl(seoMetadata.canonicalUrl) || extractCanonicalUrl(html, finalUrl || url);
     const isAuthPage = status === 401 || status === 403;
     const wasRedirect = normalizeUrl(finalUrl || url) !== normalizeUrl(url);
+    const description = getPrimaryDescription(seoMetadata);
+    const metaTags = getPrimaryMetaTags(seoMetadata);
 
     pageMap.set(url, {
       url,
       finalUrl: finalUrl || url,
       canonicalUrl,
       title,
+      description,
+      metaTags,
+      seoMetadata,
       parentUrl,
       authRequired: status === 401 || status === 403,
       thumbnailUrl: undefined,
@@ -2050,6 +2058,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       finalUrl: meta.finalUrl || url,
       canonicalUrl: meta.canonicalUrl || null,
       title: meta.title || url,
+      description: meta.description || '',
+      metaTags: meta.metaTags || '',
+      seoMetadata: meta.seoMetadata || {},
       parentUrl: meta.parentUrl,
       discoveryIndex: Number.isFinite(meta.discoveryIndex) ? meta.discoveryIndex : null,
       referrerUrl: referrerMap.get(url) || null,
@@ -3354,7 +3365,8 @@ process.on('SIGINT', async () => {
 if (RUN_WEB) {
   const server = http.createServer(app);
   attachCoeditingTransport({ server });
-  server.listen(PORT, () => {
-    console.log(`Map Mat Backend running on http://localhost:${PORT}`);
+  const listenArgs = HOST ? [PORT, HOST] : [PORT];
+  server.listen(...listenArgs, () => {
+    console.log(`Vellic Backend running on http://${HOST || 'localhost'}:${PORT}`);
   });
 }

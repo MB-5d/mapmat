@@ -8,6 +8,7 @@ import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 import TextareaInput from '../ui/TextareaInput';
 import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
+import { getSeoMetadata, normalizeMetaTagsForInput, normalizeText } from '../../utils/seoMetadata';
 
 const PAGE_TYPES = [
   'Page',
@@ -33,6 +34,15 @@ const getDescendantIds = (node, ids = new Set()) => {
   return ids;
 };
 
+const compactObject = (value) => Object.fromEntries(
+  Object.entries(value).filter(([, entryValue]) => {
+    if (entryValue === undefined || entryValue === null) return false;
+    if (typeof entryValue === 'string') return entryValue.trim() !== '';
+    if (typeof entryValue === 'object') return Object.keys(entryValue).length > 0;
+    return true;
+  })
+);
+
 const EditNodeModal = ({
   node,
   allNodes,
@@ -54,8 +64,23 @@ const EditNodeModal = ({
     node?.parentId ?? specialParentOptions[0]?.value ?? ''
   );
   const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
-  const [description, setDescription] = useState(node?.description || '');
-  const [metaTags, setMetaTags] = useState(node?.metaTags || '');
+  const initialSeoMetadata = getSeoMetadata(node);
+  const [description, setDescription] = useState(node?.description || initialSeoMetadata.description || '');
+  const [metaTags, setMetaTags] = useState(normalizeMetaTagsForInput(node?.metaTags, initialSeoMetadata));
+  const [canonicalUrl, setCanonicalUrl] = useState(node?.canonicalUrl || initialSeoMetadata.canonicalUrl || '');
+  const [robots, setRobots] = useState(initialSeoMetadata.robots || '');
+  const [h1, setH1] = useState(initialSeoMetadata.h1 || '');
+  const [h2, setH2] = useState(initialSeoMetadata.h2 || '');
+  const [language, setLanguage] = useState(initialSeoMetadata.language || '');
+  const [openGraphTitle, setOpenGraphTitle] = useState(initialSeoMetadata.openGraph?.title || '');
+  const [openGraphDescription, setOpenGraphDescription] = useState(initialSeoMetadata.openGraph?.description || '');
+  const [openGraphImage, setOpenGraphImage] = useState(initialSeoMetadata.openGraph?.image || '');
+  const [openGraphUrl, setOpenGraphUrl] = useState(initialSeoMetadata.openGraph?.url || '');
+  const [openGraphType, setOpenGraphType] = useState(initialSeoMetadata.openGraph?.type || '');
+  const [twitterCard, setTwitterCard] = useState(initialSeoMetadata.twitter?.card || '');
+  const [twitterTitle, setTwitterTitle] = useState(initialSeoMetadata.twitter?.title || '');
+  const [twitterDescription, setTwitterDescription] = useState(initialSeoMetadata.twitter?.description || '');
+  const [twitterImage, setTwitterImage] = useState(initialSeoMetadata.twitter?.image || '');
   const [annotationStatus, setAnnotationStatus] = useState(node?.annotations?.status || 'none');
   const [annotationTags, setAnnotationTags] = useState((node?.annotations?.tags || []).join(', '));
   const [annotationNote, setAnnotationNote] = useState(node?.annotations?.note || '');
@@ -69,6 +94,31 @@ const EditNodeModal = ({
       .split(',')
       .map((tag) => tag.trim())
       .filter(Boolean);
+    const nextSeoMetadata = compactObject({
+      ...initialSeoMetadata,
+      description: normalizeText(description),
+      keywords: normalizeText(metaTags),
+      robots: normalizeText(robots),
+      canonicalUrl: normalizeText(canonicalUrl),
+      h1: normalizeText(h1),
+      h2: normalizeText(h2),
+      language: normalizeText(language),
+      openGraph: compactObject({
+        ...(initialSeoMetadata.openGraph || {}),
+        title: normalizeText(openGraphTitle),
+        description: normalizeText(openGraphDescription),
+        image: normalizeText(openGraphImage),
+        url: normalizeText(openGraphUrl),
+        type: normalizeText(openGraphType),
+      }),
+      twitter: compactObject({
+        ...(initialSeoMetadata.twitter || {}),
+        card: normalizeText(twitterCard),
+        title: normalizeText(twitterTitle),
+        description: normalizeText(twitterDescription),
+        image: normalizeText(twitterImage),
+      }),
+    });
 
     onSave({
       ...node,
@@ -79,6 +129,8 @@ const EditNodeModal = ({
       thumbnailUrl,
       description,
       metaTags,
+      canonicalUrl,
+      seoMetadata: nextSeoMetadata,
       annotations: {
         status: annotationStatus || 'none',
         tags,
@@ -339,10 +391,134 @@ const EditNodeModal = ({
           <TextareaInput
             value={metaTags}
             onChange={(event) => setMetaTags(event.target.value)}
-            placeholder="Comma-separated tags: seo, marketing, landing"
+            placeholder="Meta keywords"
             rows={2}
           />
         </Field>
+
+        <div className="edit-node-seo-section">
+          <div className="edit-node-section-title">SEO Metadata</div>
+          <Field label="Canonical URL">
+            <TextInput
+              type="url"
+              value={canonicalUrl}
+              onChange={(event) => setCanonicalUrl(event.target.value)}
+              placeholder="https://example.com/page"
+            />
+          </Field>
+          <div className="edit-node-form-grid">
+            <Field label="Meta Robots">
+              <TextInput
+                type="text"
+                value={robots}
+                onChange={(event) => setRobots(event.target.value)}
+                placeholder="index, follow"
+              />
+            </Field>
+            <Field label="HTML Language">
+              <TextInput
+                type="text"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+                placeholder="en"
+              />
+            </Field>
+          </div>
+          <Field label="H1">
+            <TextInput
+              type="text"
+              value={h1}
+              onChange={(event) => setH1(event.target.value)}
+              placeholder="Primary heading"
+            />
+          </Field>
+          <Field label="H2">
+            <TextInput
+              type="text"
+              value={h2}
+              onChange={(event) => setH2(event.target.value)}
+              placeholder="Secondary heading"
+            />
+          </Field>
+          <div className="edit-node-form-grid">
+            <Field label="Open Graph Title">
+              <TextInput
+                type="text"
+                value={openGraphTitle}
+                onChange={(event) => setOpenGraphTitle(event.target.value)}
+                placeholder="Social title"
+              />
+            </Field>
+            <Field label="Open Graph Type">
+              <TextInput
+                type="text"
+                value={openGraphType}
+                onChange={(event) => setOpenGraphType(event.target.value)}
+                placeholder="website"
+              />
+            </Field>
+          </div>
+          <Field label="Open Graph Description">
+            <TextareaInput
+              value={openGraphDescription}
+              onChange={(event) => setOpenGraphDescription(event.target.value)}
+              placeholder="Social description"
+              rows={2}
+            />
+          </Field>
+          <div className="edit-node-form-grid">
+            <Field label="Open Graph Image">
+              <TextInput
+                type="url"
+                value={openGraphImage}
+                onChange={(event) => setOpenGraphImage(event.target.value)}
+                placeholder="https://example.com/image.jpg"
+              />
+            </Field>
+            <Field label="Open Graph URL">
+              <TextInput
+                type="url"
+                value={openGraphUrl}
+                onChange={(event) => setOpenGraphUrl(event.target.value)}
+                placeholder="https://example.com/page"
+              />
+            </Field>
+          </div>
+          <div className="edit-node-form-grid">
+            <Field label="Twitter Card">
+              <TextInput
+                type="text"
+                value={twitterCard}
+                onChange={(event) => setTwitterCard(event.target.value)}
+                placeholder="summary_large_image"
+              />
+            </Field>
+            <Field label="Twitter Title">
+              <TextInput
+                type="text"
+                value={twitterTitle}
+                onChange={(event) => setTwitterTitle(event.target.value)}
+                placeholder="Twitter title"
+              />
+            </Field>
+          </div>
+          <Field label="Twitter Description">
+            <TextareaInput
+              value={twitterDescription}
+              onChange={(event) => setTwitterDescription(event.target.value)}
+              placeholder="Twitter description"
+              rows={2}
+            />
+          </Field>
+          <Field label="Twitter Image">
+            <TextInput
+              type="url"
+              value={twitterImage}
+              onChange={(event) => setTwitterImage(event.target.value)}
+              placeholder="https://example.com/image.jpg"
+            />
+          </Field>
+        </div>
 
         <Field label="Marker">
           <SelectInput
