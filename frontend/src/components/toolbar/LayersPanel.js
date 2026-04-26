@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 
-import { MenuSectionHeader } from '../ui/Menu';
+import { MenuItem, MenuSectionHeader } from '../ui/Menu';
 
 const LayersPanel = ({
   layers,
@@ -35,18 +35,20 @@ const LayersPanel = ({
     || !!scanLayerAvailability?.statusDuplicate;
 
   const LayerToggle = ({ label, active, onToggle, disabled = false }) => (
-    <button
-      type="button"
-      className={`layers-panel-item ui-menu-item${disabled ? ' disabled' : ''}`}
+    <MenuItem
+      className={`layers-panel-item${disabled ? ' disabled' : ''}`}
+      label={label}
+      selected={active}
       onClick={disabled ? undefined : onToggle}
-      aria-pressed={active}
+      role="menuitemcheckbox"
+      aria-checked={active}
       disabled={disabled}
-    >
-      <span>{label}</span>
-      <span className="layers-panel-toggle">
-        {active ? <Eye size={16} /> : <EyeOff size={16} />}
-      </span>
-    </button>
+      endSlot={(
+        <span className="layers-panel-toggle">
+          {active ? <Eye size={16} /> : <EyeOff size={16} />}
+        </span>
+      )}
+    />
   );
 
   const panelList = (

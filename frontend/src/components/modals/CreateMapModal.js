@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, LayoutTemplate, Upload } from 'lucide-react';
 
+import Badge from '../ui/Badge';
 import Modal from '../ui/Modal';
 import OptionCard from '../ui/OptionCard';
 
@@ -37,7 +38,7 @@ const CreateMapModal = ({
           icon={<LayoutTemplate size={24} />}
           title="Start from Template"
           description="Product, Ecommerce, Blog..."
-          badge={<span className="ui-inline-badge coming-soon-badge">Coming Soon</span>}
+          badge={<Badge className="coming-soon-badge" label="Coming Soon" />}
           disabled
         />
 

@@ -12,12 +12,11 @@ import {
 } from 'lucide-react';
 
 import ScanBar from '../scan/ScanBar';
+import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import { useAuth } from '../../contexts/AuthContext';
-import mapmatLogo from '../../assets/MM-Logo.svg';
-import { APP_BRAND_NAME, APP_ONLY_MODE } from '../../utils/constants';
-import { resolveApiAssetUrl } from '../../utils/assets';
+import { APP_BRAND_NAME } from '../../utils/constants';
 
 const Topbar = ({
   canEdit,
@@ -67,25 +66,23 @@ const Topbar = ({
 
   const handleAccountToggle = () => setShowAccountMenu((prev) => !prev);
   const closeMenu = () => setShowAccountMenu(false);
-  const accountTriggerIcon = resolveApiAssetUrl(currentUser?.avatarUrl) ? (
-    <img
+  const accountTriggerIcon = (
+    <Avatar
       className="user-btn-avatar"
-      src={resolveApiAssetUrl(currentUser?.avatarUrl)}
-      alt=""
+      src={currentUser?.avatarUrl}
+      label={String(currentUser?.name || 'A').trim().charAt(0).toUpperCase()}
+      icon={<User size={18} />}
+      size="xs"
+      aria-hidden="true"
     />
-  ) : (
-    <User size={18} />
   );
 
   return (
     <div className="topbar" data-feedback-id="topbar" data-feedback-label="Top navigation">
       <div className="topbar-left">
         <div className="brand">
-          {APP_ONLY_MODE ? (
-            <span className="brand-text">{APP_BRAND_NAME}</span>
-          ) : (
-            <img className="brand-logo" src={mapmatLogo} alt="Map Mat" />
-          )}
+          <span className="brand-logo-mark" aria-hidden="true">V</span>
+          <span className="brand-text">{APP_BRAND_NAME}</span>
         </div>
       </div>
 
@@ -220,7 +217,6 @@ const Topbar = ({
                     role="menuitem"
                     icon={<LogOut size={16} />}
                     label="Log out"
-                    danger
                     onClick={() => {
                       closeMenu();
                       onLogout();

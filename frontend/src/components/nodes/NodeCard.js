@@ -10,10 +10,19 @@ import {
 import CommentBadge from './CommentBadge';
 import NodeActionBar from './NodeActionBar';
 import NodeBadge from './NodeBadge';
-import NodeStatusBadge from './NodeStatusBadge';
+import Badge from '../ui/Badge';
 
 import { getHostname } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS } from '../../utils/constants';
+
+const NODE_STATUS_BADGE_STYLE = {
+  new: 'info',
+  to_move: 'warning',
+  moved: 'info',
+  to_delete: 'error',
+  deleted: 'error',
+  note: 'neutral',
+};
 
 const NodeCard = ({
   node,
@@ -307,12 +316,17 @@ const NodeCard = ({
             {node.title}
           </div>
           {showBadge && (
-            <NodeStatusBadge
-              status={hasStatus ? status : 'note'}
-              label={badgeLabel}
-              note={note}
+            <Badge
+              className={`node-status-badge status-${hasStatus ? status : 'note'}`}
+              type="hollow"
+              badgeStyle={NODE_STATUS_BADGE_STYLE[hasStatus ? status : 'note'] || 'neutral'}
+              size="sm"
               title={badgeTitle}
-            />
+              aria-hidden="true"
+            >
+              <span className="node-status-text">{badgeLabel}</span>
+              {note ? <span className="node-status-note-dot" /> : null}
+            </Badge>
           )}
         </div>
 

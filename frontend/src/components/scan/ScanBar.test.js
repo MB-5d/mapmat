@@ -86,7 +86,7 @@ describe('ScanBar', () => {
     expect(scanButton.className).toContain('ui-btn--style-brand');
     expect(optionsButton.className).toContain('ui-btn');
     expect(optionsButton.className).toContain('ui-btn--type-secondary');
-    expect(optionsButton.className).toContain('ui-btn--style-mono');
+    expect(optionsButton.className).toContain('ui-btn--style-brand');
     expect(clearButton.className).toContain('ui-icon-btn');
     expect(clearButton.className).toContain('ui-icon-btn--type-ghost');
     expect(clearButton.className).toContain('ui-icon-btn--style-mono');

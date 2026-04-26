@@ -130,10 +130,10 @@ describe('App blank home and welcome modal', () => {
     await renderApp();
 
     expect(getWelcomeModal()).not.toBeNull();
-    expect(container.textContent).toContain('Welcome to Map Mat');
+    expect(container.textContent).toContain('Welcome to Vellic');
     expect(container.textContent).toContain('Make site or software structure visual, actionable, and easy to review');
     expect(container.textContent).toContain('Scan a site, import a sitemap, or start from scratch');
-    expect(container.querySelector('.welcome-modal .modal-header h3')?.textContent).toBe('Welcome to Map Mat');
+    expect(container.querySelector('.welcome-modal .modal-header h3')?.textContent).toBe('Welcome to Vellic');
     expect(container.querySelector('.welcome-modal-copy h2')).toBeNull();
   });
 
@@ -142,8 +142,8 @@ describe('App blank home and welcome modal', () => {
 
     await renderApp();
 
-    expect(container.textContent).toContain('Plan your site or software');
-    expect(container.textContent).toContain('multiple ways to match your needs');
+    expect(container.textContent).toContain('Start with a URL');
+    expect(container.textContent).toContain('Scan a site, then shape the map from the canvas.');
     expect(container.textContent).toContain('Start a new map from scratch');
     expect(container.textContent).toContain('Make updates to existing maps');
     expect(container.textContent).toContain('Use existing sitemap files');
@@ -289,7 +289,7 @@ describe('App blank home and welcome modal', () => {
     await renderApp(route);
 
     expect(getWelcomeModal()).toBeNull();
-    expect(container.textContent).not.toContain('Welcome to Map Mat');
+    expect(container.textContent).not.toContain('Welcome to Vellic');
   });
 
   test('localStorage failures do not crash the app', async () => {
@@ -304,6 +304,6 @@ describe('App blank home and welcome modal', () => {
 
     expect(setItemSpy).toHaveBeenCalled();
     expect(getWelcomeModal()).toBeNull();
-    expect(container.textContent).toContain('Plan your site or software');
+    expect(container.textContent).toContain('Start with a URL');
   });
 });

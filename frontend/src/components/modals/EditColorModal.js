@@ -3,6 +3,7 @@ import { HexColorPicker } from 'react-colorful';
 import { X } from 'lucide-react';
 
 import { DEFAULT_COLORS } from '../../utils/constants';
+import IconButton from '../ui/IconButton';
 
 const DEFAULT_COLOR = DEFAULT_COLORS[0];
 
@@ -98,9 +99,14 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
         style={modalStyle}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <button className="modal-close" onClick={onClose}>
-          <X size={24} />
-        </button>
+        <IconButton
+          className="modal-close"
+          variant="ghost"
+          size="lg"
+          icon={<X />}
+          label="Close color picker"
+          onClick={onClose}
+        />
         
         <div className="color-picker-content">
           <div className="color-picker-gradient">

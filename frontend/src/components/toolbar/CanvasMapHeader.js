@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import Avatar from '../ui/Avatar';
 import TextInput from '../ui/TextInput';
-import { resolveApiAssetUrl } from '../../utils/assets';
 
 const CanvasMapHeader = ({
   canEdit,
@@ -36,6 +36,7 @@ const CanvasMapHeader = ({
         {isEditingMapName ? (
           <TextInput
             className="canvas-map-name-input"
+            framed={false}
             value={mapName}
             onChange={onMapNameChange}
             onBlur={onMapNameBlur}
@@ -65,17 +66,16 @@ const CanvasMapHeader = ({
               onClick={() => setShowCollaboratorMenu((prev) => !prev)}
             >
               {visibleCollaborators.map((collaborator) => (
-                <span
+                <Avatar
                   key={collaborator.id}
-                  className={`topbar-collaborator-avatar tone-${collaborator.tone}`}
+                  className="topbar-collaborator-avatar"
+                  src={collaborator.avatarUrl}
+                  label={collaborator.avatarLabel}
+                  size="md"
+                  tone={collaborator.tone}
+                  bordered
                   aria-hidden="true"
-                >
-                  {resolveApiAssetUrl(collaborator.avatarUrl) ? (
-                    <img src={resolveApiAssetUrl(collaborator.avatarUrl)} alt="" />
-                  ) : (
-                    collaborator.avatarLabel
-                  )}
-                </span>
+                />
               ))}
               {hiddenCollaboratorCount > 0 && (
                 <span className="topbar-collaborator-hover-count" aria-hidden="true">
@@ -90,13 +90,15 @@ const CanvasMapHeader = ({
                 </div>
                 {collaborators.map((collaborator) => (
                   <div key={collaborator.id} className="topbar-collaborator-item" role="menuitem">
-                    <span className={`topbar-collaborator-avatar tone-${collaborator.tone}`} aria-hidden="true">
-                      {resolveApiAssetUrl(collaborator.avatarUrl) ? (
-                        <img src={resolveApiAssetUrl(collaborator.avatarUrl)} alt="" />
-                      ) : (
-                        collaborator.avatarLabel
-                      )}
-                    </span>
+                    <Avatar
+                      className="topbar-collaborator-avatar"
+                      src={collaborator.avatarUrl}
+                      label={collaborator.avatarLabel}
+                      size="md"
+                      tone={collaborator.tone}
+                      bordered
+                      aria-hidden="true"
+                    />
                     <div className="topbar-collaborator-item-copy">
                       <span className="topbar-collaborator-item-name">{collaborator.label}</span>
                       <span className="topbar-collaborator-item-role">{String(collaborator.accessMode || 'view')}</span>

@@ -21,7 +21,41 @@ import {
   Workflow,
 } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
+
+const ToolButton = ({
+  active = false,
+  className = '',
+  disabled = false,
+  children,
+  icon,
+  label,
+  title,
+  ...props
+}) => {
+  const iconContent = children ? (
+    <span className="canvas-tool-btn__content">
+      {icon}
+      {children}
+    </span>
+  ) : icon;
+
+  return (
+    <IconButton
+      className={`canvas-tool-btn ${active ? 'active' : ''} ${disabled ? 'disabled' : ''} ${className}`.trim()}
+      type="ghost"
+      buttonStyle="mono"
+      size="md"
+      active={active}
+      disabled={disabled}
+      icon={iconContent}
+      label={label || title}
+      title={title || label}
+      {...props}
+    />
+  );
+};
 
 const CanvasToolbar = ({
   canEdit,
@@ -90,43 +124,43 @@ const CanvasToolbar = ({
 
   return (
   <div className="canvas-toolbar" data-feedback-id="canvas-toolbar" data-feedback-label="Canvas toolbar">
-    <button
-      className={`canvas-tool-btn ${activeTool === 'select' && !connectionTool ? 'active' : ''}`}
+    <ToolButton
+      active={activeTool === 'select' && !connectionTool}
       onClick={onSelectTool}
+      icon={<MousePointer2 />}
+      label="Select"
       title="Select (V)"
-    >
-      <MousePointer2 size={20} />
-    </button>
+    />
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${connectionTool === 'userflow' ? 'active' : ''}`}
+      <ToolButton
+        active={connectionTool === 'userflow'}
         onClick={onToggleUserFlow}
+        icon={<Workflow />}
+        label="User Flow"
         title="User Flow (F)"
-      >
-        <Workflow size={20} />
-      </button>
+      />
     )}
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${connectionTool === 'crosslink' ? 'active' : ''}`}
+      <ToolButton
+        active={connectionTool === 'crosslink'}
         onClick={onToggleCrosslink}
+        icon={<Link2 />}
+        label="Crosslink"
         title="Crosslink (L)"
-      >
-        <Link2 size={20} />
-      </button>
+      />
     )}
 
     <div className="canvas-toolbar-divider" />
 
     <div className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
-      <button
-        className={`canvas-tool-btn ${showImageMenu ? 'active' : ''}`}
+      <ToolButton
+        active={showImageMenu}
         onClick={onToggleImageMenu}
+        icon={<Image />}
+        label="Images"
         title="Images"
         disabled={!hasMap}
-      >
-        <Image size={20} />
-      </button>
+      />
       {showImageMenu && (
         <MenuPanel className="canvas-tool-menu" role="menu">
           {hasAnyThumbnails && (
@@ -200,32 +234,33 @@ const CanvasToolbar = ({
       )}
     </div>
 
-    <button
-      className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''} ${!canViewComments ? 'disabled' : ''}`}
+    <ToolButton
+      active={showCommentsPanel}
       onClick={onToggleCommentsPanel}
+      icon={<MessageSquare />}
+      label="Comments"
       title="Comments (C)"
       disabled={!canViewComments}
     >
-      <MessageSquare size={20} />
       {hasUnreadCommentMentions && canViewComments && <span className="notification-dot" />}
-    </button>
-    <button
-      className={`canvas-tool-btn ${showReportDrawer ? 'active' : ''}`}
+    </ToolButton>
+    <ToolButton
+      active={showReportDrawer}
       onClick={onToggleReportDrawer}
+      icon={<GanttChartSquare />}
+      label="Report"
       title="Report (R)"
-    >
-      <GanttChartSquare size={20} />
-    </button>
+    />
     <div className="canvas-toolbar-divider" />
     <div className="canvas-tool-menu-wrapper" ref={layersMenuRef}>
-      <button
-        className={`canvas-tool-btn ${showLayersMenu ? 'active' : ''}`}
+      <ToolButton
+        active={showLayersMenu}
         onClick={onToggleLayersMenu}
+        icon={<Layers />}
+        label="Layers"
         title="Layers"
         disabled={!hasMap}
-      >
-        <Layers size={20} />
-      </button>
+      />
       {showLayersMenu && (
         <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
           {layersPanel}
@@ -233,14 +268,14 @@ const CanvasToolbar = ({
       )}
     </div>
     <div className="canvas-tool-menu-wrapper" ref={legendMenuRef}>
-      <button
-        className={`canvas-tool-btn ${showLegendMenu ? 'active' : ''}`}
+      <ToolButton
+        active={showLegendMenu}
         onClick={onToggleLegendMenu}
+        icon={<Palette />}
+        label="Legend"
         title="Legend"
         disabled={!hasMap}
-      >
-        <Palette size={20} />
-      </button>
+      />
       {showLegendMenu && (
         <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
           {legendPanel}
@@ -251,102 +286,97 @@ const CanvasToolbar = ({
     {canEdit && <div className="canvas-toolbar-divider" />}
 
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
+      <ToolButton
+        className={!canUndo ? 'disabled' : ''}
         onClick={canUndo || undoBlockedByLive ? onUndo : undefined}
         disabled={!canUndo && !undoBlockedByLive}
         aria-disabled={!canUndo}
+        icon={<Undo2 />}
+        label="Undo"
         title={!canUndo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Undo (⌘Z)'}
-      >
-        <Undo2 size={20} />
-      </button>
+      />
     )}
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
+      <ToolButton
+        className={!canRedo ? 'disabled' : ''}
         onClick={canRedo || redoBlockedByLive ? onRedo : undefined}
         disabled={!canRedo && !redoBlockedByLive}
         aria-disabled={!canRedo}
+        icon={<Redo2 />}
+        label="Redo"
         title={!canRedo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Redo (⇧⌘Z)'}
-      >
-        <Redo2 size={20} />
-      </button>
+      />
     )}
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${!hasMap ? 'disabled' : ''}`}
+      <ToolButton
         onClick={onClearCanvas}
         disabled={!hasMap}
+        icon={<RefreshCcw />}
+        label="Clear Canvas"
         title="Clear Canvas"
-      >
-        <RefreshCcw size={20} />
-      </button>
+      />
     )}
 
     {canEdit && <div className="canvas-toolbar-divider" />}
 
     {canEdit && (
-      <button
-        className="canvas-tool-btn"
+      <ToolButton
         title="Add Page"
         onClick={onAddPage}
-      >
-        <FilePlus size={20} />
-      </button>
+        icon={<FilePlus />}
+        label="Add Page"
+      />
     )}
 
     {canEdit && !hasSavedMap && (
-      <button
-        className="canvas-tool-btn"
+      <ToolButton
         onClick={onSaveMap}
         disabled={!hasMap}
+        icon={<Bookmark />}
+        label="Save Map"
         title="Save Map"
-      >
-        <Bookmark size={20} />
-      </button>
+      />
     )}
 
     {canEdit && hasSavedMap && (
-      <button
-        className="canvas-tool-btn"
+      <ToolButton
         onClick={onDuplicateMap}
         disabled={!hasMap}
+        icon={<CopyPlus />}
+        label="Duplicate Map"
         title="Duplicate Map"
-      >
-        <CopyPlus size={20} />
-      </button>
+      />
     )}
 
     <div className="canvas-toolbar-divider" />
 
     {canViewVersionHistory && hasMap && (
-      <button
-        className={`canvas-tool-btn ${showVersionHistory ? 'active' : ''}`}
+      <ToolButton
+        active={showVersionHistory}
         onClick={onShowVersionHistory}
+        icon={<History />}
+        label="Version History"
         title={hasSavedMap ? 'Version History (H)' : 'Version History'}
-      >
-        <History size={20} />
-      </button>
+      />
     )}
 
-    <button
-      className="canvas-tool-btn"
+    <ToolButton
       onClick={onExport}
       disabled={!hasMap}
+      icon={<Download />}
+      label="Download"
       title="Download"
-    >
-      <Download size={20} />
-    </button>
+    />
 
     {canOpenShare && (
-      <button
-        className={`canvas-tool-btn ${shareUnavailable ? 'disabled' : ''}`}
+      <ToolButton
+        className={shareUnavailable ? 'disabled' : ''}
         onClick={shareUnavailable ? onBlockedShareAttempt : onShare}
+        icon={<Share2 />}
+        label="Share"
         title={shareUnavailable ? shareDisabledReason : 'Share'}
         aria-disabled={shareUnavailable}
-      >
-        <Share2 size={20} />
-      </button>
+      />
     )}
   </div>
   );

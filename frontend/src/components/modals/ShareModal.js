@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import Button from '../ui/Button';
+import Badge from '../ui/Badge';
 import CheckboxField from '../ui/CheckboxField';
 import Modal from '../ui/Modal';
 import RadioCardGroup from '../ui/RadioCardGroup';
@@ -150,8 +151,8 @@ const ShareModal = ({
         <div className="share-collab-main">
           <div className="share-collab-name">
             {member.userName || member.userEmail || 'Member'}
-            {isSelf ? <span className="ui-inline-badge share-collab-inline-badge">You</span> : null}
-            {isImplicitOwner ? <span className="ui-inline-badge share-collab-inline-badge">Primary owner</span> : null}
+            {isSelf ? <Badge className="share-collab-inline-badge" label="You" /> : null}
+            {isImplicitOwner ? <Badge className="share-collab-inline-badge" label="Primary owner" /> : null}
           </div>
           <div className="share-collab-meta">{member.userEmail || ''}</div>
         </div>

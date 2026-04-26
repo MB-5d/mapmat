@@ -2,8 +2,9 @@ import React from 'react';
 import { RotateCcw, Scan, SlidersHorizontal } from 'lucide-react';
 
 import Button from '../ui/Button';
+import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
-import { MenuSectionHeader } from '../ui/Menu';
+import { MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 import {
@@ -11,6 +12,7 @@ import {
   SCAN_MAX_DEPTH_UI,
   TESTER_NOT_READY_MESSAGE,
 } from '../../utils/constants';
+import Icon from '../ui/Icon';
 
 const ScanBar = ({
   canEdit,
@@ -46,9 +48,10 @@ const ScanBar = ({
 
   return (
     <>
-      <Scan size={18} className="scan-bar__icon" />
+      <Icon icon={<Scan />} size="md" className="scan-bar__icon" />
       <TextInput
         className="scan-bar__input"
+        framed={false}
         value={urlInput}
         onChange={onUrlInputChange}
         onKeyDown={onUrlKeyDown}
@@ -83,10 +86,14 @@ const ScanBar = ({
           Options
         </Button>
         {showOptions && (
-          <div className="layers-panel">
+          <MenuPanel className="layers-panel">
             <div className="layers-panel-list">
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <span>Levels</span>
+              <MenuItem
+                as="div"
+                className={`layers-panel-item layers-panel-item--select${optionsDisabled ? ' disabled' : ''}`}
+                label="Levels"
+                description={`Max ${SCAN_MAX_DEPTH_UI} levels during testing`}
+                endSlot={(
                 <SelectInput
                   className="layers-panel-select-input"
                   size="sm"
@@ -99,66 +106,52 @@ const ScanBar = ({
                     <option key={value} value={value}>{value}</option>
                   ))}
                 </SelectInput>
-              </label>
-              <div className="layers-panel-hint">
-                Max {SCAN_MAX_DEPTH_UI} levels during testing
-              </div>
+                )}
+              />
               <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.subdomains}
-                  onChange={() => onOptionChange('subdomains')}
-                  disabled={optionsDisabled}
-                />
-                <span>Subdomains</span>
-              </label>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.orphanPages}
-                  onChange={() => onOptionChange('orphanPages')}
-                  disabled={optionsDisabled}
-                />
-                <span>Orphan Pages</span>
-              </label>
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.subdomains}
+                onChange={() => onOptionChange('subdomains')}
+                disabled={optionsDisabled}
+                label="Subdomains"
+              />
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.orphanPages}
+                onChange={() => onOptionChange('orphanPages')}
+                disabled={optionsDisabled}
+                label="Orphan Pages"
+              />
               <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.inactivePages}
-                  onChange={() => onOptionChange('inactivePages')}
-                  disabled={optionsDisabled}
-                />
-                <span>Inactive pages</span>
-              </label>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.errorPages}
-                  onChange={() => onOptionChange('errorPages')}
-                  disabled={optionsDisabled}
-                />
-                <span>Error pages</span>
-              </label>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.duplicates}
-                  onChange={() => onOptionChange('duplicates')}
-                  disabled={optionsDisabled}
-                />
-                <span>Duplicates</span>
-              </label>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.authenticatedPages}
-                  onChange={() => onOptionChange('authenticatedPages')}
-                  disabled={optionsDisabled || APP_ONLY_MODE}
-                />
-                <span>Authenticated Pages</span>
-              </label>
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.inactivePages}
+                onChange={() => onOptionChange('inactivePages')}
+                disabled={optionsDisabled}
+                label="Inactive pages"
+              />
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.errorPages}
+                onChange={() => onOptionChange('errorPages')}
+                disabled={optionsDisabled}
+                label="Error pages"
+              />
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.duplicates}
+                onChange={() => onOptionChange('duplicates')}
+                disabled={optionsDisabled}
+                label="Duplicates"
+              />
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.authenticatedPages}
+                onChange={() => onOptionChange('authenticatedPages')}
+                disabled={optionsDisabled || APP_ONLY_MODE}
+                label="Authenticated Pages"
+              />
               {APP_ONLY_MODE && (
                 <div className="layers-panel-hint">
                   {TESTER_NOT_READY_MESSAGE}
@@ -166,36 +159,30 @@ const ScanBar = ({
               )}
 
               <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.files}
-                  onChange={() => onOptionChange('files')}
-                  disabled={optionsDisabled}
-                />
-                <span>Files / Downloads</span>
-              </label>
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.files}
+                onChange={() => onOptionChange('files')}
+                disabled={optionsDisabled}
+                label="Files / Downloads"
+              />
               <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.brokenLinks}
-                  onChange={() => onOptionChange('brokenLinks')}
-                  disabled={optionsDisabled}
-                />
-                <span>Broken links</span>
-              </label>
-              <label className={`layers-panel-item ui-menu-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.crosslinks}
-                  onChange={() => onOptionChange('crosslinks')}
-                  disabled={optionsDisabled}
-                />
-                <span>Crosslinks</span>
-              </label>
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.brokenLinks}
+                onChange={() => onOptionChange('brokenLinks')}
+                disabled={optionsDisabled}
+                label="Broken links"
+              />
+              <CheckboxField
+                className="layers-panel-item scan-options-checkbox"
+                checked={options.crosslinks}
+                onChange={() => onOptionChange('crosslinks')}
+                disabled={optionsDisabled}
+                label="Crosslinks"
+              />
             </div>
-          </div>
+          </MenuPanel>
         )}
       </div>
 

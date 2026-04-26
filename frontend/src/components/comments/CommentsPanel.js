@@ -81,7 +81,7 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
     >
       <div className="comments-panel-header">
         <h3>All Comments</h3>
-        <IconButton className="comments-panel-close" onClick={onClose} aria-label="Close comments panel">
+        <IconButton className="comments-panel-close" size="lg" variant="ghost" onClick={onClose} aria-label="Close comments panel">
           <X size={18} />
         </IconButton>
       </div>

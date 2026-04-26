@@ -10,6 +10,7 @@ import {
 import * as api from '../../api';
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
+import IconButton from '../ui/IconButton';
 import TextareaInput from '../ui/TextareaInput';
 import { trackEvent } from '../../utils/analytics';
 import {
@@ -52,8 +53,8 @@ export default function FeedbackWidget({
   showToast,
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [intent, setIntent] = useState('confusing');
-  const [scope, setScope] = useState('whole_app');
+  const [intent, setIntent] = useState('');
+  const [scope, setScope] = useState('');
   const [rating, setRating] = useState(null);
   const [message, setMessage] = useState('');
   const [allowFollowUp, setAllowFollowUp] = useState(false);
@@ -134,8 +135,8 @@ export default function FeedbackWidget({
   if (!isVisible) return null;
 
   const resetForm = () => {
-    setIntent('confusing');
-    setScope('whole_app');
+    setIntent('');
+    setScope('');
     setRating(null);
     setMessage('');
     setAllowFollowUp(false);
@@ -171,6 +172,14 @@ export default function FeedbackWidget({
     setError('');
 
     const trimmedMessage = String(message || '').trim();
+    if (!intent) {
+      setError('Choose a feedback type.');
+      return;
+    }
+    if (!scope) {
+      setError('Choose a scope.');
+      return;
+    }
     if (!trimmedMessage) {
       setError('Tell us what happened.');
       return;
@@ -197,7 +206,7 @@ export default function FeedbackWidget({
               cacheBust: true,
               pixelRatio: 1,
               skipFonts: true,
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--color-neutral-white)',
               filter: (node) => !node.closest?.('[data-feedback-root="1"]'),
             });
           } catch (captureError) {
@@ -286,14 +295,14 @@ export default function FeedbackWidget({
                 <div className="feedback-drawer-title">Feedback</div>
                 <div className="feedback-drawer-subtitle">Share what felt good, off, or broken.</div>
               </div>
-              <button
-                type="button"
+              <IconButton
                 className="feedback-drawer-close"
+                size="lg"
+                variant="ghost"
+                icon={<X />}
+                label="Close feedback drawer"
                 onClick={handleClose}
-                aria-label="Close feedback drawer"
-              >
-                <X size={18} />
-              </button>
+              />
             </div>
 
             <form className="feedback-drawer-body" onSubmit={handleSubmit}>

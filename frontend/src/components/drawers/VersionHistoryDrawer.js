@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
+import Badge from '../ui/Badge';
 import SegmentedControl from '../ui/SegmentedControl';
 
 const VIEW_TABS = Object.freeze({
@@ -132,7 +133,7 @@ const VersionHistoryDrawer = ({
                 <div className="version-history-title-row">
                   <span className="version-history-title">{version.name || 'Updated'}</span>
                   {isCurrent ? (
-                    <span className="ui-inline-badge version-history-badge">Current</span>
+                    <Badge className="version-history-badge" label="Current" />
                   ) : null}
                 </div>
                 {version.notes ? (

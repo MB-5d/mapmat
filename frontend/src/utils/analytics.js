@@ -42,7 +42,7 @@ function initGa() {
   window.gtag('js', new Date());
   window.gtag('config', GA_MEASUREMENT_ID, {
     send_page_view: false,
-    app_name: APP_ONLY_MODE ? 'IA Tool' : 'Map Mat',
+    app_name: 'Vellic',
   });
 }
 

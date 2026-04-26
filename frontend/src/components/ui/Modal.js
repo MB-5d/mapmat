@@ -2,11 +2,13 @@ import React, { useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 
 import classNames from '../../utils/classNames';
+import IconButton from './IconButton';
 
 const Modal = ({
   show,
   onClose,
   title,
+  subtitle = '',
   size = 'md',
   scrollable = false,
   className,
@@ -51,13 +53,24 @@ const Modal = ({
         aria-modal="true"
         aria-labelledby={title ? resolvedTitleId : undefined}
       >
-        {title || !hideCloseButton ? (
+        {title || subtitle || !hideCloseButton ? (
           <div className="modal-header">
-            {title ? <h3 id={resolvedTitleId}>{title}</h3> : <div />}
+            {title || subtitle ? (
+              <div className="modal-header-copy">
+                {title ? <h3 id={resolvedTitleId}>{title}</h3> : null}
+                {subtitle ? <p className="modal-subtitle">{subtitle}</p> : null}
+              </div>
+            ) : <div />}
             {!hideCloseButton ? (
-              <button type="button" className="modal-close" onClick={onClose} aria-label={closeLabel}>
-                <X size={24} />
-              </button>
+              <IconButton
+                htmlType="button"
+                className="modal-close"
+                size="lg"
+                variant="ghost"
+                icon={<X />}
+                label={closeLabel}
+                onClick={onClose}
+              />
             ) : null}
           </div>
         ) : null}

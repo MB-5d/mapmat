@@ -2,6 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 
 import classNames from '../../utils/classNames';
+import Icon from './Icon';
 import { resolveButtonModel } from './buttonModel';
 
 const SPINNER_SIZE = {
@@ -68,15 +69,11 @@ const Button = React.forwardRef(
         {loading ? (
           <Loader2 size={SPINNER_SIZE[size] || SPINNER_SIZE.md} className="ui-btn__spinner" aria-hidden="true" />
         ) : startIcon ? (
-          <span className="ui-btn__icon ui-btn__icon--start" aria-hidden="true">
-            {startIcon}
-          </span>
+          <Icon icon={startIcon} size={size} className="ui-btn__icon ui-btn__icon--start" />
         ) : null}
         {content != null ? <span className="ui-btn__content">{content}</span> : null}
         {!loading && endIcon ? (
-          <span className="ui-btn__icon ui-btn__icon--end" aria-hidden="true">
-            {endIcon}
-          </span>
+          <Icon icon={endIcon} size={size} className="ui-btn__icon ui-btn__icon--end" />
         ) : null}
       </button>
     );

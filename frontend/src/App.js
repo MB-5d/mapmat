@@ -7,9 +7,6 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
-  AlertTriangle,
-  CheckCircle,
-  Info,
   Loader2,
   MessageSquare,
   PencilLine,
@@ -19,8 +16,6 @@ import {
   Upload,
   Wifi,
   WifiOff,
-  X,
-  XCircle,
   XOctagon,
 } from 'lucide-react';
 
@@ -53,11 +48,15 @@ import ReportDrawer from './components/reports/ReportDrawer';
 import SaveMapModal from './components/modals/SaveMapModal';
 import SaveVersionModal from './components/modals/SaveVersionModal';
 import ShareModal from './components/modals/ShareModal';
+import ScanBar from './components/scan/ScanBar';
 import ScanProgressModal from './components/scan/ScanProgressModal';
 import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
 import Button from './components/ui/Button';
+import Avatar from './components/ui/Avatar';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from './components/ui/Menu';
 import Modal from './components/ui/Modal';
+import StatusAlert from './components/ui/StatusAlert';
+import Toast from './components/ui/Toast';
 import ColorKey from './components/toolbar/ColorKey';
 import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
@@ -78,7 +77,6 @@ import {
   TESTER_NOT_READY_MESSAGE,
 } from './utils/constants';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
-import { resolveApiAssetUrl } from './utils/assets';
 import {
   buildExpandedStackMap,
   getMaxDepth,
@@ -93,6 +91,7 @@ import {
   buildReportEntries,
   comparePageNumbers,
 } from './utils/reportUtils';
+import { getSeoValue } from './utils/seoMetadata';
 import {
   parseXmlSitemap,
   parseRssAtom,
@@ -468,17 +467,15 @@ const PresenceChipList = ({ collaborators = [] }) => {
           role="listitem"
           title={`${collaborator.label} • ${formatPresenceAccessLabel(collaborator.accessMode)}`}
         >
-          <span className="presence-chip-avatar" aria-hidden="true">
-            {resolveApiAssetUrl(collaborator.avatarUrl) ? (
-              <img
-                className="presence-chip-avatar-image"
-                src={resolveApiAssetUrl(collaborator.avatarUrl)}
-                alt=""
-              />
-            ) : (
-              collaborator.avatarLabel
-            )}
-          </span>
+          <Avatar
+            className="presence-chip-avatar"
+            imageClassName="presence-chip-avatar-image"
+            src={collaborator.avatarUrl}
+            label={collaborator.avatarLabel}
+            size="sm"
+            tone={collaborator.tone}
+            aria-hidden="true"
+          />
           <span className="presence-chip-label">{collaborator.label}</span>
         </div>
       ))}
@@ -667,7 +664,13 @@ const SitemapTree = ({
         aria-hidden="true"
       >
         {connectorPaths.map((d, i) => (
-          <path key={i} d={d} fill="none" stroke="#94a3b8" strokeWidth="2" />
+          <path
+            key={i}
+            d={d}
+            fill="none"
+            stroke="var(--ui-connection-map-default)"
+            strokeWidth="2"
+          />
         ))}
       </svg>
 
@@ -977,6 +980,10 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             authRequired: node.authRequired ?? existing.authRequired,
             thumbnailUrl: node.thumbnailUrl || existing.thumbnailUrl,
             fullScreenshotUrl: node.fullScreenshotUrl || existing.fullScreenshotUrl,
+            description: node.description || existing.description,
+            metaTags: node.metaTags || existing.metaTags,
+            canonicalUrl: node.canonicalUrl || existing.canonicalUrl,
+            seoMetadata: node.seoMetadata || existing.seoMetadata,
             isMissing: false,
           });
         }
@@ -1253,6 +1260,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const presenceSessionIdRef = useRef('');
   const mapNameEditStartRef = useRef('');
   const scheduleResetViewRef = useRef(null);
+  const handledAuthRedirectKeyRef = useRef('');
 
   const resetAutosaveTracking = useCallback(({ snapshot = '' } = {}) => {
     if (autosaveTimerRef.current) {
@@ -2064,16 +2072,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       toastTimeoutRef.current = null;
     }
     setToast(null);
-  };
-
-  const ToastIcon = ({ type }) => {
-    switch (type) {
-      case 'success': return <CheckCircle size={18} />;
-      case 'error': return <XCircle size={18} />;
-      case 'warning': return <AlertTriangle size={18} />;
-      case 'loading': return <Loader2 size={18} className="toast-spinner" />;
-      default: return <Info size={18} />;
-    }
   };
 
   const versionsForDrawer = currentMap?.id ? mapVersions : (root ? draftVersions : []);
@@ -3219,7 +3217,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!hasMap || !currentMap?.id || !canViewPresenceValue) return [];
     return isLiveActive ? liveCollaborators : presenceCollaborators;
   }, [canViewPresenceValue, currentMap?.id, hasMap, isLiveActive, liveCollaborators, presenceCollaborators]);
-  const showTopbarScanBar = !hasMap || isUnsavedScannedMap;
   const showCoeditingReadOnlyBanner = !!(
     isCoeditingReadOnlyMode
     && hasMap
@@ -4022,6 +4019,56 @@ export default function App({ currentRoute, navigateToRoute }) {
       openProjectsPanel();
     }
   }, [openProjectsPanel, pendingAuthPostSuccessAction]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const authSuccess = currentRoute?.searchParams?.get('auth_success') || '';
+    const authError = currentRoute?.searchParams?.get('auth_error') || '';
+    const authProvider = currentRoute?.searchParams?.get('auth_provider') || '';
+
+    if (!authSuccess && !authError) {
+      handledAuthRedirectKeyRef.current = '';
+      return;
+    }
+
+    const authRedirectKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    if (handledAuthRedirectKeyRef.current === authRedirectKey) return;
+    handledAuthRedirectKeyRef.current = authRedirectKey;
+
+    if (authSuccess === 'google' && currentUser) {
+      showToast('Signed in with Google', 'success');
+      trackEvent('login', {
+        method: 'google',
+        app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
+      });
+    } else if (authError) {
+      showToast('Google sign-in did not complete. Try again or use email instead.', 'error');
+      if (!currentUser) {
+        openAuthModal({
+          contextMessage: authProvider === 'google'
+            ? 'Google sign-in did not complete. You can try again or use email and password.'
+            : '',
+        });
+      }
+    }
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('auth_success');
+    nextSearchParams.delete('auth_error');
+    nextSearchParams.delete('auth_provider');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    currentUser,
+    openAuthModal,
+    showToast,
+  ]);
 
   useEffect(() => {
     if (currentUser) {
@@ -7425,6 +7472,12 @@ export default function App({ currentRoute, navigateToRoute }) {
         depth,
         title: (node.title || '').replace(/"/g, '""'),
         url: node.url || '',
+        description: getSeoValue(node, 'description').replace(/"/g, '""'),
+        metaKeywords: getSeoValue(node, 'keywords').replace(/"/g, '""'),
+        canonicalUrl: getSeoValue(node, 'canonicalUrl'),
+        h1: getSeoValue(node, 'h1').replace(/"/g, '""'),
+        h2: getSeoValue(node, 'h2').replace(/"/g, '""'),
+        robots: getSeoValue(node, 'robots').replace(/"/g, '""'),
         hasChildren: node.children?.length > 0 ? 'Yes' : 'No',
         childCount: node.children?.length || 0,
       });
@@ -7436,7 +7489,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     flattenWithNumber(root, 0, '1');
 
     // Create CSV content
-    const headers = ['Page Number', 'Depth Level', 'Page Title', 'URL', 'Has Children', 'Child Count'];
+    const headers = [
+      'Page Number',
+      'Depth Level',
+      'Page Title',
+      'URL',
+      'Description',
+      'Meta Keywords',
+      'Canonical URL',
+      'H1',
+      'H2',
+      'Meta Robots',
+      'Has Children',
+      'Child Count',
+    ];
     const csvRows = [
       headers.join(','),
       ...rows.map(row => [
@@ -7444,6 +7510,12 @@ export default function App({ currentRoute, navigateToRoute }) {
         row.depth,
         `"${row.title}"`,
         `"${row.url}"`,
+        `"${row.description}"`,
+        `"${row.metaKeywords}"`,
+        `"${row.canonicalUrl}"`,
+        `"${row.h1}"`,
+        `"${row.h2}"`,
+        `"${row.robots}"`,
         row.hasChildren,
         row.childCount,
       ].join(','))
@@ -7647,7 +7719,13 @@ export default function App({ currentRoute, navigateToRoute }) {
           .join(', ');
         const title = row.title || row.url || '';
         const urlLines = pdf.splitTextToSize(row.url || '', 240);
-        const rowHeight = Math.max(12, urlLines.length * 12);
+        const seoLines = [
+          row.description ? `Description: ${row.description}` : '',
+          row.metaKeywords ? `Keywords: ${row.metaKeywords}` : '',
+          row.canonicalUrl ? `Canonical: ${row.canonicalUrl}` : '',
+          row.h1 ? `H1: ${row.h1}` : '',
+        ].filter(Boolean).flatMap((line) => pdf.splitTextToSize(line, 240));
+        const rowHeight = Math.max(12, (urlLines.length + seoLines.length) * 12);
 
         if (y + rowHeight > pageHeight - 40) {
           pdf.addPage();
@@ -7658,6 +7736,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         pdf.text(title.slice(0, 28), marginX + 50, y);
         pdf.text(issues.slice(0, 40), marginX + 220, y);
         pdf.text(urlLines, marginX + 310, y);
+        if (seoLines.length) {
+          pdf.text(seoLines, marginX + 310, y + (urlLines.length * 12));
+        }
         y += rowHeight + 6;
       });
 
@@ -9329,7 +9410,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         const nextAnnotations = buildAnnotations(updatedNode.annotations, currentNode.annotations);
         const changes = {};
-        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'fullScreenshotUrl', 'description', 'metaTags'];
+        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'fullScreenshotUrl', 'description', 'metaTags', 'canonicalUrl', 'seoMetadata'];
         fields.forEach((field) => {
           const nextValue = updatedNode[field];
           const currentValue = currentNode[field];
@@ -9363,13 +9444,16 @@ export default function App({ currentRoute, navigateToRoute }) {
         } else {
           const now = new Date().toISOString();
           const nextNode = {
+            ...updatedNode,
             url: updatedNode.url || '',
             title: updatedNode.title || 'New Page',
             pageType: updatedNode.pageType || 'page',
             thumbnailUrl: updatedNode.thumbnailUrl || '',
             fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
             description: updatedNode.description || '',
-            metaTags: updatedNode.metaTags || {},
+            metaTags: updatedNode.metaTags || '',
+            canonicalUrl: updatedNode.canonicalUrl || '',
+            seoMetadata: updatedNode.seoMetadata || {},
             annotations: buildAnnotations(updatedNode.annotations, {
               status: 'none',
               tags: [],
@@ -9438,6 +9522,8 @@ export default function App({ currentRoute, navigateToRoute }) {
             fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
+            canonicalUrl: updatedNode.canonicalUrl,
+            seoMetadata: updatedNode.seoMetadata,
             annotations: buildAnnotations(updatedNode.annotations, removedNode.annotations),
           });
           maybeMarkNodeMoved(removedNode);
@@ -9480,6 +9566,8 @@ export default function App({ currentRoute, navigateToRoute }) {
               fullScreenshotUrl: updatedNode.fullScreenshotUrl,
               description: updatedNode.description,
               metaTags: updatedNode.metaTags,
+              canonicalUrl: updatedNode.canonicalUrl,
+              seoMetadata: updatedNode.seoMetadata,
               annotations: buildAnnotations(updatedNode.annotations, target.annotations),
             });
 
@@ -9531,6 +9619,8 @@ export default function App({ currentRoute, navigateToRoute }) {
             fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
+            canonicalUrl: updatedNode.canonicalUrl,
+            seoMetadata: updatedNode.seoMetadata,
             annotations: buildAnnotations(updatedNode.annotations, target.annotations),
           });
 
@@ -9624,7 +9714,9 @@ export default function App({ currentRoute, navigateToRoute }) {
             thumbnailUrl: updatedNode.thumbnailUrl || '',
             fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
         description: updatedNode.description || '',
-        metaTags: updatedNode.metaTags || {},
+        metaTags: updatedNode.metaTags || '',
+        canonicalUrl: updatedNode.canonicalUrl || '',
+        seoMetadata: updatedNode.seoMetadata || {},
         annotations: buildAnnotations(updatedNode.annotations, {
           status: 'none',
           tags: [],
@@ -10497,7 +10589,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
-        showScanBar={showTopbarScanBar}
+        showScanBar={false}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
         scanOptionsRef={scanOptionsRef}
@@ -10520,9 +10612,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanLabel={isUnsavedScannedMap ? 'Rescan' : 'Scan'}
         scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
         scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : isUnsavedScannedMap ? "Rescan URL" : "Scan URL"}
-        optionsDisabled={!urlInput.trim() || isImportedMap || (hasMap && !!currentMap?.id)}
+        optionsDisabled={isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
-        showClearUrl={showTopbarScanBar && !!urlInput.trim()}
+        showClearUrl={false}
         sharedTitle={root?.title || 'Shared Sitemap'}
         onCreateMap={() => openCreateMapFlow()}
         onImportFile={() => setShowImportModal(true)}
@@ -10572,45 +10664,60 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         {/* Permission banner for shared links with limited access */}
         {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && !showCoeditingReadOnlyBanner && (
-          <div className="permission-banner">
-            <Info size={16} />
-            <span>
-              {accessLevel === ACCESS_LEVELS.VIEW
-                ? "You're viewing this sitemap in read-only mode"
-                : "You can view and comment on this sitemap"}
-            </span>
-          </div>
+          <StatusAlert tone="warning" className="permission-banner">
+            {accessLevel === ACCESS_LEVELS.VIEW
+              ? "You're viewing this sitemap in read-only mode"
+              : "You can view and comment on this sitemap"}
+          </StatusAlert>
         )}
 
         {mapSaveConflict && hasMap && (
-          <div className="permission-banner map-conflict-banner">
-            <AlertTriangle size={16} />
-            <span>This map changed in another session. Your last update was blocked to avoid overwriting.</span>
-            <div className="map-conflict-actions">
-              <button type="button" onClick={reloadMapAfterConflict}>Reload Latest</button>
-              <button type="button" onClick={dismissMapConflict}>Dismiss</button>
-            </div>
-          </div>
+          <StatusAlert
+            tone="danger"
+            className="permission-banner map-conflict-banner"
+            actions={(
+              <div className="map-conflict-actions">
+                <Button type="secondary" buttonStyle="danger" size="sm" onClick={reloadMapAfterConflict}>
+                  Reload Latest
+                </Button>
+                <Button type="ghost" buttonStyle="danger" size="sm" onClick={dismissMapConflict}>
+                  Dismiss
+                </Button>
+              </div>
+            )}
+          >
+            This map changed in another session. Your last update was blocked to avoid overwriting.
+          </StatusAlert>
         )}
 
         {showCoeditingReadOnlyBanner && (
-          <div className="permission-banner live-edit-banner live-edit-banner-warning">
-            <AlertTriangle size={16} />
+          <StatusAlert tone="warning" className="permission-banner live-edit-banner live-edit-banner-warning">
             <span>
               <strong>Live Editing Read-Only</strong>
               {coeditingReadOnlyMessage ? ` • ${coeditingReadOnlyMessage}` : ''}
             </span>
-          </div>
+          </StatusAlert>
         )}
 
         {showLiveStatusBanner && (
-          <div className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}>
-            {liveStatus === COEDITING_LIVE_STATUS.CONNECTED
+          <StatusAlert
+            tone={liveBannerTone === 'connected' ? 'success' : liveBannerTone === 'warning' ? 'warning' : 'info'}
+            className={`permission-banner live-edit-banner live-edit-banner-${liveBannerTone}`}
+            icon={liveStatus === COEDITING_LIVE_STATUS.CONNECTED
               ? <Wifi size={16} />
               : (liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
                 ? <WifiOff size={16} />
                 : <RefreshCw size={16} className={liveStatus === COEDITING_LIVE_STATUS.RECONNECTING ? 'live-spin' : ''} />)}
-            <div className="permission-banner-main">
+            contentClassName="permission-banner-main"
+            actions={liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC ? (
+              <div className="map-conflict-actions">
+                <Button type="secondary" buttonStyle="brand" size="sm" onClick={resyncLiveDocument}>
+                  Resync
+                </Button>
+              </div>
+            ) : null}
+          >
+            <>
               <span className="permission-banner-summary">
                 <strong>{liveBannerTitle} {liveStatusLabel}</strong>
                 {` • v${liveVersion}`}
@@ -10619,13 +10726,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                 {liveStatusDetail ? ` • ${liveStatusDetail}` : ''}
               </span>
               <PresenceChipList collaborators={liveCollaborators} />
-            </div>
-            {liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC && (
-              <div className="map-conflict-actions">
-                <button type="button" onClick={resyncLiveDocument}>Resync</button>
-              </div>
-            )}
-          </div>
+            </>
+          </StatusAlert>
         )}
 
         {hasMap && !showInviteAcceptGate && !showMapAccessGate && (
@@ -10651,15 +10753,45 @@ export default function App({ currentRoute, navigateToRoute }) {
         {!hasMap && (
           <div className="blank">
             <div className="blank-shell">
-              <div className="blank-top-guide" aria-hidden="true">
-                <svg className="blank-guide-svg" viewBox="0 0 120 84" fill="none" preserveAspectRatio="none">
-                  <path className="blank-guide-line" d="M60 84V12" />
-                  <path className="blank-guide-arrow" d="M52 20L60 12L68 20" />
-                </svg>
-              </div>
               <div className="blank-heading">
-                <div className="blank-title">Plan your site or software</div>
-                <div className="blank-subtitle">multiple ways to match your needs</div>
+                <div className="blank-title">Start with a URL</div>
+                <div className="blank-subtitle">Scan a site, then shape the map from the canvas.</div>
+              </div>
+              <div className="blank-scan-primary">
+                <div className="search-container scan-bar-shell blank-scan-shell">
+                  <ScanBar
+                    canEdit={canEdit()}
+                    urlInput={urlInput}
+                    onUrlInputChange={(e) => setUrlInput(e.target.value)}
+                    onUrlKeyDown={onKeyDownUrl}
+                    options={scanOptions}
+                    showOptions={showScanOptions}
+                    optionsRef={scanOptionsRef}
+                    onToggleOptions={() => setShowScanOptions(v => !v)}
+                    onOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
+                    scanLayerAvailability={scanLayerAvailability}
+                    scanLayerVisibility={scanLayerVisibility}
+                    onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
+                    scanDepth={scanDepth}
+                    onScanDepthChange={(value) => {
+                      const cleaned = value.replace(/[^\d]/g, '');
+                      if (!cleaned) {
+                        setScanDepth('');
+                        return;
+                      }
+                      const nextValue = Math.min(Number(cleaned), SCAN_MAX_DEPTH_UI);
+                      setScanDepth(String(nextValue));
+                    }}
+                    onScan={scan}
+                    scanLabel="Scan"
+                    scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
+                    scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
+                    optionsDisabled={isImportedMap}
+                    onClearUrl={() => setUrlInput('')}
+                    showClearUrl={!!urlInput.trim()}
+                    sharedTitle={root?.title || 'Shared Sitemap'}
+                  />
+                </div>
               </div>
               <div className="blank-card-guide" aria-hidden="true">
                 <svg className="blank-guide-svg" viewBox="0 0 960 120" fill="none" preserveAspectRatio="none">
@@ -12139,13 +12271,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       />
 
       {toast && (
-        <div className={`toast toast-${toast.type}`}>
-          <ToastIcon type={toast.type} />
-          <span>{toast.message}</span>
-          <button className="toast-close" onClick={dismissToast}>
-            <X size={16} />
-          </button>
-        </div>
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={dismissToast}
+        />
       )}
 
       {/* Generic Confirmation Modal */}

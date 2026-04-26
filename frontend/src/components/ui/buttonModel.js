@@ -9,14 +9,14 @@ const VALID_BUTTON_STYLES = new Set(BUTTON_STYLES);
 
 const DEFAULT_STYLE_BY_TYPE = {
   primary: 'brand',
-  secondary: 'mono',
+  secondary: 'brand',
   ghost: 'mono',
   link: 'brand',
 };
 
 export const BUTTON_VARIANT_MAP = {
   primary: { type: 'primary', style: 'brand' },
-  secondary: { type: 'secondary', style: 'mono' },
+  secondary: { type: 'secondary', style: 'brand' },
   ghost: { type: 'ghost', style: 'mono' },
   danger: { type: 'primary', style: 'danger' },
 };

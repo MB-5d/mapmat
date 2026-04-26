@@ -155,7 +155,7 @@ const CommentPopover = ({
     <div className="comment-popover" onWheel={(e) => e.stopPropagation()}>
       <div className="comment-popover-header">
         <h3>Comments on "{node.title || 'Untitled'}"</h3>
-        <IconButton className="comment-popover-close" onClick={handleCancel} aria-label="Close comments">
+        <IconButton className="comment-popover-close" size="lg" variant="ghost" onClick={handleCancel} aria-label="Close comments">
           <X size={18} />
         </IconButton>
       </div>

@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 
-import mapmatLogo from '../../assets/MM-Logo.svg';
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import Modal from '../ui/Modal';
+import { APP_BRAND_NAME } from '../../utils/constants';
 
 const WelcomeModal = ({
   show,
@@ -32,7 +32,7 @@ const WelcomeModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Welcome to Map Mat"
+      title={`Welcome to ${APP_BRAND_NAME}`}
       size="md"
       scrollable
       className="welcome-modal"
@@ -57,7 +57,10 @@ const WelcomeModal = ({
       )}
     >
       <div className="welcome-modal-logo-wrap">
-        <img className="welcome-modal-logo" src={mapmatLogo} alt="Map Mat" />
+        <div className="welcome-modal-wordmark" aria-label={APP_BRAND_NAME}>
+          <span className="brand-logo-mark" aria-hidden="true">V</span>
+          <span>{APP_BRAND_NAME}</span>
+        </div>
       </div>
 
       <div className="welcome-modal-copy">

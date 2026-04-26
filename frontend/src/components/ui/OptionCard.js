@@ -1,6 +1,7 @@
 import React from 'react';
 
 import classNames from '../../utils/classNames';
+import Icon from './Icon';
 
 const OptionCard = React.forwardRef(
   (
@@ -22,7 +23,7 @@ const OptionCard = React.forwardRef(
       className={classNames('ui-option-card', className)}
       {...props}
     >
-      {icon ? <span className="ui-option-card__icon">{icon}</span> : null}
+      {icon ? <Icon icon={icon} size="lg" className="ui-option-card__icon" /> : null}
       <span className="ui-option-card__content">
         <span className="ui-option-card__title">{title}</span>
         {description ? <span className="ui-option-card__description">{description}</span> : null}

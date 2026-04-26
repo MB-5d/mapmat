@@ -1,6 +1,7 @@
 import React from 'react';
 
 import classNames from '../../utils/classNames';
+import Icon from './Icon';
 
 export const MenuPanel = React.forwardRef(({ className, children, ...props }, ref) => (
   <div ref={ref} className={classNames('ui-menu-panel', className)} {...props}>
@@ -49,11 +50,7 @@ export const MenuItem = React.forwardRef(
       type={Component === 'button' ? type : undefined}
       {...props}
     >
-      {icon ? (
-        <span className="ui-menu-item__icon" aria-hidden="true">
-          {icon}
-        </span>
-      ) : null}
+      {icon ? <Icon icon={icon} className="ui-menu-item__icon" /> : null}
       <span className="ui-menu-item__content">
         {label != null ? <span className="ui-menu-item__label">{label}</span> : null}
         {description ? <span className="ui-menu-item__description">{description}</span> : null}

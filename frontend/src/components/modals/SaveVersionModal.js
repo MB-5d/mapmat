@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BookmarkPlus } from 'lucide-react';
 
+import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
 import Modal from '../ui/Modal';
@@ -55,10 +56,11 @@ const SaveVersionModal = ({
       )}
     >
       <div className="version-meta-row">
-        <div className="ui-inline-badge version-meta-pill">
-          <BookmarkPlus size={14} />
-          <span>v{versionNumber}</span>
-        </div>
+        <Badge
+          className="version-meta-pill"
+          icon={<BookmarkPlus size={14} />}
+          label={`v${versionNumber}`}
+        />
         <div className="version-meta-date">{timestamp}</div>
       </div>
 

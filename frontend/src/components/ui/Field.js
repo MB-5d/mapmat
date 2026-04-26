@@ -16,6 +16,7 @@ export const FieldError = ({ className, children, ...props }) => (
 
 const Field = ({
   label,
+  labelHidden = false,
   htmlFor,
   required = false,
   hint = '',
@@ -25,7 +26,10 @@ const Field = ({
 }) => (
   <div className={classNames('field', error && 'field--invalid', className)}>
     {label ? (
-      <label className="field-label" htmlFor={htmlFor}>
+      <label
+        className={classNames('field-label', labelHidden && 'field-label--hidden')}
+        htmlFor={htmlFor}
+      >
         <span>{label}</span>
         {required ? <span className="field-required" aria-hidden="true">*</span> : null}
       </label>

@@ -18,6 +18,7 @@ import {
 
 import './AdminConsole.css';
 import AccountDrawer from '../drawers/AccountDrawer';
+import Avatar from '../ui/Avatar';
 import FeedbackConsole from './FeedbackConsole';
 import {
   adminDisableUser,
@@ -29,7 +30,6 @@ import {
   getAdminUser,
   getAdminUsers,
 } from '../../api';
-import { resolveApiAssetUrl } from '../../utils/assets';
 import { ENABLE_ADMIN_CONSOLE } from '../../utils/constants';
 import { createAdminHomeRoute, createAdminUserRoute } from '../../utils/appRoutes';
 
@@ -119,13 +119,15 @@ function AdminUserDrawer({
       {!loading && !error && user ? (
         <>
           <div className="account-hero admin-console-drawer-hero">
-            <div className="account-hero-avatar account-hero-avatar-image admin-console-drawer-avatar">
-              {user.avatarUrl ? (
-                <img src={resolveApiAssetUrl(user.avatarUrl)} alt="" />
-              ) : (
-                <User size={20} />
-              )}
-            </div>
+            <Avatar
+              className="account-hero-avatar account-hero-avatar-image admin-console-drawer-avatar"
+              src={user.avatarUrl}
+              label={String(user.name || 'A').trim().charAt(0).toUpperCase()}
+              icon={<User size={20} />}
+              size="lg"
+              shape="rounded"
+              aria-hidden="true"
+            />
             <div className="account-hero-details">
               <div className="account-hero-name">{user.name || 'Unnamed user'}</div>
               <div className="account-hero-email">{user.email}</div>
@@ -846,13 +848,15 @@ function AdminConsole({ route, navigateToRoute }) {
                         >
                           <td>
                             <div className="admin-console-name-cell">
-                              <div className="admin-console-avatar">
-                                {user.avatarUrl ? (
-                                  <img src={resolveApiAssetUrl(user.avatarUrl)} alt="" />
-                                ) : (
-                                  <User size={18} />
-                                )}
-                              </div>
+                              <Avatar
+                                className="admin-console-avatar"
+                                src={user.avatarUrl}
+                                label={String(user.name || 'A').trim().charAt(0).toUpperCase()}
+                                icon={<User size={18} />}
+                                size="xl"
+                                shape="rounded"
+                                aria-hidden="true"
+                              />
                               <span className="admin-console-cell-primary">
                                 {user.name || 'Unnamed user'}
                               </span>

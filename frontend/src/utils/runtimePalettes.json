@@ -1,0 +1,15 @@
+{
+  "pageDepthPalette": [
+    "#12a8d6",
+    "#1ab7a8",
+    "#6cc36c",
+    "#e7b24c",
+    "#ef7b63",
+    "#9b6df3"
+  ],
+  "connectionPalette": {
+    "userFlows": "#14b8a6",
+    "crossLinks": "#f97316",
+    "brokenLinks": "#fca5a5"
+  }
+}

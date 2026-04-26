@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Loader2, X } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
+
 const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
   const containerRef = useRef(null);
 
@@ -29,9 +31,14 @@ const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
       tabIndex={0}
       ref={containerRef}
     >
-      <button className="image-overlay-close" onClick={onClose}>
-        <X size={24} />
-      </button>
+      <IconButton
+        className="image-overlay-close"
+        size="lg"
+        variant="ghost"
+        icon={<X />}
+        label="Close image"
+        onClick={onClose}
+      />
       <div className="image-modal" onClick={(e) => e.stopPropagation()}>
         {loading && (
           <div className="image-loading-overlay">

@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 
-import mapmatLogo from './assets/MM-Logo.svg';
+import vellicLogo from './assets/vellic-logo.svg';
 import './LandingPage.css';
 
 const audienceCards = [
@@ -116,7 +116,7 @@ const workflowSteps = [
 ];
 
 const comparisonColumns = [
-  { key: 'mapmat', label: 'Map Mat', highlight: true },
+  { key: 'vellic', label: 'Vellic', highlight: true },
   { key: 'flowmapp', label: 'FlowMapp' },
   { key: 'slickplan', label: 'Slickplan' },
   { key: 'octopus', label: 'Octopus.do' },
@@ -129,7 +129,7 @@ const comparisonRows = [
   {
     feature: 'Crawl from live URL',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Yes',
       slickplan: 'Yes',
       octopus: 'Yes',
@@ -141,7 +141,7 @@ const comparisonRows = [
   {
     feature: 'Visual sitemap canvas',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Yes',
       slickplan: 'Yes',
       octopus: 'Yes',
@@ -153,7 +153,7 @@ const comparisonRows = [
   {
     feature: 'Issue-focused auditing / reporting',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Not core',
       slickplan: 'Partial',
       octopus: 'Partial',
@@ -165,7 +165,7 @@ const comparisonRows = [
   {
     feature: 'Thumbnails or screenshots',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Not core',
       slickplan: 'Not core',
       octopus: 'Not core',
@@ -177,7 +177,7 @@ const comparisonRows = [
   {
     feature: 'Shareable review links',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Yes',
       slickplan: 'Yes',
       octopus: 'Yes',
@@ -189,7 +189,7 @@ const comparisonRows = [
   {
     feature: 'Comments / collaboration',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Yes',
       slickplan: 'Yes',
       octopus: 'Yes',
@@ -201,7 +201,7 @@ const comparisonRows = [
   {
     feature: 'Project organization / history',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Yes',
       slickplan: 'Yes',
       octopus: 'Yes',
@@ -213,7 +213,7 @@ const comparisonRows = [
   {
     feature: 'Export options',
     values: {
-      mapmat: 'Yes',
+      vellic: 'Yes',
       flowmapp: 'Yes',
       slickplan: 'Yes',
       octopus: 'Yes',
@@ -226,12 +226,12 @@ const comparisonRows = [
 
 const faqs = [
   {
-    question: 'Who is Map Mat for?',
+    question: 'Who is Vellic for?',
     answer: 'It is built first for agencies, consultants, and internal web teams that need to understand site structure quickly and review it with other people.',
   },
   {
     question: 'What is it best at compared with SEO crawlers or sitemap planning tools?',
-    answer: 'Map Mat is strongest when you want a live crawl, a visual sitemap canvas, screenshots, and review workflows in one place. It is not trying to be the deepest SEO spider or the broadest planning suite.',
+    answer: 'Vellic is strongest when you want a live crawl, a visual sitemap canvas, screenshots, and review workflows in one place. It is not trying to be the deepest SEO spider or the broadest planning suite.',
   },
   {
     question: 'What can it scan today?',
@@ -261,10 +261,10 @@ const legalContent = {
     content: `Last updated: January 2025
 
 1. Acceptance of Terms
-By accessing and using Map Mat ("the Service"), you agree to be bound by these Terms of Service.
+By accessing and using Vellic ("the Service"), you agree to be bound by these Terms of Service.
 
 2. Description of Service
-Map Mat is a visual sitemap generator that crawls websites and creates interactive tree diagrams of site structure.
+Vellic is a visual sitemap generator that crawls websites and creates interactive tree diagrams of site structure.
 
 3. User Accounts
 You are responsible for maintaining the confidentiality of your account credentials and for all activities under your account.
@@ -277,16 +277,16 @@ You agree not to:
 - Resell or redistribute the Service without permission
 
 5. Intellectual Property
-The Service and its original content are owned by Map Mat and protected by copyright laws.
+The Service and its original content are owned by Vellic and protected by copyright laws.
 
 6. Limitation of Liability
-Map Mat shall not be liable for any indirect, incidental, special, or consequential damages.
+Vellic shall not be liable for any indirect, incidental, special, or consequential damages.
 
 7. Changes to Terms
 We reserve the right to modify these terms at any time. Continued use constitutes acceptance of new terms.
 
 8. Contact
-Questions about these terms should be directed to hello@mapmat.com`,
+Questions about these terms should be directed to hello@vellic.com`,
   },
   privacy: {
     title: 'Privacy Policy',
@@ -322,23 +322,23 @@ You have the right to:
 We use essential cookies for authentication and preferences. No third-party tracking cookies are used.
 
 7. Contact
-Privacy questions should be directed to privacy@mapmat.com`,
+Privacy questions should be directed to privacy@vellic.com`,
   },
   legal: {
     title: 'Legal Notice',
-    content: `Map Mat Legal Notice
+    content: `Vellic Legal Notice
 
 Copyright
-All content on this site is copyright Map Mat unless otherwise noted.
+All content on this site is copyright Vellic unless otherwise noted.
 
 Trademarks
-"Map Mat" and the Map Mat logo are trademarks of Map Mat.
+"Vellic" and the Vellic logo are trademarks of Vellic.
 
 Disclaimer
-The information provided by Map Mat is for general informational purposes only. We make no warranties about the completeness, reliability, or accuracy of this information.
+The information provided by Vellic is for general informational purposes only. We make no warranties about the completeness, reliability, or accuracy of this information.
 
 Website Crawling
-Map Mat is designed for legitimate use cases such as:
+Vellic is designed for legitimate use cases such as:
 - Understanding your own website structure
 - SEO auditing with permission
 - Documentation and planning
@@ -347,14 +347,14 @@ Map Mat is designed for legitimate use cases such as:
 Users are responsible for ensuring they have permission to crawl any websites they scan.
 
 DMCA
-If you believe content infringes your copyright, please contact legal@mapmat.com with:
+If you believe content infringes your copyright, please contact legal@vellic.com with:
 - Your contact information
 - Description of the copyrighted work
 - Location of the allegedly infringing content
 - Statement of good faith belief
 
 Contact
-Legal inquiries: legal@mapmat.com`,
+Legal inquiries: legal@vellic.com`,
   },
 };
 
@@ -439,8 +439,8 @@ const LandingPage = ({ onLaunchApp }) => {
     <div className="landing">
       <nav className={`landing-nav ${scrollY > 24 ? 'scrolled' : ''}`}>
         <div className="nav-container">
-          <button type="button" className="nav-brand" onClick={() => scrollToSection('hero')} aria-label="Map Mat home">
-            <img src={mapmatLogo} alt="Map Mat" />
+          <button type="button" className="nav-brand" onClick={() => scrollToSection('hero')} aria-label="Vellic home">
+            <img src={vellicLogo} alt="Vellic" />
           </button>
 
           <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
@@ -474,7 +474,7 @@ const LandingPage = ({ onLaunchApp }) => {
               <div className="section-eyebrow">Visual site mapping for audits, redesigns, and stakeholder review</div>
               <h1>Map site structure fast enough to use in real client work.</h1>
               <p className="hero-subtitle">
-                Map Mat crawls a live website, lays it out on a visual sitemap canvas, and gives teams
+                Vellic crawls a live website, lays it out on a visual sitemap canvas, and gives teams
                 a clearer way to review hierarchy, issues, screenshots, and shareable feedback before testing starts.
               </p>
               <div className="hero-actions">
@@ -592,7 +592,7 @@ const LandingPage = ({ onLaunchApp }) => {
           <div className="section-container">
             <div className="section-header">
               <div className="section-eyebrow">What it solves</div>
-              <h2>Map Mat is useful when a crawler alone is not enough and a diagram alone is too manual.</h2>
+              <h2>Vellic is useful when a crawler alone is not enough and a diagram alone is too manual.</h2>
               <p>
                 The product is most compelling when you need to understand the existing site, review it visually,
                 and keep the review loop connected to exports, comments, and saved work.
@@ -675,7 +675,7 @@ const LandingPage = ({ onLaunchApp }) => {
         <section id="compare" className={`landing-section ${getVisibleEntryClass(visibleSections, 'compare')}`}>
           <div className="section-container">
             <div className="section-header">
-              <div className="section-eyebrow">How Map Mat compares</div>
+              <div className="section-eyebrow">How Vellic compares</div>
               <h2>A conservative feature matrix for adjacent tools.</h2>
               <p>
                 The goal is not to flatten every tool into the same category. This matrix focuses on whether each product
@@ -800,9 +800,9 @@ const LandingPage = ({ onLaunchApp }) => {
                 <p>
                   Useful if you want to sanity-check fit for audits, redesign planning, or stakeholder review before sending people into the product.
                 </p>
-                <a className="contact-link" href="mailto:hello@mapmat.com">
+                <a className="contact-link" href="mailto:hello@vellic.com">
                   <Mail size={18} />
-                  hello@mapmat.com
+                  hello@vellic.com
                 </a>
                 <p className="contact-footnote">
                   Current focus: public-site mapping, review workflows, and controlled testing readiness.
@@ -816,7 +816,7 @@ const LandingPage = ({ onLaunchApp }) => {
       <footer className="landing-footer">
         <div className="footer-container">
           <div className="footer-brand">
-            <img src={mapmatLogo} alt="Map Mat" />
+            <img src={vellicLogo} alt="Vellic" />
             <p>Visual site mapping for audits, redesigns, and review.</p>
           </div>
 
@@ -837,13 +837,13 @@ const LandingPage = ({ onLaunchApp }) => {
 
             <div className="footer-column">
               <h4>Contact</h4>
-              <a href="mailto:hello@mapmat.com">hello@mapmat.com</a>
+              <a href="mailto:hello@vellic.com">hello@vellic.com</a>
               <button type="button" onClick={handleLaunchApp}>Launch App</button>
             </div>
           </div>
         </div>
         <div className="footer-bottom">
-          <p>&copy; {new Date().getFullYear()} Map Mat. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Vellic. All rights reserved.</p>
         </div>
       </footer>
 

@@ -3,6 +3,7 @@ import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
+import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
 import TextInput from '../ui/TextInput';
@@ -40,6 +41,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   }, [isOpen, user]);
 
   const avatarUrl = resolveApiAssetUrl(user?.avatarUrl);
+  const hasPassword = !!user?.hasPassword;
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -66,12 +68,14 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           setLoading(false);
           return;
         }
-        if (!currentPassword) {
+        if (hasPassword && !currentPassword) {
           setError('Current password is required to change password');
           setLoading(false);
           return;
         }
-        updateData.currentPassword = currentPassword;
+        if (currentPassword) {
+          updateData.currentPassword = currentPassword;
+        }
         updateData.newPassword = newPassword;
       }
 
@@ -140,7 +144,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   };
 
   const handleDeleteAccount = async () => {
-    if (!deletePassword) {
+    if (hasPassword && !deletePassword) {
       setError('Password is required to delete account');
       return;
     }
@@ -172,13 +176,15 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       className="profile-drawer"
     >
       <div className="account-hero">
-        <div className="account-hero-avatar account-hero-avatar-image">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" />
-          ) : (
-            <User size={20} />
-          )}
-        </div>
+        <Avatar
+          className="account-hero-avatar account-hero-avatar-image"
+          src={avatarUrl}
+          label={String(user?.name || 'A').trim().charAt(0).toUpperCase()}
+          icon={<User size={20} />}
+          size="lg"
+          shape="rounded"
+          aria-hidden="true"
+        />
         <div className="account-hero-details">
           <div className="account-hero-name">{user?.name || 'Your account'}</div>
           <div className="account-hero-email">{user?.email || ''}</div>
@@ -241,16 +247,21 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           </div>
 
           <div className="form-section">
-            <h4>Change Password</h4>
-            <Field label="Current Password">
-              <TextInput
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
-                disabled={!user || loading}
-              />
-            </Field>
+            <h4>{hasPassword ? 'Change Password' : 'Set Password'}</h4>
+            {!hasPassword ? (
+              <p className="field-hint">You signed in without a password. Set one here if you want email/password login too.</p>
+            ) : null}
+            {hasPassword ? (
+              <Field label="Current Password">
+                <TextInput
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  disabled={!user || loading}
+                />
+              </Field>
+            ) : null}
             <Field label="New Password">
               <TextInput
                 type="password"
@@ -306,22 +317,26 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
             </div>
           </div>
           {error && <div className="auth-error">{error}</div>}
-          <Field label="Enter your password to confirm">
-            <TextInput
-              type="password"
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              placeholder="Your password"
-              autoFocus
-              disabled={loading}
-            />
-          </Field>
+          {hasPassword ? (
+            <Field label="Enter your password to confirm">
+              <TextInput
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Your password"
+                autoFocus
+                disabled={loading}
+              />
+            </Field>
+          ) : (
+            <div className="field-hint">This account does not have a password yet. You can delete it from your current signed-in session.</div>
+          )}
           <div className="account-danger-actions">
             <Button
               type="button"
               variant="danger"
               onClick={handleDeleteAccount}
-              disabled={loading || !deletePassword}
+              disabled={loading || (hasPassword && !deletePassword)}
               loading={loading}
             >
               Yes, Delete My Account

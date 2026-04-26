@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
+
 const AccountDrawer = ({
   isOpen,
   onClose,
@@ -73,14 +75,15 @@ const AccountDrawer = ({
         </div>
         <div className="account-drawer-actions">
           {actions}
-          <button
-            type="button"
+          <IconButton
+            htmlType="button"
             className="account-drawer-close"
+            variant="ghost"
+            size="lg"
+            icon={<X />}
+            label={`Close ${title}`}
             onClick={onClose}
-            aria-label={`Close ${title}`}
-          >
-            <X size={20} />
-          </button>
+          />
         </div>
       </header>
 

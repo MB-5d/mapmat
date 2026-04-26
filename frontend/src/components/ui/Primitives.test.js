@@ -2,23 +2,24 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import Avatar from './Avatar';
+import Badge from './Badge';
 import Button from './Button';
 import CheckboxField from './CheckboxField';
 import Icon from './Icon';
 import IconButton from './IconButton';
-import InlineBadge from './InlineBadge';
 import Modal from './Modal';
 import { MenuItem } from './Menu';
 import Tag from './Tag';
 import CommentBadge from '../nodes/CommentBadge';
 import NodeBadge from '../nodes/NodeBadge';
-import NodeStatusBadge from '../nodes/NodeStatusBadge';
 import OptionCard from './OptionCard';
 import RadioCardGroup from './RadioCardGroup';
 import SegmentedControl from './SegmentedControl';
 import SelectInput from './SelectInput';
+import StatusAlert from './StatusAlert';
 import TextInput from './TextInput';
 import ToggleSwitch from './ToggleSwitch';
+import Toast from './Toast';
 
 describe('ui primitives', () => {
   let container;
@@ -161,31 +162,72 @@ describe('ui primitives', () => {
     expect(dangerItem.className).toContain('ui-menu-item--danger');
   });
 
-  test('InlineBadge and NodeStatusBadge render shared badge primitives', () => {
+  test('Badge, Tag, and node badges use shared primitives', () => {
     act(() => {
       root.render(
         <div>
-          <InlineBadge icon={<span className="badge-icon-marker">+</span>} label="Current" />
+          <Badge
+            badgeStyle="brand"
+            type="fill"
+            size="sm"
+            icon={<span className="badge-icon-marker">+</span>}
+            label="Current"
+          />
           <Tag
+            type="fill"
+            tagStyle="brand"
+            size="sm"
+            state="focus"
             label="Subdomain"
             startIcon={<span className="tag-icon-marker">#</span>}
           />
           <NodeBadge label="Marketing" />
-          <NodeStatusBadge status="moved" label="Moved" note />
+          <Badge className="node-status-badge status-moved" type="hollow" badgeStyle="info" size="sm">
+            <span className="node-status-text">Moved</span>
+            <span className="node-status-note-dot" />
+          </Badge>
           <CommentBadge count={3} />
         </div>
       );
     });
 
-    expect(container.querySelector('.ui-inline-badge')).not.toBeNull();
-    expect(container.querySelector('.ui-inline-badge__icon .badge-icon-marker')).not.toBeNull();
-    expect(container.querySelector('.ui-tag')).not.toBeNull();
+    expect(container.querySelector('.ui-badge--sm.ui-badge--type-fill.ui-badge--style-brand')).not.toBeNull();
+    expect(container.querySelector('.ui-badge__icon .badge-icon-marker')).not.toBeNull();
+    expect(container.querySelector('.ui-tag--sm.ui-tag--type-fill.ui-tag--style-brand.ui-tag--state-focus')).not.toBeNull();
     expect(container.querySelector('.ui-tag__icon .tag-icon-marker')).not.toBeNull();
-    expect(container.querySelector('.node-badge')).not.toBeNull();
-    expect(container.querySelector('.node-status-badge.status-moved')).not.toBeNull();
+    expect(container.querySelector('.node-badge.ui-badge')).not.toBeNull();
+    expect(container.querySelector('.node-status-badge.status-moved.ui-badge')).not.toBeNull();
     expect(container.querySelector('.node-status-note-dot')).not.toBeNull();
     expect(container.querySelector('.comment-badge')?.textContent).toBe('');
     expect(container.querySelector('.comment-badge')?.getAttribute('aria-label')).toBe('View 3 notes');
+  });
+
+  test('StatusAlert and Toast share tone, icon, and dismiss primitives', () => {
+    const onDismiss = jest.fn();
+
+    act(() => {
+      root.render(
+        <div>
+          <StatusAlert tone="warning" title="Heads up">Check this state</StatusAlert>
+          <Toast type="success" message="Saved" onDismiss={onDismiss} />
+          <Toast type="loading" message="Saving" onDismiss={() => {}} />
+        </div>
+      );
+    });
+
+    expect(container.querySelector('.ui-status-alert--warning')).not.toBeNull();
+    expect(container.querySelector('.ui-status-alert__title')?.textContent).toContain('Heads up');
+    const toast = container.querySelector('.toast-success');
+    expect(toast).not.toBeNull();
+    const closeButton = toast.querySelector('.toast-close.ui-icon-btn');
+    expect(closeButton).not.toBeNull();
+    expect(container.querySelector('.toast-loading .ui-status-alert__spinner')).not.toBeNull();
+
+    act(() => {
+      closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
   test('Modal closes on Escape', () => {
