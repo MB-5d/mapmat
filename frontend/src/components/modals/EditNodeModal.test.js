@@ -194,4 +194,60 @@ describe('EditNodeModal', () => {
     expect(homeOption.disabled).toBe(true);
     expect(homeOption.textContent).toBe('Home (already used)');
   });
+
+  test('locks the first page as Home when creating a new map', () => {
+    const onSave = jest.fn();
+
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: '',
+            title: '',
+            url: '',
+            parentId: '__home__',
+            children: [],
+            annotations: { status: 'none', tags: [], note: '' },
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={onSave}
+          mode="add"
+          customPageTypes={[]}
+          onAddCustomType={jest.fn()}
+          specialParentOptions={[{ value: '__home__', label: 'No Parent (Home)' }]}
+          isHomePageCreation
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Add Home Page');
+    expect(container.textContent).not.toContain('Parent Page');
+
+    const disabledHomeInput = Array.from(container.querySelectorAll('input')).find((input) =>
+      input.value === 'Home'
+    );
+    expect(disabledHomeInput).not.toBeNull();
+    expect(disabledHomeInput.disabled).toBe(true);
+
+    const titleInput = container.querySelector('.edit-node-form input[type="text"]:not(:disabled)');
+    act(() => {
+      setInputValue(titleInput, 'Homepage');
+      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Add Home Page')
+    );
+    act(() => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Homepage',
+      pageType: 'Home',
+      parentId: '__home__',
+    }));
+  });
 });

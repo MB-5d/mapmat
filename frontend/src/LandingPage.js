@@ -290,11 +290,11 @@ Questions about these terms should be directed to hello@vellic.com`,
   },
   privacy: {
     title: 'Privacy Policy',
-    content: `Last updated: January 2025
+    content: `Last updated: April 27, 2026
 
 1. Information We Collect
 - Account information (email, name)
-- Usage data (pages crawled, maps created)
+- Product usage data only when optional analytics are allowed
 - Technical data (browser type, IP address)
 
 2. How We Use Your Information
@@ -307,7 +307,7 @@ Questions about these terms should be directed to hello@vellic.com`,
 Your data is stored securely using industry-standard encryption. Maps and account data are stored in secure databases.
 
 4. Data Sharing
-We do not sell your personal information. We may share data with:
+We do not sell your personal information. We do not use cookies for marketing, advertising, or retargeting. We may share data with:
 - Service providers who assist our operations
 - Law enforcement when legally required
 
@@ -319,10 +319,37 @@ You have the right to:
 - Download your data
 
 6. Cookies
-We use essential cookies for authentication and preferences. No third-party tracking cookies are used.
+Necessary storage is required for authentication, security, preferences, core app functionality, and remembering privacy choices.
+
+Optional analytics are used only to improve the product through aggregate usage research.
+
+Optional session feedback tools are used only for product research, usability improvement, and debugging product friction.
+
+Map Mat does not use marketing, advertising, retargeting, personalized ads, marketing profiles, or sale-of-data cookies.
+
+You can change your choices in Privacy Settings inside the app settings.
 
 7. Contact
 Privacy questions should be directed to privacy@vellic.com`,
+  },
+  cookies: {
+    title: 'Cookie Policy',
+    content: `Last updated: April 27, 2026
+
+1. Necessary Storage
+Necessary storage is required for login, security, saved preferences, core app functionality, and remembering your privacy choices. This cannot be disabled from the consent UI.
+
+2. Optional Analytics
+Optional analytics help us understand aggregate product usage so we can improve Map Mat. These tools are not used for marketing or advertising.
+
+3. Optional Experience Research
+Optional session feedback tools help us understand confusing flows, usability issues, and product bugs. These tools are not used for marketing or advertising.
+
+4. Marketing
+Map Mat does not use advertising cookies, retargeting pixels, personalized ads, marketing profiles, or sale-of-data cookies.
+
+5. Changing Choices
+You can change your choices in Privacy Settings inside the app settings.`,
   },
   legal: {
     title: 'Legal Notice',
@@ -375,6 +402,15 @@ const LandingPage = ({ onLaunchApp }) => {
   const [scrollY, setScrollY] = useState(0);
   const [visibleSections, setVisibleSections] = useState({});
   const [activeFaq, setActiveFaq] = useState(null);
+
+  useEffect(() => {
+    const pathname = window.location.pathname;
+    if (pathname === '/privacy' || pathname === '/privacy-policy') {
+      setActiveModal('privacy');
+    } else if (pathname === '/cookies' || pathname === '/cookie-policy') {
+      setActiveModal('cookies');
+    }
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = 'auto';
@@ -832,6 +868,7 @@ const LandingPage = ({ onLaunchApp }) => {
               <h4>Legal</h4>
               <button type="button" onClick={() => setActiveModal('terms')}>Terms of Service</button>
               <button type="button" onClick={() => setActiveModal('privacy')}>Privacy Policy</button>
+              <button type="button" onClick={() => setActiveModal('cookies')}>Cookie Policy</button>
               <button type="button" onClick={() => setActiveModal('legal')}>Legal Notice</button>
             </div>
 

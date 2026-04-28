@@ -103,6 +103,7 @@ import {
 } from './utils/importParsers';
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
+import { useConsent } from './contexts/ConsentContext';
 import { useCoeditingLive, COEDITING_LIVE_STATUS } from './hooks/useCoeditingLive';
 import {
   ROUTE_SURFACES,
@@ -1105,6 +1106,7 @@ const normalizeOrphans = (list) => (list || [])
   }));
 
 export default function App({ currentRoute, navigateToRoute }) {
+  const { openSettings: openPrivacySettings } = useConsent();
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
@@ -7026,15 +7028,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!rootNode) return;
 
     const targetX = canvas.clientWidth / 2;
-    const targetY = 60;
+    const targetY = canvas.clientHeight / 2;
     const scale = scaleRef.current;
 
     const nodeCenterX = rootNode.x + rootNode.w / 2;
-    const nodeTopY = rootNode.y;
+    const nodeCenterY = rootNode.y + rootNode.h / 2;
 
     const nextPan = {
       x: targetX - nodeCenterX * scale,
-      y: targetY - nodeTopY * scale,
+      y: targetY - nodeCenterY * scale,
     };
 
     applyTransform({ scale, x: nextPan.x, y: nextPan.y });
@@ -9781,6 +9783,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               setMapVersions([initialVersion]);
               setLatestVersionId(initialVersion.id);
             }
+            scheduleResetViewRef.current?.();
 
             setProjects(prev => {
               let updated = prev.map(p => ({
@@ -12220,6 +12223,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onThemeChange={setTheme}
         showPageNumbers={layers.pageNumbers}
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
+        onOpenPrivacySettings={openPrivacySettings}
       />
 
       <VersionHistoryDrawer
@@ -12255,6 +12259,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           customPageTypes={customPageTypes}
           onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
           specialParentOptions={specialParentOptions}
+          isHomePageCreation={editModalMode === 'add' && !root}
         />
       )}
 

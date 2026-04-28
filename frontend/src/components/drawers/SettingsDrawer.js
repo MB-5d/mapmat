@@ -2,6 +2,7 @@ import React from 'react';
 import { Sun, Moon, Monitor } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
+import Button from '../ui/Button';
 import SegmentedControl from '../ui/SegmentedControl';
 import ToggleSwitch from '../ui/ToggleSwitch';
 
@@ -12,6 +13,7 @@ const SettingsDrawer = ({
   onThemeChange,
   showPageNumbers,
   onTogglePageNumbers,
+  onOpenPrivacySettings,
 }) => {
   const themeOptions = [
     { value: 'auto', label: 'Auto', icon: <Monitor size={14} /> },
@@ -50,6 +52,18 @@ const SettingsDrawer = ({
           label="Show page numbers"
           description="Keep numbering visible in every view."
         />
+      </section>
+
+      <section className="drawer-card">
+        <div className="drawer-card-title">Privacy</div>
+        <div className="drawer-helper">
+          Manage optional analytics and product research tools.
+        </div>
+        <div className="drawer-card-actions">
+          <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={onOpenPrivacySettings}>
+            Privacy Settings
+          </Button>
+        </div>
       </section>
     </AccountDrawer>
   );

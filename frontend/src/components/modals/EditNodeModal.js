@@ -57,11 +57,16 @@ const EditNodeModal = ({
   customPageTypes = [],
   onAddCustomType,
   specialParentOptions = [],
+  isHomePageCreation = false,
 }) => {
   const rawPageType = node?.pageType || PAGE_TYPE_PAGE;
-  const initialPageType = mode !== 'edit' && rawPageType === PAGE_TYPE_HOME
-    ? PAGE_TYPE_PAGE
-    : rawPageType;
+  const initialPageType = isHomePageCreation
+    ? PAGE_TYPE_HOME
+    : (
+      mode !== 'edit' && rawPageType === PAGE_TYPE_HOME
+        ? PAGE_TYPE_PAGE
+        : rawPageType
+    );
   const [title, setTitle] = useState(node?.title || '');
   const [url, setUrl] = useState(node?.url || '');
   const [pageType, setPageType] = useState(initialPageType);
@@ -169,7 +174,9 @@ const EditNodeModal = ({
     reader.readAsDataURL(file);
   };
 
-  const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
+  const modalTitle = isHomePageCreation
+    ? 'Add Home Page'
+    : mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
   const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
 
   const getExcludeIds = () => {
@@ -224,7 +231,7 @@ const EditNodeModal = ({
             variant="primary"
             disabled={!isFormValid}
           >
-            {mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
+            {isHomePageCreation ? 'Add Home Page' : mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
           </Button>
         </>
       )}
@@ -250,76 +257,84 @@ const EditNodeModal = ({
         </Field>
 
         <Field label="Page Type" required>
-          <SelectInput
-            value={pageType}
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              if (nextValue === '__addnew__') {
-                setShowNewTypeInput(true);
-              } else {
-                setPageType(nextValue);
-                setShowNewTypeInput(false);
-              }
-            }}
-            required
-          >
-            {allPageTypes.map((type) => {
-              const disabled = type === PAGE_TYPE_HOME && !canUseHomeType;
-              return (
-                <option key={type} value={type} disabled={disabled}>
-                  {disabled ? `${type} (already used)` : type}
-                </option>
-              );
-            })}
-            <option value="__addnew__">Add New Type...</option>
-          </SelectInput>
-          {showNewTypeInput ? (
-            <TextInput
-              type="text"
-              className="new-type-input"
-              value={newTypeName}
-              onChange={(event) => setNewTypeName(event.target.value)}
-              onBlur={handleAddNewType}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  handleAddNewType();
-                }
-              }}
-              placeholder="Enter new type name"
-              autoFocus
-            />
-          ) : null}
+          {isHomePageCreation ? (
+            <TextInput type="text" value={PAGE_TYPE_HOME} disabled readOnly />
+          ) : (
+            <>
+              <SelectInput
+                value={pageType}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (nextValue === '__addnew__') {
+                    setShowNewTypeInput(true);
+                  } else {
+                    setPageType(nextValue);
+                    setShowNewTypeInput(false);
+                  }
+                }}
+                required
+              >
+                {allPageTypes.map((type) => {
+                  const disabled = type === PAGE_TYPE_HOME && !canUseHomeType;
+                  return (
+                    <option key={type} value={type} disabled={disabled}>
+                      {disabled ? `${type} (already used)` : type}
+                    </option>
+                  );
+                })}
+                <option value="__addnew__">Add New Type...</option>
+              </SelectInput>
+              {showNewTypeInput ? (
+                <TextInput
+                  type="text"
+                  className="new-type-input"
+                  value={newTypeName}
+                  onChange={(event) => setNewTypeName(event.target.value)}
+                  onBlur={handleAddNewType}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleAddNewType();
+                    }
+                  }}
+                  placeholder="Enter new type name"
+                  autoFocus
+                />
+              ) : null}
+            </>
+          )}
         </Field>
 
-        <Field
-          label="Parent Page"
-          hint={disableSubdomainOption ? 'Subdomain parent requires the URL to be blank.' : ''}
-        >
-          <SelectInput
-            value={parentId}
-            onChange={(event) => setParentId(event.target.value)}
+        {!isHomePageCreation ? (
+          <Field
+            label="Parent Page"
+            hint={disableSubdomainOption ? 'Subdomain parent requires the URL to be blank.' : ''}
           >
-            {specialParentOptions.map((option) => {
-              const isSubdomain = option.type === 'subdomain';
-              const isDisabled = option.disabled || (isSubdomain && disableSubdomainOption);
-              return (
-                <option key={option.value} value={option.value} disabled={isDisabled}>
-                  {getSpecialOptionLabel(option)}
-                </option>
-              );
-            })}
-            {parentOptions.map((candidate) => {
-              const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(candidate.depth);
-              const displayTitle = candidate.title || candidate.url || 'Untitled';
-              return (
-                <option key={candidate.id} value={candidate.id}>
-                  {indent}{candidate.pageNumber} - {displayTitle}
-                </option>
-              );
-            })}
-          </SelectInput>
-        </Field>
+            <SelectInput
+              value={parentId}
+              onChange={(event) => setParentId(event.target.value)}
+            >
+              {specialParentOptions.map((option) => {
+                const isSubdomain = option.type === 'subdomain';
+                const isDisabled = option.disabled || (isSubdomain && disableSubdomainOption);
+                return (
+                  <option key={option.value} value={option.value} disabled={isDisabled}>
+                    {getSpecialOptionLabel(option)}
+                  </option>
+                );
+              })}
+              {parentOptions.map((candidate) => {
+                const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(candidate.depth);
+                const displayTitle = candidate.title || candidate.url || 'Untitled';
+                return (
+                  <option key={candidate.id} value={candidate.id}>
+                    {indent}{candidate.pageNumber} - {displayTitle}
+                  </option>
+                );
+              })}
+            </SelectInput>
+          </Field>
+        ) : null}
 
         <Field label="Thumbnail / Image">
           {thumbnailUrl ? (
