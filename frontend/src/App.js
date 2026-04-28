@@ -10808,6 +10808,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   />
                 </div>
               </div>
+              <h3 className="blank-start-label">Or start here</h3>
               <div className="blank-card-guide" aria-hidden="true">
                 <svg className="blank-guide-svg" viewBox="0 0 960 120" fill="none" preserveAspectRatio="none">
                   <path className="blank-guide-line" d="M480 0V46" />
@@ -10827,7 +10828,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onClick={() => openCreateMapFlow()}
                 >
                   <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
-                    <Sparkles size={96} />
+                    <Sparkles size={112} className="blank-card-icon" />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Create</span>
@@ -10850,7 +10851,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   }}
                 >
                   <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
-                    <PencilLine size={96} />
+                    <PencilLine size={112} className="blank-card-icon" />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Modify</span>
@@ -10871,7 +10872,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     {importLoading ? (
                       <Loader2 size={32} className="spin" />
                     ) : (
-                      <Upload size={96} />
+                      <Upload size={112} className="blank-card-icon" />
                     )}
                   </div>
                   <div className="blank-card-title-row">
