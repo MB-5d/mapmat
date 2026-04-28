@@ -10,8 +10,12 @@ import TextareaInput from '../ui/TextareaInput';
 import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
 import { getSeoMetadata, normalizeMetaTagsForInput, normalizeText } from '../../utils/seoMetadata';
 
+const PAGE_TYPE_HOME = 'Home';
+const PAGE_TYPE_PAGE = 'Page';
+
 const PAGE_TYPES = [
-  'Page',
+  PAGE_TYPE_HOME,
+  PAGE_TYPE_PAGE,
   'Blog Post',
   'Product',
   'Category',
@@ -54,9 +58,13 @@ const EditNodeModal = ({
   onAddCustomType,
   specialParentOptions = [],
 }) => {
+  const rawPageType = node?.pageType || PAGE_TYPE_PAGE;
+  const initialPageType = mode !== 'edit' && rawPageType === PAGE_TYPE_HOME
+    ? PAGE_TYPE_PAGE
+    : rawPageType;
   const [title, setTitle] = useState(node?.title || '');
   const [url, setUrl] = useState(node?.url || '');
-  const [pageType, setPageType] = useState(node?.pageType || 'Page');
+  const [pageType, setPageType] = useState(initialPageType);
   const [newTypeName, setNewTypeName] = useState('');
   const [showNewTypeInput, setShowNewTypeInput] = useState(false);
   const allPageTypes = [...PAGE_TYPES, ...customPageTypes];
@@ -185,6 +193,8 @@ const EditNodeModal = ({
 
   const excludeIds = getExcludeIds();
   const parentOptions = allNodes.filter((candidate) => !excludeIds.has(candidate.id));
+  const homeTypeOwner = allNodes.find((candidate) => candidate.pageType === PAGE_TYPE_HOME);
+  const canUseHomeType = !homeTypeOwner || homeTypeOwner.id === node?.id;
   const hasSubdomainOption = specialParentOptions.some((option) => option.type === 'subdomain');
   const disableSubdomainOption = hasSubdomainOption && trimmedUrl.length > 0;
   const getSpecialOptionLabel = (option) => {
@@ -253,9 +263,14 @@ const EditNodeModal = ({
             }}
             required
           >
-            {allPageTypes.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
+            {allPageTypes.map((type) => {
+              const disabled = type === PAGE_TYPE_HOME && !canUseHomeType;
+              return (
+                <option key={type} value={type} disabled={disabled}>
+                  {disabled ? `${type} (already used)` : type}
+                </option>
+              );
+            })}
             <option value="__addnew__">Add New Type...</option>
           </SelectInput>
           {showNewTypeInput ? (

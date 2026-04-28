@@ -159,4 +159,39 @@ describe('EditNodeModal', () => {
       })
     );
   });
+
+  test('only allows one Home page type', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: '2',
+            title: 'Second page',
+            url: 'https://example.com/about',
+            pageType: 'Page',
+            annotations: { status: 'none', tags: [], note: '' },
+          }}
+          allNodes={[
+            { id: 'root', title: 'Home', pageType: 'Home' },
+            { id: '2', title: 'Second page', pageType: 'Page' },
+          ]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          mode="edit"
+          customPageTypes={[]}
+          onAddCustomType={jest.fn()}
+          specialParentOptions={[]}
+        />
+      );
+    });
+
+    const pageTypeSelect = Array.from(container.querySelectorAll('select')).find((select) =>
+      Array.from(select.options).some((option) => option.value === 'Home')
+    );
+    const homeOption = Array.from(pageTypeSelect.options).find((option) => option.value === 'Home');
+
+    expect(homeOption.disabled).toBe(true);
+    expect(homeOption.textContent).toBe('Home (already used)');
+  });
 });

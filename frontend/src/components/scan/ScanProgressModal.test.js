@@ -48,6 +48,7 @@ describe('ScanProgressModal', () => {
 
     expect(container.textContent).toContain('Cancel');
     expect(container.textContent).toContain('Stop');
+    expect(container.querySelector('.modal-footer')).not.toBeNull();
 
     const buttons = Array.from(container.querySelectorAll('button'));
 
@@ -76,8 +77,8 @@ describe('ScanProgressModal', () => {
       buttons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(baseProps.onCancelScan).toHaveBeenCalledTimes(1);
     expect(baseProps.onContinueScan).toHaveBeenCalledTimes(1);
+    expect(baseProps.onCancelScan).toHaveBeenCalledTimes(1);
   });
 
   test('shows the stop confirmation flow', () => {
@@ -97,8 +98,8 @@ describe('ScanProgressModal', () => {
       buttons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(baseProps.onStopScan).toHaveBeenCalledTimes(1);
     expect(baseProps.onContinueScan).toHaveBeenCalledTimes(1);
+    expect(baseProps.onStopScan).toHaveBeenCalledTimes(1);
   });
 
   test('shows the stopping state and disables scan actions', () => {

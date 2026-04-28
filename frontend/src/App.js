@@ -790,6 +790,8 @@ const SUBDOMAIN_CONTAINER_ID = '__subdomains__';
 const HOME_PARENT_ID = '__home__';
 const ORPHAN_PARENT_ID = '__orphan_root__';
 const SUBDOMAIN_PARENT_ID = '__subdomain_root__';
+const PAGE_TYPE_HOME = 'Home';
+const PAGE_TYPE_PAGE = 'Page';
 
 // Build a unified index for root + orphan + subdomain trees
 const buildForestIndex = (rootNode, orphanNodes = []) => {
@@ -884,9 +886,14 @@ const normalizeUrlForCompare = (raw) => {
 
 const buildRootUrlSet = (rootNode) => {
   const set = new Set();
+  const addUrl = (url) => {
+    if (url) set.add(normalizeUrlForCompare(url));
+  };
   const walk = (node) => {
     if (!node?.url) return;
-    set.add(normalizeUrlForCompare(node.url));
+    addUrl(node.url);
+    addUrl(node.finalUrl);
+    addUrl(node.canonicalUrl);
     node.children?.forEach(walk);
   };
   walk(rootNode);
@@ -969,7 +976,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (!node?.url) return null;
     if (urlNodeMap.has(node.url)) {
       const existing = urlNodeMap.get(node.url);
-      if (!rootUrlSet.has(node.url)) {
+      if (!rootUrlSet.has(normalizeUrlForCompare(node.url))) {
         if (orphanType === 'subdomain') existing.subdomainRoot = true;
         if (orphanType && !existing.orphanType) existing.orphanType = orphanType;
         if (existing.isMissing && !node.isMissing) {
@@ -1639,6 +1646,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         id: node.id,
         title: node.title,
         url: node.url,
+        pageType: node.pageType,
         pageNumber,
         depth,
       });
@@ -9362,6 +9370,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     const isCurrentlyOrphan = !!findOrphanTreeRoot(updatedNode.id);
     const parentSelection = normalizeParentSelection(updatedNode.parentId);
     const newParentId = parentSelection.resolvedParentId;
+    const existingHomeNode = collectAllNodesWithOrphans(root, orphans)
+      .find((node) => node?.pageType === PAGE_TYPE_HOME && (editModalMode !== 'edit' || node.id !== updatedNode.id));
+
+    if (updatedNode.pageType === PAGE_TYPE_HOME && existingHomeNode) {
+      showToast('Home page type can only be used once', 'warning');
+      return;
+    }
 
     if (isLiveActive && currentMap?.id) {
       const submitLiveNodeChange = (draft, successMessage, snapshot = null) => {
@@ -9447,7 +9462,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             ...updatedNode,
             url: updatedNode.url || '',
             title: updatedNode.title || 'New Page',
-            pageType: updatedNode.pageType || 'page',
+            pageType: updatedNode.pageType || PAGE_TYPE_PAGE,
             thumbnailUrl: updatedNode.thumbnailUrl || '',
             fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
             description: updatedNode.description || '',
@@ -9710,9 +9725,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       const newNodeData = {
         url: updatedNode.url || '',
         title: updatedNode.title || 'New Page',
-        pageType: updatedNode.pageType || 'page',
-            thumbnailUrl: updatedNode.thumbnailUrl || '',
-            fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
+        pageType: !root ? PAGE_TYPE_HOME : (updatedNode.pageType || PAGE_TYPE_PAGE),
+        thumbnailUrl: updatedNode.thumbnailUrl || '',
+        fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
         description: updatedNode.description || '',
         metaTags: updatedNode.metaTags || '',
         canonicalUrl: updatedNode.canonicalUrl || '',
@@ -10589,7 +10604,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
-        showScanBar={false}
+        showScanBar={hasMap && !isImportedMap && !!root?.url && !showInviteAcceptGate && !showMapAccessGate}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
         scanOptionsRef={scanOptionsRef}

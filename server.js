@@ -1014,6 +1014,7 @@ const PAGE_STATUS_ACTIVE = 'Active';
 const PAGE_STATUS_REDIRECT = 'Redirect';
 const PAGE_STATUS_ERROR = 'Error';
 const PAGE_STATUS_MISSING = 'Missing';
+const PAGE_TYPE_HOME = 'Home';
 const PAGE_TYPE_PAGE = 'Page';
 const PAGE_TYPE_VIRTUAL = 'Virtual Node';
 const PAGE_SEVERITY_WARNING = 'Warning';
@@ -1244,7 +1245,9 @@ async function persistPagesForIa(
       if (!isMissing && status === PAGE_STATUS_ACTIVE && node.wasRedirect) {
         status = PAGE_STATUS_REDIRECT;
       }
-      const type = isMissing ? PAGE_TYPE_VIRTUAL : PAGE_TYPE_PAGE;
+      const type = isMissing
+        ? PAGE_TYPE_VIRTUAL
+        : (node.pageType === PAGE_TYPE_HOME ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE);
       const title = node.title || getTitleFromUrl(canonicalUrl);
       const incomingLinks = linksInCounts.get(canonicalUrl) || 0;
       const discoverySource = isMissing
@@ -2058,6 +2061,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       finalUrl: meta.finalUrl || url,
       canonicalUrl: meta.canonicalUrl || null,
       title: meta.title || url,
+      pageType: url === seed ? PAGE_TYPE_HOME : PAGE_TYPE_PAGE,
       description: meta.description || '',
       metaTags: meta.metaTags || '',
       seoMetadata: meta.seoMetadata || {},

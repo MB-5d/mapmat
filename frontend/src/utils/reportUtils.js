@@ -35,6 +35,7 @@ export const getReportPageType = (node, overrides = {}) => {
   if (!node) return 'Standard';
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
+  if (node.pageType === 'Home') return 'Home';
   if (isSubdomain) return 'Subdomain';
   if (orphanType === 'file' || node.isFile) return 'File';
   if (orphanType === 'orphan') return 'Orphan';
