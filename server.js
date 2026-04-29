@@ -1395,6 +1395,7 @@ function extractThumbnailUrl(html, baseUrl) {
 }
 
 async function fetchPage(url, extraHeaders = {}) {
+  const startedAt = Date.now();
   const res = await axios.get(url, {
     timeout: 20000,
     maxRedirects: 5,
@@ -1406,9 +1407,10 @@ async function fetchPage(url, extraHeaders = {}) {
     },
     validateStatus: () => true,
   });
+  const responseTime = Date.now() - startedAt;
   const responseUrl = res.request?.res?.responseUrl;
   const finalUrl = normalizeUrl(responseUrl || url);
-  return { html: res.data, status: res.status, contentType: res.headers['content-type'], finalUrl };
+  return { html: res.data, status: res.status, contentType: res.headers['content-type'], finalUrl, responseTime };
 }
 
 function isHtmlContentType(contentType) {
@@ -1915,12 +1917,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let status = 0;
     let contentType = '';
     let finalUrl = url;
+    let responseTime = null;
     try {
       const res = await fetchPage(url, extraHeaders);
       html = res.html;
       status = res.status;
       contentType = res.contentType;
       finalUrl = res.finalUrl || url;
+      responseTime = res.responseTime;
     } catch (e) {
     // Still store node with fallback title so tree doesn't break
     if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
@@ -1933,6 +1937,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           discoveryIndex,
           httpStatus: status,
           wasRedirect: false,
+          responseTime,
         });
       }
       continue;
@@ -1988,6 +1993,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       discoveryIndex,
       httpStatus: status,
       wasRedirect,
+      responseTime,
     });
 
     const links = extractLinks(html, finalUrl || url);
@@ -2065,13 +2071,23 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       description: meta.description || '',
       metaTags: meta.metaTags || '',
       seoMetadata: meta.seoMetadata || {},
+      h1s: Array.isArray(meta.seoMetadata?.h1s) ? meta.seoMetadata.h1s : [],
+      h2s: Array.isArray(meta.seoMetadata?.h2s) ? meta.seoMetadata.h2s : [],
+      imageCount: Number.isFinite(meta.seoMetadata?.imageCount) ? meta.seoMetadata.imageCount : null,
+      missingImageAltCount: Number.isFinite(meta.seoMetadata?.missingImageAltCount) ? meta.seoMetadata.missingImageAltCount : null,
       parentUrl: meta.parentUrl,
       discoveryIndex: Number.isFinite(meta.discoveryIndex) ? meta.discoveryIndex : null,
       referrerUrl: referrerMap.get(url) || null,
+      linksIn: linksInCounts.get(url) || 0,
+      internalLinks: Array.isArray(linksByUrl.get(url)) ? linksByUrl.get(url) : [],
+      linksOut: Array.isArray(linksByUrl.get(url)) ? linksByUrl.get(url).length : 0,
       authRequired: meta.authRequired || false,
       thumbnailUrl: meta.thumbnailUrl || undefined,
       httpStatus: meta.httpStatus ?? null,
+      statusCode: meta.httpStatus ?? null,
       wasRedirect: meta.wasRedirect || false,
+      redirectTarget: meta.wasRedirect ? (meta.finalUrl || url) : null,
+      responseTime: Number.isFinite(meta.responseTime) ? meta.responseTime : null,
       children: [],
     });
   }

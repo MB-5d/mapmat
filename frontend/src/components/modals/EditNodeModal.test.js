@@ -160,6 +160,46 @@ describe('EditNodeModal', () => {
     );
   });
 
+  test('shows read-only page insights when provided', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: '1',
+            title: 'Scanned page',
+            url: 'https://example.com/page',
+            pageType: 'Page',
+            annotations: { status: 'none', tags: [], note: '' },
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          mode="edit"
+          customPageTypes={[]}
+          onAddCustomType={jest.fn()}
+          specialParentOptions={[]}
+          insightSummary={{
+            score: 82,
+            findingCount: 2,
+            topFindings: [
+              {
+                id: 'seo-1',
+                title: 'Missing meta description',
+                recommendation: 'Add a clear description.',
+              },
+            ],
+          }}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Page Insights');
+    expect(container.textContent).toContain('82/100');
+    expect(container.textContent).toContain('2 findings');
+    expect(container.textContent).toContain('Missing meta description');
+  });
+
   test('only allows one Home page type', () => {
     act(() => {
       root.render(

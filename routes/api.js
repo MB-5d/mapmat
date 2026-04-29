@@ -29,6 +29,7 @@ const {
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
 const { buildHealthSnapshot: getEmailHealthSnapshot } = require('../utils/emailProvider');
 const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
+const { analyzeMapInsights } = require('../utils/mapInsights');
 
 const router = express.Router();
 
@@ -1701,6 +1702,8 @@ router.get('/history', requireAuth, async (req, res) => {
       ...h,
       ...parseMapFields(h),
       scan_options: safeParse(h.scan_options, 'scan_options', null),
+      insights: safeParse(h.insights_data, 'insights_data', null),
+      insights_generated_at: h.insights_generated_at || null,
       scan_depth: h.scan_depth ?? null,
       map_id: h.map_id || null,
     }));
@@ -1771,6 +1774,86 @@ router.put('/history/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Update history error:', error);
     res.status(500).json({ error: 'Failed to update history' });
+  }
+});
+
+// GET /api/history/:id/insights - Get saved insights for a scan history item
+router.get('/history/:id/insights', requireAuth, async (req, res) => {
+  try {
+    await historyStore.ensureHistorySchemaAsync();
+    const { id } = req.params;
+    const historyItem = await historyStore.getHistoryItemForUserAsync(id, req.user.id);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: historyItem,
+      action: permissionPolicy.ACTIONS.HISTORY_UPDATE,
+      failureError: 'History item not found',
+    })) return;
+
+    res.json({
+      insights: safeParse(historyItem.insights_data, 'insights_data', null),
+      insights_generated_at: historyItem.insights_generated_at || null,
+    });
+  } catch (error) {
+    console.error('Get insights error:', error);
+    res.status(500).json({ error: 'Failed to get insights' });
+  }
+});
+
+// POST /api/insights/analyze - Run deterministic Map Insights from current scan data
+router.post('/insights/analyze', async (req, res) => {
+  try {
+    await historyStore.ensureHistorySchemaAsync();
+    const {
+      root,
+      orphans = [],
+      scan_meta,
+      scanMeta,
+      history_id,
+      scan_id,
+    } = req.body || {};
+
+    if (!root || typeof root !== 'object') {
+      return res.status(400).json({ error: 'Scan data is required' });
+    }
+
+    let historyItem = null;
+    if (history_id) {
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Sign in to save insights for this scan' });
+      }
+      historyItem = await historyStore.getHistoryItemForUserAsync(history_id, req.user.id);
+      if (!ensureResourceAction({
+        req,
+        res,
+        resource: historyItem,
+        action: permissionPolicy.ACTIONS.HISTORY_UPDATE,
+        failureError: 'History item not found',
+      })) return;
+    }
+
+    const insights = analyzeMapInsights({
+      root,
+      orphans: Array.isArray(orphans) ? orphans : [],
+      scanMeta: scanMeta || scan_meta || {},
+      scanId: scan_id || history_id || null,
+      historyId: history_id || null,
+    });
+
+    if (historyItem) {
+      await historyStore.updateHistoryInsightsAsync(
+        history_id,
+        req.user.id,
+        JSON.stringify(insights),
+        insights.updatedAt
+      );
+    }
+
+    res.json({ insights, saved: !!historyItem });
+  } catch (error) {
+    console.error('Analyze insights error:', error);
+    res.status(500).json({ error: 'Failed to analyze scan' });
   }
 });
 

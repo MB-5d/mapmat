@@ -66,13 +66,28 @@ function extractSeoMetadata(html, baseUrl) {
       'meta[name="googlebot"]',
     ]);
 
+    const h1s = $('h1').map((_, el) => normalizeText($(el).text())).get().filter(Boolean);
+    const h2s = $('h2').map((_, el) => normalizeText($(el).text())).get().filter(Boolean);
+    const images = $('img');
+    let missingImageAltCount = 0;
+    images.each((_, el) => {
+      const alt = $(el).attr('alt');
+      if (alt === undefined || normalizeText(alt) === '') {
+        missingImageAltCount += 1;
+      }
+    });
+
     const metadata = {
       description,
       keywords,
       robots,
       canonicalUrl,
-      h1: normalizeText($('h1').first().text()),
-      h2: normalizeText($('h2').first().text()),
+      h1: h1s[0] || '',
+      h2: h2s[0] || '',
+      h1s,
+      h2s,
+      imageCount: images.length,
+      missingImageAltCount,
       language: normalizeText($('html').first().attr('lang')),
       openGraph: compactObject({
         title: readMeta($, 'meta[property="og:title"], meta[name="og:title"]'),

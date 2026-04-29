@@ -84,7 +84,7 @@ const TABLES = [
     columns: [
       'id', 'user_id', 'map_id', 'url', 'hostname', 'title', 'page_count', 'root_data',
       'orphans_data', 'connections_data', 'colors', 'connection_colors', 'scan_options',
-      'scan_depth', 'scanned_at',
+      'scan_depth', 'insights_data', 'insights_generated_at', 'scanned_at',
     ],
   },
   {
@@ -182,6 +182,8 @@ CREATE TABLE IF NOT EXISTS scan_history (
   connection_colors TEXT,
   scan_options TEXT,
   scan_depth INTEGER,
+  insights_data TEXT,
+  insights_generated_at TIMESTAMPTZ,
   scanned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

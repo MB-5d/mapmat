@@ -186,4 +186,94 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('Open Graph title:');
     expect(container.textContent).toContain('Pricing OG');
   });
+
+  test('runs insights from the empty state', () => {
+    const onRunInsights = jest.fn();
+    renderDrawer({ onRunInsights });
+
+    const insightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+      button.textContent.includes('Insights')
+    );
+    act(() => {
+      insightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Map Insights have not been run yet.');
+    const runButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Run Insights')
+    );
+    act(() => {
+      runButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onRunInsights).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows completed insights and page score in report rows', () => {
+    renderDrawer({
+      insights: {
+        overallScore: 84,
+        scores: { seo: 80, technical: 90, ia: 88, content: 75, accessibility: null },
+        totals: { pages: 3, errorPages: 1, missingMetaDescriptions: 1, missingH1s: 1 },
+        findings: [
+          {
+            id: 'seo-1',
+            pageId: '1',
+            url: 'https://example.com/pricing',
+            category: 'seo',
+            severity: 'medium',
+            title: 'Missing meta description',
+            description: 'Pricing is missing a description.',
+            recommendation: 'Add a clear description.',
+          },
+        ],
+        pageInsights: [
+          {
+            pageId: '1',
+            url: 'https://example.com/pricing',
+            score: 95,
+            findingCount: 1,
+            topFindings: [],
+          },
+        ],
+      },
+    });
+
+    expect(container.textContent).toContain('pricing95');
+
+    const insightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+      button.textContent.includes('Insights')
+    );
+    act(() => {
+      insightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Overall Health');
+    expect(container.textContent).toContain('84');
+    expect(container.textContent).toContain('Missing meta description');
+    expect(container.textContent).toContain('Add a clear description.');
+  });
+
+  test('shows insights loading and error states', () => {
+    renderDrawer({ insightsLoading: true });
+
+    const insightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+      button.textContent.includes('Insights')
+    );
+    act(() => {
+      insightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Running Insights...');
+
+    renderDrawer({ insightsError: 'Failed to analyze scan' });
+    const nextInsightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+      button.textContent.includes('Insights')
+    );
+    act(() => {
+      nextInsightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Failed to analyze scan');
+  });
 });

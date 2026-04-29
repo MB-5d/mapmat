@@ -128,8 +128,8 @@ describe('ProjectsModal', () => {
       editingMapName: 'Renamed Map',
     });
 
-    const projectInput = container.querySelector('.project-name-input');
-    const mapInput = container.querySelector('.project-map-name-input');
+    const projectInput = container.querySelector('input.project-name-input');
+    const mapInput = container.querySelector('input.project-map-name-input');
 
     act(() => {
       projectInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -155,8 +155,8 @@ describe('ProjectsModal', () => {
     const addProjectButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.replace(/\s+/g, ' ').trim() === 'Add Project'
     );
-    const projectInput = container.querySelector('.project-name-input');
-    const mapInput = container.querySelector('.project-map-name-input');
+    const projectInput = container.querySelector('input.project-name-input');
+    const mapInput = container.querySelector('input.project-map-name-input');
 
     expect(addMapButton.className).toContain('ui-btn');
     expect(addProjectButton.className).toContain('ui-btn');

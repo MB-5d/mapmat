@@ -1126,6 +1126,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
   });
+  const [mapInsights, setMapInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsError, setInsightsError] = useState('');
   const [scanLayerAvailability, setScanLayerAvailability] = useState({
     placementPrimary: false,
     placementSubdomain: false,
@@ -1735,6 +1738,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
     return stats;
   }, [reportEntries]);
+
+  const pageInsightLookup = useMemo(() => {
+    const map = new Map();
+    (mapInsights?.pageInsights || []).forEach((entry) => {
+      if (entry.pageId) map.set(entry.pageId, entry);
+      if (entry.url) map.set(entry.url, entry);
+    });
+    return map;
+  }, [mapInsights]);
+
+  const getPageInsightForNode = useCallback((node) => {
+    if (!node) return null;
+    return pageInsightLookup.get(node.id) || pageInsightLookup.get(node.url) || null;
+  }, [pageInsightLookup]);
 
   const getVersionSnapshot = useCallback(() => ({
     root,
@@ -6281,6 +6298,47 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast('History is view-only for now', 'info');
   };
 
+  const runMapInsights = useCallback(async () => {
+    if (!root) {
+      setInsightsError('Scan a site before running Insights.');
+      return;
+    }
+
+    setInsightsLoading(true);
+    setInsightsError('');
+    try {
+      const canPersistToHistory = Boolean(
+        isLoggedIn
+        && lastHistoryId
+        && lastScanUrl
+        && root?.url
+        && normalizeUrlForCompare(root.url) === normalizeUrlForCompare(lastScanUrl)
+      );
+      const { insights, saved } = await api.analyzeInsights({
+        root,
+        orphans,
+        scanMeta,
+        history_id: canPersistToHistory ? lastHistoryId : null,
+      });
+      setMapInsights(insights || null);
+      if (saved && lastHistoryId) {
+        setScanHistory((prev) => prev.map((item) => (
+          item.id === lastHistoryId
+            ? { ...item, insights, insights_generated_at: insights?.updatedAt || new Date().toISOString() }
+            : item
+        )));
+      }
+      showToast(saved ? 'Insights saved' : 'Insights ready', 'success');
+    } catch (error) {
+      console.error('Run insights failed:', error);
+      const message = error.message || 'Failed to run Insights';
+      setInsightsError(message);
+      showToast(message, 'error');
+    } finally {
+      setInsightsLoading(false);
+    }
+  }, [isLoggedIn, lastHistoryId, lastScanUrl, orphans, root, scanMeta, showToast]);
+
   const toggleHistorySelection = (id) => {
     setSelectedHistoryItems(prev => {
       const next = new Set(prev);
@@ -6458,6 +6516,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowStopConfirm(false);
     setIsStoppingScan(false);
     setScanErrorMessage('');
+    setMapInsights(null);
+    setInsightsError('');
+    setLastHistoryId(null);
+    setLastScanUrl('');
     setLoading(true);
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
@@ -11838,6 +11900,10 @@ export default function App({ currentRoute, navigateToRoute }) {
               stats={reportStats}
               typeOptions={REPORT_TYPE_OPTIONS}
               onDownload={downloadReportPdf}
+              insights={mapInsights}
+              insightsLoading={insightsLoading}
+              insightsError={insightsError}
+              onRunInsights={runMapInsights}
               onLocateNode={(nodeId) => {
                 focusNodeById(nodeId);
               }}
@@ -12260,6 +12326,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
           specialParentOptions={specialParentOptions}
           isHomePageCreation={editModalMode === 'add' && !root}
+          insightSummary={getPageInsightForNode(editModalNode)}
         />
       )}
 

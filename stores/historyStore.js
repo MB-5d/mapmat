@@ -1,4 +1,37 @@
 const adapter = require('./dbAdapter');
+let ensureSchemaPromise = null;
+
+async function ensureColumnAsync(table, column, type) {
+  let rows = [];
+  if (adapter.runtime?.activeProvider === 'postgres') {
+    rows = await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ?
+    `, [table]);
+  } else {
+    rows = await adapter.queryAllAsync(`PRAGMA table_info(${table})`);
+  }
+
+  const columns = rows.map((row) => row.column_name || row.name).filter(Boolean);
+  if (!columns.includes(column)) {
+    await adapter.executeAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
+async function ensureHistorySchemaAsync() {
+  if (ensureSchemaPromise) return ensureSchemaPromise;
+  ensureSchemaPromise = (async () => {
+    await ensureColumnAsync('scan_history', 'insights_data', 'TEXT');
+    await ensureColumnAsync('scan_history', 'insights_generated_at', 'TIMESTAMP');
+  })();
+  try {
+    await ensureSchemaPromise;
+  } catch (error) {
+    ensureSchemaPromise = null;
+    throw error;
+  }
+}
 
 function listHistoryByUserAsync(userId, { limit, offset }) {
   return adapter.queryAllAsync(`
@@ -70,6 +103,14 @@ function getHistoryItemForUserAsync(historyId, userId) {
   return adapter.queryOneAsync('SELECT * FROM scan_history WHERE id = ? AND user_id = ?', [historyId, userId]);
 }
 
+function updateHistoryInsightsAsync(historyId, userId, insightsData, generatedAt) {
+  return adapter.executeAsync(`
+    UPDATE scan_history
+    SET insights_data = ?, insights_generated_at = ?
+    WHERE id = ? AND user_id = ?
+  `, [insightsData, generatedAt, historyId, userId]);
+}
+
 function updateHistoryMapIdAsync(historyId, mapId) {
   return adapter.executeAsync(`
     UPDATE scan_history SET map_id = ?, scanned_at = scanned_at
@@ -87,11 +128,13 @@ async function deleteHistoryByIdsForUserAsync(ids, userId) {
 }
 
 module.exports = {
+  ensureHistorySchemaAsync,
   listHistoryByUserAsync,
   countHistoryByUserAsync,
   createHistoryAsync,
   trimHistoryByUserAsync,
   getHistoryItemForUserAsync,
+  updateHistoryInsightsAsync,
   updateHistoryMapIdAsync,
   deleteHistoryByIdsForUserAsync,
 };

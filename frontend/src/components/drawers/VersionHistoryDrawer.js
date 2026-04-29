@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
-  ArrowUp,
+  ArrowUpToLine,
   BookmarkPlus,
   MessageSquare,
   PencilLine,
@@ -244,7 +244,7 @@ const VersionHistoryDrawer = ({
           : renderVersions()}
         {showBackToTop ? (
           <button type="button" className="drawer-back-to-top" onClick={scrollToTop}>
-            <ArrowUp size={16} />
+            <ArrowUpToLine size={16} />
             Back to top
           </button>
         ) : null}

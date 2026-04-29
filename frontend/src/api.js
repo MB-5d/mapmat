@@ -554,6 +554,17 @@ export async function updateHistory(id, data) {
   });
 }
 
+export async function getHistoryInsights(id) {
+  return fetchApi(`/api/history/${id}/insights`);
+}
+
+export async function analyzeInsights(data) {
+  return fetchApi('/api/insights/analyze', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function deleteHistory(ids) {
   return fetchApi('/api/history', {
     method: 'DELETE',

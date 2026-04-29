@@ -116,6 +116,8 @@ db.exec(`
     root_data TEXT NOT NULL,
     colors TEXT,
     connection_colors TEXT,
+    insights_data TEXT,
+    insights_generated_at DATETIME,
     scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -235,6 +237,8 @@ ensureColumn('scan_history', 'connection_colors', 'TEXT');
 ensureColumn('scan_history', 'scan_options', 'TEXT');
 ensureColumn('scan_history', 'scan_depth', 'INTEGER');
 ensureColumn('scan_history', 'map_id', 'TEXT');
+ensureColumn('scan_history', 'insights_data', 'TEXT');
+ensureColumn('scan_history', 'insights_generated_at', 'DATETIME');
 ensureColumn('usage_events', 'meta', 'TEXT');
 ensureColumn('pages', 'placement', "TEXT NOT NULL DEFAULT 'Primary'");
 ensureColumn('pages', 'status', "TEXT NOT NULL DEFAULT 'Active'");

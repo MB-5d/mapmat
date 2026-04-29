@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowUp,
+  ArrowUpToLine,
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Filter,
   Locate,
+  Loader2,
   Search,
   X,
 } from 'lucide-react';
@@ -18,6 +19,24 @@ import IconButton from '../ui/IconButton';
 import TextInput from '../ui/TextInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
+const INSIGHT_CATEGORY_LABELS = {
+  seo: 'SEO',
+  technical: 'Technical',
+  ia: 'IA',
+  content: 'Content',
+  accessibility: 'Accessibility Hints',
+};
+
+const INSIGHT_SEVERITY_LABELS = {
+  critical: 'Critical',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+  info: 'Info',
+};
+
+const SCORE_LABEL = (score) => (Number.isFinite(score) ? `${score}` : '--');
+
 const ReportDrawer = ({
   isOpen,
   onClose,
@@ -25,18 +44,25 @@ const ReportDrawer = ({
   stats,
   typeOptions,
   onDownload,
+  insights,
+  insightsLoading = false,
+  insightsError = '',
+  onRunInsights,
   onLocateNode,
   onLocateUrl,
   reportTitle,
   reportTimestamp,
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'number', direction: 'asc' });
+  const [activeTab, setActiveTab] = useState('report');
   const [showFilters, setShowFilters] = useState(false);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [insightCategory, setInsightCategory] = useState('all');
+  const [insightSeverity, setInsightSeverity] = useState('all');
   const bodyRef = useRef(null);
   const [filters, setFilters] = useState(() => {
     const initial = {};
@@ -155,6 +181,23 @@ const ReportDrawer = ({
     });
   }, [entryOrder, filteredEntries, sortConfig]);
 
+  const pageInsightLookup = useMemo(() => {
+    const map = new Map();
+    (insights?.pageInsights || []).forEach((entry) => {
+      if (entry.pageId) map.set(entry.pageId, entry);
+      if (entry.url) map.set(entry.url, entry);
+    });
+    return map;
+  }, [insights]);
+
+  const filteredFindings = useMemo(() => {
+    const findings = Array.isArray(insights?.findings) ? insights.findings : [];
+    return findings.filter((finding) => (
+      (insightCategory === 'all' || finding.category === insightCategory)
+      && (insightSeverity === 'all' || finding.severity === insightSeverity)
+    ));
+  }, [insightCategory, insightSeverity, insights]);
+
   const toggleSort = (key) => {
     setSortConfig((previous) => {
       if (previous.key === key) {
@@ -249,6 +292,23 @@ const ReportDrawer = ({
         </div>
       </header>
 
+      <div className="report-tabs" role="tablist" aria-label="Report views">
+        <button
+          type="button"
+          className={`report-tab ${activeTab === 'report' ? 'active' : ''}`}
+          onClick={() => setActiveTab('report')}
+        >
+          Report
+        </button>
+        <button
+          type="button"
+          className={`report-tab ${activeTab === 'insights' ? 'active' : ''}`}
+          onClick={() => setActiveTab('insights')}
+        >
+          Insights
+        </button>
+      </div>
+
       <div
         className="report-drawer-body"
         ref={bodyRef}
@@ -262,6 +322,8 @@ const ReportDrawer = ({
           e.nativeEvent?.stopImmediatePropagation?.();
         }}
       >
+        {activeTab === 'report' ? (
+          <>
         <section className="report-summary">
           <div className="report-total-card">
             <div className="report-total-value">{stats.total}</div>
@@ -341,6 +403,7 @@ const ReportDrawer = ({
           >
           {sortedEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
+            const pageInsight = pageInsightLookup.get(entry.id) || pageInsightLookup.get(entry.url) || null;
             const seoRows = [
               ['Description', entry.description],
               ['Meta keywords', entry.metaKeywords],
@@ -374,7 +437,10 @@ const ReportDrawer = ({
                   <div className="report-cell report-cell-number">{entry.number || '--'}</div>
                   <div className="report-cell report-cell-type">{entry.pageType}</div>
                   <div className="report-cell report-cell-title" title={entry.title || entry.url}>
-                    {entry.title || entry.url}
+                    <span>{entry.title || entry.url}</span>
+                    {pageInsight && (
+                      <span className="report-page-score">{pageInsight.score}</span>
+                    )}
                   </div>
                   <div className="report-cell report-cell-count">{entry.types.length}</div>
                   <button
@@ -403,6 +469,13 @@ const ReportDrawer = ({
                       )}
                       <div className="report-detail-right">
                         <div className="report-detail-info">
+                          {pageInsight && (
+                            <div className="report-page-insight">
+                              <strong>Page Insight Score</strong>
+                              <span>{pageInsight.score}/100</span>
+                              <small>{pageInsight.findingCount} finding{pageInsight.findingCount === 1 ? '' : 's'}</small>
+                            </div>
+                          )}
                           <Button
                             type="button"
                             className="report-open-link"
@@ -477,9 +550,119 @@ const ReportDrawer = ({
           )}
         </div>
       </section>
+          </>
+        ) : (
+          <section className="insights-panel">
+            {!insights && !insightsLoading && (
+              <div className="insights-empty">
+                <div className="insights-empty-title">Map Insights have not been run yet.</div>
+                <div className="insights-empty-copy">Run deterministic checks against the current scan data.</div>
+                <Button type="button" variant="primary" onClick={onRunInsights}>
+                  Run Insights
+                </Button>
+              </div>
+            )}
+
+            {insightsLoading && (
+              <div className="insights-empty">
+                <Loader2 size={22} className="spin" />
+                <div className="insights-empty-title">Running Insights...</div>
+              </div>
+            )}
+
+            {insightsError && !insightsLoading && (
+              <div className="insights-error">
+                {insightsError}
+              </div>
+            )}
+
+            {insights && !insightsLoading && (
+              <>
+                <section className="insights-summary">
+                  <div className="insights-score-card insights-score-card-main">
+                    <div className="insights-score-value">{SCORE_LABEL(insights.overallScore)}</div>
+                    <div className="insights-score-label">Overall Health</div>
+                  </div>
+                  {Object.entries(INSIGHT_CATEGORY_LABELS).map(([key, label]) => (
+                    <div key={key} className="insights-score-card">
+                      <div className="insights-score-value">{SCORE_LABEL(insights.scores?.[key])}</div>
+                      <div className="insights-score-label">{label}</div>
+                    </div>
+                  ))}
+                </section>
+
+                <section className="insights-counts">
+                  <span>{insights.totals?.pages || 0} pages</span>
+                  <span>{insights.findings?.length || 0} findings</span>
+                  <span>{insights.totals?.errorPages || 0} error pages</span>
+                  <span>{insights.totals?.missingMetaDescriptions || 0} missing descriptions</span>
+                  <span>{insights.totals?.missingH1s || 0} missing H1s</span>
+                </section>
+
+                <section className="insights-actions">
+                  <Button type="button" variant="secondary" size="sm" onClick={onRunInsights}>
+                    Rerun Insights
+                  </Button>
+                  <label className="insights-filter">
+                    Category
+                    <select value={insightCategory} onChange={(event) => setInsightCategory(event.target.value)}>
+                      <option value="all">All</option>
+                      {Object.entries(INSIGHT_CATEGORY_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="insights-filter">
+                    Severity
+                    <select value={insightSeverity} onChange={(event) => setInsightSeverity(event.target.value)}>
+                      <option value="all">All</option>
+                      {Object.entries(INSIGHT_SEVERITY_LABELS).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </section>
+
+                <section className="insights-findings">
+                  {filteredFindings.map((finding) => (
+                    <article key={finding.id} className={`insight-finding insight-${finding.severity}`}>
+                      <div className="insight-finding-header">
+                        <span className="insight-finding-title">{finding.title}</span>
+                        <span className="insight-finding-meta">
+                          {INSIGHT_CATEGORY_LABELS[finding.category] || finding.category} | {INSIGHT_SEVERITY_LABELS[finding.severity] || finding.severity}
+                        </span>
+                      </div>
+                      <p>{finding.description}</p>
+                      <p className="insight-recommendation">{finding.recommendation}</p>
+                      <div className="insight-finding-footer">
+                        <span>{finding.url || 'Site-wide'}</span>
+                        {(finding.pageId || finding.url) && (
+                          <button
+                            type="button"
+                            className="report-map-link"
+                            onClick={() => {
+                              if (finding.pageId) onLocateNode?.(finding.pageId);
+                              else onLocateUrl?.(finding.url);
+                            }}
+                          >
+                            <Locate size={16} />
+                            See on map
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                  {filteredFindings.length === 0 && (
+                    <div className="report-empty">No findings match these filters.</div>
+                  )}
+                </section>
+              </>
+            )}
+          </section>
+        )}
       {showBackToTop ? (
         <button type="button" className="drawer-back-to-top" onClick={scrollToTop}>
-          <ArrowUp size={16} />
+          <ArrowUpToLine size={16} />
           Back to top
         </button>
       ) : null}
