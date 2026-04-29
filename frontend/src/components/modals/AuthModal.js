@@ -281,13 +281,13 @@ const AuthModal = ({
         {status ? <div className="auth-success">{status}</div> : null}
 
         {view === AUTH_VIEWS.SIGNUP ? (
-          <Field label="Name">
+          <Field label="Username">
             <TextInput
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Your name"
-              autoComplete="name"
+              placeholder="Your username"
+              autoComplete="username"
               disabled={loading}
             />
           </Field>

@@ -117,6 +117,8 @@ describe('AuthModal', () => {
 
     await clickButton('Sign Up');
 
+    expect(container.textContent).toContain('Username');
+
     const inputs = container.querySelectorAll('input');
     const form = container.querySelector('form');
 

@@ -1,13 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
+import Cropper from 'react-easy-crop';
+import { AlertTriangle, ImagePlus, PencilLine, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
 import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
+import Modal from '../ui/Modal';
 import TextInput from '../ui/TextInput';
+import { createCroppedAvatarDataUrl } from '../../utils/avatarCrop';
 import { resolveApiAssetUrl } from '../../utils/assets';
+
+const AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 
 const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast }) => {
   const [name, setName] = useState('');
@@ -18,6 +23,10 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   const [deletePassword, setDeletePassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarCropSrc, setAvatarCropSrc] = useState('');
+  const [avatarCrop, setAvatarCrop] = useState({ x: 0, y: 0 });
+  const [avatarZoom, setAvatarZoom] = useState(1);
+  const [avatarCropPixels, setAvatarCropPixels] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -36,12 +45,18 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       setSuccess('');
       setLoading(false);
       setAvatarLoading(false);
+      setAvatarCropSrc('');
+      setAvatarCrop({ x: 0, y: 0 });
+      setAvatarZoom(1);
+      setAvatarCropPixels(null);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, user]);
 
   const avatarUrl = resolveApiAssetUrl(user?.avatarUrl);
+  const avatarInitial = String(user?.name || user?.email || 'A').trim().charAt(0).toUpperCase();
   const hasPassword = !!user?.hasPassword;
+  const hasAvatar = !!avatarUrl;
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -98,6 +113,25 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     }
   };
 
+  const resetAvatarCrop = () => {
+    setAvatarCrop({ x: 0, y: 0 });
+    setAvatarZoom(1);
+    setAvatarCropPixels(null);
+  };
+
+  const openAvatarCrop = (src) => {
+    resetAvatarCrop();
+    setAvatarCropSrc(src);
+  };
+
+  const handleAvatarEditClick = () => {
+    if (hasAvatar) {
+      openAvatarCrop(avatarUrl);
+      return;
+    }
+    avatarInputRef.current?.click();
+  };
+
   const handleAvatarFile = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -106,10 +140,13 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       setError('Upload a PNG, JPG, or WebP image.');
       return;
     }
+    if (file.size > AVATAR_SOURCE_MAX_BYTES) {
+      setError('Choose an avatar image under 8 MB.');
+      return;
+    }
 
     setError('');
     setSuccess('');
-    setAvatarLoading(true);
 
     try {
       const imageDataUrl = await new Promise((resolve, reject) => {
@@ -118,9 +155,23 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
         reader.onerror = () => reject(new Error('Failed to read image file'));
         reader.readAsDataURL(file);
       });
+      openAvatarCrop(imageDataUrl);
+    } catch (err) {
+      setError(err.message || 'Failed to read avatar image');
+    }
+  };
+
+  const handleSaveAvatarCrop = async () => {
+    setError('');
+    setSuccess('');
+    setAvatarLoading(true);
+
+    try {
+      const imageDataUrl = await createCroppedAvatarDataUrl(avatarCropSrc, avatarCropPixels);
       const { user: updatedUser } = await api.uploadMyAvatar({ imageDataUrl });
       onUpdate?.(updatedUser);
       setSuccess('Avatar updated');
+      setAvatarCropSrc('');
     } catch (err) {
       setError(err.message || 'Failed to upload avatar');
     } finally {
@@ -176,15 +227,26 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       className="profile-drawer"
     >
       <div className="account-hero">
-        <Avatar
-          className="account-hero-avatar account-hero-avatar-image"
-          src={avatarUrl}
-          label={String(user?.name || 'A').trim().charAt(0).toUpperCase()}
-          icon={<User size={20} />}
-          size="lg"
-          shape="rounded"
-          aria-hidden="true"
-        />
+        <button
+          type="button"
+          className="account-hero-avatar-edit"
+          onClick={handleAvatarEditClick}
+          disabled={!user || avatarLoading}
+          aria-label={hasAvatar ? 'Edit avatar' : 'Upload avatar'}
+        >
+          <Avatar
+            className="account-hero-avatar account-hero-avatar-image"
+            src={avatarUrl}
+            label={avatarInitial}
+            icon={<User size={20} />}
+            size="lg"
+            shape="circle"
+            aria-hidden="true"
+          />
+          <span className="account-hero-avatar-edit-icon" aria-hidden="true">
+            <PencilLine size={13} />
+          </span>
+        </button>
         <div className="account-hero-details">
           <div className="account-hero-name">{user?.name || 'Your account'}</div>
           <div className="account-hero-email">{user?.email || ''}</div>
@@ -198,7 +260,6 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           {success && <div className="auth-success">{success}</div>}
 
           <div className="form-section">
-            <h4>Profile</h4>
             <div className="profile-avatar-controls">
               <Button
                 type="button"
@@ -208,11 +269,11 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
                 loading={avatarLoading}
               >
                 {!avatarLoading ? <ImagePlus size={16} /> : null}
-                Upload Avatar
+                {hasAvatar ? 'Change Avatar' : 'Upload Avatar'}
               </Button>
               <Button
                 type="button"
-                variant="secondary"
+                variant="ghost"
                 onClick={handleRemoveAvatar}
                 disabled={!user || avatarLoading || !avatarUrl}
                 loading={avatarLoading}
@@ -228,12 +289,12 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
                 onChange={handleAvatarFile}
               />
             </div>
-            <Field label="Name">
+            <Field label="Username">
               <TextInput
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
+                placeholder="Your username"
                 disabled={!user || loading}
               />
             </Field>
@@ -356,6 +417,63 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           </div>
         </div>
       )}
+      <Modal
+        show={!!avatarCropSrc}
+        onClose={() => !avatarLoading && setAvatarCropSrc('')}
+        title={hasAvatar ? 'Crop Avatar' : 'Upload Avatar'}
+        subtitle="Position your image inside the circle."
+        size="sm"
+        className="avatar-crop-modal"
+        bodyClassName="avatar-crop-modal-body"
+        footer={(
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAvatarCropSrc('')}
+              disabled={avatarLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSaveAvatarCrop}
+              disabled={!avatarCropPixels || avatarLoading}
+              loading={avatarLoading}
+            >
+              Save Avatar
+            </Button>
+          </>
+        )}
+      >
+        <div className="avatar-crop-stage">
+          <Cropper
+            image={avatarCropSrc}
+            crop={avatarCrop}
+            zoom={avatarZoom}
+            aspect={1}
+            cropShape="round"
+            showGrid={false}
+            objectFit="cover"
+            onCropChange={setAvatarCrop}
+            onZoomChange={setAvatarZoom}
+            onCropComplete={(_, croppedAreaPixels) => setAvatarCropPixels(croppedAreaPixels)}
+          />
+        </div>
+        <Field label="Zoom">
+          <input
+            type="range"
+            min="1"
+            max="3"
+            step="0.01"
+            value={avatarZoom}
+            onChange={(event) => setAvatarZoom(Number(event.target.value))}
+            className="avatar-crop-zoom"
+            disabled={avatarLoading}
+          />
+        </Field>
+      </Modal>
     </AccountDrawer>
   );
 };

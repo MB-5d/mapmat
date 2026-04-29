@@ -9,7 +9,7 @@ const AVATAR_STORAGE_DIR = railwayVolumeDir
   : path.join(__dirname, '..', 'uploads', 'avatars');
 const AVATAR_MAX_BYTES = Math.max(
   32 * 1024,
-  Number(process.env.AVATAR_MAX_BYTES || 2 * 1024 * 1024)
+  Number(process.env.AVATAR_MAX_BYTES || 512 * 1024)
 );
 const ALLOWED_AVATAR_MIME = Object.freeze({
   'image/png': 'png',
