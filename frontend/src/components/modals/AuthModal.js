@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
 import * as api from '../../api';
@@ -7,7 +7,7 @@ import Field, { FieldHint } from '../ui/Field';
 import Modal from '../ui/Modal';
 import SegmentedControl from '../ui/SegmentedControl';
 import TextInput from '../ui/TextInput';
-import { API_BASE, GOOGLE_AUTH_ENABLED, SHOW_DEMO_AUTH } from '../../utils/constants';
+import { GOOGLE_AUTH_ENABLED, SHOW_DEMO_AUTH } from '../../utils/constants';
 import { trackEvent } from '../../utils/analytics';
 
 const AUTH_VIEWS = Object.freeze({
@@ -18,32 +18,43 @@ const AUTH_VIEWS = Object.freeze({
   RESET: 'reset',
 });
 
-const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
-const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
-const GOOGLE_POPUP_FEATURES = 'popup=yes,width=520,height=680,resizable=yes,scrollbars=yes';
+const GOOGLE_IDENTITY_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
+let googleIdentityScriptPromise = null;
 
-const GoogleGIcon = ({ className = '' }) => (
-  <svg
-    className={`auth-google-icon ${className}`.trim()}
-    viewBox="0 0 18 18"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.12-.84 2.07-1.8 2.71v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.61z" />
-    <path fill="#34A853" d="M9 18c2.43 0 4.47-.81 5.96-2.19l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.35 0-4.34-1.59-5.05-3.72H.94v2.33C2.42 15.95 5.46 18 9 18z" />
-    <path fill="#FBBC05" d="M3.95 10.69A5.41 5.41 0 0 1 3.67 9c0-.59.1-1.16.28-1.69V4.98H.94A9.01 9.01 0 0 0 0 9c0 1.45.34 2.82.94 4.02l3.01-2.33z" />
-    <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.42 0 9 0 5.46 0 2.42 2.05.94 4.98l3.01 2.33C4.66 5.17 6.65 3.58 9 3.58z" />
-  </svg>
-);
-
-const readGoogleAuthStorageResult = () => {
-  try {
-    const rawValue = window.localStorage.getItem(GOOGLE_AUTH_STORAGE_KEY);
-    return rawValue ? JSON.parse(rawValue) : null;
-  } catch {
-    return null;
+const loadGoogleIdentityScript = () => {
+  if (window.google?.accounts?.id) {
+    return Promise.resolve(window.google.accounts.id);
   }
+
+  if (!googleIdentityScriptPromise) {
+    googleIdentityScriptPromise = new Promise((resolve, reject) => {
+      const existingScript = document.querySelector(`script[src="${GOOGLE_IDENTITY_SCRIPT_SRC}"]`);
+
+      const handleLoad = () => {
+        if (window.google?.accounts?.id) {
+          resolve(window.google.accounts.id);
+        } else {
+          reject(new Error('Google sign-in script did not load correctly'));
+        }
+      };
+
+      if (existingScript) {
+        existingScript.addEventListener('load', handleLoad, { once: true });
+        existingScript.addEventListener('error', reject, { once: true });
+        return;
+      }
+
+      const script = document.createElement('script');
+      script.src = GOOGLE_IDENTITY_SCRIPT_SRC;
+      script.async = true;
+      script.defer = true;
+      script.onload = handleLoad;
+      script.onerror = () => reject(new Error('Google sign-in script failed to load'));
+      document.head.appendChild(script);
+    });
+  }
+
+  return googleIdentityScriptPromise;
 };
 
 const AuthModal = ({
@@ -64,11 +75,12 @@ const AuthModal = ({
   const [googleAuthAvailable, setGoogleAuthAvailable] = useState(() => (
     GOOGLE_AUTH_ENABLED ? null : false
   ));
+  const [googleClientId, setGoogleClientId] = useState('');
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
   const [codeLength, setCodeLength] = useState(6);
   const [expiresInMinutes, setExpiresInMinutes] = useState(10);
-  const googlePopupCleanupRef = useRef(null);
+  const googleButtonRef = useRef(null);
 
   const authTabs = useMemo(() => ([
     { value: AUTH_VIEWS.LOGIN, label: 'Log In' },
@@ -87,21 +99,19 @@ const AuthModal = ({
       .then((result) => {
         if (!isCancelled) {
           setGoogleAuthAvailable(Boolean(result?.googleAuthEnabled));
+          setGoogleClientId(result?.googleClientId || '');
         }
       })
       .catch(() => {
         if (!isCancelled) {
           setGoogleAuthAvailable(false);
+          setGoogleClientId('');
         }
       });
 
     return () => {
       isCancelled = true;
     };
-  }, []);
-
-  useEffect(() => () => {
-    googlePopupCleanupRef.current?.();
   }, []);
 
   const setAuthView = (nextView) => {
@@ -128,138 +138,76 @@ const AuthModal = ({
     showToast?.('Demo access enabled', 'success');
   };
 
-  const getGoogleAuthPopupFeatures = () => {
-    const width = 520;
-    const height = 680;
-    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
-    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
-    return `${GOOGLE_POPUP_FEATURES},left=${left},top=${top}`;
-  };
-
-  const handleGoogleLogin = () => {
-    if (!GOOGLE_AUTH_ENABLED || googleAuthAvailable !== true || googleLoading) {
+  const handleGoogleCredential = useCallback(async (response = {}) => {
+    if (!response?.credential || googleLoading) {
+      setError('Google sign-in did not complete. Try again or use email instead.');
       return;
     }
+
     setGoogleLoading(true);
     setError('');
-    const nextPath = `${window.location.pathname}${window.location.search}`;
-    const popupUrl = api.getGoogleAuthStartUrl(nextPath, { popup: true });
-    const redirectUrl = api.getGoogleAuthStartUrl(nextPath);
-    const popupStartedAt = Date.now();
 
     try {
-      window.localStorage.removeItem(GOOGLE_AUTH_STORAGE_KEY);
+      const result = await api.loginWithGoogleCredential(response.credential);
+      if (!result?.user) {
+        setError('Google sign-in completed, but your session was not found. Try again.');
+        return;
+      }
+      onSuccess?.(result.user);
+      onClose?.();
+      showToast?.('Signed in with Google', 'success');
+      trackEvent('login', { method: 'google' });
     } catch {
-      // Ignore storage failures; postMessage is still supported.
-    }
-
-    const popup = window.open(popupUrl, 'vellic_google_auth', getGoogleAuthPopupFeatures());
-
-    if (!popup) {
-      window.location.assign(redirectUrl);
-      return;
-    }
-
-    let handled = false;
-    let popupClosedTimer = null;
-    const expectedOrigins = new Set([
-      new URL(API_BASE).origin,
-      window.location.origin,
-    ]);
-
-    const cleanup = () => {
-      window.removeEventListener('message', handleMessage);
-      window.removeEventListener('storage', handleStorage);
-      if (popupClosedTimer) {
-        clearInterval(popupClosedTimer);
-        popupClosedTimer = null;
-      }
-      googlePopupCleanupRef.current = null;
-    };
-
-    const completeWithError = (message) => {
-      cleanup();
+      setError('Google sign-in did not complete. Try again or use email instead.');
+    } finally {
       setGoogleLoading(false);
-      setError(message);
-    };
+    }
+  }, [googleLoading, onClose, onSuccess, showToast]);
 
-    const isFreshGoogleAuthPayload = (payload) => {
-      if (payload?.type !== GOOGLE_AUTH_MESSAGE_TYPE) return false;
-      const timestamp = Number(payload.timestamp || popupStartedAt);
-      return timestamp >= popupStartedAt - 5000;
-    };
+  useEffect(() => {
+    let isCancelled = false;
+    const container = googleButtonRef.current;
 
-    async function completeFromGoogleAuthPayload(payload) {
-      if (handled || !isFreshGoogleAuthPayload(payload)) {
-        return;
-      }
-      handled = true;
-      cleanup();
+    if (!GOOGLE_AUTH_ENABLED || googleAuthAvailable !== true || !googleClientId || !container) {
+      return undefined;
+    }
 
-      try {
-        window.localStorage.removeItem(GOOGLE_AUTH_STORAGE_KEY);
-      } catch {
-        // No-op.
-      }
+    container.innerHTML = '';
 
-      if (!payload?.success) {
-        setGoogleLoading(false);
-        setError('Google sign-in did not complete. Try again or use email instead.');
-        return;
-      }
+    loadGoogleIdentityScript()
+      .then((googleAccountsId) => {
+        if (isCancelled) return;
 
-      try {
-        const result = await api.getMe();
-        if (!result?.user) {
-          completeWithError('Google sign-in completed, but your session was not found. Try again.');
-          return;
+        googleAccountsId.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredential,
+          ux_mode: 'popup',
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+
+        googleAccountsId.renderButton(container, {
+          type: 'standard',
+          theme: 'filled_black',
+          size: 'large',
+          shape: 'pill',
+          text: 'signin_with',
+          logo_alignment: 'left',
+          width: 304,
+        });
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setGoogleAuthAvailable(false);
+          setError('Google sign-in is unavailable right now. Use email and password instead.');
         }
-        onSuccess?.(result.user);
-        onClose?.();
-        showToast?.('Signed in with Google', 'success');
-      } catch {
-        completeWithError('Google sign-in completed, but Vellic could not load your account. Try again.');
-        return;
-      }
+      });
 
-      setGoogleLoading(false);
-    }
-
-    async function handleMessage(event) {
-      if (!expectedOrigins.has(event.origin)) {
-        return;
-      }
-      await completeFromGoogleAuthPayload(event.data);
-    }
-
-    async function handleStorage(event) {
-      if (event.key !== GOOGLE_AUTH_STORAGE_KEY || !event.newValue) {
-        return;
-      }
-
-      try {
-        await completeFromGoogleAuthPayload(JSON.parse(event.newValue));
-      } catch {
-        // Ignore malformed storage events.
-      }
-    }
-
-    window.addEventListener('message', handleMessage);
-    window.addEventListener('storage', handleStorage);
-    popupClosedTimer = window.setInterval(() => {
-      const storedResult = readGoogleAuthStorageResult();
-      if (storedResult) {
-        completeFromGoogleAuthPayload(storedResult);
-        return;
-      }
-
-      if (popup.closed && !handled) {
-        completeWithError('Google sign-in was closed before it finished.');
-      }
-    }, 500);
-    googlePopupCleanupRef.current = cleanup;
-    popup.focus?.();
-  };
+    return () => {
+      isCancelled = true;
+      container.innerHTML = '';
+    };
+  }, [googleAuthAvailable, googleClientId, handleGoogleCredential]);
 
   const handleLoginSubmit = async () => {
     const result = await api.login(email, password);
@@ -551,17 +499,14 @@ const AuthModal = ({
       {showAuthTabs && GOOGLE_AUTH_ENABLED && googleAuthAvailable === true ? (
         <div className="auth-provider-section">
           <div className="auth-provider-divider"><span>or</span></div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="auth-google-btn"
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            loading={googleLoading}
-            startIcon={!googleLoading ? <GoogleGIcon /> : null}
-          >
-            Sign in with Google
-          </Button>
+          <div
+            ref={googleButtonRef}
+            className="auth-google-btn-host"
+            aria-hidden={loading || googleLoading ? 'true' : undefined}
+          />
+          {googleLoading ? (
+            <div className="auth-google-loading" role="status">Signing in with Google...</div>
+          ) : null}
         </div>
       ) : null}
 

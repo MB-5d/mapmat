@@ -95,7 +95,8 @@ const AUTH_PASSWORD_RESET_TTL_MINUTES = Math.max(
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || '').trim();
 const GOOGLE_CLIENT_SECRET = String(process.env.GOOGLE_CLIENT_SECRET || '').trim();
 const GOOGLE_REDIRECT_URI = String(process.env.GOOGLE_REDIRECT_URI || '').trim();
-const GOOGLE_AUTH_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
+const GOOGLE_AUTH_ENABLED = !!GOOGLE_CLIENT_ID;
+const GOOGLE_OAUTH_REDIRECT_ENABLED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 const GOOGLE_AUTH_SCOPES = 'openid email profile';
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -602,6 +603,111 @@ async function exchangeGoogleCodeAsync({ code, redirectUri }) {
   }
 
   return data;
+}
+
+function validateGoogleProfile(googleProfile, { expectedNonce = null } = {}) {
+  const googleEmail = normalizeEmail(googleProfile.email);
+  const googleSub = String(googleProfile.sub || '').trim();
+  const googleName = String(googleProfile.name || '').trim();
+  const googlePictureUrl = String(googleProfile.picture || '').trim();
+  const googleEmailVerified = googleProfile.email_verified === true || googleProfile.email_verified === 'true';
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const audience = normalizeGoogleAudience(googleProfile.aud);
+  const audienceMatches = audience.includes(GOOGLE_CLIENT_ID);
+  const authorizedParty = String(googleProfile.azp || '').trim();
+  const authorizedPartyMatches = audience.length <= 1 || authorizedParty === GOOGLE_CLIENT_ID;
+  const issuerMatches = ['accounts.google.com', 'https://accounts.google.com'].includes(String(googleProfile.iss || '').trim());
+  const expiresAtSeconds = parseNumericClaim(googleProfile.exp);
+  const expiresAtValid = expiresAtSeconds !== null && expiresAtSeconds > nowSeconds;
+  const issuedAtSeconds = parseNumericClaim(googleProfile.iat);
+  const issuedAtValid = issuedAtSeconds === null || issuedAtSeconds <= nowSeconds + 60;
+  const notBeforeSeconds = parseNumericClaim(googleProfile.nbf);
+  const notBeforeValid = notBeforeSeconds === null || notBeforeSeconds <= nowSeconds + 60;
+  const googleNonce = String(googleProfile.nonce || '').trim();
+  const nonceMatches = !expectedNonce || googleNonce === String(expectedNonce || '').trim();
+
+  if (
+    !googleSub
+    || !googleEmail
+    || !googleEmailVerified
+    || !audienceMatches
+    || !authorizedPartyMatches
+    || !issuerMatches
+    || !nonceMatches
+    || !expiresAtValid
+    || !issuedAtValid
+    || !notBeforeValid
+  ) {
+    const error = new Error('Google profile invalid');
+    error.code = 'google_profile_invalid';
+    throw error;
+  }
+
+  return {
+    googleEmail,
+    googleSub,
+    googleName,
+    googlePictureUrl,
+  };
+}
+
+async function findOrCreateGoogleUserAsync({
+  googleEmail,
+  googleSub,
+  googleName = '',
+  googlePictureUrl = '',
+}) {
+  let user = await authStore.getUserByGoogleSubAsync(googleSub);
+  if (user && isAccountDisabled(user)) {
+    const error = new Error('Account disabled');
+    error.code = 'account_disabled';
+    throw error;
+  }
+
+  if (!user) {
+    const matchingEmailUser = await authStore.getUserByEmailAsync(googleEmail);
+
+    if (matchingEmailUser) {
+      if (isAccountDisabled(matchingEmailUser)) {
+        const error = new Error('Account disabled');
+        error.code = 'account_disabled';
+        throw error;
+      }
+
+      if (matchingEmailUser.google_sub && String(matchingEmailUser.google_sub).trim() !== googleSub) {
+        const error = new Error('Google account conflict');
+        error.code = 'google_account_conflict';
+        throw error;
+      }
+
+      user = await authStore.linkGoogleIdentityAsync(matchingEmailUser.id, {
+        googleSub,
+        verifiedAt: new Date().toISOString(),
+        name: googleName || matchingEmailUser.name,
+        googlePictureUrl,
+      });
+    } else {
+      user = await authStore.createUserAsync({
+        email: googleEmail,
+        passwordHash: '',
+        name: googleName || googleEmail.split('@')[0],
+        emailVerifiedAt: new Date().toISOString(),
+        emailVerificationRequired: false,
+        googleSub,
+        googlePictureUrl,
+        authProvider: 'google',
+      });
+    }
+  } else {
+    user = await authStore.linkGoogleIdentityAsync(user.id, {
+      googleSub,
+      verifiedAt: new Date().toISOString(),
+      name: googleName || user.name,
+      googlePictureUrl,
+    });
+  }
+
+  return await authStore.getPublicUserByIdAsync(user.id);
 }
 
 async function queueEmailVerificationCodeAsync(user) {
@@ -1147,6 +1253,7 @@ router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
 router.get('/config', (_req, res) => {
   res.json({
     googleAuthEnabled: GOOGLE_AUTH_ENABLED,
+    googleClientId: GOOGLE_AUTH_ENABLED ? GOOGLE_CLIENT_ID : null,
   });
 });
 
@@ -1154,7 +1261,7 @@ router.get('/google/start', googleAuthLimiter, async (req, res) => {
   const nextPath = buildSafeNextPath(req.query?.next);
   const popup = isGooglePopupFlow(req.query?.popup);
 
-  if (!GOOGLE_AUTH_ENABLED) {
+  if (!GOOGLE_OAUTH_REDIRECT_ENABLED) {
     return redirectWithGoogleError(res, nextPath, 'google_not_configured', { popup });
   }
 
@@ -1191,7 +1298,7 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
 
   res.clearCookie(GOOGLE_STATE_COOKIE, { ...CLEAR_COOKIE_OPTIONS, sameSite: 'lax' });
 
-  if (!GOOGLE_AUTH_ENABLED) {
+  if (!GOOGLE_OAUTH_REDIRECT_ENABLED) {
     return redirectWithGoogleError(res, nextPath, 'google_not_configured', { popup });
   }
 
@@ -1221,87 +1328,10 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
     }
 
     const googleProfile = await verifyGoogleIdTokenAsync(idToken);
-    const googleEmail = normalizeEmail(googleProfile.email);
-    const googleSub = String(googleProfile.sub || '').trim();
-    const googleName = String(googleProfile.name || '').trim();
-    const googlePictureUrl = String(googleProfile.picture || '').trim();
-    const googleEmailVerified = googleProfile.email_verified === true || googleProfile.email_verified === 'true';
-    const googleNonce = String(googleProfile.nonce || '').trim();
-    const stateNonce = String(decodedState.nonce || '').trim();
-    const nowSeconds = Math.floor(Date.now() / 1000);
-    const audience = normalizeGoogleAudience(googleProfile.aud);
-    const audienceMatches = audience.includes(GOOGLE_CLIENT_ID);
-    const authorizedParty = String(googleProfile.azp || '').trim();
-    const authorizedPartyMatches = audience.length <= 1 || authorizedParty === GOOGLE_CLIENT_ID;
-    const issuerMatches = ['accounts.google.com', 'https://accounts.google.com'].includes(String(googleProfile.iss || '').trim());
-    const nonceMatches = !!googleNonce && googleNonce === stateNonce;
-    const expiresAtSeconds = parseNumericClaim(googleProfile.exp);
-    const expiresAtValid = expiresAtSeconds !== null && expiresAtSeconds > nowSeconds;
-    const issuedAtSeconds = parseNumericClaim(googleProfile.iat);
-    const issuedAtValid = issuedAtSeconds === null || issuedAtSeconds <= nowSeconds + 60;
-    const notBeforeSeconds = parseNumericClaim(googleProfile.nbf);
-    const notBeforeValid = notBeforeSeconds === null || notBeforeSeconds <= nowSeconds + 60;
-
-    if (
-      !googleSub
-      || !googleEmail
-      || !googleEmailVerified
-      || !audienceMatches
-      || !authorizedPartyMatches
-      || !issuerMatches
-      || !nonceMatches
-      || !expiresAtValid
-      || !issuedAtValid
-      || !notBeforeValid
-    ) {
-      return redirectWithGoogleError(res, nextPath, 'google_profile_invalid', { popup });
-    }
-
-    let user = await authStore.getUserByGoogleSubAsync(googleSub);
-    if (user && isAccountDisabled(user)) {
-      return redirectWithGoogleError(res, nextPath, 'account_disabled', { popup });
-    }
-
-    if (!user) {
-      const matchingEmailUser = await authStore.getUserByEmailAsync(googleEmail);
-
-      if (matchingEmailUser) {
-        if (isAccountDisabled(matchingEmailUser)) {
-          return redirectWithGoogleError(res, nextPath, 'account_disabled', { popup });
-        }
-
-        if (matchingEmailUser.google_sub && String(matchingEmailUser.google_sub).trim() !== googleSub) {
-          return redirectWithGoogleError(res, nextPath, 'google_account_conflict', { popup });
-        }
-
-        user = await authStore.linkGoogleIdentityAsync(matchingEmailUser.id, {
-          googleSub,
-          verifiedAt: new Date().toISOString(),
-          name: googleName || matchingEmailUser.name,
-          googlePictureUrl,
-        });
-      } else {
-        user = await authStore.createUserAsync({
-          email: googleEmail,
-          passwordHash: '',
-          name: googleName || googleEmail.split('@')[0],
-          emailVerifiedAt: new Date().toISOString(),
-          emailVerificationRequired: false,
-          googleSub,
-          googlePictureUrl,
-          authProvider: 'google',
-        });
-      }
-    } else {
-      user = await authStore.linkGoogleIdentityAsync(user.id, {
-        googleSub,
-        verifiedAt: new Date().toISOString(),
-        name: googleName || user.name,
-        googlePictureUrl,
-      });
-    }
-
-    const publicUser = await authStore.getPublicUserByIdAsync(user.id);
+    const googleIdentity = validateGoogleProfile(googleProfile, {
+      expectedNonce: decodedState.nonce,
+    });
+    const publicUser = await findOrCreateGoogleUserAsync(googleIdentity);
     issueSessionCookie(res, publicUser);
 
     const successParams = {
@@ -1315,6 +1345,38 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
   } catch (error) {
     console.error('Google auth callback error:', error);
     return redirectWithGoogleError(res, nextPath, 'google_callback_failed', { popup });
+  }
+});
+
+router.post('/google/credential', googleAuthLimiter, async (req, res) => {
+  if (!GOOGLE_AUTH_ENABLED) {
+    return res.status(503).json({ error: 'Google sign-in is not configured' });
+  }
+
+  const credential = String(req.body?.credential || '').trim();
+  if (!credential) {
+    return res.status(400).json({ error: 'Google credential is required' });
+  }
+
+  try {
+    await authStore.ensureAuthSchemaAsync();
+    const googleProfile = await verifyGoogleIdTokenAsync(credential);
+    const googleIdentity = validateGoogleProfile(googleProfile);
+    const publicUser = await findOrCreateGoogleUserAsync(googleIdentity);
+    const token = issueSessionCookie(res, publicUser);
+
+    return res.json({
+      user: buildClientUser(publicUser),
+      token: AUTH_HEADER_FALLBACK ? token : undefined,
+    });
+  } catch (error) {
+    const code = error?.code || 'google_credential_failed';
+    const status = code === 'account_disabled' ? 403 : (code === 'google_account_conflict' ? 409 : 401);
+    console.error('Google credential auth error:', error);
+    return res.status(status).json({
+      error: 'Google sign-in did not complete. Try again or use email instead.',
+      code,
+    });
   }
 });
 

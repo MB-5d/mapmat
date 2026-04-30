@@ -7779,61 +7779,22 @@ body {
   letter-spacing: 0.08em;
 }
 
-.auth-google-btn.ui-btn {
-  width: auto;
-  min-width: 220px;
+.auth-google-btn-host {
+  display: flex;
   justify-content: center;
-  height: 40px;
-  min-height: 40px;
-  padding: 0 18px;
-  border: 0 !important;
-  border-radius: 20px;
-  background: #f2f2f2 !important;
-  color: #1f1f1f !important;
-  font-family: Roboto, Arial, sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
-  letter-spacing: 0;
-  box-shadow: none !important;
-  gap: 12px;
+  min-height: 44px;
+  width: 100%;
 }
 
-.auth-google-btn.ui-btn:hover:not(:disabled) {
-  background: #e8e8e8 !important;
-  color: #1f1f1f !important;
-  box-shadow: none !important;
+.auth-google-btn-host[aria-hidden="true"] {
+  pointer-events: none;
+  opacity: 0.65;
 }
 
-.auth-google-btn.ui-btn:focus-visible {
-  outline: 2px solid #1a73e8;
-  outline-offset: 2px;
-}
-
-.auth-google-btn.ui-btn:disabled {
-  background: #f2f2f2 !important;
-  color: rgba(31, 31, 31, 0.48) !important;
-}
-
-.auth-google-btn.ui-btn .ui-btn__icon--start {
-  width: 18px;
-  height: 18px;
-  color: inherit;
-}
-
-.auth-google-btn.ui-btn .ui-btn__content {
-  color: inherit;
-  white-space: nowrap;
-}
-
-.auth-google-icon {
-  width: 18px;
-  height: 18px;
-  stroke: none;
-}
-
-.auth-google-icon path {
-  stroke: none;
+.auth-google-loading {
+  color: var(--ui-color-muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .auth-demo {

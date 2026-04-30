@@ -193,6 +193,15 @@ export async function getAuthConfig() {
   return fetchJson('/auth/config', {}, { includeUserToken: false });
 }
 
+export async function loginWithGoogleCredential(credential) {
+  const result = await fetchJson('/auth/google/credential', {
+    method: 'POST',
+    body: JSON.stringify({ credential }),
+  }, { includeUserToken: false });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
+}
+
 export function getGoogleAuthStartUrl(nextPath = null, { popup = false } = {}) {
   const params = new URLSearchParams();
   if (nextPath) {

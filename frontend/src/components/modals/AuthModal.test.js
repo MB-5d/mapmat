@@ -13,6 +13,7 @@ jest.mock('../../api', () => ({
   resetPassword: jest.fn(),
   getAuthConfig: jest.fn(() => Promise.resolve({ googleAuthEnabled: false })),
   getMe: jest.fn(),
+  loginWithGoogleCredential: jest.fn(),
   getGoogleAuthStartUrl: jest.fn(() => 'http://localhost:4002/auth/google/start'),
 }));
 
@@ -29,6 +30,8 @@ jest.mock('../../utils/analytics', () => ({
 describe('AuthModal', () => {
   let container;
   let root;
+  let googleInitialize;
+  let googleRenderButton;
 
   const setInputValue = (element, value) => {
     const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
@@ -50,9 +53,21 @@ describe('AuthModal', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     api.getAuthConfig.mockResolvedValue({ googleAuthEnabled: false });
-    api.getGoogleAuthStartUrl.mockImplementation((nextPath = null, options = {}) => (
-      `http://localhost:4002/auth/google/start${options?.popup ? '?popup=1' : ''}`
-    ));
+    googleInitialize = jest.fn();
+    googleRenderButton = jest.fn((buttonContainer) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Sign in with Google';
+      buttonContainer.appendChild(button);
+    });
+    window.google = {
+      accounts: {
+        id: {
+          initialize: googleInitialize,
+          renderButton: googleRenderButton,
+        },
+      },
+    };
   });
 
   afterEach(() => {
@@ -62,6 +77,7 @@ describe('AuthModal', () => {
     container.remove();
     container = null;
     root = null;
+    delete window.google;
     jest.clearAllMocks();
     window.localStorage.clear();
   });
@@ -108,8 +124,11 @@ describe('AuthModal', () => {
     expect(showToast).toHaveBeenCalledWith('Welcome, Alex!', 'success');
   });
 
-  test('shows the neutral Google button when Google auth is available', async () => {
-    api.getAuthConfig.mockResolvedValueOnce({ googleAuthEnabled: true });
+  test('renders the official Google button when Google auth is available', async () => {
+    api.getAuthConfig.mockResolvedValueOnce({
+      googleAuthEnabled: true,
+      googleClientId: 'google-client-id.apps.googleusercontent.com',
+    });
 
     await act(async () => {
       root.render(
@@ -124,116 +143,51 @@ describe('AuthModal', () => {
 
     await act(async () => {});
 
-    const googleButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Sign in with Google'
-    );
-    expect(googleButton).toBeTruthy();
-    expect(googleButton.className).toContain('auth-google-btn');
-    expect(googleButton.querySelector('.auth-google-icon')).not.toBeNull();
-  });
-
-  test('opens Google sign-in in a popup and completes from the callback message', async () => {
-    api.getAuthConfig.mockResolvedValueOnce({ googleAuthEnabled: true });
-    api.getMe.mockResolvedValue({
-      user: { id: 'u-google', name: 'Gina', email: 'gina@example.com', authProvider: 'google' },
-    });
-    const popup = { closed: false, focus: jest.fn() };
-    const openSpy = jest.spyOn(window, 'open').mockReturnValue(popup);
-    const onSuccess = jest.fn();
-    const onClose = jest.fn();
-    const showToast = jest.fn();
-
-    await act(async () => {
-      root.render(
-        <AuthModal
-          onClose={onClose}
-          onSuccess={onSuccess}
-          onDemo={jest.fn()}
-          showToast={showToast}
-        />
-      );
-    });
-
-    await act(async () => {});
-
-    const googleButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Sign in with Google'
-    );
-    await act(async () => {
-      googleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining('popup=1'),
-      'vellic_google_auth',
-      expect.stringContaining('width=520')
-    );
-
-    await act(async () => {
-      window.dispatchEvent(new MessageEvent('message', {
-        origin: 'http://localhost:4002',
-        data: { type: 'vellic:google-auth', success: true, provider: 'google' },
-      }));
-    });
-
-    expect(api.getMe).toHaveBeenCalled();
-    expect(onSuccess).toHaveBeenCalledWith({
-      id: 'u-google',
-      name: 'Gina',
-      email: 'gina@example.com',
-      authProvider: 'google',
-    });
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(showToast).toHaveBeenCalledWith('Signed in with Google', 'success');
-
-    openSpy.mockRestore();
-  });
-
-  test('completes Google popup sign-in from same-site storage fallback', async () => {
-    jest.useFakeTimers();
-    api.getAuthConfig.mockResolvedValueOnce({ googleAuthEnabled: true });
-    api.getMe.mockResolvedValue({
-      user: { id: 'u-google', name: 'Gina', email: 'gina@example.com', authProvider: 'google' },
-    });
-    const popup = { closed: false, focus: jest.fn() };
-    const openSpy = jest.spyOn(window, 'open').mockReturnValue(popup);
-    const onSuccess = jest.fn();
-    const onClose = jest.fn();
-    const showToast = jest.fn();
-
-    await act(async () => {
-      root.render(
-        <AuthModal
-          onClose={onClose}
-          onSuccess={onSuccess}
-          onDemo={jest.fn()}
-          showToast={showToast}
-        />
-      );
-    });
-
-    await act(async () => {});
-
-    const googleButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Sign in with Google'
-    );
-    await act(async () => {
-      googleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    window.localStorage.setItem('vellic:google-auth:result', JSON.stringify({
-      type: 'vellic:google-auth',
-      success: true,
-      provider: 'google',
-      timestamp: Date.now(),
+    expect(googleInitialize).toHaveBeenCalledWith(expect.objectContaining({
+      client_id: 'google-client-id.apps.googleusercontent.com',
+      ux_mode: 'popup',
     }));
+    expect(googleRenderButton).toHaveBeenCalledWith(
+      container.querySelector('.auth-google-btn-host'),
+      expect.objectContaining({
+        type: 'standard',
+        shape: 'pill',
+      })
+    );
+  });
+
+  test('completes Google sign-in from the official button credential callback', async () => {
+    api.getAuthConfig.mockResolvedValueOnce({
+      googleAuthEnabled: true,
+      googleClientId: 'google-client-id.apps.googleusercontent.com',
+    });
+    api.loginWithGoogleCredential.mockResolvedValue({
+      user: { id: 'u-google', name: 'Gina', email: 'gina@example.com', authProvider: 'google' },
+    });
+    const onSuccess = jest.fn();
+    const onClose = jest.fn();
+    const showToast = jest.fn();
 
     await act(async () => {
-      jest.advanceTimersByTime(500);
-      await Promise.resolve();
+      root.render(
+        <AuthModal
+          onClose={onClose}
+          onSuccess={onSuccess}
+          onDemo={jest.fn()}
+          showToast={showToast}
+        />
+      );
     });
 
-    expect(api.getMe).toHaveBeenCalled();
+    await act(async () => {});
+
+    const credentialCallback = googleInitialize.mock.calls[0][0].callback;
+
+    await act(async () => {
+      await credentialCallback({ credential: 'google-id-token' });
+    });
+
+    expect(api.loginWithGoogleCredential).toHaveBeenCalledWith('google-id-token');
     expect(onSuccess).toHaveBeenCalledWith({
       id: 'u-google',
       name: 'Gina',
@@ -242,9 +196,6 @@ describe('AuthModal', () => {
     });
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(showToast).toHaveBeenCalledWith('Signed in with Google', 'success');
-
-    openSpy.mockRestore();
-    jest.useRealTimers();
   });
 
   test('switches signup into verification mode after account creation', async () => {
