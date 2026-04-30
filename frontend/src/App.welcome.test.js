@@ -124,6 +124,38 @@ describe('App blank home and welcome modal', () => {
     jest.restoreAllMocks();
     jest.clearAllMocks();
     window.localStorage.clear();
+    Object.defineProperty(window, 'opener', {
+      configurable: true,
+      value: null,
+    });
+  });
+
+  test('Google auth popup fallback tells the main window and closes', async () => {
+    suppressWelcomeModal();
+    const postMessage = jest.fn();
+    const closeSpy = jest.spyOn(window, 'close').mockImplementation(() => {});
+    Object.defineProperty(window, 'opener', {
+      configurable: true,
+      value: { postMessage },
+    });
+
+    await renderApp({
+      ...baseRoute,
+      pathname: '/app',
+      search: '?auth_success=google&auth_provider=google',
+      searchParams: new URLSearchParams('auth_success=google&auth_provider=google'),
+    });
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'vellic:google-auth',
+        success: true,
+        error: null,
+        provider: 'google',
+      }),
+      window.location.origin
+    );
+    expect(closeSpy).toHaveBeenCalled();
   });
 
   test('appears on first eligible app load when no dismissal key exists', async () => {

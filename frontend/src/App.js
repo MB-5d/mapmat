@@ -121,6 +121,7 @@ import {
 } from './utils/analytics';
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
+const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
 
 // ============================================================================
 // SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
@@ -1293,6 +1294,25 @@ export default function App({ currentRoute, navigateToRoute }) {
   const mapNameEditStartRef = useRef('');
   const scheduleResetViewRef = useRef(null);
   const handledAuthRedirectKeyRef = useRef('');
+
+  useEffect(() => {
+    const authSuccess = currentRoute?.searchParams?.get('auth_success') || '';
+    const authError = currentRoute?.searchParams?.get('auth_error') || '';
+    const authProvider = currentRoute?.searchParams?.get('auth_provider') || '';
+
+    if (!window.opener || (!authSuccess && !authError)) return;
+
+    window.opener.postMessage({
+      type: GOOGLE_AUTH_MESSAGE_TYPE,
+      success: authSuccess === 'google',
+      error: authError || null,
+      provider: authProvider || 'google',
+      redirectUrl: window.location.href,
+    }, window.location.origin);
+    window.close();
+  }, [
+    currentRoute?.searchParams,
+  ]);
 
   const resetAutosaveTracking = useCallback(({ snapshot = '' } = {}) => {
     if (autosaveTimerRef.current) {

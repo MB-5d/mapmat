@@ -144,7 +144,10 @@ const AuthModal = ({
 
     let handled = false;
     let popupClosedTimer = null;
-    const expectedOrigin = new URL(API_BASE).origin;
+    const expectedOrigins = new Set([
+      new URL(API_BASE).origin,
+      window.location.origin,
+    ]);
 
     const cleanup = () => {
       window.removeEventListener('message', handleMessage);
@@ -162,7 +165,7 @@ const AuthModal = ({
     };
 
     async function handleMessage(event) {
-      if (event.origin !== expectedOrigin || event.data?.type !== GOOGLE_AUTH_MESSAGE_TYPE) {
+      if (!expectedOrigins.has(event.origin) || event.data?.type !== GOOGLE_AUTH_MESSAGE_TYPE) {
         return;
       }
       handled = true;
