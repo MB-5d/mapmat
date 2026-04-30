@@ -183,17 +183,18 @@ const AuthModal = ({
           callback: handleGoogleCredential,
           ux_mode: 'popup',
           auto_select: false,
+          button_auto_select: false,
           cancel_on_tap_outside: true,
         });
 
         googleAccountsId.renderButton(container, {
           type: 'standard',
-          theme: 'filled_black',
+          theme: 'outline',
           size: 'large',
           shape: 'pill',
-          text: 'signin_with',
+          text: 'continue_with',
           logo_alignment: 'left',
-          width: 304,
+          width: 199,
         });
       })
       .catch(() => {
