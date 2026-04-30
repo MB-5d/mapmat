@@ -11,12 +11,12 @@ This is the operational playbook for shipping safely from `staging` to `main`.
 ## 2) Before Any Release
 
 1. Confirm you are testing on staging frontend:
-- `https://mapmat-staging.vercel.app`
+- `https://staging.vellic.io`
 2. Confirm staging backend health:
-- `https://mapmat-staging.up.railway.app/health`
+- `https://api-staging.vellic.io/health`
 - Expect: `{"ok":true}`
 3. Confirm co-editing canary gates if live rollout is being expanded:
-- Railway -> project `mapmat-staging` -> service `mapmat-staging` -> `Variables`
+- Railway -> project `vellic-staging` -> service `vellic-staging` -> `Variables`
 - export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
 - confirm `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
 - confirm `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` unless broad rollout is explicitly intended
@@ -59,12 +59,12 @@ Notes:
 ## 4) Post-Release Verification
 
 1. Verify production frontend:
-- `https://mapmat.vercel.app`
+- `https://app.vellic.io`
 2. Verify production backend health:
 - `https://<production-railway-domain>/health`
 - Expect: `{"ok":true}`
 3. Verify co-editing canary gates if live rollout is enabled:
-- Railway -> project `mapmat-production` -> service `mapmat-production` -> `Variables`
+- Railway -> project `vellic-production` -> service `vellic-production` -> `Variables`
 - export `COEDITING_ADMIN_KEY` from Railway `ADMIN_API_KEY`
 - confirm `COEDITING_ROLLOUT_HARDENING_ENABLED=true`
 - confirm `COEDITING_ROLLOUT_ALLOW_GLOBAL=false` unless broad rollout is explicitly intended
@@ -100,7 +100,7 @@ This keeps future work based on the latest released state.
 ### Production (Railway)
 
 - `NODE_ENV=production`
-- `FRONTEND_URL=https://mapmat.vercel.app` (exact origin)
+- `FRONTEND_URL=https://app.vellic.io` (exact origin)
 - `TEST_AUTH_ENABLED=false`
 - `AUTH_HEADER_FALLBACK=false`
 - `ALLOW_VERCEL_PREVIEWS=false`
@@ -109,7 +109,7 @@ This keeps future work based on the latest released state.
 ### Staging (Railway)
 
 - `NODE_ENV=production`
-- `FRONTEND_URL=https://mapmat-staging.vercel.app`
+- `FRONTEND_URL=https://staging.vellic.io`
 - `TEST_AUTH_ENABLED=true`
 - `AUTH_HEADER_FALLBACK=true`
 - `ALLOW_VERCEL_PREVIEWS=true`

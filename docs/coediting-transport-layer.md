@@ -120,11 +120,11 @@ Cookie auth still works unchanged.
 
 When `AUTH_HEADER_FALLBACK=true`, browser clients can also authenticate WebSocket upgrades through:
 
-- `Sec-WebSocket-Protocol: mapmat-auth, <jwt-token>`
+- `Sec-WebSocket-Protocol: vellic-auth, <jwt-token>`
 
 The server echoes:
 
-- `Sec-WebSocket-Protocol: mapmat-auth`
+- `Sec-WebSocket-Protocol: vellic-auth`
 
 ## Safety controls
 

@@ -33,8 +33,8 @@ You need:
 
 Use these files as the source of truth:
 
-- [/.env.staging.example](/Users/matthewbraun/Desktop/mapmat/.env.staging.example)
-- [frontend/.env.staging.example](/Users/matthewbraun/Desktop/mapmat/frontend/.env.staging.example)
+- [/.env.staging.example](../.env.staging.example)
+- [frontend/.env.staging.example](../frontend/.env.staging.example)
 
 ## 3. Validate the Intended Staging Env Locally
 

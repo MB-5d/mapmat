@@ -5,7 +5,7 @@ Use this when starting a new Codex chat and you want it to pick up the Vellic au
 ## Paste This Into a New Chat
 
 ```text
-I need you to continue the Vellic auth + staging setup in this repo: /Users/matthewbraun/Desktop/mapmat
+I need you to continue the Vellic auth + staging setup in this repo: this repo
 
 Please inspect the repo first and follow AGENTS.md.
 
@@ -55,8 +55,8 @@ Important limits / caveats:
 - Stay tightly focused on auth/staging/domain/email/OAuth setup.
 
 Staging context from earlier work:
-- Existing default staging frontend URL in repo docs/examples: https://mapmat-staging.vercel.app
-- Existing default staging backend URL in repo docs/examples: https://mapmat-staging.up.railway.app
+- Existing default staging frontend URL in repo docs/examples: https://staging.vellic.io
+- Existing default staging backend URL in repo docs/examples: https://api-staging.vellic.io
 - Google OAuth may require owned/verified domains, so if needed we should prefer my newly purchased domain over the default vercel.app / railway.app staging domains.
 - .env.staging.example and frontend/.env.staging.example were already updated with the new auth-related placeholders.
 
@@ -92,14 +92,14 @@ Start by inspecting the repo and then tell me:
 
 ## Main Files
 
-- [routes/auth.js](/Users/matthewbraun/Desktop/mapmat/routes/auth.js:1)
-- [stores/authStore.js](/Users/matthewbraun/Desktop/mapmat/stores/authStore.js:1)
-- [stores/authChallengeStore.js](/Users/matthewbraun/Desktop/mapmat/stores/authChallengeStore.js:1)
-- [frontend/src/api.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/api.js:1)
-- [frontend/src/components/modals/AuthModal.js](/Users/matthewbraun/Desktop/mapmat/frontend/src/components/modals/AuthModal.js:1)
-- [scripts/check-auth-flows.js](/Users/matthewbraun/Desktop/mapmat/scripts/check-auth-flows.js:1)
-- [.env.staging.example](/Users/matthewbraun/Desktop/mapmat/.env.staging.example:1)
-- [frontend/.env.staging.example](/Users/matthewbraun/Desktop/mapmat/frontend/.env.staging.example:1)
+- [routes/auth.js](../routes/auth.js:1)
+- [stores/authStore.js](../stores/authStore.js:1)
+- [stores/authChallengeStore.js](../stores/authChallengeStore.js:1)
+- [frontend/src/api.js](../frontend/src/api.js:1)
+- [frontend/src/components/modals/AuthModal.js](../frontend/src/components/modals/AuthModal.js:1)
+- [scripts/check-auth-flows.js](../scripts/check-auth-flows.js:1)
+- [.env.staging.example](../.env.staging.example:1)
+- [frontend/.env.staging.example](../frontend/.env.staging.example:1)
 
 ## Suggested Next Goal
 

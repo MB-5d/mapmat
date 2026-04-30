@@ -1,6 +1,6 @@
 # Figma Parity Map
 
-Active working contract: [figma-code-first-handoff.md](/Users/matthewbraun/Desktop/mapmat/docs/design-system/figma-code-first-handoff.md)
+Active working contract: [figma-code-first-handoff.md](../../docs/design-system/figma-code-first-handoff.md)
 
 Use this parity map as the audit baseline. Use the handoff contract for day-to-day Figma naming, repo ownership, and design-change workflow.
 

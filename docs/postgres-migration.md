@@ -54,7 +54,7 @@ DATABASE_URL="postgres://..." npm run migrate:postgres
 ```
 
 ```bash
-DATABASE_URL="postgres://..." SQLITE_DB_PATH="./data/mapmat.db" npm run migrate:postgres
+DATABASE_URL="postgres://..." SQLITE_DB_PATH="./data/vellic.db" npm run migrate:postgres
 ```
 
 ```bash
@@ -117,7 +117,7 @@ Runtime health visibility endpoint:
 Before cutover work, run endpoint checks from your local machine:
 
 ```bash
-HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" npm run check:db-health
+HEALTH_DB_URL="https://api-staging.vellic.io/health/db" npm run check:db-health
 ```
 
 Expected staging output:
@@ -130,7 +130,7 @@ Expected staging output:
 Run parity validation against staging endpoint:
 
 ```bash
-PARITY_URL="https://mapmat-staging.up.railway.app/health/db/parity" npm run check:db-parity
+PARITY_URL="https://api-staging.vellic.io/health/db/parity" npm run check:db-parity
 ```
 
 Expected:
@@ -173,7 +173,7 @@ Current expectation:
 Validation command:
 
 ```bash
-HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" \
+HEALTH_DB_URL="https://api-staging.vellic.io/health/db" \
 REQUIRE_RUNTIME=sqlite \
 EXPECT_RUNTIME_FALLBACK=false \
 npm run check:db-health
@@ -190,7 +190,7 @@ npm run check:backend
 Optional guardrail check (when toggling `DB_PROVIDER` to an unsupported provider):
 
 ```bash
-HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" \
+HEALTH_DB_URL="https://api-staging.vellic.io/health/db" \
 EXPECT_RUNTIME_FALLBACK=true \
 npm run check:db-health
 ```
@@ -211,8 +211,8 @@ Important shell context:
 Canary validation command (run from local machine):
 
 ```bash
-HEALTH_DB_URL="https://mapmat-staging.up.railway.app/health/db" \
-PARITY_URL="https://mapmat-staging.up.railway.app/health/db/parity" \
+HEALTH_DB_URL="https://api-staging.vellic.io/health/db" \
+PARITY_URL="https://api-staging.vellic.io/health/db/parity" \
 REQUIRE_RUNTIME=sqlite \
 REQUIRE_RUNTIME_REQUESTED=postgres \
 EXPECT_RUNTIME_FALLBACK=true \
@@ -253,14 +253,14 @@ npm run verify:phase5:production:resync
 If production canary fails with parity mismatch, re-sync production shadow Postgres:
 
 ```bash
-railway ssh -s mapmat -e production
+railway ssh -s vellic -e production
 ```
 
 Then inside the Railway shell (`root@...:/app#`):
 
 ```bash
 cd /app
-MIGRATION_TRUNCATE=true SQLITE_DB_PATH=/app/data/mapmat.db npm run migrate:postgres
+MIGRATION_TRUNCATE=true SQLITE_DB_PATH=/app/data/vellic.db npm run migrate:postgres
 exit
 ```
 

@@ -95,8 +95,8 @@ npm run verify:realtime:production:broad:window
 Co-editing staging/production rollout-state summary:
 
 ```bash
-export COEDITING_STAGING_ADMIN_KEY="<mapmat-staging ADMIN_API_KEY>"
-export COEDITING_PRODUCTION_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
+export COEDITING_STAGING_ADMIN_KEY="<vellic-staging ADMIN_API_KEY>"
+export COEDITING_PRODUCTION_ADMIN_KEY="<vellic-production ADMIN_API_KEY>"
 npm run verify:realtime:rollout-state
 ```
 
@@ -190,7 +190,7 @@ Optional:
 | `JWT_SECRET` | Secret for JWT tokens | (dev default) |
 | `NODE_ENV` | Environment | development |
 | `DB_PROVIDER` | Active runtime provider (`sqlite` or `postgres`) | `sqlite` |
-| `DB_PATH` | SQLite database file path (local/dev fallback) | `./data/mapmat.db` |
+| `DB_PATH` | SQLite database file path (local/dev fallback) | `./data/vellic.db` |
 | `TEST_AUTH_ENABLED` | Enables temporary test-account mode | true locally, false in production |
 | `TEST_AUTH_SEED_EMAIL` | Seed account email when test mode is enabled | matt@email.com |
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |

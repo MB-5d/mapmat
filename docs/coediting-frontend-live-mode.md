@@ -88,10 +88,10 @@ The browser WebSocket API cannot set `Authorization` headers directly.
 
 To preserve the existing auth-header fallback behavior for deployments where cross-site cookies are unreliable, the frontend now sends the stored bearer token through `Sec-WebSocket-Protocol` as:
 
-- `mapmat-auth`
+- `vellic-auth`
 - `<jwt-token>`
 
-The transport echoes `Sec-WebSocket-Protocol: mapmat-auth` when that fallback is used.
+The transport echoes `Sec-WebSocket-Protocol: vellic-auth` when that fallback is used.
 
 Cookie auth still works unchanged.
 

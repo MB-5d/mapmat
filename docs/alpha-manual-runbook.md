@@ -9,10 +9,10 @@ Local targets:
 
 Test accounts:
 
-- owner: `mapmat-owner@example.com`
-- editor: `mapmat-editor@example.com`
-- viewer: `mapmat-viewer@example.com`
-- commenter: `mapmat-commenter@example.com`
+- owner: `vellic-owner@example.com`
+- editor: `vellic-editor@example.com`
+- viewer: `vellic-viewer@example.com`
+- commenter: `vellic-commenter@example.com`
 - password for all: `Admin123!`
 
 Recommended setup:

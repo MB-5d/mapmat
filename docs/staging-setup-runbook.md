@@ -86,11 +86,11 @@ Start from:
 Use these as the intended staging values:
 
 ```env
-FRONTEND_URL=https://mapmat-staging.vercel.app
+FRONTEND_URL=https://staging.vellic.io
 ALLOW_VERCEL_PREVIEWS=true
 NODE_ENV=production
 DB_PROVIDER=postgres
-DATABASE_URL=postgres://staging_user:staging_password@staging-db.example.com:5432/mapmat_staging
+DATABASE_URL=postgres://staging_user:staging_password@staging-db.example.com:5432/vellic_staging
 JWT_SECRET=replace-with-a-long-random-staging-secret
 ADMIN_API_KEY=replace-with-a-long-random-staging-admin-key
 EMAIL_PROVIDER=log
@@ -157,7 +157,7 @@ Start from:
 Use these intended values:
 
 ```env
-REACT_APP_API_BASE=https://mapmat-staging.up.railway.app
+REACT_APP_API_BASE=https://api-staging.vellic.io
 REACT_APP_SHOW_THEME_TOGGLE=true
 REACT_APP_COLLABORATION_UI_ENABLED=true
 REACT_APP_REALTIME_BASELINE_ENABLED=true

@@ -1,6 +1,6 @@
 # Figma Parity Summary
 
-Active working contract: [figma-code-first-handoff.md](/Users/matthewbraun/Desktop/mapmat/docs/design-system/figma-code-first-handoff.md)
+Active working contract: [figma-code-first-handoff.md](../../docs/design-system/figma-code-first-handoff.md)
 
 This summary remains the audit snapshot. The new handoff doc is the live reference for Figma variable names, component ownership, state mapping, and the code-first workflow.
 
