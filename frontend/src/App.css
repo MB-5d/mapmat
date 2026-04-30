@@ -726,6 +726,7 @@ body {
 
 .ui-input-shell,
 .ui-select-shell {
+  --ui-input-shell-height: 40px;
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -735,7 +736,7 @@ body {
   border-radius: var(--ui-radius-sm);
   background: var(--ui-color-input-bg);
   color: var(--ui-color-text);
-  min-height: 40px;
+  min-height: var(--ui-input-shell-height);
   padding: 0 12px;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
@@ -748,13 +749,13 @@ body {
 
 .ui-input-shell--sm,
 .ui-select-shell.ui-input-shell--sm {
-  min-height: 32px;
+  --ui-input-shell-height: 32px;
   padding: 0 10px;
 }
 
 .ui-input-shell--lg,
 .ui-select-shell.ui-input-shell--lg {
-  min-height: 48px;
+  --ui-input-shell-height: 48px;
   padding: 0 14px;
 }
 
@@ -847,6 +848,44 @@ body {
   box-shadow: none;
 }
 
+.ui-input,
+.ui-select {
+  height: calc(var(--ui-input-shell-height, 40px) - 2px);
+  appearance: none;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.ui-input-shell > .ui-input,
+.ui-select-shell > .ui-select {
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.ui-input-shell > .ui-input:focus,
+.ui-input-shell > .ui-input:focus-visible,
+.ui-select-shell > .ui-select:focus,
+.ui-select-shell > .ui-select:focus-visible {
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+.ui-input:-webkit-autofill,
+.ui-input:-webkit-autofill:hover,
+.ui-input:-webkit-autofill:focus,
+.ui-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--ui-color-text);
+  caret-color: var(--ui-color-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--ui-color-input-bg) inset !important;
+  box-shadow: 0 0 0 1000px var(--ui-color-input-bg) inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
 .ui-select {
   cursor: pointer;
   appearance: none;
@@ -890,6 +929,7 @@ body {
 }
 
 .ui-textarea {
+  height: auto;
   border: 1px solid var(--ui-input-mono-border);
   border-radius: var(--ui-radius-sm);
   background: var(--ui-color-input-bg);
@@ -7578,6 +7618,7 @@ body {
 
 /* Auth Modal */
 .auth-modal {
+  overflow: hidden;
 }
 
 .auth-modal .modal-body {
@@ -7603,7 +7644,7 @@ body {
 }
 
 .auth-form {
-  padding: 24px;
+  padding: 24px 24px 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -7704,15 +7745,17 @@ body {
 }
 
 .auth-provider-section {
-  padding: 0 24px;
+  padding: 0 24px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 16px;
 }
 
 .auth-provider-divider {
   position: relative;
-  margin: 0 0 16px;
+  width: 100%;
+  margin: 0;
   text-align: center;
 }
 
