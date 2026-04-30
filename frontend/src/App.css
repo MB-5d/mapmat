@@ -6287,26 +6287,29 @@ body {
 
 .consent-drawer {
   position: fixed;
-  left: 50%;
-  bottom: max(16px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 2100;
-  width: min(960px, calc(100vw - 32px));
+  width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
+  gap: 14px;
   align-items: center;
-  padding: 16px;
+  padding: 10px max(14px, env(safe-area-inset-left)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-right));
   border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border-right: none;
+  border-bottom: none;
+  border-left: none;
+  border-radius: 14px 14px 0 0;
   background: var(--modal-bg);
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.14);
   animation: consentDrawerIn 0.18s ease-out;
 }
 
 @keyframes consentDrawerIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .consent-drawer__copy {
@@ -6314,8 +6317,8 @@ body {
 }
 
 .consent-drawer__copy h2 {
-  margin: 0 0 6px;
-  font-size: 15px;
+  margin: 0 0 3px;
+  font-size: 14px;
   line-height: 1.25;
   font-weight: 700;
   color: var(--color-text-primary);
@@ -6323,8 +6326,8 @@ body {
 
 .consent-drawer__copy p {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.35;
   color: var(--color-text-secondary);
 }
 
@@ -6333,12 +6336,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .consent-drawer__actions .ui-btn {
-  min-height: 38px;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 .consent-settings-modal__body {
@@ -6367,12 +6372,9 @@ body {
 
 @media (max-width: 720px) {
   .consent-drawer {
-    width: calc(100vw - 20px);
-    bottom: max(10px, env(safe-area-inset-bottom));
     grid-template-columns: 1fr;
-    gap: 14px;
-    padding: 14px;
-    border-radius: 16px;
+    gap: 10px;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   }
 
   .consent-drawer__actions,
@@ -6383,7 +6385,7 @@ body {
 
   .consent-drawer__actions .ui-btn,
   .consent-settings-modal__actions .ui-btn {
-    flex: 1 1 100%;
+    flex: 1 1 140px;
   }
 }
 

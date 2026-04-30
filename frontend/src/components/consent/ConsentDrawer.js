@@ -22,13 +22,13 @@ const ConsentDrawer = ({ show = true }) => {
         </p>
       </div>
       <div className="consent-drawer__actions">
-        <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={acceptResearch}>
+        <Button size="sm" onClick={acceptResearch}>
           Accept research cookies
         </Button>
-        <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={rejectOptional}>
+        <Button size="sm" variant="secondary" type="secondary" buttonStyle="mono" onClick={rejectOptional}>
           Reject all optional
         </Button>
-        <Button variant="ghost" onClick={openSettings}>
+        <Button size="sm" variant="ghost" onClick={openSettings}>
           Manage settings
         </Button>
       </div>
