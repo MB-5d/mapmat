@@ -207,7 +207,7 @@ function waitForMessage(socketState, predicate, timeoutMs = REQUEST_TIMEOUT_MS) 
 async function openJoinedSocket(session, mapId, accessMode) {
   const socketUrl = `${WS_BASE}/api/maps/${mapId}/realtime/socket`;
   const socket = session.token
-    ? new WebSocket(socketUrl, ['mapmat-auth', session.token])
+    ? new WebSocket(socketUrl, ['vellic-auth', session.token])
     : new WebSocket(socketUrl);
 
   const socketState = {
@@ -270,7 +270,7 @@ async function openJoinedSocket(session, mapId, accessMode) {
 async function expectSocketDenied(session, mapId) {
   const socketUrl = `${WS_BASE}/api/maps/${mapId}/realtime/socket`;
   const socket = session.token
-    ? new WebSocket(socketUrl, ['mapmat-auth', session.token])
+    ? new WebSocket(socketUrl, ['vellic-auth', session.token])
     : new WebSocket(socketUrl);
 
   return new Promise((resolve, reject) => {

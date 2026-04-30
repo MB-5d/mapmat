@@ -140,7 +140,7 @@ async function run() {
     );
   }
 
-  const dbPath = path.join(__dirname, '..', 'data', 'mapmat.db');
+  const dbPath = path.join(__dirname, '..', 'data', 'vellic.db');
   const db = new Database(dbPath);
   const rows = db.prepare('SELECT url, placement, parent_url, depth, status, type FROM pages').all();
 

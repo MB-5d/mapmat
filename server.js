@@ -3,7 +3,7 @@
  * Visual sitemap generator with user accounts, projects, and sharing.
  *
  * Run:
- *   cd mapmat
+ *   cd vellic
  *   npm i
  *   node server.js
  */

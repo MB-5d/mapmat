@@ -443,14 +443,19 @@ function normalizeSelectionMessage(message) {
   };
 }
 
-function shouldEchoAuthProtocol(req) {
+const COEDITING_AUTH_PROTOCOL = 'vellic-auth';
+const LEGACY_COEDITING_AUTH_PROTOCOL = 'mapmat-auth';
+
+function getRequestedAuthProtocol(req) {
   const rawHeader = String(req.headers?.['sec-websocket-protocol'] || '');
-  if (!rawHeader) return false;
+  if (!rawHeader) return null;
   const protocols = rawHeader
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  return protocols[0] === 'mapmat-auth';
+  return [COEDITING_AUTH_PROTOCOL, LEGACY_COEDITING_AUTH_PROTOCOL].includes(protocols[0])
+    ? protocols[0]
+    : null;
 }
 
 function attachCoeditingTransport({ server, logger = console } = {}) {
@@ -881,7 +886,7 @@ function attachCoeditingTransport({ server, logger = console } = {}) {
       + 'Upgrade: websocket\r\n'
       + 'Connection: Upgrade\r\n'
       + `Sec-WebSocket-Accept: ${createAcceptValue(websocketKey)}\r\n`
-      + (shouldEchoAuthProtocol(req) ? 'Sec-WebSocket-Protocol: mapmat-auth\r\n' : '')
+      + (getRequestedAuthProtocol(req) ? `Sec-WebSocket-Protocol: ${getRequestedAuthProtocol(req)}\r\n` : '')
       + '\r\n'
     );
 

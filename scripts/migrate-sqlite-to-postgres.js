@@ -10,7 +10,7 @@
  *   DATABASE_URL=postgres://...
  *
  * Optional:
- *   SQLITE_DB_PATH=/absolute/or/relative/path/to/mapmat.db
+ *   SQLITE_DB_PATH=/absolute/or/relative/path/to/vellic.db
  *   MIGRATION_TRUNCATE=true   // clear target tables before import
  */
 
@@ -32,9 +32,12 @@ const resolveSqlitePath = () => {
   if (process.env.DB_PATH) return path.resolve(process.env.DB_PATH);
 
   const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH;
-  if (railwayVolumeDir) return path.join(railwayVolumeDir, 'mapmat.db');
+  const dataDir = railwayVolumeDir || path.join(__dirname, '..', 'data');
+  const vellicPath = path.join(dataDir, 'vellic.db');
+  const legacyPath = path.join(dataDir, 'mapmat.db');
+  if (fs.existsSync(vellicPath) || !fs.existsSync(legacyPath)) return vellicPath;
 
-  return path.join(__dirname, '..', 'data', 'mapmat.db');
+  return legacyPath;
 };
 
 const DATABASE_URL = process.env.DATABASE_URL;

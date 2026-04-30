@@ -81,7 +81,7 @@ const ConsentSettingsModal = () => {
       show={isSettingsOpen}
       onClose={closeSettings}
       title="Privacy Settings"
-      subtitle="Choose optional product research tools for Map Mat."
+      subtitle="Choose optional product research tools for Vellic."
       size="md"
       scrollable
       className="consent-settings-modal"
@@ -113,7 +113,7 @@ const ConsentSettingsModal = () => {
           checked={analytics}
           onChange={(event) => setAnalytics(event.target.checked)}
           label="Analytics"
-          description="Optional. Helps us understand aggregate product usage so we can improve Map Mat. Not used for marketing or advertising."
+          description="Optional. Helps us understand aggregate product usage so we can improve Vellic. Not used for marketing or advertising."
         />
         <ToggleSwitch
           className="consent-toggle-row"
@@ -127,7 +127,7 @@ const ConsentSettingsModal = () => {
           checked={false}
           disabled
           label="Marketing"
-          description="Not used. Map Mat does not use advertising, retargeting, or marketing cookies."
+          description="Not used. Vellic does not use advertising, retargeting, or marketing cookies."
         />
       </div>
     </Modal>

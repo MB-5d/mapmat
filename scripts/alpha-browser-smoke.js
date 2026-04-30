@@ -232,7 +232,7 @@ async function getActivity(owner, mapId) {
 async function createContext(browser, token) {
   const context = await browser.newContext();
   await context.addInitScript((authToken) => {
-    window.localStorage.setItem('mapmat_auth_token', authToken);
+    window.localStorage.setItem('vellic_auth_token', authToken);
   }, token);
   return context;
 }

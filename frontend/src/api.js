@@ -4,7 +4,9 @@
 
 import { API_BASE } from './utils/constants';
 
-const AUTH_TOKEN_KEY = 'mapmat_auth_token';
+const AUTH_TOKEN_KEY = 'vellic_auth_token';
+const LEGACY_AUTH_TOKEN_KEY = 'mapmat_auth_token';
+const COEDITING_AUTH_PROTOCOL = 'vellic-auth';
 
 function canUseStorage() {
   return typeof window !== 'undefined' && !!window.localStorage;
@@ -13,7 +15,14 @@ function canUseStorage() {
 function getStoredAuthToken() {
   if (!canUseStorage()) return null;
   try {
-    return window.localStorage.getItem(AUTH_TOKEN_KEY);
+    const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) return token;
+    const legacyToken = window.localStorage.getItem(LEGACY_AUTH_TOKEN_KEY);
+    if (legacyToken) {
+      window.localStorage.setItem(AUTH_TOKEN_KEY, legacyToken);
+      window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+    }
+    return legacyToken;
   } catch {
     return null;
   }
@@ -23,6 +32,7 @@ function setStoredAuthToken(token) {
   if (!canUseStorage()) return;
   try {
     if (token) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   } catch {
     // Ignore storage errors in private mode/blocked storage scenarios.
   }
@@ -32,6 +42,7 @@ function clearStoredAuthToken() {
   if (!canUseStorage()) return;
   try {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   } catch {
     // Ignore storage errors.
   }
@@ -517,7 +528,7 @@ export function openCoeditingSocket(mapId) {
   if (!token) {
     return new WebSocket(url);
   }
-  return new WebSocket(url, ['mapmat-auth', token]);
+  return new WebSocket(url, [COEDITING_AUTH_PROTOCOL, token]);
 }
 
 // ============================================

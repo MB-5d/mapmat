@@ -50,7 +50,7 @@ describe('ConsentDrawer', () => {
   test('shows the slim notice until optional cookies are rejected', () => {
     renderConsentUi();
 
-    expect(container.textContent).toContain('Help us improve Map Mat');
+    expect(container.textContent).toContain('Help us improve Vellic');
 
     clickButton('Reject all optional');
 
@@ -62,7 +62,7 @@ describe('ConsentDrawer', () => {
       marketing: false,
       version: '2026-04-27',
     });
-    expect(container.textContent).not.toContain('Help us improve Map Mat');
+    expect(container.textContent).not.toContain('Help us improve Vellic');
   });
 
   test('opens settings and saves granular choices', () => {
@@ -81,6 +81,6 @@ describe('ConsentDrawer', () => {
     expect(saved.analytics).toBe(true);
     expect(saved.experienceResearch).toBe(false);
     expect(saved.marketing).toBe(false);
-    expect(container.textContent).not.toContain('Help us improve Map Mat');
+    expect(container.textContent).not.toContain('Help us improve Vellic');
   });
 });

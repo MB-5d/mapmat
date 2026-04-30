@@ -18,7 +18,7 @@ const {
   shouldSkipPersistedHarness,
 } = require('./lib/coeditingLoadHarness');
 
-const JWT_SECRET_EFFECTIVE = process.env.JWT_SECRET || 'mapmat-dev-secret-change-in-production';
+const JWT_SECRET_EFFECTIVE = process.env.JWT_SECRET || 'vellic-dev-secret-change-in-production';
 const MESSAGE_TIMEOUT_MS = 3000;
 
 function encodeClientFrame(opcode, payload) {
@@ -331,14 +331,14 @@ async function connectClientAsync({ port, mapId, token }) {
         Upgrade: 'websocket',
         'Sec-WebSocket-Version': '13',
         'Sec-WebSocket-Key': key,
-        'Sec-WebSocket-Protocol': `mapmat-auth, ${token}`,
+        'Sec-WebSocket-Protocol': `vellic-auth, ${token}`,
       },
     });
 
     request.once('upgrade', (response, socket, head) => {
       try {
         assert.strictEqual(response.statusCode, 101);
-        assert.strictEqual(response.headers['sec-websocket-protocol'], 'mapmat-auth');
+        assert.strictEqual(response.headers['sec-websocket-protocol'], 'vellic-auth');
         resolve(new TestWebSocketClient(socket, head));
       } catch (error) {
         socket.destroy();

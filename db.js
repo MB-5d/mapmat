@@ -21,9 +21,15 @@ if (providerFallback) {
 
 const DEFAULT_DATA_DIR = path.join(__dirname, 'data');
 const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH;
-const defaultDbPath = railwayVolumeDir
+const defaultVellicDbPath = railwayVolumeDir
+  ? path.join(railwayVolumeDir, 'vellic.db')
+  : path.join(DEFAULT_DATA_DIR, 'vellic.db');
+const legacyMapMatDbPath = railwayVolumeDir
   ? path.join(railwayVolumeDir, 'mapmat.db')
   : path.join(DEFAULT_DATA_DIR, 'mapmat.db');
+const defaultDbPath = fs.existsSync(defaultVellicDbPath) || !fs.existsSync(legacyMapMatDbPath)
+  ? defaultVellicDbPath
+  : legacyMapMatDbPath;
 const DB_PATH = process.env.DB_PATH || defaultDbPath;
 const DB_DIR = path.dirname(DB_PATH);
 

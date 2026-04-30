@@ -12,7 +12,7 @@ describe('analytics consent gating', () => {
     delete window.dataLayer;
     delete window.gtag;
     delete window.clarity;
-    delete window.__mapmatGoogleConsentDefaulted;
+    delete window.__vellicGoogleConsentDefaulted;
   });
 
   afterEach(() => {

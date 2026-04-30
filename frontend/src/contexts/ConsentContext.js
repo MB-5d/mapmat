@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 
-export const CONSENT_STORAGE_KEY = 'mapmat_consent_v1';
+export const CONSENT_STORAGE_KEY = 'vellic_consent_v1';
+const LEGACY_CONSENT_STORAGE_KEY = 'mapmat_consent_v1';
 export const CONSENT_VERSION = '2026-04-27';
 
 export const createDefaultConsent = () => ({
@@ -29,7 +30,14 @@ export const readStoredConsent = (
   }
 
   try {
-    const raw = storage.getItem(CONSENT_STORAGE_KEY);
+    let raw = storage.getItem(CONSENT_STORAGE_KEY);
+    if (!raw) {
+      raw = storage.getItem(LEGACY_CONSENT_STORAGE_KEY);
+      if (raw) {
+        storage.setItem(CONSENT_STORAGE_KEY, raw);
+        storage.removeItem(LEGACY_CONSENT_STORAGE_KEY);
+      }
+    }
     if (!raw) {
       return { consent: createDefaultConsent(), hasStoredConsent: false };
     }
@@ -75,6 +83,7 @@ export function ConsentProvider({ children }) {
 
     try {
       window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(normalized));
+      window.localStorage.removeItem(LEGACY_CONSENT_STORAGE_KEY);
     } catch (error) {
       console.warn('Failed to save consent settings', error);
     }

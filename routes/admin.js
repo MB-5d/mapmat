@@ -16,8 +16,8 @@ const ADMIN_SESSION_TTL_MS = Math.max(
 );
 const ADMIN_SESSION_TTL_SECONDS = Math.max(300, Math.floor(ADMIN_SESSION_TTL_MS / 1000));
 const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET
-  || `${process.env.JWT_SECRET || 'mapmat-dev-secret-change-in-production'}:admin-session`;
-const ADMIN_SESSION_AUDIENCE = 'mapmat-admin-console';
+  || `${process.env.JWT_SECRET || 'vellic-dev-secret-change-in-production'}:admin-session`;
+const ADMIN_SESSION_AUDIENCE = 'vellic-admin-console';
 const ADMIN_LOGIN_RATE_WINDOW_MS = Math.max(
   1000,
   Number(process.env.ADMIN_LOGIN_RATE_WINDOW_MS ?? 15 * 60 * 1000)

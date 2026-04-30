@@ -63,7 +63,7 @@ function setGoogleConsentDefaults() {
   if (typeof window === 'undefined') return;
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function gtag(){ window.dataLayer.push(arguments); };
-  if (window.__mapmatGoogleConsentDefaulted) return;
+  if (window.__vellicGoogleConsentDefaulted) return;
   window.gtag('consent', 'default', {
     analytics_storage: 'denied',
     ad_storage: 'denied',
@@ -72,7 +72,7 @@ function setGoogleConsentDefaults() {
     functionality_storage: 'granted',
     security_storage: 'granted',
   });
-  window.__mapmatGoogleConsentDefaulted = true;
+  window.__vellicGoogleConsentDefaulted = true;
 }
 
 function updateGoogleConsent(consent) {
@@ -108,7 +108,7 @@ function initGa(consent) {
   window.gtag('js', new Date());
   window.gtag('config', GA_MEASUREMENT_ID, {
     send_page_view: false,
-    app_name: 'Map Mat',
+    app_name: 'Vellic',
   });
 }
 
@@ -118,13 +118,13 @@ function initSentryBrowser() {
   sentryInitialized = true;
   appendScript('sentry-browser-js', 'https://browser.sentry-cdn.com/7.120.3/bundle.tracing.min.js');
   const tryInit = () => {
-    if (!window.Sentry || window.__mapmatSentryInitialized) return;
+    if (!window.Sentry || window.__vellicSentryInitialized) return;
     window.Sentry.init({
       dsn: SENTRY_DSN,
       environment: APP_ONLY_MODE ? 'staging' : 'development',
       tracesSampleRate: 0.2,
     });
-    window.__mapmatSentryInitialized = true;
+    window.__vellicSentryInitialized = true;
   };
   window.setTimeout(tryInit, 1000);
 }

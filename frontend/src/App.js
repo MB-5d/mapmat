@@ -154,15 +154,25 @@ const extractCommentMentions = (text) => (
   )
 );
 
-const COMMENT_MENTION_READ_STORAGE_PREFIX = 'mapmat-comment-mentions';
-export const WELCOME_MODAL_STORAGE_KEY = 'mapmat:welcome-modal-hidden:v1';
+const COMMENT_MENTION_READ_STORAGE_PREFIX = 'vellic-comment-mentions';
+const LEGACY_COMMENT_MENTION_READ_STORAGE_PREFIX = 'mapmat-comment-mentions';
+const THEME_STORAGE_KEY = 'vellic-theme';
+const LEGACY_THEME_STORAGE_KEY = 'mapmat-theme';
+export const WELCOME_MODAL_STORAGE_KEY = 'vellic:welcome-modal-hidden:v1';
+const LEGACY_WELCOME_MODAL_STORAGE_KEY = 'mapmat:welcome-modal-hidden:v1';
 
 export const readWelcomeModalHidden = (
   storage = typeof window !== 'undefined' ? window.localStorage : null
 ) => {
   if (!storage) return false;
   try {
-    return storage.getItem(WELCOME_MODAL_STORAGE_KEY) === 'true';
+    if (storage.getItem(WELCOME_MODAL_STORAGE_KEY) === 'true') return true;
+    if (storage.getItem(LEGACY_WELCOME_MODAL_STORAGE_KEY) === 'true') {
+      storage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+      storage.removeItem(LEGACY_WELCOME_MODAL_STORAGE_KEY);
+      return true;
+    }
+    return false;
   } catch (error) {
     console.warn('Failed to load welcome modal dismissal state', error);
     return false;
@@ -177,9 +187,11 @@ export const writeWelcomeModalHidden = (
   try {
     if (hidden) {
       storage.setItem(WELCOME_MODAL_STORAGE_KEY, 'true');
+      storage.removeItem(LEGACY_WELCOME_MODAL_STORAGE_KEY);
       return;
     }
     storage.removeItem(WELCOME_MODAL_STORAGE_KEY);
+    storage.removeItem(LEGACY_WELCOME_MODAL_STORAGE_KEY);
   } catch (error) {
     console.warn('Failed to persist welcome modal dismissal state', error);
   }
@@ -229,6 +241,14 @@ const getCommentMentionReadStorageKey = (user, mapKey) => {
     .toLowerCase();
   const normalizedMapKey = String(mapKey || 'draft').trim().toLowerCase();
   return `${COMMENT_MENTION_READ_STORAGE_PREFIX}:${userKey}:${normalizedMapKey}`;
+};
+
+const getLegacyCommentMentionReadStorageKey = (user, mapKey) => {
+  const userKey = String(user?.id || user?.email || user?.name || 'anonymous')
+    .trim()
+    .toLowerCase();
+  const normalizedMapKey = String(mapKey || 'draft').trim().toLowerCase();
+  return `${LEGACY_COMMENT_MENTION_READ_STORAGE_PREFIX}:${userKey}:${normalizedMapKey}`;
 };
 
 const attachCommentsToNodeTree = (node, commentsByNode) => {
@@ -1528,9 +1548,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     // Only save to localStorage if user explicitly changed it
     if (theme !== 'auto') {
-      localStorage.setItem('mapmat-theme', theme);
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
     } else {
-      localStorage.removeItem('mapmat-theme');
+      localStorage.removeItem(THEME_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
     }
 
     return () => mediaQuery.removeEventListener('change', handleChange);
@@ -2345,11 +2367,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     () => getCommentMentionReadStorageKey(currentUser, currentCommentMentionMapKey),
     [currentCommentMentionMapKey, currentUser],
   );
+  const legacyCommentMentionStorageKey = useMemo(
+    () => getLegacyCommentMentionReadStorageKey(currentUser, currentCommentMentionMapKey),
+    [currentCommentMentionMapKey, currentUser],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const raw = window.localStorage.getItem(currentCommentMentionStorageKey);
+      let raw = window.localStorage.getItem(currentCommentMentionStorageKey);
+      if (!raw) {
+        raw = window.localStorage.getItem(legacyCommentMentionStorageKey);
+        if (raw) {
+          window.localStorage.setItem(currentCommentMentionStorageKey, raw);
+          window.localStorage.removeItem(legacyCommentMentionStorageKey);
+        }
+      }
       if (!raw) {
         setReadMentionCommentIds(new Set());
         return;
@@ -2361,7 +2394,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       console.warn('Failed to load comment mention read state', error);
       setReadMentionCommentIds(new Set());
     }
-  }, [currentCommentMentionStorageKey]);
+  }, [currentCommentMentionStorageKey, legacyCommentMentionStorageKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2370,10 +2403,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         currentCommentMentionStorageKey,
         JSON.stringify({ commentIds: Array.from(readMentionCommentIds) }),
       );
+      window.localStorage.removeItem(legacyCommentMentionStorageKey);
     } catch (error) {
       console.warn('Failed to persist comment mention read state', error);
     }
-  }, [currentCommentMentionStorageKey, readMentionCommentIds]);
+  }, [currentCommentMentionStorageKey, legacyCommentMentionStorageKey, readMentionCommentIds]);
 
   const commentEntries = useMemo(() => {
     const entries = [];

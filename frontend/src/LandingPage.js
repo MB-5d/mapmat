@@ -325,7 +325,7 @@ Optional analytics are used only to improve the product through aggregate usage 
 
 Optional session feedback tools are used only for product research, usability improvement, and debugging product friction.
 
-Map Mat does not use marketing, advertising, retargeting, personalized ads, marketing profiles, or sale-of-data cookies.
+Vellic does not use marketing, advertising, retargeting, personalized ads, marketing profiles, or sale-of-data cookies.
 
 You can change your choices in Privacy Settings inside the app settings.
 
@@ -340,13 +340,13 @@ Privacy questions should be directed to privacy@vellic.com`,
 Necessary storage is required for login, security, saved preferences, core app functionality, and remembering your privacy choices. This cannot be disabled from the consent UI.
 
 2. Optional Analytics
-Optional analytics help us understand aggregate product usage so we can improve Map Mat. These tools are not used for marketing or advertising.
+Optional analytics help us understand aggregate product usage so we can improve Vellic. These tools are not used for marketing or advertising.
 
 3. Optional Experience Research
 Optional session feedback tools help us understand confusing flows, usability issues, and product bugs. These tools are not used for marketing or advertising.
 
 4. Marketing
-Map Mat does not use advertising cookies, retargeting pixels, personalized ads, marketing profiles, or sale-of-data cookies.
+Vellic does not use advertising cookies, retargeting pixels, personalized ads, marketing profiles, or sale-of-data cookies.
 
 5. Changing Choices
 You can change your choices in Privacy Settings inside the app settings.`,

@@ -19,7 +19,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (isProd && !JWT_SECRET) {
   throw new Error('JWT_SECRET is required in production');
 }
-const JWT_SECRET_EFFECTIVE = JWT_SECRET || 'mapmat-dev-secret-change-in-production';
+const JWT_SECRET_EFFECTIVE = JWT_SECRET || 'vellic-dev-secret-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 
 const COOKIE_SAMESITE = process.env.COOKIE_SAMESITE || (isProd ? 'none' : 'lax');
@@ -38,7 +38,7 @@ const CLEAR_COOKIE_OPTIONS = {
   ...COOKIE_OPTIONS,
   maxAge: 0,
 };
-const GOOGLE_STATE_COOKIE = 'mapmat_google_state';
+const GOOGLE_STATE_COOKIE = 'vellic_google_state';
 const GOOGLE_STATE_COOKIE_OPTIONS = {
   ...COOKIE_OPTIONS,
   sameSite: 'lax',
@@ -306,7 +306,7 @@ function extractWebSocketProtocolToken(req) {
     .map((value) => value.trim())
     .filter(Boolean);
 
-  if (protocols[0] !== 'mapmat-auth') return null;
+  if (!['vellic-auth', 'mapmat-auth'].includes(protocols[0])) return null;
   const token = protocols[1] || '';
   return token || null;
 }

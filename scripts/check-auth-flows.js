@@ -9,7 +9,7 @@ const { spawn } = require('child_process');
 
 const PORT = Number(process.env.AUTH_CHECK_PORT || 4311);
 const API_BASE = `http://127.0.0.1:${PORT}`;
-const DB_PATH = process.env.AUTH_CHECK_DB_PATH || path.join(os.tmpdir(), `mapmat-auth-check-${process.pid}.db`);
+const DB_PATH = process.env.AUTH_CHECK_DB_PATH || path.join(os.tmpdir(), `vellic-auth-check-${process.pid}.db`);
 const START_TIMEOUT_MS = 30000;
 const WAIT_STEP_MS = 150;
 

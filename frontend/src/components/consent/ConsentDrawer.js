@@ -16,9 +16,9 @@ const ConsentDrawer = ({ show = true }) => {
   return (
     <aside className="consent-drawer" aria-labelledby="consent-drawer-title">
       <div className="consent-drawer__copy">
-        <h2 id="consent-drawer-title">Help us improve Map Mat</h2>
+        <h2 id="consent-drawer-title">Help us improve Vellic</h2>
         <p>
-          We use necessary storage to keep Map Mat working. With your permission, we also use optional analytics and session feedback tools to understand what is useful, confusing, or broken. We do not use these cookies for marketing, advertising, retargeting, or selling personal data.
+          We use necessary storage to keep Vellic working. With your permission, we also use optional analytics and session feedback tools to understand what is useful, confusing, or broken. We do not use these cookies for marketing, advertising, retargeting, or selling personal data.
         </p>
       </div>
       <div className="consent-drawer__actions">
