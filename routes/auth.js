@@ -139,6 +139,10 @@ function isUserEmailVerified(user) {
 function buildClientUser(user) {
   if (!user) return null;
 
+  const customAvatarUrl = user.avatar_path || null;
+  const googleAvatarUrl = user.google_picture_url || null;
+  const avatarUrl = customAvatarUrl || googleAvatarUrl;
+  const avatarSource = customAvatarUrl ? 'custom' : (googleAvatarUrl ? 'google' : null);
   const hasPassword = user.has_password !== undefined
     ? Boolean(Number(user.has_password))
     : !!String(user.password_hash || '').trim();
@@ -149,7 +153,9 @@ function buildClientUser(user) {
     id: user.id,
     email: user.email,
     name: user.name,
-    avatarUrl: user.avatar_path || null,
+    avatarUrl: avatarUrl || null,
+    avatarSource,
+    hasCustomAvatar: !!customAvatarUrl,
     createdAt: user.created_at,
     emailVerified,
     emailVerifiedAt: user.email_verified_at || null,
@@ -1175,6 +1181,7 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
     const googleEmail = normalizeEmail(googleProfile.email);
     const googleSub = String(googleProfile.sub || '').trim();
     const googleName = String(googleProfile.name || '').trim();
+    const googlePictureUrl = String(googleProfile.picture || '').trim();
     const googleEmailVerified = googleProfile.email_verified === true || googleProfile.email_verified === 'true';
     const googleNonce = String(googleProfile.nonce || '').trim();
     const stateNonce = String(decodedState.nonce || '').trim();
@@ -1228,6 +1235,7 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
           googleSub,
           verifiedAt: new Date().toISOString(),
           name: googleName || matchingEmailUser.name,
+          googlePictureUrl,
         });
       } else {
         user = await authStore.createUserAsync({
@@ -1237,6 +1245,7 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
           emailVerifiedAt: new Date().toISOString(),
           emailVerificationRequired: false,
           googleSub,
+          googlePictureUrl,
           authProvider: 'google',
         });
       }
@@ -1245,6 +1254,7 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
         googleSub,
         verifiedAt: new Date().toISOString(),
         name: googleName || user.name,
+        googlePictureUrl,
       });
     }
 

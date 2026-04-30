@@ -245,12 +245,14 @@ function parseUserSort(query) {
 
 function serializeUserSummary(user) {
   if (!user) return null;
+  const customAvatarUrl = user.avatar_path || null;
+  const googleAvatarUrl = user.google_picture_url || null;
   return {
     id: user.id,
     email: user.email,
     name: user.name || '',
-    avatarUrl: user.avatar_path || null,
-    avatarPresent: !!user.avatar_path,
+    avatarUrl: customAvatarUrl || googleAvatarUrl || null,
+    avatarPresent: !!customAvatarUrl,
     accountStatus: user.account_status || 'active',
     adminRole: normalizeAdminRole(user.admin_role),
     createdAt: user.created_at,

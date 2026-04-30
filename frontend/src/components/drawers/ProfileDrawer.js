@@ -56,7 +56,11 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   const avatarUrl = resolveApiAssetUrl(user?.avatarUrl);
   const avatarInitial = String(user?.name || user?.email || 'A').trim().charAt(0).toUpperCase();
   const hasPassword = !!user?.hasPassword;
-  const hasAvatar = !!avatarUrl;
+  const avatarSource = user?.avatarSource || (user?.avatarUrl ? 'custom' : null);
+  const hasCustomAvatar = user?.hasCustomAvatar !== undefined
+    ? Boolean(user.hasCustomAvatar)
+    : avatarSource === 'custom';
+  const hasDisplayAvatar = !!avatarUrl;
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -125,7 +129,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   };
 
   const handleAvatarEditClick = () => {
-    if (hasAvatar) {
+    if (hasCustomAvatar && avatarUrl) {
       openAvatarCrop(avatarUrl);
       return;
     }
@@ -232,7 +236,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           className="account-hero-avatar-edit"
           onClick={handleAvatarEditClick}
           disabled={!user || avatarLoading}
-          aria-label={hasAvatar ? 'Edit avatar' : 'Upload avatar'}
+          aria-label={hasCustomAvatar ? 'Edit avatar' : (hasDisplayAvatar ? 'Change avatar' : 'Upload avatar')}
         >
           <Avatar
             className="account-hero-avatar account-hero-avatar-image"
@@ -269,13 +273,13 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
                 loading={avatarLoading}
               >
                 {!avatarLoading ? <ImagePlus size={16} /> : null}
-                {hasAvatar ? 'Change Avatar' : 'Upload Avatar'}
+                {hasDisplayAvatar ? 'Change Avatar' : 'Upload Avatar'}
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 onClick={handleRemoveAvatar}
-                disabled={!user || avatarLoading || !avatarUrl}
+                disabled={!user || avatarLoading || !hasCustomAvatar}
                 loading={avatarLoading}
               >
                 {!avatarLoading ? <Trash2 size={16} /> : null}
@@ -420,7 +424,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       <Modal
         show={!!avatarCropSrc}
         onClose={() => !avatarLoading && setAvatarCropSrc('')}
-        title={hasAvatar ? 'Crop Avatar' : 'Upload Avatar'}
+        title={hasCustomAvatar ? 'Crop Avatar' : 'Upload Avatar'}
         subtitle="Position your image inside the circle."
         size="sm"
         className="avatar-crop-modal"

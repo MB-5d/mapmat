@@ -15,6 +15,11 @@ jest.mock('../../api', () => ({
   getGoogleAuthStartUrl: jest.fn(() => 'http://localhost:4002/auth/google/start'),
 }));
 
+jest.mock('../../utils/constants', () => ({
+  GOOGLE_AUTH_ENABLED: true,
+  SHOW_DEMO_AUTH: false,
+}));
+
 jest.mock('../../utils/analytics', () => ({
   trackEvent: jest.fn(),
 }));
@@ -42,6 +47,7 @@ describe('AuthModal', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    api.getAuthConfig.mockResolvedValue({ googleAuthEnabled: false });
   });
 
   afterEach(() => {
@@ -94,6 +100,30 @@ describe('AuthModal', () => {
     });
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(showToast).toHaveBeenCalledWith('Welcome, Alex!', 'success');
+  });
+
+  test('shows the neutral Google button when Google auth is available', async () => {
+    api.getAuthConfig.mockResolvedValueOnce({ googleAuthEnabled: true });
+
+    await act(async () => {
+      root.render(
+        <AuthModal
+          onClose={jest.fn()}
+          onSuccess={jest.fn()}
+          onDemo={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    await act(async () => {});
+
+    const googleButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Continue with Google'
+    );
+    expect(googleButton).toBeTruthy();
+    expect(googleButton.className).toContain('auth-google-btn');
+    expect(googleButton.querySelector('.auth-google-icon')).not.toBeNull();
   });
 
   test('switches signup into verification mode after account creation', async () => {

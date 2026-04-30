@@ -96,6 +96,44 @@ describe('ProfileDrawer', () => {
       button.textContent.includes('Remove Avatar')
     );
     expect(removeButton.className).toContain('ui-btn--type-ghost');
+    expect(removeButton.disabled).toBe(false);
+  });
+
+  test('uses Google avatar as fallback and keeps remove disabled until a custom avatar exists', async () => {
+    await act(async () => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={{
+            ...baseUser,
+            avatarUrl: 'https://lh3.googleusercontent.com/a/avatar',
+            avatarSource: 'google',
+            hasCustomAvatar: false,
+          }}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.account-hero-avatar img')?.getAttribute('src')).toBe(
+      'https://lh3.googleusercontent.com/a/avatar'
+    );
+    expect(container.textContent).toContain('Change Avatar');
+
+    const removeButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Remove Avatar')
+    );
+    expect(removeButton.disabled).toBe(true);
+
+    const editButton = container.querySelector('button[aria-label="Change avatar"]');
+    await act(async () => {
+      editButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('[data-testid="avatar-cropper"]')).toBeNull();
   });
 
   test('opens cropper from avatar edit and uploads cropped avatar', async () => {

@@ -59,6 +59,11 @@ function normalizeTimestamp(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+function normalizeUrl(value) {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+}
+
 function isUserEmailVerified(user) {
   if (!user) return false;
   return !!user.email_verified_at || !Boolean(Number(user.email_verification_required || 0));
@@ -131,6 +136,7 @@ async function ensureAuthSchemaAsync() {
     await ensureColumnAsync('users', 'email_verified_at', 'TIMESTAMP');
     await ensureColumnAsync('users', 'email_verification_required', 'INTEGER NOT NULL DEFAULT 0');
     await ensureColumnAsync('users', 'google_sub', 'TEXT');
+    await ensureColumnAsync('users', 'google_picture_url', 'TEXT');
     await ensureColumnAsync('users', 'auth_provider', "TEXT NOT NULL DEFAULT 'password'");
 
     await adapter.executeAsync(
@@ -190,6 +196,7 @@ async function getPublicUserByIdAsync(userId) {
         email,
         name,
         avatar_path,
+        google_picture_url,
         account_status,
         disabled_at,
         disabled_reason,
@@ -227,6 +234,7 @@ async function createUserAsync({
   emailVerifiedAt = null,
   emailVerificationRequired = false,
   googleSub = null,
+  googlePictureUrl = null,
   authProvider = 'password',
 }) {
   await ensureAuthSchemaAsync();
@@ -243,9 +251,10 @@ async function createUserAsync({
         email_verified_at,
         email_verification_required,
         google_sub,
+        google_picture_url,
         auth_provider
       )
-      VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
     `,
     [
       id,
@@ -255,6 +264,7 @@ async function createUserAsync({
       normalizeTimestamp(emailVerifiedAt),
       toDbBoolean(emailVerificationRequired),
       String(googleSub || '').trim() || null,
+      normalizeUrl(googlePictureUrl),
       normalizeAuthProvider(authProvider),
     ]
   );
@@ -324,6 +334,7 @@ async function linkGoogleIdentityAsync(userId, {
   googleSub,
   verifiedAt = null,
   name = null,
+  googlePictureUrl = null,
 } = {}) {
   await ensureAuthSchemaAsync();
   const normalizedGoogleSub = String(googleSub || '').trim();
@@ -342,10 +353,17 @@ async function linkGoogleIdentityAsync(userId, {
             ELSE 'google'
           END,
           name = COALESCE(NULLIF(?, ''), name),
+          google_picture_url = COALESCE(NULLIF(?, ''), google_picture_url),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `,
-    [normalizedGoogleSub, normalizeTimestamp(verifiedAt), String(name || '').trim(), userId]
+    [
+      normalizedGoogleSub,
+      normalizeTimestamp(verifiedAt),
+      String(name || '').trim(),
+      normalizeUrl(googlePictureUrl) || '',
+      userId,
+    ]
   );
 
   return getUserByIdAsync(userId);
@@ -446,6 +464,7 @@ async function listUsersForAdminAsync({
         email,
         name,
         avatar_path,
+        google_picture_url,
         account_status,
         admin_role,
         email_verified_at,
@@ -490,6 +509,7 @@ async function getAdminUserByIdAsync(userId) {
         email,
         name,
         avatar_path,
+        google_picture_url,
         account_status,
         admin_role,
         email_verified_at,

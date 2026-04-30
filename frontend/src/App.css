@@ -7715,6 +7715,50 @@ body {
 .auth-google-btn {
   width: 100%;
   justify-content: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: #f2f2f2;
+  color: #1f1f1f;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0;
+  box-shadow: none;
+  gap: 12px;
+}
+
+.auth-google-btn:hover:not(:disabled) {
+  background: #e8e8e8;
+  color: #1f1f1f;
+  box-shadow: none;
+}
+
+.auth-google-btn:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+}
+
+.auth-google-btn:disabled {
+  background: #f2f2f2;
+  color: rgba(31, 31, 31, 0.48);
+}
+
+.auth-google-btn .ui-btn__icon--start {
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+
+.auth-google-icon {
+  width: 18px;
+  height: 18px;
+  stroke: none;
+}
+
+.auth-google-icon path {
+  stroke: none;
 }
 
 .auth-demo {
