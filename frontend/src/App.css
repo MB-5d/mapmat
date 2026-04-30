@@ -1692,12 +1692,14 @@ body {
   align-items: center;
   gap: 10px;
   white-space: nowrap;
+  color: var(--ui-color-text);
 }
 
 .brand-logo {
-  height: 26px;
+  height: 40px;
   width: auto;
   display: block;
+  color: var(--ui-color-text);
 }
 
 .brand-logo-mark {
@@ -1707,11 +1709,14 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: var(--ui-button-brand-fill);
-  color: var(--ui-button-brand-contrast);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.brand-logo-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .search-container,
@@ -6578,6 +6583,11 @@ body {
   letter-spacing: 0;
 }
 
+.welcome-modal-wordmark .brand-logo-mark {
+  width: 30px;
+  height: 30px;
+}
+
 .welcome-modal-copy {
   display: flex;
   flex-direction: column;
@@ -7978,14 +7988,6 @@ body {
 .topbar-account-trigger .ui-btn__icon img,
 .topbar-account-trigger .ui-btn__icon svg {
   display: block;
-}
-
-.brand-text {
-  font-size: 22px;
-  line-height: 26px;
-  font-weight: 500;
-  letter-spacing: 0;
-  color: var(--ui-color-text);
 }
 
 .account-menu-wrapper {

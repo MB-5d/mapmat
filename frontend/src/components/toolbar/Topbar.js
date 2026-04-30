@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import ScanBar from '../scan/ScanBar';
+import VellicLogo from '../brand/VellicLogo';
 import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
@@ -81,8 +82,7 @@ const Topbar = ({
     <div className="topbar" data-feedback-id="topbar" data-feedback-label="Top navigation">
       <div className="topbar-left">
         <div className="brand">
-          <span className="brand-logo-mark" aria-hidden="true">V</span>
-          <span className="brand-text">{APP_BRAND_NAME}</span>
+          <VellicLogo className="brand-logo" title={APP_BRAND_NAME} />
         </div>
       </div>
 
