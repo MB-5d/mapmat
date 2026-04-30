@@ -4041,8 +4041,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setIsLoggedIn(true);
     setAccessLevel(ACCESS_LEVELS.EDIT);
     identifyAnalyticsUser(user);
+    const loginMethod = user?.authMode === 'demo'
+      ? 'demo'
+      : (user?.authProvider === 'google' || user?.authMode === 'google' ? 'google' : 'password');
     trackEvent('login', {
-      method: user?.authMode === 'demo' ? 'demo' : 'password',
+      method: loginMethod,
       app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
     });
 

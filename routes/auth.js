@@ -407,10 +407,15 @@ function buildSafeNextPath(rawNextPath) {
   return normalized;
 }
 
-function createGoogleState(nextPath) {
+function isGooglePopupFlow(value) {
+  return ['1', 'true', 'yes', 'popup'].includes(String(value || '').trim().toLowerCase());
+}
+
+function createGoogleState(nextPath, { popup = false } = {}) {
   const payload = {
     type: 'google_oauth_state',
     nextPath: buildSafeNextPath(nextPath),
+    popup: Boolean(popup),
     nonce: crypto.randomUUID(),
   };
 
@@ -440,11 +445,47 @@ function buildAuthRedirectUrl(nextPath, params = {}) {
   return targetUrl.toString();
 }
 
-function redirectWithGoogleError(res, nextPath, errorCode) {
-  return res.redirect(buildAuthRedirectUrl(nextPath, {
+function sendGooglePopupResult(res, nextPath, params = {}) {
+  const redirectUrl = buildAuthRedirectUrl(nextPath, params);
+  const appOrigin = new URL(getDefaultAppBaseUrl()).origin;
+  const payload = {
+    type: 'vellic:google-auth',
+    success: params.auth_success === 'google',
+    error: params.auth_error || null,
+    provider: params.auth_provider || 'google',
+    redirectUrl,
+  };
+
+  res.set('Cache-Control', 'no-store');
+  return res.type('html').send(`<!doctype html>
+<html>
+  <head><title>Google sign-in</title></head>
+  <body>
+    <script>
+      (function () {
+        var payload = ${JSON.stringify(payload)};
+        var targetOrigin = ${JSON.stringify(appOrigin)};
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(payload, targetOrigin);
+          window.close();
+          return;
+        }
+        window.location.replace(${JSON.stringify(redirectUrl)});
+      }());
+    </script>
+  </body>
+</html>`);
+}
+
+function redirectWithGoogleError(res, nextPath, errorCode, { popup = false } = {}) {
+  const params = {
     auth_error: errorCode,
     auth_provider: 'google',
-  }));
+  };
+  if (popup) {
+    return sendGooglePopupResult(res, nextPath, params);
+  }
+  return res.redirect(buildAuthRedirectUrl(nextPath, params));
 }
 
 function normalizeGoogleAudience(audienceClaim) {
@@ -1111,13 +1152,14 @@ router.get('/config', (_req, res) => {
 
 router.get('/google/start', googleAuthLimiter, async (req, res) => {
   const nextPath = buildSafeNextPath(req.query?.next);
+  const popup = isGooglePopupFlow(req.query?.popup);
 
   if (!GOOGLE_AUTH_ENABLED) {
-    return redirectWithGoogleError(res, nextPath, 'google_not_configured');
+    return redirectWithGoogleError(res, nextPath, 'google_not_configured', { popup });
   }
 
   try {
-    const googleState = createGoogleState(nextPath);
+    const googleState = createGoogleState(nextPath, { popup });
     const stateToken = googleState.token;
     res.cookie(GOOGLE_STATE_COOKIE, stateToken, GOOGLE_STATE_COOKIE_OPTIONS);
 
@@ -1134,7 +1176,7 @@ router.get('/google/start', googleAuthLimiter, async (req, res) => {
     return res.redirect(authUrl.toString());
   } catch (error) {
     console.error('Google auth start error:', error);
-    return redirectWithGoogleError(res, nextPath, 'google_start_failed');
+    return redirectWithGoogleError(res, nextPath, 'google_start_failed', { popup });
   }
 });
 
@@ -1145,11 +1187,12 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
     ? verifyGoogleState(state)
     : null;
   const nextPath = buildSafeNextPath(decodedState?.nextPath || '/app');
+  const popup = Boolean(decodedState?.popup);
 
   res.clearCookie(GOOGLE_STATE_COOKIE, { ...CLEAR_COOKIE_OPTIONS, sameSite: 'lax' });
 
   if (!GOOGLE_AUTH_ENABLED) {
-    return redirectWithGoogleError(res, nextPath, 'google_not_configured');
+    return redirectWithGoogleError(res, nextPath, 'google_not_configured', { popup });
   }
 
   if (!decodedState) {
@@ -1157,12 +1200,12 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
   }
 
   if (req.query?.error) {
-    return redirectWithGoogleError(res, nextPath, String(req.query.error));
+    return redirectWithGoogleError(res, nextPath, String(req.query.error), { popup });
   }
 
   const code = String(req.query?.code || '').trim();
   if (!code) {
-    return redirectWithGoogleError(res, nextPath, 'google_code_missing');
+    return redirectWithGoogleError(res, nextPath, 'google_code_missing', { popup });
   }
 
   try {
@@ -1174,7 +1217,7 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
 
     const idToken = String(tokenData.id_token || '').trim();
     if (!idToken) {
-      return redirectWithGoogleError(res, nextPath, 'google_profile_invalid');
+      return redirectWithGoogleError(res, nextPath, 'google_profile_invalid', { popup });
     }
 
     const googleProfile = await verifyGoogleIdTokenAsync(idToken);
@@ -1211,12 +1254,12 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
       || !issuedAtValid
       || !notBeforeValid
     ) {
-      return redirectWithGoogleError(res, nextPath, 'google_profile_invalid');
+      return redirectWithGoogleError(res, nextPath, 'google_profile_invalid', { popup });
     }
 
     let user = await authStore.getUserByGoogleSubAsync(googleSub);
     if (user && isAccountDisabled(user)) {
-      return redirectWithGoogleError(res, nextPath, 'account_disabled');
+      return redirectWithGoogleError(res, nextPath, 'account_disabled', { popup });
     }
 
     if (!user) {
@@ -1224,11 +1267,11 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
 
       if (matchingEmailUser) {
         if (isAccountDisabled(matchingEmailUser)) {
-          return redirectWithGoogleError(res, nextPath, 'account_disabled');
+          return redirectWithGoogleError(res, nextPath, 'account_disabled', { popup });
         }
 
         if (matchingEmailUser.google_sub && String(matchingEmailUser.google_sub).trim() !== googleSub) {
-          return redirectWithGoogleError(res, nextPath, 'google_account_conflict');
+          return redirectWithGoogleError(res, nextPath, 'google_account_conflict', { popup });
         }
 
         user = await authStore.linkGoogleIdentityAsync(matchingEmailUser.id, {
@@ -1261,13 +1304,17 @@ router.get('/google/callback', googleAuthLimiter, async (req, res) => {
     const publicUser = await authStore.getPublicUserByIdAsync(user.id);
     issueSessionCookie(res, publicUser);
 
-    return res.redirect(buildAuthRedirectUrl(nextPath, {
+    const successParams = {
       auth_success: 'google',
       auth_provider: 'google',
-    }));
+    };
+    if (popup) {
+      return sendGooglePopupResult(res, nextPath, successParams);
+    }
+    return res.redirect(buildAuthRedirectUrl(nextPath, successParams));
   } catch (error) {
     console.error('Google auth callback error:', error);
-    return redirectWithGoogleError(res, nextPath, 'google_callback_failed');
+    return redirectWithGoogleError(res, nextPath, 'google_callback_failed', { popup });
   }
 });
 

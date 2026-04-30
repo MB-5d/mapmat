@@ -193,10 +193,13 @@ export async function getAuthConfig() {
   return fetchJson('/auth/config', {}, { includeUserToken: false });
 }
 
-export function getGoogleAuthStartUrl(nextPath = null) {
+export function getGoogleAuthStartUrl(nextPath = null, { popup = false } = {}) {
   const params = new URLSearchParams();
   if (nextPath) {
     params.set('next', nextPath);
+  }
+  if (popup) {
+    params.set('popup', '1');
   }
   const search = params.toString();
   return `${API_BASE}/auth/google/start${search ? `?${search}` : ''}`;

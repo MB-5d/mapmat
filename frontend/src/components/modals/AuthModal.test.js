@@ -12,10 +12,12 @@ jest.mock('../../api', () => ({
   forgotPassword: jest.fn(),
   resetPassword: jest.fn(),
   getAuthConfig: jest.fn(() => Promise.resolve({ googleAuthEnabled: false })),
+  getMe: jest.fn(),
   getGoogleAuthStartUrl: jest.fn(() => 'http://localhost:4002/auth/google/start'),
 }));
 
 jest.mock('../../utils/constants', () => ({
+  API_BASE: 'http://localhost:4002',
   GOOGLE_AUTH_ENABLED: true,
   SHOW_DEMO_AUTH: false,
 }));
@@ -48,6 +50,9 @@ describe('AuthModal', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     api.getAuthConfig.mockResolvedValue({ googleAuthEnabled: false });
+    api.getGoogleAuthStartUrl.mockImplementation((nextPath = null, options = {}) => (
+      `http://localhost:4002/auth/google/start${options?.popup ? '?popup=1' : ''}`
+    ));
   });
 
   afterEach(() => {
@@ -119,11 +124,68 @@ describe('AuthModal', () => {
     await act(async () => {});
 
     const googleButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Continue with Google'
+      button.textContent.trim() === 'Sign in with Google'
     );
     expect(googleButton).toBeTruthy();
     expect(googleButton.className).toContain('auth-google-btn');
     expect(googleButton.querySelector('.auth-google-icon')).not.toBeNull();
+  });
+
+  test('opens Google sign-in in a popup and completes from the callback message', async () => {
+    api.getAuthConfig.mockResolvedValueOnce({ googleAuthEnabled: true });
+    api.getMe.mockResolvedValue({
+      user: { id: 'u-google', name: 'Gina', email: 'gina@example.com', authProvider: 'google' },
+    });
+    const popup = { closed: false, focus: jest.fn() };
+    const openSpy = jest.spyOn(window, 'open').mockReturnValue(popup);
+    const onSuccess = jest.fn();
+    const onClose = jest.fn();
+    const showToast = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <AuthModal
+          onClose={onClose}
+          onSuccess={onSuccess}
+          onDemo={jest.fn()}
+          showToast={showToast}
+        />
+      );
+    });
+
+    await act(async () => {});
+
+    const googleButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Sign in with Google'
+    );
+    await act(async () => {
+      googleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('popup=1'),
+      'vellic_google_auth',
+      expect.stringContaining('width=520')
+    );
+
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: 'http://localhost:4002',
+        data: { type: 'vellic:google-auth', success: true, provider: 'google' },
+      }));
+    });
+
+    expect(api.getMe).toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalledWith({
+      id: 'u-google',
+      name: 'Gina',
+      email: 'gina@example.com',
+      authProvider: 'google',
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith('Signed in with Google', 'success');
+
+    openSpy.mockRestore();
   });
 
   test('switches signup into verification mode after account creation', async () => {

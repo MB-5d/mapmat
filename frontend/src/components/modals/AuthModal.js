@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
 import * as api from '../../api';
@@ -7,7 +7,7 @@ import Field, { FieldHint } from '../ui/Field';
 import Modal from '../ui/Modal';
 import SegmentedControl from '../ui/SegmentedControl';
 import TextInput from '../ui/TextInput';
-import { GOOGLE_AUTH_ENABLED, SHOW_DEMO_AUTH } from '../../utils/constants';
+import { API_BASE, GOOGLE_AUTH_ENABLED, SHOW_DEMO_AUTH } from '../../utils/constants';
 import { trackEvent } from '../../utils/analytics';
 
 const AUTH_VIEWS = Object.freeze({
@@ -17,6 +17,9 @@ const AUTH_VIEWS = Object.freeze({
   FORGOT: 'forgot',
   RESET: 'reset',
 });
+
+const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
+const GOOGLE_POPUP_FEATURES = 'popup=yes,width=520,height=680,resizable=yes,scrollbars=yes';
 
 const GoogleGIcon = ({ className = '' }) => (
   <svg
@@ -55,6 +58,7 @@ const AuthModal = ({
   const [status, setStatus] = useState('');
   const [codeLength, setCodeLength] = useState(6);
   const [expiresInMinutes, setExpiresInMinutes] = useState(10);
+  const googlePopupCleanupRef = useRef(null);
 
   const authTabs = useMemo(() => ([
     { value: AUTH_VIEWS.LOGIN, label: 'Log In' },
@@ -86,6 +90,10 @@ const AuthModal = ({
     };
   }, []);
 
+  useEffect(() => () => {
+    googlePopupCleanupRef.current?.();
+  }, []);
+
   const setAuthView = (nextView) => {
     setView(nextView);
     setError('');
@@ -110,13 +118,87 @@ const AuthModal = ({
     showToast?.('Demo access enabled', 'success');
   };
 
+  const getGoogleAuthPopupFeatures = () => {
+    const width = 520;
+    const height = 680;
+    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
+    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
+    return `${GOOGLE_POPUP_FEATURES},left=${left},top=${top}`;
+  };
+
   const handleGoogleLogin = () => {
     if (!GOOGLE_AUTH_ENABLED || googleAuthAvailable !== true || googleLoading) {
       return;
     }
     setGoogleLoading(true);
+    setError('');
     const nextPath = `${window.location.pathname}${window.location.search}`;
-    window.location.assign(api.getGoogleAuthStartUrl(nextPath));
+    const popupUrl = api.getGoogleAuthStartUrl(nextPath, { popup: true });
+    const redirectUrl = api.getGoogleAuthStartUrl(nextPath);
+    const popup = window.open(popupUrl, 'vellic_google_auth', getGoogleAuthPopupFeatures());
+
+    if (!popup) {
+      window.location.assign(redirectUrl);
+      return;
+    }
+
+    let handled = false;
+    let popupClosedTimer = null;
+    const expectedOrigin = new URL(API_BASE).origin;
+
+    const cleanup = () => {
+      window.removeEventListener('message', handleMessage);
+      if (popupClosedTimer) {
+        clearInterval(popupClosedTimer);
+        popupClosedTimer = null;
+      }
+      googlePopupCleanupRef.current = null;
+    };
+
+    const completeWithError = (message) => {
+      cleanup();
+      setGoogleLoading(false);
+      setError(message);
+    };
+
+    async function handleMessage(event) {
+      if (event.origin !== expectedOrigin || event.data?.type !== GOOGLE_AUTH_MESSAGE_TYPE) {
+        return;
+      }
+      handled = true;
+      cleanup();
+
+      if (!event.data?.success) {
+        setGoogleLoading(false);
+        setError('Google sign-in did not complete. Try again or use email instead.');
+        return;
+      }
+
+      try {
+        const result = await api.getMe();
+        if (!result?.user) {
+          completeWithError('Google sign-in completed, but your session was not found. Try again.');
+          return;
+        }
+        onSuccess?.(result.user);
+        onClose?.();
+        showToast?.('Signed in with Google', 'success');
+      } catch {
+        completeWithError('Google sign-in completed, but Vellic could not load your account. Try again.');
+        return;
+      }
+
+      setGoogleLoading(false);
+    }
+
+    window.addEventListener('message', handleMessage);
+    popupClosedTimer = window.setInterval(() => {
+      if (popup.closed && !handled) {
+        completeWithError('Google sign-in was closed before it finished.');
+      }
+    }, 500);
+    googlePopupCleanupRef.current = cleanup;
+    popup.focus?.();
   };
 
   const handleLoginSubmit = async () => {
@@ -416,7 +498,7 @@ const AuthModal = ({
             loading={googleLoading}
             startIcon={!googleLoading ? <GoogleGIcon /> : null}
           >
-            Continue with Google
+            Sign in with Google
           </Button>
         </div>
       ) : null}
