@@ -812,8 +812,21 @@ body {
   color: var(--ui-input-icon);
 }
 
+.ui-input-shell__element {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--ui-input-icon);
+}
+
+.ui-input-shell__element--right {
+  margin-left: auto;
+}
+
 .ui-input-shell--style-brand .ui-input-shell__icon--left,
-.ui-input-shell:focus-within .ui-input-shell__icon {
+.ui-input-shell:focus-within .ui-input-shell__icon,
+.ui-input-shell:focus-within .ui-input-shell__element {
   color: var(--ui-input-icon-active);
 }
 
@@ -7605,23 +7618,21 @@ body {
   font-size: 14px;
 }
 
-.password-input {
-  position: relative;
-  display: flex;
+.auth-modal .ui-input,
+.auth-modal .ui-input:focus {
+  border: 0;
+  box-shadow: none;
+  outline: none;
 }
 
-.password-input input {
-  flex: 1;
-  padding-right: 44px;
+.auth-modal .ui-input-shell:focus-within:not(.ui-input-shell--invalid) {
+  border-color: var(--ui-input-mono-border-focus);
+  box-shadow: none;
 }
 
-.password-toggle {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 36px;
-  height: 36px;
+.auth-password-toggle {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7633,9 +7644,19 @@ body {
   transition: all 0.2s;
 }
 
-.password-toggle:hover {
+.auth-password-toggle:hover:not(:disabled) {
   color: var(--ui-color-primary);
   background: var(--ui-color-icon-hover);
+}
+
+.auth-password-toggle:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--ui-input-mono-border-focus);
+}
+
+.auth-password-toggle:disabled {
+  cursor: not-allowed;
+  color: var(--ui-input-disabled-text);
 }
 
 .auth-submit {
@@ -7931,6 +7952,9 @@ body {
 /* User Button in Topbar */
 .user-btn-avatar {
   color: inherit;
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
 }
 
 .topbar-account-trigger {

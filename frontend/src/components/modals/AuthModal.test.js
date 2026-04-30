@@ -210,9 +210,16 @@ describe('AuthModal', () => {
     await clickButton('Sign Up');
 
     expect(container.textContent).toContain('Username');
+    expect(container.textContent).toContain('Must be at least 8 characters');
+    expect(container.querySelector('.password-input')).toBeNull();
+
+    const passwordToggle = container.querySelector('.auth-password-toggle');
+    expect(passwordToggle).not.toBeNull();
+    expect(passwordToggle.closest('.ui-input-shell')).not.toBeNull();
 
     const inputs = container.querySelectorAll('input');
     const form = container.querySelector('form');
+    expect(inputs[2].getAttribute('minlength')).toBe('8');
 
     await act(async () => {
       setInputValue(inputs[0], 'Alex');

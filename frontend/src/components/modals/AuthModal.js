@@ -330,11 +330,11 @@ const AuthModal = ({
   })();
 
   const showAuthTabs = view === AUTH_VIEWS.LOGIN || view === AUTH_VIEWS.SIGNUP;
+  const requiresNewPassword = view === AUTH_VIEWS.SIGNUP || view === AUTH_VIEWS.RESET;
   const passwordLabel = view === AUTH_VIEWS.RESET ? 'New Password' : 'Password';
-  const passwordPlaceholder = view === AUTH_VIEWS.SIGNUP || view === AUTH_VIEWS.RESET
-    ? 'Min 6 characters'
-    : 'Your password';
+  const passwordPlaceholder = view === AUTH_VIEWS.RESET ? 'New password' : 'Your password';
   const passwordAutoComplete = view === AUTH_VIEWS.LOGIN ? 'current-password' : 'new-password';
+  const passwordHelperText = requiresNewPassword ? 'Must be at least 8 characters' : '';
 
   return (
     <Modal
@@ -420,26 +420,28 @@ const AuthModal = ({
 
         {view !== AUTH_VIEWS.FORGOT && view !== AUTH_VIEWS.VERIFY ? (
           <Field label={passwordLabel}>
-            <div className="password-input">
-              <TextInput
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={passwordPlaceholder}
-                required
-                minLength={view === AUTH_VIEWS.LOGIN ? undefined : 6}
-                autoComplete={passwordAutoComplete}
-                disabled={loading}
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((current) => !current)}
-                disabled={loading}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+            <TextInput
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={passwordPlaceholder}
+              required
+              minLength={requiresNewPassword ? 8 : undefined}
+              autoComplete={passwordAutoComplete}
+              disabled={loading}
+              rightElement={(
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() => setShowPassword((current) => !current)}
+                  disabled={loading}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              )}
+            />
+            {passwordHelperText ? <FieldHint>{passwordHelperText}</FieldHint> : null}
           </Field>
         ) : null}
 

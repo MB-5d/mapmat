@@ -18,6 +18,8 @@ const TextInput = React.forwardRef(
       required = false,
       leftIcon = null,
       rightIcon = null,
+      leftElement = null,
+      rightElement = null,
       fieldClassName,
       shellClassName,
       inputClassName,
@@ -34,6 +36,8 @@ const TextInput = React.forwardRef(
     const isInvalid = invalid || Boolean(error);
     const inputId = id || name;
     const shouldWrapField = Boolean(label || hint || error || required || labelHidden || fieldClassName);
+    const hasLeftSlot = Boolean(leftIcon || leftElement);
+    const hasRightSlot = Boolean(rightIcon || rightElement);
 
     const input = (
       <input
@@ -62,17 +66,21 @@ const TextInput = React.forwardRef(
           `ui-input-shell--style-${resolvedInput.inputStyle}`,
           isInvalid && 'ui-input-shell--invalid',
           disabled && 'ui-input-shell--disabled',
-          leftIcon && 'ui-input-shell--with-left-icon',
-          rightIcon && 'ui-input-shell--with-right-icon',
+          hasLeftSlot && 'ui-input-shell--with-left-icon',
+          hasRightSlot && 'ui-input-shell--with-right-icon',
           className,
           shellClassName
         )}
       >
-        {leftIcon ? (
+        {leftElement ? (
+          <span className="ui-input-shell__element ui-input-shell__element--left">{leftElement}</span>
+        ) : leftIcon ? (
           <Icon icon={leftIcon} size={resolvedInput.size} className="ui-input-shell__icon ui-input-shell__icon--left" />
         ) : null}
         {input}
-        {rightIcon ? (
+        {rightElement ? (
+          <span className="ui-input-shell__element ui-input-shell__element--right">{rightElement}</span>
+        ) : rightIcon ? (
           <Icon icon={rightIcon} size={resolvedInput.size} className="ui-input-shell__icon ui-input-shell__icon--right" />
         ) : null}
       </span>

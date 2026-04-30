@@ -329,6 +329,25 @@ describe('ui primitives', () => {
     expect(input.getAttribute('placeholder')).toBe('Untitled map');
   });
 
+  test('TextInput supports an interactive right-side element slot', () => {
+    act(() => {
+      root.render(
+        <TextInput
+          label="Password"
+          type="password"
+          rightElement={<button type="button" className="right-element-marker">Show</button>}
+        />
+      );
+    });
+
+    const shell = container.querySelector('.ui-input-shell');
+    const button = container.querySelector('.right-element-marker');
+
+    expect(shell.className).toContain('ui-input-shell--with-right-icon');
+    expect(button).not.toBeNull();
+    expect(button.closest('.ui-input-shell__element--right')).not.toBeNull();
+  });
+
   test('TextInput can render without chrome for inline uses', () => {
     act(() => {
       root.render(<TextInput framed={false} className="inline-input" value="Inline" readOnly />);
