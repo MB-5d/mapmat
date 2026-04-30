@@ -19,6 +19,7 @@ const AUTH_VIEWS = Object.freeze({
 });
 
 const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
+const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 const GOOGLE_POPUP_FEATURES = 'popup=yes,width=520,height=680,resizable=yes,scrollbars=yes';
 
 const GoogleGIcon = ({ className = '' }) => (
@@ -35,6 +36,15 @@ const GoogleGIcon = ({ className = '' }) => (
     <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58C13.46.89 11.42 0 9 0 5.46 0 2.42 2.05.94 4.98l3.01 2.33C4.66 5.17 6.65 3.58 9 3.58z" />
   </svg>
 );
+
+const readGoogleAuthStorageResult = () => {
+  try {
+    const rawValue = window.localStorage.getItem(GOOGLE_AUTH_STORAGE_KEY);
+    return rawValue ? JSON.parse(rawValue) : null;
+  } catch {
+    return null;
+  }
+};
 
 const AuthModal = ({
   onClose,
@@ -135,6 +145,14 @@ const AuthModal = ({
     const nextPath = `${window.location.pathname}${window.location.search}`;
     const popupUrl = api.getGoogleAuthStartUrl(nextPath, { popup: true });
     const redirectUrl = api.getGoogleAuthStartUrl(nextPath);
+    const popupStartedAt = Date.now();
+
+    try {
+      window.localStorage.removeItem(GOOGLE_AUTH_STORAGE_KEY);
+    } catch {
+      // Ignore storage failures; postMessage is still supported.
+    }
+
     const popup = window.open(popupUrl, 'vellic_google_auth', getGoogleAuthPopupFeatures());
 
     if (!popup) {
@@ -151,6 +169,7 @@ const AuthModal = ({
 
     const cleanup = () => {
       window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
       if (popupClosedTimer) {
         clearInterval(popupClosedTimer);
         popupClosedTimer = null;
@@ -164,14 +183,26 @@ const AuthModal = ({
       setError(message);
     };
 
-    async function handleMessage(event) {
-      if (!expectedOrigins.has(event.origin) || event.data?.type !== GOOGLE_AUTH_MESSAGE_TYPE) {
+    const isFreshGoogleAuthPayload = (payload) => {
+      if (payload?.type !== GOOGLE_AUTH_MESSAGE_TYPE) return false;
+      const timestamp = Number(payload.timestamp || popupStartedAt);
+      return timestamp >= popupStartedAt - 5000;
+    };
+
+    async function completeFromGoogleAuthPayload(payload) {
+      if (handled || !isFreshGoogleAuthPayload(payload)) {
         return;
       }
       handled = true;
       cleanup();
 
-      if (!event.data?.success) {
+      try {
+        window.localStorage.removeItem(GOOGLE_AUTH_STORAGE_KEY);
+      } catch {
+        // No-op.
+      }
+
+      if (!payload?.success) {
         setGoogleLoading(false);
         setError('Google sign-in did not complete. Try again or use email instead.');
         return;
@@ -194,8 +225,34 @@ const AuthModal = ({
       setGoogleLoading(false);
     }
 
+    async function handleMessage(event) {
+      if (!expectedOrigins.has(event.origin)) {
+        return;
+      }
+      await completeFromGoogleAuthPayload(event.data);
+    }
+
+    async function handleStorage(event) {
+      if (event.key !== GOOGLE_AUTH_STORAGE_KEY || !event.newValue) {
+        return;
+      }
+
+      try {
+        await completeFromGoogleAuthPayload(JSON.parse(event.newValue));
+      } catch {
+        // Ignore malformed storage events.
+      }
+    }
+
     window.addEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
     popupClosedTimer = window.setInterval(() => {
+      const storedResult = readGoogleAuthStorageResult();
+      if (storedResult) {
+        completeFromGoogleAuthPayload(storedResult);
+        return;
+      }
+
       if (popup.closed && !handled) {
         completeWithError('Google sign-in was closed before it finished.');
       }

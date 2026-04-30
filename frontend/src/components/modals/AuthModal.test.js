@@ -63,6 +63,7 @@ describe('AuthModal', () => {
     container = null;
     root = null;
     jest.clearAllMocks();
+    window.localStorage.clear();
   });
 
   test('logs in and calls success handlers', async () => {
@@ -186,6 +187,64 @@ describe('AuthModal', () => {
     expect(showToast).toHaveBeenCalledWith('Signed in with Google', 'success');
 
     openSpy.mockRestore();
+  });
+
+  test('completes Google popup sign-in from same-site storage fallback', async () => {
+    jest.useFakeTimers();
+    api.getAuthConfig.mockResolvedValueOnce({ googleAuthEnabled: true });
+    api.getMe.mockResolvedValue({
+      user: { id: 'u-google', name: 'Gina', email: 'gina@example.com', authProvider: 'google' },
+    });
+    const popup = { closed: false, focus: jest.fn() };
+    const openSpy = jest.spyOn(window, 'open').mockReturnValue(popup);
+    const onSuccess = jest.fn();
+    const onClose = jest.fn();
+    const showToast = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <AuthModal
+          onClose={onClose}
+          onSuccess={onSuccess}
+          onDemo={jest.fn()}
+          showToast={showToast}
+        />
+      );
+    });
+
+    await act(async () => {});
+
+    const googleButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Sign in with Google'
+    );
+    await act(async () => {
+      googleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    window.localStorage.setItem('vellic:google-auth:result', JSON.stringify({
+      type: 'vellic:google-auth',
+      success: true,
+      provider: 'google',
+      timestamp: Date.now(),
+    }));
+
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+      await Promise.resolve();
+    });
+
+    expect(api.getMe).toHaveBeenCalled();
+    expect(onSuccess).toHaveBeenCalledWith({
+      id: 'u-google',
+      name: 'Gina',
+      email: 'gina@example.com',
+      authProvider: 'google',
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith('Signed in with Google', 'success');
+
+    openSpy.mockRestore();
+    jest.useRealTimers();
   });
 
   test('switches signup into verification mode after account creation', async () => {

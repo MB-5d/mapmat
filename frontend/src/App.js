@@ -122,6 +122,7 @@ import {
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
 const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
+const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 
 // ============================================================================
 // SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
@@ -1299,16 +1300,29 @@ export default function App({ currentRoute, navigateToRoute }) {
     const authSuccess = currentRoute?.searchParams?.get('auth_success') || '';
     const authError = currentRoute?.searchParams?.get('auth_error') || '';
     const authProvider = currentRoute?.searchParams?.get('auth_provider') || '';
+    const isGoogleAuthPopup = window.opener || window.name === 'vellic_google_auth';
 
-    if (!window.opener || (!authSuccess && !authError)) return;
+    if (!isGoogleAuthPopup || (!authSuccess && !authError)) return;
 
-    window.opener.postMessage({
+    const payload = {
       type: GOOGLE_AUTH_MESSAGE_TYPE,
       success: authSuccess === 'google',
       error: authError || null,
       provider: authProvider || 'google',
       redirectUrl: window.location.href,
-    }, window.location.origin);
+      timestamp: Date.now(),
+    };
+
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(payload, window.location.origin);
+    }
+
+    try {
+      window.localStorage.setItem(GOOGLE_AUTH_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage failures; postMessage above is still the primary path.
+    }
+
     window.close();
   }, [
     currentRoute?.searchParams,

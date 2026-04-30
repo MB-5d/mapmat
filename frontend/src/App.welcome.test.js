@@ -128,6 +128,10 @@ describe('App blank home and welcome modal', () => {
       configurable: true,
       value: null,
     });
+    Object.defineProperty(window, 'name', {
+      configurable: true,
+      value: '',
+    });
   });
 
   test('Google auth popup fallback tells the main window and closes', async () => {
@@ -155,6 +159,35 @@ describe('App blank home and welcome modal', () => {
       }),
       window.location.origin
     );
+    expect(closeSpy).toHaveBeenCalled();
+  });
+
+  test('Google auth popup fallback uses storage when opener is unavailable', async () => {
+    suppressWelcomeModal();
+    const closeSpy = jest.spyOn(window, 'close').mockImplementation(() => {});
+    Object.defineProperty(window, 'opener', {
+      configurable: true,
+      value: null,
+    });
+    Object.defineProperty(window, 'name', {
+      configurable: true,
+      value: 'vellic_google_auth',
+    });
+
+    await renderApp({
+      ...baseRoute,
+      pathname: '/app',
+      search: '?auth_success=google&auth_provider=google',
+      searchParams: new URLSearchParams('auth_success=google&auth_provider=google'),
+    });
+
+    const storedResult = JSON.parse(window.localStorage.getItem('vellic:google-auth:result'));
+    expect(storedResult).toEqual(expect.objectContaining({
+      type: 'vellic:google-auth',
+      success: true,
+      error: null,
+      provider: 'google',
+    }));
     expect(closeSpy).toHaveBeenCalled();
   });
 
