@@ -2134,33 +2134,6 @@ body {
   padding: 8px;
 }
 
-.scan-options-depth {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--ui-color-muted);
-}
-
-.scan-options-depth label {
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--ui-color-muted);
-}
-
-.scan-options-depth-input {
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  color: var(--ui-color-muted);
-  width: 32px;
-  text-align: left;
-  padding: 0;
-  margin-left: auto;
-}
-
 .scan-options-item {
   display: flex;
   align-items: center;
@@ -2184,11 +2157,6 @@ body {
 }
 
 .scan-options-item.disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.scan-options-depth-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -4235,6 +4203,35 @@ body {
 
 .layers-panel-section {
   padding: 6px 10px 4px;
+}
+
+.scan-options-depth-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0 10px 12px;
+}
+
+.scan-options-depth-field.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scan-options-depth-label {
+  font-size: var(--type-label-md-size);
+  line-height: var(--type-label-md-line-height);
+  font-weight: var(--type-label-md-weight);
+  color: var(--ui-color-muted);
+}
+
+.scan-options-depth-select-shell {
+  width: 76px;
+  border-radius: var(--ui-radius-md);
+}
+
+.scan-options-depth-select-input {
+  min-width: 0;
 }
 
 .layers-panel-item {
@@ -9778,18 +9775,6 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-[data-theme="dark"] .scan-options-depth {
-  color: var(--ui-color-muted);
-}
-
-[data-theme="dark"] .scan-options-depth label {
-  color: var(--ui-color-muted);
-}
-
-[data-theme="dark"] .scan-options-depth-input {
-  color: var(--ui-color-muted);
-}
-
 [data-theme="dark"] .scan-options-item {
   color: var(--ui-color-muted);
 }
@@ -11058,7 +11043,6 @@ body {
 /* Dark mode: Increase disabled opacity for better contrast */
 [data-theme="dark"] .scan-btn:disabled,
 [data-theme="dark"] .scan-options-item.disabled,
-[data-theme="dark"] .scan-options-depth-input:disabled,
 [data-theme="dark"] .layers-panel-item.disabled,
 [data-theme="dark"] .canvas-tool-btn.disabled,
 [data-theme="dark"] .icon-btn:disabled {
@@ -11268,17 +11252,6 @@ body {
   min-width: 200px;
 }
 
-/* Also need select input styling for the depth dropdown */
-.layers-panel-select-input {
-  border: 1px solid var(--ui-color-border);
-  border-radius: var(--ui-radius-sm);
-  padding: 2px 28px 2px 6px;
-  font-size: 13px;
-  color: var(--ui-color-muted);
-  background: var(--ui-color-surface);
-  cursor: pointer;
-}
-
 .layers-panel-item .ui-select-shell {
   margin-left: auto;
 }
@@ -11286,12 +11259,6 @@ body {
 [data-theme="dark"] .scan-options .layers-panel {
   background: var(--ui-color-surface);
   border: 1px solid var(--ui-color-border);
-}
-
-[data-theme="dark"] .layers-panel-select-input {
-  background: var(--ui-color-input-bg);
-  border-color: var(--ui-color-border);
-  color: var(--ui-color-muted);
 }
 
 /* ============================================

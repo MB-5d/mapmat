@@ -177,7 +177,7 @@ const SCAN_LIMITS = {
   maxPagesDefault: Number(process.env.SCAN_MAX_PAGES_DEFAULT ?? 300),
   maxPagesHard: Number(process.env.SCAN_MAX_PAGES_HARD ?? 1000),
   maxDepthDefault: Number(process.env.SCAN_MAX_DEPTH_DEFAULT ?? 6),
-  maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 10),
+  maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 25),
 };
 const SCAN_API_KEY = process.env.SCAN_API_KEY || null;
 const ALLOW_PRIVATE_NETWORKS = process.env.ALLOW_PRIVATE_NETWORKS === 'true'

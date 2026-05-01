@@ -68,7 +68,7 @@ describe('ScanBar', () => {
     });
 
     const urlInput = container.querySelector('.search-container input:not([type="checkbox"])');
-    const depthSelect = container.querySelector('.layers-panel-select-input');
+    const depthSelect = container.querySelector('.scan-options-depth-select-input');
     const scanButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Scan')
     );
@@ -81,6 +81,10 @@ describe('ScanBar', () => {
 
     expect(urlInput.className).toContain('ui-input');
     expect(depthSelect.className).toContain('ui-select');
+    expect(depthSelect.value).toBe('2');
+    expect(container.textContent).toContain('Scan depth');
+    expect(container.textContent).toContain('Levels');
+    expect(container.textContent).not.toContain('during testing');
     expect(scanButton.className).toContain('ui-btn');
     expect(scanButton.className).toContain('ui-btn--type-primary');
     expect(scanButton.className).toContain('ui-btn--style-brand');

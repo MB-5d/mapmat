@@ -4,15 +4,16 @@ import { RotateCcw, Scan, SlidersHorizontal } from 'lucide-react';
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
-import { MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
+import { MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 import {
   APP_ONLY_MODE,
-  SCAN_MAX_DEPTH_UI,
   TESTER_NOT_READY_MESSAGE,
 } from '../../utils/constants';
 import Icon from '../ui/Icon';
+
+const SCAN_DEPTH_OPTIONS = Array.from({ length: 25 }, (_, index) => index + 1);
 
 const ScanBar = ({
   canEdit,
@@ -88,26 +89,24 @@ const ScanBar = ({
         {showOptions && (
           <MenuPanel className="layers-panel">
             <div className="layers-panel-list">
-              <MenuItem
-                as="div"
-                className={`layers-panel-item layers-panel-item--select${optionsDisabled ? ' disabled' : ''}`}
-                label="Levels"
-                description={`Max ${SCAN_MAX_DEPTH_UI} levels during testing`}
-                endSlot={(
+              <MenuSectionHeader className="layers-panel-section">Scan depth</MenuSectionHeader>
+              <div className={`scan-options-depth-field${optionsDisabled ? ' is-disabled' : ''}`}>
+                <label className="scan-options-depth-label" htmlFor="scan-depth-select">Levels</label>
                 <SelectInput
-                  className="layers-panel-select-input"
+                  id="scan-depth-select"
+                  shellClassName="scan-options-depth-select-shell"
+                  inputClassName="scan-options-depth-select-input"
                   size="sm"
                   value={scanDepth}
                   onChange={(e) => onScanDepthChange(e.target.value)}
                   disabled={optionsDisabled}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {Array.from({ length: SCAN_MAX_DEPTH_UI }, (_, index) => index + 1).map((value) => (
+                  {SCAN_DEPTH_OPTIONS.map((value) => (
                     <option key={value} value={value}>{value}</option>
                   ))}
                 </SelectInput>
-                )}
-              />
+              </div>
               <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
               <CheckboxField
                 className="layers-panel-item scan-options-checkbox"

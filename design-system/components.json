@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedOn": "2026-04-30",
+    "generatedOn": "2026-05-01",
     "sources": [
       "frontend/src/components/ui",
       "frontend/src/components/drawers/AccountDrawer.js",
@@ -515,6 +515,9 @@
         "options open",
         "scan disabled",
         "read-only title"
+      ],
+      "notes": [
+        "Scan options uses section headers and shared SelectInput for scan depth."
       ]
     },
     {

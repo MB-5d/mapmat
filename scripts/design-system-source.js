@@ -1365,6 +1365,9 @@ const components = [
       sharedTitle: 'string',
     },
     states: ['rest', 'focus', 'options open', 'scan disabled', 'read-only title'],
+    notes: [
+      'Scan options uses section headers and shared SelectInput for scan depth.',
+    ],
   },
   {
     name: 'Topbar',

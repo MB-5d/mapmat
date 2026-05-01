@@ -25,7 +25,6 @@ export const ENABLE_ANALYTICS = parseEnvBool(process.env.REACT_APP_ENABLE_ANALYT
 export const CLARITY_PROJECT_ID = String(process.env.REACT_APP_CLARITY_PROJECT_ID || '').trim();
 export const GA_MEASUREMENT_ID = String(process.env.REACT_APP_GA_MEASUREMENT_ID || '').trim();
 export const SENTRY_DSN = String(process.env.REACT_APP_SENTRY_DSN || '').trim();
-export const SCAN_MAX_DEPTH_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_DEPTH, 8, { min: 1, max: 10 });
 export const SCAN_MAX_PAGES_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_PAGES, 300, { min: 1, max: 5000 });
 export const TESTER_NOT_READY_MESSAGE = 'Not ready for testing yet';
 

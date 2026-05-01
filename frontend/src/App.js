@@ -70,7 +70,6 @@ import {
   DEFAULT_CONNECTION_COLORS,
   ACCESS_LEVELS,
   SCAN_MESSAGES,
-  SCAN_MAX_DEPTH_UI,
   REPORT_TYPE_OPTIONS,
   ANNOTATION_STATUS_OPTIONS,
   LAYOUT,
@@ -6579,9 +6578,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     const parsedDepth = Number.parseInt(scanDepth, 10);
-    const depthValue = Number.isFinite(parsedDepth)
-      ? Math.min(Math.max(parsedDepth, 1), SCAN_MAX_DEPTH_UI)
-      : Math.min(4, SCAN_MAX_DEPTH_UI);
+    const depthValue = Number.isFinite(parsedDepth) && parsedDepth > 0
+      ? parsedDepth
+      : 4;
 
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
@@ -10756,8 +10755,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setScanDepth('');
             return;
           }
-          const nextValue = Math.min(Number(cleaned), SCAN_MAX_DEPTH_UI);
-          setScanDepth(String(nextValue));
+          setScanDepth(String(Number(cleaned)));
         }}
         onScan={scan}
         scanLabel={isUnsavedScannedMap ? 'Rescan' : 'Scan'}
@@ -10930,8 +10928,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                         setScanDepth('');
                         return;
                       }
-                      const nextValue = Math.min(Number(cleaned), SCAN_MAX_DEPTH_UI);
-                      setScanDepth(String(nextValue));
+                      setScanDepth(String(Number(cleaned)));
                     }}
                     onScan={scan}
                     scanLabel="Scan"
