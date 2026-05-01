@@ -96,6 +96,7 @@ describe('SaveMapModal', () => {
     );
 
     expect(newProjectButton.className).toContain('ui-btn');
+    expect(newProjectButton.className).toContain('ui-btn--type-link');
 
     act(() => {
       newProjectButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

@@ -7194,19 +7194,6 @@ body {
   transform: translateX(0);
 }
 
-.project-name-input {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid rgba(99, 102, 241, 0.5);
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 14px;
-  font-weight: 600;
-  outline: none;
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
-}
-
 .project-folder-meta {
   display: flex;
   align-items: center;
@@ -7221,23 +7208,7 @@ body {
 }
 
 .project-add-map-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid rgba(99, 102, 241, 0.16);
-  border-radius: 999px;
-  padding: 7px 12px;
-  background: rgba(99, 102, 241, 0.08);
-  color: #4f46e5;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
-}
-
-.project-add-map-btn:hover {
-  background: rgba(99, 102, 241, 0.14);
-  border-color: rgba(99, 102, 241, 0.28);
+  flex-shrink: 0;
 }
 
 .project-chevron {
@@ -7303,19 +7274,6 @@ body {
   white-space: nowrap;
 }
 
-.project-map-name-input {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid rgba(99, 102, 241, 0.5);
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 14px;
-  font-weight: 600;
-  outline: none;
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
-}
-
 .map-actions {
   display: flex;
   align-items: center;
@@ -7379,24 +7337,6 @@ body {
   min-width: 0;
 }
 
-.map-move-confirm,
-.map-move-cancel {
-  border: 1px solid #e2e8f0;
-  background: var(--color-neutral-white);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.map-move-confirm {
-  color: #1e293b;
-}
-
-.map-move-cancel {
-  color: #64748b;
-}
-
 .project-folder-footer {
   display: flex;
   justify-content: flex-end;
@@ -7426,27 +7366,8 @@ body {
 }
 
 .projects-modal .add-project-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
+  align-self: flex-start;
   margin: 0 0 20px;
-  padding: 12px;
-  background: var(--color-bg-secondary);
-  border: 1px dashed var(--color-border);
-  border-radius: 14px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.projects-modal .add-project-btn:hover {
-  background: var(--color-bg-hover);
-  border-color: #6366f1;
-  color: #6366f1;
 }
 
 /* Save Map Modal */
@@ -8683,6 +8604,9 @@ body {
 
 .save-map-form {
   padding: var(--modal-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
 }
 
 .save-map-modal .modal-body {
@@ -8690,43 +8614,22 @@ body {
 }
 
 .save-map-form .modal-footer {
-  margin: 16px calc(var(--modal-padding) * -1) calc(var(--modal-padding) * -1);
+  margin: var(--space-md) calc(var(--modal-padding) * -1) calc(var(--modal-padding) * -1);
   padding: var(--modal-footer-padding);
   border-top: 1px solid var(--color-border);
 }
 
 .new-project-link {
-  background: none;
-  border: none;
-  font-size: 13px;
-  color: #6366f1;
-  padding: 0;
-  margin-bottom: 16px;
-}
-
-.new-project-link:hover {
-  text-decoration: underline;
-}
-
-.new-project-inline .cancel {
-  background: transparent;
-  color: #64748b;
+  align-self: flex-start;
 }
 
 .new-project-inline {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
 }
 
-.new-project-inline .ui-input {
+.new-project-inline .ui-input-shell {
   flex: 1;
-  font-size: 13px;
-}
-
-.new-project-inline .ui-btn.cancel {
-  background: #f1f5f9;
-  color: #64748b;
 }
 
 .form-actions {
@@ -10089,12 +9992,6 @@ body {
   color: #e2e0e8;
 }
 
-[data-theme="dark"] .project-name-input {
-  background: #0d0812;
-  border-color: #6366f1;
-  color: #e2e0e8;
-}
-
 [data-theme="dark"] .project-map-count {
   color: #6b5a80;
 }
@@ -10106,17 +10003,6 @@ body {
 [data-theme="dark"] .inline-title-edit-button:hover {
   background: rgba(167, 139, 250, 0.14);
   color: #d8b4fe;
-}
-
-[data-theme="dark"] .project-add-map-btn {
-  background: rgba(167, 139, 250, 0.14);
-  border-color: rgba(167, 139, 250, 0.2);
-  color: #d8b4fe;
-}
-
-[data-theme="dark"] .project-add-map-btn:hover {
-  background: rgba(167, 139, 250, 0.22);
-  border-color: rgba(167, 139, 250, 0.32);
 }
 
 [data-theme="dark"] .project-chevron {
@@ -10150,12 +10036,6 @@ body {
   color: #e2e0e8;
 }
 
-[data-theme="dark"] .project-map-name-input {
-  background: #0d0812;
-  border-color: #6366f1;
-  color: #e2e0e8;
-}
-
 [data-theme="dark"] .map-delete {
   background: #1a1022;
   border-color: #301E3F;
@@ -10181,12 +10061,6 @@ body {
 [data-theme="dark"] .map-move-row {
   background: #1a1022;
   border-top-color: #301E3F;
-}
-
-[data-theme="dark"] .map-move-confirm,
-[data-theme="dark"] .map-move-cancel {
-  background: #0d0812;
-  border-color: #301E3F;
 }
 
 [data-theme="dark"] .project-folder-footer {
@@ -10871,18 +10745,6 @@ body {
   color: #e2e0e8;
 }
 
-[data-theme="dark"] .projects-modal .add-project-btn {
-  background: #1a1022;
-  border-color: #301E3F;
-  color: #9f8fb8;
-}
-
-[data-theme="dark"] .projects-modal .add-project-btn:hover {
-  background: #251530;
-  border-color: #6366f1;
-  color: #e2e0e8;
-}
-
 [data-theme="dark"] .account-menu {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
@@ -10972,21 +10834,6 @@ body {
 
 [data-theme="dark"] .image-upload-zone .url-input-small::placeholder {
   color: #6b5a80;
-}
-
-[data-theme="dark"] .new-project-inline button {
-  background: #1a1022;
-  border-color: #301E3F;
-  color: #e2e0e8;
-}
-
-[data-theme="dark"] .new-project-inline button:hover {
-  background: #251530;
-}
-
-[data-theme="dark"] .new-project-inline .cancel {
-  background: transparent;
-  color: #9f8fb8;
 }
 
 [data-theme="dark"] .coming-soon-field {
@@ -11207,18 +11054,6 @@ body {
 [data-theme="light"] .select-with-add .add-project-btn:hover {
   background: #e2e8f0;
   color: #1e293b;
-}
-
-[data-theme="light"] .projects-modal .add-project-btn {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: #64748b;
-}
-
-[data-theme="light"] .projects-modal .add-project-btn:hover {
-  background: #f1f5f9;
-  border-color: #6366f1;
-  color: #6366f1;
 }
 
 [data-theme="light"] .report-stat-label {

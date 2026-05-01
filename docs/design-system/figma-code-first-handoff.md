@@ -147,7 +147,7 @@ Use stable component names in Figma. When a component changes, update the mapped
 | `Vellic / Pattern / Comments Panel` | [frontend/src/components/comments/CommentsPanel.js](../../frontend/src/components/comments/CommentsPanel.js) | Partial | Feature-level composition built from shell + form primitives |
 | `Vellic / Pattern / Comment Popover` | [frontend/src/components/comments/CommentPopover.js](../../frontend/src/components/comments/CommentPopover.js) | Partial | Feature-level composition with reply and mention states |
 | `Vellic / Pattern / Share Modal` | [frontend/src/components/modals/ShareModal.js](../../frontend/src/components/modals/ShareModal.js) | Partial | Permission flow, invite flow, requests |
-| `Vellic / Pattern / Save Map Modal` | [frontend/src/components/modals/SaveMapModal.js](../../frontend/src/components/modals/SaveMapModal.js) | Partial | Form uses modal shell but not all shared control wrappers |
+| `Vellic / Pattern / Save Map Modal` | [frontend/src/components/modals/SaveMapModal.js](../../frontend/src/components/modals/SaveMapModal.js) | Partial | Form uses modal shell, shared field controls, and shared link action |
 | `Vellic / Pattern / Create Map Modal` | [frontend/src/components/modals/CreateMapModal.js](../../frontend/src/components/modals/CreateMapModal.js) | Partial | Still coupled to inline option-card styling |
 
 ## State And Variant Contract

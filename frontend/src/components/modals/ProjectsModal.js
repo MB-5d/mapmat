@@ -110,7 +110,7 @@ const ProjectsModal = ({
                             </div>
                             {editingProjectId === project.id && !projectIsVirtual ? (
                               <TextInput
-                                className="project-name-input"
+                                inputClassName="project-name-input"
                                 value={editingProjectName}
                                 onChange={(event) => onEditProjectNameChange(event.target.value)}
                                 onBlur={() => onRenameProject(project.id, editingProjectName)}
@@ -145,16 +145,16 @@ const ProjectsModal = ({
                             <span className="project-map-count">{project.maps?.length || 0} maps</span>
                             {!projectIsVirtual && (
                               <Button
-                                type="button"
+                                type="link"
+                                buttonStyle="brand"
                                 className="project-add-map-btn"
                                 size="sm"
-                                variant="ghost"
+                                startIcon={<FolderPlus />}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   onAddMap(project.id);
                                 }}
                               >
-                                <FolderPlus size={14} />
                                 Add map
                               </Button>
                             )}
@@ -191,7 +191,7 @@ const ProjectsModal = ({
                                         <div className="map-main">
                                           {editingMapId === map.id && !mapIsReadOnly ? (
                                             <TextInput
-                                              className="project-map-name-input"
+                                              inputClassName="project-map-name-input"
                                               value={editingMapName}
                                               onChange={(event) => onEditMapNameChange(event.target.value)}
                                               onBlur={() => onRenameMap(project.id, map.id, editingMapName)}
@@ -314,10 +314,11 @@ const ProjectsModal = ({
 
               <Button
                 className="add-project-btn"
-                variant="secondary"
+                type="link"
+                buttonStyle="mono"
+                startIcon={<FolderPlus />}
                 onClick={onAddProject}
               >
-                <FolderPlus size={18} />
                 Add Project
               </Button>
             </>

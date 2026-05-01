@@ -159,7 +159,9 @@ describe('ProjectsModal', () => {
     const mapInput = container.querySelector('input.project-map-name-input');
 
     expect(addMapButton.className).toContain('ui-btn');
+    expect(addMapButton.className).toContain('ui-btn--type-link');
     expect(addProjectButton.className).toContain('ui-btn');
+    expect(addProjectButton.className).toContain('ui-btn--type-link');
     expect(projectInput.className).toContain('ui-input');
     expect(mapInput.className).toContain('ui-input');
 

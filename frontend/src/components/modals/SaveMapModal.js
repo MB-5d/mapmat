@@ -89,8 +89,14 @@ const SaveMapForm = ({
         </SelectInput>
       </Field>
       {!showNewProject ? (
-        <Button type="button" variant="ghost" size="sm" className="new-project-link" onClick={() => setShowNewProject(true)}>
-          <FolderPlus size={14} />
+        <Button
+          type="link"
+          buttonStyle="brand"
+          size="sm"
+          className="new-project-link"
+          startIcon={<FolderPlus />}
+          onClick={() => setShowNewProject(true)}
+        >
           Create new project
         </Button>
       ) : (
@@ -106,7 +112,7 @@ const SaveMapForm = ({
             }}
           />
           <Button size="sm" onClick={handleCreateProject}>Create</Button>
-          <Button size="sm" variant="secondary" className="cancel" onClick={() => setShowNewProject(false)}>Cancel</Button>
+          <Button size="sm" variant="secondary" onClick={() => setShowNewProject(false)}>Cancel</Button>
         </div>
       )}
       <Field label="Notes (optional)">
