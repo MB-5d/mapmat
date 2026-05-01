@@ -458,7 +458,7 @@ const appSemantics = {
     'feedback-tab-bg-hover': 'linear-gradient(180deg, rgba(240, 250, 255, 1) 0%, rgba(230, 244, 253, 1) 100%)',
     'feedback-tab-border': 'rgba(184, 213, 235, 0.92)',
     'feedback-tab-text': '#1f2937',
-    'feedback-tab-icon': 'var(--color-neutral-600)',
+    'feedback-tab-icon': 'var(--feedback-tab-text)',
     'feedback-tab-shadow': 'rgba(112, 144, 176, 0.18)',
     'feedback-tab-shadow-hover': 'rgba(112, 144, 176, 0.22)',
   },
@@ -596,7 +596,7 @@ const appSemantics = {
     'feedback-tab-bg-hover': 'linear-gradient(180deg, rgba(49, 34, 67, 1) 0%, rgba(35, 23, 48, 1) 100%)',
     'feedback-tab-border': 'rgba(86, 69, 110, 0.9)',
     'feedback-tab-text': 'var(--color-plum-200)',
-    'feedback-tab-icon': 'var(--color-plum-300)',
+    'feedback-tab-icon': 'var(--feedback-tab-text)',
     'feedback-tab-shadow': 'rgba(4, 1, 8, 0.34)',
     'feedback-tab-shadow-hover': 'rgba(4, 1, 8, 0.42)',
   },
@@ -1072,6 +1072,21 @@ function buildRuntimeColorBindings() {
 const runtimeColorBindings = buildRuntimeColorBindings();
 
 const components = [
+  {
+    name: 'VellicLogo',
+    kind: 'brand',
+    source: 'frontend/src/components/brand/VellicLogo.js',
+    props: {
+      title: 'string',
+      decorative: 'boolean',
+      className: 'string',
+    },
+    states: ['full lockup', 'icon-only mark'],
+    notes: [
+      'Topbar and welcome modal use the full Figma lockup from Vellic UI Kit.',
+      'Favicon uses frontend/public/favicon.svg and favicon.ico from the Figma transparent mark.',
+    ],
+  },
   {
     name: 'Avatar',
     kind: 'primitive',

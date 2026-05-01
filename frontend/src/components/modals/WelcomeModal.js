@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 
 import Button from '../ui/Button';
-import { VellicLogoIcon } from '../brand/VellicLogo';
+import VellicLogo from '../brand/VellicLogo';
 import CheckboxField from '../ui/CheckboxField';
 import Modal from '../ui/Modal';
 import { APP_BRAND_NAME } from '../../utils/constants';
@@ -58,12 +58,7 @@ const WelcomeModal = ({
       )}
     >
       <div className="welcome-modal-logo-wrap">
-        <div className="welcome-modal-wordmark" aria-label={APP_BRAND_NAME}>
-          <span className="brand-logo-mark" aria-hidden="true">
-            <VellicLogoIcon decorative />
-          </span>
-          <span>{APP_BRAND_NAME}</span>
-        </div>
+        <VellicLogo className="welcome-modal-logo" title={APP_BRAND_NAME} />
       </div>
 
       <div className="welcome-modal-copy">

@@ -6572,20 +6572,11 @@ body {
   justify-content: center;
 }
 
-.welcome-modal-wordmark {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+.welcome-modal-logo {
+  height: 40px;
+  width: auto;
+  display: block;
   color: var(--ui-color-text);
-  font-size: 24px;
-  line-height: 30px;
-  font-weight: 500;
-  letter-spacing: 0;
-}
-
-.welcome-modal-wordmark .brand-logo-mark {
-  width: 30px;
-  height: 30px;
 }
 
 .welcome-modal-copy {
@@ -11717,7 +11708,7 @@ body {
   align-items: center;
   justify-content: center;
   background: transparent;
-  color: var(--feedback-tab-icon);
+  color: currentColor;
   line-height: 0;
 }
 

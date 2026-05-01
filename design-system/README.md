@@ -20,6 +20,7 @@
 - Dark theme overrides from `frontend/src/App.css`.
 - Landing-only tokens from `frontend/src/LandingPage.css`.
 - Runtime palettes and layout constants from `frontend/src/utils/constants.js`.
+- Brand asset contract from `frontend/src/components/brand/VellicLogo.js`, `frontend/src/assets/vellic-logo.svg`, and `frontend/public/favicon.*`.
 - Dedicated runtime/reference color tokens for page depth and editable connection palettes, exported separately from semantic UI colors.
 - Grouped semantic color exports for Figma, while keeping the live app’s flat CSS variable contract intact.
 - Shared primitives and shells from `frontend/src/components/ui` plus `AccountDrawer`.
@@ -28,6 +29,7 @@
 - `ScanBar` as the real compound topbar scan surface, instead of documenting it as a generic search field.
 - Sora as the design file typeface, matching the app.
 - Lucide icons through Pencil `icon_font` nodes, matching the app icon source.
+- The Figma file name for the library is `Vellic UI Kit`; keep repo handoff docs and component names aligned to that name.
 
 ## Ambiguities
 - The landing page still operates as a separate token track. It is exported under `landing` instead of being merged into the app token vocabulary.

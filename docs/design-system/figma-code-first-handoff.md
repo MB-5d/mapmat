@@ -1,10 +1,10 @@
 # Figma Code-First Handoff Contract
 
-Last updated: 2026-04-14
+Last updated: 2026-04-30
 
 ## Purpose
 
-This file defines how the new `Vellic - DS Library` Figma file maps to the current repo.
+This file defines how the `Vellic UI Kit` Figma file maps to the current repo.
 
 Use this contract when:
 
@@ -118,6 +118,9 @@ Use stable component names in Figma. When a component changes, update the mapped
 
 | Figma component | Repo owner | Code status | Notes |
 | --- | --- | --- | --- |
+| `Vellic / Brand / Full Lockup` | [frontend/src/components/brand/VellicLogo.js](../../frontend/src/components/brand/VellicLogo.js), [frontend/src/assets/vellic-logo.svg](../../frontend/src/assets/vellic-logo.svg) | Shared brand asset exists | Used by topbar and welcome modal |
+| `Vellic / Brand / Icon` | [frontend/src/components/brand/VellicLogo.js](../../frontend/src/components/brand/VellicLogo.js), [frontend/public/logo-icon.svg](../../frontend/public/logo-icon.svg) | Shared brand asset exists | Use anywhere the square icon-only mark is needed |
+| `Vellic / Brand / Favicon` | [frontend/public/favicon.svg](../../frontend/public/favicon.svg), [frontend/public/favicon.ico](../../frontend/public/favicon.ico), [frontend/public/index.html](../../frontend/public/index.html) | Browser asset exists | Keep versioned favicon refs when replacing asset to avoid sticky browser cache |
 | `Vellic / UI / Button` | [frontend/src/components/ui/Button.js](../../frontend/src/components/ui/Button.js), [frontend/src/App.css](../../frontend/src/App.css) | Shared primitive exists | Primary, secondary, danger; `sm/md/lg` |
 | `Vellic / UI / Icon Button` | [frontend/src/components/ui/IconButton.js](../../frontend/src/components/ui/IconButton.js), [frontend/src/App.css](../../frontend/src/App.css) | Shared primitive exists | Default, primary, danger; `sm/md/lg` |
 | `Vellic / UI / Input` | [frontend/src/components/ui/TextInput.js](../../frontend/src/components/ui/TextInput.js), [frontend/src/App.css](../../frontend/src/App.css) | Shared primitive exists | `sm/md/lg` |

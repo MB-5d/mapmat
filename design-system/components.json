@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedOn": "2026-04-26",
+    "generatedOn": "2026-04-30",
     "sources": [
       "frontend/src/components/ui",
       "frontend/src/components/drawers/AccountDrawer.js",
@@ -16,6 +16,24 @@
     ]
   },
   "components": [
+    {
+      "name": "VellicLogo",
+      "kind": "brand",
+      "source": "frontend/src/components/brand/VellicLogo.js",
+      "props": {
+        "title": "string",
+        "decorative": "boolean",
+        "className": "string"
+      },
+      "states": [
+        "full lockup",
+        "icon-only mark"
+      ],
+      "notes": [
+        "Topbar and welcome modal use the full Figma lockup from Vellic UI Kit.",
+        "Favicon uses frontend/public/favicon.svg and favicon.ico from the Figma transparent mark."
+      ]
+    },
     {
       "name": "Avatar",
       "kind": "primitive",
