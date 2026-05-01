@@ -2816,27 +2816,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #4f46e5;
   background: none;
 }
 
-.blank-card-illustration-modify {
-  color: #0f766e;
-}
-
-.blank-card-illustration-upload {
-  color: #2563eb;
-}
-
-.blank-card-illustration svg {
-  width: 128px;
+.blank-card-art {
+  width: min(128px, 100%);
   height: 128px;
+  object-fit: contain;
   display: block;
 }
 
-.blank-card-illustration .blank-card-icon {
-  width: 96px;
-  height: 96px;
+.blank-card-illustration .spin {
+  width: 32px;
+  height: 32px;
 }
 
 .blank-card-title-row {
@@ -9858,27 +9850,6 @@ body {
 [data-theme="dark"] .blank-card.drag-over {
   border-color: rgba(167, 139, 250, 0.68);
   box-shadow: 0 28px 64px rgba(0, 0, 0, 0.36);
-}
-
-[data-theme="dark"] .blank-card-illustration {
-  color: #c4b5fd;
-  background:
-    radial-gradient(circle at top left, rgba(167, 139, 250, 0.18), transparent 52%),
-    linear-gradient(160deg, rgba(37, 21, 48, 0.92), rgba(26, 16, 34, 0.82));
-}
-
-[data-theme="dark"] .blank-card-illustration-modify {
-  color: #5eead4;
-  background:
-    radial-gradient(circle at top left, rgba(45, 212, 191, 0.15), transparent 52%),
-    linear-gradient(160deg, rgba(18, 52, 49, 0.92), rgba(12, 30, 29, 0.82));
-}
-
-[data-theme="dark"] .blank-card-illustration-upload {
-  color: #93c5fd;
-  background:
-    radial-gradient(circle at top left, rgba(96, 165, 250, 0.16), transparent 52%),
-    linear-gradient(160deg, rgba(17, 31, 60, 0.92), rgba(11, 21, 41, 0.82));
 }
 
 [data-theme="dark"] .blank-card-title {

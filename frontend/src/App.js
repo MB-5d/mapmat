@@ -9,11 +9,8 @@ import {
 import {
   Loader2,
   MessageSquare,
-  PencilLine,
   RefreshCw,
-  Sparkles,
   Trash2,
-  Upload,
   Wifi,
   WifiOff,
   XOctagon,
@@ -21,6 +18,9 @@ import {
 
 import './App.css';
 import * as api from './api';
+import createIllustration from './assets/home/create-illustration.png';
+import modifyIllustration from './assets/home/modify-illustration.png';
+import uploadIllustration from './assets/home/upload-illustration.png';
 import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
 import CommentPopover from './components/comments/CommentPopover';
 import CommentsPanel from './components/comments/CommentsPanel';
@@ -10961,7 +10961,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onClick={() => openCreateMapFlow()}
                 >
                   <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
-                    <Sparkles size={112} className="blank-card-icon" />
+                    <img src={createIllustration} alt="" className="blank-card-art" />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Create</span>
@@ -10984,7 +10984,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   }}
                 >
                   <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
-                    <PencilLine size={112} className="blank-card-icon" />
+                    <img src={modifyIllustration} alt="" className="blank-card-art" />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Modify</span>
@@ -11005,7 +11005,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     {importLoading ? (
                       <Loader2 size={32} className="spin" />
                     ) : (
-                      <Upload size={112} className="blank-card-icon" />
+                      <img src={uploadIllustration} alt="" className="blank-card-art" />
                     )}
                   </div>
                   <div className="blank-card-title-row">
