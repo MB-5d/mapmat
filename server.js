@@ -174,8 +174,6 @@ installBackendSentryProcessHandlers();
 // Browser instance for screenshots
 let browser = null;
 const SCAN_LIMITS = {
-  maxPagesDefault: Number(process.env.SCAN_MAX_PAGES_DEFAULT ?? 300),
-  maxPagesHard: Number(process.env.SCAN_MAX_PAGES_HARD ?? 1000),
   maxDepthDefault: Number(process.env.SCAN_MAX_DEPTH_DEFAULT ?? 6),
   maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 25),
 };
@@ -337,6 +335,13 @@ const clampInt = (value, { min, max, fallback }) => {
   const parsed = typeof value === 'string' ? Number(value) : value;
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(Math.max(parsed, min), max);
+};
+
+const normalizeMaxPagesLimit = (value) => {
+  const fallback = null;
+  const raw = value === undefined || value === null || value === '' ? fallback : Number(value);
+  if (!Number.isFinite(raw) || raw <= 0) return fallback;
+  return Math.max(1, Math.floor(raw));
 };
 
 const getClientIp = (req) => {
@@ -860,7 +865,6 @@ async function getBrowser() {
   return browser;
 }
 
-const DEFAULT_MAX_PAGES = SCAN_LIMITS.maxPagesDefault;
 const DEFAULT_MAX_DEPTH = SCAN_LIMITS.maxDepthDefault;
 
 function normalizeUrl(raw) {
@@ -1897,7 +1901,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const MAX_BROKEN_LINK_CHECKS = 500;
   let brokenChecks = 0;
 
-  while (queueIndex < queue.length && visited.size < maxPages) {
+  while (queueIndex < queue.length && (maxPages === null || visited.size < maxPages)) {
     if (await pollJobStatus()) break;
     const { url, depth } = queue[queueIndex++];
 
@@ -2923,11 +2927,7 @@ app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit(
 
   try {
     const safeUrl = await assertSafeUrl(url);
-    const maxPagesSafe = clampInt(maxPages, {
-      min: 1,
-      max: SCAN_LIMITS.maxPagesHard,
-      fallback: DEFAULT_MAX_PAGES,
-    });
+    const maxPagesSafe = normalizeMaxPagesLimit(maxPages);
     const maxDepthSafe = clampInt(maxDepth, {
       min: 1,
       max: SCAN_LIMITS.maxDepthHard,
@@ -3013,11 +3013,7 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
       parsedOptions = {};
     }
 
-    const maxPagesSafe = clampInt(maxPages, {
-      min: 1,
-      max: SCAN_LIMITS.maxPagesHard,
-      fallback: DEFAULT_MAX_PAGES,
-    });
+    const maxPagesSafe = normalizeMaxPagesLimit(maxPages);
     const maxDepthSafe = clampInt(maxDepth, {
       min: 1,
       max: SCAN_LIMITS.maxDepthHard,
@@ -3064,11 +3060,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
 
   try {
     const safeUrl = await assertSafeUrl(url);
-    const maxPagesSafe = clampInt(maxPages, {
-      min: 1,
-      max: SCAN_LIMITS.maxPagesHard,
-      fallback: DEFAULT_MAX_PAGES,
-    });
+    const maxPagesSafe = normalizeMaxPagesLimit(maxPages);
     const maxDepthSafe = clampInt(maxDepth, {
       min: 1,
       max: SCAN_LIMITS.maxDepthHard,

@@ -10,12 +10,6 @@ function parseEnvBool(value, fallback = false) {
   return fallback;
 }
 
-function parseEnvInt(value, fallback, { min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER } = {}) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(Math.max(parsed, min), max);
-}
-
 export const APP_ONLY_MODE = parseEnvBool(process.env.REACT_APP_APP_ONLY_MODE, false);
 export const SHOW_DEMO_AUTH = parseEnvBool(process.env.REACT_APP_ENABLE_DEMO_AUTH, !APP_ONLY_MODE);
 export const GOOGLE_AUTH_ENABLED = parseEnvBool(process.env.REACT_APP_GOOGLE_AUTH_ENABLED, false);
@@ -25,7 +19,6 @@ export const ENABLE_ANALYTICS = parseEnvBool(process.env.REACT_APP_ENABLE_ANALYT
 export const CLARITY_PROJECT_ID = String(process.env.REACT_APP_CLARITY_PROJECT_ID || '').trim();
 export const GA_MEASUREMENT_ID = String(process.env.REACT_APP_GA_MEASUREMENT_ID || '').trim();
 export const SENTRY_DSN = String(process.env.REACT_APP_SENTRY_DSN || '').trim();
-export const SCAN_MAX_PAGES_UI = parseEnvInt(process.env.REACT_APP_SCAN_MAX_PAGES, 300, { min: 1, max: 5000 });
 export const TESTER_NOT_READY_MESSAGE = 'Not ready for testing yet';
 
 export const DEFAULT_COLORS = runtimePalettes.pageDepthPalette;
