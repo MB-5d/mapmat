@@ -66,7 +66,7 @@ function RootApp() {
 
   const consentUi = (
     <>
-      <ConsentDrawer show={route.surface !== ROUTE_SURFACES.WEBSITE} />
+      <ConsentDrawer />
       <ConsentSettingsModal />
     </>
   );

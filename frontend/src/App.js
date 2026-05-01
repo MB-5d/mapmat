@@ -1127,7 +1127,7 @@ const normalizeOrphans = (list) => (list || [])
   }));
 
 export default function App({ currentRoute, navigateToRoute }) {
-  const { openSettings: openPrivacySettings } = useConsent();
+  const { consent, openSettings: openPrivacySettings } = useConsent();
   const [urlInput, setUrlInput] = useState('');
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
@@ -12357,6 +12357,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onThemeChange={setTheme}
         showPageNumbers={layers.pageNumbers}
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
+        consent={consent}
         onOpenPrivacySettings={openPrivacySettings}
       />
 

@@ -146,12 +146,17 @@ describe('AuthModal', () => {
     expect(googleInitialize).toHaveBeenCalledWith(expect.objectContaining({
       client_id: 'google-client-id.apps.googleusercontent.com',
       ux_mode: 'popup',
+      auto_select: false,
+      button_auto_select: false,
     }));
     expect(googleRenderButton).toHaveBeenCalledWith(
       container.querySelector('.auth-google-btn-host'),
       expect.objectContaining({
         type: 'standard',
+        theme: 'outline',
         shape: 'pill',
+        text: 'continue_with',
+        width: 199,
       })
     );
   });

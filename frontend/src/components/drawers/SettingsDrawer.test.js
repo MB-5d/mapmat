@@ -36,6 +36,7 @@ describe('SettingsDrawer', () => {
           onThemeChange={onThemeChange}
           showPageNumbers={false}
           onTogglePageNumbers={onTogglePageNumbers}
+          consent={{ analytics: false, experienceResearch: false }}
         />
       );
     });
@@ -52,5 +53,37 @@ describe('SettingsDrawer', () => {
 
     expect(onThemeChange).toHaveBeenCalledWith('light');
     expect(onTogglePageNumbers).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows cookie consent access and status', () => {
+    const onOpenPrivacySettings = jest.fn();
+
+    act(() => {
+      root.render(
+        <SettingsDrawer
+          isOpen
+          onClose={jest.fn()}
+          theme="auto"
+          onThemeChange={jest.fn()}
+          showPageNumbers={false}
+          onTogglePageNumbers={jest.fn()}
+          consent={{ analytics: true, experienceResearch: false }}
+          onOpenPrivacySettings={onOpenPrivacySettings}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Cookie Consent');
+    expect(container.textContent).toContain('Some optional research tools are allowed.');
+
+    const button = Array.from(container.querySelectorAll('button')).find((candidate) =>
+      candidate.textContent.includes('Cookie Consent Settings')
+    );
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOpenPrivacySettings).toHaveBeenCalledTimes(1);
   });
 });

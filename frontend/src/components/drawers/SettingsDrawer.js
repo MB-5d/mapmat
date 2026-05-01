@@ -13,6 +13,7 @@ const SettingsDrawer = ({
   onThemeChange,
   showPageNumbers,
   onTogglePageNumbers,
+  consent,
   onOpenPrivacySettings,
 }) => {
   const themeOptions = [
@@ -20,6 +21,9 @@ const SettingsDrawer = ({
     { value: 'light', label: 'Light', icon: <Sun size={14} /> },
     { value: 'dark', label: 'Dark', icon: <Moon size={14} /> },
   ];
+  const optionalConsentLabel = consent?.analytics || consent?.experienceResearch
+    ? 'Some optional research tools are allowed.'
+    : 'Optional research tools are off.';
 
   return (
     <AccountDrawer
@@ -55,13 +59,13 @@ const SettingsDrawer = ({
       </section>
 
       <section className="drawer-card">
-        <div className="drawer-card-title">Privacy</div>
+        <div className="drawer-card-title">Cookie Consent</div>
         <div className="drawer-helper">
-          Manage optional analytics and product research tools.
+          {optionalConsentLabel}
         </div>
         <div className="drawer-card-actions">
           <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={onOpenPrivacySettings}>
-            Privacy Settings
+            Cookie Consent Settings
           </Button>
         </div>
       </section>
