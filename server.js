@@ -1898,7 +1898,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const pageMap = new Map();
   const errors = [];
   const inactivePages = [];
-  const blockedPages = [];
   const brokenLinks = [];
   const files = [];
   const linksByUrl = new Map();
@@ -1961,14 +1960,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       const shouldKeep = (scanOptions.errorPages && (classification.isErrorStatus || classification.isBlockedStatus))
         || (scanOptions.authenticatedPages && classification.isAuthStatus)
         || (scanOptions.inactivePages && classification.isInactiveStatus);
-      if (classification.isBlockedStatus && (scanOptions.errorPages || scanOptions.authenticatedPages)) {
-        blockedPages.push({
-          url,
-          status,
-          blockedReason: classification.blockedReason,
-          isChallengePage: classification.isChallengePage,
-        });
-      } else if (classification.isErrorStatus && scanOptions.errorPages) {
+      if (classification.isErrorStatus && scanOptions.errorPages) {
         errors.push({
           url,
           status,
@@ -2025,7 +2017,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       responseTime,
       titleSource: classification.titleSource,
       blockedReason: classification.blockedReason,
-      isChallengePage: classification.isChallengePage,
+      isChallengePage: false,
       isBlocked: false,
       scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
@@ -2125,8 +2117,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       responseTime: Number.isFinite(meta.responseTime) ? meta.responseTime : null,
       titleSource: meta.titleSource || 'html',
       blockedReason: meta.blockedReason || null,
-      isChallengePage: Boolean(meta.isChallengePage),
-      isBlocked: Boolean(meta.isBlocked),
+      isChallengePage: false,
+      isBlocked: false,
       scanStatus: meta.scanStatus || null,
       metadataAvailable: meta.metadataAvailable !== false,
       children: [],
@@ -2544,7 +2536,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     subdomains: scanOptions.subdomains ? subdomainNodes : [],
     errors: scanOptions.errorPages ? errors : [],
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
-    blockedPages: scanOptions.errorPages || scanOptions.authenticatedPages ? blockedPages : [],
     brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],
     files: scanOptions.files ? files : [],
     crosslinks,

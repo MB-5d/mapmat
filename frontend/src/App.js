@@ -1018,8 +1018,8 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             seoMetadata: node.seoMetadata || existing.seoMetadata,
             titleSource: node.titleSource || existing.titleSource,
             blockedReason: node.blockedReason || existing.blockedReason,
-            isChallengePage: node.isChallengePage || existing.isChallengePage,
-            isBlocked: node.isBlocked || existing.isBlocked,
+            isChallengePage: false,
+            isBlocked: false,
             scanStatus: node.scanStatus || existing.scanStatus,
             metadataAvailable: node.metadataAvailable ?? existing.metadataAvailable,
             isMissing: false,
@@ -1073,19 +1073,6 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     }
     urlNodeMap.set(newNode.url, newNode);
     addNormalizedUrl(newNode.url, newNode);
-  });
-
-  (scanResult.blockedPages || []).forEach((blocked) => {
-    if (!blocked?.url) return;
-    const node = urlNodeMap.get(blocked.url);
-    if (!node) return;
-    node.isBlocked = false;
-    node.isChallengePage = blocked.isChallengePage || node.isChallengePage;
-    node.blockedReason = blocked.blockedReason || node.blockedReason || 'crawler_limited';
-    node.scanStatus = 'scan_limited';
-    node.isError = false;
-    node.isInactive = false;
-    node.authRequired = false;
   });
 
   (scanResult.errors || []).forEach((error) => {
