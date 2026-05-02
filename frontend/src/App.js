@@ -1681,8 +1681,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }), [scanLayerAvailability, scanLayerVisibility]);
 
   const badgeVisibility = useMemo(() => ({
-    subdomains: true,
-    orphanPages: true,
+    subdomains: false,
+    orphanPages: false,
     files: true,
     brokenLinks: true,
     inactivePages: true,
