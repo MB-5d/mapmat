@@ -53,6 +53,10 @@ const {
   getPrimaryDescription,
   getPrimaryMetaTags,
 } = require('./utils/scanMetadata');
+const {
+  classifyScanResponse,
+  getUrlFallbackTitle,
+} = require('./utils/scanPageClassification');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -1936,28 +1940,36 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (!pageMap.has(url)) {
         pageMap.set(url, {
           url,
-          title: new URL(url).pathname === '/' ? new URL(url).hostname : url,
+          title: getUrlFallbackTitle(url),
           parentUrl: getParentUrl(url),
           discoveryIndex,
           httpStatus: status,
           wasRedirect: false,
           responseTime,
+          titleSource: 'url_fallback',
+          blockedReason: 'fetch_failed',
+          metadataAvailable: false,
         });
       }
       continue;
     }
 
+    const classification = classifyScanResponse({ html, status, url, finalUrl });
+
     if (status >= 400) {
-      const isAuthStatus = status === 401 || status === 403;
-      const isInactiveStatus = status >= 400;
       const shouldKeep = scanOptions.errorPages
-        || (scanOptions.authenticatedPages && isAuthStatus)
-        || (scanOptions.inactivePages && isInactiveStatus);
-      if (scanOptions.errorPages || (scanOptions.authenticatedPages && isAuthStatus)) {
-        errors.push({ url, status, authRequired: isAuthStatus });
+        || (scanOptions.authenticatedPages && classification.isAuthStatus)
+        || (scanOptions.inactivePages && classification.isInactiveStatus);
+      if (scanOptions.errorPages || (scanOptions.authenticatedPages && classification.isAuthStatus)) {
+        errors.push({
+          url,
+          status,
+          authRequired: classification.isAuthStatus,
+          blockedReason: classification.blockedReason,
+        });
       }
-      if (scanOptions.inactivePages && isInactiveStatus) {
-        inactivePages.push({ url, status });
+      if (scanOptions.inactivePages && classification.isInactiveStatus) {
+        inactivePages.push({ url, status, blockedReason: classification.blockedReason });
       }
       if (scanOptions.brokenLinks) {
         brokenLinks.push({ url, status });
@@ -1974,11 +1986,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       continue;
     }
 
-    const seoMetadata = extractSeoMetadata(html, finalUrl || url);
-    const title = extractTitle(html, finalUrl || url);
+    const seoMetadata = classification.shouldExtractMetadata
+      ? extractSeoMetadata(html, finalUrl || url)
+      : {};
+    const title = classification.shouldExtractMetadata
+      ? extractTitle(html, finalUrl || url)
+      : classification.fallbackTitle;
     const parentUrl = getParentUrl(finalUrl || url);
-    const canonicalUrl = normalizeUrl(seoMetadata.canonicalUrl) || extractCanonicalUrl(html, finalUrl || url);
-    const isAuthPage = status === 401 || status === 403;
+    const canonicalUrl = classification.shouldExtractMetadata
+      ? (normalizeUrl(seoMetadata.canonicalUrl) || extractCanonicalUrl(html, finalUrl || url))
+      : null;
     const wasRedirect = normalizeUrl(finalUrl || url) !== normalizeUrl(url);
     const description = getPrimaryDescription(seoMetadata);
     const metaTags = getPrimaryMetaTags(seoMetadata);
@@ -1992,15 +2009,19 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       metaTags,
       seoMetadata,
       parentUrl,
-      authRequired: status === 401 || status === 403,
+      authRequired: classification.isAuthStatus,
       thumbnailUrl: undefined,
       discoveryIndex,
       httpStatus: status,
       wasRedirect,
       responseTime,
+      titleSource: classification.titleSource,
+      blockedReason: classification.blockedReason,
+      isChallengePage: classification.isChallengePage,
+      metadataAvailable: classification.metadataAvailable,
     });
 
-    const links = extractLinks(html, finalUrl || url);
+    const links = classification.shouldExtractLinks ? extractLinks(html, finalUrl || url) : [];
     const allowedLinks = links.filter((link) => allowUrl(link));
     linksByUrl.set(url, allowedLinks);
 
@@ -2092,6 +2113,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       wasRedirect: meta.wasRedirect || false,
       redirectTarget: meta.wasRedirect ? (meta.finalUrl || url) : null,
       responseTime: Number.isFinite(meta.responseTime) ? meta.responseTime : null,
+      titleSource: meta.titleSource || 'html',
+      blockedReason: meta.blockedReason || null,
+      isChallengePage: Boolean(meta.isChallengePage),
+      metadataAvailable: meta.metadataAvailable !== false,
       children: [],
     });
   }
@@ -2108,6 +2133,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const rootHostNormalized = normalizeHost(rootHost);
 
   const canonicalKeyFor = (node) => getCanonicalKey(node.canonicalUrl || node.finalUrl || node.url);
+  const shouldInferPathParents = (node) => {
+    const statusCode = Number(node?.statusCode ?? node?.httpStatus);
+    return !node?.isChallengePage
+      && !node?.blockedReason
+      && !node?.authRequired
+      && !(Number.isFinite(statusCode) && statusCode >= 400);
+  };
   const canonicalToUrl = new Map();
   nodes.forEach((node) => {
     const key = canonicalKeyFor(node);
@@ -2139,6 +2171,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   for (const node of nodes.values()) {
     if (node.url === rootUrl) continue;
+    if (!shouldInferPathParents(node)) continue;
     ensureParentChain(node.url);
   }
 
@@ -2208,6 +2241,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   // Ensure path ancestors for linked nodes are also linked (for missing placeholders)
   Array.from(linked).forEach((url) => {
+    const linkedNode = nodes.get(url);
+    if (linkedNode && !shouldInferPathParents(linkedNode)) return;
     let parentUrl = getParentUrl(url);
     while (parentUrl) {
       if (!nodes.has(parentUrl)) break;
@@ -2312,6 +2347,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   Array.from(orphanMap.values()).forEach((node) => {
+    if (!shouldInferPathParents(node)) return;
     ensureOrphanParentChain(node.url);
   });
 

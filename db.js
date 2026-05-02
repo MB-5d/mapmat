@@ -87,6 +87,8 @@ db.exec(`
     root_data TEXT NOT NULL,
     colors TEXT,
     connection_colors TEXT,
+    insights_data TEXT,
+    insights_generated_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -230,6 +232,8 @@ ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
 ensureColumn('maps', 'connection_colors', 'TEXT');
 ensureColumn('maps', 'notes', 'TEXT');
+ensureColumn('maps', 'insights_data', 'TEXT');
+ensureColumn('maps', 'insights_generated_at', 'DATETIME');
 ensureColumn('map_versions', 'orphans_data', 'TEXT');
 ensureColumn('map_versions', 'connections_data', 'TEXT');
 ensureColumn('map_versions', 'connection_colors', 'TEXT');

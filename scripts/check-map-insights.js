@@ -36,6 +36,16 @@ const root = {
       h1s: ['Pricing'],
       children: [],
     },
+    {
+      id: 'duplicate-active',
+      url: 'https://example.com/compare/pricing',
+      title: 'Pricing',
+      description: 'Pricing',
+      statusCode: 200,
+      linksIn: 1,
+      h1s: ['Pricing'],
+      children: [],
+    },
   ],
 };
 
@@ -49,7 +59,7 @@ const analysis = analyzeMapInsights({
 });
 
 assert.strictEqual(analysis.scanId, 'fixture-scan');
-assert.strictEqual(analysis.totals.pages, 3);
+assert.strictEqual(analysis.totals.pages, 4);
 assert.strictEqual(analysis.totals.errorPages, 1);
 assert.strictEqual(analysis.totals.brokenLinks, 1);
 assert.ok(analysis.findings.some((finding) => finding.title === 'Missing H1'));

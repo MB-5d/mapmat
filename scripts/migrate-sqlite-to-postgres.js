@@ -70,7 +70,8 @@ const TABLES = [
     conflictKey: 'id',
     columns: [
       'id', 'user_id', 'project_id', 'name', 'notes', 'url', 'root_data', 'orphans_data',
-      'connections_data', 'colors', 'connection_colors', 'created_at', 'updated_at',
+      'connections_data', 'colors', 'connection_colors', 'insights_data', 'insights_generated_at',
+      'created_at', 'updated_at',
     ],
   },
   {
@@ -151,6 +152,8 @@ CREATE TABLE IF NOT EXISTS maps (
   connections_data TEXT,
   colors TEXT,
   connection_colors TEXT,
+  insights_data TEXT,
+  insights_generated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );

@@ -1,4 +1,37 @@
 const adapter = require('./dbAdapter');
+let ensureMapInsightsSchemaPromise = null;
+
+async function ensureColumnAsync(table, column, type) {
+  let rows = [];
+  if (adapter.runtime?.activeProvider === 'postgres') {
+    rows = await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ?
+    `, [table]);
+  } else {
+    rows = await adapter.queryAllAsync(`PRAGMA table_info(${table})`);
+  }
+
+  const columns = rows.map((row) => row.column_name || row.name).filter(Boolean);
+  if (!columns.includes(column)) {
+    await adapter.executeAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
+async function ensureMapInsightsSchemaAsync() {
+  if (ensureMapInsightsSchemaPromise) return ensureMapInsightsSchemaPromise;
+  ensureMapInsightsSchemaPromise = (async () => {
+    await ensureColumnAsync('maps', 'insights_data', 'TEXT');
+    await ensureColumnAsync('maps', 'insights_generated_at', 'TIMESTAMP');
+  })();
+  try {
+    await ensureMapInsightsSchemaPromise;
+  } catch (error) {
+    ensureMapInsightsSchemaPromise = null;
+    throw error;
+  }
+}
 
 function listMapsByUserAsync({ userId, projectId, limit, offset }) {
   let query = `
@@ -185,7 +218,6 @@ async function updateMapByIdAsync(mapId, patch) {
     updates.push('project_id = ?');
     params.push(patch.projectId);
   }
-
   if (updates.length === 0) return false;
 
   updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -196,6 +228,14 @@ async function updateMapByIdAsync(mapId, patch) {
 
 function deleteMapByIdAsync(mapId) {
   return adapter.executeAsync('DELETE FROM maps WHERE id = ?', [mapId]);
+}
+
+function updateMapInsightsAsync(mapId, insightsData, generatedAt) {
+  return adapter.executeAsync(`
+    UPDATE maps
+    SET insights_data = ?, insights_generated_at = ?
+    WHERE id = ?
+  `, [insightsData, generatedAt, mapId]);
 }
 
 async function listPersistedScreenshotFilenamesAsync() {
@@ -318,6 +358,7 @@ function getMapVersionByIdAsync(versionId) {
 }
 
 module.exports = {
+  ensureMapInsightsSchemaAsync,
   listMapsByUserAsync,
   listMapsAccessibleToUserAsync,
   countMapsByUserAsync,
@@ -330,6 +371,7 @@ module.exports = {
   createMapAsync,
   updateMapByIdAsync,
   deleteMapByIdAsync,
+  updateMapInsightsAsync,
   listPersistedScreenshotFilenamesAsync,
   listMapVersionsForUserMapAsync,
   listMapVersionsByMapAsync,

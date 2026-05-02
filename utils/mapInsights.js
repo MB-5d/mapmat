@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const { detectChallengePage } = require('./scanPageClassification');
 
 const CATEGORIES = Object.freeze({
   seo: 'seo',
@@ -219,6 +220,16 @@ function looksPlaceholder(value) {
   ].some((term) => normalized === term || normalized.includes(term));
 }
 
+function hasReliableContentMetadata(page, statusCode = null) {
+  const node = page?.node || {};
+  const blocked = Boolean(node.blockedReason || node.isChallengePage || node.authRequired);
+  const errorStatus = statusCode !== null && statusCode >= 400;
+  if (blocked || errorStatus) return false;
+  if (node.metadataAvailable === false) return false;
+  if (detectChallengePage('', page?.title || node.title || '').isChallengePage) return false;
+  return true;
+}
+
 function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, historyId = null } = {}) {
   const pages = collectPages(root, orphans);
   const findings = [];
@@ -231,14 +242,18 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
     }
   })();
 
-  const hasSeoMetadata = pages.some((page) => (
+  const reliablePages = pages.filter((page) => {
+    const statusCode = readNumber(page.node?.statusCode, page.node?.httpStatus);
+    return hasReliableContentMetadata(page, statusCode);
+  });
+  const hasSeoMetadata = reliablePages.some((page) => (
     (page.node?.seoMetadata && Object.keys(page.node.seoMetadata).length > 0)
-    || page.node?.description
-    || page.node?.canonicalUrl
-    || page.node?.h1s
-    || page.node?.h2s
+      || page.node?.description
+      || page.node?.canonicalUrl
+      || page.node?.h1s
+      || page.node?.h2s
   ));
-  const hasCanonicalData = pages.some((page) => getMeta(page.node, 'canonicalUrl'));
+  const hasCanonicalData = reliablePages.some((page) => getMeta(page.node, 'canonicalUrl'));
   const hasStatusData = pages.some((page) => readNumber(page.node?.statusCode, page.node?.httpStatus) !== null);
   const hasResponseTimes = pages.some((page) => readNumber(page.node?.responseTime) !== null);
   const hasImageData = pages.some((page) => readNumber(page.node?.imageCount, page.node?.seoMetadata?.imageCount) !== null);
@@ -255,8 +270,12 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
     const imageCount = readNumber(node.imageCount, node.seoMetadata?.imageCount);
     const missingImageAltCount = readNumber(node.missingImageAltCount, node.seoMetadata?.missingImageAltCount);
 
-    addLengthFinding(findings, createFinding, page, CATEGORIES.seo, 'title', title, 10, 70);
-    if (hasSeoMetadata) {
+    const hasReliableMetadata = hasReliableContentMetadata(page, statusCode);
+
+    if (hasReliableMetadata) {
+      addLengthFinding(findings, createFinding, page, CATEGORIES.seo, 'title', title, 10, 70);
+    }
+    if (hasReliableMetadata && hasSeoMetadata) {
       addLengthFinding(findings, createFinding, page, CATEGORIES.seo, 'meta description', description, 50, 170);
       if (!h1s.length) {
         findings.push(createFinding({
@@ -395,7 +414,7 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
       }));
     }
 
-    if (looksPlaceholder(title) || looksPlaceholder(description)) {
+    if (hasReliableMetadata && (looksPlaceholder(title) || looksPlaceholder(description))) {
       findings.push(createFinding({
         category: CATEGORIES.content,
         severity: SEVERITIES.medium,
@@ -408,7 +427,7 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
       }));
     }
 
-    if (hasSeoMetadata && (!description || !h1s.length)) {
+    if (hasReliableMetadata && hasSeoMetadata && (!description || !h1s.length)) {
       findings.push(createFinding({
         category: CATEGORIES.content,
         severity: SEVERITIES.low,
@@ -433,10 +452,10 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
     }
   });
 
-  addDuplicateFindings(findings, createFinding, pages, CATEGORIES.seo, 'title', (page) => page.title);
+  addDuplicateFindings(findings, createFinding, reliablePages, CATEGORIES.seo, 'title', (page) => page.title);
   if (hasSeoMetadata) {
-    addDuplicateFindings(findings, createFinding, pages, CATEGORIES.seo, 'meta description', (page) => getMeta(page.node, 'description'));
-    addDuplicateFindings(findings, createFinding, pages, CATEGORIES.content, 'H1', (page) => getMeta(page.node, 'h1s')[0] || '', SEVERITIES.low);
+    addDuplicateFindings(findings, createFinding, reliablePages, CATEGORIES.seo, 'meta description', (page) => getMeta(page.node, 'description'));
+    addDuplicateFindings(findings, createFinding, reliablePages, CATEGORIES.content, 'H1', (page) => getMeta(page.node, 'h1s')[0] || '', SEVERITIES.low);
   }
 
   pages.forEach((page) => {

@@ -581,6 +581,10 @@ export async function getHistoryInsights(id) {
   return fetchApi(`/api/history/${id}/insights`);
 }
 
+export async function getMapInsights(id) {
+  return fetchApi(`/api/maps/${id}/insights`);
+}
+
 export async function analyzeInsights(data) {
   return fetchApi('/api/insights/analyze', {
     method: 'POST',

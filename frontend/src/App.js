@@ -656,6 +656,7 @@ const SitemapTree = ({
       badges.push('Broken Link');
     }
     if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) badges.push('Inactive');
+    if (node.isChallengePage && badgeVisibility?.errorPages) badges.push('Blocked');
     if (node.authRequired && badgeVisibility?.authenticatedPages) badges.push('Auth');
     if (node.isError && badgeVisibility?.errorPages) badges.push('Error');
     return badges;
@@ -1013,6 +1014,10 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             metaTags: node.metaTags || existing.metaTags,
             canonicalUrl: node.canonicalUrl || existing.canonicalUrl,
             seoMetadata: node.seoMetadata || existing.seoMetadata,
+            titleSource: node.titleSource || existing.titleSource,
+            blockedReason: node.blockedReason || existing.blockedReason,
+            isChallengePage: node.isChallengePage || existing.isChallengePage,
+            metadataAvailable: node.metadataAvailable ?? existing.metadataAvailable,
             isMissing: false,
           });
         }
@@ -1072,6 +1077,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (!node) return;
     node.isError = true;
     node.errorStatus = error.status;
+    node.blockedReason = error.blockedReason || node.blockedReason || null;
     if (error.authRequired) node.authRequired = true;
   });
 
@@ -5982,6 +5988,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
+    setMapInsights(null);
+    setInsightsError('');
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setIsImportedMap(false);
@@ -6011,6 +6019,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
+    setMapInsights(null);
+    setInsightsError('');
     setColors(DEFAULT_COLORS);
     setConnectionColors(DEFAULT_CONNECTION_COLORS);
     setCurrentMap(null);
@@ -6062,6 +6072,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setCurrentMap(map);
+    setMapInsights(map.insights || null);
+    setInsightsError('');
     if (!skipNavigation) {
       navigateToRoute(createMapRoute(map.id));
     }
@@ -6389,8 +6401,22 @@ export default function App({ currentRoute, navigateToRoute }) {
         orphans,
         scanMeta,
         history_id: canPersistToHistory ? lastHistoryId : null,
+        map_id: isLoggedIn && currentMap?.id ? currentMap.id : null,
       });
       setMapInsights(insights || null);
+      if (saved && currentMap?.id) {
+        setCurrentMap((prev) => (
+          prev ? { ...prev, insights, insights_generated_at: insights?.updatedAt || new Date().toISOString() } : prev
+        ));
+        setProjects((prev) => prev.map((project) => ({
+          ...project,
+          maps: (project.maps || []).map((map) => (
+            map.id === currentMap.id
+              ? { ...map, insights, insights_generated_at: insights?.updatedAt || new Date().toISOString() }
+              : map
+          )),
+        })));
+      }
       if (saved && lastHistoryId) {
         setScanHistory((prev) => prev.map((item) => (
           item.id === lastHistoryId
@@ -6407,7 +6433,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     } finally {
       setInsightsLoading(false);
     }
-  }, [isLoggedIn, lastHistoryId, lastScanUrl, orphans, root, scanMeta, showToast]);
+  }, [currentMap?.id, isLoggedIn, lastHistoryId, lastScanUrl, orphans, root, scanMeta, showToast]);
 
   const toggleHistorySelection = (id) => {
     setSelectedHistoryItems(prev => {

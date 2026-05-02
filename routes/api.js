@@ -259,10 +259,13 @@ function parseMapFields(row) {
     connections: safeParse(row.connections_data, 'connections_data', []),
     colors: safeParse(row.colors, 'colors', null),
     connectionColors: safeParse(row.connection_colors, 'connection_colors', null),
+    insights: safeParse(row.insights_data, 'insights_data', null),
+    insights_generated_at: row.insights_generated_at || null,
     root_data: undefined,
     orphans_data: undefined,
     connections_data: undefined,
     connection_colors: undefined,
+    insights_data: undefined,
   };
 }
 
@@ -1100,6 +1103,30 @@ router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/maps/:id/insights - Get saved insights for a saved map
+router.get('/maps/:id/insights', requireAuth, async (req, res) => {
+  try {
+    await mapStore.ensureMapInsightsSchemaAsync();
+    const { id } = req.params;
+    const { map, role } = await resolveMapPermissionContextAsync({
+      mapId: id,
+      actorUserId: req.user.id,
+    });
+
+    if (!map || !permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, role)) {
+      return res.status(404).json({ error: 'Map not found' });
+    }
+
+    res.json({
+      insights: safeParse(map.insights_data, 'insights_data', null),
+      insights_generated_at: map.insights_generated_at || null,
+    });
+  } catch (error) {
+    console.error('Get map insights error:', error);
+    res.status(500).json({ error: 'Failed to get map insights' });
+  }
+});
+
 // POST /api/maps - Save a new map
 router.post('/maps', requireAuth, async (req, res) => {
   try {
@@ -1805,6 +1832,7 @@ router.get('/history/:id/insights', requireAuth, async (req, res) => {
 router.post('/insights/analyze', async (req, res) => {
   try {
     await historyStore.ensureHistorySchemaAsync();
+    await mapStore.ensureMapInsightsSchemaAsync();
     const {
       root,
       orphans = [],
@@ -1812,6 +1840,7 @@ router.post('/insights/analyze', async (req, res) => {
       scanMeta,
       history_id,
       scan_id,
+      map_id,
     } = req.body || {};
 
     if (!root || typeof root !== 'object') {
@@ -1819,6 +1848,8 @@ router.post('/insights/analyze', async (req, res) => {
     }
 
     let historyItem = null;
+    let mapItem = null;
+    let canPersistMapInsights = false;
     if (history_id) {
       if (!req.user?.id) {
         return res.status(401).json({ error: 'Sign in to save insights for this scan' });
@@ -1832,12 +1863,23 @@ router.post('/insights/analyze', async (req, res) => {
         failureError: 'History item not found',
       })) return;
     }
+    if (map_id && req.user?.id) {
+      const { map, role } = await resolveMapPermissionContextAsync({
+        mapId: map_id,
+        actorUserId: req.user.id,
+      });
+      if (!map || !permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, role)) {
+        return res.status(404).json({ error: 'Map not found' });
+      }
+      mapItem = map;
+      canPersistMapInsights = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, role);
+    }
 
     const insights = analyzeMapInsights({
       root,
       orphans: Array.isArray(orphans) ? orphans : [],
       scanMeta: scanMeta || scan_meta || {},
-      scanId: scan_id || history_id || null,
+      scanId: scan_id || history_id || map_id || null,
       historyId: history_id || null,
     });
 
@@ -1849,8 +1891,11 @@ router.post('/insights/analyze', async (req, res) => {
         insights.updatedAt
       );
     }
+    if (mapItem && canPersistMapInsights) {
+      await mapStore.updateMapInsightsAsync(map_id, JSON.stringify(insights), insights.updatedAt);
+    }
 
-    res.json({ insights, saved: !!historyItem });
+    res.json({ insights, saved: !!historyItem || (mapItem && canPersistMapInsights) });
   } catch (error) {
     console.error('Analyze insights error:', error);
     res.status(500).json({ error: 'Failed to analyze scan' });
