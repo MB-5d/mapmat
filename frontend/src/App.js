@@ -655,10 +655,15 @@ const SitemapTree = ({
     if (node.isBroken && !isOrphanRoot && badgeVisibility?.brokenLinks && !badges.includes('Broken Link')) {
       badges.push('Broken Link');
     }
-    if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) badges.push('Inactive');
-    if (node.isChallengePage && badgeVisibility?.errorPages) badges.push('Blocked');
-    if (node.authRequired && badgeVisibility?.authenticatedPages) badges.push('Auth');
-    if (node.isError && badgeVisibility?.errorPages) badges.push('Error');
+    if ((node.isBlocked || node.isChallengePage) && badgeVisibility?.errorPages) {
+      badges.push('Blocked');
+    } else if (node.authRequired && badgeVisibility?.authenticatedPages) {
+      badges.push('Auth');
+    } else if (node.isError && badgeVisibility?.errorPages) {
+      badges.push('Error');
+    } else if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) {
+      badges.push('Inactive');
+    }
     return badges;
   };
 
@@ -945,9 +950,9 @@ const getNodeStatusFlags = (node, nodeMeta) => {
   const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
   return {
     broken: !isOrphanRoot && (node?.isBroken || nodeMeta?.orphanType === 'broken'),
-    error: Boolean(node?.isError),
-    inactive: Boolean(node?.isInactive || nodeMeta?.orphanType === 'inactive'),
-    auth: Boolean(node?.authRequired),
+    error: Boolean(node?.isError || node?.isBlocked || node?.isChallengePage),
+    inactive: Boolean(!node?.isBlocked && !node?.isChallengePage && !node?.isError && !node?.authRequired && (node?.isInactive || nodeMeta?.orphanType === 'inactive')),
+    auth: Boolean(!node?.isBlocked && !node?.isChallengePage && node?.authRequired),
     duplicate: Boolean(node?.isDuplicate),
   };
 };
@@ -1017,6 +1022,8 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             titleSource: node.titleSource || existing.titleSource,
             blockedReason: node.blockedReason || existing.blockedReason,
             isChallengePage: node.isChallengePage || existing.isChallengePage,
+            isBlocked: node.isBlocked || existing.isBlocked,
+            scanStatus: node.scanStatus || existing.scanStatus,
             metadataAvailable: node.metadataAvailable ?? existing.metadataAvailable,
             isMissing: false,
           });
@@ -1071,13 +1078,28 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     addNormalizedUrl(newNode.url, newNode);
   });
 
+  (scanResult.blockedPages || []).forEach((blocked) => {
+    if (!blocked?.url) return;
+    const node = urlNodeMap.get(blocked.url);
+    if (!node) return;
+    node.isBlocked = true;
+    node.isChallengePage = blocked.isChallengePage || node.isChallengePage;
+    node.blockedReason = blocked.blockedReason || node.blockedReason || 'crawler_blocked';
+    node.scanStatus = 'blocked';
+    node.isError = false;
+    node.isInactive = false;
+    node.authRequired = false;
+  });
+
   (scanResult.errors || []).forEach((error) => {
     if (!error?.url) return;
     const node = urlNodeMap.get(error.url);
     if (!node) return;
+    if (node.isBlocked || node.isChallengePage) return;
     node.isError = true;
     node.errorStatus = error.status;
     node.blockedReason = error.blockedReason || node.blockedReason || null;
+    node.scanStatus = 'error';
     if (error.authRequired) node.authRequired = true;
   });
 
@@ -1094,9 +1116,13 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
 
   (scanResult.inactivePages || []).forEach((inactive) => {
     if (!inactive?.url) return;
+    const inactiveStatus = Number(inactive.status || 0);
+    if (inactiveStatus >= 400) return;
     const existing = urlNodeMap.get(inactive.url);
     if (existing) {
+      if (existing.isBlocked || existing.isChallengePage || existing.isError || existing.authRequired) return;
       existing.isInactive = true;
+      existing.scanStatus = 'inactive';
       return;
     }
     addOrphanNode({

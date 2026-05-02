@@ -22,6 +22,7 @@ assert.strictEqual(challenge.isChallengePage, true);
 assert.strictEqual(challenge.metadataAvailable, false);
 assert.strictEqual(challenge.shouldExtractLinks, false);
 assert.strictEqual(challenge.fallbackTitle, 'app');
+assert.strictEqual(challenge.scanStatus, 'blocked');
 
 const error = classifyScanResponse({
   url: 'https://example.com/missing-page',
@@ -32,6 +33,40 @@ const error = classifyScanResponse({
 assert.strictEqual(error.metadataAvailable, false);
 assert.strictEqual(error.shouldExtractLinks, false);
 assert.strictEqual(error.fallbackTitle, 'missing page');
+assert.strictEqual(error.scanStatus, 'blocked');
+assert.strictEqual(error.isInactiveStatus, false);
+
+const missingPage = classifyScanResponse({
+  url: 'https://example.com/missing-page',
+  finalUrl: 'https://example.com/missing-page',
+  status: 404,
+  html: '<html><head><title>Page not found</title></head><body>Not found</body></html>',
+});
+assert.strictEqual(missingPage.scanStatus, 'error');
+assert.strictEqual(missingPage.isErrorStatus, true);
+assert.strictEqual(missingPage.isInactiveStatus, false);
+
+const forbiddenCrawlerBlock = classifyScanResponse({
+  url: 'https://example.com/protected-by-bot-rules',
+  finalUrl: 'https://example.com/protected-by-bot-rules',
+  status: 403,
+  html: '<html><head><title>Forbidden</title></head><body>Request blocked</body></html>',
+});
+assert.strictEqual(forbiddenCrawlerBlock.scanStatus, 'blocked');
+assert.strictEqual(forbiddenCrawlerBlock.isAuthStatus, false);
+assert.strictEqual(forbiddenCrawlerBlock.isErrorStatus, false);
+assert.strictEqual(forbiddenCrawlerBlock.isInactiveStatus, false);
+
+const authRequired = classifyScanResponse({
+  url: 'https://example.com/account',
+  finalUrl: 'https://example.com/account',
+  status: 403,
+  html: '<html><head><title>Sign in</title></head><body>Authentication required. Log in to continue.</body></html>',
+});
+assert.strictEqual(authRequired.scanStatus, 'auth');
+assert.strictEqual(authRequired.isAuthStatus, true);
+assert.strictEqual(authRequired.isErrorStatus, false);
+assert.strictEqual(authRequired.isInactiveStatus, false);
 
 const insights = analyzeMapInsights({
   root: {

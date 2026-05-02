@@ -1898,6 +1898,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const pageMap = new Map();
   const errors = [];
   const inactivePages = [];
+  const blockedPages = [];
   const brokenLinks = [];
   const files = [];
   const linksByUrl = new Map();
@@ -1957,14 +1958,21 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const classification = classifyScanResponse({ html, status, url, finalUrl });
 
     if (status >= 400) {
-      const shouldKeep = scanOptions.errorPages
+      const shouldKeep = (scanOptions.errorPages && (classification.isErrorStatus || classification.isBlockedStatus))
         || (scanOptions.authenticatedPages && classification.isAuthStatus)
         || (scanOptions.inactivePages && classification.isInactiveStatus);
-      if (scanOptions.errorPages || (scanOptions.authenticatedPages && classification.isAuthStatus)) {
+      if (classification.isBlockedStatus && (scanOptions.errorPages || scanOptions.authenticatedPages)) {
+        blockedPages.push({
+          url,
+          status,
+          blockedReason: classification.blockedReason,
+          isChallengePage: classification.isChallengePage,
+        });
+      } else if (classification.isErrorStatus && scanOptions.errorPages) {
         errors.push({
           url,
           status,
-          authRequired: classification.isAuthStatus,
+          authRequired: false,
           blockedReason: classification.blockedReason,
         });
       }
@@ -2018,6 +2026,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       titleSource: classification.titleSource,
       blockedReason: classification.blockedReason,
       isChallengePage: classification.isChallengePage,
+      isBlocked: classification.scanStatus === 'blocked',
+      scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
     });
 
@@ -2116,6 +2126,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       titleSource: meta.titleSource || 'html',
       blockedReason: meta.blockedReason || null,
       isChallengePage: Boolean(meta.isChallengePage),
+      isBlocked: Boolean(meta.isBlocked),
+      scanStatus: meta.scanStatus || null,
       metadataAvailable: meta.metadataAvailable !== false,
       children: [],
     });
@@ -2529,6 +2541,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     subdomains: scanOptions.subdomains ? subdomainNodes : [],
     errors: scanOptions.errorPages ? errors : [],
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
+    blockedPages: scanOptions.errorPages || scanOptions.authenticatedPages ? blockedPages : [],
     brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],
     files: scanOptions.files ? files : [],
     crosslinks,

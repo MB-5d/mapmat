@@ -21,6 +21,15 @@ const CHALLENGE_BODY_PATTERNS = [
   /bot detection/i,
 ];
 
+const AUTH_BODY_PATTERNS = [
+  /sign in/i,
+  /log in/i,
+  /login required/i,
+  /authentication required/i,
+  /access your account/i,
+  /unauthorized/i,
+];
+
 function getUrlFallbackTitle(url) {
   try {
     const parsed = new URL(url);
@@ -60,27 +69,44 @@ function detectChallengePage(html, title = '') {
 
 function classifyScanResponse({ html = '', status = 0, url = '', finalUrl = '' } = {}) {
   const normalizedStatus = Number(status) || 0;
-  const { title } = extractHtmlTitle(html);
+  const { title, bodyText } = extractHtmlTitle(html);
   const challenge = detectChallengePage(html, title);
-  const isAuthStatus = normalizedStatus === 401 || normalizedStatus === 403;
-  const isErrorStatus = normalizedStatus >= 400;
-  const isInactiveStatus = normalizedStatus === 0 || normalizedStatus >= 400;
-  const isMetadataReliable = !isAuthStatus && !isErrorStatus && !challenge.isChallengePage;
+  const looksAuthRequired = AUTH_BODY_PATTERNS.some((pattern) => pattern.test(`${title} ${bodyText}`));
+  const isAuthStatus = normalizedStatus === 401 || (normalizedStatus === 403 && looksAuthRequired);
+  const isBlockedStatus = challenge.isChallengePage || normalizedStatus === 403 || normalizedStatus === 429;
+  const isErrorStatus = normalizedStatus >= 500 || normalizedStatus === 404 || normalizedStatus === 410;
+  const isInactiveStatus = normalizedStatus === 0;
+  const isMetadataReliable = !isAuthStatus && !isBlockedStatus && !isErrorStatus && !isInactiveStatus;
   let blockedReason = challenge.blockedReason;
+  let scanStatus = 'active';
 
-  if (!blockedReason && isAuthStatus) blockedReason = 'auth_required';
-  if (!blockedReason && isErrorStatus) blockedReason = 'error_status';
-  if (!blockedReason && normalizedStatus === 0) blockedReason = 'fetch_failed';
+  if (isInactiveStatus) {
+    blockedReason = 'fetch_failed';
+    scanStatus = 'inactive';
+  } else if (isAuthStatus) {
+    blockedReason = 'auth_required';
+    scanStatus = 'auth';
+  } else if (isBlockedStatus) {
+    blockedReason = blockedReason || 'crawler_blocked';
+    scanStatus = 'blocked';
+  } else if (isErrorStatus) {
+    blockedReason = 'error_status';
+    scanStatus = 'error';
+  } else if (normalizedStatus >= 300 && normalizedStatus < 400) {
+    scanStatus = 'redirect';
+  }
 
   return {
     title,
     titleSource: isMetadataReliable && title ? 'html' : 'url_fallback',
     fallbackTitle: getUrlFallbackTitle(finalUrl || url),
     isAuthStatus,
+    isBlockedStatus,
     isErrorStatus,
     isInactiveStatus,
     isChallengePage: challenge.isChallengePage,
     blockedReason,
+    scanStatus,
     metadataAvailable: isMetadataReliable,
     shouldExtractMetadata: isMetadataReliable,
     shouldExtractLinks: isMetadataReliable,
