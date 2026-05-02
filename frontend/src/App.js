@@ -654,9 +654,7 @@ const SitemapTree = ({
     if (node.isBroken && !isOrphanRoot && badgeVisibility?.brokenLinks && !badges.includes('Broken Link')) {
       badges.push('Broken Link');
     }
-    if ((node.isBlocked || node.isChallengePage) && badgeVisibility?.errorPages) {
-      badges.push('Blocked');
-    } else if (node.authRequired && badgeVisibility?.authenticatedPages) {
+    if (node.authRequired && badgeVisibility?.authenticatedPages) {
       badges.push('Auth');
     } else if (node.isError && badgeVisibility?.errorPages) {
       badges.push('Error');
@@ -949,9 +947,9 @@ const getNodeStatusFlags = (node, nodeMeta) => {
   const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
   return {
     broken: !isOrphanRoot && (node?.isBroken || nodeMeta?.orphanType === 'broken'),
-    error: Boolean(node?.isError || node?.isBlocked || node?.isChallengePage),
-    inactive: Boolean(!node?.isBlocked && !node?.isChallengePage && !node?.isError && !node?.authRequired && (node?.isInactive || nodeMeta?.orphanType === 'inactive')),
-    auth: Boolean(!node?.isBlocked && !node?.isChallengePage && node?.authRequired),
+    error: Boolean(node?.isError),
+    inactive: Boolean(!node?.isError && !node?.authRequired && (node?.isInactive || nodeMeta?.orphanType === 'inactive')),
+    auth: Boolean(node?.authRequired),
     duplicate: Boolean(node?.isDuplicate),
   };
 };
@@ -1081,10 +1079,10 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (!blocked?.url) return;
     const node = urlNodeMap.get(blocked.url);
     if (!node) return;
-    node.isBlocked = true;
+    node.isBlocked = false;
     node.isChallengePage = blocked.isChallengePage || node.isChallengePage;
-    node.blockedReason = blocked.blockedReason || node.blockedReason || 'crawler_blocked';
-    node.scanStatus = 'blocked';
+    node.blockedReason = blocked.blockedReason || node.blockedReason || 'crawler_limited';
+    node.scanStatus = 'scan_limited';
     node.isError = false;
     node.isInactive = false;
     node.authRequired = false;
@@ -1094,7 +1092,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (!error?.url) return;
     const node = urlNodeMap.get(error.url);
     if (!node) return;
-    if (node.isBlocked || node.isChallengePage) return;
+    if (node.scanStatus === 'scan_limited') return;
     node.isError = true;
     node.errorStatus = error.status;
     node.blockedReason = error.blockedReason || node.blockedReason || null;
@@ -1119,7 +1117,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (inactiveStatus >= 400) return;
     const existing = urlNodeMap.get(inactive.url);
     if (existing) {
-      if (existing.isBlocked || existing.isChallengePage || existing.isError || existing.authRequired) return;
+      if (existing.scanStatus === 'scan_limited' || existing.isError || existing.authRequired) return;
       existing.isInactive = true;
       existing.scanStatus = 'inactive';
       return;
@@ -1765,10 +1763,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     const forestIndexForCounts = buildForestIndex(root, orphans);
     const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
     const hasInactive = nodesForCounts.some((node) => (
-      !node.isBlocked && !node.isChallengePage && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
+      node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
     ));
-    const hasAuth = nodesForCounts.some((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired);
-    const hasErrors = nodesForCounts.some((node) => !!node.isError || !!node.isBlocked || !!node.isChallengePage);
+    const hasAuth = nodesForCounts.some((node) => !!node.authRequired);
+    const hasErrors = nodesForCounts.some((node) => !!node.isError);
     const hasBroken = nodesForCounts.some((node) => {
       const meta = forestIndexForCounts.nodes.get(node.id);
       if (isTopLevelOrphanRootMeta(meta)) return false;
@@ -6743,9 +6741,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         return !!node.isBroken || node.orphanType === 'broken';
       });
       const hasInactive = nodesForCounts.some((node) => (
-        !node.isBlocked && !node.isChallengePage && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
+        node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
       ));
-      const hasErrors = nodesForCounts.some((node) => !!node.isError || !!node.isBlocked || !!node.isChallengePage);
+      const hasErrors = nodesForCounts.some((node) => !!node.isError);
       const seenCrosslinks = new Set();
       const scannedCrosslinks = (data.crosslinks || [])
         .map((link, index) => {

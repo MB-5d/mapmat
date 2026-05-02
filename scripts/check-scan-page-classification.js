@@ -22,7 +22,7 @@ assert.strictEqual(challenge.isChallengePage, true);
 assert.strictEqual(challenge.metadataAvailable, false);
 assert.strictEqual(challenge.shouldExtractLinks, false);
 assert.strictEqual(challenge.fallbackTitle, 'app');
-assert.strictEqual(challenge.scanStatus, 'blocked');
+assert.strictEqual(challenge.scanStatus, 'scan_limited');
 
 const error = classifyScanResponse({
   url: 'https://example.com/missing-page',
@@ -33,7 +33,7 @@ const error = classifyScanResponse({
 assert.strictEqual(error.metadataAvailable, false);
 assert.strictEqual(error.shouldExtractLinks, false);
 assert.strictEqual(error.fallbackTitle, 'missing page');
-assert.strictEqual(error.scanStatus, 'blocked');
+assert.strictEqual(error.scanStatus, 'scan_limited');
 assert.strictEqual(error.isInactiveStatus, false);
 
 const missingPage = classifyScanResponse({
@@ -52,7 +52,7 @@ const forbiddenCrawlerBlock = classifyScanResponse({
   status: 403,
   html: '<html><head><title>Forbidden</title></head><body>Request blocked</body></html>',
 });
-assert.strictEqual(forbiddenCrawlerBlock.scanStatus, 'blocked');
+assert.strictEqual(forbiddenCrawlerBlock.scanStatus, 'scan_limited');
 assert.strictEqual(forbiddenCrawlerBlock.isAuthStatus, false);
 assert.strictEqual(forbiddenCrawlerBlock.isErrorStatus, false);
 assert.strictEqual(forbiddenCrawlerBlock.isInactiveStatus, false);

@@ -87,8 +87,8 @@ function classifyScanResponse({ html = '', status = 0, url = '', finalUrl = '' }
     blockedReason = 'auth_required';
     scanStatus = 'auth';
   } else if (isBlockedStatus) {
-    blockedReason = blockedReason || 'crawler_blocked';
-    scanStatus = 'blocked';
+    blockedReason = blockedReason || 'crawler_limited';
+    scanStatus = 'scan_limited';
   } else if (isErrorStatus) {
     blockedReason = 'error_status';
     scanStatus = 'error';

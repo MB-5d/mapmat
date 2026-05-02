@@ -2026,7 +2026,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       titleSource: classification.titleSource,
       blockedReason: classification.blockedReason,
       isChallengePage: classification.isChallengePage,
-      isBlocked: classification.scanStatus === 'blocked',
+      isBlocked: false,
       scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
     });

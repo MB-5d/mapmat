@@ -10,8 +10,6 @@ export const getReportTypesForNode = (node, overrides = {}) => {
     && !node.isBroken
     && !node.isInactive
     && !node.isError
-    && !node.isBlocked
-    && !node.isChallengePage
     && !node.isFile
     && !node.authRequired
     && orphanType !== 'broken'
@@ -24,12 +22,12 @@ export const getReportTypesForNode = (node, overrides = {}) => {
   if (node.isMissing) types.add('missing');
   if (node.isDuplicate) types.add('duplicates');
   if (node.isBroken || orphanType === 'broken') types.add('brokenLinks');
-  if (!node.isBlocked && !node.isChallengePage && !node.isError && !node.authRequired && (node.isInactive || orphanType === 'inactive')) types.add('inactivePages');
-  if (node.isError || node.isBlocked || node.isChallengePage) types.add('errorPages');
+  if (node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (node.isInactive || orphanType === 'inactive')) types.add('inactivePages');
+  if (node.isError) types.add('errorPages');
   if (orphanType === 'orphan') types.add('orphanPages');
   if (isSubdomain) types.add('subdomains');
   if (node.isFile || orphanType === 'file') types.add('files');
-  if (!node.isBlocked && !node.isChallengePage && node.authRequired) types.add('authenticatedPages');
+  if (node.authRequired) types.add('authenticatedPages');
   return Array.from(types);
 };
 
