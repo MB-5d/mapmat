@@ -3180,7 +3180,6 @@ app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) 
 
 app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
   const { id } = req.params;
-  const includeResult = req.query.include_result !== 'false';
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -3217,13 +3216,15 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
       res.end();
       return;
     }
-    const job = serializeJobRow(row, includeResult);
-    sendEvent('update', job);
-    if ([JOB_STATUS.complete, JOB_STATUS.failed, JOB_STATUS.canceled].includes(job.status)) {
-      sendEvent('complete', job);
+    const terminal = [JOB_STATUS.complete, JOB_STATUS.failed, JOB_STATUS.canceled].includes(row.status);
+    if (terminal) {
+      sendEvent('complete', serializeJobRow(row, true));
       clearInterval(interval);
       res.end();
+      return;
     }
+
+    sendEvent('update', serializeJobRow(row, false));
   }, 1000);
 });
 
