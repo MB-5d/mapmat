@@ -650,7 +650,6 @@ const SitemapTree = ({
     if (orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
     if (orphanType === 'file' && badgeVisibility?.files) badges.push('File');
     if (orphanType === 'broken' && !isOrphanRoot && badgeVisibility?.brokenLinks) badges.push('Broken Link');
-    if (orphanType === 'inactive' && badgeVisibility?.inactivePages) badges.push('Inactive');
     if (node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
     if (node.isBroken && !isOrphanRoot && badgeVisibility?.brokenLinks && !badges.includes('Broken Link')) {
       badges.push('Broken Link');
@@ -661,7 +660,7 @@ const SitemapTree = ({
       badges.push('Auth');
     } else if (node.isError && badgeVisibility?.errorPages) {
       badges.push('Error');
-    } else if (node.isInactive && badgeVisibility?.inactivePages && !badges.includes('Inactive')) {
+    } else if ((node.isInactive || orphanType === 'inactive') && badgeVisibility?.inactivePages && !badges.includes('Inactive')) {
       badges.push('Inactive');
     }
     return badges;
@@ -1765,9 +1764,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     const nodesForCounts = collectAllNodesWithOrphans(root, orphans);
     const forestIndexForCounts = buildForestIndex(root, orphans);
     const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
-    const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
-    const hasAuth = nodesForCounts.some((node) => !!node.authRequired);
-    const hasErrors = nodesForCounts.some((node) => !!node.isError);
+    const hasInactive = nodesForCounts.some((node) => (
+      !node.isBlocked && !node.isChallengePage && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
+    ));
+    const hasAuth = nodesForCounts.some((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired);
+    const hasErrors = nodesForCounts.some((node) => !!node.isError || !!node.isBlocked || !!node.isChallengePage);
     const hasBroken = nodesForCounts.some((node) => {
       const meta = forestIndexForCounts.nodes.get(node.id);
       if (isTopLevelOrphanRootMeta(meta)) return false;
@@ -6732,7 +6733,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
       const forestIndexForCounts = buildForestIndex(merged.root, merged.orphans);
       const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
-      const authCount = nodesForCounts.filter((node) => !!node.authRequired).length;
+      const authCount = nodesForCounts.filter((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired).length;
       const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
       const hasSubdomains = (merged.orphans || []).some((orphan) => !!orphan.subdomainRoot);
       const hasOrphans = (merged.orphans || []).some((orphan) => !orphan.subdomainRoot);
@@ -6741,8 +6742,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (isTopLevelOrphanRootMeta(meta)) return false;
         return !!node.isBroken || node.orphanType === 'broken';
       });
-      const hasInactive = nodesForCounts.some((node) => !!node.isInactive || node.orphanType === 'inactive');
-      const hasErrors = nodesForCounts.some((node) => !!node.isError);
+      const hasInactive = nodesForCounts.some((node) => (
+        !node.isBlocked && !node.isChallengePage && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
+      ));
+      const hasErrors = nodesForCounts.some((node) => !!node.isError || !!node.isBlocked || !!node.isChallengePage);
       const seenCrosslinks = new Set();
       const scannedCrosslinks = (data.crosslinks || [])
         .map((link, index) => {

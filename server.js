@@ -2146,11 +2146,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const canonicalKeyFor = (node) => getCanonicalKey(node.canonicalUrl || node.finalUrl || node.url);
   const shouldInferPathParents = (node) => {
-    const statusCode = Number(node?.statusCode ?? node?.httpStatus);
-    return !node?.isChallengePage
-      && !node?.blockedReason
-      && !node?.authRequired
-      && !(Number.isFinite(statusCode) && statusCode >= 400);
+    if (!node?.url || node.url === rootUrl) return false;
+    try {
+      const parsed = new URL(node.url);
+      const pathDepth = parsed.pathname.split('/').filter(Boolean).length;
+      return pathDepth > 1;
+    } catch {
+      return false;
+    }
   };
   const canonicalToUrl = new Map();
   nodes.forEach((node) => {
