@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ImagePlus, PencilLine, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
 import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
+import { EditIcon } from '../ui/icons';
 import Field from '../ui/Field';
 import Modal from '../ui/Modal';
 import TextInput from '../ui/TextInput';
@@ -248,7 +249,7 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
             aria-hidden="true"
           />
           <span className="account-hero-avatar-edit-icon" aria-hidden="true">
-            <PencilLine size={13} />
+            <EditIcon size={13} />
           </span>
         </button>
         <div className="account-hero-details">

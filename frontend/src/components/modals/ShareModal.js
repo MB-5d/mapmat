@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   Check,
   Copy,
-  Edit2,
   Eye,
   Mail,
   MessageSquare,
@@ -14,6 +13,7 @@ import {
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import CheckboxField from '../ui/CheckboxField';
+import { EditIcon } from '../ui/icons';
 import Modal from '../ui/Modal';
 import RadioCardGroup from '../ui/RadioCardGroup';
 import SelectInput from '../ui/SelectInput';
@@ -131,7 +131,7 @@ const ShareModal = ({
       value: accessLevels.EDIT,
       label: 'Can edit',
       description: 'Full editing access',
-      icon: <Edit2 size={16} />,
+      icon: <EditIcon size={16} />,
     },
   ];
 

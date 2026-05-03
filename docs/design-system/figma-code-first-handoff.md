@@ -62,6 +62,7 @@ If those four items stay together, manual sync remains fast and predictable even
 
 - The live app is currently driven by CSS variables and CSS classes in [frontend/src/App.css](../../frontend/src/App.css).
 - Lucide is the icon source of truth for shared app icons.
+- Edit actions use the shared `EditIcon` alias in [frontend/src/components/ui/icons.js](../../frontend/src/components/ui/icons.js), backed by Lucide `Pencil`; do not use `Edit2`, `PencilLine`, or pen variants for edit affordances.
 - Tailwind is not the current token-binding source for these app surfaces. Do not point Figma variables at a Tailwind config unless the repo actually moves there.
 
 ## Figma Variable Contract

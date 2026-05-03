@@ -1,7 +1,8 @@
 import React from 'react';
-import { ChevronDown, ChevronUp, Edit2, Palette } from 'lucide-react';
+import { ChevronDown, ChevronUp, Palette } from 'lucide-react';
 
 import { DEFAULT_CONNECTION_COLORS } from '../../utils/constants';
+import { EditIcon } from '../ui/icons';
 
 const ColorKey = ({
   showColorKey,
@@ -52,7 +53,7 @@ const ColorKey = ({
             >
             <div className={`color-swatch ${editingDepth === idx ? 'editing' : ''}`} style={{ backgroundColor: color }} />
             <span>Level {idx}</span>
-            {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+            {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
           </div>
           );
         })}
@@ -78,7 +79,7 @@ const ColorKey = ({
                   style={{ '--legend-color': connectionColors?.userFlows || DEFAULT_CONNECTION_COLORS.userFlows }}
                 />
                 <span>User Flows</span>
-                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+                {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
               </div>
             )}
             {connectionLegend?.hasCrossLinks && (
@@ -100,7 +101,7 @@ const ColorKey = ({
                   style={{ '--legend-color': connectionColors?.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks }}
                 />
                 <span>Crosslinks</span>
-                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+                {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
               </div>
             )}
             {connectionLegend?.hasBrokenLinks && (
@@ -122,7 +123,7 @@ const ColorKey = ({
                   style={{ '--legend-color': connectionColors?.brokenLinks || DEFAULT_CONNECTION_COLORS.brokenLinks }}
                 />
                 <span>Broken Links</span>
-                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+                {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
               </div>
             )}
           </>

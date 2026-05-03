@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
-  Edit2,
   Folder,
   FolderInput,
   FolderPlus,
@@ -12,6 +11,7 @@ import {
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import Button from '../ui/Button';
+import { EditIcon } from '../ui/icons';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
@@ -135,7 +135,7 @@ const ProjectsModal = ({
                                     onEditProjectNameStart(project.id, project.name);
                                   }}
                                 >
-                                  <Edit2 size={14} />
+                                  <EditIcon size={14} />
                                 </button>
                               </div>
                             )}
@@ -216,7 +216,7 @@ const ProjectsModal = ({
                                                   onEditMapNameStart(map.id, map.name);
                                                 }}
                                               >
-                                                <Edit2 size={14} />
+                                                <EditIcon size={14} />
                                               </button>
                                             </div>
                                           )}

@@ -3,13 +3,13 @@ import {
   ArrowUpToLine,
   BookmarkPlus,
   MessageSquare,
-  PencilLine,
   Plus,
   Users,
 } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
 import Badge from '../ui/Badge';
+import { EditIcon } from '../ui/icons';
 import SegmentedControl from '../ui/SegmentedControl';
 
 const VIEW_TABS = Object.freeze({
@@ -48,7 +48,7 @@ function getActivityIcon(eventScope) {
     case 'collaboration':
       return <Users size={14} />;
     default:
-      return <PencilLine size={14} />;
+      return <EditIcon size={14} />;
   }
 }
 

@@ -288,6 +288,7 @@ function buildComponentsJson() {
       generatedOn: todayIso(),
       sources: [
         'frontend/src/components/ui',
+        'frontend/src/components/ui/icons.js',
         'frontend/src/components/drawers/AccountDrawer.js',
         'frontend/src/components/nodes/NodeCard.js',
         'frontend/src/components/toolbar/Topbar.js',
@@ -298,6 +299,7 @@ function buildComponentsJson() {
         'Browser/CSS interaction states are included only when the live app defines them today.',
         'Button and IconButton keep legacy variant compatibility in code, but type + style + size is the canonical model.',
         'Selected/on states are reserved for selected controls and menu rows, not standard buttons.',
+        'Edit actions use the shared EditIcon alias, which is Lucide Pencil. Do not use Edit2, PencilLine, or Pen variants for edit affordances.',
       ],
     },
     components,

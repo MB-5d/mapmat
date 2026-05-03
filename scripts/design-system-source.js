@@ -1112,6 +1112,10 @@ const components = [
       tone: ['inherit', 'default', 'muted', 'brand', 'danger', 'inverse'],
     },
     states: ['rest'],
+    notes: [
+      'Edit actions use frontend/src/components/ui/icons.js EditIcon, backed by Lucide Pencil.',
+      'Do not use Edit2, PencilLine, or Pen variants for edit affordances.',
+    ],
   },
   {
     name: 'Button',
