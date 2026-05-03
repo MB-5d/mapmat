@@ -18,8 +18,11 @@ import {
 
 import './App.css';
 import * as api from './api';
+import createIllustrationDark from './assets/home/create-illustration-dark.png';
 import createIllustration from './assets/home/create-illustration.png';
+import modifyIllustrationDark from './assets/home/modify-illustration-dark.png';
 import modifyIllustration from './assets/home/modify-illustration.png';
+import uploadIllustrationDark from './assets/home/upload-illustration-dark.png';
 import uploadIllustration from './assets/home/upload-illustration.png';
 import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
 import CommentPopover from './components/comments/CommentPopover';
@@ -11067,7 +11070,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onClick={() => openCreateMapFlow()}
                 >
                   <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
-                    <img src={createIllustration} alt="" className="blank-card-art" />
+                    <img src={createIllustration} alt="" className="blank-card-art blank-card-art-light" />
+                    <img src={createIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Create</span>
@@ -11090,7 +11094,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   }}
                 >
                   <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
-                    <img src={modifyIllustration} alt="" className="blank-card-art" />
+                    <img src={modifyIllustration} alt="" className="blank-card-art blank-card-art-light" />
+                    <img src={modifyIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
                   </div>
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Modify</span>
@@ -11111,7 +11116,10 @@ export default function App({ currentRoute, navigateToRoute }) {
                     {importLoading ? (
                       <Loader2 size={32} className="spin" />
                     ) : (
-                      <img src={uploadIllustration} alt="" className="blank-card-art" />
+                      <>
+                        <img src={uploadIllustration} alt="" className="blank-card-art blank-card-art-light" />
+                        <img src={uploadIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
+                      </>
                     )}
                   </div>
                   <div className="blank-card-title-row">

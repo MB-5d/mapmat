@@ -2823,6 +2823,10 @@ body {
   display: block;
 }
 
+.blank-card-art-dark {
+  display: none;
+}
+
 .blank-card-illustration .spin {
   width: 32px;
   height: 32px;
@@ -9886,6 +9890,14 @@ body {
 [data-theme="dark"] .blank-card.drag-over {
   border-color: rgba(167, 139, 250, 0.68);
   box-shadow: 0 28px 64px rgba(0, 0, 0, 0.36);
+}
+
+[data-theme="dark"] .blank-card-art-light {
+  display: none;
+}
+
+[data-theme="dark"] .blank-card-art-dark {
+  display: block;
 }
 
 [data-theme="dark"] .blank-card-title {
