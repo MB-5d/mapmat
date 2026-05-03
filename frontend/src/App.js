@@ -3104,6 +3104,32 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [animatePanTo, findStackParentsForNode, orphans, root]);
 
+  const findNodeByUrlInMap = useCallback((url) => {
+    if (!url) return null;
+    const urlMap = buildUrlNodeMap(root, orphans);
+    let match = urlMap.get(url);
+    if (!match?.id) {
+      const normalized = normalizeUrlForCompare(url);
+      for (const [candidateUrl, node] of urlMap.entries()) {
+        if (normalizeUrlForCompare(candidateUrl) === normalized) {
+          match = node;
+          break;
+        }
+      }
+    }
+    return match?.id ? match : null;
+  }, [orphans, root]);
+
+  const locateUrlOnMap = useCallback((url) => {
+    if (!url || !contentRef.current || !canvasRef.current) return false;
+    const match = findNodeByUrlInMap(url);
+    if (!match?.id) return false;
+    focusNodeById(match.id);
+    return true;
+  }, [findNodeByUrlInMap, focusNodeById]);
+
+  const canLocateUrlOnMap = useCallback((url) => !!findNodeByUrlInMap(url), [findNodeByUrlInMap]);
+
   useEffect(() => {
     if (!root) return;
     applyTransform({ scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y });
@@ -12056,22 +12082,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               onLocateNode={(nodeId) => {
                 focusNodeById(nodeId);
               }}
-              onLocateUrl={(url) => {
-                if (!url || !contentRef.current || !canvasRef.current) return;
-                const urlMap = buildUrlNodeMap(root, orphans);
-                let match = urlMap.get(url);
-                if (!match?.id) {
-                  const normalized = normalizeUrlForCompare(url);
-                  for (const [candidateUrl, node] of urlMap.entries()) {
-                    if (normalizeUrlForCompare(candidateUrl) === normalized) {
-                      match = node;
-                      break;
-                    }
-                  }
-                }
-                if (!match?.id) return;
-                focusNodeById(match.id);
-              }}
+              onLocateUrl={locateUrlOnMap}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
             />
@@ -12475,6 +12486,8 @@ export default function App({ currentRoute, navigateToRoute }) {
             setEditModalNode(null);
             requestDeleteNode(nodeId);
           }}
+          onLocateUrl={locateUrlOnMap}
+          canLocateUrl={canLocateUrlOnMap}
           mode={editModalMode}
           allowDelete={editModalNode.id !== root?.id}
           customPageTypes={customPageTypes}

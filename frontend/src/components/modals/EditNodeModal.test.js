@@ -228,6 +228,71 @@ describe('EditNodeModal', () => {
     expect(onDelete).toHaveBeenCalledWith('node-1');
   });
 
+  test('shows duplicate source link and locate action for duplicate pages', () => {
+    const onLocateUrl = jest.fn();
+
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Duplicate page',
+            url: 'https://example.com/page?copy=1',
+            pageType: 'Page',
+            isDuplicate: true,
+            duplicateOf: 'https://example.com/page',
+          }}
+          allNodes={[]}
+          rootTree={{ id: 'root', children: [] }}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onLocateUrl={onLocateUrl}
+          canLocateUrl={() => true}
+          mode="edit"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Duplicate Page');
+    expect(container.textContent).toContain('Duplicate of');
+    expect(container.textContent).toContain('example.com/page');
+    expect(container.textContent).toContain('Open page');
+
+    const showOnMapButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Show on map');
+    expect(showOnMapButton).not.toBeUndefined();
+
+    act(() => {
+      showOnMapButton.click();
+    });
+
+    expect(onLocateUrl).toHaveBeenCalledWith('https://example.com/page');
+  });
+
+  test('does not show duplicate source section for normal pages', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Normal page',
+            url: 'https://example.com/page',
+            pageType: 'Page',
+          }}
+          allNodes={[]}
+          rootTree={{ id: 'root', children: [] }}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onLocateUrl={jest.fn()}
+          mode="edit"
+        />
+      );
+    });
+
+    expect(container.textContent).not.toContain('Duplicate Page');
+    expect(container.textContent).not.toContain('Show on map');
+  });
+
   test('only allows one Home page type', () => {
     act(() => {
       root.render(

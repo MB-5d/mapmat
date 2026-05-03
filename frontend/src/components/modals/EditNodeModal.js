@@ -54,6 +54,8 @@ const EditNodeModal = ({
   onClose,
   onSave,
   onDelete,
+  onLocateUrl,
+  canLocateUrl,
   mode = 'edit',
   allowDelete = true,
   customPageTypes = [],
@@ -103,6 +105,13 @@ const EditNodeModal = ({
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
   const canDelete = allowDelete && mode === 'edit' && !isHomePageCreation && typeof onDelete === 'function' && node?.id;
+  const duplicateSourceUrl = node?.isDuplicate && node?.duplicateOf ? node.duplicateOf : '';
+  const duplicateSourceLabel = duplicateSourceUrl
+    ? duplicateSourceUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')
+    : '';
+  const canShowDuplicateSourceOnMap = duplicateSourceUrl
+    && typeof onLocateUrl === 'function'
+    && (typeof canLocateUrl !== 'function' || canLocateUrl(duplicateSourceUrl));
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -266,6 +275,39 @@ const EditNodeModal = ({
             placeholder="https://example.com/page"
           />
         </Field>
+
+        {duplicateSourceUrl ? (
+          <div className="edit-node-duplicate-section">
+            <div className="edit-node-section-title">Duplicate Page</div>
+            <div className="edit-node-duplicate-row">
+              <span>Duplicate of</span>
+              <strong title={duplicateSourceUrl}>{duplicateSourceLabel}</strong>
+            </div>
+            <div className="edit-node-duplicate-actions">
+              {canShowDuplicateSourceOnMap ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    onClose();
+                    onLocateUrl(duplicateSourceUrl);
+                  }}
+                >
+                  Show on map
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => window.open(duplicateSourceUrl, '_blank', 'noopener')}
+              >
+                Open page
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <Field label="Page Type" required>
           {isHomePageCreation ? (
