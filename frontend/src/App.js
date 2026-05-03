@@ -6728,6 +6728,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     );
     eventSourceRef.current = eventSource;
     let streamHandled = false;
+    let streamErrorCount = 0;
 
     const handleCompletedJob = (job) => {
       if (streamHandled) return;
@@ -6895,9 +6896,19 @@ export default function App({ currentRoute, navigateToRoute }) {
       resetScanUi();
     };
 
+    const loadCompletedJobWithResult = async (job) => {
+      if (job?.status !== 'complete' || job?.result) return job;
+      const response = await api.getScanJob(jobId, {
+        includeResult: true,
+        accessToken: jobAccessToken,
+      });
+      return response?.job || job;
+    };
+
     eventSource.addEventListener('update', (e) => {
       try {
         const job = JSON.parse(e.data);
+        streamErrorCount = 0;
         if (job?.progress) {
           setScanProgress(job.progress);
         }
@@ -6910,7 +6921,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     });
 
-    eventSource.addEventListener('complete', (e) => {
+    eventSource.addEventListener('complete', async (e) => {
       let job;
       try {
         job = JSON.parse(e.data);
@@ -6925,7 +6936,17 @@ export default function App({ currentRoute, navigateToRoute }) {
         return;
       }
 
-      handleCompletedJob(job);
+      try {
+        handleCompletedJob(await loadCompletedJobWithResult(job));
+      } catch (err) {
+        console.error('Scan result fetch failed:', err);
+        streamHandled = true;
+        trackEvent('scan_failed', {
+          phase: 'complete',
+          message: err?.message || 'Scan completed but results could not be loaded',
+        });
+        showScanError(err?.message || 'Scan completed but results could not be loaded');
+      }
     });
 
     eventSource.addEventListener('job-error', (e) => {
@@ -6955,7 +6976,15 @@ export default function App({ currentRoute, navigateToRoute }) {
           handleCompletedJob(job);
           return;
         }
+        streamErrorCount = 0;
+        if (job?.progress) setScanProgress(job.progress);
+        if (job?.status === 'running' || job?.status === 'queued' || job?.status === 'stopping') {
+          if (job.status === 'stopping') setIsStoppingScan(true);
+          return;
+        }
       } catch (err) {
+        streamErrorCount += 1;
+        if (streamErrorCount < 3) return;
         const message = err?.message || 'Connection error';
         streamHandled = true;
         trackEvent('scan_failed', {

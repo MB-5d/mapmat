@@ -3218,7 +3218,7 @@ app.get('/scan-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
     }
     const terminal = [JOB_STATUS.complete, JOB_STATUS.failed, JOB_STATUS.canceled].includes(row.status);
     if (terminal) {
-      sendEvent('complete', serializeJobRow(row, true));
+      sendEvent('complete', serializeJobRow(row, false));
       clearInterval(interval);
       res.end();
       return;
