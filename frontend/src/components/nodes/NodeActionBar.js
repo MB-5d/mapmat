@@ -1,9 +1,10 @@
 import React from 'react';
-import { Copy, Edit2, ExternalLink, MessageSquare, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, MessageSquare, Trash2 } from 'lucide-react';
 
 import classNames from '../../utils/classNames';
 import Icon from '../ui/Icon';
 import IconButton from '../ui/IconButton';
+import { EditIcon } from '../ui/icons';
 
 const NodeActionBar = ({
   node,
@@ -13,6 +14,7 @@ const NodeActionBar = ({
   showCommentAction = false,
   commentActionLabel = 'Comments',
   showExternalLinkAction = true,
+  showDeleteAction = true,
   onDelete,
   onEdit,
   onDuplicate,
@@ -41,13 +43,13 @@ const NodeActionBar = ({
             type="link"
             buttonStyle="mono"
             size="md"
-            icon={<Edit2 />}
+            icon={<EditIcon />}
             label="Edit"
             title="Edit"
             onClick={() => onEdit?.(node)}
           />
         ) : null}
-        {showOwnerEditorActions && !isRoot ? (
+        {showOwnerEditorActions && showDeleteAction && !isRoot ? (
           <IconButton
             className="node-card-action"
             type="link"

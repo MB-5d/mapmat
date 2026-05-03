@@ -53,7 +53,9 @@ const EditNodeModal = ({
   rootTree,
   onClose,
   onSave,
+  onDelete,
   mode = 'edit',
+  allowDelete = true,
   customPageTypes = [],
   onAddCustomType,
   specialParentOptions = [],
@@ -100,6 +102,7 @@ const EditNodeModal = ({
   const [annotationNote, setAnnotationNote] = useState(node?.annotations?.note || '');
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
+  const canDelete = allowDelete && mode === 'edit' && !isHomePageCreation && typeof onDelete === 'function' && node?.id;
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -223,17 +226,24 @@ const EditNodeModal = ({
       bodyClassName="edit-node-form-content"
       footer={(
         <>
-          <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form="edit-node-form"
-            variant="primary"
-            disabled={!isFormValid}
-          >
-            {isHomePageCreation ? 'Add Home Page' : mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
-          </Button>
+          {canDelete ? (
+            <Button type="button" variant="danger" onClick={() => onDelete(node.id)}>
+              Delete
+            </Button>
+          ) : null}
+          <div className="edit-node-modal__footer-actions">
+            <Button type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="edit-node-form"
+              variant="primary"
+              disabled={!isFormValid}
+            >
+              {isHomePageCreation ? 'Add Home Page' : mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
+            </Button>
+          </div>
         </>
       )}
     >

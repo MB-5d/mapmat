@@ -67,4 +67,25 @@ describe('NodeCard', () => {
     expect(deleteAction?.className).toContain('ui-icon-btn--style-mono');
     expect(deleteAction?.className).not.toContain('ui-icon-btn--style-danger');
   });
+
+  test('can hide direct delete action while keeping edit action available', () => {
+    act(() => {
+      root.render(
+        <NodeCard
+          node={{ id: 'node-1', title: 'Scanned page', url: 'https://example.com/page' }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails={false}
+          canEdit
+          showDeleteAction={false}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Edit"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Delete"]')).toBeNull();
+  });
 });

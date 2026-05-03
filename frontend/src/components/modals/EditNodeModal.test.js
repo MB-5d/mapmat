@@ -200,6 +200,34 @@ describe('EditNodeModal', () => {
     expect(container.textContent).toContain('Missing meta description');
   });
 
+  test('shows delete action in edit mode when provided', () => {
+    const onDelete = jest.fn();
+
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{ id: 'node-1', title: 'Scanned page', url: 'https://example.com/page', pageType: 'Page' }}
+          allNodes={[]}
+          rootTree={{ id: 'root', children: [] }}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onDelete={onDelete}
+          mode="edit"
+        />
+      );
+    });
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Delete');
+    expect(deleteButton).not.toBeUndefined();
+
+    act(() => {
+      deleteButton.click();
+    });
+
+    expect(onDelete).toHaveBeenCalledWith('node-1');
+  });
+
   test('only allows one Home page type', () => {
     act(() => {
       root.render(

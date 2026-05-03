@@ -35,6 +35,7 @@ const NodeCard = ({
   showCommentAction = false,
   commentActionLabel = 'Comments',
   showExternalLinkAction = true,
+  showDeleteAction = true,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -343,6 +344,7 @@ const NodeCard = ({
             showCommentAction={showCommentAction}
             commentActionLabel={commentActionLabel}
             showExternalLinkAction={showExternalLinkAction}
+            showDeleteAction={showDeleteAction}
             onDelete={onDelete}
             onEdit={onEdit}
             onDuplicate={onDuplicate}
@@ -390,6 +392,7 @@ const DraggableNodeCard = ({
   showCommentAction,
   commentActionLabel,
   showExternalLinkAction,
+  showDeleteAction,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -435,6 +438,7 @@ const DraggableNodeCard = ({
         showCommentAction={showCommentAction}
         commentActionLabel={commentActionLabel}
         showExternalLinkAction={showExternalLinkAction}
+        showDeleteAction={showDeleteAction}
         connectionTool={connectionTool}
         snapTarget={snapTarget}
         onAnchorMouseDown={onAnchorMouseDown}

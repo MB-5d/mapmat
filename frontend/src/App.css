@@ -6647,6 +6647,13 @@ body {
   gap: 16px;
 }
 
+.edit-node-modal__footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-left: auto;
+}
+
 .edit-node-seo-section {
   display: flex;
   flex-direction: column;

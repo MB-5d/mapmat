@@ -582,6 +582,7 @@ const SitemapTree = ({
   showCommentAction,
   commentActionLabel,
   showExternalLinkAction,
+  showDeleteAction,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -734,6 +735,7 @@ const SitemapTree = ({
             showCommentAction={showCommentAction}
             commentActionLabel={commentActionLabel}
             showExternalLinkAction={showExternalLinkAction}
+            showDeleteAction={showDeleteAction}
             connectionTool={connectionTool}
             snapTarget={snapTarget}
             onAnchorMouseDown={onAnchorMouseDown}
@@ -889,6 +891,19 @@ const buildUrlNodeMap = (rootNode, orphanNodes = []) => {
     if (orphan?.url && !map.has(orphan.url)) map.set(orphan.url, orphan);
   });
   return map;
+};
+
+const removeNodeFromTreeById = (tree, nodeId) => {
+  if (!tree?.children?.length) return null;
+  const idx = tree.children.findIndex((child) => child.id === nodeId);
+  if (idx !== -1) {
+    return tree.children.splice(idx, 1)[0];
+  }
+  for (const child of tree.children) {
+    const removed = removeNodeFromTreeById(child, nodeId);
+    if (removed) return removed;
+  }
+  return null;
 };
 
 const normalizeUrlForCompare = (raw) => {
@@ -1690,6 +1705,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     errorPages: true,
     duplicates: true,
   }), []);
+
+  const hasScannedNodeData = useMemo(() => {
+    if (!hasMap) return false;
+    return collectAllNodesWithOrphans(root, orphans).some((node) => (
+      node?.statusCode != null
+      || node?.httpStatus != null
+      || node?.responseTime != null
+      || !!node?.scanStatus
+      || !!node?.titleSource
+    ));
+  }, [hasMap, root, orphans]);
+  const isScanOrImportMap = hasMap && (isImportedMap || !!lastScanAt || hasScannedNodeData);
+  const showDirectNodeDeleteAction = !isScanOrImportMap;
 
   const reportLayout = useMemo(() => {
     if (!root) return null;
@@ -9343,9 +9371,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     // Check orphans
-    const orphanToDelete = orphans.find(o => o.id === id);
+    const orphanToDelete = orphans.find(o => findNodeById(o, id));
     if (orphanToDelete) {
-      setDeleteConfirmNode(orphanToDelete);
+      setDeleteConfirmNode(findNodeById(orphanToDelete, id));
     }
   };
 
@@ -9369,8 +9397,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     // Check if it's an orphan
-    if (orphans.some(o => o.id === id)) {
-      setOrphans(prev => prev.filter(o => o.id !== id));
+    if (orphans.some(o => findNodeById(o, id))) {
+      saveStateForUndo();
+      setOrphans((prev) => {
+        const next = structuredClone(prev);
+        const topLevelIndex = next.findIndex((orphan) => orphan.id === id);
+        if (topLevelIndex !== -1) {
+          next.splice(topLevelIndex, 1);
+          return next;
+        }
+        for (const orphan of next) {
+          if (removeNodeFromTreeById(orphan, id)) return next;
+        }
+        return prev;
+      });
       setDeleteConfirmNode(null);
       return;
     }
@@ -11156,6 +11196,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   showCommentAction={!!effectiveFeatureGates.mapComment}
                   commentActionLabel={canComment() ? 'Comments' : 'View comments'}
                   showExternalLinkAction={canEdit()}
+                  showDeleteAction={showDirectNodeDeleteAction}
                   connectionTool={connectionTool}
                   snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
                   onAnchorMouseDown={handleAnchorMouseDown}
@@ -12430,7 +12471,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           rootTree={root}
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
+          onDelete={(nodeId) => {
+            setEditModalNode(null);
+            requestDeleteNode(nodeId);
+          }}
           mode={editModalMode}
+          allowDelete={editModalNode.id !== root?.id}
           customPageTypes={customPageTypes}
           onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
           specialParentOptions={specialParentOptions}
