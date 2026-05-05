@@ -1487,6 +1487,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailErrorRef = useRef(new Set());
   const thumbnailCompletedRef = useRef(false);
   const thumbnailStopRequestedRef = useRef(false);
+  const screenshotStopRequestedRef = useRef(false);
+  const activeScreenshotJobRef = useRef(null);
   const thumbnailSessionRef = useRef(0);
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
@@ -1500,6 +1502,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [thumbnailElapsedMs, setThumbnailElapsedMs] = useState(0);
   const [thumbnailDisplayErrorIds, setThumbnailDisplayErrorIds] = useState(() => new Set());
   const [thumbnailStats, setThumbnailStats] = useState({
+    mode: null,
     total: 0,
     loaded: 0,
     failed: 0,
@@ -4776,6 +4779,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, []);
 
+  const getActiveImageCaptureMode = useCallback(() => {
+    const cached = thumbnailStats.cached || 0;
+    const totalNew = Math.max(0, thumbnailStats.total - cached);
+    if (!thumbnailStats.mode || thumbnailStats.stopped || totalNew <= 0) return null;
+    return thumbnailStats.loaded < totalNew ? thumbnailStats.mode : null;
+  }, [thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+
+  const guardImageCaptureAvailable = useCallback((nextMode) => {
+    const activeMode = getActiveImageCaptureMode();
+    if (!activeMode) return true;
+    const label = activeMode === 'screenshot' ? 'full screenshots' : 'thumbnails';
+    const nextLabel = nextMode === 'screenshot' ? 'full screenshots' : 'thumbnails';
+    showToast(`Finish or stop ${label} before capturing ${nextLabel}`, 'info');
+    return false;
+  }, [getActiveImageCaptureMode, showToast]);
+
   const scheduleThumbnailRetry = useCallback((nodeId, url, attemptOverride) => {
     if (!nodeId || !url) return;
     if (thumbnailStopRequestedRef.current) return;
@@ -4883,7 +4902,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
   };
 
-  const resetThumbnailQueue = (total, cached = 0, bumpSession = true) => {
+  const resetThumbnailQueue = (total, cached = 0, bumpSession = true, mode = 'thumbnail') => {
     if (bumpSession) {
       const nextSessionId = thumbnailSessionRef.current + 1;
       thumbnailSessionRef.current = nextSessionId;
@@ -4903,11 +4922,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailErrorRef.current = new Set();
     thumbnailCompletedRef.current = false;
     thumbnailStopRequestedRef.current = false;
+    screenshotStopRequestedRef.current = false;
+    activeScreenshotJobRef.current = null;
     thumbnailAuthToastShownRef.current = false;
     setThumbnailQueueSize(0);
     setThumbnailActiveCount(0);
     setThumbnailReloadMap({});
     setThumbnailStats({
+      mode,
       total,
       loaded: 0,
       failed: 0,
@@ -5053,16 +5075,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('Select pages to capture thumbnails', 'info');
       return;
     }
+    if (!guardImageCaptureAvailable('thumbnail')) return;
     const { targetIds, candidates, total, cachedCount } = getThumbnailCandidates(scope);
     if (total === 0) {
-      resetThumbnailQueue(0);
+      resetThumbnailQueue(0, 0, true, 'thumbnail');
       setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
       setShowImageMenu(false);
       showToast('No pages with URLs to capture', 'info');
       return;
     }
-    resetThumbnailQueue(total, cachedCount, true);
+    resetThumbnailQueue(total, cachedCount, true, 'thumbnail');
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
     thumbnailExpectedRef.current = new Set(candidates.map((node) => node.id));
@@ -5088,15 +5111,26 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleStopThumbnailCapture = async () => {
     if (!thumbnailStats.total || thumbnailStats.stopped) return;
+    const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
     const confirmed = await showConfirm({
-      title: 'Stop capturing thumbnails?',
-      message: 'This will stop the capture process. Thumbnails already captured will be kept.',
+      title: isScreenshotCapture ? 'Stop capturing screenshots?' : 'Stop capturing thumbnails?',
+      message: isScreenshotCapture
+        ? 'This will stop the capture process. Screenshots already captured will be kept.'
+        : 'This will stop the capture process. Thumbnails already captured will be kept.',
       confirmText: 'Stop',
       cancelText: 'Keep going',
       danger: true,
     });
     if (!confirmed) return;
-    thumbnailStopRequestedRef.current = true;
+    if (isScreenshotCapture) {
+      screenshotStopRequestedRef.current = true;
+      const jobId = activeScreenshotJobRef.current;
+      if (jobId) {
+        api.cancelScreenshotJob(jobId).catch(() => {});
+      }
+    } else {
+      thumbnailStopRequestedRef.current = true;
+    }
     thumbnailQueueRef.current = [];
     thumbnailQueuedRef.current.clear();
     thumbnailAbortControllersRef.current.forEach((controller) => controller.abort());
@@ -5109,7 +5143,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     const cached = thumbnailStats.cached || 0;
     const totalNew = Math.max(0, thumbnailStats.total - cached);
-    const isActive = showThumbnails
+    const isActive = (showThumbnails || thumbnailStats.mode === 'screenshot')
       && totalNew > 0
       && !thumbnailStats.stopped
       && thumbnailStats.loaded < totalNew;
@@ -5134,12 +5168,18 @@ export default function App({ currentRoute, navigateToRoute }) {
         thumbnailElapsedTimerRef.current = null;
       }
     };
-  }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   const waitForScreenshotJobResult = useCallback(async (jobId, { timeoutMs = 120000 } = {}) => {
     if (!jobId) throw new Error('Failed to start screenshot job');
     const startedAt = Date.now();
     while (true) {
+      if (screenshotStopRequestedRef.current) {
+        try {
+          await api.cancelScreenshotJob(jobId);
+        } catch {}
+        throw new Error('Screenshot capture stopped');
+      }
       const { job } = await api.getScreenshotJob(jobId, { includeResult: true });
       if (!job) throw new Error('Screenshot job not found');
       if (job.status === 'complete') {
@@ -5341,6 +5381,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('Select pages to capture full screenshots', 'info');
       return;
     }
+    if (!guardImageCaptureAvailable('screenshot')) return;
 
     const targets = getFullScreenshotTargets(scope);
     if (targets.length === 0) {
@@ -5360,13 +5401,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     setShowImageMenu(false);
+    setShowThumbnails(true);
+    setThumbnailScopeIds(new Set(targets.map((node) => node.id)));
+    resetThumbnailQueue(targets.length, 0, true, 'screenshot');
+    thumbnailElapsedStartRef.current = Date.now();
+    setThumbnailElapsedMs(0);
     try {
       for (let index = 0; index < targets.length; index += 1) {
+        if (screenshotStopRequestedRef.current) break;
         const node = targets[index];
-        showToast(`Capturing full screenshot ${index + 1} of ${targets.length}...`, 'loading', true);
         try {
           const { jobId } = await api.createScreenshotJob({ url: node.url, type: 'full' });
+          activeScreenshotJobRef.current = jobId;
           const data = await waitForScreenshotJobResult(jobId);
+          activeScreenshotJobRef.current = null;
           if (data?.error) {
             throw new Error(data.error);
           }
@@ -5377,17 +5425,22 @@ export default function App({ currentRoute, navigateToRoute }) {
             fullScreenshotUrl: data.url,
             authRequired: false,
           };
-          if (!node.thumbnailUrl) {
-            const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' });
-            if (thumbData?.url) {
-              assetUpdates.thumbnailUrl = thumbData.url;
-            }
+          const needsThumbnail = !node.thumbnailUrl || thumbnailDisplayErrorIds.has(node.id);
+          if (needsThumbnail) {
+            const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' }).catch(() => null);
+            assetUpdates.thumbnailUrl = thumbData?.url || data.url;
           }
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
           if (!persisted) {
             throw new Error('Failed to save screenshot assets on the selected page');
           }
           if (assetUpdates.thumbnailUrl) {
+            setThumbnailDisplayErrorIds((prev) => {
+              if (!prev.has(node.id)) return prev;
+              const next = new Set(prev);
+              next.delete(node.id);
+              return next;
+            });
             setThumbnailScopeIds((prev) => {
               const next = new Set(prev || []);
               next.add(node.id);
@@ -5396,7 +5449,18 @@ export default function App({ currentRoute, navigateToRoute }) {
             bumpThumbnailReload(node.id);
             setShowThumbnails(true);
           }
+          const loadedCount = index + 1;
+          const elapsed = Date.now() - thumbnailElapsedStartRef.current;
+          setThumbnailStats((prev) => ({
+            ...prev,
+            loaded: loadedCount,
+            avgMs: loadedCount ? Math.round(elapsed / loadedCount) : 0,
+          }));
         } catch (error) {
+          activeScreenshotJobRef.current = null;
+          if (screenshotStopRequestedRef.current || error?.message === 'Screenshot capture stopped') {
+            break;
+          }
           if (isScreenshotAuthError(error?.message)) {
             updateNodeScreenshotAssets(node.id, {
               authRequired: true,
@@ -5406,6 +5470,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
           throw error;
         }
+      }
+      if (screenshotStopRequestedRef.current) {
+        showToast('Screenshot capture stopped', 'warning');
+        setTimeout(() => flushThumbnailAutosave(), 300);
+        return;
       }
       showToast(
         `Captured ${targets.length} full screenshot${targets.length === 1 ? '' : 's'}`,
@@ -7011,7 +7080,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isInsideNodeMenu = e.target.closest('.node-menu');
-    const isOnConnection = e.target.closest('.connections-layer');
+    const isOnConnection = e.target.closest('.connection-hit, .connection-line, .connection-glow');
 
     // Close connection menu when clicking outside of it
     if (connectionMenu && !isInsideConnectionMenu) {
@@ -12130,11 +12199,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           const etaMs = thumbnailStats.avgMs > 0
             ? Math.ceil((remaining * thumbnailStats.avgMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY))
             : 0;
+          const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
           return (
             <div className="thumbnail-progress-toast">
               <div className="thumbnail-progress-details">
                 <span>
-                  Thumbnails: {thumbnailStats.loaded}/{totalNew}
+                  {isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: {thumbnailStats.loaded}/{totalNew}
                   {cached > 0 ? ` (${cached} cached)` : ''}
                   {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} retrying)` : ''}
                 </span>
@@ -12146,7 +12216,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               <button
                 className="thumbnail-progress-stop"
                 onClick={handleStopThumbnailCapture}
-                title="Stop thumbnail capture"
+                title={isScreenshotCapture ? 'Stop screenshot capture' : 'Stop thumbnail capture'}
                 onPointerDown={(event) => event.stopPropagation()}
                 type="button"
               >
