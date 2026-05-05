@@ -3,6 +3,12 @@
 /* eslint-disable no-console */
 
 const crypto = require('crypto');
+
+if (String(process.env.DB_PROVIDER || '').toLowerCase() === 'postgres' && !process.env.DATABASE_URL) {
+  console.log('[email-webhooks] Skipped persisted webhook check without DATABASE_URL.');
+  process.exit(0);
+}
+
 const emailDeliveryStore = require('../stores/emailDeliveryStore');
 const {
   createEmailDeliveryAsync,

@@ -2,6 +2,11 @@
 
 /* eslint-disable no-console */
 
+if (String(process.env.DB_PROVIDER || '').toLowerCase() === 'postgres' && !process.env.DATABASE_URL) {
+  console.log('[email-delivery-check] Skipped persisted delivery check without DATABASE_URL.');
+  process.exit(0);
+}
+
 const jobStore = require('../stores/jobStore');
 const emailDeliveryStore = require('../stores/emailDeliveryStore');
 const {
