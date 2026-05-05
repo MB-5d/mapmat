@@ -85,4 +85,58 @@ describe('CanvasToolbar', () => {
     expect(undoButton.className).toContain('disabled');
     expect(undoButton.disabled).toBe(false);
   });
+
+  test('shows saving state on the canvas save button', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          isSavingMap
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap={false}
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const saveButton = container.querySelector('button[aria-label="Saving"]');
+    expect(saveButton).not.toBeNull();
+    expect(saveButton.textContent).toContain('Saving');
+    expect(saveButton.className).toContain('is-saving');
+    expect(saveButton.disabled).toBe(true);
+  });
 });

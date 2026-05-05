@@ -1241,6 +1241,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showCreateMapModal, setShowCreateMapModal] = useState(false);
   const [showSaveMapModal, setShowSaveMapModal] = useState(false);
+  const [isSavingMap, setIsSavingMap] = useState(false);
   const [showVersionHistoryDrawer, setShowVersionHistoryDrawer] = useState(false);
   const [showSaveVersionModal, setShowSaveVersionModal] = useState(false);
   const [welcomeModalDismissedForSession, setWelcomeModalDismissedForSession] = useState(false);
@@ -5708,6 +5709,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const snapshot = getVersionSnapshot();
     if (!snapshot?.root) return;
     const targetProjectId = normalizeProjectSelection(projectId);
+    setIsSavingMap(true);
     try {
       const { map, initialVersion } = await api.saveMap({
         name: name.trim(),
@@ -5760,6 +5762,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     } catch (error) {
       showToast(error.message || 'Failed to duplicate map', 'error');
     } finally {
+      setIsSavingMap(false);
       setShowSaveMapModal(false);
     }
   };
@@ -5903,6 +5906,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const wasNewMap = !currentMap?.id;
     const targetProjectId = normalizeProjectSelection(projectId);
 
+    setIsSavingMap(true);
     try {
       let savedMap;
       let initialVersion = null;
@@ -6044,6 +6048,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         return;
       }
       showToast(e.message || 'Failed to save map', 'error');
+    } finally {
+      setIsSavingMap(false);
     }
   };
 
@@ -12045,6 +12051,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setCreateMapMode(false);
                   setShowSaveMapModal(true);
                 },
+                isSavingMap,
                 onDuplicateMap: duplicateCurrentMap,
                 onShowVersionHistory: () => {
                   setShowVersionHistoryDrawer((prev) => {
@@ -12352,6 +12359,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
         submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
         submitLoadingLabel={createMapMode ? 'Creating' : (duplicateMapConfig ? 'Duplicating' : 'Saving')}
+        saving={isSavingMap}
       />
 
       <SaveVersionModal

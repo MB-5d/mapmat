@@ -11,6 +11,7 @@ import {
   EyeOff,
   Layers,
   Link2,
+  Loader2,
   MessageSquare,
   MousePointer2,
   Palette,
@@ -107,6 +108,7 @@ const CanvasToolbar = ({
   onRedo,
   onClearCanvas,
   onSaveMap,
+  isSavingMap = false,
   onDuplicateMap,
   onShowVersionHistory,
   onExport,
@@ -330,12 +332,15 @@ const CanvasToolbar = ({
 
     {canEdit && !hasSavedMap && (
       <ToolButton
+        className={isSavingMap ? 'is-saving' : ''}
         onClick={onSaveMap}
-        disabled={!hasMap}
-        icon={<Bookmark />}
-        label="Save Map"
-        title="Save Map"
-      />
+        disabled={!hasMap || isSavingMap}
+        icon={isSavingMap ? <Loader2 className="spin" /> : <Bookmark />}
+        label={isSavingMap ? 'Saving' : 'Save Map'}
+        title={isSavingMap ? 'Saving' : 'Save Map'}
+      >
+        {isSavingMap ? 'Saving' : null}
+      </ToolButton>
     )}
 
     {canEdit && hasSavedMap && (

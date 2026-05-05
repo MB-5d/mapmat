@@ -28,6 +28,7 @@ const SaveMapForm = ({
   onCancel,
   submitLabel,
   submitLoadingLabel,
+  saving = false,
 }) => {
   // Get default name from root domain (e.g., "example" from "https://www.example.com")
   const getDefaultName = () => {
@@ -54,7 +55,7 @@ const SaveMapForm = ({
   const selectableProjects = (projects || []).filter((project) => !isVirtualProject(project));
 
   const handleSave = async () => {
-    if (!mapName.trim() || isSubmitting) return;
+    if (!mapName.trim() || isSubmitting || saving) return;
     setIsSubmitting(true);
     try {
       await Promise.resolve(onSave(selectedProject || null, mapName, notes));
@@ -131,11 +132,11 @@ const SaveMapForm = ({
         />
       </Field>
       <div className="modal-footer">
-        <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
+        <Button variant="secondary" onClick={onCancel} disabled={isSubmitting || saving}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleSave} disabled={!mapName.trim() || isSubmitting} loading={isSubmitting}>
-          {isSubmitting ? (submitLoadingLabel || 'Saving') : submitLabel}
+        <Button variant="primary" onClick={handleSave} disabled={!mapName.trim() || isSubmitting || saving} loading={isSubmitting || saving}>
+          {(isSubmitting || saving) ? (submitLoadingLabel || 'Saving') : submitLabel}
         </Button>
       </div>
     </div>
@@ -158,6 +159,7 @@ const SaveMapModal = ({
   title = 'Save Map',
   submitLabel = 'Save Map',
   submitLoadingLabel = 'Saving',
+  saving = false,
 }) => {
   if (!show) return null;
 
@@ -183,6 +185,7 @@ const SaveMapModal = ({
           onCancel={onClose}
           submitLabel={submitLabel}
           submitLoadingLabel={submitLoadingLabel}
+          saving={saving}
         />
       )}
     </Modal>

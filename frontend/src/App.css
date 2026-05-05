@@ -4454,11 +4454,21 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
 }
 
 .canvas-tool-btn__content svg {
   width: 20px;
   height: 20px;
+}
+
+.canvas-tool-btn.is-saving {
+  width: auto;
+  min-width: 92px;
+  padding: 0 12px;
+  color: var(--ui-color-primary);
+  font-size: var(--type-button-sm-size);
+  font-weight: var(--font-weight-semibold);
 }
 
 .notification-dot {
