@@ -5313,14 +5313,23 @@ export default function App({ currentRoute, navigateToRoute }) {
       setFullImageUrl(urlOrImage);
       return;
     }
+    if (!guardImageCaptureAvailable('screenshot')) return;
 
     setImageLoading(true);
     setFullImageUrl(null);
-    showToast('Loading full page screenshot...', 'loading', true);
+    resetThumbnailQueue(1, 0, true, 'screenshot');
+    thumbnailElapsedStartRef.current = Date.now();
+    setThumbnailElapsedMs(0);
+    if (nodeId) {
+      setThumbnailScopeIds(new Set([nodeId]));
+      setShowThumbnails(true);
+    }
 
     try {
       const { jobId } = await api.createScreenshotJob({ url: urlOrImage, type: 'full' });
+      activeScreenshotJobRef.current = jobId;
       const data = await waitForScreenshotJobResult(jobId);
+      activeScreenshotJobRef.current = null;
       if (data?.error) {
         throw new Error(data.error);
       }
@@ -5333,17 +5342,22 @@ export default function App({ currentRoute, navigateToRoute }) {
           fullScreenshotUrl: data.url,
           authRequired: false,
         };
-        if (!sourceNode?.thumbnailUrl) {
-          const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' });
-          if (thumbData?.url) {
-            assetUpdates.thumbnailUrl = thumbData.url;
-          }
+        const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
+        if (needsThumbnail) {
+          const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
+          assetUpdates.thumbnailUrl = thumbData?.url || data.url;
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
         if (!persisted) {
           throw new Error('Failed to save screenshot assets on this page');
         }
         if (assetUpdates.thumbnailUrl) {
+          setThumbnailDisplayErrorIds((prev) => {
+            if (!prev.has(nodeId)) return prev;
+            const next = new Set(prev);
+            next.delete(nodeId);
+            return next;
+          });
           setThumbnailScopeIds((prev) => {
             const next = new Set(prev || []);
             next.add(nodeId);
@@ -5353,10 +5367,21 @@ export default function App({ currentRoute, navigateToRoute }) {
           setShowThumbnails(true);
         }
       }
+      setThumbnailStats((prev) => ({
+        ...prev,
+        loaded: 1,
+        avgMs: Date.now() - thumbnailElapsedStartRef.current,
+      }));
       setFullImageUrl(data.url);
       setToast(null);
     } catch (e) {
+      activeScreenshotJobRef.current = null;
       console.error('Screenshot error:', e);
+      if (screenshotStopRequestedRef.current || e?.message === 'Screenshot capture stopped') {
+        showToast('Screenshot capture stopped', 'warning');
+        setImageLoading(false);
+        return;
+      }
       if (nodeId && isScreenshotAuthError(e?.message)) {
         updateNodeScreenshotAssets(nodeId, {
           authRequired: true,
@@ -12189,7 +12214,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             />
           </DndContext>
         )}
-        {showThumbnails && thumbnailStats.total > 0 && (() => {
+        {(showThumbnails || thumbnailStats.mode === 'screenshot') && thumbnailStats.total > 0 && (() => {
           if (thumbnailStats.stopped) return null;
           const cached = thumbnailStats.cached || 0;
           const totalNew = Math.max(0, thumbnailStats.total - cached);
