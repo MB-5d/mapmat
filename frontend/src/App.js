@@ -4829,12 +4829,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       controller.abort();
     }, 45000);
 
-    fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(next.url)}&type=thumb`, {
-      signal: controller.signal,
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then(({ ok, data }) => {
-        if (ok && data?.url) {
+    api.captureScreenshot({ url: next.url, type: 'thumb' }, { signal: controller.signal })
+      .then((data) => {
+        if (data?.url) {
           updateNodeThumbnail(next.id, data.url);
           bumpThumbnailReload(next.id);
           updateThumbnailErrorState(next.id, false);
@@ -5297,14 +5294,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           authRequired: false,
         };
         if (!sourceNode?.thumbnailUrl) {
-          const thumbResponse = await fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(urlOrImage)}&type=thumb`, {
-            credentials: 'include',
-          });
-          const thumbData = await thumbResponse.json().catch(() => ({}));
-          if (thumbResponse.ok && thumbData?.url) {
+          const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' });
+          if (thumbData?.url) {
             assetUpdates.thumbnailUrl = thumbData.url;
-          } else if (isScreenshotAuthError(thumbData?.error)) {
-            throw new Error(thumbData.error);
           }
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
@@ -5386,14 +5378,9 @@ export default function App({ currentRoute, navigateToRoute }) {
             authRequired: false,
           };
           if (!node.thumbnailUrl) {
-            const thumbResponse = await fetch(`${API_BASE}/screenshot?url=${encodeURIComponent(node.url)}&type=thumb`, {
-              credentials: 'include',
-            });
-            const thumbData = await thumbResponse.json().catch(() => ({}));
-            if (thumbResponse.ok && thumbData?.url) {
+            const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' });
+            if (thumbData?.url) {
               assetUpdates.thumbnailUrl = thumbData.url;
-            } else if (isScreenshotAuthError(thumbData?.error)) {
-              throw new Error(thumbData.error);
             }
           }
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);

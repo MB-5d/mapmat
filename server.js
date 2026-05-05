@@ -198,8 +198,6 @@ const ALLOW_PRIVATE_NETWORKS = process.env.ALLOW_PRIVATE_NETWORKS === 'true'
   || (!isProd && process.env.ALLOW_PRIVATE_NETWORKS !== 'false');
 const SCAN_RATE_WINDOW_MS = Number(process.env.SCAN_RATE_WINDOW_MS ?? (isProd ? 60000 : 10000));
 const SCAN_RATE_LIMIT = Number(process.env.SCAN_RATE_LIMIT ?? (isProd ? 60 : 120));
-const SCREENSHOT_RATE_WINDOW_MS = Number(process.env.SCREENSHOT_RATE_WINDOW_MS ?? (isProd ? 60000 : 10000));
-const SCREENSHOT_RATE_LIMIT = Number(process.env.SCREENSHOT_RATE_LIMIT ?? (isProd ? 30 : 60));
 const SCREENSHOT_QUEUE_MAX = Number(process.env.SCREENSHOT_QUEUE_MAX ?? (isProd ? 25 : 100));
 const SCREENSHOT_MIN_GAP_MS = Number(
   process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 2000 : 150)
@@ -557,12 +555,6 @@ const enforceUsageLimit = (eventType) => async (req, res, next) => {
 };
 
 const scanLimiter = createRateLimiter({ windowMs: SCAN_RATE_WINDOW_MS, max: SCAN_RATE_LIMIT, name: 'scan' });
-const screenshotLimiter = createRateLimiter({
-  windowMs: SCREENSHOT_RATE_WINDOW_MS,
-  max: SCREENSHOT_RATE_LIMIT,
-  name: 'screenshot',
-});
-
 const processScreenshotQueue = () => {
   while (screenshotActive < SCREENSHOT_MAX_CONCURRENCY && screenshotQueue.length) {
     const next = screenshotQueue.shift();
@@ -809,11 +801,19 @@ const markJobComplete = async (id, result) => {
   await jobStore.markJobCompleteAsync(id, JOB_STATUS.complete, JSON.stringify(result || {}));
 };
 
+const normalizeJobErrorMessage = (error) => {
+  const message = error?.message || String(error || 'Job failed');
+  if (message.includes('Executable') && message.includes('ms-playwright')) {
+    return 'Screenshots are not available in this environment.';
+  }
+  return message;
+};
+
 const markJobFailed = async (id, error) => {
   await jobStore.markJobFailedAsync(
     id,
     JOB_STATUS.failed,
-    error?.message || String(error || 'Job failed')
+    normalizeJobErrorMessage(error)
   );
 };
 
@@ -3358,7 +3358,7 @@ app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res
 
 // Screenshot endpoint - captures full-page screenshot
 // Note: Playwright requires browser binaries which may not be available on all hosts
-app.get('/screenshot', authMiddleware, screenshotLimiter, requireApiKey, enforceUsageLimit('screenshot'), async (req, res) => {
+app.get('/screenshot', authMiddleware, requireApiKey, async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
   const screenshotType = normalizeScreenshotType(req.query?.type);
@@ -3401,7 +3401,7 @@ app.get('/screenshot', authMiddleware, screenshotLimiter, requireApiKey, enforce
 });
 
 // Background screenshot jobs
-app.post('/screenshot-jobs', authMiddleware, screenshotLimiter, requireApiKey, enforceUsageLimit('screenshot_job'), async (req, res) => {
+app.post('/screenshot-jobs', authMiddleware, requireApiKey, async (req, res) => {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
   const screenshotType = normalizeScreenshotType(req.body?.type);

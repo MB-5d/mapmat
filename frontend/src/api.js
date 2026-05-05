@@ -649,6 +649,11 @@ export async function createScreenshotJob(payload) {
   });
 }
 
+export async function captureScreenshot({ url, type = 'full' }, options = {}) {
+  const params = new URLSearchParams({ url, type });
+  return fetchApi(`/screenshot?${params.toString()}`, options);
+}
+
 export async function getScreenshotJob(id, { includeResult = true } = {}) {
   const query = includeResult ? '' : '?include_result=false';
   return fetchApi(`/screenshot-jobs/${id}${query}`);
