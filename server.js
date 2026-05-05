@@ -181,6 +181,18 @@ const SCAN_LIMITS = {
   maxDepthDefault: Number(process.env.SCAN_MAX_DEPTH_DEFAULT ?? 6),
   maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 25),
 };
+const toPositiveInt = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+};
+const SCAN_PAGE_CONCURRENCY = Math.max(
+  1,
+  toPositiveInt(process.env.SCAN_PAGE_CONCURRENCY, isProd ? 6 : 8)
+);
+const SCAN_BROKEN_LINK_CONCURRENCY = Math.max(
+  1,
+  toPositiveInt(process.env.SCAN_BROKEN_LINK_CONCURRENCY, isProd ? 8 : 10)
+);
 const SCAN_API_KEY = process.env.SCAN_API_KEY || null;
 const ALLOW_PRIVATE_NETWORKS = process.env.ALLOW_PRIVATE_NETWORKS === 'true'
   || (!isProd && process.env.ALLOW_PRIVATE_NETWORKS !== 'false');
@@ -1461,6 +1473,17 @@ async function checkLinkStatus(url, extraHeaders = {}) {
   }
 }
 
+async function runWithConcurrency(items, concurrency, worker) {
+  let index = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (index < items.length) {
+      const item = items[index++];
+      await worker(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
 const resolveMapBaseUrl = (mapRow) => {
   if (!mapRow) return null;
   if (mapRow.url) {
@@ -1902,14 +1925,31 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const files = [];
   const linksByUrl = new Map();
   const linkStatusCache = new Map();
+  const scheduledBrokenLinkChecks = new Set();
+  const brokenLinkCandidates = [];
   const MAX_BROKEN_LINK_CHECKS = 500;
   let brokenChecks = 0;
 
-  while (queueIndex < queue.length && (maxPages === null || visited.size < maxPages)) {
-    if (await pollJobStatus()) break;
-    const { url, depth } = queue[queueIndex++];
+  const scheduleBrokenLinkCheck = (link, sourceUrl) => {
+    if (!scanOptions.brokenLinks) return;
+    if (brokenChecks >= MAX_BROKEN_LINK_CHECKS) return;
+    if (linkStatusCache.has(link) || scheduledBrokenLinkChecks.has(link)) return;
+    scheduledBrokenLinkChecks.add(link);
+    brokenChecks += 1;
+    brokenLinkCandidates.push({ link, sourceUrl });
+  };
 
-    if (visited.has(url)) continue;
+  const takeNextQueueItem = () => {
+    while (queueIndex < queue.length && (maxPages === null || visited.size < maxPages)) {
+      const item = queue[queueIndex++];
+      if (!item?.url || visited.has(item.url)) continue;
+      visited.add(item.url);
+      return item;
+    }
+    return null;
+  };
+
+  const processCrawlItem = async ({ url, depth }) => {
     visited.add(url);
     const discoveryIndex = discoveryCounter++;
 
@@ -1918,8 +1958,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       onProgress({ scanned: visited.size, queued: Math.max(0, queue.length - queueIndex) });
     }
 
-    if (depth > maxDepth) continue;
-    if (!allowUrl(url)) continue;
+    if (depth > maxDepth) return;
+    if (!allowUrl(url)) return;
 
     let html;
     let status = 0;
@@ -1934,9 +1974,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       finalUrl = res.finalUrl || url;
       responseTime = res.responseTime;
     } catch (e) {
-    // Still store node with fallback title so tree doesn't break
-    if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
-    if (scanOptions.inactivePages) inactivePages.push({ url, status: 0, reason: 'fetch_failed' });
+      // Still store node with fallback title so tree doesn't break
+      if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
+      if (scanOptions.inactivePages) inactivePages.push({ url, status: 0, reason: 'fetch_failed' });
       if (!pageMap.has(url)) {
         pageMap.set(url, {
           url,
@@ -1951,7 +1991,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           metadataAvailable: false,
         });
       }
-      continue;
+      return;
     }
 
     const classification = classifyScanResponse({ html, status, url, finalUrl });
@@ -1975,7 +2015,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         brokenLinks.push({ url, status });
       }
       if (!shouldKeep) {
-        continue;
+        return;
       }
     }
 
@@ -1983,7 +2023,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (scanOptions.files) {
         files.push({ url, sourceUrl: getParentUrl(url) || null, contentType });
       }
-      continue;
+      return;
     }
 
     const seoMetadata = classification.shouldExtractMetadata
@@ -2031,21 +2071,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (await pollJobStatus()) break;
       if (!allowUrl(link)) continue;
 
-      if (scanOptions.brokenLinks && brokenChecks < MAX_BROKEN_LINK_CHECKS && !linkStatusCache.has(link)) {
-        brokenChecks += 1;
-        const statusResult = await checkLinkStatus(link, extraHeaders);
-        linkStatusCache.set(link, statusResult.status);
-        if (statusResult.status >= 400 || statusResult.status === 0) {
-          brokenLinks.push({
-            url: link,
-            status: statusResult.status || undefined,
-            sourceUrl: url,
-          });
-        }
-      }
-
       // Skip obvious assets
       if (/\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|mp4|mov|mp3|wav)$/i.test(link)) {
+        scheduleBrokenLinkCheck(link, url);
         if (scanOptions.files) files.push({ url: link, sourceUrl: url });
         continue;
       }
@@ -2054,17 +2082,64 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       recordDiscovery(link, 'crawl');
 
       const d = depth + 1;
-      if (d > maxDepth) continue;
-      if (visited.has(link)) continue;
+      if (d > maxDepth) {
+        scheduleBrokenLinkCheck(link, url);
+        continue;
+      }
 
-        const normalizedReferrer = normalizeUrl(url);
-        if (!referrerMap.has(link) && link !== normalizedReferrer) {
-          referrerMap.set(link, normalizedReferrer);
-        }
+      const normalizedReferrer = normalizeUrl(url);
+      if (!referrerMap.has(link) && link !== normalizedReferrer) {
+        referrerMap.set(link, normalizedReferrer);
+      }
+      if (visited.has(link)) continue;
       enqueue(link, d);
     }
 
-    if (stopRequested) break;
+    if (stopRequested) return;
+  };
+
+  const crawlWorker = async () => {
+    while (!stopRequested) {
+      if (await pollJobStatus()) break;
+      const item = takeNextQueueItem();
+      if (!item) {
+        if (activeCrawlItems === 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        continue;
+      }
+      activeCrawlItems += 1;
+      try {
+        await processCrawlItem(item);
+      } finally {
+        activeCrawlItems -= 1;
+      }
+    }
+  };
+
+  let activeCrawlItems = 0;
+  const workerCount = Math.min(
+    SCAN_PAGE_CONCURRENCY,
+    Math.max(1, maxPages === null ? SCAN_PAGE_CONCURRENCY : maxPages)
+  );
+  await Promise.all(Array.from({ length: workerCount }, crawlWorker));
+
+  if (scanOptions.brokenLinks && brokenLinkCandidates.length && !stopRequested) {
+    await runWithConcurrency(
+      brokenLinkCandidates,
+      SCAN_BROKEN_LINK_CONCURRENCY,
+      async ({ link, sourceUrl }) => {
+        if (await pollJobStatus()) return;
+        const statusResult = await checkLinkStatus(link, extraHeaders);
+        linkStatusCache.set(link, statusResult.status);
+        if (statusResult.status >= 400 || statusResult.status === 0) {
+          brokenLinks.push({
+            url: link,
+            status: statusResult.status || undefined,
+            sourceUrl,
+          });
+        }
+      }
+    );
   }
 
   // Ensure the root exists
