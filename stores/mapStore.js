@@ -244,7 +244,7 @@ async function listPersistedScreenshotFilenamesAsync() {
     UNION ALL
     SELECT root_data, orphans_data FROM map_versions
   `);
-  const pattern = /\/screenshots\/([a-f0-9_]+\.png)/gi;
+  const pattern = /\/screenshots\/([a-f0-9_]+\.(?:png|jpe?g|webp))/gi;
   const filenames = new Set();
 
   (rows || []).forEach((row) => {

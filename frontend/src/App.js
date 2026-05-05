@@ -1648,40 +1648,47 @@ export default function App({ currentRoute, navigateToRoute }) {
     return nodes.some((node) => !!node.thumbnailUrl);
   }, [root, orphans]);
 
+  const hasStoredImageAsset = useCallback((value) => {
+    const raw = String(value || '').trim();
+    return raw.startsWith('/screenshots/')
+      || raw.includes('/screenshots/')
+      || /^https?:\/\//i.test(raw);
+  }, []);
+
   const hasAnyDownloadableThumbnails = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => node.thumbnailUrl?.includes('/screenshots/'));
-  }, [root, orphans]);
+    return nodes.some((node) => hasStoredImageAsset(node.thumbnailUrl));
+  }, [root, orphans, hasStoredImageAsset]);
 
   const hasAnyFullScreenshotAssets = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => node.fullScreenshotUrl?.includes('/screenshots/'));
-  }, [root, orphans]);
+    return nodes.some((node) => hasStoredImageAsset(node.fullScreenshotUrl));
+  }, [root, orphans, hasStoredImageAsset]);
 
   const hasSelectedDownloadableThumbnails = useMemo(() => {
     if (!root || selectedNodeIds.size === 0) return false;
     const selectedIds = selectedNodeIds;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => selectedIds.has(node.id) && node.thumbnailUrl?.includes('/screenshots/'));
-  }, [orphans, root, selectedNodeIds]);
+    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.thumbnailUrl));
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
 
   const hasSelectedFullScreenshotAssets = useMemo(() => {
     if (!root || selectedNodeIds.size === 0) return false;
     const selectedIds = selectedNodeIds;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => selectedIds.has(node.id) && node.fullScreenshotUrl?.includes('/screenshots/'));
-  }, [orphans, root, selectedNodeIds]);
+    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.fullScreenshotUrl));
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
 
   const allThumbnailsCaptured = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
     if (nodes.length === 0) return false;
     return nodes.every(
-      (node) => node.thumbnailUrl?.includes('/screenshots/') && !thumbnailDisplayErrorIds.has(node.id)
+      (node) => hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id)
     );
-  }, [root, orphans, thumbnailDisplayErrorIds]);
+  }, [root, orphans, thumbnailDisplayErrorIds, hasStoredImageAsset]);
 
   const maxDepth = useMemo(() => {
     const orphanDepth = (orphans || []).reduce((max, orphan) => {
@@ -4848,7 +4855,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       controller.abort();
     }, 45000);
 
-    api.captureScreenshot({ url: next.url, type: 'thumb' }, { signal: controller.signal })
+    api.createScreenshotJob({ url: next.url, type: 'thumb' }, { signal: controller.signal })
+      .then(({ jobId }) => waitForScreenshotJobResult(jobId, {
+        signal: controller.signal,
+        shouldStop: () => thumbnailStopRequestedRef.current,
+        timeoutMs: 45000,
+      }))
       .then((data) => {
         if (data?.url) {
           updateNodeThumbnail(next.id, data.url);
@@ -5054,8 +5066,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const candidates = forceRecapture
       ? orderedTargets
       : orderedTargets.filter((node) => {
-          const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
-          const hasRenderableThumb = node.thumbnailUrl && isScreenshotThumb && !thumbnailDisplayErrorIds.has(node.id);
+          const hasRenderableThumb = hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id);
           return !hasRenderableThumb;
         });
     const targetIds = new Set(candidates.map((node) => node.id));
@@ -5170,17 +5181,21 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
-  const waitForScreenshotJobResult = useCallback(async (jobId, { timeoutMs = 120000 } = {}) => {
+  const waitForScreenshotJobResult = useCallback(async (jobId, {
+    timeoutMs = 120000,
+    signal = null,
+    shouldStop = () => screenshotStopRequestedRef.current,
+  } = {}) => {
     if (!jobId) throw new Error('Failed to start screenshot job');
     const startedAt = Date.now();
     while (true) {
-      if (screenshotStopRequestedRef.current) {
+      if (signal?.aborted || shouldStop()) {
         try {
           await api.cancelScreenshotJob(jobId);
         } catch {}
         throw new Error('Screenshot capture stopped');
       }
-      const { job } = await api.getScreenshotJob(jobId, { includeResult: true });
+      const { job } = await api.getScreenshotJob(jobId, { includeResult: true, signal });
       if (!job) throw new Error('Screenshot job not found');
       if (job.status === 'complete') {
         return job.result || {};
@@ -5199,7 +5214,15 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         throw new Error('Screenshot job timed out');
       }
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, 1200);
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('Screenshot capture stopped'));
+          }, { once: true });
+        }
+      });
     }
   }, []);
 
@@ -5220,9 +5243,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
     return orderThumbnailNodes(
-      scopedNodes.filter((node) => node?.[assetKey] && String(node[assetKey]).includes('/screenshots/'))
+      scopedNodes.filter((node) => hasStoredImageAsset(node?.[assetKey]))
     );
-  }, [orphans, root, selectedNodeIds]);
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
 
   const sanitizeAssetFilenamePart = (value, fallback = 'asset') => {
     const cleaned = String(value || '')
@@ -5344,7 +5367,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         };
         const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
         if (needsThumbnail) {
-          const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
+          const thumbJob = await api.createScreenshotJob({ url: urlOrImage, type: 'thumb' }).catch(() => null);
+          const thumbData = thumbJob?.jobId
+            ? await waitForScreenshotJobResult(thumbJob.jobId).catch(() => null)
+            : null;
           assetUpdates.thumbnailUrl = thumbData?.url || data.url;
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
@@ -5452,7 +5478,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           };
           const needsThumbnail = !node.thumbnailUrl || thumbnailDisplayErrorIds.has(node.id);
           if (needsThumbnail) {
-            const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' }).catch(() => null);
+            const thumbJob = await api.createScreenshotJob({ url: node.url, type: 'thumb' }).catch(() => null);
+            const thumbData = thumbJob?.jobId
+              ? await waitForScreenshotJobResult(thumbJob.jobId).catch(() => null)
+              : null;
             assetUpdates.thumbnailUrl = thumbData?.url || data.url;
           }
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);

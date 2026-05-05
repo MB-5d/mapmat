@@ -19,6 +19,19 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 - `SCREENSHOT_FULL_MAX_WIDTH=1920`
 - `SCREENSHOT_CLEANUP_INTERVAL_MS=300000`
 - `SCREENSHOT_CLEANUP_MAX_FILES=50`
+- `SCREENSHOT_STORAGE_PROVIDER=local|r2`
+- `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
+- `R2_PUBLIC_BASE_URL=https://<public screenshot asset host>`
+- `SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY=50`
+- `SCREENSHOT_ACTIVE_LIMIT_PER_HOST=25`
+- `SCREENSHOT_ACTIVE_LIMIT_GLOBAL=500`
+
+## Scalable runtime shape
+
+- Run the normal API service with `RUN_MODE=web`.
+- Run a separate Railway worker service from the same image with `RUN_MODE=worker` or `npm run start:worker`.
+- Web creates screenshot jobs and polls results; the worker runs Playwright capture.
+- Use R2 for screenshot storage before scaling beyond one backend instance.
 
 ## API behavior notes
 
@@ -28,6 +41,8 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
   - `cached`
   - `blocked`
   - `truncated`
+- Thumbnail captures are stored as small JPEG assets for node cards.
+- Full captures remain full-page PNG assets for lightbox/download.
 
 ## Frontend behavior
 
@@ -35,7 +50,7 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 - The legacy direct `/screenshot?type=full` frontend path is no longer used for full-size viewing.
 - Expanding a node thumbnail keeps showing the current thumbnail asset until an explicit full-page asset has been captured for that node.
 - Explicit full-page screenshots are requested from the toolbar image menu and their backend-generated asset URLs are saved onto the node data.
-- Thumbnail generation still uses the direct `thumb` endpoint and remains a separate follow-on pipeline concern.
+- Thumbnail generation uses screenshot jobs so the web process does not run Playwright under normal app use.
 
 ## Next asset lifecycle controls
 

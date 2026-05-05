@@ -642,10 +642,11 @@ export async function stopScanJob(id, { accessToken = null } = {}) {
   });
 }
 
-export async function createScreenshotJob(payload) {
+export async function createScreenshotJob(payload, options = {}) {
   return fetchApi('/screenshot-jobs', {
     method: 'POST',
     body: JSON.stringify(payload),
+    ...options,
   });
 }
 
@@ -654,9 +655,9 @@ export async function captureScreenshot({ url, type = 'full' }, options = {}) {
   return fetchApi(`/screenshot?${params.toString()}`, options);
 }
 
-export async function getScreenshotJob(id, { includeResult = true } = {}) {
+export async function getScreenshotJob(id, { includeResult = true, ...options } = {}) {
   const query = includeResult ? '' : '?include_result=false';
-  return fetchApi(`/screenshot-jobs/${id}${query}`);
+  return fetchApi(`/screenshot-jobs/${id}${query}`, options);
 }
 
 export async function cancelScreenshotJob(id) {

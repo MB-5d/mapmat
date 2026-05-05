@@ -49,6 +49,18 @@ const { JOB_TYPES: EMAIL_JOB_TYPES, processEmailDeliveryJobAsync } = require('./
 const { AVATAR_PUBLIC_BASE, AVATAR_STORAGE_DIR } = require('./utils/avatarStorage');
 const { FEEDBACK_PUBLIC_BASE, FEEDBACK_STORAGE_DIR } = require('./utils/feedbackStorage');
 const {
+  SCREENSHOT_LOCAL_DIR,
+  SCREENSHOT_PUBLIC_BASE,
+  buildPublicUrl: buildScreenshotPublicUrl,
+  isR2Configured: isScreenshotR2Configured,
+  listLocalScreenshotFiles,
+  readScreenshotJson,
+  removeLocalScreenshotFile,
+  saveScreenshotJson,
+  saveScreenshotObject,
+  statScreenshotObject,
+} = require('./utils/screenshotStorage');
+const {
   extractSeoMetadata,
   getPrimaryDescription,
   getPrimaryMetaTags,
@@ -144,12 +156,8 @@ app.use(cookieParser());
 app.use('/api/email/webhooks', emailWebhookRouter);
 app.use(express.json({ limit: '5mb' }));
 
-// Serve static screenshots
-const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
-if (!fs.existsSync(SCREENSHOT_DIR)) {
-  fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
-}
-app.use('/screenshots', express.static(SCREENSHOT_DIR));
+// Serve local screenshot assets in development/fallback mode. R2 assets are served by the bucket/CDN URL.
+app.use(SCREENSHOT_PUBLIC_BASE, express.static(SCREENSHOT_LOCAL_DIR));
 app.use(AVATAR_PUBLIC_BASE, express.static(AVATAR_STORAGE_DIR));
 app.use(FEEDBACK_PUBLIC_BASE, express.static(FEEDBACK_STORAGE_DIR));
 
@@ -638,6 +646,7 @@ const refreshProtectedScreenshotFilenames = async ({ force = false } = {}) => {
 };
 
 const cleanupStaleScreenshots = async () => {
+  if (isScreenshotR2Configured()) return;
   const now = Date.now();
   if (now - screenshotLastCleanupAt < SCREENSHOT_CLEANUP_INTERVAL_MS) return;
   screenshotLastCleanupAt = now;
@@ -645,7 +654,7 @@ const cleanupStaleScreenshots = async () => {
 
   let entries = [];
   try {
-    entries = fs.readdirSync(SCREENSHOT_DIR, { withFileTypes: true });
+    entries = await listLocalScreenshotFiles();
   } catch (error) {
     console.warn('Screenshot cleanup read error:', error.message);
     return;
@@ -655,43 +664,21 @@ const cleanupStaleScreenshots = async () => {
   for (const entry of entries) {
     if (deleted >= SCREENSHOT_CLEANUP_MAX_FILES) break;
     if (!entry.isFile()) continue;
-    if (!entry.name.endsWith('.png')) continue;
+    if (!/\.(png|jpe?g|webp)$/i.test(entry.name)) continue;
     if (protectedFilenames.has(entry.name)) continue;
 
-    const filepath = path.join(SCREENSHOT_DIR, entry.name);
     try {
-      const stats = fs.statSync(filepath);
+      const stats = await statScreenshotObject(entry.name);
       const ageMs = now - stats.mtimeMs;
       if (ageMs <= SCREENSHOT_CACHE_TTL_MS) continue;
-      fs.unlinkSync(filepath);
-      const metaPath = path.join(SCREENSHOT_DIR, `${entry.name}${SCREENSHOT_META_SUFFIX}`);
-      if (fs.existsSync(metaPath)) {
-        fs.unlinkSync(metaPath);
-      }
+      await removeLocalScreenshotFile(entry.name);
+      await removeLocalScreenshotFile(`${entry.name}${SCREENSHOT_META_SUFFIX}`).catch(() => {});
       deleted += 1;
     } catch {
       // Ignore stale file races and permission edge-cases.
     }
   }
 };
-
-function readScreenshotMeta(metaPath) {
-  try {
-    if (!fs.existsSync(metaPath)) return null;
-    const raw = fs.readFileSync(metaPath, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function writeScreenshotMeta(metaPath, value) {
-  try {
-    fs.writeFileSync(metaPath, JSON.stringify(value, null, 2), 'utf8');
-  } catch (error) {
-    console.warn('Screenshot metadata write error:', error.message);
-  }
-}
 
 const JOB_TYPES = {
   scan: 'scan',
@@ -711,6 +698,18 @@ const JOB_POLL_INTERVAL_MS = Number(process.env.JOB_POLL_INTERVAL_MS ?? (isProd 
 const JOB_MAX_CONCURRENCY = Math.max(
   1,
   Number(process.env.JOB_MAX_CONCURRENCY ?? (isProd ? 1 : 2))
+);
+const SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY = Math.max(
+  1,
+  Number(process.env.SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY ?? (isProd ? 50 : 200))
+);
+const SCREENSHOT_ACTIVE_LIMIT_PER_HOST = Math.max(
+  1,
+  Number(process.env.SCREENSHOT_ACTIVE_LIMIT_PER_HOST ?? (isProd ? 25 : 100))
+);
+const SCREENSHOT_ACTIVE_LIMIT_GLOBAL = Math.max(
+  1,
+  Number(process.env.SCREENSHOT_ACTIVE_LIMIT_GLOBAL ?? (isProd ? 500 : 2000))
 );
 
 const parseJsonSafe = (raw) => {
@@ -763,6 +762,62 @@ const findActiveDiscoveryJob = async (mapId) => {
     }
   }
   return null;
+};
+
+const getRequestJobIdentity = (req) => {
+  const userId = req.user?.id || null;
+  if (userId) return { column: 'user_id', value: userId };
+  const apiKey = getApiKey(req);
+  if (apiKey) return { column: 'api_key', value: apiKey };
+  const ip = getClientIp(req);
+  const ipHash = hashIp(ip);
+  if (ipHash) return { column: 'ip_hash', value: ipHash };
+  return null;
+};
+
+const enforceScreenshotJobQueueLimits = async (req, safeUrl) => {
+  const activeRows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
+    JOB_TYPES.screenshot,
+    [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.stopping]
+  );
+  const host = new URL(safeUrl).hostname;
+  const identity = getRequestJobIdentity(req);
+  let identityCount = 0;
+  let hostCount = 0;
+
+  (activeRows || []).forEach((row) => {
+    const payload = getJobPayload(row);
+    let payloadHost = payload.host || null;
+    if (!payloadHost && payload.url) {
+      try {
+        payloadHost = new URL(payload.url).hostname;
+      } catch {
+        payloadHost = null;
+      }
+    }
+    if (payloadHost === host) {
+      hostCount += 1;
+    }
+    if (identity && row[identity.column] === identity.value) {
+      identityCount += 1;
+    }
+  });
+
+  if ((activeRows || []).length >= SCREENSHOT_ACTIVE_LIMIT_GLOBAL) {
+    const error = new Error('Screenshot queue is busy. Try again shortly.');
+    error.status = 429;
+    throw error;
+  }
+  if (identity && identityCount >= SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY) {
+    const error = new Error('You already have many screenshots queued. Let some finish before starting more.');
+    error.status = 429;
+    throw error;
+  }
+  if (hostCount >= SCREENSHOT_ACTIVE_LIMIT_PER_HOST) {
+    const error = new Error('This website already has many screenshots queued. Let some finish before starting more.');
+    error.status = 429;
+    throw error;
+  }
 };
 
 const createJob = async ({ type, payload, req }) => {
@@ -2670,26 +2725,26 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
   await cleanupStaleScreenshots();
 
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
-  const filename = `${urlHash}_${normalizedType}.png`;
-  const filepath = path.join(SCREENSHOT_DIR, filename);
-  const metaPath = path.join(SCREENSHOT_DIR, `${filename}${SCREENSHOT_META_SUFFIX}`);
+  const extension = normalizedType === SCREENSHOT_TYPES.thumb ? 'jpg' : 'png';
+  const contentType = extension === 'jpg' ? 'image/jpeg' : 'image/png';
+  const filename = `${urlHash}_${normalizedType}.${extension}`;
+  const metaKey = `${filename}${SCREENSHOT_META_SUFFIX}`;
   const baseUrl = getBaseUrl();
 
-  if (fs.existsSync(filepath)) {
-    const stats = fs.statSync(filepath);
-    const ageMs = Date.now() - stats.mtimeMs;
-    const meta = readScreenshotMeta(metaPath);
+  const cachedStats = await statScreenshotObject(filename);
+  if (cachedStats) {
+    const ageMs = Date.now() - cachedStats.mtimeMs;
+    const meta = await readScreenshotJson(metaKey);
     if (
       ageMs < SCREENSHOT_CACHE_TTL_MS
-      && meta
-      && meta.url === safeUrl
+      && (isScreenshotR2Configured() || (meta && meta.url === safeUrl))
     ) {
       return {
-        url: `${baseUrl}/screenshots/${filename}`,
+        url: buildScreenshotPublicUrl(filename, baseUrl),
         cached: true,
         type: normalizedType,
         blocked: false,
-        truncated: !!meta.truncated,
+        truncated: !!meta?.truncated,
       };
     }
   }
@@ -2701,9 +2756,12 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
 
     const b = await getBrowser();
     const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];
+    const viewport = normalizedType === SCREENSHOT_TYPES.thumb
+      ? { width: 640, height: 360 }
+      : { width: 1280, height: 720 };
     const context = await b.newContext({
       userAgent: ua,
-      viewport: { width: 1280, height: 720 },
+      viewport,
       deviceScaleFactor: normalizedType === SCREENSHOT_TYPES.full
         ? SCREENSHOT_FULL_DEVICE_SCALE_FACTOR
         : SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR,
@@ -2836,8 +2894,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
                 width: Math.max(320, clipWidth),
                 height: SCREENSHOT_FULL_MAX_HEIGHT,
               });
-              await page.screenshot({
-                path: filepath,
+              const buffer = await page.screenshot({
                 type: 'png',
                 clip: {
                   x: 0,
@@ -2846,27 +2903,35 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
                   height: SCREENSHOT_FULL_MAX_HEIGHT,
                 },
               });
+              await saveScreenshotObject({ key: filename, buffer, contentType, baseUrl });
             } else {
-              await page.screenshot({
-                path: filepath,
+              const buffer = await page.screenshot({
                 fullPage: true,
                 type: 'png',
               });
+              await saveScreenshotObject({ key: filename, buffer, contentType, baseUrl });
             }
           } else {
-            await page.screenshot({
-              path: filepath,
+            const buffer = await page.screenshot({
               fullPage: false,
-              type: 'png',
+              type: 'jpeg',
+              quality: 58,
             });
+            await saveScreenshotObject({ key: filename, buffer, contentType, baseUrl });
           }
 
-          writeScreenshotMeta(metaPath, {
-            url: safeUrl,
-            type: normalizedType,
-            blocked,
-            truncated,
-            capturedAt: new Date().toISOString(),
+          await saveScreenshotJson({
+            key: metaKey,
+            baseUrl,
+            value: {
+              url: safeUrl,
+              type: normalizedType,
+              blocked,
+              truncated,
+              capturedAt: new Date().toISOString(),
+            },
+          }).catch((error) => {
+            console.warn('Screenshot metadata write error:', error.message);
           });
 
           return { blocked, truncated };
@@ -2886,7 +2951,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
   });
 
   return {
-    url: `${baseUrl}/screenshots/${filename}`,
+    url: buildScreenshotPublicUrl(filename, baseUrl),
     cached: false,
     type: normalizedType,
     blocked: shotResult?.blocked || false,
@@ -3411,20 +3476,22 @@ app.post('/screenshot-jobs', authMiddleware, requireApiKey, async (req, res) => 
 
   try {
     const safeUrl = await assertSafeUrl(url);
+    await enforceScreenshotJobQueueLimits(req, safeUrl);
+    const host = new URL(safeUrl).hostname;
     const jobId = await createJob({
       type: JOB_TYPES.screenshot,
-      payload: { url: safeUrl, type: screenshotType },
+      payload: { url: safeUrl, type: screenshotType, host },
       req,
     });
 
-    recordUsage(req, 'screenshot_job', 1, { host: new URL(safeUrl).hostname, type: screenshotType });
+    recordUsage(req, 'screenshot_job', 1, { host, type: screenshotType });
 
     res.json({ jobId });
   } catch (e) {
     const message = e.message || 'Failed to create screenshot job';
-    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+    const status = e.status || (message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
       ? 400
-      : 500;
+      : 500);
     res.status(status).json({ error: message });
   }
 });

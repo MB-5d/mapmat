@@ -67,9 +67,10 @@ const NodeCard = ({
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
   const [thumbKey, setThumbKey] = useState(0);
+  const [shouldLoadThumb, setShouldLoadThumb] = useState(false);
+  const cardRef = useRef(null);
   const thumbImgRef = useRef(null);
 
-  const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
   const thumb = node.thumbnailUrl
     ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbKey}`
     : null;
@@ -102,11 +103,29 @@ const NodeCard = ({
     if (showThumbnails) {
       setThumbError(false);
       setThumbLoading(canRequestThumbnail && !node.thumbnailUrl);
+      setShouldLoadThumb(false);
       if (canRequestThumbnail) {
         setThumbKey(k => k + 1); // Force new image request
       }
     }
   }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail, thumbnailSessionId]);
+
+  useEffect(() => {
+    if (!showThumbnails || !thumb) return undefined;
+    const element = cardRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setShouldLoadThumb(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setShouldLoadThumb(true);
+        observer.disconnect();
+      }
+    }, { root: null, rootMargin: '900px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [showThumbnails, thumb]);
 
   useEffect(() => {
     if (!showThumbnails) return;
@@ -145,7 +164,7 @@ const NodeCard = ({
   useEffect(() => {
     if (!showThumbnails || !onRequestThumbnail) return;
     if (!canRequestThumbnail) return;
-    if (node.thumbnailUrl && isScreenshotThumb) return;
+    if (node.thumbnailUrl) return;
     if (thumbError) return;
     let isActive = true;
     setThumbLoading(!node.thumbnailUrl);
@@ -160,7 +179,7 @@ const NodeCard = ({
     return () => {
       isActive = false;
     };
-  }, [showThumbnails, node, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError, canRequestThumbnail]);
+  }, [showThumbnails, node, node.thumbnailUrl, node.url, onRequestThumbnail, thumbError, canRequestThumbnail]);
 
   useEffect(() => {
     if (!thumb || !thumbImgRef.current) return;
@@ -210,6 +229,7 @@ const NodeCard = ({
 
   return (
     <div
+      ref={cardRef}
       className={classNames.join(' ')}
       data-node-card="1"
       data-node-id={node.id}
@@ -269,7 +289,7 @@ const NodeCard = ({
               <Loader2 size={24} className="thumb-spinner" />
             </div>
           )}
-          {hasThumb && !thumbError ? (
+          {hasThumb && shouldLoadThumb && !thumbError ? (
             <>
               <img
                 className="thumb-img"
