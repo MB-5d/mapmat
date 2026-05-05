@@ -27,6 +27,7 @@ const SaveMapForm = ({
   onCreateProject,
   onCancel,
   submitLabel,
+  submitLoadingLabel,
 }) => {
   // Get default name from root domain (e.g., "example" from "https://www.example.com")
   const getDefaultName = () => {
@@ -49,11 +50,17 @@ const SaveMapForm = ({
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [notes, setNotes] = useState(defaultNotes || currentMap?.notes || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const selectableProjects = (projects || []).filter((project) => !isVirtualProject(project));
 
-  const handleSave = () => {
-    if (!mapName.trim()) return;
-    onSave(selectedProject || null, mapName, notes);
+  const handleSave = async () => {
+    if (!mapName.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await Promise.resolve(onSave(selectedProject || null, mapName, notes));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCreateProject = async () => {
@@ -124,11 +131,11 @@ const SaveMapForm = ({
         />
       </Field>
       <div className="modal-footer">
-        <Button variant="secondary" onClick={onCancel}>
+        <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleSave} disabled={!mapName.trim()}>
-          {submitLabel}
+        <Button variant="primary" onClick={handleSave} disabled={!mapName.trim() || isSubmitting} loading={isSubmitting}>
+          {isSubmitting ? (submitLoadingLabel || 'Saving') : submitLabel}
         </Button>
       </div>
     </div>
@@ -150,6 +157,7 @@ const SaveMapModal = ({
   onCreateProject,
   title = 'Save Map',
   submitLabel = 'Save Map',
+  submitLoadingLabel = 'Saving',
 }) => {
   if (!show) return null;
 
@@ -174,6 +182,7 @@ const SaveMapModal = ({
           onCreateProject={onCreateProject}
           onCancel={onClose}
           submitLabel={submitLabel}
+          submitLoadingLabel={submitLoadingLabel}
         />
       )}
     </Modal>

@@ -31,7 +31,7 @@ describe('SaveMapModal', () => {
     jest.clearAllMocks();
   });
 
-  test('saves the current map values through the shared form controls', () => {
+  test('saves the current map values through the shared form controls', async () => {
     const onSave = jest.fn();
 
     act(() => {
@@ -66,8 +66,9 @@ describe('SaveMapModal', () => {
       button.textContent.includes('Save Map')
     );
 
-    act(() => {
+    await act(async () => {
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
     });
 
     expect(onSave).toHaveBeenCalledWith(null, 'Homepage map', 'Shared DS flow');
@@ -108,6 +109,47 @@ describe('SaveMapModal', () => {
     expect(inlineInput.className).toContain('ui-input');
     inlineButtons.forEach((button) => {
       expect(button.className).toContain('ui-btn');
+    });
+  });
+
+  test('shows saving state while save is in progress', async () => {
+    let resolveSave;
+    const onSave = jest.fn(() => new Promise((resolve) => {
+      resolveSave = resolve;
+    }));
+
+    await act(async () => {
+      root.render(
+        <SaveMapModal
+          show
+          onClose={jest.fn()}
+          isLoggedIn
+          onRequireLogin={jest.fn()}
+          projects={[]}
+          currentMap={{ name: 'Current map', notes: '' }}
+          rootUrl="https://example.com"
+          defaultProjectId=""
+          onSave={onSave}
+          onCreateProject={jest.fn()}
+        />
+      );
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Map')
+    );
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(saveButton.textContent).toContain('Saving');
+    expect(saveButton.getAttribute('aria-busy')).toBe('true');
+
+    await act(async () => {
+      resolveSave();
+      await Promise.resolve();
     });
   });
 });

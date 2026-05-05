@@ -71,6 +71,7 @@ import {
   API_BASE,
   DEFAULT_COLORS,
   DEFAULT_CONNECTION_COLORS,
+  getDepthColor,
   ACCESS_LEVELS,
   SCAN_MESSAGES,
   REPORT_TYPE_OPTIONS,
@@ -707,7 +708,7 @@ const SitemapTree = ({
 
       {/* Render all nodes with absolute positioning */}
       {Array.from(layout.nodes.values()).map(nodeData => {
-        const color = colors[Math.min(nodeData.depth, colors.length - 1)];
+        const color = getDepthColor(colors, nodeData.depth);
         const isRoot = nodeData.node.id === data.id;
         const badges = getBadgesForNode(nodeData.node, nodeData);
         const annotations = nodeData.node?.annotations || {};
@@ -12350,6 +12351,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onCreateProject={createProject}
         title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
         submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
+        submitLoadingLabel={createMapMode ? 'Creating' : (duplicateMapConfig ? 'Duplicating' : 'Saving')}
       />
 
       <SaveVersionModal

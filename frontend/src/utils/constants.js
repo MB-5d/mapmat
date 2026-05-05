@@ -24,6 +24,12 @@ export const TESTER_NOT_READY_MESSAGE = 'Not ready for testing yet';
 export const DEFAULT_COLORS = runtimePalettes.pageDepthPalette;
 export const DEFAULT_CONNECTION_COLORS = runtimePalettes.connectionPalette;
 
+export const getDepthColor = (colors, depth = 0) => {
+  const index = Math.max(0, Number(depth) || 0);
+  if (Array.isArray(colors) && colors[index]) return colors[index];
+  return DEFAULT_COLORS[index] || DEFAULT_COLORS[index % DEFAULT_COLORS.length] || '#94a3b8';
+};
+
 // Permission levels for sharing
 export const ACCESS_LEVELS = {
   VIEW: 'view',       // Can only look at map

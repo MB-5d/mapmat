@@ -13,7 +13,7 @@ import NodeBadge from './NodeBadge';
 import Badge from '../ui/Badge';
 
 import { getHostname } from '../../utils/url';
-import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS } from '../../utils/constants';
+import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
 
 const NODE_STATUS_BADGE_STYLE = {
   new: 'info',
@@ -482,7 +482,7 @@ const DragOverlayTree = ({
   showPageNumbers = true,
   showAnnotations = true,
 }) => {
-  const childColor = colors[Math.min(depth + 1, colors.length - 1)];
+  const childColor = getDepthColor(colors, depth + 1);
   const INDENT = 40;
   const GAP = 60;
 

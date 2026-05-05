@@ -1768,6 +1768,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
     return true;
   };
+  const isWithinScanDepth = (candidate) => {
+    const normalized = normalizeUrl(candidate);
+    if (!normalized) return false;
+    if (normalized === seed) return true;
+    return getUrlDepth(normalized) <= maxDepth;
+  };
 
   const discoverySourceByUrl = new Map();
   const linksInCounts = new Map();
@@ -1800,6 +1806,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   let queueIndex = 0;
   const enqueue = (url, depth) => {
     if (!url) return;
+    if (!isWithinScanDepth(url)) return;
     if (queued.has(url)) return;
     queued.add(url);
     queue.push({ url, depth });
@@ -1825,7 +1832,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   // Add common pages to queue
   for (const path of commonPaths) {
     const commonUrl = normalizeUrl(`${origin}${path}`);
-    if (commonUrl) {
+    if (commonUrl && isWithinScanDepth(commonUrl)) {
       recordDiscovery(commonUrl, 'crawl');
       enqueue(commonUrl, 1);
     }
@@ -1874,7 +1881,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const urls = sitemapRes.data.split('\n').map((u) => u.trim()).filter(Boolean);
         for (const u of urls) {
           const norm = normalizeUrl(u);
-          if (norm && allowUrl(norm)) {
+          if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
             recordDiscovery(norm, 'sitemap');
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
             enqueue(norm, 1);
@@ -1889,7 +1896,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       $('url > loc').each((_, el) => {
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
-        if (norm && allowUrl(norm)) {
+        if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
           recordDiscovery(norm, 'sitemap');
           if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
           enqueue(norm, 1);
@@ -1958,7 +1965,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       onProgress({ scanned: visited.size, queued: Math.max(0, queue.length - queueIndex) });
     }
 
-    if (depth > maxDepth) return;
+    if (depth > maxDepth || !isWithinScanDepth(url)) return;
     if (!allowUrl(url)) return;
 
     let html;
@@ -2082,7 +2089,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       recordDiscovery(link, 'crawl');
 
       const d = depth + 1;
-      if (d > maxDepth) {
+      if (d > maxDepth || !isWithinScanDepth(link)) {
         scheduleBrokenLinkCheck(link, url);
         continue;
       }

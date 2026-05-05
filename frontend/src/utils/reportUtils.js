@@ -1,4 +1,5 @@
 import { getSeoValue } from './seoMetadata';
+import { getDepthColor } from './constants';
 
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
@@ -52,7 +53,7 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
     const orphanType = context.orphanType || node.orphanType || null;
     const number = reportNumberMap.get(node.id) || '';
     const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
-    const levelColor = colors[Math.min(depth, colors.length - 1)] || colors[0];
+    const levelColor = getDepthColor(colors, depth);
     const titleValue = node.title || node.url || '';
     const showFullTitle = titleValue.length > 24;
     entries.push({

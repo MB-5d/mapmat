@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
+import { getDepthColor } from '../../utils/constants';
 import './minimapNavigator.css';
 
 const DEFAULT_MINIMAP_WIDTH = 320;
@@ -349,8 +350,7 @@ const MinimapNavigator = ({
               />
             ))}
             {nodes.map((node) => {
-              const depthColor = colors?.[Math.min(node.depth, Math.max(0, (colors?.length || 1) - 1))];
-              const baseColor = depthColor || '#94a3b8';
+              const baseColor = getDepthColor(colors, node.depth);
               const tintColor = mixWithWhite(baseColor, 0.6);
               const centerX = node.x + node.w / 2;
               const centerY = node.y + node.h / 2;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Palette } from 'lucide-react';
 
-import { DEFAULT_CONNECTION_COLORS } from '../../utils/constants';
+import { DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
 import { EditIcon } from '../ui/icons';
 
 const ColorKey = ({
@@ -34,7 +34,7 @@ const ColorKey = ({
       <div className="color-key-list">
         <div className="color-key-section">Pages</div>
         {Array.from({ length: Math.max(maxDepth + 1, colors.length) }).map((_, idx) => {
-          const color = colors[idx] || colors[colors.length - 1];
+          const color = getDepthColor(colors, idx);
           if (idx > maxDepth) return null;
           return (
             <div
