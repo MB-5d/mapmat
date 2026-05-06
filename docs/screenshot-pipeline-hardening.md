@@ -14,6 +14,7 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 ## Backend configuration
 
 - `SCREENSHOT_CAPTURE_TIMEOUT_MS=60000`
+- `SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS=12000`
 - `SCREENSHOT_CACHE_TTL_MS=3600000`
 - `SCREENSHOT_FULL_MAX_HEIGHT=16000`
 - `SCREENSHOT_FULL_MAX_WIDTH=1920`

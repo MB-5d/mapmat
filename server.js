@@ -218,6 +218,10 @@ const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
   Number(process.env.SCREENSHOT_CAPTURE_TIMEOUT_MS ?? (isProd ? 45000 : 60000))
 );
+const SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? (isProd ? 12000 : 15000))
+);
 const SCREENSHOT_CACHE_TTL_MS = Math.max(
   60000,
   Number(process.env.SCREENSHOT_CACHE_TTL_MS ?? 3600000)
@@ -2780,11 +2784,15 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
       page = await context.newPage();
 
       let lastError = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      const captureTimeoutMs = normalizedType === SCREENSHOT_TYPES.thumb
+        ? SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS
+        : SCREENSHOT_CAPTURE_TIMEOUT_MS;
+      const maxAttempts = normalizedType === SCREENSHOT_TYPES.thumb ? 1 : 2;
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
         try {
           await page.goto(safeUrl, {
             waitUntil: 'domcontentloaded',
-            timeout: SCREENSHOT_CAPTURE_TIMEOUT_MS,
+            timeout: captureTimeoutMs,
           });
           await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 1200);
           await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
