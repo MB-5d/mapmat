@@ -3065,13 +3065,16 @@ const runJobLoop = async () => {
   jobLoopRunning = false;
 };
 
-if (RUN_WORKER) {
+if (JOB_WORKER_TYPES.length > 0) {
+  console.log(`[jobs] processor enabled for types=${JOB_WORKER_TYPES.join(',')}`);
   setInterval(() => {
     runJobLoop().catch((err) => console.error('Job loop error:', err));
   }, JOB_POLL_INTERVAL_MS);
   setTimeout(() => {
     runJobLoop().catch((err) => console.error('Job loop error:', err));
   }, 0);
+} else {
+  console.log('[jobs] processor disabled');
 }
 
 app.get('/', (_, res) => res.status(200).send('Loxo backend OK'));
