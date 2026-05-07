@@ -690,6 +690,24 @@ const JOB_TYPES = {
   discovery: 'discovery',
   email: EMAIL_JOB_TYPES.EMAIL,
 };
+const ALL_BACKGROUND_JOB_TYPES = Object.freeze(Object.values(JOB_TYPES));
+const parseJobWorkerTypes = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (raw.toLowerCase() === 'all') return ALL_BACKGROUND_JOB_TYPES;
+  const requested = raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const allowed = requested.filter((type) => ALL_BACKGROUND_JOB_TYPES.includes(type));
+  return allowed.length > 0 ? allowed : null;
+};
+const DEFAULT_JOB_WORKER_TYPES = RUN_MODE === 'worker'
+  ? [JOB_TYPES.screenshot]
+  : (RUN_MODE === 'web'
+    ? [JOB_TYPES.scan, JOB_TYPES.discovery, JOB_TYPES.email]
+    : ALL_BACKGROUND_JOB_TYPES);
+const JOB_WORKER_TYPES = parseJobWorkerTypes(process.env.JOB_WORKER_TYPES) || DEFAULT_JOB_WORKER_TYPES;
 const JOB_STATUS = {
   queued: 'queued',
   running: 'running',
@@ -850,6 +868,7 @@ const takeNextJob = () => jobStore.takeNextQueuedJobAsync({
   queuedStatus: JOB_STATUS.queued,
   stoppingStatus: JOB_STATUS.stopping,
   runningStatus: JOB_STATUS.running,
+  types: JOB_WORKER_TYPES,
 });
 
 const updateJobProgress = async (id, progress) => {

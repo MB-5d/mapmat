@@ -42,13 +42,22 @@ const takeNextQueuedJobAsync = adapter.transactionAsync(async ({
   queuedStatus,
   stoppingStatus,
   runningStatus,
+  types = null,
 }) => {
+  const allowedTypes = Array.isArray(types)
+    ? types.filter(Boolean)
+    : null;
+  if (allowedTypes && allowedTypes.length === 0) return null;
+  const typeClause = allowedTypes
+    ? `AND type IN (${adapter.placeholders(allowedTypes.length)})`
+    : '';
   const job = await adapter.queryOneAsync(`
     SELECT * FROM jobs
     WHERE status IN (?, ?)
+    ${typeClause}
     ORDER BY created_at ASC
     LIMIT 1
-  `, [queuedStatus, stoppingStatus]);
+  `, [queuedStatus, stoppingStatus, ...(allowedTypes || [])]);
   if (!job) return null;
 
   const nextStatus = job.status === queuedStatus ? runningStatus : stoppingStatus;

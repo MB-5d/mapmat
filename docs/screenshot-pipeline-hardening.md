@@ -26,12 +26,15 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 - `SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY=50`
 - `SCREENSHOT_ACTIVE_LIMIT_PER_HOST=25`
 - `SCREENSHOT_ACTIVE_LIMIT_GLOBAL=500`
+- `JOB_WORKER_TYPES=scan,discovery,email` on the web service
+- `JOB_WORKER_TYPES=screenshot` on the screenshot worker service
 
 ## Scalable runtime shape
 
 - Run the normal API service with `RUN_MODE=web`.
 - Run a separate Railway worker service from the same image with `RUN_MODE=worker` or `npm run start:worker`.
-- Web creates screenshot jobs and polls results; the worker runs Playwright capture.
+- Web creates screenshot jobs and polls results; by default it still processes scan/discovery/email jobs.
+- The screenshot worker processes only screenshot jobs by default, keeping Playwright work off the web service.
 - Use R2 for screenshot storage before scaling beyond one backend instance.
 
 ## API behavior notes
