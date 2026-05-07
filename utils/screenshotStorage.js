@@ -189,7 +189,12 @@ async function readScreenshotJson(key) {
 
 async function statScreenshotObject(key) {
   if (isR2Configured()) {
-    return headR2Object(key);
+    try {
+      return await headR2Object(key);
+    } catch (error) {
+      console.warn('R2 metadata read skipped:', error.message);
+      return null;
+    }
   }
   try {
     return await fs.promises.stat(path.join(SCREENSHOT_LOCAL_DIR, key));

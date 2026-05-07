@@ -21,10 +21,13 @@ try {
 }
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH && fs.existsSync('/ms-playwright')) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = '/ms-playwright';
+}
+const { chromium } = require('playwright');
 const dns = require('dns').promises;
 const net = require('net');
 const { probePostgres } = require('./utils/postgresProbe');
