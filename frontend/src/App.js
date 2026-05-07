@@ -1494,6 +1494,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
   const thumbnailAuthToastShownRef = useRef(false);
+  const thumbnailFailureToastShownRef = useRef(false);
   const MAX_THUMBNAIL_CONCURRENCY = 6;
   const MAX_THUMBNAIL_ATTEMPTS = 2;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
@@ -4881,6 +4882,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailInFlightRef.current.add(next.id);
     let success = false;
     let shouldRetry = true;
+    let lastErrorMessage = '';
     const controller = new AbortController();
     thumbnailAbortControllersRef.current.set(next.id, controller);
     const timeoutId = setTimeout(() => {
@@ -4921,6 +4923,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
       })
       .catch((error) => {
+        lastErrorMessage = error?.message || 'Thumbnail capture failed';
         if (isScreenshotAuthError(error?.message)) {
           shouldRetry = false;
           updateNodeScreenshotAssets(next.id, {
@@ -4960,6 +4963,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (shouldRetry && attempt < MAX_THUMBNAIL_ATTEMPTS - 1) {
             scheduleThumbnailRetry(next.id, next.url, attempt);
           } else {
+            if (!thumbnailFailureToastShownRef.current && lastErrorMessage && !isScreenshotAuthError(lastErrorMessage)) {
+              thumbnailFailureToastShownRef.current = true;
+              showToast(lastErrorMessage, 'error');
+            }
             completeThumbnailCapture(next.id);
           }
         }
@@ -4991,6 +4998,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     screenshotStopRequestedRef.current = false;
     activeScreenshotJobRef.current = null;
     thumbnailAuthToastShownRef.current = false;
+    thumbnailFailureToastShownRef.current = false;
     setThumbnailQueueSize(0);
     setThumbnailActiveCount(0);
     setThumbnailReloadMap({});

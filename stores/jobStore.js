@@ -111,6 +111,15 @@ async function getJobStatusAsync(id) {
   return (await adapter.queryOneAsync('SELECT status FROM jobs WHERE id = ?', [id]))?.status || null;
 }
 
+function summarizeJobsByTypeAndStatusAsync() {
+  return adapter.queryAllAsync(`
+    SELECT type, status, COUNT(*) AS count
+    FROM jobs
+    GROUP BY type, status
+    ORDER BY type ASC, status ASC
+  `);
+}
+
 module.exports = {
   getJobByIdAsync,
   listJobPayloadsByTypeAndStatusesAsync,
@@ -122,4 +131,5 @@ module.exports = {
   markJobCanceledAsync,
   markJobStoppingAsync,
   getJobStatusAsync,
+  summarizeJobsByTypeAndStatusAsync,
 };

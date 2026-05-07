@@ -3044,6 +3044,7 @@ async function processJob(job) {
     throw new Error(`Unknown job type: ${job.type}`);
   } catch (error) {
     if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+    console.error(`[jobs] ${job.type} job ${jobId} failed:`, error?.message || error);
     await markJobFailed(jobId, error);
   }
 }
@@ -3105,6 +3106,27 @@ app.get('/health/db', async (_, res) => {
     runtimeFallback: DB_RUNTIME.fallback,
     supportedRuntimes: DB_RUNTIME.supportedProviders,
     postgres: pg,
+  });
+});
+
+app.get('/health/jobs', async (_req, res) => {
+  const rows = await jobStore.summarizeJobsByTypeAndStatusAsync();
+  const counts = {};
+  (rows || []).forEach((row) => {
+    const type = row.type || 'unknown';
+    const status = row.status || 'unknown';
+    if (!counts[type]) counts[type] = {};
+    counts[type][status] = Number(row.count || 0);
+  });
+  return res.status(200).json({
+    ok: true,
+    runMode: RUN_MODE,
+    processorEnabled: JOB_WORKER_TYPES.length > 0,
+    workerTypes: JOB_WORKER_TYPES,
+    activeJobs,
+    pollIntervalMs: JOB_POLL_INTERVAL_MS,
+    maxConcurrency: JOB_MAX_CONCURRENCY,
+    counts,
   });
 });
 

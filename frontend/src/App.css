@@ -8640,8 +8640,9 @@ body {
 
 .thumbnail-progress-toast {
   position: absolute;
-  left: calc(24px + 160px);
+  left: 50%;
   top: 24px;
+  transform: translateX(-50%);
   display: inline-flex;
   gap: 12px;
   align-items: center;
@@ -8655,12 +8656,16 @@ body {
   z-index: 1200;
   backdrop-filter: blur(6px);
   pointer-events: auto;
+  min-width: 520px;
+  justify-content: space-between;
 }
 
 .thumbnail-progress-details {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
 
 .thumbnail-progress-line {
@@ -8671,7 +8676,7 @@ body {
 }
 
 .thumbnail-progress-bar {
-  width: 36px;
+  width: 72px;
   height: 6px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.25);
@@ -8720,6 +8725,14 @@ body {
 
 .thumbnail-progress-stop:active {
   transform: translateY(1px);
+}
+
+@media (max-width: 640px) {
+  .thumbnail-progress-toast {
+    min-width: 0;
+    width: calc(100vw - 32px);
+    top: 16px;
+  }
 }
 
 .save-map-form {
