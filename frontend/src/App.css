@@ -2786,45 +2786,45 @@ body {
 
 [data-theme="dark"] .blank-scan-shell.search-container,
 [data-theme="dark"] .blank-scan-shell.scan-bar-shell {
-  background: var(--color-neutral-white);
-  border-color: var(--color-neutral-300);
+  background: var(--color-plum-800);
+  border-color: var(--color-plum-400);
 }
 
 [data-theme="dark"] .blank-scan-shell.search-container:hover,
 [data-theme="dark"] .blank-scan-shell.scan-bar-shell:hover {
-  background: var(--color-neutral-white);
-  border-color: var(--color-brand-400);
+  background: var(--color-plum-700);
+  border-color: var(--color-brand-300);
 }
 
 [data-theme="dark"] .blank-scan-shell.search-container:focus-within,
 [data-theme="dark"] .blank-scan-shell.scan-bar-shell:focus-within {
-  background: var(--color-neutral-white);
-  border-color: var(--color-brand-500);
+  background: var(--color-plum-700);
+  border-color: var(--color-brand-300);
 }
 
 [data-theme="dark"] .blank-scan-shell.search-container input,
 [data-theme="dark"] .blank-scan-shell.scan-bar-shell input {
-  color: var(--color-neutral-900);
+  color: var(--color-plum-100);
 }
 
 [data-theme="dark"] .blank-scan-shell.search-container input::placeholder,
 [data-theme="dark"] .blank-scan-shell.scan-bar-shell input::placeholder {
-  color: var(--color-neutral-600);
+  color: var(--color-plum-300);
 }
 
 [data-theme="dark"] .blank-scan-shell .search-icon,
 [data-theme="dark"] .blank-scan-shell .scan-bar__icon {
-  color: var(--color-neutral-600);
+  color: var(--color-plum-300);
 }
 
 [data-theme="dark"] .blank-scan-shell .ui-btn--type-secondary.ui-btn--style-brand {
-  border-color: var(--color-brand-600);
-  color: var(--color-brand-600);
+  border-color: var(--color-brand-300);
+  color: var(--color-brand-300);
 }
 
 [data-theme="dark"] .blank-scan-shell .ui-btn--type-secondary.ui-btn--style-brand:hover:not(:disabled) {
-  border-color: var(--color-brand-700);
-  color: var(--color-brand-700);
+  border-color: var(--color-brand-200);
+  color: var(--color-brand-200);
 }
 
 [data-theme="dark"] .blank-scan-shell .ui-btn--type-primary.ui-btn--style-brand:disabled {
