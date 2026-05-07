@@ -2752,7 +2752,85 @@ body {
   flex: 1 1 auto;
   min-height: 56px;
   padding: 8px 12px;
+  background: var(--color-neutral-white);
+  border-color: var(--color-neutral-300);
   box-shadow: var(--shadow-card);
+}
+
+.blank-scan-shell.search-container:hover,
+.blank-scan-shell.scan-bar-shell:hover {
+  background: var(--color-neutral-white);
+  border-color: var(--color-brand-400);
+}
+
+.blank-scan-shell.search-container:focus-within,
+.blank-scan-shell.scan-bar-shell:focus-within {
+  background: var(--color-neutral-white);
+  border-color: var(--color-brand-500);
+}
+
+.blank-scan-shell.search-container input,
+.blank-scan-shell.scan-bar-shell input {
+  color: var(--color-neutral-900);
+}
+
+.blank-scan-shell.search-container input::placeholder,
+.blank-scan-shell.scan-bar-shell input::placeholder {
+  color: var(--color-neutral-600);
+}
+
+.blank-scan-shell .search-icon,
+.blank-scan-shell .scan-bar__icon {
+  color: var(--color-neutral-600);
+}
+
+[data-theme="dark"] .blank-scan-shell.search-container,
+[data-theme="dark"] .blank-scan-shell.scan-bar-shell {
+  background: var(--color-neutral-white);
+  border-color: var(--color-neutral-300);
+}
+
+[data-theme="dark"] .blank-scan-shell.search-container:hover,
+[data-theme="dark"] .blank-scan-shell.scan-bar-shell:hover {
+  background: var(--color-neutral-white);
+  border-color: var(--color-brand-400);
+}
+
+[data-theme="dark"] .blank-scan-shell.search-container:focus-within,
+[data-theme="dark"] .blank-scan-shell.scan-bar-shell:focus-within {
+  background: var(--color-neutral-white);
+  border-color: var(--color-brand-500);
+}
+
+[data-theme="dark"] .blank-scan-shell.search-container input,
+[data-theme="dark"] .blank-scan-shell.scan-bar-shell input {
+  color: var(--color-neutral-900);
+}
+
+[data-theme="dark"] .blank-scan-shell.search-container input::placeholder,
+[data-theme="dark"] .blank-scan-shell.scan-bar-shell input::placeholder {
+  color: var(--color-neutral-600);
+}
+
+[data-theme="dark"] .blank-scan-shell .search-icon,
+[data-theme="dark"] .blank-scan-shell .scan-bar__icon {
+  color: var(--color-neutral-600);
+}
+
+[data-theme="dark"] .blank-scan-shell .ui-btn--type-secondary.ui-btn--style-brand {
+  border-color: var(--color-brand-600);
+  color: var(--color-brand-600);
+}
+
+[data-theme="dark"] .blank-scan-shell .ui-btn--type-secondary.ui-btn--style-brand:hover:not(:disabled) {
+  border-color: var(--color-brand-700);
+  color: var(--color-brand-700);
+}
+
+[data-theme="dark"] .blank-scan-shell .ui-btn--type-primary.ui-btn--style-brand:disabled {
+  background: var(--color-brand-300);
+  border-color: var(--color-brand-300);
+  color: var(--color-brand-950);
 }
 
 .blank-start-label {
