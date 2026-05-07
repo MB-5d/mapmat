@@ -26,6 +26,7 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 - `SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY=50`
 - `SCREENSHOT_ACTIVE_LIMIT_PER_HOST=25`
 - `SCREENSHOT_ACTIVE_LIMIT_GLOBAL=500`
+- `SCREENSHOT_QUEUE_LIMIT_WINDOW_MS=900000`
 - `JOB_WORKER_TYPES=scan,discovery,email` on the web service
 - `JOB_WORKER_TYPES=screenshot` on the screenshot worker service
 

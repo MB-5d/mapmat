@@ -733,6 +733,10 @@ const SCREENSHOT_ACTIVE_LIMIT_GLOBAL = Math.max(
   1,
   Number(process.env.SCREENSHOT_ACTIVE_LIMIT_GLOBAL ?? (isProd ? 500 : 2000))
 );
+const SCREENSHOT_QUEUE_LIMIT_WINDOW_MS = Math.max(
+  60000,
+  Number(process.env.SCREENSHOT_QUEUE_LIMIT_WINDOW_MS ?? 15 * 60 * 1000)
+);
 
 const parseJsonSafe = (raw) => {
   if (!raw) return null;
@@ -798,10 +802,16 @@ const getRequestJobIdentity = (req) => {
 };
 
 const enforceScreenshotJobQueueLimits = async (req, safeUrl) => {
-  const activeRows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
+  const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
     JOB_TYPES.screenshot,
     [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.stopping]
   );
+  const cutoff = Date.now() - SCREENSHOT_QUEUE_LIMIT_WINDOW_MS;
+  const activeRows = (rows || []).filter((row) => {
+    const timestamp = row.started_at || row.created_at;
+    const timeMs = timestamp ? new Date(timestamp).getTime() : Date.now();
+    return Number.isFinite(timeMs) && timeMs >= cutoff;
+  });
   const host = new URL(safeUrl).hostname;
   const identity = getRequestJobIdentity(req);
   let identityCount = 0;
