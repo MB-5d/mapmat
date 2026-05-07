@@ -120,6 +120,16 @@ function summarizeJobsByTypeAndStatusAsync() {
   `);
 }
 
+function listRecentJobsByTypeAsync(type, limit = 10) {
+  return adapter.queryAllAsync(`
+    SELECT id, type, status, created_at, started_at, finished_at, payload, error
+    FROM jobs
+    WHERE type = ?
+    ORDER BY COALESCE(finished_at, started_at, created_at) DESC
+    LIMIT ?
+  `, [type, Math.max(1, Math.min(50, Number(limit) || 10))]);
+}
+
 module.exports = {
   getJobByIdAsync,
   listJobPayloadsByTypeAndStatusesAsync,
@@ -132,4 +142,5 @@ module.exports = {
   markJobStoppingAsync,
   getJobStatusAsync,
   summarizeJobsByTypeAndStatusAsync,
+  listRecentJobsByTypeAsync,
 };

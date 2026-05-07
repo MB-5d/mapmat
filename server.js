@@ -3128,6 +3128,20 @@ app.get('/health/jobs', async (_req, res) => {
     if (!counts[type]) counts[type] = {};
     counts[type][status] = Number(row.count || 0);
   });
+  const recentScreenshotRows = await jobStore.listRecentJobsByTypeAsync(JOB_TYPES.screenshot, 10);
+  const recentScreenshots = (recentScreenshotRows || []).map((row) => {
+    const payload = getJobPayload(row);
+    return {
+      id: row.id,
+      status: row.status,
+      createdAt: row.created_at,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      host: payload.host || null,
+      type: payload.type || null,
+      error: row.error || null,
+    };
+  });
   return res.status(200).json({
     ok: true,
     runMode: RUN_MODE,
@@ -3137,6 +3151,7 @@ app.get('/health/jobs', async (_req, res) => {
     pollIntervalMs: JOB_POLL_INTERVAL_MS,
     maxConcurrency: JOB_MAX_CONCURRENCY,
     counts,
+    recentScreenshots,
   });
 });
 
