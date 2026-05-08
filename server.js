@@ -238,11 +238,11 @@ const SCREENSHOT_FULL_VIEWPORT_HEIGHT = Math.max(
 );
 const SCREENSHOT_THUMB_VIEWPORT_WIDTH = Math.max(
   640,
-  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_WIDTH ?? 1920)
+  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_WIDTH ?? 1280)
 );
 const SCREENSHOT_THUMB_VIEWPORT_HEIGHT = Math.max(
   360,
-  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_HEIGHT ?? 1080)
+  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_HEIGHT ?? 720)
 );
 const SCREENSHOT_CANVAS_THUMB_WIDTH = Math.max(
   160,
@@ -254,7 +254,7 @@ const SCREENSHOT_CANVAS_THUMB_HEIGHT = Math.max(
 );
 const SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR = Math.max(
   1,
-  Number(process.env.SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR ?? 1)
+  Number(process.env.SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR ?? 1.5)
 );
 const SCREENSHOT_FULL_DEVICE_SCALE_FACTOR = Math.max(
   1,
@@ -280,7 +280,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v4';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v5';
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2463,30 +2463,53 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     node._childUrls = undefined;
   });
 
-  // Build referrer adjacency (link graph)
-  const referrerChildren = new Map();
-  for (const [childUrl, referrerUrl] of referrerMap.entries()) {
-    if (!referrerUrl) continue;
-    if (!nodes.has(childUrl) || !nodes.has(referrerUrl)) continue;
-    if (!referrerChildren.has(referrerUrl)) referrerChildren.set(referrerUrl, []);
-    referrerChildren.get(referrerUrl).push(childUrl);
+  const resolveNodeUrl = (url) => {
+    const normalized = normalizeUrl(url);
+    if (!normalized) return null;
+    if (nodes.has(normalized)) return normalized;
+    const canonicalMatch = canonicalToUrl.get(getCanonicalKey(normalized));
+    if (canonicalMatch && nodes.has(canonicalMatch)) return canonicalMatch;
+    return null;
+  };
+
+  // Build deterministic adjacency from all collected page links after crawling.
+  // This avoids parallel crawl timing deciding the final map shape.
+  const linkChildren = new Map();
+  for (const [sourceRaw, targets] of linksByUrl.entries()) {
+    const sourceUrl = resolveNodeUrl(sourceRaw);
+    if (!sourceUrl) continue;
+    for (const targetRaw of targets || []) {
+      const targetUrl = resolveNodeUrl(targetRaw);
+      if (!targetUrl || targetUrl === sourceUrl) continue;
+      if (!linkChildren.has(sourceUrl)) linkChildren.set(sourceUrl, []);
+      const children = linkChildren.get(sourceUrl);
+      if (!children.includes(targetUrl)) children.push(targetUrl);
+    }
   }
 
-  // Determine which nodes are linked to root via referrers
+  // Determine which nodes are linked to root via the completed link graph.
   const linked = new Set([rootUrl]);
   const linkedQueue = [rootUrl];
+  const preferredReferrerMap = new Map();
   while (linkedQueue.length) {
     const current = linkedQueue.shift();
-    const children = referrerChildren.get(current) || [];
+    const children = linkChildren.get(current) || [];
     for (const childUrl of children) {
       if (!nodes.has(childUrl)) continue;
       const childHost = new URL(childUrl).hostname;
       if (normalizeHost(childHost) !== rootHostNormalized) continue;
       if (linked.has(childUrl)) continue;
       linked.add(childUrl);
+      preferredReferrerMap.set(childUrl, current);
       linkedQueue.push(childUrl);
     }
   }
+
+  nodes.forEach((node) => {
+    if (preferredReferrerMap.has(node.url)) {
+      node.referrerUrl = preferredReferrerMap.get(node.url);
+    }
+  });
 
   // Ensure path ancestors for linked nodes are also linked (for missing placeholders)
   Array.from(linked).forEach((url) => {
