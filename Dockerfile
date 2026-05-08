@@ -7,6 +7,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY package*.json ./
 RUN npm ci --omit=dev
+RUN npx playwright install chromium
 
 COPY . .
 

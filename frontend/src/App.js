@@ -1489,7 +1489,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailCompletedRef = useRef(false);
   const thumbnailStopRequestedRef = useRef(false);
   const screenshotStopRequestedRef = useRef(false);
-  const activeScreenshotJobRef = useRef(null);
   const thumbnailSessionRef = useRef(0);
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
@@ -4889,12 +4888,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       controller.abort();
     }, 45000);
 
-    api.createScreenshotJob({ url: next.url, type: 'thumb' }, { signal: controller.signal })
-      .then(({ jobId }) => waitForScreenshotJobResult(jobId, {
-        signal: controller.signal,
-        shouldStop: () => thumbnailStopRequestedRef.current,
-        timeoutMs: 45000,
-      }))
+    api.captureScreenshot({ url: next.url, type: 'thumb' }, { signal: controller.signal })
       .then((data) => {
         if (data?.url) {
           const persisted = updateNodeThumbnail(next.id, data.url);
@@ -4996,7 +4990,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailCompletedRef.current = false;
     thumbnailStopRequestedRef.current = false;
     screenshotStopRequestedRef.current = false;
-    activeScreenshotJobRef.current = null;
     thumbnailAuthToastShownRef.current = false;
     thumbnailFailureToastShownRef.current = false;
     setThumbnailQueueSize(0);
@@ -5185,10 +5178,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!confirmed) return;
     if (isScreenshotCapture) {
       screenshotStopRequestedRef.current = true;
-      const jobId = activeScreenshotJobRef.current;
-      if (jobId) {
-        api.cancelScreenshotJob(jobId).catch(() => {});
-      }
     } else {
       thumbnailStopRequestedRef.current = true;
     }
@@ -5230,51 +5219,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     };
   }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
-
-  const waitForScreenshotJobResult = useCallback(async (jobId, {
-    timeoutMs = 120000,
-    signal = null,
-    shouldStop = () => screenshotStopRequestedRef.current,
-  } = {}) => {
-    if (!jobId) throw new Error('Failed to start screenshot job');
-    const startedAt = Date.now();
-    while (true) {
-      if (signal?.aborted || shouldStop()) {
-        try {
-          await api.cancelScreenshotJob(jobId);
-        } catch {}
-        throw new Error('Screenshot capture stopped');
-      }
-      const { job } = await api.getScreenshotJob(jobId, { includeResult: true, signal });
-      if (!job) throw new Error('Screenshot job not found');
-      if (job.status === 'complete') {
-        return job.result || {};
-      }
-      if (job.status === 'failed') {
-        throw new Error(job.error || 'Screenshot job failed');
-      }
-      if (job.status === 'canceled') {
-        throw new Error('Screenshot job canceled');
-      }
-      if (Date.now() - startedAt > timeoutMs) {
-        try {
-          await api.cancelScreenshotJob(jobId);
-        } catch {
-          // no-op
-        }
-        throw new Error('Screenshot job timed out');
-      }
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, 1200);
-        if (signal) {
-          signal.addEventListener('abort', () => {
-            clearTimeout(timer);
-            reject(new Error('Screenshot capture stopped'));
-          }, { once: true });
-        }
-      });
-    }
-  }, []);
 
   const getFullScreenshotTargets = (scope) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
@@ -5400,10 +5344,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     try {
-      const { jobId } = await api.createScreenshotJob({ url: urlOrImage, type: 'full' });
-      activeScreenshotJobRef.current = jobId;
-      const data = await waitForScreenshotJobResult(jobId);
-      activeScreenshotJobRef.current = null;
+      const data = await api.captureScreenshot({ url: urlOrImage, type: 'full' });
       if (data?.error) {
         throw new Error(data.error);
       }
@@ -5418,10 +5359,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         };
         const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
         if (needsThumbnail) {
-          const thumbJob = await api.createScreenshotJob({ url: urlOrImage, type: 'thumb' }).catch(() => null);
-          const thumbData = thumbJob?.jobId
-            ? await waitForScreenshotJobResult(thumbJob.jobId).catch(() => null)
-            : null;
+          const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
           assetUpdates.thumbnailUrl = thumbData?.url || data.url;
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
@@ -5452,7 +5390,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       setFullImageUrl(data.url);
       setToast(null);
     } catch (e) {
-      activeScreenshotJobRef.current = null;
       console.error('Screenshot error:', e);
       if (screenshotStopRequestedRef.current || e?.message === 'Screenshot capture stopped') {
         showToast('Screenshot capture stopped', 'warning');
@@ -5514,10 +5451,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (screenshotStopRequestedRef.current) break;
         const node = targets[index];
         try {
-          const { jobId } = await api.createScreenshotJob({ url: node.url, type: 'full' });
-          activeScreenshotJobRef.current = jobId;
-          const data = await waitForScreenshotJobResult(jobId);
-          activeScreenshotJobRef.current = null;
+          const data = await api.captureScreenshot({ url: node.url, type: 'full' });
           if (data?.error) {
             throw new Error(data.error);
           }
@@ -5530,10 +5464,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           };
           const needsThumbnail = !node.thumbnailUrl || thumbnailDisplayErrorIds.has(node.id);
           if (needsThumbnail) {
-            const thumbJob = await api.createScreenshotJob({ url: node.url, type: 'thumb' }).catch(() => null);
-            const thumbData = thumbJob?.jobId
-              ? await waitForScreenshotJobResult(thumbJob.jobId).catch(() => null)
-              : null;
+            const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' }).catch(() => null);
             assetUpdates.thumbnailUrl = thumbData?.url || data.url;
           }
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
@@ -5563,7 +5494,6 @@ export default function App({ currentRoute, navigateToRoute }) {
             avgMs: loadedCount ? Math.round(elapsed / loadedCount) : 0,
           }));
         } catch (error) {
-          activeScreenshotJobRef.current = null;
           if (screenshotStopRequestedRef.current || error?.message === 'Screenshot capture stopped') {
             break;
           }

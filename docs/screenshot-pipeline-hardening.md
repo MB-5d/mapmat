@@ -20,7 +20,7 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 - `SCREENSHOT_FULL_MAX_WIDTH=1920`
 - `SCREENSHOT_CLEANUP_INTERVAL_MS=300000`
 - `SCREENSHOT_CLEANUP_MAX_FILES=50`
-- `SCREENSHOT_STORAGE_PROVIDER=local|r2`
+- `SCREENSHOT_STORAGE_PROVIDER=local`
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
 - `R2_PUBLIC_BASE_URL=https://<public screenshot asset host>`
 - `SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY=50`
@@ -34,9 +34,8 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 
 - Run the normal API service with `RUN_MODE=web`.
 - Run a separate Railway worker service from the same image with `RUN_MODE=worker` or `npm run start:worker`.
-- Web creates screenshot jobs and polls results; by default it still processes scan/discovery/email jobs.
-- The screenshot worker processes only screenshot jobs by default, keeping Playwright work off the web service.
-- Use R2 for screenshot storage before scaling beyond one backend instance.
+- Keep screenshot capture on the web service until local `/screenshots` capture is verified stable.
+- Re-enable R2 and the screenshot worker only after the local capture path passes staging validation.
 
 ## API behavior notes
 
