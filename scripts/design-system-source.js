@@ -206,6 +206,15 @@ const typography = {
       letterSpacing: '0',
     },
   },
+  'node-title': {
+    md: {
+      cssSize: '16px',
+      figmaSize: 16,
+      lineHeight: '24px',
+      weight: 400,
+      letterSpacing: '-0.01em',
+    },
+  },
   body: {
     lg: {
       cssSize: '20px',

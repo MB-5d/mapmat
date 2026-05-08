@@ -3900,10 +3900,11 @@ body {
 }
 
 .card-title {
-  font-size: var(--type-title-md-size);
-  line-height: var(--type-title-md-line-height);
-  font-weight: 700;
-  min-height: calc(var(--type-title-md-line-height) * 3);
+  font-size: var(--type-node-title-md-size);
+  line-height: var(--type-node-title-md-line-height);
+  font-weight: var(--type-node-title-md-weight);
+  letter-spacing: var(--type-node-title-md-letter-spacing);
+  min-height: calc(var(--type-node-title-md-line-height) * 3);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 3;
