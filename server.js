@@ -2465,7 +2465,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const orphanCandidates = [];
   const subdomainCandidates = [];
-  const fallbackRootChildren = [];
 
   const pushUniqueChild = (parent, child) => {
     if (!parent._childUrls) parent._childUrls = new Set();
@@ -2502,21 +2501,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     if (scanOptions.orphanPages) {
       if (!node.isMissing) orphanCandidates.push(node);
-    } else if (!node.isMissing) {
-      fallbackRootChildren.push(node);
     }
-  }
-
-  const rootNode = nodes.get(rootUrl);
-  if (rootNode && rootNode.children.length === 0 && fallbackRootChildren.length > 0) {
-    fallbackRootChildren
-      .sort((a, b) => {
-        const aIndex = Number.isFinite(a.discoveryIndex) ? a.discoveryIndex : Number.MAX_SAFE_INTEGER;
-        const bIndex = Number.isFinite(b.discoveryIndex) ? b.discoveryIndex : Number.MAX_SAFE_INTEGER;
-        if (aIndex !== bIndex) return aIndex - bIndex;
-        return (a.title || a.url || '').localeCompare(b.title || b.url || '');
-      })
-      .forEach((node) => pushUniqueChild(rootNode, node));
   }
 
   // Build subdomain trees

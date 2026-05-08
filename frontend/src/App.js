@@ -5324,18 +5324,20 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   // Fetch full page screenshot from backend (or display direct image URL).
   // When a node id is provided, persist the generated backend asset URLs onto that node.
-  const viewFullScreenshot = async (urlOrImage, isDirectImage = false, nodeId = null) => {
+  const viewFullScreenshot = async (urlOrImage, isDirectImage = false, nodeId = null, captureType = 'full') => {
     if (isDirectImage) {
       setImageLoading(true);
       setFullImageUrl(urlOrImage);
       return;
     }
-    if (!guardImageCaptureAvailable('screenshot')) return;
+    const normalizedCaptureType = captureType === 'thumb' ? 'thumb' : 'full';
+    const captureMode = normalizedCaptureType === 'thumb' ? 'thumbnail' : 'screenshot';
+    if (!guardImageCaptureAvailable(captureMode)) return;
     if (!guardImageCapturePersistenceReady()) return;
 
     setImageLoading(true);
     setFullImageUrl(null);
-    resetThumbnailQueue(1, 0, true, 'screenshot');
+    resetThumbnailQueue(1, 0, true, captureMode);
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
     if (nodeId) {
@@ -5344,7 +5346,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     try {
-      const data = await api.captureScreenshot({ url: urlOrImage, type: 'full' });
+      const data = await api.captureScreenshot({ url: urlOrImage, type: normalizedCaptureType });
       if (data?.error) {
         throw new Error(data.error);
       }
@@ -5353,14 +5355,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
       if (nodeId) {
         const sourceNode = collectAllNodesWithOrphans(root, orphans).find((node) => node.id === nodeId);
-        const assetUpdates = {
-          fullScreenshotUrl: data.url,
-          authRequired: false,
-        };
-        const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
-        if (needsThumbnail) {
-          const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
-          if (thumbData?.url) assetUpdates.thumbnailUrl = thumbData.url;
+        const assetUpdates = { authRequired: false };
+        if (normalizedCaptureType === 'full') {
+          assetUpdates.fullScreenshotUrl = data.url;
+          const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
+          if (needsThumbnail) {
+            const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
+            if (thumbData?.url) assetUpdates.thumbnailUrl = thumbData.url;
+          }
+        } else {
+          assetUpdates.thumbnailUrl = data.url;
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
         if (!persisted) {
