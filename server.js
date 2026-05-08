@@ -238,11 +238,11 @@ const SCREENSHOT_FULL_VIEWPORT_HEIGHT = Math.max(
 );
 const SCREENSHOT_THUMB_VIEWPORT_WIDTH = Math.max(
   640,
-  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_WIDTH ?? 1280)
+  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_WIDTH ?? 1920)
 );
 const SCREENSHOT_THUMB_VIEWPORT_HEIGHT = Math.max(
   360,
-  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_HEIGHT ?? 720)
+  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_HEIGHT ?? 1080)
 );
 const SCREENSHOT_CANVAS_THUMB_WIDTH = Math.max(
   160,
@@ -280,7 +280,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v3';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v4';
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
