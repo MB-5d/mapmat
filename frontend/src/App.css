@@ -3054,7 +3054,7 @@ body {
   left: -5000px;
   width: 10000px;
   height: 10000px;
-  background-image: radial-gradient(circle, rgba(203, 213, 225, 0.4) 0.75px, transparent 0.75px);
+  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0.75px, transparent 0.75px);
   background-size: 16px 16px;
   pointer-events: none;
   z-index: -1;
@@ -9964,7 +9964,7 @@ body {
 }
 
 [data-theme="dark"] .content::before {
-  background-image: radial-gradient(circle, rgba(93, 63, 130, 0.3) 0.75px, transparent 0.75px);
+  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0.75px, transparent 0.75px);
 }
 
 [data-theme="dark"] .blank-title {
@@ -11067,7 +11067,7 @@ body {
 }
 
 [data-theme="light"] .content::before {
-  background-image: radial-gradient(circle, #cbd5e1 0.75px, transparent 0.75px);
+  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0.75px, transparent 0.75px);
 }
 
 [data-theme="light"] .node-card {
