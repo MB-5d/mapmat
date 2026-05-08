@@ -7,6 +7,7 @@ const path = require('path');
 const PORT = Number(process.env.SCAN_JOB_TREE_PORT || 4307);
 const API_BASE = process.env.API_BASE || `http://127.0.0.1:${PORT}`;
 const SCAN_URL = process.env.SCAN_JOB_TREE_URL || 'https://flora.ai';
+const MAX_PAGES = Number(process.env.SCAN_JOB_TREE_MAX_PAGES || 1000);
 const MAX_DEPTH = Number(process.env.SCAN_JOB_TREE_MAX_DEPTH || 4);
 const MIN_ROOT_CHILDREN = Number(process.env.SCAN_JOB_TREE_MIN_ROOT_CHILDREN || 2);
 const MIN_TOTAL_NODES = Number(process.env.SCAN_JOB_TREE_MIN_TOTAL_NODES || 5);
@@ -74,6 +75,7 @@ async function runCheck() {
     method: 'POST',
     body: JSON.stringify({
       url: SCAN_URL,
+      maxPages: MAX_PAGES,
       maxDepth: MAX_DEPTH,
       options: {},
     }),

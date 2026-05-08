@@ -182,6 +182,7 @@ let browser = null;
 const SCAN_LIMITS = {
   maxDepthDefault: Number(process.env.SCAN_MAX_DEPTH_DEFAULT ?? 6),
   maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 25),
+  maxPagesDefault: Math.max(1, Number(process.env.SCAN_MAX_PAGES_DEFAULT ?? 1000)),
 };
 const toPositiveInt = (value, fallback) => {
   const parsed = Number(value);
@@ -382,8 +383,7 @@ const clampInt = (value, { min, max, fallback }) => {
   return Math.min(Math.max(parsed, min), max);
 };
 
-const normalizeMaxPagesLimit = (value) => {
-  const fallback = null;
+const normalizeMaxPagesLimit = (value, fallback = null) => {
   const raw = value === undefined || value === null || value === '' ? fallback : Number(value);
   if (!Number.isFinite(raw) || raw <= 0) return fallback;
   return Math.max(1, Math.floor(raw));
@@ -778,15 +778,24 @@ const JOB_TYPES = {
   email: EMAIL_JOB_TYPES.EMAIL,
 };
 const ALL_BACKGROUND_JOB_TYPES = Object.freeze(Object.values(JOB_TYPES));
+const getAllowedJobTypesForRunMode = () => {
+  if (process.env.ALLOW_CROSS_MODE_JOB_TYPES === 'true') {
+    return ALL_BACKGROUND_JOB_TYPES;
+  }
+  if (RUN_MODE === 'worker') return [JOB_TYPES.screenshot];
+  if (RUN_MODE === 'web') return [JOB_TYPES.scan, JOB_TYPES.discovery, JOB_TYPES.email];
+  return ALL_BACKGROUND_JOB_TYPES;
+};
+const ALLOWED_JOB_TYPES_FOR_RUN_MODE = getAllowedJobTypesForRunMode();
 const parseJobWorkerTypes = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return null;
-  if (raw.toLowerCase() === 'all') return ALL_BACKGROUND_JOB_TYPES;
+  if (raw.toLowerCase() === 'all') return ALLOWED_JOB_TYPES_FOR_RUN_MODE;
   const requested = raw
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
-  const allowed = requested.filter((type) => ALL_BACKGROUND_JOB_TYPES.includes(type));
+  const allowed = requested.filter((type) => ALLOWED_JOB_TYPES_FOR_RUN_MODE.includes(type));
   return allowed.length > 0 ? allowed : null;
 };
 const DEFAULT_JOB_WORKER_TYPES = RUN_MODE === 'worker'
@@ -3335,9 +3344,11 @@ app.get('/health/jobs', async (_req, res) => {
     runMode: RUN_MODE,
     processorEnabled: JOB_WORKER_TYPES.length > 0,
     workerTypes: JOB_WORKER_TYPES,
+    allowedWorkerTypes: ALLOWED_JOB_TYPES_FOR_RUN_MODE,
     activeJobs,
     pollIntervalMs: JOB_POLL_INTERVAL_MS,
     maxConcurrency: JOB_MAX_CONCURRENCY,
+    scanMaxPagesDefault: SCAN_LIMITS.maxPagesDefault,
     counts,
     recentScreenshots,
   });
@@ -3382,7 +3393,7 @@ app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit(
 
   try {
     const safeUrl = await assertSafeUrl(url);
-    const maxPagesSafe = normalizeMaxPagesLimit(maxPages);
+    const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = clampInt(maxDepth, {
       min: 1,
       max: SCAN_LIMITS.maxDepthHard,
@@ -3468,7 +3479,7 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
       parsedOptions = {};
     }
 
-    const maxPagesSafe = normalizeMaxPagesLimit(maxPages);
+    const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = clampInt(maxDepth, {
       min: 1,
       max: SCAN_LIMITS.maxDepthHard,
@@ -3515,7 +3526,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
 
   try {
     const safeUrl = await assertSafeUrl(url);
-    const maxPagesSafe = normalizeMaxPagesLimit(maxPages);
+    const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = clampInt(maxDepth, {
       min: 1,
       max: SCAN_LIMITS.maxDepthHard,
