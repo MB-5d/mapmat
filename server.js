@@ -1929,6 +1929,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const scanOptions = normalizeScanOptions(options);
   const seed = normalizeUrl(startUrl);
   if (!seed) throw new Error('Invalid URL');
+  const pageLimit = normalizeMaxPagesLimit(maxPages);
+  const depthLimit = clampInt(maxDepth, {
+    min: 1,
+    max: SCAN_LIMITS.maxDepthHard,
+    fallback: DEFAULT_MAX_DEPTH,
+  });
 
   const origin = new URL(seed).origin;
   const baseHost = normalizeHost(new URL(seed).hostname);
@@ -1947,7 +1953,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const normalized = normalizeUrl(candidate);
     if (!normalized) return false;
     if (normalized === seed) return true;
-    return getUrlDepth(normalized) <= maxDepth;
+    return getUrlDepth(normalized) <= depthLimit;
   };
 
   const discoverySourceByUrl = new Map();
@@ -2122,7 +2128,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   const takeNextQueueItem = () => {
-    while (queueIndex < queue.length && (maxPages === null || visited.size < maxPages)) {
+    while (queueIndex < queue.length && (pageLimit === null || visited.size < pageLimit)) {
       const item = queue[queueIndex++];
       if (!item?.url || visited.has(item.url)) continue;
       visited.add(item.url);
@@ -2140,7 +2146,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       onProgress({ scanned: visited.size, queued: Math.max(0, queue.length - queueIndex) });
     }
 
-    if (depth > maxDepth || !isWithinScanDepth(url)) return;
+    if (depth > depthLimit || !isWithinScanDepth(url)) return;
     if (!allowUrl(url)) return;
 
     let html;
@@ -2264,7 +2270,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       recordDiscovery(link, 'crawl');
 
       const d = depth + 1;
-      if (d > maxDepth || !isWithinScanDepth(link)) {
+      if (d > depthLimit || !isWithinScanDepth(link)) {
         scheduleBrokenLinkCheck(link, url);
         continue;
       }
@@ -2301,7 +2307,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   let activeCrawlItems = 0;
   const workerCount = Math.min(
     SCAN_PAGE_CONCURRENCY,
-    Math.max(1, maxPages === null ? SCAN_PAGE_CONCURRENCY : maxPages)
+    Math.max(1, pageLimit === null ? SCAN_PAGE_CONCURRENCY : pageLimit)
   );
   await Promise.all(Array.from({ length: workerCount }, crawlWorker));
 
@@ -2322,6 +2328,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         }
       }
     );
+  }
+
+  if (!pageMap.has(seed) && !stopRequested) {
+    await processCrawlItem({ url: seed, depth: 0 });
   }
 
   // Ensure the root exists
