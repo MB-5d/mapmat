@@ -244,6 +244,14 @@ const SCREENSHOT_THUMB_VIEWPORT_HEIGHT = Math.max(
   360,
   Number(process.env.SCREENSHOT_THUMB_VIEWPORT_HEIGHT ?? 720)
 );
+const SCREENSHOT_CANVAS_THUMB_WIDTH = Math.max(
+  160,
+  Number(process.env.SCREENSHOT_CANVAS_THUMB_WIDTH ?? 360)
+);
+const SCREENSHOT_CANVAS_THUMB_HEIGHT = Math.max(
+  90,
+  Number(process.env.SCREENSHOT_CANVAS_THUMB_HEIGHT ?? 203)
+);
 const SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR = Math.max(
   1,
   Number(process.env.SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR ?? 1)
@@ -272,7 +280,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v2';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v3';
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -713,6 +721,38 @@ function writeScreenshotMeta(metaPath, value) {
     fs.writeFileSync(metaPath, JSON.stringify(value, null, 2), 'utf8');
   } catch (error) {
     console.warn('Screenshot metadata write error:', error.message);
+  }
+}
+
+async function resizeScreenshotForCanvas(context, sourcePath, targetPath) {
+  const source = fs.readFileSync(sourcePath);
+  const sourceDataUrl = `data:image/png;base64,${source.toString('base64')}`;
+  let resizePage = null;
+  try {
+    resizePage = await context.newPage();
+    const resizedDataUrl = await resizePage.evaluate(async ({ dataUrl, width, height }) => {
+      const image = new Image();
+      image.src = dataUrl;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(image, 0, 0, width, height);
+      return canvas.toDataURL('image/jpeg', 0.74);
+    }, {
+      dataUrl: sourceDataUrl,
+      width: SCREENSHOT_CANVAS_THUMB_WIDTH,
+      height: SCREENSHOT_CANVAS_THUMB_HEIGHT,
+    });
+    const [, payload] = resizedDataUrl.split(',');
+    fs.writeFileSync(targetPath, Buffer.from(payload || '', 'base64'));
+  } finally {
+    if (resizePage) {
+      await resizePage.close().catch(() => {});
+    }
   }
 }
 
@@ -2791,12 +2831,26 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
 
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
   const filename = `${urlHash}_${normalizedType}_${SCREENSHOT_CAPTURE_CACHE_VERSION}.png`;
+  const thumbPreviewFilename = `${urlHash}_thumb_preview_${SCREENSHOT_CAPTURE_CACHE_VERSION}.png`;
+  const thumbSmallFilename = `${urlHash}_thumb_small_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
+  const fullSmallFilename = `${urlHash}_full_thumb_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const filepath = path.join(SCREENSHOT_DIR, filename);
-  const metaPath = path.join(SCREENSHOT_DIR, `${filename}${SCREENSHOT_META_SUFFIX}`);
+  const thumbPreviewPath = path.join(SCREENSHOT_DIR, thumbPreviewFilename);
+  const thumbSmallPath = path.join(SCREENSHOT_DIR, thumbSmallFilename);
+  const fullSmallPath = path.join(SCREENSHOT_DIR, fullSmallFilename);
+  const primaryPath = normalizedType === SCREENSHOT_TYPES.thumb ? thumbSmallPath : filepath;
+  const metaPath = path.join(SCREENSHOT_DIR, `${path.basename(primaryPath)}${SCREENSHOT_META_SUFFIX}`);
   const baseUrl = getBaseUrl();
+  const publicUrl = (name) => `${baseUrl}/screenshots/${name}`;
 
-  if (fs.existsSync(filepath)) {
-    const stats = fs.statSync(filepath);
+  if (
+    fs.existsSync(primaryPath)
+    && (
+      normalizedType !== SCREENSHOT_TYPES.thumb
+      || fs.existsSync(thumbPreviewPath)
+    )
+  ) {
+    const stats = fs.statSync(primaryPath);
     const ageMs = Date.now() - stats.mtimeMs;
     const meta = readScreenshotMeta(metaPath);
     if (
@@ -2804,13 +2858,20 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
       && meta
       && meta.url === safeUrl
     ) {
-      return {
-        url: `${baseUrl}/screenshots/${filename}`,
+      const result = {
+        url: publicUrl(path.basename(primaryPath)),
         cached: true,
         type: normalizedType,
         blocked: false,
         truncated: !!meta.truncated,
       };
+      if (normalizedType === SCREENSHOT_TYPES.thumb) {
+        result.thumbnailUrl = publicUrl(thumbSmallFilename);
+        result.thumbnailFullUrl = publicUrl(thumbPreviewFilename);
+      } else if (fs.existsSync(fullSmallPath)) {
+        result.thumbnailUrl = publicUrl(fullSmallFilename);
+      }
+      return result;
     }
   }
 
@@ -2980,12 +3041,14 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
                 type: 'png',
               });
             }
+            await resizeScreenshotForCanvas(context, filepath, fullSmallPath);
           } else {
             await page.screenshot({
-              path: filepath,
+              path: thumbPreviewPath,
               fullPage: false,
               type: 'png',
             });
+            await resizeScreenshotForCanvas(context, thumbPreviewPath, thumbSmallPath);
           }
 
           writeScreenshotMeta(metaPath, {
@@ -3012,13 +3075,22 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
     }
   });
 
-  return {
-    url: `${baseUrl}/screenshots/${filename}`,
+  const result = {
+    url: normalizedType === SCREENSHOT_TYPES.thumb
+      ? publicUrl(thumbSmallFilename)
+      : publicUrl(filename),
     cached: false,
     type: normalizedType,
     blocked: shotResult?.blocked || false,
     truncated: shotResult?.truncated || false,
   };
+  if (normalizedType === SCREENSHOT_TYPES.thumb) {
+    result.thumbnailUrl = publicUrl(thumbSmallFilename);
+    result.thumbnailFullUrl = publicUrl(thumbPreviewFilename);
+  } else if (fs.existsSync(fullSmallPath)) {
+    result.thumbnailUrl = publicUrl(fullSmallFilename);
+  }
+  return result;
 }
 
 async function processJob(job) {

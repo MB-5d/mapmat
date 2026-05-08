@@ -1030,6 +1030,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             referrerUrl: node.referrerUrl || existing.referrerUrl,
             authRequired: node.authRequired ?? existing.authRequired,
             thumbnailUrl: node.thumbnailUrl || existing.thumbnailUrl,
+            thumbnailFullUrl: node.thumbnailFullUrl || existing.thumbnailFullUrl,
             fullScreenshotUrl: node.fullScreenshotUrl || existing.fullScreenshotUrl,
             description: node.description || existing.description,
             metaTags: node.metaTags || existing.metaTags,
@@ -4734,8 +4735,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     return true;
   };
 
-  const updateNodeThumbnail = (nodeId, thumbnailUrl) => {
-    return updateNodeScreenshotAssets(nodeId, { thumbnailUrl, authRequired: false });
+  const getThumbnailAssetUpdates = (data) => {
+    const smallUrl = data?.thumbnailUrl || data?.url || '';
+    const previewUrl = data?.thumbnailFullUrl || data?.previewUrl || data?.fullSizeUrl || data?.url || '';
+    const updates = { authRequired: false };
+    if (smallUrl) updates.thumbnailUrl = smallUrl;
+    if (previewUrl) updates.thumbnailFullUrl = previewUrl;
+    return updates;
   };
 
   const isScreenshotAuthError = useCallback((message) => (
@@ -4891,7 +4897,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     api.captureScreenshot({ url: next.url, type: 'thumb' }, { signal: controller.signal })
       .then((data) => {
         if (data?.url) {
-          const persisted = updateNodeThumbnail(next.id, data.url);
+          const persisted = updateNodeScreenshotAssets(next.id, getThumbnailAssetUpdates(data));
           if (persisted) {
             bumpThumbnailReload(next.id);
             updateThumbnailErrorState(next.id, false);
@@ -4908,6 +4914,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           updateNodeScreenshotAssets(next.id, {
             authRequired: true,
             thumbnailUrl: null,
+            thumbnailFullUrl: null,
             fullScreenshotUrl: null,
           });
           if (!thumbnailAuthToastShownRef.current) {
@@ -4923,6 +4930,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           updateNodeScreenshotAssets(next.id, {
             authRequired: true,
             thumbnailUrl: null,
+            thumbnailFullUrl: null,
             fullScreenshotUrl: null,
           });
           if (!thumbnailAuthToastShownRef.current) {
@@ -5358,13 +5366,14 @@ export default function App({ currentRoute, navigateToRoute }) {
         const assetUpdates = { authRequired: false };
         if (normalizedCaptureType === 'full') {
           assetUpdates.fullScreenshotUrl = data.url;
+          if (data.thumbnailUrl) assetUpdates.thumbnailUrl = data.thumbnailUrl;
           const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
-          if (needsThumbnail) {
+          if (needsThumbnail && !assetUpdates.thumbnailUrl) {
             const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
-            if (thumbData?.url) assetUpdates.thumbnailUrl = thumbData.url;
+            Object.assign(assetUpdates, getThumbnailAssetUpdates(thumbData));
           }
         } else {
-          assetUpdates.thumbnailUrl = data.url;
+          Object.assign(assetUpdates, getThumbnailAssetUpdates(data));
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
         if (!persisted) {
@@ -5391,7 +5400,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         loaded: 1,
         avgMs: Date.now() - thumbnailElapsedStartRef.current,
       }));
-      setFullImageUrl(data.url);
+      setFullImageUrl(
+        normalizedCaptureType === 'thumb'
+          ? (data.thumbnailFullUrl || data.previewUrl || data.url)
+          : data.url
+      );
       setToast(null);
     } catch (e) {
       console.error('Screenshot error:', e);
@@ -5404,6 +5417,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         updateNodeScreenshotAssets(nodeId, {
           authRequired: true,
           thumbnailUrl: null,
+          thumbnailFullUrl: null,
           fullScreenshotUrl: null,
         });
       }
@@ -5466,10 +5480,11 @@ export default function App({ currentRoute, navigateToRoute }) {
             fullScreenshotUrl: data.url,
             authRequired: false,
           };
+          if (data.thumbnailUrl) assetUpdates.thumbnailUrl = data.thumbnailUrl;
           const needsThumbnail = !node.thumbnailUrl || thumbnailDisplayErrorIds.has(node.id);
-          if (needsThumbnail) {
+          if (needsThumbnail && !assetUpdates.thumbnailUrl) {
             const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' }).catch(() => null);
-            if (thumbData?.url) assetUpdates.thumbnailUrl = thumbData.url;
+            Object.assign(assetUpdates, getThumbnailAssetUpdates(thumbData));
           }
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
           if (!persisted) {
@@ -5505,6 +5520,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             updateNodeScreenshotAssets(node.id, {
               authRequired: true,
               thumbnailUrl: null,
+              thumbnailFullUrl: null,
               fullScreenshotUrl: null,
             });
           }
@@ -9800,7 +9816,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         const nextAnnotations = buildAnnotations(updatedNode.annotations, currentNode.annotations);
         const changes = {};
-        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'fullScreenshotUrl', 'description', 'metaTags', 'canonicalUrl', 'seoMetadata'];
+        const fields = ['title', 'url', 'pageType', 'thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl', 'description', 'metaTags', 'canonicalUrl', 'seoMetadata'];
         fields.forEach((field) => {
           const nextValue = updatedNode[field];
           const currentValue = currentNode[field];
@@ -9839,6 +9855,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             title: updatedNode.title || 'New Page',
             pageType: updatedNode.pageType || PAGE_TYPE_PAGE,
             thumbnailUrl: updatedNode.thumbnailUrl || '',
+            thumbnailFullUrl: updatedNode.thumbnailFullUrl || '',
             fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
             description: updatedNode.description || '',
             metaTags: updatedNode.metaTags || '',
@@ -9909,6 +9926,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             url: updatedNode.url,
             pageType: updatedNode.pageType,
             thumbnailUrl: updatedNode.thumbnailUrl,
+            thumbnailFullUrl: updatedNode.thumbnailFullUrl,
             fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
@@ -9953,6 +9971,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               url: updatedNode.url,
               pageType: updatedNode.pageType,
               thumbnailUrl: updatedNode.thumbnailUrl,
+              thumbnailFullUrl: updatedNode.thumbnailFullUrl,
               fullScreenshotUrl: updatedNode.fullScreenshotUrl,
               description: updatedNode.description,
               metaTags: updatedNode.metaTags,
@@ -10006,6 +10025,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             url: updatedNode.url,
             pageType: updatedNode.pageType,
             thumbnailUrl: updatedNode.thumbnailUrl,
+            thumbnailFullUrl: updatedNode.thumbnailFullUrl,
             fullScreenshotUrl: updatedNode.fullScreenshotUrl,
             description: updatedNode.description,
             metaTags: updatedNode.metaTags,
@@ -10102,6 +10122,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         title: updatedNode.title || 'New Page',
         pageType: !root ? PAGE_TYPE_HOME : (updatedNode.pageType || PAGE_TYPE_PAGE),
         thumbnailUrl: updatedNode.thumbnailUrl || '',
+        thumbnailFullUrl: updatedNode.thumbnailFullUrl || '',
         fullScreenshotUrl: updatedNode.fullScreenshotUrl || '',
         description: updatedNode.description || '',
         metaTags: updatedNode.metaTags || '',
