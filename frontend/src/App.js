@@ -5360,7 +5360,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
         if (needsThumbnail) {
           const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
-          assetUpdates.thumbnailUrl = thumbData?.url || data.url;
+          if (thumbData?.url) assetUpdates.thumbnailUrl = thumbData.url;
         }
         const persisted = updateNodeScreenshotAssets(nodeId, assetUpdates);
         if (!persisted) {
@@ -5465,7 +5465,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           const needsThumbnail = !node.thumbnailUrl || thumbnailDisplayErrorIds.has(node.id);
           if (needsThumbnail) {
             const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' }).catch(() => null);
-            assetUpdates.thumbnailUrl = thumbData?.url || data.url;
+            if (thumbData?.url) assetUpdates.thumbnailUrl = thumbData.url;
           }
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
           if (!persisted) {

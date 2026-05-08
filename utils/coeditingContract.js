@@ -24,7 +24,7 @@ const ALLOWED_OP_TYPE_SET = new Set(ALLOWED_OP_TYPES);
 
 const OP_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{5,127}$/;
 const SESSION_ID_PATTERN = /^[A-Za-z0-9._:-]{6,120}$/;
-const ENTITY_ID_PATTERN = /^[A-Za-z0-9._:-]{1,120}$/;
+const ENTITY_ID_PATTERN = /^[A-Za-z0-9._:-]{1,1024}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 class CoeditingContractError extends Error {

@@ -191,9 +191,8 @@ const NodeCard = ({
   }, [thumb, node.id, onThumbnailLoad]);
 
   const handleViewFull = () => {
-    const directAssetUrl = node.fullScreenshotUrl || node.thumbnailUrl;
-    const hasDirectImage = !!directAssetUrl;
-    const source = directAssetUrl || node.url;
+    const hasDirectImage = !!node.fullScreenshotUrl;
+    const source = node.fullScreenshotUrl || node.url;
     if (!source) return;
     onViewImage(source, hasDirectImage, node.id);
     if (!node.thumbnailUrl && thumbError) {

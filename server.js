@@ -228,6 +228,22 @@ const SCREENSHOT_FULL_MAX_WIDTH = Math.max(
   320,
   Number(process.env.SCREENSHOT_FULL_MAX_WIDTH ?? 1920)
 );
+const SCREENSHOT_FULL_VIEWPORT_WIDTH = Math.max(
+  1280,
+  Number(process.env.SCREENSHOT_FULL_VIEWPORT_WIDTH ?? 1920)
+);
+const SCREENSHOT_FULL_VIEWPORT_HEIGHT = Math.max(
+  720,
+  Number(process.env.SCREENSHOT_FULL_VIEWPORT_HEIGHT ?? 1080)
+);
+const SCREENSHOT_THUMB_VIEWPORT_WIDTH = Math.max(
+  640,
+  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_WIDTH ?? 1280)
+);
+const SCREENSHOT_THUMB_VIEWPORT_HEIGHT = Math.max(
+  360,
+  Number(process.env.SCREENSHOT_THUMB_VIEWPORT_HEIGHT ?? 720)
+);
 const SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR = Math.max(
   1,
   Number(process.env.SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR ?? 1)
@@ -256,6 +272,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v2';
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -2448,6 +2465,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const orphanCandidates = [];
   const subdomainCandidates = [];
+  const fallbackRootChildren = [];
 
   const pushUniqueChild = (parent, child) => {
     if (!parent._childUrls) parent._childUrls = new Set();
@@ -2484,7 +2502,21 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     if (scanOptions.orphanPages) {
       if (!node.isMissing) orphanCandidates.push(node);
+    } else if (!node.isMissing) {
+      fallbackRootChildren.push(node);
     }
+  }
+
+  const rootNode = nodes.get(rootUrl);
+  if (rootNode && rootNode.children.length === 0 && fallbackRootChildren.length > 0) {
+    fallbackRootChildren
+      .sort((a, b) => {
+        const aIndex = Number.isFinite(a.discoveryIndex) ? a.discoveryIndex : Number.MAX_SAFE_INTEGER;
+        const bIndex = Number.isFinite(b.discoveryIndex) ? b.discoveryIndex : Number.MAX_SAFE_INTEGER;
+        if (aIndex !== bIndex) return aIndex - bIndex;
+        return (a.title || a.url || '').localeCompare(b.title || b.url || '');
+      })
+      .forEach((node) => pushUniqueChild(rootNode, node));
   }
 
   // Build subdomain trees
@@ -2773,7 +2805,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
   await cleanupStaleScreenshots();
 
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
-  const filename = `${urlHash}_${normalizedType}.png`;
+  const filename = `${urlHash}_${normalizedType}_${SCREENSHOT_CAPTURE_CACHE_VERSION}.png`;
   const filepath = path.join(SCREENSHOT_DIR, filename);
   const metaPath = path.join(SCREENSHOT_DIR, `${filename}${SCREENSHOT_META_SUFFIX}`);
   const baseUrl = getBaseUrl();
@@ -2805,8 +2837,8 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
     const b = await getBrowser();
     const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];
     const viewport = normalizedType === SCREENSHOT_TYPES.thumb
-      ? { width: 640, height: 360 }
-      : { width: 1280, height: 720 };
+      ? { width: SCREENSHOT_THUMB_VIEWPORT_WIDTH, height: SCREENSHOT_THUMB_VIEWPORT_HEIGHT }
+      : { width: SCREENSHOT_FULL_VIEWPORT_WIDTH, height: SCREENSHOT_FULL_VIEWPORT_HEIGHT };
     const context = await b.newContext({
       userAgent: ua,
       viewport,
