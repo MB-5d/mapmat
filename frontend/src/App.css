@@ -507,7 +507,7 @@ body {
 }
 
 .ui-icon-btn--type-ghost.ui-icon-btn--style-brand:hover:not(:disabled) {
-  background: transparent;
+  background: var(--ui-color-icon-hover);
   color: var(--ui-button-brand-quiet-hover);
 }
 
@@ -522,7 +522,7 @@ body {
 .ui-icon-btn--type-ghost.ui-icon-btn--style-mono:hover:not(:disabled),
 .ui-icon-btn--ghost:hover:not(:disabled),
 .ui-icon-btn--default:hover:not(:disabled) {
-  background: transparent;
+  background: var(--ui-color-icon-hover);
   color: var(--ui-button-mono-quiet-hover);
 }
 
@@ -533,7 +533,7 @@ body {
 }
 
 .ui-icon-btn--type-ghost.ui-icon-btn--style-danger:hover:not(:disabled) {
-  background: transparent;
+  background: var(--ui-color-icon-hover);
   color: var(--ui-button-danger-quiet-hover);
 }
 
