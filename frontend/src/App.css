@@ -2787,7 +2787,7 @@ body {
 [data-theme="dark"] .blank-scan-shell.search-container,
 [data-theme="dark"] .blank-scan-shell.scan-bar-shell {
   background: var(--color-plum-800);
-  border-color: var(--color-plum-400);
+  border-color: var(--ui-color-border);
 }
 
 [data-theme="dark"] .blank-scan-shell.search-container:hover,
@@ -10561,12 +10561,12 @@ body {
 }
 
 [data-theme="dark"] .canvas-toolbar-divider {
-  background: #2d1f3d;
+  background: var(--ui-color-border);
 }
 
 [data-theme="dark"] .zoom-controls {
   background: #1a1022;
-  border-color: #2d1f3d;
+  border-color: var(--ui-color-border);
 }
 
 [data-theme="dark"] .zoom-level {
@@ -10574,7 +10574,7 @@ body {
 }
 
 [data-theme="dark"] .zoom-divider {
-  background: #2d1f3d;
+  background: var(--ui-color-border);
 }
 
 /* Dark mode Layers Panel */
