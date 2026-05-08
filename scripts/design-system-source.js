@@ -208,9 +208,9 @@ const typography = {
   },
   'node-title': {
     md: {
-      cssSize: '16px',
-      figmaSize: 16,
-      lineHeight: '24px',
+      cssSize: '14px',
+      figmaSize: 14,
+      lineHeight: '20px',
       weight: 400,
       letterSpacing: '-0.01em',
     },

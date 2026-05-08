@@ -1983,7 +1983,7 @@
                           "fill": "$ui-color-text",
                           "content": "Pricing Page",
                           "fontFamily": "Sora",
-                          "fontSize": 16,
+                          "fontSize": 14,
                           "fontWeight": "normal"
                         },
                         {
