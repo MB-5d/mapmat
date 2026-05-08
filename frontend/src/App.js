@@ -5481,6 +5481,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             authRequired: false,
           };
           if (data.thumbnailUrl) assetUpdates.thumbnailUrl = data.thumbnailUrl;
+          if (data.thumbnailFullUrl) assetUpdates.thumbnailFullUrl = data.thumbnailFullUrl;
           const needsThumbnail = !node.thumbnailUrl || thumbnailDisplayErrorIds.has(node.id);
           if (needsThumbnail && !assetUpdates.thumbnailUrl) {
             const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' }).catch(() => null);
@@ -5536,6 +5537,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         `Captured ${targets.length} full screenshot${targets.length === 1 ? '' : 's'}`,
         'success',
       );
+      setTimeout(() => flushThumbnailAutosave(), 300);
       trackEvent('screenshot_capture', {
         type: 'full',
         scope,
@@ -12257,10 +12259,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (totalNew <= 0) return null;
           const remaining = totalNew - thumbnailStats.loaded;
           if (remaining <= 0) return null;
-          const etaMs = thumbnailStats.avgMs > 0
-            ? Math.ceil((remaining * thumbnailStats.avgMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY))
-            : 0;
           const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
+          const fallbackItemMs = isScreenshotCapture ? 30000 : 12000;
+          const estimateItemMs = thumbnailStats.avgMs > 0
+            ? thumbnailStats.avgMs
+            : Math.max(fallbackItemMs, thumbnailElapsedMs || 0);
+          const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY));
           return (
             <div className="thumbnail-progress-toast">
               <div className="thumbnail-progress-details">
@@ -12271,7 +12275,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 </span>
                 <span className="thumbnail-progress-line">
                   <span className="thumbnail-progress-bar" aria-hidden="true" />
-                  {formatDuration(thumbnailElapsedMs)} | ETA ~{thumbnailStats.avgMs > 0 ? formatDuration(etaMs) : '--:--'}
+                  {formatDuration(thumbnailElapsedMs)} | ETA ~{formatDuration(etaMs)}
                 </span>
               </div>
               <button

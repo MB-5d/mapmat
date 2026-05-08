@@ -101,11 +101,12 @@ const NodeCard = ({
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
     if (showThumbnails) {
+      const hasExistingThumbnail = !!node.thumbnailUrl;
       setThumbError(false);
-      setThumbLoading(canRequestThumbnail && !node.thumbnailUrl);
-      setShouldLoadThumb(false);
+      setThumbLoading(canRequestThumbnail && !hasExistingThumbnail);
+      setShouldLoadThumb(hasExistingThumbnail);
       if (canRequestThumbnail) {
-        setThumbKey(k => k + 1); // Force new image request
+        setThumbKey(k => k + 1); // Force new image request for the active batch only.
       }
     }
   }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail, thumbnailSessionId]);

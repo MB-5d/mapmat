@@ -222,7 +222,7 @@ const SCREENSHOT_CACHE_TTL_MS = Math.max(
 );
 const SCREENSHOT_FULL_MAX_HEIGHT = Math.max(
   720,
-  Number(process.env.SCREENSHOT_FULL_MAX_HEIGHT ?? 16000)
+  Number(process.env.SCREENSHOT_FULL_MAX_HEIGHT ?? 24000)
 );
 const SCREENSHOT_FULL_MAX_WIDTH = Math.max(
   320,
@@ -280,7 +280,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v5';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v6';
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -740,7 +740,22 @@ async function resizeScreenshotForCanvas(context, sourcePath, targetPath) {
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(image, 0, 0, width, height);
+      const sourceWidth = Math.max(1, image.naturalWidth || image.width || 1);
+      const sourceHeight = Math.max(1, image.naturalHeight || image.height || 1);
+      const targetRatio = width / height;
+      const sourceRatio = sourceWidth / sourceHeight;
+      let cropX = 0;
+      let cropY = 0;
+      let cropWidth = sourceWidth;
+      let cropHeight = sourceHeight;
+      if (sourceRatio > targetRatio) {
+        cropWidth = sourceHeight * targetRatio;
+        cropX = (sourceWidth - cropWidth) / 2;
+      } else if (sourceRatio < targetRatio) {
+        cropHeight = sourceWidth / targetRatio;
+        cropY = 0;
+      }
+      ctx.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, width, height);
       return canvas.toDataURL('image/jpeg', 0.74);
     }, {
       dataUrl: sourceDataUrl,
@@ -3023,6 +3038,49 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
           await page.waitForLoadState('load', { timeout: 5000 }).catch(() => {});
           await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
           await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 500);
+
+          if (normalizedType === SCREENSHOT_TYPES.full) {
+            await page.evaluate(async () => {
+              const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const root = document.scrollingElement || document.documentElement || document.body;
+              const viewportHeight = Math.max(window.innerHeight || 720, 320);
+              const warmImages = () => {
+                Array.from(document.images || []).forEach((image) => {
+                  try {
+                    image.loading = 'eager';
+                    image.decoding = 'sync';
+                    const src = image.getAttribute('data-src') || image.getAttribute('data-lazy-src') || image.getAttribute('data-original');
+                    const srcset = image.getAttribute('data-srcset') || image.getAttribute('data-lazy-srcset');
+                    if (src && !image.getAttribute('src')) image.setAttribute('src', src);
+                    if (srcset && !image.getAttribute('srcset')) image.setAttribute('srcset', srcset);
+                  } catch {
+                    // Ignore lazy image edge cases.
+                  }
+                });
+              };
+
+              for (let pass = 0; pass < 2; pass += 1) {
+                warmImages();
+                const maxScrollTop = Math.max((root?.scrollHeight || 0) - viewportHeight, 0);
+                const step = Math.max(Math.floor(viewportHeight * 0.8), 360);
+                for (let y = 0; y <= maxScrollTop; y += step) {
+                  window.scrollTo(0, y);
+                  warmImages();
+                  await wait(140);
+                }
+                if (maxScrollTop > 0) {
+                  window.scrollTo(0, maxScrollTop);
+                  warmImages();
+                  await wait(320);
+                }
+              }
+
+              window.scrollTo(0, 0);
+              await document.fonts?.ready?.catch?.(() => {});
+              await wait(400);
+              await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
+            });
+          }
 
           const title = await page.title();
           const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');

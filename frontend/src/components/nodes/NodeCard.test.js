@@ -88,4 +88,31 @@ describe('NodeCard', () => {
     expect(container.querySelector('button[aria-label="Edit"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Delete"]')).toBeNull();
   });
+
+  test('keeps an existing thumbnail visible when a new batch targets other nodes', async () => {
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'node-1',
+            title: 'Already captured',
+            url: 'https://example.com/page',
+            thumbnailUrl: 'https://assets.example/thumb.jpg',
+          }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          thumbnailRequestIds={new Set(['node-2'])}
+          thumbnailSessionId={2}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.thumb-img')).not.toBeNull();
+    expect(container.querySelector('.thumb-placeholder')).toBeNull();
+  });
 });
