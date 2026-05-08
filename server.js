@@ -182,7 +182,7 @@ let browser = null;
 const SCAN_LIMITS = {
   maxDepthDefault: Number(process.env.SCAN_MAX_DEPTH_DEFAULT ?? 6),
   maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 25),
-  maxPagesDefault: Math.max(1, Number(process.env.SCAN_MAX_PAGES_DEFAULT ?? 1000)),
+  maxPagesDefault: Math.max(1, Number(process.env.SCAN_JOB_MAX_PAGES_DEFAULT ?? 5000)),
 };
 const toPositiveInt = (value, fallback) => {
   const parsed = Number(value);
