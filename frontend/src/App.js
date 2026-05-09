@@ -139,6 +139,12 @@ const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 4;
 const INTERACTIVE_MIN_SCALE = 0.1;
+const CANVAS_EDGE_PADDING_MAX = 400;
+
+const clampCanvasPanAxis = (value, min, max) => {
+  if (min <= max) return Math.max(min, Math.min(max, value));
+  return Math.max(max, Math.min(min, value));
+};
 
 const parseEnvBool = (value, fallback = false) => {
   if (value === undefined || value === null || value === '') return fallback;
@@ -3123,15 +3129,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     const scaledRight = bounds.maxX * scaleArg;
     const scaledBottom = bounds.maxY * scaleArg;
 
-    // Keep map inside viewport with padding on all sides
-    const padding = 400;
-    const minPanX = padding - scaledRight;
-    const maxPanX = viewportWidth - padding - scaledLeft;
-    const minPanY = padding - scaledBottom;
-    const maxPanY = viewportHeight - padding - scaledTop;
+    // Keep the furthest node edge within 400px of the viewport edge when possible.
+    const padding = CANVAS_EDGE_PADDING_MAX;
+    const minPanX = viewportWidth - padding - scaledRight;
+    const maxPanX = padding - scaledLeft;
+    const minPanY = viewportHeight - padding - scaledBottom;
+    const maxPanY = padding - scaledTop;
 
-    const clampedX = Math.max(minPanX, Math.min(maxPanX, newPan.x));
-    const clampedY = Math.max(minPanY, Math.min(maxPanY, newPan.y));
+    const clampedX = clampCanvasPanAxis(newPan.x, minPanX, maxPanX);
+    const clampedY = clampCanvasPanAxis(newPan.y, minPanY, maxPanY);
 
     return { x: clampedX, y: clampedY };
   }, [worldBounds]);

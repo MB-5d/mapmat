@@ -13,12 +13,16 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--type-home-title-lg-line-height: 40px;');
     expect(generatedCss).toContain('--type-home-title-lg-weight: 600;');
     expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(0, 0, 0, 0.1);');
+    expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(180, 180, 180, 0.12);');
+    expect(generatedCss).toContain('--shadow-card: 0 1px 3px rgba(180, 180, 180, 0.12), 0 1px 2px rgba(160, 160, 160, 0.08);');
     expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.25px;');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
 
     expect(appCss).toContain('font-size: var(--type-home-title-lg-size);');
     expect(appCss).toContain('box-shadow: var(--shadow-canvas-control);');
+    expect(appCss).toContain('box-shadow: var(--shadow-drawer);');
+    expect(appCss).toContain('box-shadow: var(--ui-overlay-shadow);');
     expect(appCss).toContain('stroke-width: var(--ui-connection-map-stroke-width);');
     expect(appCss).toContain('color: var(--ui-control-disabled-content);');
   });
@@ -36,6 +40,9 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('var(--canvas-grid-dot-radius, 0.75px)');
     expect(appJs).toContain('const canvasGridSize = Math.max(4, Math.round(16 * (scale || 1)));');
     expect(appJs).toContain('const canvasGridDotRadius = Math.max(0.22, Math.min(0.75, 0.75 * (canvasGridSize / 16)));');
+    expect(appJs).toContain('const CANVAS_EDGE_PADDING_MAX = 400;');
+    expect(appJs).toContain('const minPanX = viewportWidth - padding - scaledRight;');
+    expect(appJs).toContain('const maxPanX = padding - scaledLeft;');
     expect(appCss).toContain('z-index: 0;');
     expect(appCss).toContain('border-radius: var(--ui-radius-lg);');
     expect(appCss).toContain('transform: translate(15px, 15px);');
