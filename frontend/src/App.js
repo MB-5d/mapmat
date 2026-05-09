@@ -1635,6 +1635,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailAuthToastShownRef = useRef(false);
   const thumbnailFailureToastShownRef = useRef(false);
   const MAX_THUMBNAIL_CONCURRENCY = 6;
+  const FULL_SCREENSHOT_CONCURRENCY = 2;
   const MAX_THUMBNAIL_ATTEMPTS = 2;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
   const [thumbnailSessionId, setThumbnailSessionId] = useState(0);
@@ -5625,12 +5626,32 @@ export default function App({ currentRoute, navigateToRoute }) {
     resetThumbnailQueue(targets.length, 0, true, 'screenshot');
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
+    thumbnailExpectedRef.current = new Set(targets.map((node) => node.id));
     try {
-      for (let index = 0; index < targets.length; index += 1) {
-        if (screenshotStopRequestedRef.current) break;
-        const node = targets[index];
+      let nextIndex = 0;
+      let completedCount = 0;
+      let successCount = 0;
+      let failedCount = 0;
+      const updateProgressStats = () => {
+        const elapsed = Date.now() - thumbnailElapsedStartRef.current;
+        setThumbnailStats((prev) => ({
+          ...prev,
+          loaded: completedCount,
+          failed: failedCount,
+          avgMs: completedCount ? Math.round(elapsed / completedCount) : 0,
+        }));
+      };
+      const captureNode = async (node) => {
+        const controller = new AbortController();
+        thumbnailAbortControllersRef.current.set(node.id, controller);
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 65000);
         try {
-          const data = await api.captureScreenshot({ url: node.url, type: 'full' });
+          const data = await api.captureScreenshot(
+            { url: node.url, type: 'full' },
+            { signal: controller.signal },
+          );
           if (data?.error) {
             throw new Error(data.error);
           }
@@ -5643,11 +5664,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           };
           if (data.thumbnailUrl) assetUpdates.thumbnailUrl = data.thumbnailUrl;
           if (data.thumbnailFullUrl) assetUpdates.thumbnailFullUrl = data.thumbnailFullUrl;
-          const needsThumbnail = !node.thumbnailUrl || thumbnailDisplayErrorIds.has(node.id);
-          if (needsThumbnail && !assetUpdates.thumbnailUrl) {
-            const thumbData = await api.captureScreenshot({ url: node.url, type: 'thumb' }).catch(() => null);
-            Object.assign(assetUpdates, getThumbnailAssetUpdates(thumbData));
-          }
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
           if (!persisted) {
             throw new Error('Failed to save screenshot assets on the selected page');
@@ -5667,16 +5683,10 @@ export default function App({ currentRoute, navigateToRoute }) {
             bumpThumbnailReload(node.id);
             setShowThumbnails(true);
           }
-          const loadedCount = index + 1;
-          const elapsed = Date.now() - thumbnailElapsedStartRef.current;
-          setThumbnailStats((prev) => ({
-            ...prev,
-            loaded: loadedCount,
-            avgMs: loadedCount ? Math.round(elapsed / loadedCount) : 0,
-          }));
+          successCount += 1;
         } catch (error) {
           if (screenshotStopRequestedRef.current || error?.message === 'Screenshot capture stopped') {
-            break;
+            return;
           }
           if (isScreenshotAuthError(error?.message)) {
             updateNodeScreenshotAssets(node.id, {
@@ -5685,24 +5695,45 @@ export default function App({ currentRoute, navigateToRoute }) {
               thumbnailFullUrl: null,
               fullScreenshotUrl: null,
             });
+            if (!thumbnailAuthToastShownRef.current) {
+              thumbnailAuthToastShownRef.current = true;
+              showToast('Screenshot capture for this page requires login. Prompted credentials are not supported yet.', 'info');
+            }
           }
-          throw error;
+          failedCount += 1;
+          console.error('Full screenshot capture failed:', error);
+        } finally {
+          clearTimeout(timeoutId);
+          thumbnailAbortControllersRef.current.delete(node.id);
+          completedCount += 1;
+          updateProgressStats();
         }
-      }
+      };
+      const workerCount = Math.min(FULL_SCREENSHOT_CONCURRENCY, targets.length);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (!screenshotStopRequestedRef.current) {
+          const node = targets[nextIndex];
+          nextIndex += 1;
+          if (!node) break;
+          await captureNode(node);
+        }
+      });
+      await Promise.all(workers);
       if (screenshotStopRequestedRef.current) {
         showToast('Screenshot capture stopped', 'warning');
         setTimeout(() => flushThumbnailAutosave(), 300);
         return;
       }
-      showToast(
-        `Captured ${targets.length} full screenshot${targets.length === 1 ? '' : 's'}`,
-        'success',
-      );
+      const message = failedCount > 0
+        ? `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}; ${failedCount} failed`
+        : `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}`;
+      showToast(message, failedCount > 0 ? 'warning' : 'success');
       setTimeout(() => flushThumbnailAutosave(), 300);
       trackEvent('screenshot_capture', {
         type: 'full',
         scope,
-        count: targets.length,
+        count: successCount,
+        failed: failedCount,
       });
     } catch (error) {
       console.error('Full screenshot batch error:', error);
@@ -12520,14 +12551,15 @@ export default function App({ currentRoute, navigateToRoute }) {
           const estimateItemMs = thumbnailStats.avgMs > 0
             ? thumbnailStats.avgMs
             : Math.max(fallbackItemMs, thumbnailElapsedMs || 0);
-          const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, MAX_THUMBNAIL_CONCURRENCY));
+          const activeConcurrency = isScreenshotCapture ? FULL_SCREENSHOT_CONCURRENCY : MAX_THUMBNAIL_CONCURRENCY;
+          const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, activeConcurrency));
           return (
             <div className="thumbnail-progress-toast">
               <div className="thumbnail-progress-details">
                 <span>
                   {isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: {thumbnailStats.loaded}/{totalNew}
                   {cached > 0 ? ` (${cached} cached)` : ''}
-                  {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} retrying)` : ''}
+                  {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'})` : ''}
                 </span>
                 <span className="thumbnail-progress-line">
                   <span className="thumbnail-progress-bar" aria-hidden="true" />

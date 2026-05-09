@@ -211,7 +211,7 @@ const SCREENSHOT_MAX_CONCURRENCY = Math.max(
 );
 const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.SCREENSHOT_CAPTURE_TIMEOUT_MS ?? (isProd ? 45000 : 60000))
+  Number(process.env.SCREENSHOT_CAPTURE_TIMEOUT_MS ?? 30000)
 );
 const SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
@@ -223,19 +223,19 @@ const SCREENSHOT_CACHE_TTL_MS = Math.max(
 );
 const SCREENSHOT_FULL_MAX_HEIGHT = Math.max(
   720,
-  Number(process.env.SCREENSHOT_FULL_MAX_HEIGHT ?? 24000)
+  Number(process.env.SCREENSHOT_FULL_MAX_HEIGHT ?? 12000)
 );
 const SCREENSHOT_FULL_MAX_WIDTH = Math.max(
   320,
-  Number(process.env.SCREENSHOT_FULL_MAX_WIDTH ?? 1920)
+  Number(process.env.SCREENSHOT_FULL_MAX_WIDTH ?? 1280)
 );
 const SCREENSHOT_FULL_VIEWPORT_WIDTH = Math.max(
   1280,
-  Number(process.env.SCREENSHOT_FULL_VIEWPORT_WIDTH ?? 1920)
+  Number(process.env.SCREENSHOT_FULL_VIEWPORT_WIDTH ?? 1280)
 );
 const SCREENSHOT_FULL_VIEWPORT_HEIGHT = Math.max(
   720,
-  Number(process.env.SCREENSHOT_FULL_VIEWPORT_HEIGHT ?? 1080)
+  Number(process.env.SCREENSHOT_FULL_VIEWPORT_HEIGHT ?? 720)
 );
 const SCREENSHOT_THUMB_VIEWPORT_WIDTH = Math.max(
   640,
@@ -259,7 +259,7 @@ const SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR = Math.max(
 );
 const SCREENSHOT_FULL_DEVICE_SCALE_FACTOR = Math.max(
   1,
-  Number(process.env.SCREENSHOT_FULL_DEVICE_SCALE_FACTOR ?? 2)
+  Number(process.env.SCREENSHOT_FULL_DEVICE_SCALE_FACTOR ?? 1.5)
 );
 const SCREENSHOT_CLEANUP_INTERVAL_MS = Math.max(
   10000,
@@ -281,7 +281,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v6';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v7';
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -726,7 +726,8 @@ function writeScreenshotMeta(metaPath, value) {
 
 async function resizeScreenshotForCanvas(context, sourcePath, targetPath) {
   const source = fs.readFileSync(sourcePath);
-  const sourceDataUrl = `data:image/png;base64,${source.toString('base64')}`;
+  const sourceMime = /\.jpe?g$/i.test(sourcePath) ? 'image/jpeg' : 'image/png';
+  const sourceDataUrl = `data:${sourceMime};base64,${source.toString('base64')}`;
   let resizePage = null;
   try {
     resizePage = await context.newPage();
@@ -1055,8 +1056,12 @@ const isLikelyBlocked = (title, bodyText) => {
 
 async function getBrowser() {
   if (!browser) {
+    const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      || process.env.CHROME_EXECUTABLE_PATH
+      || null;
     browser = await chromium.launch({
       headless: true,
+      ...(executablePath ? { executablePath } : {}),
     });
     browser.on('disconnected', () => {
       browser = null;
@@ -2878,23 +2883,32 @@ const SCREENSHOT_CAPTURE_STABILIZE_STYLE = `
   }
 `;
 
-async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
+async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options = {}) {
   const normalizedType = normalizeScreenshotType(type);
   if (!normalizedType) {
     throw new Error('Invalid screenshot type. Use full or thumb.');
   }
+  const abortSignal = options?.signal || null;
+  const throwIfAborted = () => {
+    if (abortSignal?.aborted) {
+      throw new Error('Screenshot capture stopped');
+    }
+  };
 
   await cleanupStaleScreenshots();
 
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
-  const filename = `${urlHash}_${normalizedType}_${SCREENSHOT_CAPTURE_CACHE_VERSION}.png`;
+  const fullExtension = 'jpg';
+  const filename = `${urlHash}_${normalizedType}_${SCREENSHOT_CAPTURE_CACHE_VERSION}.${normalizedType === SCREENSHOT_TYPES.full ? fullExtension : 'png'}`;
   const thumbPreviewFilename = `${urlHash}_thumb_preview_${SCREENSHOT_CAPTURE_CACHE_VERSION}.png`;
   const thumbSmallFilename = `${urlHash}_thumb_small_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const fullSmallFilename = `${urlHash}_full_thumb_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
+  const fullViewportTempFilename = `${urlHash}_full_viewport_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const filepath = path.join(SCREENSHOT_DIR, filename);
   const thumbPreviewPath = path.join(SCREENSHOT_DIR, thumbPreviewFilename);
   const thumbSmallPath = path.join(SCREENSHOT_DIR, thumbSmallFilename);
   const fullSmallPath = path.join(SCREENSHOT_DIR, fullSmallFilename);
+  const fullViewportTempPath = path.join(SCREENSHOT_DIR, fullViewportTempFilename);
   const primaryPath = normalizedType === SCREENSHOT_TYPES.thumb ? thumbSmallPath : filepath;
   const metaPath = path.join(SCREENSHOT_DIR, `${path.basename(primaryPath)}${SCREENSHOT_META_SUFFIX}`);
   const baseUrl = getBaseUrl();
@@ -2921,6 +2935,9 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
         type: normalizedType,
         blocked: false,
         truncated: !!meta.truncated,
+        width: meta.width || null,
+        height: meta.height || null,
+        durationMs: meta.durationMs || null,
       };
       if (normalizedType === SCREENSHOT_TYPES.thumb) {
         result.thumbnailUrl = publicUrl(thumbSmallFilename);
@@ -2933,9 +2950,11 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
   }
 
   const shotResult = await enqueueScreenshot(async () => {
+    throwIfAborted();
     const host = new URL(safeUrl).hostname;
     const waitMs = reserveScreenshotSlot(host);
     if (waitMs > 0) await sleep(waitMs);
+    throwIfAborted();
 
     const b = await getBrowser();
     const ua = SCREENSHOT_USER_AGENTS[Math.floor(Math.random() * SCREENSHOT_USER_AGENTS.length)];
@@ -2955,8 +2974,18 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
       },
     });
     let page = null;
+    const abortActiveCapture = () => {
+      if (page) {
+        page.close().catch(() => {});
+      }
+      context.close().catch(() => {});
+    };
 
     try {
+      if (abortSignal) {
+        abortSignal.addEventListener('abort', abortActiveCapture, { once: true });
+      }
+      throwIfAborted();
       await context.addInitScript(() => {
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       });
@@ -2966,34 +2995,37 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
       const captureTimeoutMs = normalizedType === SCREENSHOT_TYPES.thumb
         ? SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS
         : SCREENSHOT_CAPTURE_TIMEOUT_MS;
-      const maxAttempts = normalizedType === SCREENSHOT_TYPES.thumb ? 1 : 2;
+      page.setDefaultTimeout(captureTimeoutMs);
+      page.setDefaultNavigationTimeout(captureTimeoutMs);
+      const maxAttempts = 1;
       for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const captureStartedAt = Date.now();
         try {
+          throwIfAborted();
           await page.goto(safeUrl, {
             waitUntil: 'domcontentloaded',
             timeout: captureTimeoutMs,
           });
-          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 1200);
+          throwIfAborted();
+          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 650);
           await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
-          await page.evaluate(async (shouldWarmFull) => {
+          await page.evaluate(async ({ shouldWarmFull, maxStops }) => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            const images = Array.from(document.images || []);
-            images.forEach((image) => {
-              try {
-                image.loading = 'eager';
-                image.decoding = 'sync';
-                const src = image.getAttribute('data-src') || image.getAttribute('data-lazy-src') || image.getAttribute('data-original');
-                const srcset = image.getAttribute('data-srcset') || image.getAttribute('data-lazy-srcset');
-                if (src && !image.getAttribute('src')) {
-                  image.setAttribute('src', src);
+            const warmImages = () => {
+              Array.from(document.images || []).forEach((image) => {
+                try {
+                  image.loading = 'eager';
+                  image.decoding = 'sync';
+                  const src = image.getAttribute('data-src') || image.getAttribute('data-lazy-src') || image.getAttribute('data-original');
+                  const srcset = image.getAttribute('data-srcset') || image.getAttribute('data-lazy-srcset');
+                  if (src && !image.getAttribute('src')) image.setAttribute('src', src);
+                  if (srcset && !image.getAttribute('srcset')) image.setAttribute('srcset', srcset);
+                } catch {
+                  // Ignore per-image mutations for screenshot warmup.
                 }
-                if (srcset && !image.getAttribute('srcset')) {
-                  image.setAttribute('srcset', srcset);
-                }
-              } catch {
-                // Ignore per-image mutations for screenshot warmup.
-              }
-            });
+              });
+            };
+            warmImages();
 
             const nodes = Array.from(document.querySelectorAll('*'));
             nodes.forEach((node) => {
@@ -3032,80 +3064,43 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
             });
 
             await document.fonts?.ready?.catch?.(() => {});
-            await wait(shouldWarmFull ? 260 : 500);
+            await wait(shouldWarmFull ? 180 : 500);
 
             if (shouldWarmFull) {
               const root = document.scrollingElement || document.documentElement || document.body;
               const viewportHeight = Math.max(window.innerHeight || 720, 320);
               const maxScrollTop = Math.max((root?.scrollHeight || 0) - viewportHeight, 0);
-              const step = Math.max(Math.floor(viewportHeight * 0.85), 320);
-
-              for (let y = 0; y <= maxScrollTop; y += step) {
-                window.scrollTo(0, y);
-                await wait(180);
+              const stops = Math.max(2, maxStops || 10);
+              const positions = new Set([0, maxScrollTop]);
+              for (let index = 1; index < stops - 1; index += 1) {
+                positions.add(Math.round((maxScrollTop * index) / (stops - 1)));
               }
-              if (maxScrollTop > 0) {
-                window.scrollTo(0, maxScrollTop);
-                await wait(260);
+              for (const y of Array.from(positions).sort((a, b) => a - b)) {
+                window.scrollTo(0, y);
+                warmImages();
+                await wait(120);
               }
             }
 
             window.scrollTo(0, 0);
-            await wait(shouldWarmFull ? 220 : 420);
+            await wait(shouldWarmFull ? 180 : 420);
             await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
-          }, normalizedType === SCREENSHOT_TYPES.full);
-          await page.waitForLoadState('load', { timeout: 5000 }).catch(() => {});
-          await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 500);
-
-          if (normalizedType === SCREENSHOT_TYPES.full) {
-            await page.evaluate(async () => {
-              const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-              const root = document.scrollingElement || document.documentElement || document.body;
-              const viewportHeight = Math.max(window.innerHeight || 720, 320);
-              const warmImages = () => {
-                Array.from(document.images || []).forEach((image) => {
-                  try {
-                    image.loading = 'eager';
-                    image.decoding = 'sync';
-                    const src = image.getAttribute('data-src') || image.getAttribute('data-lazy-src') || image.getAttribute('data-original');
-                    const srcset = image.getAttribute('data-srcset') || image.getAttribute('data-lazy-srcset');
-                    if (src && !image.getAttribute('src')) image.setAttribute('src', src);
-                    if (srcset && !image.getAttribute('srcset')) image.setAttribute('srcset', srcset);
-                  } catch {
-                    // Ignore lazy image edge cases.
-                  }
-                });
-              };
-
-              for (let pass = 0; pass < 2; pass += 1) {
-                warmImages();
-                const maxScrollTop = Math.max((root?.scrollHeight || 0) - viewportHeight, 0);
-                const step = Math.max(Math.floor(viewportHeight * 0.8), 360);
-                for (let y = 0; y <= maxScrollTop; y += step) {
-                  window.scrollTo(0, y);
-                  warmImages();
-                  await wait(140);
-                }
-                if (maxScrollTop > 0) {
-                  window.scrollTo(0, maxScrollTop);
-                  warmImages();
-                  await wait(320);
-                }
-              }
-
-              window.scrollTo(0, 0);
-              await document.fonts?.ready?.catch?.(() => {});
-              await wait(400);
-              await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
-            });
+          }, { shouldWarmFull: normalizedType === SCREENSHOT_TYPES.full, maxStops: 10 });
+          throwIfAborted();
+          await page.waitForLoadState('load', { timeout: normalizedType === SCREENSHOT_TYPES.full ? 2500 : 5000 }).catch(() => {});
+          if (normalizedType === SCREENSHOT_TYPES.thumb) {
+            await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
           }
+          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 250);
+          throwIfAborted();
 
           const title = await page.title();
           const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
           const blocked = isLikelyBlocked(title, bodyText);
 
           let truncated = false;
+          let width = null;
+          let height = null;
           if (normalizedType === SCREENSHOT_TYPES.full) {
             const metrics = await page.evaluate(() => {
               const doc = document.documentElement;
@@ -3117,6 +3112,17 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
 
             const clipWidth = Math.max(1, Math.min(Math.ceil(metrics.scrollWidth), SCREENSHOT_FULL_MAX_WIDTH));
             const scrollHeight = Math.max(1, Math.ceil(metrics.scrollHeight));
+            const clipHeight = Math.min(scrollHeight, SCREENSHOT_FULL_MAX_HEIGHT);
+            width = Math.round(clipWidth * SCREENSHOT_FULL_DEVICE_SCALE_FACTOR);
+            height = Math.round(clipHeight * SCREENSHOT_FULL_DEVICE_SCALE_FACTOR);
+
+            await page.screenshot({
+              path: fullViewportTempPath,
+              fullPage: false,
+              type: 'jpeg',
+              quality: 82,
+              timeout: captureTimeoutMs,
+            });
 
             if (scrollHeight > SCREENSHOT_FULL_MAX_HEIGHT) {
               truncated = true;
@@ -3126,7 +3132,9 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
               });
               await page.screenshot({
                 path: filepath,
-                type: 'png',
+                type: 'jpeg',
+                quality: 86,
+                timeout: captureTimeoutMs,
                 clip: {
                   x: 0,
                   y: 0,
@@ -3138,15 +3146,19 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
               await page.screenshot({
                 path: filepath,
                 fullPage: true,
-                type: 'png',
+                type: 'jpeg',
+                quality: 86,
+                timeout: captureTimeoutMs,
               });
             }
-            await resizeScreenshotForCanvas(context, filepath, fullSmallPath);
+            await resizeScreenshotForCanvas(context, fullViewportTempPath, fullSmallPath);
+            fs.unlink(fullViewportTempPath, () => {});
           } else {
             await page.screenshot({
               path: thumbPreviewPath,
               fullPage: false,
               type: 'png',
+              timeout: captureTimeoutMs,
             });
             await resizeScreenshotForCanvas(context, thumbPreviewPath, thumbSmallPath);
           }
@@ -3156,10 +3168,19 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
             type: normalizedType,
             blocked,
             truncated,
+            width,
+            height,
+            durationMs: Date.now() - captureStartedAt,
             capturedAt: new Date().toISOString(),
           });
 
-          return { blocked, truncated };
+          return {
+            blocked,
+            truncated,
+            width,
+            height,
+            durationMs: Date.now() - captureStartedAt,
+          };
         } catch (err) {
           lastError = err;
           await page.waitForTimeout(800 + Math.floor(Math.random() * 400));
@@ -3168,6 +3189,12 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
 
       throw lastError || new Error('Screenshot failed');
     } finally {
+      if (normalizedType === SCREENSHOT_TYPES.full && fs.existsSync(fullViewportTempPath)) {
+        fs.unlink(fullViewportTempPath, () => {});
+      }
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', abortActiveCapture);
+      }
       if (page) {
         await page.close().catch(() => {});
       }
@@ -3183,6 +3210,9 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full) {
     type: normalizedType,
     blocked: shotResult?.blocked || false,
     truncated: shotResult?.truncated || false,
+    width: shotResult?.width || null,
+    height: shotResult?.height || null,
+    durationMs: shotResult?.durationMs || null,
   };
   if (normalizedType === SCREENSHOT_TYPES.thumb) {
     result.thumbnailUrl = publicUrl(thumbSmallFilename);
@@ -3721,13 +3751,27 @@ app.get('/screenshot', authMiddleware, requireApiKey, async (req, res) => {
     });
   }
 
+  const abortController = new AbortController();
+  let clientGone = false;
+  req.on('close', () => {
+    if (!res.writableEnded) {
+      clientGone = true;
+      abortController.abort();
+    }
+  });
+
   try {
     recordUsage(req, 'screenshot', 1, { host: new URL(safeUrl).hostname, type: screenshotType });
-    const result = await captureScreenshot(safeUrl, screenshotType);
+    const result = await captureScreenshot(safeUrl, screenshotType, { signal: abortController.signal });
+    if (clientGone) return;
     res.json(result);
   } catch (e) {
+    if (clientGone) return;
     console.error('Screenshot error:', e.message);
     // Return a short, user-friendly error
+    if (e.message?.includes('Screenshot capture stopped')) {
+      return res.status(499).json({ error: 'Screenshot capture stopped' });
+    }
     if (e.code === 'SCREENSHOT_AUTH_REQUIRED' || e.message?.includes('requires authentication')) {
       return res.status(409).json({ error: 'Screenshot capture requires authentication. Prompted credentials are not supported yet.' });
     }
