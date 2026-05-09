@@ -307,12 +307,12 @@
   --type-tag-md-line-height: 20px;
   --type-tag-md-weight: 600;
   --type-tag-md-letter-spacing: 0;
-  --ui-page-depth-1: #12a8d6;
-  --ui-page-depth-2: #1ab7a8;
-  --ui-page-depth-3: #6cc36c;
-  --ui-page-depth-4: #e7b24c;
-  --ui-page-depth-5: #ef7b63;
-  --ui-page-depth-6: #9b6df3;
+  --ui-page-depth-1: #38bdf8;
+  --ui-page-depth-2: #2dd4bf;
+  --ui-page-depth-3: #a3e635;
+  --ui-page-depth-4: #fbbf24;
+  --ui-page-depth-5: #fb7185;
+  --ui-page-depth-6: #a78bfa;
   --ui-connection-userflow: #14b8a6;
   --ui-connection-crosslink: #f97316;
   --ui-connection-broken: var(--color-red-400);

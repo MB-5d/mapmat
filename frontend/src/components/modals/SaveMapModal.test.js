@@ -152,4 +152,42 @@ describe('SaveMapModal', () => {
       await Promise.resolve();
     });
   });
+
+  test('blocks duplicate map names within the selected project', async () => {
+    const onSave = jest.fn();
+
+    act(() => {
+      root.render(
+        <SaveMapModal
+          show
+          onClose={jest.fn()}
+          isLoggedIn
+          onRequireLogin={jest.fn()}
+          projects={[{
+            id: 'p1',
+            name: 'Project One',
+            maps: [{ id: 'existing-map', name: 'Homepage map', project_id: 'p1' }],
+          }]}
+          currentMap={null}
+          rootUrl="https://example.com"
+          defaultProjectId="p1"
+          defaultName="Homepage map"
+          onSave={onSave}
+          onCreateProject={jest.fn()}
+        />
+      );
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Map')
+    );
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('already exists in this folder');
+  });
 });

@@ -7,6 +7,7 @@ import Modal from '../ui/Modal';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 import TextareaInput from '../ui/TextareaInput';
+import { findMapNameConflict, getMapNameConflictMessage } from '../../utils/mapNameConflicts';
 
 const isVirtualProject = (project) => (
   !!project?.isVirtual
@@ -52,10 +53,20 @@ const SaveMapForm = ({
   const [newProjectName, setNewProjectName] = useState('');
   const [notes, setNotes] = useState(defaultNotes || currentMap?.notes || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nameError, setNameError] = useState('');
   const selectableProjects = (projects || []).filter((project) => !isVirtualProject(project));
 
   const handleSave = async () => {
     if (!mapName.trim() || isSubmitting || saving) return;
+    const conflict = findMapNameConflict(projects, {
+      projectId: selectedProject || null,
+      name: mapName,
+      excludeMapId: currentMap?.id || null,
+    });
+    if (conflict) {
+      setNameError(getMapNameConflictMessage(mapName));
+      return;
+    }
     setIsSubmitting(true);
     try {
       await Promise.resolve(onSave(selectedProject || null, mapName, notes));
@@ -76,13 +87,17 @@ const SaveMapForm = ({
 
   return (
     <div className="save-map-form">
-      <Field label="Map Name" required>
+      <Field label="Map Name" required error={nameError}>
         <TextInput
           type="text"
           value={mapName}
-          onChange={(e) => setMapName(e.target.value)}
+          onChange={(e) => {
+            setMapName(e.target.value);
+            setNameError('');
+          }}
           placeholder="Enter map name..."
           autoFocus
+          invalid={Boolean(nameError)}
         />
       </Field>
       <Field label="Save to Project (optional)">

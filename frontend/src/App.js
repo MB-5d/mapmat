@@ -79,6 +79,10 @@ import {
   LAYOUT,
   TESTER_NOT_READY_MESSAGE,
 } from './utils/constants';
+import {
+  findMapNameConflict,
+  getMapNameConflictMessage,
+} from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
 import {
   buildExpandedStackMap,
@@ -2173,6 +2177,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const isMapUpdateConflictError = useCallback((error) => {
     return error?.status === 409 && error?.code === 'MAP_UPDATE_CONFLICT';
+  }, []);
+
+  const isMapNameConflictError = useCallback((error) => {
+    return error?.status === 409 && error?.code === 'MAP_NAME_CONFLICT';
   }, []);
 
   const registerMapConflict = useCallback(({ error, mapId, source }) => {
@@ -4802,6 +4810,17 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const commitMapNameEdit = useCallback(() => {
     const trimmedName = (mapName || '').trim() || 'Untitled Map';
+    if (currentMap?.id) {
+      const conflict = findMapNameConflict(projects, {
+        projectId: currentMap.project_id || null,
+        name: trimmedName,
+        excludeMapId: currentMap.id,
+      });
+      if (conflict) {
+        showToast(getMapNameConflictMessage(trimmedName), 'error');
+        return;
+      }
+    }
     setMapName(trimmedName);
     setIsEditingMapName(false);
 
@@ -4822,7 +4841,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(result.error || 'Failed to queue map rename', 'error');
       }
     }
-  }, [currentMap?.id, currentMap?.name, isLiveActive, mapName, showToast, submitLiveDraft]);
+  }, [currentMap?.id, currentMap?.name, currentMap?.project_id, isLiveActive, mapName, projects, showToast, submitLiveDraft]);
 
   const updateNodeScreenshotAssets = (nodeId, assetUpdates = {}) => {
     if (!nodeId) return;
@@ -5766,6 +5785,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
+    const targetProjectId = normalizeProjectSelection(projectId);
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: trimmedName,
+      excludeMapId: mapId,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(trimmedName), 'error');
+      return;
+    }
+
     if (isCoeditingReadOnlyMode && currentMap?.id === mapId) {
       setEditingMapId(null);
       warnCoeditingReadOnly('This map');
@@ -5798,6 +5828,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (isMapUpdateConflictError(error)) {
         setEditingMapId(null);
         registerMapConflict({ error, mapId, source: 'rename' });
+        return;
+      }
+      if (isMapNameConflictError(error)) {
+        showToast(error.message || getMapNameConflictMessage(trimmedName), 'error');
         return;
       }
       showToast(error.message || 'Failed to rename map', 'error');
@@ -5850,6 +5884,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     if ((currentProjectId || null) === (targetProjectId || null)) {
       return;
     }
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: mapRecord?.name || '',
+      excludeMapId: mapId,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(mapRecord?.name || 'Untitled Map'), 'error');
+      return;
+    }
     try {
       const { map } = await api.updateMap(
         mapId,
@@ -5886,6 +5929,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     } catch (e) {
       if (isMapUpdateConflictError(e)) {
         registerMapConflict({ error: e, mapId, source: 'move' });
+        return;
+      }
+      if (isMapNameConflictError(e)) {
+        showToast(e.message || getMapNameConflictMessage(mapRecord?.name || 'Untitled Map'), 'error');
         return;
       }
       showToast(e.message || 'Failed to move map', 'error');
@@ -5965,10 +6012,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     const snapshot = getVersionSnapshot();
     if (!snapshot?.root) return;
     const targetProjectId = normalizeProjectSelection(projectId);
+    const trimmedName = name.trim();
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: trimmedName,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(trimmedName), 'error');
+      return;
+    }
     setIsSavingMap(true);
     try {
       const { map, initialVersion } = await api.saveMap({
-        name: name.trim(),
+        name: trimmedName,
         url: snapshot.root?.url || '',
         root: snapshot.root,
         orphans: snapshot.orphans,
@@ -6016,6 +6072,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('Map duplicated', 'success');
       setDuplicateMapConfig(null);
     } catch (error) {
+      if (isMapNameConflictError(error)) {
+        showToast(error.message || getMapNameConflictMessage(trimmedName), 'error');
+        return;
+      }
       showToast(error.message || 'Failed to duplicate map', 'error');
     } finally {
       setIsSavingMap(false);
@@ -6106,6 +6166,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     const baseName = (currentMap?.name || mapName || 'Untitled Map').trim();
     const copyName = `${baseName} (Copy)`;
     const targetProjectId = normalizeProjectSelection(currentMap?.project_id || null);
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: copyName,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(copyName), 'error');
+      return;
+    }
     try {
       const { map } = await api.saveMap({
         name: copyName,
@@ -6142,6 +6210,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       versionBaselineRef.current = serializeVersionSnapshot(snapshot);
       showToast('Saved as a copy', 'success');
     } catch (error) {
+      if (isMapNameConflictError(error)) {
+        showToast(error.message || getMapNameConflictMessage(copyName), 'error');
+        return;
+      }
       showToast(error.message || 'Failed to save copy', 'error');
     }
   };
@@ -6161,6 +6233,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     const wasNewMap = !currentMap?.id;
     const targetProjectId = normalizeProjectSelection(projectId);
+    const trimmedName = mapName.trim();
+    const conflict = findMapNameConflict(projects, {
+      projectId: targetProjectId,
+      name: trimmedName,
+      excludeMapId: currentMap?.id || null,
+    });
+    if (conflict) {
+      showToast(getMapNameConflictMessage(trimmedName), 'error');
+      return;
+    }
 
     setIsSavingMap(true);
     try {
@@ -6171,7 +6253,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         const { map } = await api.updateMap(
           currentMap.id,
           {
-            name: mapName.trim(),
+            name: trimmedName,
             root,
             orphans,
             connections,
@@ -6186,7 +6268,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       } else {
         // Create new map
         const response = await api.saveMap({
-          name: mapName.trim(),
+          name: trimmedName,
           url: root.url,
           root,
           orphans,
@@ -6230,7 +6312,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       navigateToRoute(createMapRoute(savedMap.id));
       resetAutosaveTracking({
         snapshot: serializeMapAutosaveSnapshot({
-          name: mapName.trim(),
+          name: trimmedName,
           root,
           orphans,
           connections,
@@ -6247,7 +6329,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         new_map: wasNewMap ? 'true' : 'false',
         imported_map: isImportedMap ? 'true' : 'false',
       });
-      showToast(`Map "${mapName}" saved`, 'success');
+      showToast(`Map "${trimmedName}" saved`, 'success');
 
       if (pendingLogoutAfterSave) {
         const shouldPreserveAsViewOnly = Boolean(savedMap?.id)
@@ -6301,6 +6383,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     } catch (e) {
       if (isMapUpdateConflictError(e)) {
         registerMapConflict({ error: e, mapId: currentMap?.id || null, source: 'save' });
+        return;
+      }
+      if (isMapNameConflictError(e)) {
+        showToast(e.message || getMapNameConflictMessage(trimmedName), 'error');
         return;
       }
       showToast(e.message || 'Failed to save map', 'error');
@@ -11205,8 +11291,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       />
 
       <div
-        className={`canvas ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
+        className={`canvas ${hasMap ? 'has-map' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
+        style={{
+          '--canvas-pan-x': `${pan.x || 0}px`,
+          '--canvas-pan-y': `${pan.y || 0}px`,
+          '--canvas-grid-size': `${Math.max(4, 16 * (scale || 1))}px`,
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

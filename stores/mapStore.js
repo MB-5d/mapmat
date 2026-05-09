@@ -105,6 +105,38 @@ async function countMapsAccessibleToUserAsync({ userId, projectId }) {
   return (await adapter.queryOneAsync(query, params))?.count || 0;
 }
 
+function normalizeMapNameForCompare(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+async function getMapNameConflictAsync({ ownerId, projectId, name, excludeMapId = null }) {
+  const normalizedName = String(name || '').trim();
+  if (!ownerId || !normalizedName) return Promise.resolve(null);
+
+  const params = [ownerId];
+  let query = `
+    SELECT id, name, project_id
+    FROM maps
+    WHERE user_id = ?
+  `;
+
+  if (projectId) {
+    query += ' AND project_id = ?';
+    params.push(projectId);
+  } else {
+    query += ' AND project_id IS NULL';
+  }
+
+  if (excludeMapId) {
+    query += ' AND id != ?';
+    params.push(excludeMapId);
+  }
+
+  const rows = await adapter.queryAsync(query, params);
+  const targetName = normalizeMapNameForCompare(normalizedName);
+  return rows.find((row) => normalizeMapNameForCompare(row.name) === targetName) || null;
+}
+
 function getMapWithProjectForUserAsync(mapId, userId) {
   return adapter.queryOneAsync(`
     SELECT m.*, p.name as project_name
@@ -363,6 +395,7 @@ module.exports = {
   listMapsAccessibleToUserAsync,
   countMapsByUserAsync,
   countMapsAccessibleToUserAsync,
+  getMapNameConflictAsync,
   getMapWithProjectForUserAsync,
   getMapWithProjectAccessibleToUserAsync,
   getMapForUserAsync,

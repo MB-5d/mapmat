@@ -279,6 +279,33 @@ function parseJsonArray(raw, fallback = []) {
   }
 }
 
+async function ensureMapNameAvailable({
+  res,
+  ownerId,
+  projectId,
+  name,
+  excludeMapId = null,
+}) {
+  const trimmedName = String(name || '').trim();
+  const conflict = await mapStore.getMapNameConflictAsync({
+    ownerId,
+    projectId,
+    name: trimmedName,
+    excludeMapId,
+  });
+  if (!conflict) return true;
+  res.status(409).json({
+    error: `A map named "${trimmedName}" already exists in this folder.`,
+    code: 'MAP_NAME_CONFLICT',
+    conflict: {
+      map_id: conflict.id,
+      name: conflict.name,
+      project_id: conflict.project_id || null,
+    },
+  });
+  return false;
+}
+
 function serializeMapComment(row) {
   return {
     id: row.id,
@@ -1132,8 +1159,9 @@ router.post('/maps', requireAuth, async (req, res) => {
   try {
     const { name, url, root, orphans, connections, colors, connectionColors, project_id, notes } = req.body;
     const normalizedProjectId = normalizeProjectSelectionValue(project_id);
+    const trimmedName = String(name || '').trim();
 
-    if (!name?.trim()) {
+    if (!trimmedName) {
       return res.status(400).json({ error: 'Map name is required' });
     }
 
@@ -1154,13 +1182,20 @@ router.post('/maps', requireAuth, async (req, res) => {
       })) return;
     }
 
+    if (!await ensureMapNameAvailable({
+      res,
+      ownerId: req.user.id,
+      projectId: normalizedProjectId,
+      name: trimmedName,
+    })) return;
+
     const mapId = uuidv4();
 
     await mapStore.createMapAsync({
       id: mapId,
       userId: req.user.id,
       projectId: normalizedProjectId,
-      name: name.trim(),
+      name: trimmedName,
       notes: notes ? notes.trim() : null,
       url: url || root.url || '',
       rootData: JSON.stringify(root),
@@ -1250,9 +1285,24 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
 
     const patch = {};
+    const nextName = name !== undefined ? String(name || '').trim() : map.name;
+    if (name !== undefined && !nextName) {
+      return res.status(400).json({ error: 'Map name is required' });
+    }
+    const nextProjectId = project_id !== undefined ? normalizedProjectId : (map.project_id || null);
+
+    if (name !== undefined || project_id !== undefined) {
+      if (!await ensureMapNameAvailable({
+        res,
+        ownerId: map.user_id,
+        projectId: nextProjectId,
+        name: nextName,
+        excludeMapId: id,
+      })) return;
+    }
 
     if (name !== undefined) {
-      patch.name = name.trim();
+      patch.name = nextName;
     }
     if (notes !== undefined) {
       patch.notes = notes ? notes.trim() : null;

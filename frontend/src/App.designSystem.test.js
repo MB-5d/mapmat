@@ -31,10 +31,12 @@ describe('UI design-system contract', () => {
   });
 
   test('canvas grid and stacked cards use shared visual rules', () => {
+    expect(appCss).toContain('.canvas.has-map::before');
+    expect(appCss).toContain('background-position: var(--canvas-pan-x, 0px) var(--canvas-pan-y, 0px);');
     expect(appCss).toContain('z-index: 0;');
     expect(appCss).toContain('border-radius: var(--ui-radius-lg);');
-    expect(appCss).toContain('transform: translate(12px, 12px);');
-    expect(appCss).toContain('transform: translate(8px, 8px);');
+    expect(appCss).toContain('transform: translate(15px, 15px);');
+    expect(appCss).toContain('transform: translate(10px, 10px);');
     expect(appCss).toContain('transform: translate(5px, 5px);');
   });
 });
