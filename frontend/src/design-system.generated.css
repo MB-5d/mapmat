@@ -124,6 +124,7 @@
   --unit-56: 56px;
   --unit-72: 72px;
   --unit-80: 80px;
+  --unit-1.5: 1.5px;
   --border-width-none: 0px;
   --border-width-subtle: 1px;
   --border-width-strong: 2px;
@@ -141,6 +142,7 @@
   --radius-full: 999px;
   --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-raised: 0 4px 12px rgba(15, 23, 42, 0.12);
+  --shadow-canvas-control: 0 4px 12px rgba(0, 0, 0, 0.1);
   --shadow-overlay: 0 12px 24px rgba(15, 23, 42, 0.12);
   --shadow-modal: 0 20px 25px rgba(15, 23, 42, 0.15);
   --shadow-drawer: -12px 0 24px rgba(15, 23, 42, 0.15);
@@ -149,6 +151,7 @@
   --node-w: 288px;
   --node-h-collapsed: 200px;
   --node-h-thumb: 262px;
+  --ui-connection-map-stroke-width: 1.5px;
   --gap-l1-x: 80px;
   --gap-stack-y: 56px;
   --indent-x: 40px;
@@ -244,6 +247,10 @@
   --type-node-title-md-line-height: 20px;
   --type-node-title-md-weight: 400;
   --type-node-title-md-letter-spacing: -0.01em;
+  --type-home-title-lg-size: 32px;
+  --type-home-title-lg-line-height: 40px;
+  --type-home-title-lg-weight: 600;
+  --type-home-title-lg-letter-spacing: 0;
   --type-body-lg-size: 20px;
   --type-body-lg-line-height: 30px;
   --type-body-lg-weight: 400;
@@ -315,18 +322,18 @@
   --ui-color-danger-hover: var(--color-red-600);
   --ui-button-brand-fill: var(--color-brand-700);
   --ui-button-brand-fill-hover: var(--color-brand-800);
-  --ui-button-brand-fill-disabled: var(--color-brand-300);
+  --ui-button-brand-fill-disabled: var(--color-brand-600);
   --ui-button-brand-contrast: var(--color-neutral-white);
   --ui-button-brand-quiet: var(--color-brand-700);
   --ui-button-brand-quiet-hover: var(--color-brand-800);
-  --ui-button-brand-quiet-disabled: var(--color-brand-300);
+  --ui-button-brand-quiet-disabled: var(--color-brand-600);
   --ui-button-mono-fill: var(--color-neutral-900);
   --ui-button-mono-fill-hover: var(--color-neutral-800);
   --ui-button-mono-fill-disabled: var(--color-neutral-400);
   --ui-button-mono-contrast: var(--color-neutral-white);
   --ui-button-mono-quiet: var(--color-neutral-900);
   --ui-button-mono-quiet-hover: var(--color-neutral-800);
-  --ui-button-mono-quiet-disabled: var(--color-neutral-400);
+  --ui-button-mono-quiet-disabled: var(--color-neutral-500);
   --ui-button-danger-fill: var(--color-red-800);
   --ui-button-danger-fill-hover: var(--color-red-900);
   --ui-button-danger-fill-disabled: var(--color-red-300);
@@ -361,6 +368,7 @@
   --ui-input-icon: var(--color-neutral-500);
   --ui-input-icon-active: var(--color-brand-500);
   --ui-color-icon-hover: var(--color-neutral-300);
+  --ui-control-disabled-content: var(--color-neutral-500);
   --ui-color-accent-soft: rgba(99, 102, 241, 0.12);
   --ui-color-accent-soft-border: rgba(99, 102, 241, 0.28);
   --ui-canvas-grid-dot: rgba(203, 213, 225, 0.4);
@@ -475,18 +483,18 @@
 [data-theme="dark"] {
   --ui-button-brand-fill: var(--color-brand-700);
   --ui-button-brand-fill-hover: var(--color-brand-800);
-  --ui-button-brand-fill-disabled: var(--color-brand-300);
+  --ui-button-brand-fill-disabled: var(--color-brand-600);
   --ui-button-brand-contrast: var(--color-neutral-white);
   --ui-button-brand-quiet: var(--color-brand-300);
   --ui-button-brand-quiet-hover: var(--color-brand-200);
-  --ui-button-brand-quiet-disabled: var(--color-brand-400);
+  --ui-button-brand-quiet-disabled: var(--color-brand-300);
   --ui-button-mono-fill: var(--color-neutral-white);
   --ui-button-mono-fill-hover: var(--color-neutral-100);
   --ui-button-mono-fill-disabled: var(--color-neutral-300);
   --ui-button-mono-contrast: var(--color-neutral-900);
   --ui-button-mono-quiet: var(--color-neutral-white);
   --ui-button-mono-quiet-hover: var(--color-neutral-100);
-  --ui-button-mono-quiet-disabled: var(--color-neutral-300);
+  --ui-button-mono-quiet-disabled: var(--color-plum-300);
   --ui-button-danger-fill: var(--color-red-800);
   --ui-button-danger-fill-hover: var(--color-red-900);
   --ui-button-danger-fill-disabled: var(--color-red-300);
@@ -521,6 +529,7 @@
   --ui-input-icon: var(--color-plum-400);
   --ui-input-icon-active: var(--color-brand-300);
   --ui-color-icon-hover: var(--color-plum-700);
+  --ui-control-disabled-content: var(--color-plum-300);
   --ui-color-accent-soft: rgba(99, 102, 241, 0.18);
   --ui-color-accent-soft-border: rgba(129, 140, 248, 0.7);
   --ui-canvas-grid-dot: rgba(159, 143, 184, 0.45);

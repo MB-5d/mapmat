@@ -159,6 +159,7 @@ function primitiveCssEntries() {
   entries['node-w'] = `${layout.NODE_W}px`;
   entries['node-h-collapsed'] = `${layout.NODE_H_COLLAPSED}px`;
   entries['node-h-thumb'] = `${layout.NODE_H_THUMB}px`;
+  entries['ui-connection-map-stroke-width'] = `${layout.CONNECTION_MAP_STROKE}px`;
   entries['gap-l1-x'] = `${layout.GAP_L1_X}px`;
   entries['gap-stack-y'] = `${layout.GAP_STACK_Y}px`;
   entries['indent-x'] = `${layout.INDENT_X}px`;

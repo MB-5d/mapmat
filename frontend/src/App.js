@@ -699,7 +699,7 @@ const SitemapTree = ({
             d={d}
             fill="none"
             stroke="var(--ui-connection-map-default)"
-            strokeWidth="2"
+            strokeWidth="var(--ui-connection-map-stroke-width)"
           />
         ))}
       </svg>
@@ -1162,6 +1162,140 @@ const normalizeOrphans = (list) => (list || [])
     orphanType: orphan.orphanType || 'orphan',
   }));
 
+const normalizeScanConfig = ({ url, depth, options }) => ({
+  url: normalizeUrlForCompare(url || ''),
+  depth: Number.parseInt(depth, 10) || 4,
+  options: Object.keys(options || {})
+    .sort()
+    .reduce((acc, key) => {
+      acc[key] = Boolean(options[key]);
+      return acc;
+    }, {}),
+});
+
+const scanConfigsHaveOptionChanges = (nextConfig, previousConfig) => {
+  if (!nextConfig || !previousConfig) return false;
+  if (nextConfig.depth !== previousConfig.depth) return true;
+  const keys = new Set([
+    ...Object.keys(nextConfig.options || {}),
+    ...Object.keys(previousConfig.options || {}),
+  ]);
+  return Array.from(keys).some((key) => Boolean(nextConfig.options?.[key]) !== Boolean(previousConfig.options?.[key]));
+};
+
+const collectNodesDeep = (rootNode, orphanNodes = []) => {
+  const result = [];
+  const walk = (node) => {
+    if (!node) return;
+    result.push(node);
+    (node.children || []).forEach(walk);
+  };
+  walk(rootNode);
+  (orphanNodes || []).forEach(walk);
+  return result;
+};
+
+const nodeKey = (node) => {
+  if (!node) return '';
+  if (node.url) return `url:${normalizeUrlForCompare(node.url)}`;
+  return node.id ? `id:${node.id}` : '';
+};
+
+const hasUserPreservedNodeState = (node, manualNodeIds = new Set()) => {
+  if (!node) return false;
+  const annotations = node.annotations || {};
+  return manualNodeIds.has(node.id)
+    || Boolean(node.comments?.length)
+    || Boolean(annotations.status && annotations.status !== 'none')
+    || Boolean(String(annotations.note || '').trim())
+    || Boolean(annotations.tags?.length)
+    || Boolean(node.thumbnailUrl || node.thumbnailFullUrl || node.fullScreenshotUrl);
+};
+
+const mergeRescanResults = ({
+  existingRoot,
+  existingOrphans,
+  nextRoot,
+  nextOrphans,
+  manualConnections = [],
+}) => {
+  const existingByKey = new Map();
+  collectNodesDeep(existingRoot, existingOrphans).forEach((node) => {
+    const key = nodeKey(node);
+    if (key && !existingByKey.has(key)) existingByKey.set(key, node);
+    if (node?.id && !existingByKey.has(`id:${node.id}`)) existingByKey.set(`id:${node.id}`, node);
+  });
+
+  const hydratedKeys = new Set();
+  const preserveFields = [
+    'id',
+    'title',
+    'pageType',
+    'annotations',
+    'comments',
+    'thumbnailUrl',
+    'thumbnailFullUrl',
+    'fullScreenshotUrl',
+    'description',
+    'metaTags',
+    'canonicalUrl',
+    'seoMetadata',
+  ];
+
+  const hydrateNode = (node) => {
+    if (!node) return node;
+    const key = nodeKey(node);
+    const existing = existingByKey.get(key) || existingByKey.get(`id:${node.id}`);
+    const next = {
+      ...node,
+      children: (node.children || []).map(hydrateNode),
+    };
+    if (existing) {
+      if (key) hydratedKeys.add(key);
+      if (existing.id) hydratedKeys.add(`id:${existing.id}`);
+      preserveFields.forEach((field) => {
+        const value = existing[field];
+        if (value !== undefined && value !== null && value !== '') {
+          next[field] = value;
+        }
+      });
+    }
+    return next;
+  };
+
+  const manualNodeIds = new Set();
+  manualConnections.forEach((connection) => {
+    if (connection?.sourceNodeId) manualNodeIds.add(connection.sourceNodeId);
+    if (connection?.targetNodeId) manualNodeIds.add(connection.targetNodeId);
+  });
+
+  const nextRootHydrated = hydrateNode(nextRoot);
+  const nextOrphansHydrated = (nextOrphans || []).map(hydrateNode);
+  const nextKeys = new Set(collectNodesDeep(nextRootHydrated, nextOrphansHydrated).map(nodeKey).filter(Boolean));
+  const preservedMissing = collectNodesDeep(existingRoot, existingOrphans)
+    .filter((node) => {
+      const key = nodeKey(node);
+      if (!key || hydratedKeys.has(key) || nextKeys.has(key)) return false;
+      return hasUserPreservedNodeState(node, manualNodeIds);
+    })
+    .map((node) => ({
+      ...node,
+      children: [],
+      orphanType: node.orphanType || 'orphan',
+    }));
+
+  return {
+    root: nextRootHydrated,
+    orphans: normalizeOrphans([...nextOrphansHydrated, ...preservedMissing]),
+  };
+};
+
+export const __testing = {
+  normalizeScanConfig,
+  scanConfigsHaveOptionChanges,
+  mergeRescanResults,
+};
+
 export default function App({ currentRoute, navigateToRoute }) {
   const { consent, openSettings: openPrivacySettings } = useConsent();
   const [urlInput, setUrlInput] = useState('');
@@ -1180,6 +1314,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   });
   const [showScanOptions, setShowScanOptions] = useState(false);
   const [scanDepth, setScanDepth] = useState('4');
+  const [lastCompletedScanConfig, setLastCompletedScanConfig] = useState(null);
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
   });
@@ -1635,6 +1770,13 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const hasMap = !!root;
   const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap;
+  const currentScanConfig = useMemo(() => normalizeScanConfig({
+    url: urlInput,
+    depth: scanDepth,
+    options: scanOptions,
+  }), [urlInput, scanDepth, scanOptions]);
+  const hasTopbarRescanChanges = isUnsavedScannedMap
+    && scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig);
   useEffect(() => {
     if (!hasMap) {
       setSelectedNodeIds(new Set());
@@ -6797,6 +6939,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     const depthValue = Number.isFinite(parsedDepth) && parsedDepth > 0
       ? parsedDepth
       : 4;
+    const requestedScanConfig = normalizeScanConfig({
+      url,
+      depth: depthValue,
+      options: scanOptions,
+    });
+    const shouldMergeScanResult = isUnsavedScannedMap
+      && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig);
 
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
@@ -6927,12 +7076,27 @@ export default function App({ currentRoute, navigateToRoute }) {
           };
         })
         .filter(Boolean);
+      const manualConnections = shouldMergeScanResult
+        ? connections.filter((connection) => !(connection.autoRoute || connection.locked || String(connection.id || '').startsWith('scan-crosslink-')))
+        : [];
+      if (shouldMergeScanResult) {
+        merged = mergeRescanResults({
+          existingRoot: root,
+          existingOrphans: orphans,
+          nextRoot: merged.root,
+          nextOrphans: merged.orphans,
+          manualConnections,
+        });
+      }
+      const nextConnections = shouldMergeScanResult
+        ? [...manualConnections, ...scannedCrosslinks]
+        : scannedCrosslinks;
       setRoot(merged.root);
       setOrphans(merged.orphans);
       setShowThumbnails(false);
       setThumbnailScopeIds(null);
       resetThumbnailQueue(0);
-      setConnections(scannedCrosslinks);
+      setConnections(nextConnections);
       setScanMeta({
         brokenLinks: data.brokenLinks || [],
         partial: isPartialResult,
@@ -6967,16 +7131,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       setDraftVersionFromSnapshot({
         root: merged.root,
         orphans: merged.orphans,
-        connections: scannedCrosslinks,
-        colors: DEFAULT_COLORS,
-        connectionColors: DEFAULT_CONNECTION_COLORS,
+        connections: nextConnections,
+        colors: shouldMergeScanResult ? colors : DEFAULT_COLORS,
+        connectionColors: shouldMergeScanResult ? connectionColors : DEFAULT_CONNECTION_COLORS,
       }, 'Updated');
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setLastScanAt(new Date().toISOString());
+      setLastCompletedScanConfig(requestedScanConfig);
       // Set map name from site title
-      if (!preserveName && data.root?.title) {
+      if (!preserveName && !shouldMergeScanResult && data.root?.title) {
         setMapName(data.root.title);
-      } else if (!preserveName) {
+      } else if (!preserveName && !shouldMergeScanResult) {
         // Use domain as fallback
         try {
           const domain = new URL(url).hostname.replace('www.', '');
@@ -6995,7 +7160,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const pageCount = countNodes(merged.root);
       addToHistory(url, merged.root, pageCount, scanConfig, depthValue, {
         orphans: merged.orphans,
-        connections: scannedCrosslinks,
+        connections: nextConnections,
       });
       trackEvent('scan_completed', {
         hostname,
@@ -11003,7 +11168,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
-        showScanBar={hasMap && !isImportedMap && !!root?.url && !showInviteAcceptGate && !showMapAccessGate}
+        showScanBar={isUnsavedScannedMap && !!root?.url && !showInviteAcceptGate && !showMapAccessGate}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
         scanOptionsRef={scanOptionsRef}
@@ -11022,12 +11187,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           setScanDepth(String(Number(cleaned)));
         }}
         onScan={scan}
-        scanLabel={isUnsavedScannedMap ? 'Rescan' : 'Scan'}
-        scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
-        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : isUnsavedScannedMap ? "Rescan URL" : "Scan URL"}
+        scanLabel={hasTopbarRescanChanges ? 'Rescan' : 'Scan'}
+        scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !hasTopbarRescanChanges)}
+        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasTopbarRescanChanges ? "Rescan with updated options" : "Change scan options to rescan"}
         optionsDisabled={isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
-        showClearUrl={false}
+        showClearUrl={!!urlInput.trim()}
         sharedTitle={root?.title || 'Shared Sitemap'}
         onCreateMap={() => openCreateMapFlow()}
         onImportFile={() => setShowImportModal(true)}
