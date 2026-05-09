@@ -11275,6 +11275,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     saveMapModalProjectId || 'none',
     saveMapModalName || 'untitled',
   ].join(':');
+  const canvasGridSize = Math.max(4, Math.round(16 * (scale || 1)));
+  const canvasGridDotRadius = Math.max(0.22, Math.min(0.75, 0.75 * (canvasGridSize / 16)));
 
   return (
     <AuthProvider value={authValue}>
@@ -11327,7 +11329,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         style={{
           '--canvas-pan-x': `${pan.x || 0}px`,
           '--canvas-pan-y': `${pan.y || 0}px`,
-          '--canvas-grid-size': `${Math.max(4, 16 * (scale || 1))}px`,
+          '--canvas-grid-size': `${canvasGridSize}px`,
+          '--canvas-grid-dot-radius': `${canvasGridDotRadius}px`,
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

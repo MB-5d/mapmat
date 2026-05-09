@@ -33,6 +33,9 @@ describe('UI design-system contract', () => {
   test('canvas grid and stacked cards use shared visual rules', () => {
     expect(appCss).toContain('.canvas.has-map::before');
     expect(appCss).toContain('background-position: var(--canvas-pan-x, 0px) var(--canvas-pan-y, 0px);');
+    expect(appCss).toContain('var(--canvas-grid-dot-radius, 0.75px)');
+    expect(appJs).toContain('const canvasGridSize = Math.max(4, Math.round(16 * (scale || 1)));');
+    expect(appJs).toContain('const canvasGridDotRadius = Math.max(0.22, Math.min(0.75, 0.75 * (canvasGridSize / 16)));');
     expect(appCss).toContain('z-index: 0;');
     expect(appCss).toContain('border-radius: var(--ui-radius-lg);');
     expect(appCss).toContain('transform: translate(15px, 15px);');

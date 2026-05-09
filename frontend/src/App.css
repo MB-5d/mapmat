@@ -2247,7 +2247,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0.75px, transparent 0.75px);
+  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) var(--canvas-grid-dot-radius, 0.75px), transparent var(--canvas-grid-dot-radius, 0.75px));
   background-position: var(--canvas-pan-x, 0px) var(--canvas-pan-y, 0px);
   background-size: var(--canvas-grid-size, 16px) var(--canvas-grid-size, 16px);
   pointer-events: none;
@@ -9971,7 +9971,7 @@ body {
 }
 
 [data-theme="dark"] .canvas.has-map::before {
-  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0.75px, transparent 0.75px);
+  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) var(--canvas-grid-dot-radius, 0.75px), transparent var(--canvas-grid-dot-radius, 0.75px));
 }
 
 [data-theme="dark"] .blank-title {
@@ -11076,7 +11076,7 @@ body {
 }
 
 [data-theme="light"] .canvas.has-map::before {
-  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0.75px, transparent 0.75px);
+  background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) var(--canvas-grid-dot-radius, 0.75px), transparent var(--canvas-grid-dot-radius, 0.75px));
 }
 
 [data-theme="light"] .node-card {
