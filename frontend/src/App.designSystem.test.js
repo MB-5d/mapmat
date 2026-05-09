@@ -13,7 +13,7 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--type-home-title-lg-line-height: 40px;');
     expect(generatedCss).toContain('--type-home-title-lg-weight: 600;');
     expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(0, 0, 0, 0.1);');
-    expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.5px;');
+    expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.25px;');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
 
@@ -23,11 +23,19 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('color: var(--ui-control-disabled-content);');
   });
 
-  test('top scan bar is limited to unsaved scans and supports clear/rescan states', () => {
+  test('top scan bar is limited to unsaved scans and supports clear/update states', () => {
     expect(appJs).toContain('showScanBar={isUnsavedScannedMap');
-    expect(appJs).toContain("scanLabel={hasTopbarRescanChanges ? 'Rescan' : 'Scan'}");
+    expect(appJs).toContain("scanLabel={hasTopbarRescanChanges ? 'Update' : 'Scan'}");
     expect(appJs).toContain('showClearUrl={!!urlInput.trim()}');
     expect(appJs).toContain('scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig)');
+  });
+
+  test('canvas grid and stacked cards use shared visual rules', () => {
+    expect(appCss).toContain('z-index: 0;');
+    expect(appCss).toContain('border-radius: var(--ui-radius-lg);');
+    expect(appCss).toContain('transform: translate(12px, 12px);');
+    expect(appCss).toContain('transform: translate(8px, 8px);');
+    expect(appCss).toContain('transform: translate(5px, 5px);');
   });
 });
 

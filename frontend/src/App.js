@@ -11187,9 +11187,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           setScanDepth(String(Number(cleaned)));
         }}
         onScan={scan}
-        scanLabel={hasTopbarRescanChanges ? 'Rescan' : 'Scan'}
+        scanLabel={hasTopbarRescanChanges ? 'Update' : 'Scan'}
         scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !hasTopbarRescanChanges)}
-        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasTopbarRescanChanges ? "Rescan with updated options" : "Change scan options to rescan"}
+        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasTopbarRescanChanges ? "Update scan with changed options" : "Change scan options to update"}
         optionsDisabled={isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
         showClearUrl={!!urlInput.trim()}

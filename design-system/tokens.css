@@ -124,7 +124,7 @@
   --unit-56: 56px;
   --unit-72: 72px;
   --unit-80: 80px;
-  --unit-1.5: 1.5px;
+  --unit-1.25: 1.25px;
   --border-width-none: 0px;
   --border-width-subtle: 1px;
   --border-width-strong: 2px;
@@ -151,7 +151,7 @@
   --node-w: 288px;
   --node-h-collapsed: 200px;
   --node-h-thumb: 262px;
-  --ui-connection-map-stroke-width: 1.5px;
+  --ui-connection-map-stroke-width: 1.25px;
   --gap-l1-x: 80px;
   --gap-stack-y: 56px;
   --indent-x: 40px;
