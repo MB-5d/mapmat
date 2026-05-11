@@ -251,6 +251,26 @@ function safeParse(raw, fieldName, fallback = undefined) {
   }
 }
 
+function stripNodeForStorage(node) {
+  if (!node || typeof node !== 'object') return node;
+  const next = { ...node };
+  delete next.internalLinks;
+  delete next._childUrls;
+  delete next._treeDepth;
+  delete next._treeSize;
+  if (Array.isArray(node.children)) {
+    next.children = node.children.map(stripNodeForStorage);
+  }
+  return next;
+}
+
+function sanitizeMapTreeForStorage({ root, orphans } = {}) {
+  return {
+    root: root ? stripNodeForStorage(root) : root,
+    orphans: Array.isArray(orphans) ? orphans.map(stripNodeForStorage) : orphans,
+  };
+}
+
 // Shared parser for map/history/share rows that store JSON in *_data columns.
 function parseMapFields(row) {
   return {
@@ -571,6 +591,7 @@ async function createInitialMapVersionAsync({
   const versionNumber = await mapStore.getNextMapVersionNumberByMapAsync(mapId);
   const versionName = 'Initial';
   const versionNotes = notes ? String(notes).trim() : null;
+  const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
 
   await mapStore.createMapVersionAsync({
     id: versionId,
@@ -579,8 +600,8 @@ async function createInitialMapVersionAsync({
     versionNumber,
     name: versionName,
     notes: versionNotes,
-    rootData: JSON.stringify(root),
-    orphansData: orphans ? JSON.stringify(orphans) : null,
+    rootData: JSON.stringify(sanitizedTree.root),
+    orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
     connectionsData: connections ? JSON.stringify(connections) : null,
     colors: colors ? JSON.stringify(colors) : null,
     connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
@@ -1190,6 +1211,7 @@ router.post('/maps', requireAuth, async (req, res) => {
     })) return;
 
     const mapId = uuidv4();
+    const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
 
     await mapStore.createMapAsync({
       id: mapId,
@@ -1197,9 +1219,9 @@ router.post('/maps', requireAuth, async (req, res) => {
       projectId: normalizedProjectId,
       name: trimmedName,
       notes: notes ? notes.trim() : null,
-      url: url || root.url || '',
-      rootData: JSON.stringify(root),
-      orphansData: orphans ? JSON.stringify(orphans) : null,
+      url: url || sanitizedTree.root?.url || '',
+      rootData: JSON.stringify(sanitizedTree.root),
+      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
       connectionsData: connections ? JSON.stringify(connections) : null,
       colors: colors ? JSON.stringify(colors) : null,
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
@@ -1307,11 +1329,12 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     if (notes !== undefined) {
       patch.notes = notes ? notes.trim() : null;
     }
+    const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
     if (root !== undefined) {
-      patch.rootData = JSON.stringify(root);
+      patch.rootData = JSON.stringify(sanitizedTree.root);
     }
     if (orphans !== undefined) {
-      patch.orphansData = orphans ? JSON.stringify(orphans) : null;
+      patch.orphansData = sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null;
     }
     if (connections !== undefined) {
       patch.connectionsData = connections ? JSON.stringify(connections) : null;
@@ -1441,6 +1464,7 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
 
     const versionId = uuidv4();
     const title = name?.trim() || 'Updated';
+    const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
 
     await mapStore.createMapVersionAsync({
       id: versionId,
@@ -1449,8 +1473,8 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
       versionNumber: nextVersion,
       name: title,
       notes: notes?.trim() || null,
-      rootData: JSON.stringify(root),
-      orphansData: orphans ? JSON.stringify(orphans) : null,
+      rootData: JSON.stringify(sanitizedTree.root),
+      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
       connectionsData: connections ? JSON.stringify(connections) : null,
       colors: colors ? JSON.stringify(colors) : null,
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
@@ -1802,16 +1826,17 @@ router.post('/history', requireAuth, async (req, res) => {
     }
 
     const historyId = uuidv4();
+    const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
 
     await historyStore.createHistoryAsync({
       id: historyId,
       userId: req.user.id,
-      url: url || root.url || '',
+      url: url || sanitizedTree.root?.url || '',
       hostname: hostname || '',
       title: title || '',
       pageCount: page_count || 0,
-      rootData: JSON.stringify(root),
-      orphansData: orphans ? JSON.stringify(orphans) : null,
+      rootData: JSON.stringify(sanitizedTree.root),
+      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
       connectionsData: connections ? JSON.stringify(connections) : null,
       colors: colors ? JSON.stringify(colors) : null,
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
@@ -2000,6 +2025,7 @@ router.post('/shares', requireAuth, async (req, res) => {
     }
 
     const shareId = uuidv4();
+    const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
     const expiresAt = expires_in_days
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
@@ -2008,8 +2034,8 @@ router.post('/shares', requireAuth, async (req, res) => {
       id: shareId,
       mapId: map_id || null,
       userId: req.user.id,
-      rootData: JSON.stringify(root),
-      orphansData: orphans ? JSON.stringify(orphans) : null,
+      rootData: JSON.stringify(sanitizedTree.root),
+      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
       connectionsData: connections ? JSON.stringify(connections) : null,
       colors: colors ? JSON.stringify(colors) : null,
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,

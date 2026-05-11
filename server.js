@@ -79,6 +79,7 @@ const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBL
 const RUN_MODE = process.env.RUN_MODE || 'both'; // 'web' | 'worker' | 'both'
 const RUN_WEB = RUN_MODE === 'both' || RUN_MODE === 'web';
 const RUN_WORKER = RUN_MODE === 'both' || RUN_MODE === 'worker';
+const REQUEST_JSON_LIMIT = process.env.REQUEST_JSON_LIMIT || '25mb';
 if (process.env.TRUST_PROXY === 'true' || isProd) {
   app.set('trust proxy', 1);
 }
@@ -145,7 +146,19 @@ app.use(cors({
 
 app.use(cookieParser());
 app.use('/api/email/webhooks', emailWebhookRouter);
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: REQUEST_JSON_LIMIT }));
+app.use((err, req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'This map is too large to save right now. Please try again after image capture finishes.',
+      code: 'REQUEST_BODY_TOO_LARGE',
+    });
+  }
+  if (err instanceof SyntaxError && Object.prototype.hasOwnProperty.call(err, 'body')) {
+    return res.status(400).json({ error: 'Invalid JSON request body' });
+  }
+  return next(err);
+});
 
 const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
 if (!fs.existsSync(SCREENSHOT_DIR)) {
@@ -2387,7 +2400,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       discoveryIndex: Number.isFinite(meta.discoveryIndex) ? meta.discoveryIndex : null,
       referrerUrl: referrerMap.get(url) || null,
       linksIn: linksInCounts.get(url) || 0,
-      internalLinks: Array.isArray(linksByUrl.get(url)) ? linksByUrl.get(url) : [],
       linksOut: Array.isArray(linksByUrl.get(url)) ? linksByUrl.get(url).length : 0,
       authRequired: meta.authRequired || false,
       thumbnailUrl: meta.thumbnailUrl || undefined,
@@ -2773,6 +2785,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     delete node._childUrls;
     delete node._treeDepth;
     delete node._treeSize;
+    delete node.internalLinks;
     if (node.children?.length) {
       node.children.forEach(stripInternalFields);
     }

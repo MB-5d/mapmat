@@ -9,6 +9,8 @@ import TextInput from '../ui/TextInput';
 import TextareaInput from '../ui/TextareaInput';
 import { findMapNameConflict, getMapNameConflictMessage } from '../../utils/mapNameConflicts';
 
+const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const isVirtualProject = (project) => (
   !!project?.isVirtual
   || project?.id === 'uncategorized'
@@ -69,6 +71,7 @@ const SaveMapForm = ({
     }
     setIsSubmitting(true);
     try {
+      await waitForUiResponse();
       await Promise.resolve(onSave(selectedProject || null, mapName, notes));
     } finally {
       setIsSubmitting(false);

@@ -524,6 +524,37 @@ const PresenceChipList = ({ collaborators = [] }) => {
   );
 };
 
+const stripNodeForMapSave = (node) => {
+  if (!node || typeof node !== 'object') return node;
+  const next = { ...node };
+  delete next.internalLinks;
+  delete next._childUrls;
+  delete next._treeDepth;
+  delete next._treeSize;
+  if (Array.isArray(node.children)) {
+    next.children = node.children.map(stripNodeForMapSave);
+  }
+  return next;
+};
+
+const prepareMapTreeForSave = ({ root, orphans } = {}) => ({
+  root: root ? stripNodeForMapSave(root) : root,
+  orphans: Array.isArray(orphans) ? orphans.map(stripNodeForMapSave) : [],
+});
+
+const buildMapSavePayload = (payload = {}) => {
+  const tree = prepareMapTreeForSave({
+    root: payload.root,
+    orphans: payload.orphans,
+  });
+  const next = { ...payload };
+  if (Object.prototype.hasOwnProperty.call(payload, 'root')) next.root = tree.root || null;
+  if (Object.prototype.hasOwnProperty.call(payload, 'orphans')) next.orphans = tree.orphans;
+  return next;
+};
+
+const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const serializeMapAutosaveSnapshot = ({
   name,
   root,
@@ -532,15 +563,18 @@ const serializeMapAutosaveSnapshot = ({
   colors,
   connectionColors,
   project_id,
-} = {}) => JSON.stringify({
-  name: (name || '').trim(),
-  root: root || null,
-  orphans: Array.isArray(orphans) ? orphans : [],
-  connections: Array.isArray(connections) ? connections : [],
-  colors: colors || DEFAULT_COLORS,
-  connectionColors: connectionColors || DEFAULT_CONNECTION_COLORS,
-  project_id: project_id || null,
-});
+} = {}) => {
+  const payload = buildMapSavePayload({ root, orphans });
+  return JSON.stringify({
+    name: (name || '').trim(),
+    root: payload.root || null,
+    orphans: Array.isArray(payload.orphans) ? payload.orphans : [],
+    connections: Array.isArray(connections) ? connections : [],
+    colors: colors || DEFAULT_COLORS,
+    connectionColors: connectionColors || DEFAULT_CONNECTION_COLORS,
+    project_id: project_id || null,
+  });
+};
 
 function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
   const projectsById = new Map();
@@ -2025,13 +2059,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     return pageInsightLookup.get(node.id) || pageInsightLookup.get(node.url) || null;
   }, [pageInsightLookup]);
 
-  const getVersionSnapshot = useCallback(() => ({
-    root,
-    orphans,
-    connections,
-    colors,
-    connectionColors,
-  }), [root, orphans, connections, colors, connectionColors]);
+  const getVersionSnapshot = useCallback(() => {
+    const tree = prepareMapTreeForSave({ root, orphans });
+    return {
+      root: tree.root,
+      orphans: tree.orphans,
+      connections,
+      colors,
+      connectionColors,
+    };
+  }, [root, orphans, connections, colors, connectionColors]);
 
   const serializeVersionSnapshot = useCallback((snapshot) => {
     try {
@@ -2200,6 +2237,24 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, []);
 
+  const getMapConflictActualUpdatedAt = useCallback((error) => (
+    error?.payload?.conflict?.actual_updated_at
+    || error?.payload?.latest?.updated_at
+    || null
+  ), []);
+
+  const updateMapWithLatestTimestamp = useCallback(async (mapId, payload, { expectedUpdatedAt } = {}) => {
+    try {
+      return await api.updateMap(mapId, payload, { expectedUpdatedAt });
+    } catch (error) {
+      const actualUpdatedAt = getMapConflictActualUpdatedAt(error);
+      if (!isMapUpdateConflictError(error) || !actualUpdatedAt || actualUpdatedAt === expectedUpdatedAt) {
+        throw error;
+      }
+      return api.updateMap(mapId, payload, { expectedUpdatedAt: actualUpdatedAt });
+    }
+  }, [getMapConflictActualUpdatedAt, isMapUpdateConflictError]);
+
   const flushAutosave = useCallback(() => {
     if (isCoeditingReadOnlyMode) {
       autosavePendingRef.current = null;
@@ -2214,7 +2269,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!pending) return;
 
     autosaveInFlightRef.current = true;
-    api.updateMap(pending.mapId, pending.payload, {
+    updateMapWithLatestTimestamp(pending.mapId, pending.payload, {
       expectedUpdatedAt: pending.expectedUpdatedAt,
     })
       .then(({ map }) => {
@@ -2253,11 +2308,23 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (autosavePendingRef.current?.snapshot === pending.snapshot) {
             autosavePendingRef.current = null;
           }
-          registerMapConflict({
-            error,
-            mapId: pending.mapId,
-            source: 'autosave',
-          });
+          const actualUpdatedAt = getMapConflictActualUpdatedAt(error);
+          if (actualUpdatedAt) {
+            setCurrentMap((current) => (
+              current?.id === pending.mapId
+                ? { ...current, updated_at: actualUpdatedAt }
+                : current
+            ));
+            setProjects((prev) => prev.map((project) => ({
+              ...project,
+              maps: (project.maps || []).map((map) => (
+                map.id === pending.mapId ? { ...map, updated_at: actualUpdatedAt } : map
+              )),
+            })));
+            setMapSaveConflict(null);
+            return;
+          }
+          registerMapConflict({ error, mapId: pending.mapId, source: 'autosave' });
           return;
         }
         if (autosaveRetryTimerRef.current) return;
@@ -2268,7 +2335,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           flushAutosave();
         }, delay);
       });
-  }, [isCoeditingReadOnlyMode, isMapUpdateConflictError, registerMapConflict]);
+  }, [getMapConflictActualUpdatedAt, isCoeditingReadOnlyMode, isMapUpdateConflictError, registerMapConflict, updateMapWithLatestTimestamp]);
 
   useEffect(() => {
     const handleOnline = () => flushAutosave();
@@ -3590,7 +3657,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       || areMapPermissionsPending
     ) return;
 
-    const snapshot = JSON.stringify({
+    const payload = buildMapSavePayload({
       name: currentMap?.name || mapName,
       root,
       orphans,
@@ -3599,6 +3666,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       connectionColors,
       project_id: currentMap?.project_id || null,
     });
+    const snapshot = serializeMapAutosaveSnapshot(payload);
 
     if (snapshot === lastAutosaveSnapshotRef.current) return;
 
@@ -3608,11 +3676,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         mapId: currentMap.id,
         changedAt: Date.now(),
         snapshot: {
-          root,
-          orphans,
-          connections,
-          colors,
-          connectionColors,
+          root: payload.root,
+          orphans: payload.orphans,
+          connections: payload.connections,
+          colors: payload.colors,
+          connectionColors: payload.connectionColors,
         },
       };
 
@@ -3625,7 +3693,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       autosavePendingRef.current = {
         mapId: currentMap.id,
         expectedUpdatedAt: currentMap?.updated_at || null,
-        payload: {
+        payload: buildMapSavePayload({
           name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
           root,
           orphans,
@@ -3633,7 +3701,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           colors,
           connectionColors,
           project_id: currentMap?.project_id || null,
-        },
+        }),
         snapshot,
       };
       flushAutosave();
@@ -4858,20 +4926,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       return true;
     });
     if (nextAssets.length === 0) return false;
-    if (isLiveActive && currentMap?.id) {
-      const result = submitLiveDraft({
-        type: 'node.update',
-        payload: {
-          nodeId,
-          changes: Object.fromEntries(nextAssets),
-        },
-      });
-      if (!result.ok) {
-        showToast(result.error || 'Failed to queue screenshot update', 'error');
-        return false;
-      }
-      return true;
-    }
     setRoot((prev) => {
       if (!prev) return prev;
       if (!findNodeById(prev, nodeId)) return prev;
@@ -4926,8 +4980,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, []);
 
   const flushThumbnailAutosave = () => {
-    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion || isLiveEditingModeActive) return;
-    const payload = {
+    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion || isCoeditingReadOnlyMode || isCollaborativeLiveEditingRestricted) return;
+    const payload = buildMapSavePayload({
       name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
       root,
       orphans,
@@ -4935,8 +4989,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       colors,
       connectionColors,
       project_id: currentMap?.project_id || null,
-    };
-    const snapshot = JSON.stringify(payload);
+    });
+    const snapshot = serializeMapAutosaveSnapshot(payload);
     autosavePendingRef.current = {
       mapId: currentMap.id,
       expectedUpdatedAt: currentMap?.updated_at || null,
@@ -4978,11 +5032,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return false;
   }, [getActiveImageCaptureMode, showToast]);
 
-  const guardImageCapturePersistenceReady = useCallback(() => {
-    if (!isLiveActive || liveStatus === COEDITING_LIVE_STATUS.CONNECTED) return true;
-    showToast('Live editing is out of sync. Resync before capturing images.', 'warning');
-    return false;
-  }, [isLiveActive, liveStatus, showToast]);
+  const guardImageCapturePersistenceReady = useCallback(() => true, []);
 
   const scheduleThumbnailRetry = useCallback((nodeId, url, attemptOverride) => {
     if (!nodeId || !url) return;
@@ -5845,7 +5895,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     try {
-      const { map } = await api.updateMap(
+      const { map } = await updateMapWithLatestTimestamp(
         mapId,
         { name: trimmedName },
         { expectedUpdatedAt: current?.updated_at || (currentMap?.id === mapId ? currentMap?.updated_at : null) }
@@ -5931,7 +5981,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     try {
-      const { map } = await api.updateMap(
+      const { map } = await updateMapWithLatestTimestamp(
         mapId,
         { project_id: targetProjectId || null },
         { expectedUpdatedAt: mapRecord?.updated_at || (currentMap?.id === mapId ? currentMap?.updated_at : null) }
@@ -6060,6 +6110,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     setIsSavingMap(true);
     try {
+      await waitForUiResponse();
       const { map, initialVersion } = await api.saveMap({
         name: trimmedName,
         url: snapshot.root?.url || '',
@@ -6154,7 +6205,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     const snapshot = getVersionSnapshot();
     try {
-      const { map } = await api.updateMap(
+      const { map } = await updateMapWithLatestTimestamp(
         currentMap.id,
         {
           name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
@@ -6174,7 +6225,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         ...p,
         maps: (p.maps || []).map(m => (m.id === map.id ? map : m)),
       })));
-      lastAutosaveSnapshotRef.current = JSON.stringify({
+      lastAutosaveSnapshotRef.current = serializeMapAutosaveSnapshot({
         name: map.name,
         root: snapshot.root,
         orphans: snapshot.orphans,
@@ -6263,11 +6314,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowSaveMapModal(false);
       return;
     }
-    if (isLiveActive && currentMap?.id) {
-      showToast('Live editing already persists this saved map. Turn live editing off before using Save Map.', 'info');
-      setShowSaveMapModal(false);
-      return;
-    }
     const wasNewMap = !currentMap?.id;
     const targetProjectId = normalizeProjectSelection(projectId);
     const trimmedName = mapName.trim();
@@ -6283,13 +6329,14 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     setIsSavingMap(true);
     try {
+      await waitForUiResponse();
       let savedMap;
       let initialVersion = null;
       if (currentMap?.id) {
         // Update existing map
-        const { map } = await api.updateMap(
+        const { map } = await updateMapWithLatestTimestamp(
           currentMap.id,
-          {
+          buildMapSavePayload({
             name: trimmedName,
             root,
             orphans,
@@ -6298,13 +6345,13 @@ export default function App({ currentRoute, navigateToRoute }) {
             connectionColors,
             notes: notes?.trim() || null,
             project_id: targetProjectId,
-          },
+          }),
           { expectedUpdatedAt: currentMap?.updated_at || null }
         );
         savedMap = map;
       } else {
         // Create new map
-        const response = await api.saveMap({
+        const response = await api.saveMap(buildMapSavePayload({
           name: trimmedName,
           url: root.url,
           root,
@@ -6314,7 +6361,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           connectionColors,
           notes: notes?.trim() || null,
           project_id: targetProjectId,
-        });
+        }));
         savedMap = response.map;
         initialVersion = response.initialVersion || null;
       }

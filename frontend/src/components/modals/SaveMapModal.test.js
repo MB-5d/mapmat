@@ -7,6 +7,8 @@ describe('SaveMapModal', () => {
   let container;
   let root;
 
+  const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0));
+
   const setInputValue = (element, value) => {
     const prototype = element.tagName === 'TEXTAREA'
       ? window.HTMLTextAreaElement.prototype
@@ -68,7 +70,7 @@ describe('SaveMapModal', () => {
 
     await act(async () => {
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
+      await waitForUiResponse();
     });
 
     expect(onSave).toHaveBeenCalledWith(null, 'Homepage map', 'Shared DS flow');
@@ -141,6 +143,7 @@ describe('SaveMapModal', () => {
 
     await act(async () => {
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await waitForUiResponse();
     });
 
     expect(onSave).toHaveBeenCalledTimes(1);
@@ -151,6 +154,45 @@ describe('SaveMapModal', () => {
       resolveSave();
       await Promise.resolve();
     });
+  });
+
+  test('shows a saving response before starting deferred save work', async () => {
+    const onSave = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <SaveMapModal
+          show
+          onClose={jest.fn()}
+          isLoggedIn
+          onRequireLogin={jest.fn()}
+          projects={[]}
+          currentMap={{ name: 'Current map', notes: '' }}
+          rootUrl="https://example.com"
+          defaultProjectId=""
+          onSave={onSave}
+          onCreateProject={jest.fn()}
+        />
+      );
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Map')
+    );
+
+    act(() => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(saveButton.textContent).toContain('Saving');
+    expect(saveButton.getAttribute('aria-busy')).toBe('true');
+    expect(onSave).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await waitForUiResponse();
+    });
+
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 
   test('blocks duplicate map names within the selected project', async () => {
@@ -184,7 +226,7 @@ describe('SaveMapModal', () => {
 
     await act(async () => {
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
+      await waitForUiResponse();
     });
 
     expect(onSave).not.toHaveBeenCalled();

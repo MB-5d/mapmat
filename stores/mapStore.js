@@ -132,7 +132,7 @@ async function getMapNameConflictAsync({ ownerId, projectId, name, excludeMapId 
     params.push(excludeMapId);
   }
 
-  const rows = await adapter.queryAsync(query, params);
+  const rows = await adapter.queryAllAsync(query, params);
   const targetName = normalizeMapNameForCompare(normalizedName);
   return rows.find((row) => normalizeMapNameForCompare(row.name) === targetName) || null;
 }
