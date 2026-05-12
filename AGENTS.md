@@ -9,3 +9,11 @@
 - Treat the app codebase as the source of truth unless the user explicitly says a Figma decision should lead and then be ported back to code.
 - Call out explicitly before any Figma cleanup step that requires matching repo changes.
 - Design system goal: represent reusable UI decisions as tokens or shared components so the system can scale and adapt without duplicate manual styling.
+
+## Parallel Chat Safety
+- Multiple Codex chats may be working in this repo at the same time.
+- Before editing, inspect the current worktree and relevant files.
+- Do not overwrite, revert, or remove changes made by another chat or the user.
+- If another chat appears to be editing the same files or feature area, pause and ask the user before resolving the conflict.
+- Prefer narrow, task-specific edits so parallel work can proceed safely.
+- If a merge, rebase, commit, or push could affect another chat's progress, ask the user first.

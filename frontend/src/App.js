@@ -154,6 +154,167 @@ const parseEnvBool = (value, fallback = false) => {
   return fallback;
 };
 
+const escapeXml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&apos;');
+
+const normalizeBriefText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+
+const getAiExportPageType = (node = {}, fallback = 'Page') => {
+  if (node.pageType) return node.pageType;
+  if (node.subdomainRoot) return 'Subdomain';
+  if (node.isFile || node.orphanType === 'file') return 'File';
+  if (node.isMissing) return 'Missing';
+  if (node.isDuplicate) return 'Duplicate';
+  if (node.isBroken || node.orphanType === 'broken') return 'Broken';
+  if (node.orphanType === 'orphan') return 'Orphan';
+  return fallback;
+};
+
+const buildAiExportRows = (rootNode, orphanNodes = []) => {
+  const rows = [];
+
+  const visit = (node, number, depth, section) => {
+    if (!node) return;
+    const annotations = node.annotations || {};
+    rows.push({
+      id: node.id || '',
+      number,
+      depth,
+      section,
+      title: normalizeBriefText(node.title) || 'Untitled',
+      url: normalizeBriefText(node.url),
+      pageType: getAiExportPageType(node, section === 'orphan' ? 'Orphan' : 'Page'),
+      description: getSeoValue(node, 'description'),
+      metaKeywords: getSeoValue(node, 'keywords'),
+      canonicalUrl: getSeoValue(node, 'canonicalUrl'),
+      h1: getSeoValue(node, 'h1'),
+      h2: getSeoValue(node, 'h2'),
+      robots: getSeoValue(node, 'robots'),
+      annotationStatus: annotations.status || 'none',
+      annotationTags: Array.isArray(annotations.tags) ? annotations.tags : [],
+      annotationNote: normalizeBriefText(annotations.note),
+      thumbnailUrl: node.thumbnailUrl || '',
+      thumbnailFullUrl: node.thumbnailFullUrl || '',
+      fullScreenshotUrl: node.fullScreenshotUrl || '',
+      childCount: Array.isArray(node.children) ? node.children.length : 0,
+    });
+
+    (node.children || []).forEach((child, index) => {
+      visit(child, `${number}.${index + 1}`, depth + 1, section);
+    });
+  };
+
+  if (rootNode) visit(rootNode, '1', 0, 'main');
+  (orphanNodes || []).forEach((orphan, index) => {
+    visit(orphan, `O${index + 1}`, 0, 'orphan');
+  });
+
+  return rows;
+};
+
+const buildAiSiteMapXml = (rows) => {
+  const urls = rows
+    .map((row) => row.url)
+    .filter(Boolean)
+    .filter((url, index, allUrls) => allUrls.indexOf(url) === index);
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...urls.map((url) => `  <url><loc>${escapeXml(url)}</loc></url>`),
+    '</urlset>',
+  ].join('\n');
+};
+
+const buildAiSiteBriefMarkdown = ({ hostname, mode, rows, generatedAt }) => {
+  const mainRows = rows.filter((row) => row.section === 'main');
+  const orphanRows = rows.filter((row) => row.section === 'orphan');
+  const pageList = (list) => list.map((row) => {
+    const indent = '  '.repeat(row.depth);
+    const details = [
+      `type: ${row.pageType}`,
+      row.url ? `url: ${row.url}` : '',
+      row.description ? `description: ${row.description}` : '',
+      row.h1 ? `h1: ${row.h1}` : '',
+      row.annotationStatus && row.annotationStatus !== 'none' ? `status: ${row.annotationStatus}` : '',
+      row.annotationTags.length ? `tags: ${row.annotationTags.join(', ')}` : '',
+      row.annotationNote ? `note: ${row.annotationNote}` : '',
+    ].filter(Boolean).join('; ');
+    return `${indent}- ${row.number}. ${row.title} (${details})`;
+  }).join('\n');
+
+  return `# AI Site Brief
+
+Generated from Vellic for ${hostname}
+Generated: ${generatedAt}
+Mode: ${mode}
+
+## How to use this with other files
+- Treat this file as the site structure and information architecture brief.
+- Brand guidelines, design system files, and reference images override visual style notes here.
+- Copy docs or content matrices override placeholder copy or page descriptions here.
+- Existing code, routes, CMS fields, analytics, SEO settings, and working behavior should be preserved unless the user explicitly asks to change them.
+- If this brief conflicts with another supplied file, ask the user before choosing.
+
+## Build instruction
+Use the Vellic map to ${mode === 'Improve Existing Site' ? 'improve the existing site structure without blindly replacing the current implementation' : 'build a new site from this structure'}. Page types should guide the layout pattern for each page. Use URLs, hierarchy, SEO fields, annotations, and relationships to decide navigation, routing, redirects, and content gaps.
+
+## Recommended IA changes
+- Preserve important existing behavior unless a requested IA change requires a careful update.
+- Use moved, missing, duplicate, orphan, file, subdomain, and broken-page signals as recommendations, not automatic destructive changes.
+- For an existing site, propose redirects for renamed, moved, or removed URLs before changing routes.
+
+## Main site structure
+${pageList(mainRows) || '- No main pages found.'}
+
+## Orphan, file, subdomain, or exception pages
+${pageList(orphanRows) || '- None found.'}
+
+## Companion files
+- site-map.json contains the full structured map data.
+- sitemap.xml contains the URL list for tools that expect XML.
+- Screenshots and thumbnails are referenced in site-map.json when available.
+`;
+};
+
+const buildAiSiteData = ({
+  root,
+  orphans,
+  connections,
+  colors,
+  connectionColors,
+  rows,
+  mode,
+  hostname,
+  generatedAt,
+}) => ({
+  exportType: 'vellic-ai-site-build',
+  version: 1,
+  mode,
+  hostname,
+  generatedAt,
+  instructions: {
+    sourcePriority: [
+      'Brand and design-system files override visual style notes.',
+      'Copy docs and content matrices override placeholder copy.',
+      'Reference images override visual assumptions.',
+      'Vellic map data defines structure, navigation, URLs, page relationships, page types, and IA recommendations.',
+      'Ask the user before choosing when supplied files conflict.',
+    ],
+    existingSiteSafety: 'Preserve existing design system, routes, components, CMS fields, analytics, SEO settings, and working behavior unless explicitly asked to change them.',
+  },
+  pages: rows,
+  root,
+  orphans: Array.isArray(orphans) ? orphans : [],
+  connections: Array.isArray(connections) ? connections : [],
+  colors,
+  connectionColors,
+});
+
 const COLLABORATION_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COLLABORATION_UI_ENABLED,
   false
@@ -8208,6 +8369,35 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast('Downloaded JSON');
   };
 
+  const exportAiSiteBrief = () => {
+    if (!root) return;
+
+    const hostname = getHostname(root.url) || 'site';
+    const generatedAt = new Date().toISOString();
+    const rows = buildAiExportRows(root, orphans);
+    const mode = root.url ? 'Improve Existing Site' : 'Build New Site';
+    const baseFilename = `ai-site-brief-${hostname}`;
+    const siteData = buildAiSiteData({
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      rows,
+      mode,
+      hostname,
+      generatedAt,
+    });
+
+    downloadText(
+      `${baseFilename}.md`,
+      buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt })
+    );
+    downloadText(`${baseFilename}-site-map.json`, JSON.stringify(siteData, null, 2));
+    downloadText(`${baseFilename}-sitemap.xml`, buildAiSiteMapXml(rows));
+    showToast('Downloaded AI Site Brief');
+  };
+
   const exportCsv = () => {
     if (!root) return;
 
@@ -12720,6 +12910,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       <ExportModal
         show={showExportModal}
         onClose={() => setShowExportModal(false)}
+        onExportAiSiteBrief={() => { exportAiSiteBrief(); setShowExportModal(false); }}
         onExportPng={() => { setShowExportModal(false); exportPng(); }}
         onExportPdf={() => { setShowExportModal(false); exportPdf(); }}
         onExportCsv={() => { exportCsv(); setShowExportModal(false); }}

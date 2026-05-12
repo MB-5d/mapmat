@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileImage, FileJson, FileSpreadsheet, FileText, List } from 'lucide-react';
+import { FileImage, FileJson, FileSpreadsheet, FileText, List, Sparkles } from 'lucide-react';
 
 import Modal from '../ui/Modal';
 import OptionCard from '../ui/OptionCard';
@@ -12,6 +12,7 @@ const ExportModal = ({
   onExportCsv,
   onExportJson,
   onExportSiteIndex,
+  onExportAiSiteBrief,
 }) => {
   if (!show) return null;
 
@@ -24,6 +25,13 @@ const ExportModal = ({
       className="export-modal"
     >
       <div className="export-options">
+        <OptionCard
+          className="export-btn"
+          icon={<Sparkles size={24} />}
+          title="AI Site Brief"
+          description="Site-building brief for AI code tools"
+          onClick={onExportAiSiteBrief}
+        />
         <OptionCard
           className="export-btn"
           icon={<FileImage size={24} />}
