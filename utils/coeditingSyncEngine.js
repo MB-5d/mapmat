@@ -665,8 +665,19 @@ async function createSnapshotFromMapRowAsync(mapRow) {
   return parseSnapshotRowToDocument(snapshotRow);
 }
 
-async function refreshSnapshotFromMapRowAsync(mapRow) {
-  const document = parseMapRowToDocument(mapRow);
+async function refreshSnapshotFromMapRowAsync(mapRow, { previousDocument = null } = {}) {
+  const savedDocument = parseMapRowToDocument(mapRow);
+  const latestOpVersion = await coeditingStore.getMaxLiveOpVersionByMapIdAsync(savedDocument.mapId);
+  const previousVersion = Number(previousDocument?.version || 0);
+  const nextVersion = previousDocument
+    ? Math.max(previousVersion, latestOpVersion) + 1
+    : savedDocument.version;
+  const document = {
+    ...savedDocument,
+    version: nextVersion,
+    lastOpId: null,
+    lastActorId: previousDocument?.lastActorId || null,
+  };
   const stored = serializeDocument(document);
   const snapshotRow = await coeditingStore.updateLiveSnapshotAsync({
     mapId: document.mapId,
@@ -701,7 +712,7 @@ async function ensureLiveDocumentCurrentAsync(mapId) {
   const snapshotRow = await coeditingStore.getLiveSnapshotByMapIdAsync(mapId);
   if (!snapshotRow) {
     const createdDocument = await createSnapshotFromMapRowAsync(mapRow);
-    return { mapRow, document: createdDocument };
+    return { mapRow, document: createdDocument, refreshedFromSavedMap: false };
   }
 
   const document = parseSnapshotRowToDocument(snapshotRow);
@@ -710,25 +721,13 @@ async function ensureLiveDocumentCurrentAsync(mapId) {
   const savedMapUpdatedAt = normalizeTimestampMarker(mapRow.updated_at);
 
   if (liveMapUpdatedAt && savedMapUpdatedAt && liveMapUpdatedAt !== savedMapUpdatedAt) {
-    if (document.version === 0 && !document.lastOpId) {
-      const refreshedDocument = await refreshSnapshotFromMapRowAsync(mapRow);
-      return { mapRow, document: refreshedDocument };
-    }
-
-    throw new CoeditingSyncError(
-      'COEDITING_MAP_DRIFT',
-      'Live snapshot is stale relative to the saved map',
-      409,
-      {
-        mapId,
-        liveMapUpdatedAt,
-        savedMapUpdatedAt,
-        version: document.version,
-      }
-    );
+    const refreshedDocument = await refreshSnapshotFromMapRowAsync(mapRow, {
+      previousDocument: document,
+    });
+    return { mapRow, document: refreshedDocument, refreshedFromSavedMap: true };
   }
 
-  return { mapRow, document };
+  return { mapRow, document, refreshedFromSavedMap: false };
 }
 
 function buildCommittedOperation(operation, version, committedAt) {
@@ -885,7 +884,13 @@ async function listCommittedOperationsAsync({
     LIVE_OP_REPLAY_LIMIT_MAX
   );
 
-  const { document } = await ensureLiveDocumentCurrentAsync(mapId);
+  const { document, refreshedFromSavedMap } = await ensureLiveDocumentCurrentAsync(mapId);
+  if (refreshedFromSavedMap && normalizedAfterVersion < document.version) {
+    return {
+      currentVersion: document.version,
+      operations: [],
+    };
+  }
   const rows = await coeditingStore.listLiveOpsByMapIdAfterVersionAsync(
     mapId,
     normalizedAfterVersion,
