@@ -156,6 +156,18 @@ function serializeDocument(document) {
   };
 }
 
+function documentsMatchForSnapshot(leftDocument, rightDocument) {
+  const left = serializeDocument(leftDocument);
+  const right = serializeDocument(rightDocument);
+  return left.name === right.name
+    && left.notes === right.notes
+    && left.rootData === right.rootData
+    && left.orphansData === right.orphansData
+    && left.connectionsData === right.connectionsData
+    && left.colors === right.colors
+    && left.connectionColors === right.connectionColors;
+}
+
 function summarizeDocument(document) {
   return {
     mapId: document.mapId,
@@ -716,11 +728,13 @@ async function ensureLiveDocumentCurrentAsync(mapId) {
   }
 
   const document = parseSnapshotRowToDocument(snapshotRow);
+  const savedDocument = parseMapRowToDocument(mapRow);
 
   const liveMapUpdatedAt = normalizeTimestampMarker(document.mapUpdatedAt);
   const savedMapUpdatedAt = normalizeTimestampMarker(mapRow.updated_at);
+  const contentMatchesSavedMap = documentsMatchForSnapshot(document, savedDocument);
 
-  if (liveMapUpdatedAt && savedMapUpdatedAt && liveMapUpdatedAt !== savedMapUpdatedAt) {
+  if (!contentMatchesSavedMap || (liveMapUpdatedAt && savedMapUpdatedAt && liveMapUpdatedAt !== savedMapUpdatedAt)) {
     const refreshedDocument = await refreshSnapshotFromMapRowAsync(mapRow, {
       previousDocument: document,
     });

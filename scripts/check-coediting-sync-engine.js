@@ -60,14 +60,30 @@ async function assertSavedMapDriftRefreshesLiveSnapshot() {
     });
     assert.strictEqual(committed.liveDocument.version, 1);
 
-    const savedMapUpdatedAt = new Date(Date.now() + 10000).toISOString();
+    const savedMapUpdatedAt = committed.liveDocument.mapUpdatedAt;
+    assert.ok(savedMapUpdatedAt);
+    const savedRootWithThumbnail = {
+      id: 'root',
+      title: 'Load Test Root',
+      url: 'https://example.com',
+      thumbnailUrl: '/screenshots/root-thumb.jpg',
+      thumbnailFullUrl: '/screenshots/root-preview.jpg',
+      children: [],
+    };
     await adapter.executeAsync(
-      'UPDATE maps SET name = ?, updated_at = ? WHERE id = ?',
-      ['Saved Outside Live Editing', savedMapUpdatedAt, context.mapId]
+      'UPDATE maps SET name = ?, root_data = ?, updated_at = ? WHERE id = ?',
+      [
+        'Saved Outside Live Editing',
+        JSON.stringify(savedRootWithThumbnail),
+        savedMapUpdatedAt,
+        context.mapId,
+      ]
     );
 
     const refreshed = await getLiveDocumentAsync({ mapId: context.mapId });
     assert.strictEqual(refreshed.name, 'Saved Outside Live Editing');
+    assert.strictEqual(refreshed.root.thumbnailUrl, '/screenshots/root-thumb.jpg');
+    assert.strictEqual(refreshed.root.thumbnailFullUrl, '/screenshots/root-preview.jpg');
     assert.ok(refreshed.version > committed.liveDocument.version);
     assert.strictEqual(refreshed.mapUpdatedAt, savedMapUpdatedAt);
 
