@@ -388,7 +388,7 @@ const createZipPackageBlob = (files) => {
     pushHeader([
       0x4b50, 0x0201, 0x0014,
       ...commonHeader,
-      0x0000, 0x0000, 0x0000, 0x0000,
+      0x0000, 0x0000, 0x0000,
       0x0000, 0x0000,
       localOffset & 0xffff, localOffset >>> 16,
     ]);
