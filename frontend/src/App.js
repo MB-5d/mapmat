@@ -4569,13 +4569,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [canViewActivityValue, currentMap?.id, loadMapActivity, loadMapVersions, showVersionHistoryDrawer]);
 
-  const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot } = {}) => {
+  const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot, allowDuplicate = false } = {}) => {
     const targetMapId = mapId || currentMap?.id;
     if (!targetMapId || !root) return null;
     if (targetMapId === currentMap?.id && warnCoeditingReadOnly('This map')) return null;
     const payload = snapshot || getVersionSnapshot();
     const serialized = serializeVersionSnapshot(payload);
-    if (serialized && serialized === lastVersionSnapshotRef.current) return null;
+    if (!allowDuplicate && serialized && serialized === lastVersionSnapshotRef.current) return null;
     const { version } = await api.createMapVersion(targetMapId, {
       ...payload,
       name,
@@ -6338,6 +6338,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         mapId: currentMap.id,
         name,
         notes,
+        allowDuplicate: true,
       });
       if (version) {
         showToast('Version saved', 'success');
