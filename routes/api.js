@@ -289,6 +289,43 @@ function parseMapFields(row) {
   };
 }
 
+function parseMapVersionFields(row) {
+  const parseOptional = (raw, fieldName, fallback) => {
+    if (raw === null || raw === undefined || raw === '') return fallback;
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      console.warn(`Skipping invalid map version field ${fieldName}:`, {
+        versionId: row?.id || null,
+        mapId: row?.map_id || null,
+        error: error.message,
+      });
+      return fallback;
+    }
+  };
+
+  const root = parseOptional(row?.root_data, 'root_data', null);
+  if (!root || typeof root !== 'object') {
+    console.warn('Skipping map version with missing root data:', {
+      versionId: row?.id || null,
+      mapId: row?.map_id || null,
+    });
+    return null;
+  }
+
+  return {
+    root,
+    orphans: parseOptional(row.orphans_data, 'orphans_data', []),
+    connections: parseOptional(row.connections_data, 'connections_data', []),
+    colors: parseOptional(row.colors, 'colors', null),
+    connectionColors: parseOptional(row.connection_colors, 'connection_colors', null),
+    root_data: undefined,
+    orphans_data: undefined,
+    connections_data: undefined,
+    connection_colors: undefined,
+  };
+}
+
 function parseJsonArray(raw, fallback = []) {
   if (raw === null || raw === undefined || raw === '') return fallback;
   try {
@@ -1418,16 +1455,25 @@ router.get('/maps/:id/versions', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    await ensureInitialMapVersionForMapAsync(map);
+    try {
+      await ensureInitialMapVersionForMapAsync(map);
+    } catch (error) {
+      console.warn('Initial map version backfill skipped:', {
+        mapId: id,
+        error: error.message,
+      });
+    }
 
     const versions = collaborationEnabled
       ? await mapStore.listMapVersionsByMapAsync(id, 25)
       : await mapStore.listMapVersionsForUserMapAsync(id, req.user.id, 25);
 
-    const parsed = versions.map((v) => ({
-      ...v,
-      ...parseMapFields(v),
-    }));
+    const parsed = versions
+      .map((v) => {
+        const fields = parseMapVersionFields(v);
+        return fields ? { ...v, ...fields } : null;
+      })
+      .filter(Boolean);
 
     res.json({ versions: parsed });
   } catch (error) {

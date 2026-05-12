@@ -160,7 +160,10 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 
-const SCREENSHOT_DIR = path.join(__dirname, 'screenshots');
+const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH || null;
+const SCREENSHOT_DIR = process.env.SCREENSHOT_STORAGE_DIR
+  || process.env.SCREENSHOT_DIR
+  || (railwayVolumeDir ? path.join(railwayVolumeDir, 'screenshots') : path.join(__dirname, 'screenshots'));
 if (!fs.existsSync(SCREENSHOT_DIR)) {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 }
