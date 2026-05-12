@@ -20,6 +20,10 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function normalizeUsername(username) {
+  return String(username || '').trim().toLowerCase();
+}
+
 function normalizeAdminRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
   if (normalized === ADMIN_ROLES.SUPPORT || normalized === ADMIN_ROLES.PLATFORM_OWNER) {
@@ -218,6 +222,30 @@ async function getUserByEmailAsync(email) {
   const normalizedEmail = normalizeEmail(email);
   await syncBootstrapAdminRoleForEmailAsync(normalizedEmail);
   return await adapter.queryOneAsync('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+}
+
+async function getUserByLoginIdentifierAsync(identifier) {
+  await ensureAuthSchemaAsync();
+  const normalizedIdentifier = normalizeUsername(identifier);
+  if (!normalizedIdentifier) return null;
+
+  const userByEmail = await getUserByEmailAsync(normalizedIdentifier);
+  if (userByEmail) return userByEmail;
+
+  const matchingUsers = await adapter.queryAllAsync(
+    `
+      SELECT *
+      FROM users
+      WHERE LOWER(TRIM(COALESCE(name, ''))) = ?
+      ORDER BY created_at ASC, id ASC
+      LIMIT 2
+    `,
+    [normalizedIdentifier]
+  );
+
+  if (matchingUsers.length !== 1) return null;
+  await syncBootstrapAdminRoleForEmailAsync(matchingUsers[0]?.email || '');
+  return matchingUsers[0];
 }
 
 async function getUserByGoogleSubAsync(googleSub) {
@@ -562,6 +590,7 @@ module.exports = {
   getUserByIdAsync,
   getPublicUserByIdAsync,
   getUserByEmailAsync,
+  getUserByLoginIdentifierAsync,
   getUserByGoogleSubAsync,
   createUserAsync,
   updateSeedUserCredentialsAsync,

@@ -340,6 +340,10 @@ const AuthModal = ({
 
   const showAuthTabs = view === AUTH_VIEWS.LOGIN || view === AUTH_VIEWS.SIGNUP;
   const requiresNewPassword = view === AUTH_VIEWS.SIGNUP || view === AUTH_VIEWS.RESET;
+  const emailFieldLabel = view === AUTH_VIEWS.LOGIN ? 'Email or Username' : 'Email';
+  const emailFieldType = view === AUTH_VIEWS.LOGIN ? 'text' : 'email';
+  const emailFieldPlaceholder = view === AUTH_VIEWS.LOGIN ? 'you@example.com or username' : 'you@example.com';
+  const emailFieldAutoComplete = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
   const passwordLabel = view === AUTH_VIEWS.RESET ? 'New Password' : 'Password';
   const passwordPlaceholder = view === AUTH_VIEWS.RESET ? 'New password' : 'Your password';
   const passwordAutoComplete = view === AUTH_VIEWS.LOGIN ? 'current-password' : 'new-password';
@@ -399,14 +403,14 @@ const AuthModal = ({
           </Field>
         ) : null}
 
-        <Field label="Email">
+        <Field label={emailFieldLabel}>
           <TextInput
-            type="email"
+            type={emailFieldType}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@example.com"
+            placeholder={emailFieldPlaceholder}
             required
-            autoComplete="email"
+            autoComplete={emailFieldAutoComplete}
             disabled={loading || googleLoading}
           />
         </Field>

@@ -148,10 +148,10 @@ export async function signup(email, password, name) {
   });
 }
 
-export async function login(email, password) {
+export async function login(identifier, password) {
   const result = await fetchApi('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: identifier, password }),
   });
   if (result?.token) setStoredAuthToken(result.token);
   return result;

@@ -111,6 +111,10 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function isEmailIdentifier(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
 function normalizeIp(ip) {
   return ip && ip.startsWith('::ffff:') ? ip.slice(7) : ip || '';
 }
@@ -1083,16 +1087,17 @@ router.post('/resend-verification', resendLimiter, async (req, res) => {
 router.post('/login', loginLimiter, async (req, res) => {
   try {
     await authStore.ensureAuthSchemaAsync();
-    const { email, password } = req.body || {};
-    const emailNormalized = normalizeEmail(email);
+    const { email, loginIdentifier, username, password } = req.body || {};
+    const identifier = String(loginIdentifier || email || username || '').trim();
+    const emailNormalized = normalizeEmail(identifier);
 
-    if (!emailNormalized || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!identifier || !password) {
+      return res.status(400).json({ error: 'Email or username and password are required' });
     }
 
-    let user = await authStore.getUserByEmailAsync(emailNormalized);
+    let user = await authStore.getUserByLoginIdentifierAsync(identifier);
 
-    if (!user && TEST_AUTH_ENABLED) {
+    if (!user && TEST_AUTH_ENABLED && isEmailIdentifier(identifier)) {
       if (password.length < 6) {
         return res.status(400).json({ error: 'Password must be at least 6 characters' });
       }
@@ -1110,7 +1115,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     }
 
     if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid email/username or password' });
     }
 
     if (isAccountDisabled(user)) {
@@ -1123,7 +1128,7 @@ router.post('/login', loginLimiter, async (req, res) => {
       return res.status(403).json({
         error: 'Check your email for a verification code before logging in.',
         code: 'EMAIL_NOT_VERIFIED',
-        email: emailNormalized,
+        email: user.email,
         canResendVerification: true,
       });
     }
@@ -1138,7 +1143,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
     const isValid = await bcrypt.compare(password, passwordHashCurrent);
     if (!isValid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid email/username or password' });
     }
 
     const publicUser = await authStore.getPublicUserByIdAsync(user.id);

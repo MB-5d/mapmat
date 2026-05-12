@@ -202,6 +202,7 @@ async function waitForEmailCode(emailLogs, {
 async function run() {
   const server = await startServer();
   const email = randomEmail();
+  const username = `Auth Check ${Date.now()}`;
   const originalPassword = randomPassword();
   const nextPassword = randomPassword();
 
@@ -219,7 +220,7 @@ async function run() {
       body: JSON.stringify({
         email,
         password: originalPassword,
-        name: 'Auth Check',
+        name: username,
       }),
     });
 
@@ -373,8 +374,15 @@ async function run() {
     });
     assert.strictEqual(login.user?.email, email, 'login after reset should work');
 
+    const usernameLogin = await fetchJson(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify({ email: username, password: nextPassword }),
+    });
+    assert.strictEqual(usernameLogin.user?.email, email, 'login with username should work');
+
     console.log('[auth-flow-check] Passed.', JSON.stringify({
       email,
+      username,
       verificationCodeLength: verificationEmail.code.length,
       resetCodeLength: resetEmail.code.length,
       verified: verified.user?.emailVerified === true,

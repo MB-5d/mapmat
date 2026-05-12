@@ -124,6 +124,38 @@ describe('AuthModal', () => {
     expect(showToast).toHaveBeenCalledWith('Welcome, Alex!', 'success');
   });
 
+  test('allows login with a username identifier', async () => {
+    api.login.mockResolvedValue({
+      user: { id: 'u1', name: 'Alex', email: 'alex@example.com', authProvider: 'password' },
+    });
+
+    await act(async () => {
+      root.render(
+        <AuthModal
+          onClose={jest.fn()}
+          onSuccess={jest.fn()}
+          onDemo={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Email or Username');
+
+    const inputs = container.querySelectorAll('input');
+    const form = container.querySelector('form');
+
+    await act(async () => {
+      setInputValue(inputs[0], 'alex');
+      inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+      setInputValue(inputs[1], 'secret123');
+      inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(api.login).toHaveBeenCalledWith('alex', 'secret123');
+  });
+
   test('renders the official Google button when Google auth is available', async () => {
     api.getAuthConfig.mockResolvedValueOnce({
       googleAuthEnabled: true,
@@ -304,7 +336,7 @@ describe('AuthModal', () => {
       );
     });
 
-    const emailInput = container.querySelector('input[type="email"]');
+    const emailInput = container.querySelector('input[autocomplete="username"]');
     await act(async () => {
       setInputValue(emailInput, 'alex@example.com');
       emailInput.dispatchEvent(new Event('input', { bubbles: true }));

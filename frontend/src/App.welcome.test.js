@@ -58,7 +58,7 @@ describe('App blank home and welcome modal', () => {
   };
 
   const submitAuthForm = async ({ email, password }) => {
-    const emailInput = container.querySelector('input[type="email"]');
+    const emailInput = container.querySelector('input[autocomplete="username"], input[type="email"]');
     const passwordInput = container.querySelector('input[type="password"]');
     const form = container.querySelector('.auth-form');
 
