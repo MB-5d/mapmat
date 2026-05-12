@@ -142,6 +142,7 @@ describe('map image asset persistence', () => {
   const {
     applyNodeAssetUpdatesToMap,
     buildMapSavePayload,
+    serializeMapAutosaveSnapshot,
   } = __testing;
 
   test('thumbnail asset updates are retained in saved map payloads', () => {
@@ -176,5 +177,28 @@ describe('map image asset persistence', () => {
     expect(payload.root.internalLinks).toBeUndefined();
     expect(payload.root.children[0].thumbnailUrl).toBe('/screenshots/thumb-about.jpg');
     expect(payload.root.children[0].thumbnailFullUrl).toBe('/screenshots/preview-about.jpg');
+  });
+
+  test('autosave snapshots only track canvas content changes', () => {
+    const base = {
+      name: 'Original map name',
+      root: { id: 'home', title: 'Home', url: 'https://example.com', children: [] },
+      orphans: [],
+      connections: [],
+      colors: { home: '#000000' },
+      connectionColors: { primary: '#111111' },
+      project_id: 'project-a',
+    };
+
+    expect(serializeMapAutosaveSnapshot(base)).toBe(serializeMapAutosaveSnapshot({
+      ...base,
+      name: 'Renamed map',
+      project_id: 'project-b',
+    }));
+
+    expect(serializeMapAutosaveSnapshot(base)).not.toBe(serializeMapAutosaveSnapshot({
+      ...base,
+      root: { ...base.root, title: 'Updated Home' },
+    }));
   });
 });

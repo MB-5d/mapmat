@@ -596,23 +596,19 @@ const applyNodeAssetUpdatesToMap = ({ root, orphans, nodeId, assetEntries }) => 
 const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const serializeMapAutosaveSnapshot = ({
-  name,
   root,
   orphans,
   connections,
   colors,
   connectionColors,
-  project_id,
 } = {}) => {
   const payload = buildMapSavePayload({ root, orphans });
   return JSON.stringify({
-    name: (name || '').trim(),
     root: payload.root || null,
     orphans: Array.isArray(payload.orphans) ? payload.orphans : [],
     connections: Array.isArray(connections) ? connections : [],
     colors: colors || DEFAULT_COLORS,
     connectionColors: connectionColors || DEFAULT_CONNECTION_COLORS,
-    project_id: project_id || null,
   });
 };
 
@@ -1379,6 +1375,7 @@ export const __testing = {
   scanConfigsHaveOptionChanges,
   mergeRescanResults,
   buildMapSavePayload,
+  serializeMapAutosaveSnapshot,
   applyNodeAssetUpdatesToMap,
 };
 
@@ -5030,6 +5027,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       project_id: currentMap?.project_id || null,
     });
     const snapshot = serializeMapAutosaveSnapshot(payload);
+    if (snapshot === lastAutosaveSnapshotRef.current) return;
     autosavePendingRef.current = {
       mapId: currentMap.id,
       expectedUpdatedAt: currentMap?.updated_at || null,
@@ -6189,7 +6187,15 @@ export default function App({ currentRoute, navigateToRoute }) {
       setActiveVersionId(null);
       setShowVersionEditPrompt(false);
       versionBaselineRef.current = null;
-      lastAutosaveSnapshotRef.current = '';
+      resetAutosaveTracking({
+        snapshot: serializeMapAutosaveSnapshot({
+          root: snapshot.root,
+          orphans: snapshot.orphans,
+          connections: snapshot.connections,
+          colors: snapshot.colors,
+          connectionColors: snapshot.connectionColors,
+        }),
+      });
       if (initialVersion) {
         setMapVersions([initialVersion]);
         setLatestVersionId(initialVersion.id);
