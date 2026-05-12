@@ -5785,11 +5785,12 @@ body {
 }
 
 .version-history-drawer .account-drawer-actions {
-  gap: 48px;
+  gap: 8px;
 }
 
 .version-history-tabs {
-  align-self: flex-start;
+  align-self: stretch;
+  width: 100%;
 }
 
 .version-history-add {

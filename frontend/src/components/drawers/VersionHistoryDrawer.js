@@ -385,7 +385,7 @@ const VersionHistoryDrawer = ({
         <IconButton
           type="secondary"
           buttonStyle="brand"
-          size="sm"
+          size="lg"
           className="version-history-add"
           icon={<Plus />}
           onClick={onAddVersion}
@@ -400,8 +400,9 @@ const VersionHistoryDrawer = ({
       {canViewActivity ? (
         <SegmentedControl
           className="version-history-tabs"
-          variant="pill"
+          variant="tabs"
           size="sm"
+          fullWidth
           ariaLabel="Map timeline views"
           value={activeView}
           onChange={setActiveView}
