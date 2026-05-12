@@ -553,6 +553,46 @@ const buildMapSavePayload = (payload = {}) => {
   return next;
 };
 
+const cloneNodeTree = (tree) => (
+  typeof structuredClone === 'function'
+    ? structuredClone(tree)
+    : JSON.parse(JSON.stringify(tree))
+);
+
+const applyNodeAssetUpdates = (tree, nodeId, assetEntries) => {
+  if (!tree || !nodeId || !assetEntries?.length || !findNodeById(tree, nodeId)) {
+    return { tree, updated: false };
+  }
+  const nextTree = cloneNodeTree(tree);
+  const target = findNodeById(nextTree, nodeId);
+  if (!target) return { tree, updated: false };
+  assetEntries.forEach(([key, value]) => {
+    target[key] = value;
+  });
+  return { tree: nextTree, updated: true };
+};
+
+const applyNodeAssetUpdatesToMap = ({ root, orphans, nodeId, assetEntries }) => {
+  const rootUpdate = applyNodeAssetUpdates(root, nodeId, assetEntries);
+  let updated = rootUpdate.updated;
+  let nextOrphans = Array.isArray(orphans) ? orphans : [];
+
+  if (nextOrphans.length > 0) {
+    nextOrphans = nextOrphans.map((orphan) => {
+      const orphanUpdate = applyNodeAssetUpdates(orphan, nodeId, assetEntries);
+      if (!orphanUpdate.updated) return orphan;
+      updated = true;
+      return orphanUpdate.tree;
+    });
+  }
+
+  return {
+    root: rootUpdate.tree,
+    orphans: nextOrphans,
+    updated,
+  };
+};
+
 const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const serializeMapAutosaveSnapshot = ({
@@ -1338,6 +1378,8 @@ export const __testing = {
   normalizeScanConfig,
   scanConfigsHaveOptionChanges,
   mergeRescanResults,
+  buildMapSavePayload,
+  applyNodeAssetUpdatesToMap,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -1393,6 +1435,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [isEditingMapName, setIsEditingMapName] = useState(false);
   const [root, setRoot] = useState(null);
   const [orphans, setOrphans] = useState([]); // Pages with no parent (numbered 0.x)
+  const rootRef = useRef(root);
+  const orphansRef = useRef(orphans);
   const [customPageTypes, setCustomPageTypes] = useState([]); // User-added page types
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
@@ -1583,6 +1627,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [showReportDrawer, setShowReportDrawer] = useState(false);
+
+  useEffect(() => {
+    rootRef.current = root;
+  }, [root]);
+
+  useEffect(() => {
+    orphansRef.current = orphans;
+  }, [orphans]);
   const [lastScanAt, setLastScanAt] = useState(null);
   const [expandedStacks, setExpandedStacks] = useState({});
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
@@ -2060,7 +2112,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [pageInsightLookup]);
 
   const getVersionSnapshot = useCallback(() => {
-    const tree = prepareMapTreeForSave({ root, orphans });
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    const tree = prepareMapTreeForSave({ root: latestRoot, orphans: latestOrphans });
     return {
       root: tree.root,
       orphans: tree.orphans,
@@ -4919,41 +4973,24 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [currentMap?.id, currentMap?.name, currentMap?.project_id, isLiveActive, mapName, projects, showToast, submitLiveDraft]);
 
   const updateNodeScreenshotAssets = (nodeId, assetUpdates = {}) => {
-    if (!nodeId) return;
+    if (!nodeId) return false;
     const nextAssets = Object.entries(assetUpdates).filter(([, value]) => {
       if (value === undefined) return false;
       if (typeof value === 'string') return value.trim().length > 0;
       return true;
     });
     if (nextAssets.length === 0) return false;
-    setRoot((prev) => {
-      if (!prev) return prev;
-      if (!findNodeById(prev, nodeId)) return prev;
-      const copy = structuredClone(prev);
-      const target = findNodeById(copy, nodeId);
-      if (target) {
-        nextAssets.forEach(([key, value]) => {
-          target[key] = value;
-        });
-      }
-      return copy;
+    const nextMap = applyNodeAssetUpdatesToMap({
+      root: rootRef.current || root,
+      orphans: orphansRef.current || orphans,
+      nodeId,
+      assetEntries: nextAssets,
     });
-    setOrphans((prev) => {
-      let updated = false;
-      const next = prev.map((orphan) => {
-        if (!findNodeById(orphan, nodeId)) return orphan;
-        const copy = structuredClone(orphan);
-        const target = findNodeById(copy, nodeId);
-        if (target) {
-          nextAssets.forEach(([key, value]) => {
-            target[key] = value;
-          });
-        }
-        updated = true;
-        return copy;
-      });
-      return updated ? next : prev;
-    });
+    if (!nextMap.updated) return false;
+    rootRef.current = nextMap.root;
+    orphansRef.current = nextMap.orphans;
+    setRoot(nextMap.root);
+    setOrphans(nextMap.orphans);
     return true;
   };
 
@@ -4980,11 +5017,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, []);
 
   const flushThumbnailAutosave = () => {
-    if (!currentMap?.id || !root || isImportedMap || isViewingHistoricalVersion || isCoeditingReadOnlyMode || isCollaborativeLiveEditingRestricted) return;
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    if (!currentMap?.id || !latestRoot || isImportedMap || isViewingHistoricalVersion || isCoeditingReadOnlyMode || isCollaborativeLiveEditingRestricted) return;
     const payload = buildMapSavePayload({
       name: (currentMap?.name || mapName || '').trim() || 'Untitled Map',
-      root,
-      orphans,
+      root: latestRoot,
+      orphans: latestOrphans,
       connections,
       colors,
       connectionColors,
@@ -6308,7 +6347,9 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   // Map functions
   const saveMap = async (projectId, mapName, notes) => {
-    if (!root) return showToast('No sitemap to save', 'warning');
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    if (!latestRoot) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
     if (currentMap?.id && warnCoeditingReadOnly('This map')) {
       setShowSaveMapModal(false);
@@ -6338,8 +6379,8 @@ export default function App({ currentRoute, navigateToRoute }) {
           currentMap.id,
           buildMapSavePayload({
             name: trimmedName,
-            root,
-            orphans,
+            root: latestRoot,
+            orphans: latestOrphans,
             connections,
             colors,
             connectionColors,
@@ -6353,9 +6394,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         // Create new map
         const response = await api.saveMap(buildMapSavePayload({
           name: trimmedName,
-          url: root.url,
-          root,
-          orphans,
+          url: latestRoot.url,
+          root: latestRoot,
+          orphans: latestOrphans,
           connections,
           colors,
           connectionColors,
@@ -6397,8 +6438,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       resetAutosaveTracking({
         snapshot: serializeMapAutosaveSnapshot({
           name: trimmedName,
-          root,
-          orphans,
+          root: latestRoot,
+          orphans: latestOrphans,
           connections,
           colors,
           connectionColors,

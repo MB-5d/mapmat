@@ -137,3 +137,44 @@ describe('scan config and differential rescan behavior', () => {
     expect(merged.orphans.some((node) => node.id === 'deep-old')).toBe(true);
   });
 });
+
+describe('map image asset persistence', () => {
+  const {
+    applyNodeAssetUpdatesToMap,
+    buildMapSavePayload,
+  } = __testing;
+
+  test('thumbnail asset updates are retained in saved map payloads', () => {
+    const root = {
+      id: 'home',
+      url: 'https://example.com',
+      internalLinks: ['https://example.com/about'],
+      children: [
+        {
+          id: 'about',
+          url: 'https://example.com/about',
+          children: [],
+        },
+      ],
+    };
+
+    const updated = applyNodeAssetUpdatesToMap({
+      root,
+      orphans: [],
+      nodeId: 'about',
+      assetEntries: [
+        ['thumbnailUrl', '/screenshots/thumb-about.jpg'],
+        ['thumbnailFullUrl', '/screenshots/preview-about.jpg'],
+      ],
+    });
+
+    const payload = buildMapSavePayload({
+      root: updated.root,
+      orphans: updated.orphans,
+    });
+
+    expect(payload.root.internalLinks).toBeUndefined();
+    expect(payload.root.children[0].thumbnailUrl).toBe('/screenshots/thumb-about.jpg');
+    expect(payload.root.children[0].thumbnailFullUrl).toBe('/screenshots/preview-about.jpg');
+  });
+});
