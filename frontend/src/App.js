@@ -12934,12 +12934,15 @@ export default function App({ currentRoute, navigateToRoute }) {
           const remaining = totalNew - thumbnailStats.loaded;
           if (remaining <= 0) return null;
           const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
+          const hasRetries = thumbnailStats.failed > 0;
           const fallbackItemMs = isScreenshotCapture ? 30000 : 12000;
-          const estimateItemMs = thumbnailStats.avgMs > 0
-            ? thumbnailStats.avgMs
-            : Math.max(fallbackItemMs, thumbnailElapsedMs || 0);
+          const elapsedItemMs = thumbnailStats.loaded > 0
+            ? Math.ceil(Math.max(thumbnailElapsedMs, 1000) / thumbnailStats.loaded)
+            : 0;
+          const estimateItemMs = Math.max(thumbnailStats.avgMs || 0, elapsedItemMs, fallbackItemMs);
           const activeConcurrency = isScreenshotCapture ? FULL_SCREENSHOT_CONCURRENCY : MAX_THUMBNAIL_CONCURRENCY;
-          const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, activeConcurrency));
+          const etaConcurrency = hasRetries ? 1 : activeConcurrency;
+          const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
           return (
             <div className="thumbnail-progress-toast">
               <div className="thumbnail-progress-details">
@@ -12950,7 +12953,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 </span>
                 <span className="thumbnail-progress-line">
                   <span className="thumbnail-progress-bar" aria-hidden="true" />
-                  {formatDuration(thumbnailElapsedMs)} | ETA ~{formatDuration(etaMs)}
+                  {formatDuration(thumbnailElapsedMs)} | ETA {hasRetries ? 'retrying ' : '~'}{formatDuration(etaMs)}
                 </span>
               </div>
               <button
