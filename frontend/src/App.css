@@ -5913,7 +5913,13 @@ body {
   align-self: flex-end;
   margin: 8px 8px 0 auto;
   z-index: 6;
+  box-shadow: var(--shadow-raised);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.drawer-back-to-top:hover:not(:disabled) {
   box-shadow: var(--shadow-overlay);
+  transform: translateY(-1px);
 }
 
 .save-version-modal .version-meta-row {

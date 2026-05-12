@@ -2998,7 +2998,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity]);
 
   useEffect(() => {
-    if (!currentMap?.id || !isLoggedIn || !currentUser || !canViewActivityValue) {
+    if (!currentMap?.id || !isLoggedIn || !currentUser || !canViewActivityValue || showVersionHistoryDrawer) {
       return undefined;
     }
 
@@ -3021,7 +3021,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       window.removeEventListener('focus', refreshActivity);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity]);
+  }, [canViewActivityValue, currentMap?.id, currentUser, isLoggedIn, loadMapActivity, showVersionHistoryDrawer]);
 
   // Show confirmation modal and return promise
   const showConfirm = useCallback(({ title, message, confirmText = 'OK', cancelText = 'Cancel', danger = false }) => {
@@ -4303,30 +4303,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       canceled = true;
     };
   }, [canViewActivityValue, currentMap?.id, loadMapActivity, loadMapVersions, showVersionHistoryDrawer]);
-
-  useEffect(() => {
-    if (!showVersionHistoryDrawer || !currentMap?.id) return undefined;
-
-    const refreshVersions = () => {
-      loadMapVersions(currentMap.id);
-    };
-
-    const intervalId = window.setInterval(refreshVersions, ACTIVITY_POLL_INTERVAL_MS);
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        refreshVersions();
-      }
-    };
-
-    window.addEventListener('focus', refreshVersions);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshVersions);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [currentMap?.id, loadMapVersions, showVersionHistoryDrawer]);
 
   const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot } = {}) => {
     const targetMapId = mapId || currentMap?.id;

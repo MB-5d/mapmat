@@ -416,7 +416,7 @@ const VersionHistoryDrawer = ({
           : renderVersions()}
         {showBackToTop ? (
           <Button
-            type="secondary"
+            type="primary"
             buttonStyle="mono"
             size="sm"
             className="drawer-back-to-top"
