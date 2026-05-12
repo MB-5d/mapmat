@@ -315,6 +315,110 @@ const buildAiSiteData = ({
   connectionColors,
 });
 
+const zipCrcTable = Array.from({ length: 256 }, (_, index) => {
+  let c = index;
+  for (let k = 0; k < 8; k += 1) {
+    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+  }
+  return c >>> 0;
+});
+
+const getZipCrc32 = (bytes) => {
+  let crc = 0xffffffff;
+  bytes.forEach((byte) => {
+    crc = zipCrcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  });
+  return (crc ^ 0xffffffff) >>> 0;
+};
+
+const getZipDosTimestamp = (date = new Date()) => ({
+  time: (
+    (date.getHours() << 11)
+    | (date.getMinutes() << 5)
+    | Math.floor(date.getSeconds() / 2)
+  ) & 0xffff,
+  date: (
+    ((date.getFullYear() - 1980) << 9)
+    | ((date.getMonth() + 1) << 5)
+    | date.getDate()
+  ) & 0xffff,
+});
+
+const createZipPackageBlob = (files) => {
+  const encoder = new TextEncoder();
+  const chunks = [];
+  const centralDirectory = [];
+  let offset = 0;
+  const timestamp = getZipDosTimestamp();
+
+  const pushHeader = (values) => {
+    const bytes = new Uint8Array(values.length * 2);
+    const view = new DataView(bytes.buffer);
+    values.forEach((value, index) => view.setUint16(index * 2, value, true));
+    chunks.push(bytes);
+    offset += bytes.length;
+  };
+
+  files.forEach(({ path, content }) => {
+    const nameBytes = encoder.encode(path);
+    const dataBytes = encoder.encode(content);
+    const crc = getZipCrc32(dataBytes);
+    const localOffset = offset;
+    const commonHeader = [
+      0x0014, 0x0800, 0x0000, timestamp.time, timestamp.date,
+      crc & 0xffff, crc >>> 16,
+      dataBytes.length & 0xffff, dataBytes.length >>> 16,
+      dataBytes.length & 0xffff, dataBytes.length >>> 16,
+      nameBytes.length, 0x0000,
+    ];
+
+    pushHeader([0x4b50, 0x0403, ...commonHeader]);
+    chunks.push(nameBytes, dataBytes);
+    offset += nameBytes.length + dataBytes.length;
+
+    centralDirectory.push({
+      nameBytes,
+      commonHeader,
+      localOffset,
+    });
+  });
+
+  const centralStart = offset;
+  centralDirectory.forEach(({ nameBytes, commonHeader, localOffset }) => {
+    pushHeader([
+      0x4b50, 0x0201, 0x0014,
+      ...commonHeader,
+      0x0000, 0x0000, 0x0000, 0x0000,
+      0x0000, 0x0000,
+      localOffset & 0xffff, localOffset >>> 16,
+    ]);
+    chunks.push(nameBytes);
+    offset += nameBytes.length;
+  });
+
+  const centralSize = offset - centralStart;
+  pushHeader([
+    0x4b50, 0x0605, 0x0000, 0x0000,
+    files.length, files.length,
+    centralSize & 0xffff, centralSize >>> 16,
+    centralStart & 0xffff, centralStart >>> 16,
+    0x0000,
+  ]);
+
+  return new Blob(chunks, { type: 'application/zip' });
+};
+
+const downloadBlob = (filename, blob) => {
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+};
+
 const COLLABORATION_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COLLABORATION_UI_ENABLED,
   false
@@ -8389,13 +8493,27 @@ export default function App({ currentRoute, navigateToRoute }) {
       generatedAt,
     });
 
-    downloadText(
-      `${baseFilename}.md`,
-      buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt })
-    );
-    downloadText(`${baseFilename}-site-map.json`, JSON.stringify(siteData, null, 2));
-    downloadText(`${baseFilename}-sitemap.xml`, buildAiSiteMapXml(rows));
-    showToast('Downloaded AI Site Brief');
+    const zipBlob = createZipPackageBlob([
+      {
+        path: 'AI_SITE_BRIEF.md',
+        content: buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt }),
+      },
+      {
+        path: 'site-map.json',
+        content: JSON.stringify(siteData, null, 2),
+      },
+      {
+        path: 'sitemap.xml',
+        content: buildAiSiteMapXml(rows),
+      },
+      {
+        path: 'references/README.md',
+        content: '# References\n\nAdd brand guidelines, design system files, reference images, copy docs, content matrices, or screenshots here before sharing this package with an AI code tool.\n',
+      },
+    ]);
+
+    downloadBlob(`${baseFilename}.zip`, zipBlob);
+    showToast('Downloaded AI Site Brief package');
   };
 
   const exportCsv = () => {
