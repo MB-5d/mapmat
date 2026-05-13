@@ -204,6 +204,11 @@ const toPositiveInt = (value, fallback) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 };
+const toBoundedNumber = (value, { min, max, fallback }) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+};
 const SCAN_PAGE_CONCURRENCY = Math.max(
   1,
   toPositiveInt(process.env.SCAN_PAGE_CONCURRENCY, isProd ? 6 : 8)
@@ -219,11 +224,11 @@ const SCAN_RATE_WINDOW_MS = Number(process.env.SCAN_RATE_WINDOW_MS ?? (isProd ? 
 const SCAN_RATE_LIMIT = Number(process.env.SCAN_RATE_LIMIT ?? (isProd ? 60 : 120));
 const SCREENSHOT_QUEUE_MAX = Number(process.env.SCREENSHOT_QUEUE_MAX ?? (isProd ? 25 : 100));
 const SCREENSHOT_MIN_GAP_MS = Number(
-  process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 2000 : 150)
+  process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 500 : 150)
 );
 const SCREENSHOT_MAX_CONCURRENCY = Math.max(
   1,
-  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 1 : 6))
+  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 2 : 6))
 );
 const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
@@ -277,6 +282,26 @@ const SCREENSHOT_FULL_DEVICE_SCALE_FACTOR = Math.max(
   1,
   Number(process.env.SCREENSHOT_FULL_DEVICE_SCALE_FACTOR ?? 1.5)
 );
+const SCREENSHOT_FULL_JPEG_QUALITY = Math.round(toBoundedNumber(
+  process.env.SCREENSHOT_FULL_JPEG_QUALITY,
+  { min: 60, max: 92, fallback: 82 }
+));
+const SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY = Math.round(toBoundedNumber(
+  process.env.SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY,
+  { min: 60, max: 92, fallback: 84 }
+));
+const SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS = Math.max(
+  250,
+  Number(process.env.SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS ?? 1200)
+);
+const SCREENSHOT_FULL_WARMUP_MAX_STOPS = Math.max(
+  2,
+  Number(process.env.SCREENSHOT_FULL_WARMUP_MAX_STOPS ?? 8)
+);
+const SCREENSHOT_FULL_WARMUP_STEP_PX = Math.max(
+  720,
+  Number(process.env.SCREENSHOT_FULL_WARMUP_STEP_PX ?? 1800)
+);
 const SCREENSHOT_CLEANUP_INTERVAL_MS = Math.max(
   10000,
   Number(process.env.SCREENSHOT_CLEANUP_INTERVAL_MS ?? 300000)
@@ -297,7 +322,9 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v7';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v8';
+const SCREENSHOT_BLOCKED_RESOURCE_TYPES = new Set(['media', 'eventsource', 'websocket']);
+const SCREENSHOT_BLOCKED_URL_PATTERN = /(?:google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|connect\.facebook\.net|hotjar|segment\.io|fullstory|intercom|clarity\.ms|sentry\.io|datadoghq-browser-agent|newrelic|amplitude\.com|mixpanel\.com)/i;
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -788,6 +815,21 @@ async function resizeScreenshotForCanvas(context, sourcePath, targetPath) {
   }
 }
 
+async function installScreenshotRequestFilters(page) {
+  await page.route('**/*', (route) => {
+    const request = route.request();
+    const resourceType = request.resourceType();
+    const requestUrl = request.url();
+    if (
+      SCREENSHOT_BLOCKED_RESOURCE_TYPES.has(resourceType)
+      || SCREENSHOT_BLOCKED_URL_PATTERN.test(requestUrl)
+    ) {
+      return route.abort().catch(() => {});
+    }
+    return route.continue().catch(() => {});
+  });
+}
+
 const JOB_TYPES = {
   scan: 'scan',
   screenshot: 'screenshot',
@@ -1078,6 +1120,12 @@ async function getBrowser() {
     browser = await chromium.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {}),
+      args: [
+        '--disable-background-networking',
+        '--disable-dev-shm-usage',
+        '--disable-renderer-backgrounding',
+        '--no-sandbox',
+      ],
     });
     browser.on('disconnected', () => {
       browser = null;
@@ -2916,7 +2964,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
   const urlHash = crypto.createHash('sha256').update(safeUrl).digest('hex');
   const fullExtension = 'jpg';
   const filename = `${urlHash}_${normalizedType}_${SCREENSHOT_CAPTURE_CACHE_VERSION}.${normalizedType === SCREENSHOT_TYPES.full ? fullExtension : 'png'}`;
-  const thumbPreviewFilename = `${urlHash}_thumb_preview_${SCREENSHOT_CAPTURE_CACHE_VERSION}.png`;
+  const thumbPreviewFilename = `${urlHash}_thumb_preview_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const thumbSmallFilename = `${urlHash}_thumb_small_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const fullSmallFilename = `${urlHash}_full_thumb_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
   const fullViewportTempFilename = `${urlHash}_full_viewport_${SCREENSHOT_CAPTURE_CACHE_VERSION}.jpg`;
@@ -3006,6 +3054,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       });
       page = await context.newPage();
+      await installScreenshotRequestFilters(page);
 
       let lastError = null;
       const captureTimeoutMs = normalizedType === SCREENSHOT_TYPES.thumb
@@ -3025,7 +3074,12 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
           throwIfAborted();
           await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 650);
           await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
-          await page.evaluate(async ({ shouldWarmFull, maxStops }) => {
+          await page.evaluate(async ({
+            shouldWarmFull,
+            maxCaptureHeight,
+            maxStops,
+            stepPx,
+          }) => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
             const warmImages = () => {
               Array.from(document.images || []).forEach((image) => {
@@ -3080,34 +3134,43 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
             });
 
             await document.fonts?.ready?.catch?.(() => {});
-            await wait(shouldWarmFull ? 180 : 500);
+            await wait(shouldWarmFull ? 100 : 300);
 
             if (shouldWarmFull) {
               const root = document.scrollingElement || document.documentElement || document.body;
               const viewportHeight = Math.max(window.innerHeight || 720, 320);
               const maxScrollTop = Math.max((root?.scrollHeight || 0) - viewportHeight, 0);
-              const stops = Math.max(2, maxStops || 10);
-              const positions = new Set([0, maxScrollTop]);
+              const captureScrollTop = Math.max(0, Math.min(maxScrollTop, Math.max(maxCaptureHeight - viewportHeight, 0)));
+              const stopsByStep = Math.ceil(captureScrollTop / Math.max(stepPx || 1800, 720)) + 1;
+              const stops = Math.min(Math.max(2, maxStops || 8), Math.max(2, stopsByStep));
+              const positions = new Set([0, captureScrollTop]);
               for (let index = 1; index < stops - 1; index += 1) {
-                positions.add(Math.round((maxScrollTop * index) / (stops - 1)));
+                positions.add(Math.round((captureScrollTop * index) / (stops - 1)));
               }
               for (const y of Array.from(positions).sort((a, b) => a - b)) {
                 window.scrollTo(0, y);
                 warmImages();
-                await wait(120);
+                await wait(80);
               }
             }
 
             window.scrollTo(0, 0);
-            await wait(shouldWarmFull ? 180 : 420);
+            await wait(shouldWarmFull ? 100 : 260);
             await new Promise((resolve) => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve)));
-          }, { shouldWarmFull: normalizedType === SCREENSHOT_TYPES.full, maxStops: 10 });
+          }, {
+            shouldWarmFull: normalizedType === SCREENSHOT_TYPES.full,
+            maxCaptureHeight: SCREENSHOT_FULL_MAX_HEIGHT,
+            maxStops: SCREENSHOT_FULL_WARMUP_MAX_STOPS,
+            stepPx: SCREENSHOT_FULL_WARMUP_STEP_PX,
+          });
           throwIfAborted();
-          await page.waitForLoadState('load', { timeout: normalizedType === SCREENSHOT_TYPES.full ? 2500 : 5000 }).catch(() => {});
+          await page.waitForLoadState('load', {
+            timeout: normalizedType === SCREENSHOT_TYPES.full ? SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS : 2500,
+          }).catch(() => {});
           if (normalizedType === SCREENSHOT_TYPES.thumb) {
-            await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+            await page.waitForLoadState('networkidle', { timeout: SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS }).catch(() => {});
           }
-          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 250);
+          await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 250 : 150);
           throwIfAborted();
 
           const title = await page.title();
@@ -3136,7 +3199,8 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
               path: fullViewportTempPath,
               fullPage: false,
               type: 'jpeg',
-              quality: 82,
+              quality: SCREENSHOT_FULL_JPEG_QUALITY,
+              animations: 'disabled',
               timeout: captureTimeoutMs,
             });
 
@@ -3149,7 +3213,8 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
               await page.screenshot({
                 path: filepath,
                 type: 'jpeg',
-                quality: 86,
+                quality: SCREENSHOT_FULL_JPEG_QUALITY,
+                animations: 'disabled',
                 timeout: captureTimeoutMs,
                 clip: {
                   x: 0,
@@ -3163,7 +3228,8 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
                 path: filepath,
                 fullPage: true,
                 type: 'jpeg',
-                quality: 86,
+                quality: SCREENSHOT_FULL_JPEG_QUALITY,
+                animations: 'disabled',
                 timeout: captureTimeoutMs,
               });
             }
@@ -3173,7 +3239,9 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
             await page.screenshot({
               path: thumbPreviewPath,
               fullPage: false,
-              type: 'png',
+              type: 'jpeg',
+              quality: SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY,
+              animations: 'disabled',
               timeout: captureTimeoutMs,
             });
             await resizeScreenshotForCanvas(context, thumbPreviewPath, thumbSmallPath);
