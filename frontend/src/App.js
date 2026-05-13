@@ -13,7 +13,6 @@ import {
   Trash2,
   Wifi,
   WifiOff,
-  XOctagon,
 } from 'lucide-react';
 
 import './App.css';
@@ -5667,19 +5666,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   };
 
-  const handleStopThumbnailCapture = async () => {
+  const stopThumbnailCaptureNow = (showStoppedToast = false) => {
     if (!thumbnailStats.total || thumbnailStats.stopped) return;
     const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
-    const confirmed = await showConfirm({
-      title: isScreenshotCapture ? 'Stop capturing screenshots?' : 'Stop capturing thumbnails?',
-      message: isScreenshotCapture
-        ? 'This will stop the capture process. Screenshots already captured will be kept.'
-        : 'This will stop the capture process. Thumbnails already captured will be kept.',
-      confirmText: 'Stop',
-      cancelText: 'Keep going',
-      danger: true,
-    });
-    if (!confirmed) return;
     if (isScreenshotCapture) {
       screenshotStopRequestedRef.current = true;
     } else {
@@ -5692,6 +5681,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     setThumbnailQueueSize(0);
     setThumbnailStats((prev) => ({ ...prev, stopped: true }));
     setTimeout(() => flushThumbnailAutosave(), 300);
+    if (showStoppedToast) {
+      showToast(isScreenshotCapture ? 'Screenshot capture stopped' : 'Thumbnail capture stopped', 'warning');
+    }
   };
 
   useEffect(() => {
@@ -7758,7 +7750,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (e.button !== 0) return;
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
-    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .thumbnail-progress-toast, .minimap-navigator');
+    const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .image-capture-toast, .minimap-navigator');
     const isInsidePopover = e.target.closest('.comment-popover-container');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isInsideNodeMenu = e.target.closest('.node-menu');
@@ -12944,29 +12936,38 @@ export default function App({ currentRoute, navigateToRoute }) {
           const activeConcurrency = isScreenshotCapture ? FULL_SCREENSHOT_CONCURRENCY : MAX_THUMBNAIL_CONCURRENCY;
           const etaConcurrency = hasRetries ? 1 : activeConcurrency;
           const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
+          const title = `${isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: ${thumbnailStats.loaded}/${totalNew}`;
           return (
-            <div className="thumbnail-progress-toast">
-              <div className="thumbnail-progress-details">
-                <span>
-                  {isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: {thumbnailStats.loaded}/{totalNew}
-                  {cached > 0 ? ` (${cached} cached)` : ''}
-                  {thumbnailStats.failed > 0 ? ` (${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'})` : ''}
-                </span>
-                <span className="thumbnail-progress-line">
-                  <span className="thumbnail-progress-bar" aria-hidden="true" />
+            <Toast
+              type={hasRetries ? 'warning' : 'loading'}
+              className="image-capture-toast"
+              title={title}
+              action={(
+                <Button
+                  type="secondary"
+                  buttonStyle="mono"
+                  size="sm"
+                  onClick={() => stopThumbnailCaptureNow(true)}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  Stop
+                </Button>
+              )}
+            >
+              <div className="image-capture-toast__body">
+                {(cached > 0 || thumbnailStats.failed > 0) && (
+                  <span className="image-capture-toast__meta">
+                    {cached > 0 ? `${cached} cached` : ''}
+                    {cached > 0 && thumbnailStats.failed > 0 ? ' • ' : ''}
+                    {thumbnailStats.failed > 0 ? `${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'}` : ''}
+                  </span>
+                )}
+                <span className="image-capture-toast__line">
+                  <span className="image-capture-toast__bar" aria-hidden="true" />
                   {formatDuration(thumbnailElapsedMs)} | ETA {hasRetries ? 'retrying ' : '~'}{formatDuration(etaMs)}
                 </span>
               </div>
-              <button
-                className="thumbnail-progress-stop"
-                onClick={handleStopThumbnailCapture}
-                title={isScreenshotCapture ? 'Stop screenshot capture' : 'Stop thumbnail capture'}
-                onPointerDown={(event) => event.stopPropagation()}
-                type="button"
-              >
-                <XOctagon size={16} />
-              </button>
-            </div>
+            </Toast>
           );
         })()}
       </div>
