@@ -2613,8 +2613,20 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   });
 
-  // Ensure path ancestors for linked nodes are also linked (for missing placeholders)
-  Array.from(linked).forEach((url) => {
+  // Keep all successfully scanned primary-domain pages visible. Some sites expose
+  // pages through sitemap/common-path discovery without server-rendered root links.
+  const visiblePrimaryUrls = new Set(linked);
+  nodes.forEach((node) => {
+    if (!node?.url || node.url === rootUrl) return;
+    if (node.isMissing || node.isDuplicate) return;
+    const nodeHost = normalizeHost(new URL(node.url).hostname);
+    if (nodeHost === rootHostNormalized) {
+      visiblePrimaryUrls.add(node.url);
+    }
+  });
+
+  // Ensure path ancestors for visible nodes are also visible (for missing placeholders)
+  Array.from(visiblePrimaryUrls).forEach((url) => {
     const linkedNode = nodes.get(url);
     if (linkedNode && !shouldInferPathParents(linkedNode)) return;
     let parentUrl = getParentUrl(url);
@@ -2622,8 +2634,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       if (!nodes.has(parentUrl)) break;
       const parentHost = new URL(parentUrl).hostname;
       if (normalizeHost(parentHost) !== rootHostNormalized) break;
-      if (linked.has(parentUrl)) break;
-      linked.add(parentUrl);
+      if (visiblePrimaryUrls.has(parentUrl)) break;
+      visiblePrimaryUrls.add(parentUrl);
       parentUrl = getParentUrl(parentUrl);
     }
   });
@@ -2654,9 +2666,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       continue;
     }
 
-    if (linked.has(node.url)) {
+    if (visiblePrimaryUrls.has(node.url)) {
       const parentUrl = node.parentUrl;
-      if (parentUrl && nodes.has(parentUrl) && linked.has(parentUrl)) {
+      if (parentUrl && nodes.has(parentUrl) && visiblePrimaryUrls.has(parentUrl)) {
         pushUniqueChild(nodes.get(parentUrl), node);
       } else {
         pushUniqueChild(nodes.get(rootUrl), node);
