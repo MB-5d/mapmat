@@ -139,4 +139,67 @@ describe('CanvasToolbar', () => {
     expect(saveButton.className).toContain('is-saving');
     expect(saveButton.disabled).toBe(true);
   });
+
+  test('shows remaining screenshot action when some full screenshots exist', () => {
+    const onGetFullScreenshotsAll = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetFullScreenshotsAll={onGetFullScreenshotsAll}
+          onGetFullScreenshotsSelected={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+          fullScreenshotsAllLabel="Get Screenshots (Remaining)"
+        />
+      );
+    });
+
+    const remainingButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Get Screenshots (Remaining)'));
+    expect(remainingButton).not.toBeNull();
+    expect(remainingButton.disabled).toBe(false);
+
+    act(() => {
+      remainingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onGetFullScreenshotsAll).toHaveBeenCalledTimes(1);
+  });
 });

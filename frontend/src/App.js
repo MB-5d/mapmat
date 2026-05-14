@@ -1159,6 +1159,13 @@ const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
   return result;
 };
 
+const collectNodeAndDescendantIds = (node, result = []) => {
+  if (!node?.id) return result;
+  result.push(node.id);
+  node.children?.forEach((child) => collectNodeAndDescendantIds(child, result));
+  return result;
+};
+
 const hasAssignedUrl = (node) => typeof node?.url === 'string' && node.url.trim() !== '';
 const ORPHAN_CONTAINER_ID = '__orphans__';
 const SUBDOMAIN_CONTAINER_ID = '__subdomains__';
@@ -2193,6 +2200,28 @@ export default function App({ currentRoute, navigateToRoute }) {
     );
   }, [root, orphans, thumbnailDisplayErrorIds, hasStoredImageAsset]);
 
+  const fullScreenshotCaptureStats = useMemo(() => {
+    if (!root) {
+      return {
+        total: 0,
+        captured: 0,
+        remaining: 0,
+        hasPartial: false,
+        allCaptured: false,
+      };
+    }
+    const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
+    const captured = nodes.filter((node) => hasStoredImageAsset(node.fullScreenshotUrl)).length;
+    const remaining = Math.max(0, nodes.length - captured);
+    return {
+      total: nodes.length,
+      captured,
+      remaining,
+      hasPartial: captured > 0 && remaining > 0,
+      allCaptured: nodes.length > 0 && remaining === 0,
+    };
+  }, [root, orphans, hasStoredImageAsset]);
+
   const maxDepth = useMemo(() => {
     const orphanDepth = (orphans || []).reduce((max, orphan) => {
       return Math.max(max, getMaxDepth(orphan));
@@ -2894,6 +2923,26 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     layoutRef.current = mapLayout;
   }, [mapLayout]);
+
+  const getNodeStackSelectionIds = useCallback((nodeId) => {
+    if (!nodeId) return [];
+    const fallbackIds = [nodeId];
+    const layoutNode = layoutRef.current?.nodes?.get(nodeId);
+    const stackInfo = layoutNode?.stackInfo;
+    if (!stackInfo?.collapsed || !stackInfo.parentId) {
+      return fallbackIds;
+    }
+
+    const stackParent = collectAllNodesWithOrphans(root, orphans)
+      .find((node) => sameId(node.id, stackInfo.parentId));
+    const stackChildren = Array.isArray(stackParent?.children) ? stackParent.children : [];
+    const stackIds = stackChildren.reduce((ids, child) => collectNodeAndDescendantIds(child, ids), []);
+    return stackIds.length ? stackIds : fallbackIds;
+  }, [root, orphans]);
+
+  const addNodeAndStackSelection = useCallback((targetSet, nodeId) => {
+    getNodeStackSelectionIds(nodeId).forEach((id) => targetSet.add(id));
+  }, [getNodeStackSelectionIds]);
 
   const brokenConnections = useMemo(() => {
     const visibleNodes = collectAllNodesWithOrphans(renderRoot, visibleOrphans);
@@ -5716,13 +5765,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
-  const getFullScreenshotTargets = (scope) => {
+  const getFullScreenshotCandidates = (scope) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
     const scopedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
     const scopedNodes = scope === 'selected'
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
-    return orderThumbnailNodes(scopedNodes.filter((node) => node?.url));
+    const orderedTargets = orderThumbnailNodes(scopedNodes.filter((node) => node?.url));
+    const forceRecapture = scope === 'selected';
+    const candidates = forceRecapture
+      ? orderedTargets
+      : orderedTargets.filter((node) => !hasStoredImageAsset(node.fullScreenshotUrl));
+    return {
+      candidates,
+      total: orderedTargets.length,
+      cachedCount: forceRecapture ? 0 : orderedTargets.length - candidates.length,
+    };
   };
 
   const getDownloadableScreenshotTargets = useCallback((scope, assetType) => {
@@ -5929,17 +5987,24 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!guardImageCaptureAvailable('screenshot')) return;
     if (!guardImageCapturePersistenceReady()) return;
 
-    const targets = getFullScreenshotTargets(scope);
-    if (targets.length === 0) {
+    const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope);
+    if (total === 0) {
       setShowImageMenu(false);
       showToast('No pages with URLs to capture', 'info');
+      return;
+    }
+    if (targets.length === 0) {
+      setShowImageMenu(false);
+      resetThumbnailQueue(total, cachedCount, true, 'screenshot');
+      setThumbnailScopeIds(new Set());
+      showToast('All full screenshots are already captured', 'info');
       return;
     }
 
     if (targets.length > 10) {
       const confirmed = await showConfirm({
         title: 'Capture full screenshots?',
-        message: `This will generate ${targets.length} full-page screenshots and attach them to the selected pages.`,
+        message: `This will generate ${targets.length} full-page screenshot${targets.length === 1 ? '' : 's'} and attach them to the selected pages.`,
         confirmText: 'Capture',
         cancelText: 'Cancel',
       });
@@ -5949,7 +6014,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowImageMenu(false);
     setShowThumbnails(true);
     setThumbnailScopeIds(new Set(targets.map((node) => node.id)));
-    resetThumbnailQueue(targets.length, 0, true, 'screenshot');
+    resetThumbnailQueue(total, cachedCount, true, 'screenshot');
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
     thumbnailExpectedRef.current = new Set(targets.map((node) => node.id));
@@ -7839,7 +7904,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               && rect.x + rect.w >= nx
               && rect.y <= ny + nh
               && rect.y + rect.h >= ny;
-            if (intersects) next.add(nodeData.node.id);
+            if (intersects) addNodeAndStackSelection(next, nodeData.node.id);
           });
         }
         setSelectedNodeIds(next);
@@ -7883,18 +7948,20 @@ export default function App({ currentRoute, navigateToRoute }) {
                 && rect.x + rect.w >= nx
                 && rect.y <= ny + nh
                 && rect.y + rect.h >= ny;
-              if (intersects) next.add(nodeData.node.id);
+              if (intersects) addNodeAndStackSelection(next, nodeData.node.id);
             });
           }
           setSelectedNodeIds(next);
         } else if (selectionStartNodeRef.current && moved < 3) {
           const nodeId = selectionStartNodeRef.current;
+          const targetIds = getNodeStackSelectionIds(nodeId);
           setSelectedNodeIds((prev) => {
             const next = new Set(selectionAdditiveRef.current ? prev : selectionBaseRef.current);
-            if (next.has(nodeId)) {
-              next.delete(nodeId);
+            const allSelected = targetIds.every((id) => next.has(id));
+            if (allSelected) {
+              targetIds.forEach((id) => next.delete(id));
             } else {
-              next.add(nodeId);
+              targetIds.forEach((id) => next.add(id));
             }
             return next;
           });
@@ -9469,10 +9536,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     const menuX = (event.clientX - contentRect.left) / scaleValue;
     const menuY = (event.clientY - contentRect.top) / scaleValue;
 
-    const hasSelection = selectedNodeIds?.has(nodeId);
-    const targetIds = hasSelection ? Array.from(selectedNodeIds) : [nodeId];
+    const stackTargetIds = getNodeStackSelectionIds(nodeId);
+    const hasSelection = stackTargetIds.some((id) => selectedNodeIds?.has(id));
+    const targetIds = hasSelection
+      ? Array.from(new Set([...Array.from(selectedNodeIds || []), ...stackTargetIds]))
+      : stackTargetIds;
     if (!hasSelection) {
-      setSelectedNodeIds(new Set([nodeId]));
+      setSelectedNodeIds(new Set(stackTargetIds));
     }
 
     setNodeMenu({
@@ -9503,18 +9573,20 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     if (!canEdit()) return;
 
+    const targetIds = getNodeStackSelectionIds(node.id);
     if (shiftActive) {
       setSelectedNodeIds((prev) => {
         const next = new Set(prev);
-        if (next.has(node.id)) {
-          next.delete(node.id);
+        const allSelected = targetIds.every((id) => next.has(id));
+        if (allSelected) {
+          targetIds.forEach((id) => next.delete(id));
         } else {
-          next.add(node.id);
+          targetIds.forEach((id) => next.add(id));
         }
         return next;
       });
     } else {
-      setSelectedNodeIds(new Set([node.id]));
+      setSelectedNodeIds(new Set(targetIds));
     }
   };
 
@@ -12824,6 +12896,10 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasFullScreenshotAssets: hasAnyFullScreenshotAssets,
                 hasSelectedFullScreenshotAssets: hasSelectedFullScreenshotAssets,
                 allThumbnailsCaptured,
+                allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
+                fullScreenshotsAllLabel: fullScreenshotCaptureStats.hasPartial
+                  ? 'Get Screenshots (Remaining)'
+                  : 'Get Screenshots (All)',
                 showImageMenu,
                 imageMenuRef,
                 hasSelection: selectedNodeIds.size > 0,

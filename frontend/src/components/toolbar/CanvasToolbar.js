@@ -98,6 +98,8 @@ const CanvasToolbar = ({
   hasFullScreenshotAssets,
   hasSelectedFullScreenshotAssets,
   allThumbnailsCaptured,
+  allFullScreenshotsCaptured,
+  fullScreenshotsAllLabel = 'Get Screenshots (All)',
   showImageMenu,
   imageMenuRef,
   hasSelection,
@@ -208,13 +210,13 @@ const CanvasToolbar = ({
             <MenuSectionHeader className="canvas-tool-menu-label">Full screenshots</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Get full screenshots (All)"
+              label={fullScreenshotsAllLabel}
               onClick={onGetFullScreenshotsAll}
-              disabled={!hasMap}
+              disabled={!hasMap || allFullScreenshotsCaptured}
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Get full screenshots (Selected)"
+              label="Get Screenshots (Selected)"
               onClick={onGetFullScreenshotsSelected}
               disabled={!hasSelection || !hasMap}
             />
