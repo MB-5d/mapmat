@@ -2216,9 +2216,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
     }
     const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
-    const captured = nodes.filter((node) => hasStoredImageAsset(node.thumbnailUrl)).length;
+    const captured = nodes.filter(
+      (node) => hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id)
+    ).length;
     const unavailable = nodes.filter(
-      (node) => !hasStoredImageAsset(node.thumbnailUrl) && hasTerminalThumbnailFailure(node)
+      (node) => !hasStoredImageAsset(node.thumbnailUrl)
+        && !thumbnailDisplayErrorIds.has(node.id)
+        && hasTerminalThumbnailFailure(node)
     ).length;
     const remaining = Math.max(0, nodes.length - captured - unavailable);
     return {
@@ -2229,7 +2233,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       hasPartial: captured > 0 && remaining > 0,
       allCaptured: nodes.length > 0 && remaining === 0,
     };
-  }, [root, orphans, hasStoredImageAsset, hasTerminalThumbnailFailure]);
+  }, [root, orphans, thumbnailDisplayErrorIds, hasStoredImageAsset, hasTerminalThumbnailFailure]);
   const allThumbnailsCaptured = thumbnailCaptureStats.allCaptured;
 
   const fullScreenshotCaptureStats = useMemo(() => {
@@ -5759,11 +5763,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     const candidates = forceRecapture
       ? orderedTargets
       : orderedTargets.filter((node) => {
-          if (hasStoredImageAsset(node.thumbnailUrl)) {
+          const hasSavedThumb = hasStoredImageAsset(node.thumbnailUrl);
+          const hasDisplayError = thumbnailDisplayErrorIds.has(node.id);
+          if (hasSavedThumb && !hasDisplayError) {
             cachedCount += 1;
             return false;
           }
-          if (hasTerminalThumbnailFailure(node)) {
+          if (!hasSavedThumb && !hasDisplayError && hasTerminalThumbnailFailure(node)) {
             unavailableCount += 1;
             return false;
           }
