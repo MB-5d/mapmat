@@ -1999,6 +1999,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailSessionRef = useRef(0);
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
+  const thumbnailAutosaveTimerRef = useRef(null);
   const thumbnailAuthToastShownRef = useRef(false);
   const thumbnailFailureToastShownRef = useRef(false);
   const MAX_THUMBNAIL_CONCURRENCY = 2;
@@ -2215,12 +2216,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
     }
     const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
-    const captured = nodes.filter(
-      (node) => hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id)
-    ).length;
+    const captured = nodes.filter((node) => hasStoredImageAsset(node.thumbnailUrl)).length;
     const unavailable = nodes.filter(
-      (node) => !(hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id))
-        && hasTerminalThumbnailFailure(node)
+      (node) => !hasStoredImageAsset(node.thumbnailUrl) && hasTerminalThumbnailFailure(node)
     ).length;
     const remaining = Math.max(0, nodes.length - captured - unavailable);
     return {
@@ -2231,7 +2229,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       hasPartial: captured > 0 && remaining > 0,
       allCaptured: nodes.length > 0 && remaining === 0,
     };
-  }, [root, orphans, thumbnailDisplayErrorIds, hasStoredImageAsset, hasTerminalThumbnailFailure]);
+  }, [root, orphans, hasStoredImageAsset, hasTerminalThumbnailFailure]);
   const allThumbnailsCaptured = thumbnailCaptureStats.allCaptured;
 
   const fullScreenshotCaptureStats = useMemo(() => {
@@ -2747,6 +2745,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (messageTimerRef.current) clearInterval(messageTimerRef.current);
       if (eventSourceRef.current) eventSourceRef.current.close();
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      if (thumbnailAutosaveTimerRef.current) clearTimeout(thumbnailAutosaveTimerRef.current);
     };
   }, []);
 
@@ -5352,7 +5351,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }));
   }, []);
 
-  const flushThumbnailAutosave = () => {
+  const flushThumbnailAutosave = useCallback(() => {
     const latestRoot = rootRef.current || root;
     const latestOrphans = orphansRef.current || orphans;
     if (!currentMap?.id || !latestRoot || isImportedMap || isViewingHistoricalVersion || isCoeditingReadOnlyMode || isCollaborativeLiveEditingRestricted) return;
@@ -5374,7 +5373,41 @@ export default function App({ currentRoute, navigateToRoute }) {
       snapshot,
     };
     flushAutosave();
-  };
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    currentMap?.id,
+    currentMap?.name,
+    currentMap?.project_id,
+    currentMap?.updated_at,
+    flushAutosave,
+    isCoeditingReadOnlyMode,
+    isCollaborativeLiveEditingRestricted,
+    isImportedMap,
+    isViewingHistoricalVersion,
+    mapName,
+    orphans,
+    root,
+  ]);
+
+  const flushThumbnailAutosaveNow = useCallback(() => {
+    if (thumbnailAutosaveTimerRef.current) {
+      clearTimeout(thumbnailAutosaveTimerRef.current);
+      thumbnailAutosaveTimerRef.current = null;
+    }
+    flushThumbnailAutosave();
+  }, [flushThumbnailAutosave]);
+
+  const scheduleThumbnailAutosave = useCallback((delay = 1800) => {
+    if (thumbnailAutosaveTimerRef.current) {
+      clearTimeout(thumbnailAutosaveTimerRef.current);
+    }
+    thumbnailAutosaveTimerRef.current = setTimeout(() => {
+      thumbnailAutosaveTimerRef.current = null;
+      flushThumbnailAutosave();
+    }, delay);
+  }, [flushThumbnailAutosave]);
 
   const updateThumbnailErrorState = useCallback((nodeId, hasError) => {
     if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
@@ -5465,9 +5498,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           'warning',
         );
       }
-      setTimeout(() => flushThumbnailAutosave(), 300);
+      setTimeout(() => flushThumbnailAutosaveNow(), 300);
     }
-  }, [flushThumbnailAutosave, showToast, thumbnailStats.mode]);
+  }, [flushThumbnailAutosaveNow, showToast, thumbnailStats.mode]);
 
   const processThumbnailQueue = () => {
     if (thumbnailStopRequestedRef.current) return;
@@ -5505,12 +5538,16 @@ export default function App({ currentRoute, navigateToRoute }) {
             bumpThumbnailReload(next.id);
             updateThumbnailErrorState(next.id, false);
             completeThumbnailCapture(next.id);
+            scheduleThumbnailAutosave();
             success = true;
           } else {
             shouldRetry = false;
             thumbnailStopRequestedRef.current = true;
           }
           return;
+        }
+        if (data?.error) {
+          lastErrorMessage = data.error;
         }
         if (isScreenshotAuthError(data?.error)) {
           shouldRetry = false;
@@ -5578,6 +5615,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               markThumbnailCaptureFailed(next.id, lastErrorMessage);
             }
             completeThumbnailCapture(next.id);
+            scheduleThumbnailAutosave();
           }
         }
         processThumbnailQueue();
@@ -5659,7 +5697,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     completeThumbnailCapture(nodeId);
   }, [completeThumbnailCapture, updateThumbnailErrorState]);
 
-  const handleThumbnailImageError = useCallback((nodeId, url) => {
+  const handleThumbnailImageError = useCallback((nodeId) => {
     if (nodeId) {
       setThumbnailDisplayErrorIds((prev) => {
         if (prev.has(nodeId)) return prev;
@@ -5671,14 +5709,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
     if (thumbnailStopRequestedRef.current) return;
     thumbnailLoadStartRef.current.delete(nodeId);
-    updateThumbnailErrorState(nodeId, true);
-    const attempt = thumbnailAttemptsRef.current.get(nodeId) || 0;
-    if (attempt < MAX_THUMBNAIL_ATTEMPTS - 1) {
-      scheduleThumbnailRetry(nodeId, url, attempt);
-    } else {
-      completeThumbnailCapture(nodeId);
-    }
-  }, [completeThumbnailCapture, scheduleThumbnailRetry, updateThumbnailErrorState]);
+    completeThumbnailCapture(nodeId);
+  }, [completeThumbnailCapture]);
 
   const orderThumbnailNodes = (nodes) => {
     if (!Array.isArray(nodes) || nodes.length === 0) return [];
@@ -5727,8 +5759,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const candidates = forceRecapture
       ? orderedTargets
       : orderedTargets.filter((node) => {
-          const hasRenderableThumb = hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id);
-          if (hasRenderableThumb) {
+          if (hasStoredImageAsset(node.thumbnailUrl)) {
             cachedCount += 1;
             return false;
           }
@@ -5814,7 +5845,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailAbortControllersRef.current.clear();
     setThumbnailQueueSize(0);
     setThumbnailStats((prev) => ({ ...prev, stopped: true }));
-    setTimeout(() => flushThumbnailAutosave(), 300);
+    setTimeout(() => flushThumbnailAutosaveNow(), 300);
     if (showStoppedToast) {
       showToast(isScreenshotCapture ? 'Screenshot capture stopped' : 'Thumbnail capture stopped', 'warning');
     }
@@ -6034,6 +6065,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           bumpThumbnailReload(nodeId);
           setShowThumbnails(true);
         }
+        flushThumbnailAutosaveNow();
       }
       setThumbnailStats((prev) => ({
         ...prev,
@@ -6176,6 +6208,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             setShowThumbnails(true);
           }
           successCount += 1;
+          scheduleThumbnailAutosave();
         } catch (error) {
           if (screenshotStopRequestedRef.current || error?.message === 'Screenshot capture stopped') {
             return;
@@ -6191,6 +6224,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               thumbnailAuthToastShownRef.current = true;
               showToast('Screenshot capture for this page requires login. Prompted credentials are not supported yet.', 'info');
             }
+            scheduleThumbnailAutosave();
           }
           failedCount += 1;
           console.error('Full screenshot capture failed:', error);
@@ -6213,14 +6247,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       await Promise.all(workers);
       if (screenshotStopRequestedRef.current) {
         showToast('Screenshot capture stopped', 'warning');
-        setTimeout(() => flushThumbnailAutosave(), 300);
+        setTimeout(() => flushThumbnailAutosaveNow(), 300);
         return;
       }
       const message = failedCount > 0
         ? `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}; ${failedCount} failed`
         : `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}`;
       showToast(message, failedCount > 0 ? 'warning' : 'success');
-      setTimeout(() => flushThumbnailAutosave(), 300);
+      setTimeout(() => flushThumbnailAutosaveNow(), 300);
       trackEvent('screenshot_capture', {
         type: 'full',
         scope,
@@ -13153,14 +13187,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           const activeConcurrency = isScreenshotCapture ? FULL_SCREENSHOT_CONCURRENCY : MAX_THUMBNAIL_CONCURRENCY;
           const etaConcurrency = activeConcurrency;
           const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
-          const isRemainingBatch = cached > 0 || unavailable > 0;
           const overallCompleted = Math.min(
             thumbnailStats.total,
             cached + unavailable + thumbnailStats.loaded,
           );
           const title = `${isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: ${overallCompleted}/${thumbnailStats.total}`;
           const metaParts = [
-            isRemainingBatch ? `${thumbnailStats.loaded}/${totalNew} remaining this run` : '',
             cached > 0 ? `${cached} cached` : '',
             unavailable > 0 ? `${unavailable} unavailable` : '',
             thumbnailStats.failed > 0 ? `${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'}` : '',

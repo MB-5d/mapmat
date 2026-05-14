@@ -105,8 +105,8 @@ const NodeCard = ({
       setThumbError(false);
       setThumbLoading(canRequestThumbnail && !hasExistingThumbnail);
       setShouldLoadThumb(hasExistingThumbnail);
-      if (canRequestThumbnail) {
-        setThumbKey(k => k + 1); // Force new image request for the active batch only.
+      if (hasExistingThumbnail || canRequestThumbnail) {
+        setThumbKey(k => k + 1);
       }
     }
   }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail, thumbnailSessionId]);
@@ -156,7 +156,9 @@ const NodeCard = ({
       if (thumbLoading) {
         setThumbError(true);
         setThumbLoading(false);
-        onThumbnailError?.(node.id, node.url);
+        if (thumb) {
+          onThumbnailError?.(node.id, node.url);
+        }
       }
     }, 120000);
     return () => clearTimeout(timeout);
