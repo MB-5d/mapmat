@@ -2191,14 +2191,30 @@ export default function App({ currentRoute, navigateToRoute }) {
     return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.fullScreenshotUrl));
   }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
 
-  const allThumbnailsCaptured = useMemo(() => {
-    if (!root) return false;
+  const thumbnailCaptureStats = useMemo(() => {
+    if (!root) {
+      return {
+        total: 0,
+        captured: 0,
+        remaining: 0,
+        hasPartial: false,
+        allCaptured: false,
+      };
+    }
     const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
-    if (nodes.length === 0) return false;
-    return nodes.every(
+    const captured = nodes.filter(
       (node) => hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id)
-    );
+    ).length;
+    const remaining = Math.max(0, nodes.length - captured);
+    return {
+      total: nodes.length,
+      captured,
+      remaining,
+      hasPartial: captured > 0 && remaining > 0,
+      allCaptured: nodes.length > 0 && remaining === 0,
+    };
   }, [root, orphans, thumbnailDisplayErrorIds, hasStoredImageAsset]);
+  const allThumbnailsCaptured = thumbnailCaptureStats.allCaptured;
 
   const fullScreenshotCaptureStats = useMemo(() => {
     if (!root) {
@@ -3932,6 +3948,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     submitDraft: submitLiveDraft,
     updateSelection: updateLiveSelection,
     resync: resyncLiveDocument,
+    resetToDocument: resetLiveDocumentToSavedMap,
   } = useCoeditingLive({
     enabled: isLiveRealtimeModeActive,
     mapId: currentMap?.id || null,
@@ -7125,6 +7142,43 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const dismissMapConflict = () => {
     setMapSaveConflict(null);
+  };
+
+  const handleLiveResync = async () => {
+    const resynced = await resyncLiveDocument();
+    if (resynced) {
+      showToast('Live editing resynced', 'success');
+      return;
+    }
+
+    const mapId = currentMap?.id;
+    if (!mapId) {
+      showToast('Failed to resync live editing', 'error');
+      return;
+    }
+
+    try {
+      const { map } = await api.getMap(mapId);
+      if (!map) throw new Error('Map not found');
+      loadMap(map, { skipNavigation: true, silent: true });
+      resetLiveDocumentToSavedMap({
+        mapId: map.id,
+        version: 0,
+        name: map.name || 'Untitled Map',
+        notes: map.notes ?? null,
+        root: map.root,
+        orphans: map.orphans || [],
+        connections: map.connections || [],
+        colors: map.colors || DEFAULT_COLORS,
+        connectionColors: map.connectionColors || DEFAULT_CONNECTION_COLORS,
+        mapUpdatedAt: map.updated_at || null,
+        lastOpId: null,
+        lastActorId: currentUser?.id || null,
+      });
+      showToast('Resynced with the latest saved map', 'success');
+    } catch (error) {
+      showToast(error.message || 'Failed to resync live editing', 'error');
+    }
   };
 
   const handleLoadMapRequest = (map) => {
@@ -11863,7 +11917,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             contentClassName="permission-banner-main"
             actions={liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC ? (
               <div className="map-conflict-actions">
-                <Button type="secondary" buttonStyle="brand" size="sm" onClick={resyncLiveDocument}>
+                <Button type="secondary" buttonStyle="brand" size="sm" onClick={handleLiveResync}>
                   Resync
                 </Button>
               </div>
@@ -12896,6 +12950,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasFullScreenshotAssets: hasAnyFullScreenshotAssets,
                 hasSelectedFullScreenshotAssets: hasSelectedFullScreenshotAssets,
                 allThumbnailsCaptured,
+                thumbnailsAllLabel: thumbnailCaptureStats.hasPartial
+                  ? 'Get Thumbnails (Remaining)'
+                  : 'Get Thumbnails (All)',
                 allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
                 fullScreenshotsAllLabel: fullScreenshotCaptureStats.hasPartial
                   ? 'Get Screenshots (Remaining)'

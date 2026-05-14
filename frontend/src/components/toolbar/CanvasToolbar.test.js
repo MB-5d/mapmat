@@ -202,4 +202,67 @@ describe('CanvasToolbar', () => {
 
     expect(onGetFullScreenshotsAll).toHaveBeenCalledTimes(1);
   });
+
+  test('shows remaining thumbnail action when some thumbnails exist', () => {
+    const onGetThumbnailsAll = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={onGetThumbnailsAll}
+          onGetThumbnailsSelected={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+          thumbnailsAllLabel="Get Thumbnails (Remaining)"
+        />
+      );
+    });
+
+    const remainingButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Get Thumbnails (Remaining)'));
+    expect(remainingButton).not.toBeNull();
+    expect(remainingButton.disabled).toBe(false);
+
+    act(() => {
+      remainingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onGetThumbnailsAll).toHaveBeenCalledTimes(1);
+  });
 });

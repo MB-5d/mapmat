@@ -650,6 +650,33 @@ export function useCoeditingLive({
     }
   }, [enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, scheduleReconnect, setLiveStatus]);
 
+  const resetToDocument = useCallback((document) => {
+    if (!enabled || !mapId || !document) return false;
+    const nextDocument = normalizeLiveDocument({
+      ...document,
+      mapId,
+    });
+    authoritativeDocumentRef.current = nextDocument;
+    pendingDraftsRef.current = [];
+    inFlightOpIdRef.current = '';
+    setPendingCount(0);
+    setLiveVersion(nextDocument.version || 0);
+    applyDocument(nextDocument, { source: 'coediting' });
+
+    const socket = socketRef.current;
+    const isConnected = joiningRef.current && socket?.readyState === WebSocket.OPEN;
+    setLiveStatus(
+      isConnected ? STATUS.CONNECTED : STATUS.RECONNECTING,
+      isConnected ? 'Connected' : 'Resynced from saved map'
+    );
+    if (isConnected) {
+      flushQueue();
+    } else {
+      scheduleReconnect();
+    }
+    return true;
+  }, [applyDocument, enabled, flushQueue, mapId, scheduleReconnect, setLiveStatus]);
+
   const remoteSelections = useMemo(() => {
     const currentSessionId = sessionIdRef.current;
     return (participants || []).filter(
@@ -670,6 +697,7 @@ export function useCoeditingLive({
     submitDraft,
     updateSelection,
     resync,
+    resetToDocument,
   };
 }
 
