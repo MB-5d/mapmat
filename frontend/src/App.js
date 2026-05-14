@@ -1383,6 +1383,9 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             thumbnailUrl: node.thumbnailUrl || existing.thumbnailUrl,
             thumbnailFullUrl: node.thumbnailFullUrl || existing.thumbnailFullUrl,
             fullScreenshotUrl: node.fullScreenshotUrl || existing.fullScreenshotUrl,
+            thumbnailCaptureFailed: node.thumbnailCaptureFailed ?? existing.thumbnailCaptureFailed,
+            thumbnailCaptureError: node.thumbnailCaptureError || existing.thumbnailCaptureError,
+            thumbnailCaptureFailedAt: node.thumbnailCaptureFailedAt || existing.thumbnailCaptureFailedAt,
             description: node.description || existing.description,
             metaTags: node.metaTags || existing.metaTags,
             canonicalUrl: node.canonicalUrl || existing.canonicalUrl,
@@ -1560,7 +1563,8 @@ const hasUserPreservedNodeState = (node, manualNodeIds = new Set()) => {
     || Boolean(annotations.status && annotations.status !== 'none')
     || Boolean(String(annotations.note || '').trim())
     || Boolean(annotations.tags?.length)
-    || Boolean(node.thumbnailUrl || node.thumbnailFullUrl || node.fullScreenshotUrl);
+    || Boolean(node.thumbnailUrl || node.thumbnailFullUrl || node.fullScreenshotUrl)
+    || Boolean(node.thumbnailCaptureFailed);
 };
 
 const mergeRescanResults = ({
@@ -1587,6 +1591,9 @@ const mergeRescanResults = ({
     'thumbnailUrl',
     'thumbnailFullUrl',
     'fullScreenshotUrl',
+    'thumbnailCaptureFailed',
+    'thumbnailCaptureError',
+    'thumbnailCaptureFailedAt',
     'description',
     'metaTags',
     'canonicalUrl',
@@ -2011,6 +2018,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     failed: 0,
     avgMs: 0,
     cached: 0,
+    unavailable: 0,
     stopped: false,
   });
 
@@ -2165,6 +2173,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       || /^https?:\/\//i.test(raw);
   }, []);
 
+  const hasTerminalThumbnailFailure = useCallback((node) => (
+    Boolean(node?.thumbnailCaptureFailed || node?.authRequired)
+  ), []);
+
   const hasAnyDownloadableThumbnails = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
@@ -2196,6 +2208,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       return {
         total: 0,
         captured: 0,
+        unavailable: 0,
         remaining: 0,
         hasPartial: false,
         allCaptured: false,
@@ -2205,15 +2218,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     const captured = nodes.filter(
       (node) => hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id)
     ).length;
-    const remaining = Math.max(0, nodes.length - captured);
+    const unavailable = nodes.filter(
+      (node) => !(hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id))
+        && hasTerminalThumbnailFailure(node)
+    ).length;
+    const remaining = Math.max(0, nodes.length - captured - unavailable);
     return {
       total: nodes.length,
       captured,
+      unavailable,
       remaining,
       hasPartial: captured > 0 && remaining > 0,
       allCaptured: nodes.length > 0 && remaining === 0,
     };
-  }, [root, orphans, thumbnailDisplayErrorIds, hasStoredImageAsset]);
+  }, [root, orphans, thumbnailDisplayErrorIds, hasStoredImageAsset, hasTerminalThumbnailFailure]);
   const allThumbnailsCaptured = thumbnailCaptureStats.allCaptured;
 
   const fullScreenshotCaptureStats = useMemo(() => {
@@ -5300,10 +5318,25 @@ export default function App({ currentRoute, navigateToRoute }) {
   const getThumbnailAssetUpdates = (data) => {
     const smallUrl = data?.thumbnailUrl || data?.url || '';
     const previewUrl = data?.thumbnailFullUrl || data?.previewUrl || data?.fullSizeUrl || data?.url || '';
-    const updates = { authRequired: false };
+    const updates = {
+      authRequired: false,
+      thumbnailCaptureFailed: false,
+      thumbnailCaptureError: null,
+      thumbnailCaptureFailedAt: null,
+    };
     if (smallUrl) updates.thumbnailUrl = smallUrl;
     if (previewUrl) updates.thumbnailFullUrl = previewUrl;
     return updates;
+  };
+
+  const markThumbnailCaptureFailed = (nodeId, message, extraUpdates = {}) => {
+    if (!nodeId) return false;
+    return updateNodeScreenshotAssets(nodeId, {
+      thumbnailCaptureFailed: true,
+      thumbnailCaptureError: message || 'Thumbnail capture failed',
+      thumbnailCaptureFailedAt: new Date().toISOString(),
+      ...extraUpdates,
+    });
   };
 
   const isScreenshotAuthError = useCallback((message) => (
@@ -5361,10 +5394,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const getActiveImageCaptureMode = useCallback(() => {
     const cached = thumbnailStats.cached || 0;
-    const totalNew = Math.max(0, thumbnailStats.total - cached);
+    const unavailable = thumbnailStats.unavailable || 0;
+    const totalNew = Math.max(0, thumbnailStats.total - cached - unavailable);
     if (!thumbnailStats.mode || thumbnailStats.stopped || totalNew <= 0) return null;
     return thumbnailStats.loaded < totalNew ? thumbnailStats.mode : null;
-  }, [thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total, thumbnailStats.unavailable]);
 
   const guardImageCaptureAvailable = useCallback((nextMode) => {
     const activeMode = getActiveImageCaptureMode();
@@ -5423,9 +5457,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     }));
     if (!thumbnailCompletedRef.current && expectedCount > 0 && completedCount >= expectedCount) {
       thumbnailCompletedRef.current = true;
+      const failedCount = thumbnailErrorRef.current.size;
+      if (thumbnailStats.mode === 'thumbnail' && failedCount > 0 && !thumbnailFailureToastShownRef.current) {
+        thumbnailFailureToastShownRef.current = true;
+        showToast(
+          `${failedCount} thumbnail${failedCount === 1 ? '' : 's'} could not be captured. Select those pages and run Selected to retry.`,
+          'warning',
+        );
+      }
       setTimeout(() => flushThumbnailAutosave(), 300);
     }
-  }, [flushThumbnailAutosave]);
+  }, [flushThumbnailAutosave, showToast, thumbnailStats.mode]);
 
   const processThumbnailQueue = () => {
     if (thumbnailStopRequestedRef.current) return;
@@ -5474,6 +5516,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           shouldRetry = false;
           updateNodeScreenshotAssets(next.id, {
             authRequired: true,
+            thumbnailCaptureFailed: true,
+            thumbnailCaptureError: 'Requires login',
+            thumbnailCaptureFailedAt: new Date().toISOString(),
             thumbnailUrl: null,
             thumbnailFullUrl: null,
             fullScreenshotUrl: null,
@@ -5490,6 +5535,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           shouldRetry = false;
           updateNodeScreenshotAssets(next.id, {
             authRequired: true,
+            thumbnailCaptureFailed: true,
+            thumbnailCaptureError: 'Requires login',
+            thumbnailCaptureFailedAt: new Date().toISOString(),
             thumbnailUrl: null,
             thumbnailFullUrl: null,
             fullScreenshotUrl: null,
@@ -5526,9 +5574,8 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (shouldRetry && attempt < MAX_THUMBNAIL_ATTEMPTS - 1) {
             scheduleThumbnailRetry(next.id, next.url, attempt);
           } else {
-            if (!thumbnailFailureToastShownRef.current && lastErrorMessage && !isScreenshotAuthError(lastErrorMessage)) {
-              thumbnailFailureToastShownRef.current = true;
-              showToast(lastErrorMessage, 'error');
+            if (!isScreenshotAuthError(lastErrorMessage)) {
+              markThumbnailCaptureFailed(next.id, lastErrorMessage);
             }
             completeThumbnailCapture(next.id);
           }
@@ -5537,7 +5584,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
   };
 
-  const resetThumbnailQueue = (total, cached = 0, bumpSession = true, mode = 'thumbnail') => {
+  const resetThumbnailQueue = (total, cached = 0, bumpSession = true, mode = 'thumbnail', unavailable = 0) => {
     if (bumpSession) {
       const nextSessionId = thumbnailSessionRef.current + 1;
       thumbnailSessionRef.current = nextSessionId;
@@ -5571,6 +5618,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       failed: 0,
       avgMs: 0,
       cached,
+      unavailable,
       stopped: false,
     });
   };
@@ -5674,15 +5722,30 @@ export default function App({ currentRoute, navigateToRoute }) {
     const targetNodes = scopedNodes.filter((node) => node?.url);
     const orderedTargets = orderThumbnailNodes(targetNodes);
     const forceRecapture = scope === 'selected';
+    let cachedCount = 0;
+    let unavailableCount = 0;
     const candidates = forceRecapture
       ? orderedTargets
       : orderedTargets.filter((node) => {
           const hasRenderableThumb = hasStoredImageAsset(node.thumbnailUrl) && !thumbnailDisplayErrorIds.has(node.id);
-          return !hasRenderableThumb;
+          if (hasRenderableThumb) {
+            cachedCount += 1;
+            return false;
+          }
+          if (hasTerminalThumbnailFailure(node)) {
+            unavailableCount += 1;
+            return false;
+          }
+          return true;
         });
     const targetIds = new Set(candidates.map((node) => node.id));
-    const cachedCount = forceRecapture ? 0 : (orderedTargets.length - candidates.length);
-    return { targetIds, candidates, total: orderedTargets.length, cachedCount };
+    return {
+      targetIds,
+      candidates,
+      total: orderedTargets.length,
+      cachedCount: forceRecapture ? 0 : cachedCount,
+      unavailableCount: forceRecapture ? 0 : unavailableCount,
+    };
   };
 
   const handleThumbnailCapture = (scope) => {
@@ -5699,7 +5762,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     if (!guardImageCaptureAvailable('thumbnail')) return;
     if (!guardImageCapturePersistenceReady()) return;
-    const { targetIds, candidates, total, cachedCount } = getThumbnailCandidates(scope);
+    const { targetIds, candidates, total, cachedCount, unavailableCount } = getThumbnailCandidates(scope);
     if (total === 0) {
       resetThumbnailQueue(0, 0, true, 'thumbnail');
       setThumbnailScopeIds(new Set());
@@ -5708,7 +5771,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('No pages with URLs to capture', 'info');
       return;
     }
-    resetThumbnailQueue(total, cachedCount, true, 'thumbnail');
+    resetThumbnailQueue(total, cachedCount, true, 'thumbnail', unavailableCount);
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
     thumbnailExpectedRef.current = new Set(candidates.map((node) => node.id));
@@ -5716,7 +5779,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       setThumbnailScopeIds(new Set());
       setShowThumbnails(true);
       setShowImageMenu(false);
-      showToast('No new thumbnails to generate', 'info');
+      showToast(
+        unavailableCount > 0
+          ? `${unavailableCount} thumbnail${unavailableCount === 1 ? '' : 's'} could not be captured. Select those pages and run Selected to retry.`
+          : 'No new thumbnails to generate',
+        unavailableCount > 0 ? 'warning' : 'info',
+      );
       return;
     }
     setThumbnailScopeIds(targetIds);
@@ -5754,7 +5822,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     const cached = thumbnailStats.cached || 0;
-    const totalNew = Math.max(0, thumbnailStats.total - cached);
+    const unavailable = thumbnailStats.unavailable || 0;
+    const totalNew = Math.max(0, thumbnailStats.total - cached - unavailable);
     const isActive = (showThumbnails || thumbnailStats.mode === 'screenshot')
       && totalNew > 0
       && !thumbnailStats.stopped
@@ -5780,7 +5849,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         thumbnailElapsedTimerRef.current = null;
       }
     };
-  }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [showThumbnails, thumbnailStats.cached, thumbnailStats.loaded, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total, thumbnailStats.unavailable]);
 
   const getFullScreenshotCandidates = (scope) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
@@ -5929,7 +5998,15 @@ export default function App({ currentRoute, navigateToRoute }) {
         const assetUpdates = { authRequired: false };
         if (normalizedCaptureType === 'full') {
           assetUpdates.fullScreenshotUrl = data.url;
-          if (data.thumbnailUrl) assetUpdates.thumbnailUrl = data.thumbnailUrl;
+          if (data.thumbnailUrl) {
+            Object.assign(assetUpdates, {
+              thumbnailUrl: data.thumbnailUrl,
+              thumbnailCaptureFailed: false,
+              thumbnailCaptureError: null,
+              thumbnailCaptureFailedAt: null,
+            });
+          }
+          if (data.thumbnailFullUrl) assetUpdates.thumbnailFullUrl = data.thumbnailFullUrl;
           const needsThumbnail = !sourceNode?.thumbnailUrl || thumbnailDisplayErrorIds.has(nodeId);
           if (needsThumbnail && !assetUpdates.thumbnailUrl) {
             const thumbData = await api.captureScreenshot({ url: urlOrImage, type: 'thumb' }).catch(() => null);
@@ -6070,7 +6147,14 @@ export default function App({ currentRoute, navigateToRoute }) {
             fullScreenshotUrl: data.url,
             authRequired: false,
           };
-          if (data.thumbnailUrl) assetUpdates.thumbnailUrl = data.thumbnailUrl;
+          if (data.thumbnailUrl) {
+            Object.assign(assetUpdates, {
+              thumbnailUrl: data.thumbnailUrl,
+              thumbnailCaptureFailed: false,
+              thumbnailCaptureError: null,
+              thumbnailCaptureFailedAt: null,
+            });
+          }
           if (data.thumbnailFullUrl) assetUpdates.thumbnailFullUrl = data.thumbnailFullUrl;
           const persisted = updateNodeScreenshotAssets(node.id, assetUpdates);
           if (!persisted) {
@@ -13055,7 +13139,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         {(showThumbnails || thumbnailStats.mode === 'screenshot') && thumbnailStats.total > 0 && (() => {
           if (thumbnailStats.stopped) return null;
           const cached = thumbnailStats.cached || 0;
-          const totalNew = Math.max(0, thumbnailStats.total - cached);
+          const unavailable = thumbnailStats.unavailable || 0;
+          const totalNew = Math.max(0, thumbnailStats.total - cached - unavailable);
           if (totalNew <= 0) return null;
           const remaining = totalNew - thumbnailStats.loaded;
           if (remaining <= 0) return null;
@@ -13069,7 +13154,13 @@ export default function App({ currentRoute, navigateToRoute }) {
           const activeConcurrency = isScreenshotCapture ? FULL_SCREENSHOT_CONCURRENCY : MAX_THUMBNAIL_CONCURRENCY;
           const etaConcurrency = hasRetries ? 1 : activeConcurrency;
           const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
-          const title = `${isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: ${thumbnailStats.loaded}/${totalNew}`;
+          const isRemainingBatch = cached > 0 || unavailable > 0;
+          const title = `${isRemainingBatch ? 'Remaining ' : ''}${isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: ${thumbnailStats.loaded}/${totalNew}`;
+          const metaParts = [
+            cached > 0 ? `${cached} cached` : '',
+            unavailable > 0 ? `${unavailable} unavailable` : '',
+            thumbnailStats.failed > 0 ? `${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'}` : '',
+          ].filter(Boolean);
           return (
             <Toast
               type={hasRetries ? 'warning' : 'loading'}
@@ -13088,11 +13179,9 @@ export default function App({ currentRoute, navigateToRoute }) {
               )}
             >
               <div className="image-capture-toast__body">
-                {(cached > 0 || thumbnailStats.failed > 0) && (
+                {metaParts.length > 0 && (
                   <span className="image-capture-toast__meta">
-                    {cached > 0 ? `${cached} cached` : ''}
-                    {cached > 0 && thumbnailStats.failed > 0 ? ' • ' : ''}
-                    {thumbnailStats.failed > 0 ? `${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'}` : ''}
+                    {metaParts.join(' • ')}
                   </span>
                 )}
                 <span className="image-capture-toast__line">
