@@ -2001,7 +2001,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailElapsedTimerRef = useRef(null);
   const thumbnailAuthToastShownRef = useRef(false);
   const thumbnailFailureToastShownRef = useRef(false);
-  const MAX_THUMBNAIL_CONCURRENCY = 6;
+  const MAX_THUMBNAIL_CONCURRENCY = 2;
   const FULL_SCREENSHOT_CONCURRENCY = 2;
   const MAX_THUMBNAIL_ATTEMPTS = 2;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
@@ -13145,25 +13145,29 @@ export default function App({ currentRoute, navigateToRoute }) {
           const remaining = totalNew - thumbnailStats.loaded;
           if (remaining <= 0) return null;
           const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
-          const hasRetries = thumbnailStats.failed > 0;
           const fallbackItemMs = isScreenshotCapture ? 30000 : 12000;
           const elapsedItemMs = thumbnailStats.loaded > 0
             ? Math.ceil(Math.max(thumbnailElapsedMs, 1000) / thumbnailStats.loaded)
             : 0;
           const estimateItemMs = Math.max(thumbnailStats.avgMs || 0, elapsedItemMs, fallbackItemMs);
           const activeConcurrency = isScreenshotCapture ? FULL_SCREENSHOT_CONCURRENCY : MAX_THUMBNAIL_CONCURRENCY;
-          const etaConcurrency = hasRetries ? 1 : activeConcurrency;
+          const etaConcurrency = activeConcurrency;
           const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
           const isRemainingBatch = cached > 0 || unavailable > 0;
-          const title = `${isRemainingBatch ? 'Remaining ' : ''}${isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: ${thumbnailStats.loaded}/${totalNew}`;
+          const overallCompleted = Math.min(
+            thumbnailStats.total,
+            cached + unavailable + thumbnailStats.loaded,
+          );
+          const title = `${isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: ${overallCompleted}/${thumbnailStats.total}`;
           const metaParts = [
+            isRemainingBatch ? `${thumbnailStats.loaded}/${totalNew} remaining this run` : '',
             cached > 0 ? `${cached} cached` : '',
             unavailable > 0 ? `${unavailable} unavailable` : '',
             thumbnailStats.failed > 0 ? `${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'}` : '',
           ].filter(Boolean);
           return (
             <Toast
-              type={hasRetries ? 'warning' : 'loading'}
+              type="loading"
               className="image-capture-toast"
               title={title}
               action={(
@@ -13186,7 +13190,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 )}
                 <span className="image-capture-toast__line">
                   <span className="image-capture-toast__bar" aria-hidden="true" />
-                  {formatDuration(thumbnailElapsedMs)} | ETA {hasRetries ? 'retrying ' : '~'}{formatDuration(etaMs)}
+                  {formatDuration(thumbnailElapsedMs)} | ETA ~{formatDuration(etaMs)}
                 </span>
               </div>
             </Toast>
