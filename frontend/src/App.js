@@ -553,6 +553,8 @@ const findCommentInThread = (comments, commentId) => {
 const ACTIVITY_POLL_INTERVAL_MS = 5000;
 const MAX_TRACKED_ACTIVITY_IDS = 80;
 const AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS = 15000;
+const ASSET_AUTOSAVE_SUPPRESSION_MS = 2500;
+const THUMBNAIL_AUTOSAVE_INTERVAL_MS = 15000;
 const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
   accessPolicy: 'private',
   nonViewerInvitesRequireOwner: true,
@@ -1818,6 +1820,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const autosaveRetryTimerRef = useRef(null);
   const autosaveRetryDelayRef = useRef(1000);
   const lastAutosaveVersionAtRef = useRef(0);
+  const autosaveCheckpointInFlightRef = useRef(new Set());
+  const lastAutosaveCheckpointKeyRef = useRef('');
+  const assetAutosaveSuppressionUntilRef = useRef(0);
   const versionBaselineRef = useRef(null);
   const lastVersionSnapshotRef = useRef('');
   const clearLoadedMapViewRef = useRef(null);
@@ -2665,6 +2670,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setAutosaveCheckpointRequest({
           mapId: map.id,
           changedAt: Date.now(),
+          skipVersionCheckpoint: Boolean(pending.skipVersionCheckpoint),
           snapshot: {
             root: pending.payload.root,
             orphans: pending.payload.orphans,
@@ -4058,6 +4064,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       || isCoeditingReadOnlyMode
       || areMapPermissionsPending
     ) return;
+    if (assetAutosaveSuppressionUntilRef.current > Date.now()) return;
 
     const payload = buildMapSavePayload({
       name: currentMap?.name || mapName,
@@ -4682,10 +4689,17 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     const request = autosaveCheckpointRequest;
     if (!request?.mapId || !request?.snapshot?.root) return;
+    if (request.skipVersionCheckpoint) return;
     if (currentMap?.id && !sameId(currentMap.id, request.mapId)) return;
     if ((request.changedAt || 0) - lastAutosaveVersionAtRef.current < AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS) return;
     const serialized = serializeVersionSnapshot(request.snapshot);
     if (!serialized || serialized === lastVersionSnapshotRef.current) return;
+    const checkpointKey = `${request.mapId}:${request.changedAt || 0}:${serialized}`;
+    if (
+      checkpointKey === lastAutosaveCheckpointKeyRef.current
+      || autosaveCheckpointInFlightRef.current.has(checkpointKey)
+    ) return;
+    autosaveCheckpointInFlightRef.current.add(checkpointKey);
 
     let cancelled = false;
     (async () => {
@@ -4697,11 +4711,14 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
         if (!cancelled && version) {
           lastAutosaveVersionAtRef.current = request.changedAt || Date.now();
+          lastAutosaveCheckpointKeyRef.current = checkpointKey;
         }
       } catch (error) {
         if (!cancelled) {
           console.warn('Failed to create autosave checkpoint', error);
         }
+      } finally {
+        autosaveCheckpointInFlightRef.current.delete(checkpointKey);
       }
     })();
 
@@ -5311,6 +5328,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       assetEntries: nextAssets,
     });
     if (!nextMap.updated) return false;
+    assetAutosaveSuppressionUntilRef.current = Date.now() + ASSET_AUTOSAVE_SUPPRESSION_MS;
     rootRef.current = nextMap.root;
     orphansRef.current = nextMap.orphans;
     setRoot(nextMap.root);
@@ -5375,6 +5393,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       expectedUpdatedAt: currentMap?.updated_at || null,
       payload,
       snapshot,
+      skipVersionCheckpoint: true,
     };
     flushAutosave();
   }, [
@@ -5403,10 +5422,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     flushThumbnailAutosave();
   }, [flushThumbnailAutosave]);
 
-  const scheduleThumbnailAutosave = useCallback((delay = 1800) => {
-    if (thumbnailAutosaveTimerRef.current) {
-      clearTimeout(thumbnailAutosaveTimerRef.current);
-    }
+  const scheduleThumbnailAutosave = useCallback((delay = THUMBNAIL_AUTOSAVE_INTERVAL_MS) => {
+    if (thumbnailAutosaveTimerRef.current) return;
     thumbnailAutosaveTimerRef.current = setTimeout(() => {
       thumbnailAutosaveTimerRef.current = null;
       flushThumbnailAutosave();
@@ -5695,11 +5712,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         return next;
       });
     }
-    if (thumbnailStopRequestedRef.current) return;
-    if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
-    updateThumbnailErrorState(nodeId, false);
-    completeThumbnailCapture(nodeId);
-  }, [completeThumbnailCapture, updateThumbnailErrorState]);
+  }, []);
 
   const handleThumbnailImageError = useCallback((nodeId) => {
     if (nodeId) {
@@ -5710,11 +5723,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         return next;
       });
     }
-    if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
-    if (thumbnailStopRequestedRef.current) return;
-    thumbnailLoadStartRef.current.delete(nodeId);
-    completeThumbnailCapture(nodeId);
-  }, [completeThumbnailCapture]);
+  }, []);
 
   const orderThumbnailNodes = (nodes) => {
     if (!Array.isArray(nodes) || nodes.length === 0) return [];
@@ -13197,9 +13206,12 @@ export default function App({ currentRoute, navigateToRoute }) {
             thumbnailStats.total,
             cached + unavailable + thumbnailStats.loaded,
           );
-          const title = `${isScreenshotCapture ? 'Screenshots' : 'Thumbnails'}: ${overallCompleted}/${thumbnailStats.total}`;
+          const captureLabel = isScreenshotCapture ? 'Screenshots' : 'Thumbnails';
+          const isRemainingRun = cached > 0 || unavailable > 0;
+          const title = `${isRemainingRun ? 'Remaining ' : ''}${captureLabel}: ${thumbnailStats.loaded}/${totalNew}`;
           const metaParts = [
-            cached > 0 ? `${cached} cached` : '',
+            isRemainingRun ? `${overallCompleted}/${thumbnailStats.total} total processed` : '',
+            cached > 0 ? `${cached} already captured` : '',
             unavailable > 0 ? `${unavailable} unavailable` : '',
             thumbnailStats.failed > 0 ? `${thumbnailStats.failed} ${isScreenshotCapture ? 'failed' : 'retrying'}` : '',
           ].filter(Boolean);
