@@ -191,7 +191,7 @@ describe('ReportDrawer', () => {
     const onRunInsights = jest.fn();
     renderDrawer({ onRunInsights });
 
-    const insightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+    const insightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
       button.textContent.includes('Insights')
     );
     act(() => {
@@ -241,7 +241,7 @@ describe('ReportDrawer', () => {
 
     expect(container.textContent).toContain('pricing95');
 
-    const insightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+    const insightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
       button.textContent.includes('Insights')
     );
     act(() => {
@@ -257,7 +257,7 @@ describe('ReportDrawer', () => {
   test('shows insights loading and error states', () => {
     renderDrawer({ insightsLoading: true });
 
-    const insightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+    const insightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
       button.textContent.includes('Insights')
     );
     act(() => {
@@ -267,7 +267,7 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('Running Insights...');
 
     renderDrawer({ insightsError: 'Failed to analyze scan' });
-    const nextInsightsTab = Array.from(container.querySelectorAll('.report-tab')).find((button) =>
+    const nextInsightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
       button.textContent.includes('Insights')
     );
     act(() => {

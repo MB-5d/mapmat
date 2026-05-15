@@ -698,9 +698,11 @@ function AdminConsole({ route, navigateToRoute }) {
             <div className="admin-console-badge">Private Surface</div>
             <h1>Support Console</h1>
             <p>Support-only access for user support operations and feedback triage.</p>
-            <div className="admin-console-surface-nav">
+            <div className="admin-console-surface-nav" role="tablist" aria-label="Support console sections">
               <button
                 type="button"
+                role="tab"
+                aria-selected={activePanel === 'users'}
                 className={`admin-console-surface-tab ${activePanel === 'users' ? 'is-active' : ''}`}
                 onClick={handleShowUsers}
               >
@@ -709,6 +711,8 @@ function AdminConsole({ route, navigateToRoute }) {
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={activePanel === 'feedback'}
                 className={`admin-console-surface-tab ${activePanel === 'feedback' ? 'is-active' : ''}`}
                 onClick={handleShowFeedback}
               >

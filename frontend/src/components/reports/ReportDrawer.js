@@ -16,6 +16,7 @@ import {
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
+import SegmentedControl from '../ui/SegmentedControl';
 import TextInput from '../ui/TextInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
@@ -36,6 +37,10 @@ const INSIGHT_SEVERITY_LABELS = {
 };
 
 const SCORE_LABEL = (score) => (Number.isFinite(score) ? `${score}` : '--');
+const REPORT_TABS = [
+  { value: 'report', label: 'Report' },
+  { value: 'insights', label: 'Insights' },
+];
 
 const ReportDrawer = ({
   isOpen,
@@ -292,22 +297,17 @@ const ReportDrawer = ({
         </div>
       </header>
 
-      <div className="report-tabs" role="tablist" aria-label="Report views">
-        <button
-          type="button"
-          className={`report-tab ${activeTab === 'report' ? 'active' : ''}`}
-          onClick={() => setActiveTab('report')}
-        >
-          Report
-        </button>
-        <button
-          type="button"
-          className={`report-tab ${activeTab === 'insights' ? 'active' : ''}`}
-          onClick={() => setActiveTab('insights')}
-        >
-          Insights
-        </button>
-      </div>
+      <SegmentedControl
+        className="report-tabs"
+        variant="tabs"
+        size="sm"
+        fullWidth
+        ariaLabel="Report views"
+        value={activeTab}
+        onChange={setActiveTab}
+        options={REPORT_TABS}
+        optionRole="tab"
+      />
 
       <div
         className="report-drawer-body"

@@ -4680,29 +4680,7 @@ body {
 }
 
 .report-tabs {
-  display: inline-flex;
-  gap: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 4px;
-  background: var(--color-bg-primary);
-  width: fit-content;
-}
-
-.report-tab {
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--color-text-secondary);
-  padding: 7px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.report-tab.active {
-  background: var(--color-primary);
-  color: var(--color-neutral-white);
+  width: 100%;
 }
 
 .report-drawer-body {
@@ -6523,10 +6501,6 @@ body {
   right: var(--space-lg);
   z-index: 10;
   flex-shrink: 0;
-}
-
-.modal-close.ui-icon-btn {
-  color: var(--ui-icon-muted);
 }
 
 .modal-options {
@@ -10738,15 +10712,6 @@ body {
   color: #6b5a80;
 }
 
-[data-theme="dark"] .modal-close {
-  color: var(--ui-icon-muted);
-}
-
-[data-theme="dark"] .modal-close:hover {
-  background: var(--ui-color-icon-hover);
-  color: var(--ui-icon-default);
-}
-
 [data-theme="dark"] .key-toggle {
   color: #A48EBB;
 }
@@ -11392,24 +11357,6 @@ body {
   right: 8px;
 }
 
-[data-theme="dark"] .color-picker-modal .modal-close {
-  color: var(--ui-icon-muted);
-}
-
-[data-theme="dark"] .color-picker-modal .modal-close:hover {
-  background: var(--ui-color-icon-hover);
-  color: var(--ui-icon-default);
-}
-
-[data-theme="light"] .color-picker-modal .modal-close {
-  color: var(--ui-icon-muted);
-}
-
-[data-theme="light"] .color-picker-modal .modal-close:hover {
-  background: var(--ui-color-icon-hover);
-  color: var(--ui-icon-default);
-}
-
 /* Content layout */
 .color-picker-content {
   display: flex;
@@ -11704,14 +11651,31 @@ body {
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
-.feedback-drawer-close {
-  color: var(--color-text-secondary);
-}
-
 .feedback-chip:hover,
 .feedback-rating-pill:hover,
 .feedback-target-picker:hover {
   background: var(--color-bg-hover);
+}
+
+.modal-close.ui-icon-btn,
+.account-drawer-close.ui-icon-btn,
+.report-drawer-close.ui-icon-btn,
+.feedback-drawer-close.ui-icon-btn,
+.image-overlay-close.ui-icon-btn,
+.comments-panel-close.ui-icon-btn,
+.comment-popover-close.ui-icon-btn {
+  color: var(--ui-icon-muted);
+}
+
+.modal-close.ui-icon-btn:hover:not(:disabled),
+.account-drawer-close.ui-icon-btn:hover:not(:disabled),
+.report-drawer-close.ui-icon-btn:hover:not(:disabled),
+.feedback-drawer-close.ui-icon-btn:hover:not(:disabled),
+.image-overlay-close.ui-icon-btn:hover:not(:disabled),
+.comments-panel-close.ui-icon-btn:hover:not(:disabled),
+.comment-popover-close.ui-icon-btn:hover:not(:disabled) {
+  background: var(--ui-color-icon-hover);
+  color: var(--ui-icon-default);
 }
 
 .feedback-widget-tab:hover {
