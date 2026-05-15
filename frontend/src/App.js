@@ -12115,30 +12115,6 @@ export default function App({ currentRoute, navigateToRoute }) {
 
                 <button
                   type="button"
-                  className="blank-card"
-                  onClick={() => {
-                    if (currentUser) {
-                      openProjectsPanel();
-                      return;
-                    }
-                    openAuthModal({
-                      contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
-                      postSuccessAction: 'open-projects',
-                    });
-                  }}
-                >
-                  <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
-                    <img src={modifyIllustration} alt="" className="blank-card-art blank-card-art-light" />
-                    <img src={modifyIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
-                  </div>
-                  <div className="blank-card-title-row">
-                    <span className="blank-card-title">Modify</span>
-                  </div>
-                  <div className="blank-card-copy">Make updates to existing maps</div>
-                </button>
-
-                <button
-                  type="button"
                   className={`blank-card blank-card-upload ${blankUploadDragActive ? 'drag-over' : ''}`}
                   onClick={() => blankUploadInputRef.current?.click()}
                   onDrop={handleImportDrop}
@@ -12169,6 +12145,30 @@ export default function App({ currentRoute, navigateToRoute }) {
                         </>
                       )}
                   </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="blank-card"
+                  onClick={() => {
+                    if (currentUser) {
+                      openProjectsPanel();
+                      return;
+                    }
+                    openAuthModal({
+                      contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
+                      postSuccessAction: 'open-projects',
+                    });
+                  }}
+                >
+                  <div className="blank-card-illustration blank-card-illustration-modify" aria-hidden="true">
+                    <img src={modifyIllustration} alt="" className="blank-card-art blank-card-art-light" />
+                    <img src={modifyIllustrationDark} alt="" className="blank-card-art blank-card-art-dark" />
+                  </div>
+                  <div className="blank-card-title-row">
+                    <span className="blank-card-title">Modify</span>
+                  </div>
+                  <div className="blank-card-copy">Make updates to existing maps</div>
                 </button>
               </div>
               <input

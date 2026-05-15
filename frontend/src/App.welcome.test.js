@@ -202,7 +202,7 @@ describe('App blank home and welcome modal', () => {
     expect(container.querySelector('.welcome-modal-copy h2')).toBeNull();
   });
 
-  test('renders updated blank-home copy and an enabled modify card', async () => {
+  test('renders updated blank-home copy with upload before modify', async () => {
     suppressWelcomeModal();
 
     await renderApp();
@@ -215,6 +215,8 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).toContain('(drag in here or click to select)');
     expect(getBlankCardButton('Modify')).not.toBeNull();
     expect(getBlankCardButton('Modify').disabled).toBe(false);
+    expect(Array.from(container.querySelectorAll('.blank-card-title')).map((title) => title.textContent.trim()))
+      .toEqual(['Create', 'Upload', 'Modify']);
   });
 
   test('logged-in create still opens the existing create-map flow', async () => {
