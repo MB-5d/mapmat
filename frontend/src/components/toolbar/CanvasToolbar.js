@@ -97,9 +97,7 @@ const CanvasToolbar = ({
   hasDownloadableSelectedThumbnails,
   hasFullScreenshotAssets,
   hasSelectedFullScreenshotAssets,
-  allThumbnailsCaptured,
   thumbnailsAllLabel = 'Get Thumbnails (All)',
-  allFullScreenshotsCaptured,
   fullScreenshotsAllLabel = 'Get Screenshots (All)',
   showImageMenu,
   imageMenuRef,
@@ -185,7 +183,7 @@ const CanvasToolbar = ({
               className="canvas-tool-menu-item"
               label={thumbnailsAllLabel}
               onClick={onGetThumbnailsAll}
-              disabled={!hasMap || allThumbnailsCaptured}
+              disabled={!hasMap}
             />
             <MenuItem
               className="canvas-tool-menu-item"
@@ -213,7 +211,7 @@ const CanvasToolbar = ({
               className="canvas-tool-menu-item"
               label={fullScreenshotsAllLabel}
               onClick={onGetFullScreenshotsAll}
-              disabled={!hasMap || allFullScreenshotsCaptured}
+              disabled={!hasMap}
             />
             <MenuItem
               className="canvas-tool-menu-item"

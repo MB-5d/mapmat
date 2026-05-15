@@ -655,6 +655,14 @@ export async function captureScreenshot({ url, type = 'full' }, options = {}) {
   return fetchApi(`/screenshot?${params.toString()}`, options);
 }
 
+export async function validateScreenshotAssets(urls = [], options = {}) {
+  return fetchApi('/screenshot-assets/validate', {
+    method: 'POST',
+    body: JSON.stringify({ urls }),
+    ...options,
+  });
+}
+
 export async function getScreenshotJob(id, { includeResult = true, ...options } = {}) {
   const query = includeResult ? '' : '?include_result=false';
   return fetchApi(`/screenshot-jobs/${id}${query}`, options);

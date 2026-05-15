@@ -556,6 +556,11 @@ const AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS = 15000;
 const ASSET_AUTOSAVE_SUPPRESSION_MS = 2500;
 const IMAGE_CAPTURE_BATCH_SIZE = 50;
 const SCREENSHOT_ASSET_FILENAME_PATTERN = /(?:^|\/)[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
+const CLEARABLE_NODE_ASSET_KEYS = new Set([
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+]);
 const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
   accessPolicy: 'private',
   nonViewerInvitesRequireOwner: true,
@@ -1179,6 +1184,7 @@ const getImageCaptureStats = ({
   rootNode,
   orphanNodes = [],
   assetKey,
+  invalidAssetIds = new Set(),
   isUnavailable = () => false,
 }) => {
   if (!rootNode) {
@@ -1192,9 +1198,13 @@ const getImageCaptureStats = ({
     };
   }
   const nodes = collectAllNodesWithOrphans(rootNode, orphanNodes).filter((node) => node?.url);
-  const captured = nodes.filter((node) => isStoredScreenshotAsset(node?.[assetKey])).length;
+  const hasCapturedAsset = (node) => (
+    isStoredScreenshotAsset(node?.[assetKey])
+    && !invalidAssetIds.has(node?.id)
+  );
+  const captured = nodes.filter(hasCapturedAsset).length;
   const unavailable = nodes.filter(
-    (node) => !isStoredScreenshotAsset(node?.[assetKey]) && isUnavailable(node)
+    (node) => !hasCapturedAsset(node) && isUnavailable(node)
   ).length;
   const remaining = Math.max(0, nodes.length - captured - unavailable);
   return {
@@ -2054,6 +2064,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
   const thumbnailAutosaveTimerRef = useRef(null);
+  const screenshotAssetValidationSignatureRef = useRef('');
   const thumbnailAuthToastShownRef = useRef(false);
   const thumbnailFailureToastShownRef = useRef(false);
   const MAX_THUMBNAIL_CONCURRENCY = 2;
@@ -2064,6 +2075,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [, setThumbnailQueueSize] = useState(0);
   const [, setThumbnailActiveCount] = useState(0);
   const [thumbnailReloadMap, setThumbnailReloadMap] = useState({});
+  const [invalidThumbnailAssetIds, setInvalidThumbnailAssetIds] = useState(() => new Set());
+  const [invalidFullScreenshotAssetIds, setInvalidFullScreenshotAssetIds] = useState(() => new Set());
   const [thumbnailElapsedMs, setThumbnailElapsedMs] = useState(0);
   const [thumbnailStats, setThumbnailStats] = useState({
     mode: null,
@@ -2214,11 +2227,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [hasMap]);
 
+  useEffect(() => {
+    setInvalidThumbnailAssetIds(new Set());
+    setInvalidFullScreenshotAssetIds(new Set());
+    screenshotAssetValidationSignatureRef.current = '';
+  }, [currentMap?.id]);
+
   const hasAnyThumbnails = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => isStoredScreenshotAsset(node.thumbnailUrl));
-  }, [root, orphans]);
+    return nodes.some((node) => isStoredScreenshotAsset(node.thumbnailUrl) && !invalidThumbnailAssetIds.has(node.id));
+  }, [root, orphans, invalidThumbnailAssetIds]);
 
   const hasStoredImageAsset = useCallback(isStoredScreenshotAsset, []);
 
@@ -2229,37 +2248,38 @@ export default function App({ currentRoute, navigateToRoute }) {
   const hasAnyDownloadableThumbnails = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => hasStoredImageAsset(node.thumbnailUrl));
-  }, [root, orphans, hasStoredImageAsset]);
+    return nodes.some((node) => hasStoredImageAsset(node.thumbnailUrl) && !invalidThumbnailAssetIds.has(node.id));
+  }, [root, orphans, hasStoredImageAsset, invalidThumbnailAssetIds]);
 
   const hasAnyFullScreenshotAssets = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => hasStoredImageAsset(node.fullScreenshotUrl));
-  }, [root, orphans, hasStoredImageAsset]);
+    return nodes.some((node) => hasStoredImageAsset(node.fullScreenshotUrl) && !invalidFullScreenshotAssetIds.has(node.id));
+  }, [root, orphans, hasStoredImageAsset, invalidFullScreenshotAssetIds]);
 
   const hasSelectedDownloadableThumbnails = useMemo(() => {
     if (!root || selectedNodeIds.size === 0) return false;
     const selectedIds = selectedNodeIds;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.thumbnailUrl));
-  }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
+    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.thumbnailUrl) && !invalidThumbnailAssetIds.has(node.id));
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidThumbnailAssetIds]);
 
   const hasSelectedFullScreenshotAssets = useMemo(() => {
     if (!root || selectedNodeIds.size === 0) return false;
     const selectedIds = selectedNodeIds;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.fullScreenshotUrl));
-  }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
+    return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.fullScreenshotUrl) && !invalidFullScreenshotAssetIds.has(node.id));
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidFullScreenshotAssetIds]);
 
   const thumbnailCaptureStats = useMemo(() => {
     return getImageCaptureStats({
       rootNode: root,
       orphanNodes: orphans,
       assetKey: 'thumbnailUrl',
+      invalidAssetIds: invalidThumbnailAssetIds,
       isUnavailable: hasTerminalThumbnailFailure,
     });
-  }, [root, orphans, hasTerminalThumbnailFailure]);
+  }, [root, orphans, invalidThumbnailAssetIds, hasTerminalThumbnailFailure]);
   const allThumbnailsCaptured = thumbnailCaptureStats.allCaptured;
 
   const fullScreenshotCaptureStats = useMemo(() => {
@@ -2267,8 +2287,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       rootNode: root,
       orphanNodes: orphans,
       assetKey: 'fullScreenshotUrl',
+      invalidAssetIds: invalidFullScreenshotAssetIds,
     });
-  }, [root, orphans]);
+  }, [root, orphans, invalidFullScreenshotAssetIds]);
 
   const maxDepth = useMemo(() => {
     const orphanDepth = (orphans || []).reduce((max, orphan) => {
@@ -2678,6 +2699,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           mapId: map.id,
           changedAt: Date.now(),
           skipVersionCheckpoint: Boolean(pending.skipVersionCheckpoint),
+          force: Boolean(pending.forceVersionCheckpoint),
           snapshot: {
             root: pending.payload.root,
             orphans: pending.payload.orphans,
@@ -4698,7 +4720,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!request?.mapId || !request?.snapshot?.root) return;
     if (request.skipVersionCheckpoint) return;
     if (currentMap?.id && !sameId(currentMap.id, request.mapId)) return;
-    if ((request.changedAt || 0) - lastAutosaveVersionAtRef.current < AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS) return;
+    if (!request.force && (request.changedAt || 0) - lastAutosaveVersionAtRef.current < AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS) return;
     const serialized = serializeVersionSnapshot(request.snapshot);
     if (!serialized || serialized === lastVersionSnapshotRef.current) return;
     const checkpointKey = `${request.mapId}:${request.changedAt || 0}:${serialized}`;
@@ -5320,11 +5342,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [currentMap?.id, currentMap?.name, currentMap?.project_id, isLiveActive, mapName, projects, showToast, submitLiveDraft]);
 
-  const updateNodeScreenshotAssets = (nodeId, assetUpdates = {}) => {
+  const updateNodeScreenshotAssets = useCallback((nodeId, assetUpdates = {}) => {
     if (!nodeId) return false;
-    const nextAssets = Object.entries(assetUpdates).filter(([, value]) => {
+    const nextAssets = Object.entries(assetUpdates).filter(([key, value]) => {
       if (value === undefined) return false;
-      if (typeof value === 'string') return value.trim().length > 0;
+      if (value === null) return true;
+      if (typeof value === 'string') {
+        if (value.trim().length > 0) return true;
+        return CLEARABLE_NODE_ASSET_KEYS.has(key);
+      }
       return true;
     });
     if (nextAssets.length === 0) return false;
@@ -5341,7 +5367,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(nextMap.root);
     setOrphans(nextMap.orphans);
     return true;
-  };
+  }, [orphans, root]);
 
   const getThumbnailAssetUpdates = (data) => {
     const smallUrl = data?.thumbnailUrl || data?.url || '';
@@ -5380,7 +5406,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }));
   }, []);
 
-  const flushThumbnailAutosave = useCallback(() => {
+  const flushThumbnailAutosave = useCallback(({ createVersionCheckpoint = false, forceVersionCheckpoint = false } = {}) => {
     const latestRoot = rootRef.current || root;
     const latestOrphans = orphansRef.current || orphans;
     if (!currentMap?.id || !latestRoot || isImportedMap || isViewingHistoricalVersion || isCoeditingReadOnlyMode || isCollaborativeLiveEditingRestricted) return;
@@ -5394,13 +5420,31 @@ export default function App({ currentRoute, navigateToRoute }) {
       project_id: currentMap?.project_id || null,
     });
     const snapshot = serializeMapAutosaveSnapshot(payload);
-    if (snapshot === lastAutosaveSnapshotRef.current) return;
+    if (snapshot === lastAutosaveSnapshotRef.current) {
+      if (createVersionCheckpoint) {
+        setAutosaveCheckpointRequest({
+          mapId: currentMap.id,
+          changedAt: Date.now(),
+          skipVersionCheckpoint: false,
+          force: forceVersionCheckpoint,
+          snapshot: {
+            root: payload.root,
+            orphans: payload.orphans,
+            connections: payload.connections,
+            colors: payload.colors,
+            connectionColors: payload.connectionColors,
+          },
+        });
+      }
+      return;
+    }
     autosavePendingRef.current = {
       mapId: currentMap.id,
       expectedUpdatedAt: currentMap?.updated_at || null,
       payload,
       snapshot,
-      skipVersionCheckpoint: true,
+      skipVersionCheckpoint: !createVersionCheckpoint,
+      forceVersionCheckpoint,
     };
     flushAutosave();
   }, [
@@ -5421,13 +5465,144 @@ export default function App({ currentRoute, navigateToRoute }) {
     root,
   ]);
 
-  const flushThumbnailAutosaveNow = useCallback(() => {
+  const flushThumbnailAutosaveNow = useCallback((options = {}) => {
     if (thumbnailAutosaveTimerRef.current) {
       clearTimeout(thumbnailAutosaveTimerRef.current);
       thumbnailAutosaveTimerRef.current = null;
     }
-    flushThumbnailAutosave();
+    flushThumbnailAutosave(options);
   }, [flushThumbnailAutosave]);
+
+  const scheduleThumbnailAutosave = useCallback((options = {}) => {
+    if (thumbnailAutosaveTimerRef.current) {
+      clearTimeout(thumbnailAutosaveTimerRef.current);
+    }
+    thumbnailAutosaveTimerRef.current = setTimeout(() => {
+      thumbnailAutosaveTimerRef.current = null;
+      flushThumbnailAutosave(options);
+    }, 2000);
+  }, [flushThumbnailAutosave]);
+
+  const clearInvalidThumbnailAsset = useCallback((nodeId, { save = true } = {}) => {
+    if (!nodeId) return false;
+    setInvalidThumbnailAssetIds((prev) => {
+      if (prev.has(nodeId)) return prev;
+      const next = new Set(prev);
+      next.add(nodeId);
+      return next;
+    });
+    const updated = updateNodeScreenshotAssets(nodeId, {
+      thumbnailUrl: '',
+      thumbnailFullUrl: '',
+      thumbnailCaptureFailed: false,
+      thumbnailCaptureError: null,
+      thumbnailCaptureFailedAt: null,
+    });
+    if (updated && save) {
+      scheduleThumbnailAutosave({ createVersionCheckpoint: false });
+    }
+    return updated;
+  }, [scheduleThumbnailAutosave, updateNodeScreenshotAssets]);
+
+  const clearInvalidFullScreenshotAsset = useCallback((nodeId, { save = true } = {}) => {
+    if (!nodeId) return false;
+    setInvalidFullScreenshotAssetIds((prev) => {
+      if (prev.has(nodeId)) return prev;
+      const next = new Set(prev);
+      next.add(nodeId);
+      return next;
+    });
+    const updated = updateNodeScreenshotAssets(nodeId, {
+      fullScreenshotUrl: '',
+    });
+    if (updated && save) {
+      scheduleThumbnailAutosave({ createVersionCheckpoint: false });
+    }
+    return updated;
+  }, [scheduleThumbnailAutosave, updateNodeScreenshotAssets]);
+
+  const handleThumbnailDisplayLoad = useCallback((nodeId) => {
+    if (!nodeId) return;
+    setInvalidThumbnailAssetIds((prev) => {
+      if (!prev.has(nodeId)) return prev;
+      const next = new Set(prev);
+      next.delete(nodeId);
+      return next;
+    });
+  }, []);
+
+  const handleThumbnailDisplayError = useCallback((nodeId) => {
+    clearInvalidThumbnailAsset(nodeId);
+  }, [clearInvalidThumbnailAsset]);
+
+  const validateStoredAssetsForNodes = useCallback(async (nodes, assetKey, { clearMissing = false } = {}) => {
+    const targets = (nodes || [])
+      .filter((node) => node?.id && hasStoredImageAsset(node?.[assetKey]))
+      .map((node) => ({ id: node.id, url: node[assetKey] }));
+    if (targets.length === 0) return new Set();
+    try {
+      const response = await api.validateScreenshotAssets(targets.map((target) => target.url));
+      const results = response?.results || {};
+      const missingIds = new Set();
+      targets.forEach((target) => {
+        if (results[target.url]?.available === false) missingIds.add(target.id);
+      });
+      if (missingIds.size === 0) return missingIds;
+      if (assetKey === 'thumbnailUrl') {
+        setInvalidThumbnailAssetIds((prev) => new Set([...prev, ...missingIds]));
+        if (clearMissing) {
+          missingIds.forEach((nodeId) => clearInvalidThumbnailAsset(nodeId, { save: false }));
+        }
+      } else if (assetKey === 'fullScreenshotUrl') {
+        setInvalidFullScreenshotAssetIds((prev) => new Set([...prev, ...missingIds]));
+        if (clearMissing) {
+          missingIds.forEach((nodeId) => clearInvalidFullScreenshotAsset(nodeId, { save: false }));
+        }
+      }
+      if (clearMissing) {
+        scheduleThumbnailAutosave({ createVersionCheckpoint: false });
+      }
+      return missingIds;
+    } catch (error) {
+      console.warn('Failed to validate screenshot assets', error);
+      return new Set();
+    }
+  }, [
+    clearInvalidFullScreenshotAsset,
+    clearInvalidThumbnailAsset,
+    hasStoredImageAsset,
+    scheduleThumbnailAutosave,
+  ]);
+
+  useEffect(() => {
+    if (!currentMap?.id || !root || thumbnailStats.mode) return undefined;
+    const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.id);
+    const assetTokens = [];
+    nodes.forEach((node) => {
+      if (hasStoredImageAsset(node.thumbnailUrl)) {
+        assetTokens.push(`t:${node.id}:${node.thumbnailUrl}`);
+      }
+      if (hasStoredImageAsset(node.fullScreenshotUrl)) {
+        assetTokens.push(`f:${node.id}:${node.fullScreenshotUrl}`);
+      }
+    });
+    if (assetTokens.length === 0) return undefined;
+    const signature = `${currentMap.id}:${nodes.length}:${assetTokens.join('|')}`;
+    if (signature === screenshotAssetValidationSignatureRef.current) return undefined;
+    const timer = setTimeout(() => {
+      screenshotAssetValidationSignatureRef.current = signature;
+      validateStoredAssetsForNodes(nodes, 'thumbnailUrl');
+      validateStoredAssetsForNodes(nodes, 'fullScreenshotUrl');
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [
+    currentMap?.id,
+    hasStoredImageAsset,
+    orphans,
+    root,
+    thumbnailStats.mode,
+    validateStoredAssetsForNodes,
+  ]);
 
   const getActiveImageCaptureMode = useCallback(() => {
     const total = thumbnailStats.total || 0;
@@ -5520,6 +5695,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       failed: thumbnailErrorRef.current.size,
       avgMs: completedCount ? Math.round(thumbnailTotalTimeRef.current / completedCount) : 0,
     }));
+    if (capturedCount > 0 && capturedCount % IMAGE_CAPTURE_BATCH_SIZE === 0) {
+      setTimeout(() => flushThumbnailAutosaveNow({ createVersionCheckpoint: false }), 100);
+    }
     if (!thumbnailCompletedRef.current && expectedCount > 0 && completedCount >= expectedCount) {
       thumbnailCompletedRef.current = true;
       const failedCount = thumbnailErrorRef.current.size;
@@ -5530,7 +5708,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           'warning',
         );
       }
-      setTimeout(() => flushThumbnailAutosaveNow(), 300);
+      setTimeout(() => flushThumbnailAutosaveNow({ createVersionCheckpoint: true, forceVersionCheckpoint: true }), 300);
     }
   }, [flushThumbnailAutosaveNow, showToast, thumbnailStats.mode]);
 
@@ -5568,6 +5746,12 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (data?.url) {
           const persisted = updateNodeScreenshotAssets(next.id, getThumbnailAssetUpdates(data));
           if (persisted) {
+            setInvalidThumbnailAssetIds((prev) => {
+              if (!prev.has(next.id)) return prev;
+              const updated = new Set(prev);
+              updated.delete(next.id);
+              return updated;
+            });
             bumpThumbnailReload(next.id);
             completeThumbnailCapture(next.id);
             success = true;
@@ -5720,7 +5904,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   };
 
-  const getThumbnailCandidates = (scope) => {
+  const getThumbnailCandidates = (scope, invalidAssetIds = invalidThumbnailAssetIds) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
     const baseIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
     const scopedNodes = scope === 'selected'
@@ -5734,7 +5918,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const candidates = forceRecapture
       ? orderedTargets
       : orderedTargets.filter((node) => {
-          const hasSavedThumb = hasStoredImageAsset(node.thumbnailUrl);
+          const hasSavedThumb = hasStoredImageAsset(node.thumbnailUrl) && !invalidAssetIds.has(node.id);
           if (hasSavedThumb) {
             cachedCount += 1;
             return false;
@@ -5755,7 +5939,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   };
 
-  const handleThumbnailCapture = (scope) => {
+  const handleThumbnailCapture = async (scope) => {
     if (warnCoeditingReadOnly('Thumbnail capture')) {
       return;
     }
@@ -5769,7 +5953,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     if (!guardImageCaptureAvailable('thumbnail')) return;
     if (!guardImageCapturePersistenceReady()) return;
-    const { targetIds, candidates, total, cachedCount, unavailableCount } = getThumbnailCandidates(scope);
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const selectedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = scope === 'selected'
+      ? allNodes.filter((node) => selectedIds.has(node.id))
+      : allNodes;
+    const validatedInvalidIds = await validateStoredAssetsForNodes(scopedNodes, 'thumbnailUrl');
+    const invalidIds = new Set([...invalidThumbnailAssetIds, ...validatedInvalidIds]);
+    const { targetIds, candidates, total, cachedCount, unavailableCount } = getThumbnailCandidates(scope, invalidIds);
     if (total === 0) {
       resetThumbnailQueue(0, 0, true, 'thumbnail');
       setThumbnailScopeIds(new Set());
@@ -5828,7 +6019,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailAbortControllersRef.current.clear();
     setThumbnailQueueSize(0);
     setThumbnailStats((prev) => ({ ...prev, stopped: true }));
-    setTimeout(() => flushThumbnailAutosaveNow(), 300);
+    setTimeout(() => flushThumbnailAutosaveNow({ createVersionCheckpoint: true, forceVersionCheckpoint: true }), 300);
     if (showStoppedToast) {
       const captured = thumbnailLoadedRef.current.size;
       const total = thumbnailExpectedRef.current.size || thumbnailStats.total || 0;
@@ -5870,7 +6061,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [showThumbnails, thumbnailStats.completed, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
-  const getFullScreenshotCandidates = (scope) => {
+  const getFullScreenshotCandidates = (scope, invalidAssetIds = invalidFullScreenshotAssetIds) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
     const scopedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
     const scopedNodes = scope === 'selected'
@@ -5880,7 +6071,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const forceRecapture = scope === 'selected';
     const candidates = forceRecapture
       ? orderedTargets
-      : orderedTargets.filter((node) => !hasStoredImageAsset(node.fullScreenshotUrl));
+      : orderedTargets.filter((node) => !hasStoredImageAsset(node.fullScreenshotUrl) || invalidAssetIds.has(node.id));
     return {
       candidates,
       total: orderedTargets.length,
@@ -5896,9 +6087,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       ? allNodes.filter((node) => scopedIds.has(node.id))
       : allNodes;
     return orderThumbnailNodes(
-      scopedNodes.filter((node) => hasStoredImageAsset(node?.[assetKey]))
+      scopedNodes.filter((node) => {
+        const invalidIds = assetType === 'thumb' ? invalidThumbnailAssetIds : invalidFullScreenshotAssetIds;
+        return hasStoredImageAsset(node?.[assetKey]) && !invalidIds.has(node.id);
+      })
     );
-  }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
+  }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidThumbnailAssetIds, invalidFullScreenshotAssetIds]);
 
   const sanitizeAssetFilenamePart = (value, fallback = 'asset') => {
     const cleaned = String(value || '')
@@ -6032,7 +6226,21 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (!persisted) {
           throw new Error('Failed to save screenshot assets on this page');
         }
+        if (normalizedCaptureType === 'full') {
+          setInvalidFullScreenshotAssetIds((prev) => {
+            if (!prev.has(nodeId)) return prev;
+            const updated = new Set(prev);
+            updated.delete(nodeId);
+            return updated;
+          });
+        }
         if (assetUpdates.thumbnailUrl) {
+          setInvalidThumbnailAssetIds((prev) => {
+            if (!prev.has(nodeId)) return prev;
+            const updated = new Set(prev);
+            updated.delete(nodeId);
+            return updated;
+          });
           setThumbnailScopeIds((prev) => {
             const next = new Set(prev || []);
             next.add(nodeId);
@@ -6041,7 +6249,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           bumpThumbnailReload(nodeId);
           setShowThumbnails(true);
         }
-        flushThumbnailAutosaveNow();
+        flushThumbnailAutosaveNow({ createVersionCheckpoint: true, forceVersionCheckpoint: true });
       }
       setThumbnailStats((prev) => ({
         ...prev,
@@ -6087,7 +6295,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!guardImageCaptureAvailable('screenshot')) return;
     if (!guardImageCapturePersistenceReady()) return;
 
-    const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope);
+    const allNodes = collectAllNodesWithOrphans(root, orphans);
+    const selectedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const scopedNodes = scope === 'selected'
+      ? allNodes.filter((node) => selectedIds.has(node.id))
+      : allNodes;
+    const validatedInvalidIds = await validateStoredAssetsForNodes(scopedNodes, 'fullScreenshotUrl');
+    const invalidIds = new Set([...invalidFullScreenshotAssetIds, ...validatedInvalidIds]);
+    const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope, invalidIds);
     if (total === 0) {
       setShowImageMenu(false);
       showToast('No pages with URLs to capture', 'info');
@@ -6166,7 +6381,19 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (!persisted) {
             throw new Error('Failed to save screenshot assets on the selected page');
           }
+          setInvalidFullScreenshotAssetIds((prev) => {
+            if (!prev.has(node.id)) return prev;
+            const updated = new Set(prev);
+            updated.delete(node.id);
+            return updated;
+          });
           if (assetUpdates.thumbnailUrl) {
+            setInvalidThumbnailAssetIds((prev) => {
+              if (!prev.has(node.id)) return prev;
+              const updated = new Set(prev);
+              updated.delete(node.id);
+              return updated;
+            });
             setThumbnailScopeIds((prev) => {
               const next = new Set(prev || []);
               next.add(node.id);
@@ -6212,17 +6439,20 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
         });
         await Promise.all(workers);
+        if (successCount > 0) {
+          flushThumbnailAutosaveNow({ createVersionCheckpoint: false });
+        }
       }
       if (screenshotStopRequestedRef.current) {
         showToast(`Stopped after capturing ${successCount} of ${targets.length} screenshots`, 'warning');
-        setTimeout(() => flushThumbnailAutosaveNow(), 300);
+        setTimeout(() => flushThumbnailAutosaveNow({ createVersionCheckpoint: true, forceVersionCheckpoint: true }), 300);
         return;
       }
       const message = failedCount > 0
         ? `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}; ${failedCount} failed`
         : `Captured ${successCount} full screenshot${successCount === 1 ? '' : 's'}`;
       showToast(message, failedCount > 0 ? 'warning' : 'success');
-      setTimeout(() => flushThumbnailAutosaveNow(), 300);
+      setTimeout(() => flushThumbnailAutosaveNow({ createVersionCheckpoint: true, forceVersionCheckpoint: true }), 300);
       trackEvent('screenshot_capture', {
         type: 'full',
         scope,
@@ -12306,6 +12536,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                   thumbnailSessionId={thumbnailSessionId}
                   thumbnailReloadMap={thumbnailReloadMap}
                   thumbnailCaptureStopped={thumbnailStats.stopped}
+                  onThumbnailLoad={handleThumbnailDisplayLoad}
+                  onThumbnailError={handleThumbnailDisplayError}
                   expandedStacks={expandedStacks}
                   onToggleStack={(nodeId) => {
                     setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));

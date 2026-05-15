@@ -323,6 +323,7 @@ const SCREENSHOT_TYPES = Object.freeze({
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
 const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v8';
+const SCREENSHOT_ASSET_FILENAME_PATTERN = /^[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
 const SCREENSHOT_BLOCKED_RESOURCE_TYPES = new Set(['media', 'eventsource', 'websocket']);
 const SCREENSHOT_BLOCKED_URL_PATTERN = /(?:google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|connect\.facebook\.net|hotjar|segment\.io|fullstory|intercom|clarity\.ms|sentry\.io|datadoghq-browser-agent|newrelic|amplitude\.com|mixpanel\.com)/i;
 
@@ -756,6 +757,47 @@ function readScreenshotMeta(metaPath) {
     return JSON.parse(raw);
   } catch {
     return null;
+  }
+}
+
+function getScreenshotAssetFilename(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const parsePathname = (candidate) => {
+    const cleaned = String(candidate || '').split(/[?#]/)[0];
+    const marker = '/screenshots/';
+    const markerIndex = cleaned.indexOf(marker);
+    const basename = markerIndex >= 0
+      ? path.basename(cleaned.slice(markerIndex + marker.length))
+      : path.basename(cleaned);
+    return SCREENSHOT_ASSET_FILENAME_PATTERN.test(basename) ? basename : '';
+  };
+  try {
+    return parsePathname(new URL(raw).pathname);
+  } catch {
+    return parsePathname(raw);
+  }
+}
+
+function validateScreenshotAssetUrl(value) {
+  const raw = String(value || '').trim();
+  const filename = getScreenshotAssetFilename(value);
+  if (!filename) {
+    return { available: false, reason: 'not_screenshot_asset' };
+  }
+  if (!raw.startsWith('/screenshots/') && !raw.includes('/screenshots/')) {
+    return { available: true, filename, reason: 'external_asset_not_checked' };
+  }
+  const filepath = path.join(SCREENSHOT_DIR, filename);
+  try {
+    const stats = fs.statSync(filepath);
+    return {
+      available: stats.isFile() && stats.size > 0,
+      filename,
+      size: stats.size || 0,
+    };
+  } catch {
+    return { available: false, filename, reason: 'missing_file' };
   }
 }
 
@@ -3879,6 +3921,22 @@ app.get('/screenshot', authMiddleware, requireApiKey, async (req, res) => {
       : 'Screenshot failed';
     res.status(500).json({ error: shortError });
   }
+});
+
+app.post('/screenshot-assets/validate', authMiddleware, requireApiKey, (req, res) => {
+  const urls = Array.isArray(req.body?.urls) ? req.body.urls : [];
+  const limitedUrls = urls.slice(0, 1500);
+  const results = {};
+  limitedUrls.forEach((url) => {
+    const key = String(url || '').trim();
+    if (!key || Object.prototype.hasOwnProperty.call(results, key)) return;
+    results[key] = validateScreenshotAssetUrl(key);
+  });
+  res.json({
+    ok: true,
+    total: limitedUrls.length,
+    results,
+  });
 });
 
 // Background screenshot jobs

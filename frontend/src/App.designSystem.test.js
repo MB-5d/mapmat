@@ -182,15 +182,16 @@ describe('map image asset persistence', () => {
     const stats = getImageCaptureStats({
       rootNode: root,
       assetKey: 'thumbnailUrl',
+      invalidAssetIds: new Set(['about']),
       isUnavailable: (node) => Boolean(node.authRequired),
     });
 
     expect(stats).toMatchObject({
       total: 4,
-      captured: 1,
+      captured: 0,
       unavailable: 1,
-      remaining: 2,
-      hasPartial: true,
+      remaining: 3,
+      hasPartial: false,
       allCaptured: false,
     });
   });
