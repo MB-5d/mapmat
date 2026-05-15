@@ -52,7 +52,6 @@ const NodeCard = ({
   badges = [],
   showPageNumbers = true,
   showAnnotations = true,
-  onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
   thumbnailReloadKey = 0,
@@ -75,7 +74,7 @@ const NodeCard = ({
     ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbKey}`
     : null;
   const hasThumb = Boolean(thumb);
-  const canRequestThumbnail = !thumbnailRequestIds || thumbnailRequestIds.has(node.id);
+  const canRequestThumbnail = !!(thumbnailRequestIds && thumbnailRequestIds.has(node.id));
   const annotations = node?.annotations || {};
   const status = annotations.status || 'none';
   const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
@@ -163,26 +162,6 @@ const NodeCard = ({
     }, 120000);
     return () => clearTimeout(timeout);
   }, [showThumbnails, thumbLoading, thumbKey, thumb, canRequestThumbnail, node.id, node.url, onThumbnailError]);
-
-  useEffect(() => {
-    if (!showThumbnails || !onRequestThumbnail) return;
-    if (!canRequestThumbnail) return;
-    if (node.thumbnailUrl) return;
-    if (thumbError) return;
-    let isActive = true;
-    setThumbLoading(!node.thumbnailUrl);
-    setThumbError(false);
-    onRequestThumbnail(node).then((success) => {
-      if (!isActive) return;
-      if (success === false && !node.thumbnailUrl) {
-        setThumbError(true);
-        setThumbLoading(false);
-      }
-    });
-    return () => {
-      isActive = false;
-    };
-  }, [showThumbnails, node, node.thumbnailUrl, node.url, onRequestThumbnail, thumbError, canRequestThumbnail]);
 
   useEffect(() => {
     if (!thumb || !thumbImgRef.current) return;
@@ -429,7 +408,6 @@ const DraggableNodeCard = ({
   activeId,
   badges,
   showPageNumbers,
-  onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
   thumbnailReloadKey,
@@ -477,7 +455,6 @@ const DraggableNodeCard = ({
         badges={badges}
         showPageNumbers={showPageNumbers}
         showAnnotations={showAnnotations}
-        onRequestThumbnail={onRequestThumbnail}
         thumbnailRequestIds={thumbnailRequestIds}
         thumbnailSessionId={thumbnailSessionId}
         thumbnailReloadKey={thumbnailReloadKey}

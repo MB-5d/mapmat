@@ -202,4 +202,28 @@ describe('NodeCard', () => {
 
     expect(onThumbnailError).not.toHaveBeenCalled();
   });
+
+  test('does not start thumbnail capture from render state', async () => {
+    const onRequestThumbnail = jest.fn(() => Promise.resolve(true));
+
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{ id: 'node-1', title: 'Missing thumbnail', url: 'https://example.com/page' }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          thumbnailRequestIds={new Set(['node-1'])}
+          thumbnailSessionId={1}
+          onRequestThumbnail={onRequestThumbnail}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
+        />
+      );
+    });
+
+    expect(onRequestThumbnail).not.toHaveBeenCalled();
+  });
 });
