@@ -143,7 +143,57 @@ describe('map image asset persistence', () => {
     applyNodeAssetUpdatesToMap,
     buildMapSavePayload,
     serializeMapAutosaveSnapshot,
+    isStoredScreenshotAsset,
+    getImageCaptureStats,
   } = __testing;
+
+  test('image capture stats only count real saved screenshot assets', () => {
+    expect(isStoredScreenshotAsset('https://replit.com/pricing')).toBe(false);
+    expect(isStoredScreenshotAsset('/screenshots/thumb-about.jpg')).toBe(true);
+    expect(isStoredScreenshotAsset('https://api.vellic.io/screenshots/thumb-about.jpg')).toBe(true);
+    expect(isStoredScreenshotAsset('https://pub-example.r2.dev/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_thumb_small_v8.jpg')).toBe(true);
+
+    const root = {
+      id: 'home',
+      url: 'https://example.com',
+      thumbnailUrl: 'https://example.com',
+      children: [
+        {
+          id: 'about',
+          url: 'https://example.com/about',
+          thumbnailUrl: '/screenshots/thumb-about.jpg',
+          children: [],
+        },
+        {
+          id: 'contact',
+          url: 'https://example.com/contact',
+          thumbnailCaptureFailed: true,
+          children: [],
+        },
+        {
+          id: 'login',
+          url: 'https://example.com/login',
+          authRequired: true,
+          children: [],
+        },
+      ],
+    };
+
+    const stats = getImageCaptureStats({
+      rootNode: root,
+      assetKey: 'thumbnailUrl',
+      isUnavailable: (node) => Boolean(node.authRequired),
+    });
+
+    expect(stats).toMatchObject({
+      total: 4,
+      captured: 1,
+      unavailable: 1,
+      remaining: 2,
+      hasPartial: true,
+      allCaptured: false,
+    });
+  });
 
   test('thumbnail asset updates are retained in saved map payloads', () => {
     const root = {

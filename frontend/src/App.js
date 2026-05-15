@@ -554,6 +554,8 @@ const ACTIVITY_POLL_INTERVAL_MS = 5000;
 const MAX_TRACKED_ACTIVITY_IDS = 80;
 const AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS = 15000;
 const ASSET_AUTOSAVE_SUPPRESSION_MS = 2500;
+const IMAGE_CAPTURE_BATCH_SIZE = 50;
+const SCREENSHOT_ASSET_FILENAME_PATTERN = /(?:^|\/)[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
 const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
   accessPolicy: 'private',
   nonViewerInvitesRequireOwner: true,
@@ -1158,6 +1160,53 @@ const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
   return result;
 };
 
+const isStoredScreenshotAsset = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  if (raw.startsWith('/screenshots/') || raw.includes('/screenshots/')) return true;
+  const withoutQuery = raw.split(/[?#]/)[0];
+  if (SCREENSHOT_ASSET_FILENAME_PATTERN.test(withoutQuery)) return true;
+  try {
+    const parsed = new URL(raw);
+    return parsed.pathname.includes('/screenshots/')
+      || SCREENSHOT_ASSET_FILENAME_PATTERN.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+};
+
+const getImageCaptureStats = ({
+  rootNode,
+  orphanNodes = [],
+  assetKey,
+  isUnavailable = () => false,
+}) => {
+  if (!rootNode) {
+    return {
+      total: 0,
+      captured: 0,
+      unavailable: 0,
+      remaining: 0,
+      hasPartial: false,
+      allCaptured: false,
+    };
+  }
+  const nodes = collectAllNodesWithOrphans(rootNode, orphanNodes).filter((node) => node?.url);
+  const captured = nodes.filter((node) => isStoredScreenshotAsset(node?.[assetKey])).length;
+  const unavailable = nodes.filter(
+    (node) => !isStoredScreenshotAsset(node?.[assetKey]) && isUnavailable(node)
+  ).length;
+  const remaining = Math.max(0, nodes.length - captured - unavailable);
+  return {
+    total: nodes.length,
+    captured,
+    unavailable,
+    remaining,
+    hasPartial: captured > 0 && remaining > 0,
+    allCaptured: nodes.length > 0 && remaining === 0,
+  };
+};
+
 const collectNodeAndDescendantIds = (node, result = []) => {
   if (!node?.id) return result;
   result.push(node.id);
@@ -1654,6 +1703,8 @@ export const __testing = {
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
   applyNodeAssetUpdatesToMap,
+  isStoredScreenshotAsset,
+  getImageCaptureStats,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -1984,6 +2035,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanOptionsRef = useRef(null);
   const blankUploadInputRef = useRef(null);
   const thumbnailQueueRef = useRef([]);
+  const thumbnailPendingQueueRef = useRef([]);
   const thumbnailQueuedRef = useRef(new Set());
   const thumbnailInFlightRef = useRef(new Set());
   const thumbnailAbortControllersRef = useRef(new Map());
@@ -2165,18 +2217,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const hasAnyThumbnails = useMemo(() => {
     if (!root) return false;
     const nodes = collectAllNodesWithOrphans(root, orphans);
-    return nodes.some((node) => !!node.thumbnailUrl);
+    return nodes.some((node) => isStoredScreenshotAsset(node.thumbnailUrl));
   }, [root, orphans]);
 
-  const hasStoredImageAsset = useCallback((value) => {
-    const raw = String(value || '').trim();
-    return raw.startsWith('/screenshots/')
-      || raw.includes('/screenshots/')
-      || /^https?:\/\//i.test(raw);
-  }, []);
+  const hasStoredImageAsset = useCallback(isStoredScreenshotAsset, []);
 
   const hasTerminalThumbnailFailure = useCallback((node) => (
-    Boolean(node?.thumbnailCaptureFailed || node?.authRequired)
+    Boolean(node?.authRequired)
   ), []);
 
   const hasAnyDownloadableThumbnails = useMemo(() => {
@@ -2206,55 +2253,22 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [orphans, root, selectedNodeIds, hasStoredImageAsset]);
 
   const thumbnailCaptureStats = useMemo(() => {
-    if (!root) {
-      return {
-        total: 0,
-        captured: 0,
-        unavailable: 0,
-        remaining: 0,
-        hasPartial: false,
-        allCaptured: false,
-      };
-    }
-    const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
-    const captured = nodes.filter((node) => hasStoredImageAsset(node.thumbnailUrl)).length;
-    const unavailable = nodes.filter(
-      (node) => !hasStoredImageAsset(node.thumbnailUrl)
-        && hasTerminalThumbnailFailure(node)
-    ).length;
-    const remaining = Math.max(0, nodes.length - captured - unavailable);
-    return {
-      total: nodes.length,
-      captured,
-      unavailable,
-      remaining,
-      hasPartial: captured > 0 && remaining > 0,
-      allCaptured: nodes.length > 0 && remaining === 0,
-    };
-  }, [root, orphans, hasStoredImageAsset, hasTerminalThumbnailFailure]);
+    return getImageCaptureStats({
+      rootNode: root,
+      orphanNodes: orphans,
+      assetKey: 'thumbnailUrl',
+      isUnavailable: hasTerminalThumbnailFailure,
+    });
+  }, [root, orphans, hasTerminalThumbnailFailure]);
   const allThumbnailsCaptured = thumbnailCaptureStats.allCaptured;
 
   const fullScreenshotCaptureStats = useMemo(() => {
-    if (!root) {
-      return {
-        total: 0,
-        captured: 0,
-        remaining: 0,
-        hasPartial: false,
-        allCaptured: false,
-      };
-    }
-    const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.url);
-    const captured = nodes.filter((node) => hasStoredImageAsset(node.fullScreenshotUrl)).length;
-    const remaining = Math.max(0, nodes.length - captured);
-    return {
-      total: nodes.length,
-      captured,
-      remaining,
-      hasPartial: captured > 0 && remaining > 0,
-      allCaptured: nodes.length > 0 && remaining === 0,
-    };
-  }, [root, orphans, hasStoredImageAsset]);
+    return getImageCaptureStats({
+      rootNode: root,
+      orphanNodes: orphans,
+      assetKey: 'fullScreenshotUrl',
+    });
+  }, [root, orphans]);
 
   const maxDepth = useMemo(() => {
     const orphanDepth = (orphans || []).reduce((max, orphan) => {
@@ -5433,6 +5447,30 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const guardImageCapturePersistenceReady = useCallback(() => true, []);
 
+  const enqueueThumbnailWork = (workItem) => {
+    const id = workItem?.id;
+    const url = workItem?.url;
+    if (!id || !url) return false;
+    if (!thumbnailExpectedRef.current.has(id)) return false;
+    if (thumbnailFinishedRef.current.has(id)) return false;
+    if (thumbnailQueuedRef.current.has(id) || thumbnailInFlightRef.current.has(id)) return false;
+    thumbnailQueuedRef.current.add(id);
+    thumbnailQueueRef.current.push({
+      ...workItem,
+      sessionId: workItem.sessionId || thumbnailSessionRef.current,
+    });
+    setThumbnailQueueSize(thumbnailQueueRef.current.length);
+    return true;
+  };
+
+  const refillThumbnailQueueBatch = () => {
+    if (thumbnailQueueRef.current.length > 0) return;
+    if (thumbnailPendingQueueRef.current.length === 0) return;
+    const nextBatch = thumbnailPendingQueueRef.current.splice(0, IMAGE_CAPTURE_BATCH_SIZE);
+    nextBatch.forEach((workItem) => enqueueThumbnailWork(workItem));
+    setThumbnailQueueSize(thumbnailQueueRef.current.length);
+  };
+
   const scheduleThumbnailRetry = useCallback((nodeId, url, attemptOverride) => {
     if (!nodeId || !url) return;
     if (thumbnailStopRequestedRef.current) return;
@@ -5446,15 +5484,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     setTimeout(() => {
       if (thumbnailStopRequestedRef.current) return;
       if (thumbnailSessionRef.current !== sessionId) return;
-      if (thumbnailQueuedRef.current.has(nodeId) || thumbnailInFlightRef.current.has(nodeId)) return;
-      thumbnailQueuedRef.current.add(nodeId);
-      thumbnailQueueRef.current.push({
+      enqueueThumbnailWork({
         id: nodeId,
         url,
         attempt: nextAttempt,
         sessionId,
       });
-      setThumbnailQueueSize(thumbnailQueueRef.current.length);
       processThumbnailQueue();
     }, retryDelay);
   }, []);
@@ -5502,6 +5537,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const processThumbnailQueue = () => {
     if (thumbnailStopRequestedRef.current) return;
     if (thumbnailActiveRef.current >= MAX_THUMBNAIL_CONCURRENCY) return;
+    refillThumbnailQueueBatch();
     const next = thumbnailQueueRef.current.shift();
     if (!next) return;
     if (next.sessionId && next.sessionId !== thumbnailSessionRef.current) {
@@ -5607,6 +5643,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         processThumbnailQueue();
       });
+    processThumbnailQueue();
   };
 
   const resetThumbnailQueue = (total, cached = 0, bumpSession = true, mode = 'thumbnail', unavailable = 0) => {
@@ -5616,6 +5653,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setThumbnailSessionId(nextSessionId);
     }
     thumbnailQueueRef.current = [];
+    thumbnailPendingQueueRef.current = [];
     thumbnailQueuedRef.current.clear();
     thumbnailInFlightRef.current.clear();
     thumbnailAbortControllersRef.current.forEach((controller) => controller.abort());
@@ -5647,28 +5685,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       unavailable,
       stopped: false,
     });
-  };
-
-  const requestThumbnail = (node) => {
-    if (!node?.id || !node?.url) return Promise.resolve(false);
-    if (!thumbnailExpectedRef.current.has(node.id)) return Promise.resolve(false);
-    if (thumbnailStopRequestedRef.current) return Promise.resolve(true);
-    if (thumbnailQueuedRef.current.has(node.id) || thumbnailInFlightRef.current.has(node.id)) {
-      return Promise.resolve(true);
-    }
-    if (!thumbnailAttemptsRef.current.has(node.id)) {
-      thumbnailAttemptsRef.current.set(node.id, 0);
-    }
-    thumbnailQueuedRef.current.add(node.id);
-    thumbnailQueueRef.current.push({
-      id: node.id,
-      url: node.url,
-      attempt: 0,
-      sessionId: thumbnailSessionRef.current,
-    });
-    setThumbnailQueueSize(thumbnailQueueRef.current.length);
-    processThumbnailQueue();
-    return Promise.resolve(true);
   };
 
   const orderThumbnailNodes = (nodes) => {
@@ -5786,9 +5802,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       scope,
       count: candidates.length,
     });
+    thumbnailPendingQueueRef.current = candidates.map((node) => ({
+      id: node.id,
+      url: node.url,
+      attempt: 0,
+      sessionId: thumbnailSessionRef.current,
+    }));
     candidates.forEach((node) => {
-      requestThumbnail(node);
+      thumbnailAttemptsRef.current.set(node.id, 0);
     });
+    processThumbnailQueue();
   };
 
   const stopThumbnailCaptureNow = (showStoppedToast = false) => {
@@ -6096,7 +6119,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setThumbnailElapsedMs(0);
     thumbnailExpectedRef.current = new Set(targets.map((node) => node.id));
     try {
-      let nextIndex = 0;
       let completedCount = 0;
       let successCount = 0;
       let failedCount = 0;
@@ -6176,18 +6198,23 @@ export default function App({ currentRoute, navigateToRoute }) {
           updateProgressStats();
         }
       };
-      const workerCount = Math.min(FULL_SCREENSHOT_CONCURRENCY, targets.length);
-      const workers = Array.from({ length: workerCount }, async () => {
-        while (!screenshotStopRequestedRef.current) {
-          const node = targets[nextIndex];
-          nextIndex += 1;
-          if (!node) break;
-          await captureNode(node);
-        }
-      });
-      await Promise.all(workers);
+      for (let start = 0; start < targets.length; start += IMAGE_CAPTURE_BATCH_SIZE) {
+        if (screenshotStopRequestedRef.current) break;
+        const batch = targets.slice(start, start + IMAGE_CAPTURE_BATCH_SIZE);
+        let nextIndex = 0;
+        const workerCount = Math.min(FULL_SCREENSHOT_CONCURRENCY, batch.length);
+        const workers = Array.from({ length: workerCount }, async () => {
+          while (!screenshotStopRequestedRef.current) {
+            const node = batch[nextIndex];
+            nextIndex += 1;
+            if (!node) break;
+            await captureNode(node);
+          }
+        });
+        await Promise.all(workers);
+      }
       if (screenshotStopRequestedRef.current) {
-        showToast('Screenshot capture stopped', 'warning');
+        showToast(`Stopped after capturing ${successCount} of ${targets.length} screenshots`, 'warning');
         setTimeout(() => flushThumbnailAutosaveNow(), 300);
         return;
       }
