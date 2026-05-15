@@ -228,7 +228,7 @@ const SCREENSHOT_MIN_GAP_MS = Number(
 );
 const SCREENSHOT_MAX_CONCURRENCY = Math.max(
   1,
-  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 2 : 6))
+  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 3 : 6))
 );
 const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
@@ -236,7 +236,7 @@ const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
 );
 const SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? (isProd ? 12000 : 15000))
+  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? 9000)
 );
 const SCREENSHOT_CACHE_TTL_MS = Math.max(
   60000,

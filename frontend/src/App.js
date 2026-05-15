@@ -555,6 +555,7 @@ const MAX_TRACKED_ACTIVITY_IDS = 80;
 const AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS = 15000;
 const ASSET_AUTOSAVE_SUPPRESSION_MS = 2500;
 const IMAGE_CAPTURE_BATCH_SIZE = 50;
+const IMAGE_CAPTURE_AUTOSAVE_INTERVAL = 25;
 const SCREENSHOT_ASSET_FILENAME_PATTERN = /(?:^|\/)[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
 const CLEARABLE_NODE_ASSET_KEYS = new Set([
   'thumbnailUrl',
@@ -1240,41 +1241,61 @@ const buildForestIndex = (rootNode, orphanNodes = []) => {
     trees: new Map(), // treeRootId -> { type, hasUrl, nodeIds }
   };
 
-  const registerTree = (treeRoot, treeType) => {
+  const registerTree = (treeRoot, treeType, treeIndex = 0) => {
     if (!treeRoot?.id) return;
     const treeRootId = treeRoot.id;
     const nodeIds = new Set();
-    const stack = [{ node: treeRoot, parentId: null }];
+    let visitOrder = 0;
+    const stack = [{
+      node: treeRoot,
+      parentId: null,
+      depth: 0,
+      siblingIndex: 0,
+      orderPath: '00000',
+    }];
 
     while (stack.length > 0) {
-      const { node, parentId } = stack.pop();
+      const { node, parentId, depth, siblingIndex, orderPath } = stack.pop();
       if (!node?.id) continue;
       nodeIds.add(node.id);
       index.nodes.set(node.id, {
         treeRootId,
         treeType,
+        treeIndex,
         parentId,
+        depth,
+        siblingIndex,
+        order: visitOrder,
+        orderPath,
         hasUrl: hasAssignedUrl(node),
       });
+      visitOrder += 1;
 
       const children = node.children || [];
       for (let i = children.length - 1; i >= 0; i -= 1) {
-        stack.push({ node: children[i], parentId: node.id });
+        stack.push({
+          node: children[i],
+          parentId: node.id,
+          depth: depth + 1,
+          siblingIndex: i,
+          orderPath: `${orderPath}.${String(i).padStart(5, '0')}`,
+        });
       }
     }
 
     index.trees.set(treeRootId, {
       type: treeType,
+      treeIndex,
       hasUrl: hasAssignedUrl(treeRoot),
       nodeIds,
     });
   };
 
-  if (rootNode) registerTree(rootNode, 'root');
+  if (rootNode) registerTree(rootNode, 'root', 0);
   const list = Array.isArray(orphanNodes) ? orphanNodes : [];
-  list.forEach((orphan) => {
+  list.forEach((orphan, index) => {
     const treeType = orphan?.subdomainRoot ? 'subdomain' : 'orphan';
-    registerTree(orphan, treeType);
+    registerTree(orphan, treeType, index + 1);
   });
 
   return index;
@@ -2057,6 +2078,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailLoadedRef = useRef(new Set());
   const thumbnailFinishedRef = useRef(new Set());
   const thumbnailErrorRef = useRef(new Set());
+  const thumbnailLastAutosavedCompletedRef = useRef(0);
+  const thumbnailRunMaxAttemptsRef = useRef(2);
+  const thumbnailBatchIndexRef = useRef(0);
+  const thumbnailBatchTotalRef = useRef(0);
   const thumbnailCompletedRef = useRef(false);
   const thumbnailStopRequestedRef = useRef(false);
   const screenshotStopRequestedRef = useRef(false);
@@ -2067,7 +2092,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const screenshotAssetValidationSignatureRef = useRef('');
   const thumbnailAuthToastShownRef = useRef(false);
   const thumbnailFailureToastShownRef = useRef(false);
-  const MAX_THUMBNAIL_CONCURRENCY = 2;
+  const MAX_THUMBNAIL_CONCURRENCY = 3;
   const FULL_SCREENSHOT_CONCURRENCY = 2;
   const MAX_THUMBNAIL_ATTEMPTS = 2;
   const THUMBNAIL_RETRY_BASE_DELAY = 800;
@@ -5642,6 +5667,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (thumbnailQueueRef.current.length > 0) return;
     if (thumbnailPendingQueueRef.current.length === 0) return;
     const nextBatch = thumbnailPendingQueueRef.current.splice(0, IMAGE_CAPTURE_BATCH_SIZE);
+    thumbnailBatchIndexRef.current += 1;
+    setThumbnailStats((prev) => ({
+      ...prev,
+      batchIndex: thumbnailBatchIndexRef.current,
+      batchTotal: thumbnailBatchTotalRef.current,
+    }));
     nextBatch.forEach((workItem) => enqueueThumbnailWork(workItem));
     setThumbnailQueueSize(thumbnailQueueRef.current.length);
   };
@@ -5695,7 +5726,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       failed: thumbnailErrorRef.current.size,
       avgMs: completedCount ? Math.round(thumbnailTotalTimeRef.current / completedCount) : 0,
     }));
-    if (capturedCount > 0 && capturedCount % IMAGE_CAPTURE_BATCH_SIZE === 0) {
+    if (
+      completedCount > 0
+      && completedCount - thumbnailLastAutosavedCompletedRef.current >= IMAGE_CAPTURE_AUTOSAVE_INTERVAL
+    ) {
+      thumbnailLastAutosavedCompletedRef.current = completedCount;
       setTimeout(() => flushThumbnailAutosaveNow({ createVersionCheckpoint: false }), 100);
     }
     if (!thumbnailCompletedRef.current && expectedCount > 0 && completedCount >= expectedCount) {
@@ -5739,7 +5774,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailAbortControllersRef.current.set(next.id, controller);
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, 45000);
+    }, 18000);
 
     api.captureScreenshot({ url: next.url, type: 'thumb' }, { signal: controller.signal })
       .then((data) => {
@@ -5816,7 +5851,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           return;
         }
         if (!success) {
-          if (shouldRetry && attempt < MAX_THUMBNAIL_ATTEMPTS - 1) {
+          if (shouldRetry && attempt < thumbnailRunMaxAttemptsRef.current - 1) {
             scheduleThumbnailRetry(next.id, next.url, attempt);
           } else {
             if (!isScreenshotAuthError(lastErrorMessage)) {
@@ -5850,6 +5885,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailLoadedRef.current = new Set();
     thumbnailFinishedRef.current = new Set();
     thumbnailErrorRef.current = new Set();
+    thumbnailLastAutosavedCompletedRef.current = 0;
+    thumbnailRunMaxAttemptsRef.current = MAX_THUMBNAIL_ATTEMPTS;
+    thumbnailBatchIndexRef.current = 0;
+    thumbnailBatchTotalRef.current = 0;
     thumbnailCompletedRef.current = false;
     thumbnailStopRequestedRef.current = false;
     screenshotStopRequestedRef.current = false;
@@ -5867,6 +5906,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       avgMs: 0,
       cached,
       unavailable,
+      batchIndex: 0,
+      batchTotal: 0,
       stopped: false,
     });
   };
@@ -5886,10 +5927,30 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!layout) return null;
       return { x: layout.x, y: layout.y };
     };
+    const getMeta = (node) => forestIndex.nodes.get(node.id) || {};
+    const compareCaptureMeta = (a, b) => {
+      const metaA = getMeta(a);
+      const metaB = getMeta(b);
+      const treeA = metaA.treeIndex ?? Number.MAX_SAFE_INTEGER;
+      const treeB = metaB.treeIndex ?? Number.MAX_SAFE_INTEGER;
+      if (treeA !== treeB) return treeA - treeB;
+      const depthA = metaA.depth ?? Number.MAX_SAFE_INTEGER;
+      const depthB = metaB.depth ?? Number.MAX_SAFE_INTEGER;
+      if (depthA !== depthB) return depthA - depthB;
+      const pathA = metaA.orderPath || '';
+      const pathB = metaB.orderPath || '';
+      if (pathA !== pathB) return pathA.localeCompare(pathB);
+      const orderA = metaA.order ?? Number.MAX_SAFE_INTEGER;
+      const orderB = metaB.order ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return null;
+    };
     return [...nodes].sort((a, b) => {
       const groupA = groupRank(a);
       const groupB = groupRank(b);
       if (groupA !== groupB) return groupA - groupB;
+      const captureOrder = compareCaptureMeta(a, b);
+      if (captureOrder !== null) return captureOrder;
       const posA = getPosition(a);
       const posB = getPosition(b);
       if (posA && posB) {
@@ -5988,6 +6049,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     setThumbnailScopeIds(targetIds);
     setShowThumbnails(true);
     setShowImageMenu(false);
+    thumbnailRunMaxAttemptsRef.current = scope === 'selected' && candidates.length <= IMAGE_CAPTURE_BATCH_SIZE
+      ? MAX_THUMBNAIL_ATTEMPTS
+      : 1;
+    thumbnailBatchTotalRef.current = Math.max(1, Math.ceil(candidates.length / IMAGE_CAPTURE_BATCH_SIZE));
+    thumbnailBatchIndexRef.current = 0;
+    setThumbnailStats((prev) => ({
+      ...prev,
+      batchIndex: 0,
+      batchTotal: thumbnailBatchTotalRef.current,
+    }));
     trackEvent('screenshot_capture', {
       type: 'thumbnail',
       scope,
@@ -6330,6 +6401,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowThumbnails(true);
     setThumbnailScopeIds(new Set(targets.map((node) => node.id)));
     resetThumbnailQueue(targets.length, cachedCount, true, 'screenshot');
+    thumbnailBatchTotalRef.current = Math.max(1, Math.ceil(targets.length / IMAGE_CAPTURE_BATCH_SIZE));
+    thumbnailBatchIndexRef.current = 0;
+    setThumbnailStats((prev) => ({
+      ...prev,
+      batchIndex: 0,
+      batchTotal: thumbnailBatchTotalRef.current,
+    }));
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
     thumbnailExpectedRef.current = new Set(targets.map((node) => node.id));
@@ -6428,6 +6506,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       for (let start = 0; start < targets.length; start += IMAGE_CAPTURE_BATCH_SIZE) {
         if (screenshotStopRequestedRef.current) break;
         const batch = targets.slice(start, start + IMAGE_CAPTURE_BATCH_SIZE);
+        thumbnailBatchIndexRef.current = Math.floor(start / IMAGE_CAPTURE_BATCH_SIZE) + 1;
+        setThumbnailStats((prev) => ({
+          ...prev,
+          batchIndex: thumbnailBatchIndexRef.current,
+          batchTotal: thumbnailBatchTotalRef.current,
+        }));
         let nextIndex = 0;
         const workerCount = Math.min(FULL_SCREENSHOT_CONCURRENCY, batch.length);
         const workers = Array.from({ length: workerCount }, async () => {
@@ -13387,7 +13471,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
           const captureLabel = isScreenshotCapture ? 'Screenshots' : 'Thumbnails';
           const title = `${captureLabel}: Captured ${thumbnailStats.loaded || 0} of ${total}`;
+          const batchLabel = thumbnailStats.batchTotal > 1 && thumbnailStats.batchIndex > 0
+            ? `Batch ${thumbnailStats.batchIndex} of ${thumbnailStats.batchTotal}`
+            : '';
           const metaParts = [
+            batchLabel,
             cached > 0 ? `${cached} already had images` : '',
             unavailable > 0 ? `${unavailable} unavailable` : '',
             thumbnailStats.failed > 0 ? `${thumbnailStats.failed} failed` : '',
