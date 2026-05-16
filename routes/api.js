@@ -289,6 +289,187 @@ function parseMapFields(row) {
   };
 }
 
+const NODE_ASSET_STRING_FIELDS = new Set([
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+]);
+
+const NODE_ASSET_BOOLEAN_FIELDS = new Set([
+  'authRequired',
+  'thumbnailCaptureFailed',
+  'fullScreenshotTruncated',
+]);
+
+function collectNodeAssetFields(root, orphans = []) {
+  const assetsById = new Map();
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const nodeId = String(node.id || '').trim();
+    if (nodeId) {
+      const assets = {};
+      NODE_ASSET_STRING_FIELDS.forEach((field) => {
+        if (typeof node[field] === 'string' && node[field].trim()) {
+          assets[field] = node[field];
+        }
+      });
+      NODE_ASSET_BOOLEAN_FIELDS.forEach((field) => {
+        if (typeof node[field] === 'boolean') {
+          assets[field] = node[field];
+        }
+      });
+      if (Object.keys(assets).length > 0) {
+        assetsById.set(nodeId, assets);
+      }
+    }
+    if (Array.isArray(node.children)) {
+      node.children.forEach(visit);
+    }
+  };
+
+  visit(root);
+  if (Array.isArray(orphans)) {
+    orphans.forEach(visit);
+  }
+  return assetsById;
+}
+
+function mergePreservedNodeAssets(node, assetsById, result) {
+  if (!node || typeof node !== 'object') return node;
+  let nextNode = node;
+  const nodeId = String(node.id || '').trim();
+  const existingAssets = nodeId ? assetsById.get(nodeId) : null;
+
+  if (existingAssets) {
+    Object.entries(existingAssets).forEach(([field, value]) => {
+      if (nextNode[field] !== value) {
+        if (nextNode === node) nextNode = { ...node };
+        nextNode[field] = value;
+        result.changed = true;
+      }
+    });
+  }
+
+  if (Array.isArray(node.children)) {
+    let childrenChanged = false;
+    const nextChildren = node.children.map((child) => {
+      const nextChild = mergePreservedNodeAssets(child, assetsById, result);
+      if (nextChild !== child) childrenChanged = true;
+      return nextChild;
+    });
+    if (childrenChanged) {
+      if (nextNode === node) nextNode = { ...node };
+      nextNode.children = nextChildren;
+    }
+  }
+
+  return nextNode;
+}
+
+function preserveExistingImageAssets({ root, orphans, currentRoot, currentOrphans }) {
+  const assetsById = collectNodeAssetFields(currentRoot, currentOrphans);
+  if (assetsById.size === 0) return { root, orphans };
+
+  const result = { changed: false };
+  return {
+    root: root !== undefined ? mergePreservedNodeAssets(root, assetsById, result) : root,
+    orphans: Array.isArray(orphans)
+      ? orphans.map((orphan) => mergePreservedNodeAssets(orphan, assetsById, result))
+      : orphans,
+  };
+}
+
+function normalizeNodeAssetUpdates(rawUpdates) {
+  if (!Array.isArray(rawUpdates)) {
+    return { error: 'updates must be an array' };
+  }
+  if (rawUpdates.length > 2000) {
+    return { error: 'Too many node asset updates' };
+  }
+
+  const updatesById = new Map();
+  rawUpdates.forEach((entry) => {
+    const nodeId = String(entry?.nodeId || entry?.id || '').trim();
+    const rawAssets = entry?.assets || entry?.updates || {};
+    if (!nodeId || !rawAssets || typeof rawAssets !== 'object' || Array.isArray(rawAssets)) return;
+
+    const normalized = {};
+    Object.entries(rawAssets).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (NODE_ASSET_STRING_FIELDS.has(key)) {
+        if (value === null) {
+          normalized[key] = null;
+          return;
+        }
+        const nextValue = String(value).trim();
+        normalized[key] = nextValue || null;
+        return;
+      }
+      if (NODE_ASSET_BOOLEAN_FIELDS.has(key)) {
+        normalized[key] = parseBooleanLike(value, false);
+      }
+    });
+
+    if (Object.keys(normalized).length === 0) return;
+    updatesById.set(nodeId, {
+      ...(updatesById.get(nodeId) || {}),
+      ...normalized,
+    });
+  });
+
+  return { updatesById };
+}
+
+function applyNodeAssetUpdatesToTree(node, updatesById, result) {
+  if (!node || typeof node !== 'object') return node;
+
+  let nextNode = node;
+  const patch = updatesById.get(String(node.id || ''));
+  if (patch) {
+    nextNode = { ...node };
+    Object.entries(patch).forEach(([key, value]) => {
+      if (nextNode[key] !== value) {
+        nextNode[key] = value;
+        result.changed = true;
+      }
+    });
+    result.updatedNodeIds.add(String(node.id));
+  }
+
+  const children = Array.isArray(node.children) ? node.children : null;
+  if (children) {
+    let childrenChanged = false;
+    const nextChildren = children.map((child) => {
+      const nextChild = applyNodeAssetUpdatesToTree(child, updatesById, result);
+      if (nextChild !== child) childrenChanged = true;
+      return nextChild;
+    });
+    if (childrenChanged) {
+      if (nextNode === node) nextNode = { ...node };
+      nextNode.children = nextChildren;
+      result.changed = true;
+    }
+  }
+
+  return nextNode;
+}
+
+function applyNodeAssetUpdatesToMapData({ root, orphans, updatesById }) {
+  const result = { changed: false, updatedNodeIds: new Set() };
+  const nextRoot = applyNodeAssetUpdatesToTree(root, updatesById, result);
+  const nextOrphans = Array.isArray(orphans)
+    ? orphans.map((orphan) => applyNodeAssetUpdatesToTree(orphan, updatesById, result))
+    : orphans;
+  return {
+    root: nextRoot,
+    orphans: nextOrphans,
+    changed: result.changed,
+    updatedNodeIds: Array.from(result.updatedNodeIds),
+  };
+}
+
 function parseMapVersionFields(row) {
   const parseOptional = (raw, fieldName, fallback) => {
     if (raw === null || raw === undefined || raw === '') return fallback;
@@ -1366,7 +1547,22 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     if (notes !== undefined) {
       patch.notes = notes ? notes.trim() : null;
     }
-    const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
+    let treeRoot = root;
+    let treeOrphans = orphans;
+    if (root !== undefined || orphans !== undefined) {
+      const currentRoot = safeParse(map.root_data, 'root_data', null);
+      const currentOrphans = safeParse(map.orphans_data, 'orphans_data', []);
+      const preservedTree = preserveExistingImageAssets({
+        root,
+        orphans,
+        currentRoot,
+        currentOrphans,
+      });
+      treeRoot = preservedTree.root;
+      treeOrphans = preservedTree.orphans;
+    }
+
+    const sanitizedTree = sanitizeMapTreeForStorage({ root: treeRoot, orphans: treeOrphans });
     if (root !== undefined) {
       patch.rootData = JSON.stringify(sanitizedTree.root);
     }
@@ -1411,6 +1607,71 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Update map error:', error);
     res.status(500).json({ error: 'Failed to update map' });
+  }
+});
+
+// PATCH /api/maps/:id/node-assets - Persist screenshot/thumbnail fields without full map autosave
+router.patch('/maps/:id/node-assets', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error, updatesById } = normalizeNodeAssetUpdates(req.body?.updates);
+    if (error) {
+      return res.status(400).json({ error });
+    }
+    if (!updatesById || updatesById.size === 0) {
+      return res.status(400).json({ error: 'No node asset updates provided' });
+    }
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_UPDATE,
+      failureError: 'Map not found',
+    })) return;
+
+    const currentRoot = safeParse(map.root_data, 'root_data', null);
+    const currentOrphans = safeParse(map.orphans_data, 'orphans_data', []);
+    const nextMap = applyNodeAssetUpdatesToMapData({
+      root: currentRoot,
+      orphans: currentOrphans,
+      updatesById,
+    });
+
+    if (!nextMap.changed) {
+      return res.json({
+        map: {
+          ...map,
+          ...parseMapFields(map),
+        },
+        updatedNodeIds: [],
+      });
+    }
+
+    const sanitizedTree = sanitizeMapTreeForStorage({
+      root: nextMap.root,
+      orphans: nextMap.orphans,
+    });
+    await mapStore.updateMapByIdAsync(id, {
+      rootData: JSON.stringify(sanitizedTree.root),
+      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+    });
+
+    const updated = await mapStore.getMapByIdAsync(id);
+    return res.json({
+      map: {
+        ...updated,
+        ...parseMapFields(updated),
+      },
+      updatedNodeIds: nextMap.updatedNodeIds,
+    });
+  } catch (error) {
+    console.error('Update map node assets error:', error);
+    return res.status(500).json({ error: 'Failed to update map node assets' });
   }
 });
 

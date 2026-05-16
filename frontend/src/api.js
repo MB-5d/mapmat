@@ -466,6 +466,13 @@ export async function updateMap(id, data, { expectedUpdatedAt } = {}) {
   });
 }
 
+export async function updateMapNodeAssets(id, updates) {
+  return fetchApi(`/api/maps/${id}/node-assets`, {
+    method: 'PATCH',
+    body: JSON.stringify({ updates }),
+  });
+}
+
 export async function deleteMap(id) {
   return fetchApi(`/api/maps/${id}`, { method: 'DELETE' });
 }

@@ -232,15 +232,15 @@ const SCREENSHOT_MAX_CONCURRENCY = Math.max(
 );
 const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.SCREENSHOT_CAPTURE_TIMEOUT_MS ?? 30000)
+  Number(process.env.SCREENSHOT_CAPTURE_TIMEOUT_MS ?? 45000)
 );
 const SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? 12000)
+  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? 20000)
 );
 const SCREENSHOT_CACHE_TTL_MS = Math.max(
   60000,
-  Number(process.env.SCREENSHOT_CACHE_TTL_MS ?? 3600000)
+  Number(process.env.SCREENSHOT_CACHE_TTL_MS ?? 604800000)
 );
 const SCREENSHOT_FULL_MAX_HEIGHT = Math.max(
   720,
@@ -248,7 +248,7 @@ const SCREENSHOT_FULL_MAX_HEIGHT = Math.max(
 );
 const SCREENSHOT_FULL_MAX_WIDTH = Math.max(
   320,
-  Number(process.env.SCREENSHOT_FULL_MAX_WIDTH ?? 1280)
+  Number(process.env.SCREENSHOT_FULL_MAX_WIDTH ?? 1920)
 );
 const SCREENSHOT_FULL_VIEWPORT_WIDTH = Math.max(
   1280,
@@ -322,7 +322,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v9';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v11';
 const SCREENSHOT_ASSET_FILENAME_PATTERN = /^[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
 const SCREENSHOT_BLOCKED_RESOURCE_TYPES = new Set(['media', 'eventsource', 'websocket']);
 const SCREENSHOT_BLOCKED_URL_PATTERN = /(?:google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|connect\.facebook\.net|hotjar|segment\.io|fullstory|intercom|clarity\.ms|sentry\.io|datadoghq-browser-agent|newrelic|amplitude\.com|mixpanel\.com)/i;
@@ -785,7 +785,11 @@ function validateScreenshotAssetUrl(value) {
   if (!filename) {
     return { available: false, reason: 'not_screenshot_asset' };
   }
-  if (!raw.startsWith('/screenshots/') && !raw.includes('/screenshots/')) {
+  const screenshotStorageProvider = String(process.env.SCREENSHOT_STORAGE_PROVIDER || 'local').toLowerCase();
+  const shouldCheckLocalFile = screenshotStorageProvider === 'local'
+    || raw.startsWith('/screenshots/')
+    || raw.includes('/screenshots/');
+  if (!shouldCheckLocalFile) {
     return { available: true, filename, reason: 'external_asset_not_checked' };
   }
   const filepath = path.join(SCREENSHOT_DIR, filename);
