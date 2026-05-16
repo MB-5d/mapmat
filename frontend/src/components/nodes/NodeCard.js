@@ -362,6 +362,7 @@ const NodeCard = ({
             event.stopPropagation();
             onToggleStack?.();
           }}
+          onPointerDown={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
           type="button"
           title={stackInfo?.collapsed ? 'Expand stack' : 'Collapse stack'}

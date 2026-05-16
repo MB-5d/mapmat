@@ -236,7 +236,7 @@ const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
 );
 const SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? 9000)
+  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? 12000)
 );
 const SCREENSHOT_CACHE_TTL_MS = Math.max(
   60000,
@@ -284,7 +284,7 @@ const SCREENSHOT_FULL_DEVICE_SCALE_FACTOR = Math.max(
 );
 const SCREENSHOT_FULL_JPEG_QUALITY = Math.round(toBoundedNumber(
   process.env.SCREENSHOT_FULL_JPEG_QUALITY,
-  { min: 60, max: 92, fallback: 82 }
+  { min: 60, max: 92, fallback: 88 }
 ));
 const SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY = Math.round(toBoundedNumber(
   process.env.SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY,
@@ -322,7 +322,7 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v8';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v9';
 const SCREENSHOT_ASSET_FILENAME_PATTERN = /^[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
 const SCREENSHOT_BLOCKED_RESOURCE_TYPES = new Set(['media', 'eventsource', 'websocket']);
 const SCREENSHOT_BLOCKED_URL_PATTERN = /(?:google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|connect\.facebook\.net|hotjar|segment\.io|fullstory|intercom|clarity\.ms|sentry\.io|datadoghq-browser-agent|newrelic|amplitude\.com|mixpanel\.com)/i;

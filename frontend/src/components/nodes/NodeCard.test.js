@@ -90,6 +90,40 @@ describe('NodeCard', () => {
     expect(container.querySelector('button[aria-label="Delete"]')).toBeNull();
   });
 
+  test('stack toggle handles click without starting card drag', () => {
+    const onToggleStack = jest.fn();
+    const onCardPointerDown = jest.fn();
+
+    act(() => {
+      root.render(
+        <NodeCard
+          node={{ id: 'node-1', title: 'Stacked page', url: 'https://example.com/page-1' }}
+          number="1.1"
+          color="#0ea5e9"
+          showThumbnails={false}
+          canEdit
+          dragHandleProps={{ onPointerDown: onCardPointerDown }}
+          stackInfo={{ parentId: 0, totalCount: 6, collapsed: true }}
+          onToggleStack={onToggleStack}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+        />
+      );
+    });
+
+    const toggle = container.querySelector('.stack-toggle');
+    expect(toggle).not.toBeNull();
+
+    act(() => {
+      toggle.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onCardPointerDown).not.toHaveBeenCalled();
+    expect(onToggleStack).toHaveBeenCalledTimes(1);
+  });
+
   test('keeps an existing thumbnail visible when a new batch targets other nodes', async () => {
     await act(async () => {
       root.render(
