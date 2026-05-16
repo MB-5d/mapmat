@@ -11678,6 +11678,20 @@ body {
   color: var(--ui-icon-default);
 }
 
+.image-overlay .image-overlay-close.ui-icon-btn {
+  background: var(--color-neutral-white);
+  border-color: rgba(var(--shadow-rgb-deep), 0.14);
+  color: var(--color-neutral-900);
+  box-shadow: var(--shadow-raised);
+}
+
+.image-overlay .image-overlay-close.ui-icon-btn:hover:not(:disabled) {
+  background: var(--color-neutral-100);
+  border-color: rgba(var(--shadow-rgb-deep), 0.2);
+  color: var(--color-neutral-900);
+  box-shadow: var(--shadow-overlay);
+}
+
 .feedback-widget-tab:hover {
   background: var(--feedback-tab-bg-hover);
   box-shadow: 0 14px 28px var(--feedback-tab-shadow-hover);
