@@ -12387,7 +12387,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     : duplicateMapConfig?.projectId || null;
   const saveMapModalName = createMapMode
     ? createMapDefaults?.name ?? ''
-    : duplicateMapConfig?.name || '';
+    : duplicateMapConfig
+      ? duplicateMapConfig.name || ''
+      : currentMap?.name || mapName || root?.title || undefined;
   const saveMapModalNotes = createMapMode
     ? createMapDefaults?.notes ?? ''
     : currentMap?.notes || '';
@@ -13708,6 +13710,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               type="loading"
               className="image-capture-toast"
               title={title}
+              icon={false}
               action={(
                 <Button
                   type="secondary"
@@ -13727,9 +13730,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                   </span>
                 )}
                 <span className="image-capture-toast__line">
-                  <span className="image-capture-toast__bar" aria-hidden="true" />
                   {formatDuration(thumbnailElapsedMs)} | ETA ~{formatDuration(etaMs)}
                 </span>
+                <span className="image-capture-toast__bar" aria-hidden="true" />
               </div>
             </Toast>
           );

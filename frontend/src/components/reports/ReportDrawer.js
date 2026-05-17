@@ -661,10 +661,16 @@ const ReportDrawer = ({
           </section>
         )}
       {showBackToTop ? (
-        <button type="button" className="drawer-back-to-top" onClick={scrollToTop}>
-          <ArrowUpToLine size={16} />
+        <Button
+          type="primary"
+          buttonStyle="mono"
+          size="sm"
+          className="drawer-back-to-top"
+          onClick={scrollToTop}
+          startIcon={<ArrowUpToLine />}
+        >
           Back to top
-        </button>
+        </Button>
       ) : null}
       </div>
     </aside>
