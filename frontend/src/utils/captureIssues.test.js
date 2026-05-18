@@ -1,0 +1,68 @@
+import {
+  CAPTURE_ISSUE_TYPES,
+  buildCaptureIssueFromResult,
+  getReconciledCaptureProgress,
+} from './captureIssues';
+
+describe('captureIssues', () => {
+  test('classifies common capture failure types', () => {
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n1', status: 'skipped', error: 'PDF file' },
+      { id: 'n1', title: 'Handbook', url: 'https://example.com/file.pdf', isFile: true },
+      '40'
+    )).toMatchObject({
+      nodeId: 'n1',
+      pageNumber: '40',
+      label: 'PDF/file',
+      type: CAPTURE_ISSUE_TYPES.file,
+    });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n2', status: 'blocked', error: 'Requires login' },
+      { id: 'n2', title: 'Private', url: 'https://example.com/private' },
+      's2'
+    )).toMatchObject({
+      label: 'Requires login',
+      type: CAPTURE_ISSUE_TYPES.auth,
+    });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n3', status: 'missing_asset', error: 'Saved image fields were not found on the map' },
+      { id: 'n3', title: 'Missing', url: 'https://example.com/missing' },
+      's3'
+    )).toMatchObject({
+      label: 'Missing saved asset',
+      type: CAPTURE_ISSUE_TYPES.missingAsset,
+    });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n4', status: 'failed', error: 'Inactive page' },
+      { id: 'n4', title: 'Inactive', url: 'https://example.com/inactive', isInactive: true },
+      '50'
+    )).toMatchObject({
+      label: 'Inactive page',
+      type: CAPTURE_ISSUE_TYPES.inactive,
+    });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n5', status: 'failed', error: 'Unreachable page' },
+      { id: 'n5', title: 'Unreachable', url: 'https://example.com/down', statusCode: 0 },
+      's101'
+    )).toMatchObject({
+      label: 'Unreachable',
+      type: CAPTURE_ISSUE_TYPES.unreachable,
+    });
+  });
+
+  test('reconciled progress never exceeds loaded images plus issues', () => {
+    const progress = getReconciledCaptureProgress({
+      total: 918,
+      loadedIds: new Set(['a', 'b', 'c']),
+      issueCount: 2,
+    });
+
+    expect(progress.loaded).toBe(3);
+    expect(progress.completed).toBe(5);
+    expect(progress.total).toBe(918);
+  });
+});

@@ -3913,6 +3913,36 @@ body {
   white-space: nowrap;
 }
 
+.thumb-placeholder-label {
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: var(--ui-radius-sm);
+  background: rgba(15, 23, 42, 0.08);
+  color: var(--color-text-primary);
+  font-size: var(--type-caption-md-size);
+  font-weight: 700;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thumb-placeholder-file .thumb-placeholder-label {
+  background: rgba(234, 179, 8, 0.18);
+  color: #713f12;
+}
+
+.thumb-placeholder-error .thumb-placeholder-label,
+.thumb-placeholder-inactive .thumb-placeholder-label {
+  background: rgba(239, 68, 68, 0.14);
+  color: #991b1b;
+}
+
+.thumb-placeholder-blocked .thumb-placeholder-label {
+  background: rgba(99, 102, 241, 0.14);
+  color: #3730a3;
+}
+
 .thumb-placeholder-text {
   font-size: var(--type-caption-md-size);
   line-height: var(--type-caption-md-line-height);
@@ -4563,6 +4593,117 @@ body {
   line-height: var(--type-body-xs-line-height);
   color: var(--ui-color-muted);
   padding: 0 var(--space-sm) var(--space-xs);
+}
+
+.capture-issues {
+  width: 100%;
+  max-width: 360px;
+  padding: 0 4px 4px;
+}
+
+.capture-issues-empty {
+  padding: 8px 10px;
+  color: var(--ui-color-input-placeholder);
+  font-size: var(--type-caption-md-size);
+}
+
+.capture-issues-summary,
+.capture-issues-more {
+  padding: 4px 6px;
+  color: var(--ui-color-muted);
+  font-size: var(--type-caption-md-size);
+  font-weight: 600;
+}
+
+.capture-issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 300px;
+  overflow: auto;
+}
+
+.capture-issue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface-muted);
+}
+
+.capture-issue-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+}
+
+.capture-issue-title,
+.capture-issue-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-issue-title {
+  color: var(--ui-color-text);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+}
+
+.capture-issue-label {
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: var(--ui-radius-sm);
+  background: rgba(239, 68, 68, 0.14);
+  color: #991b1b;
+  font-size: var(--type-caption-md-size);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-issue-label-file {
+  background: rgba(234, 179, 8, 0.18);
+  color: #713f12;
+}
+
+.capture-issue-label-auth,
+.capture-issue-label-missing_asset,
+.capture-issue-label-image_load {
+  background: rgba(99, 102, 241, 0.14);
+  color: #3730a3;
+}
+
+.capture-issue-url {
+  color: var(--ui-color-input-placeholder);
+  font-size: var(--type-caption-md-size);
+}
+
+.capture-issue-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.capture-issue-actions button {
+  border: none;
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-muted);
+  cursor: pointer;
+  font-size: var(--type-caption-md-size);
+  font-weight: 600;
+  padding: 4px 6px;
+}
+
+.capture-issue-actions button:hover {
+  background: var(--ui-color-icon-hover);
+  color: var(--ui-color-text);
 }
 
 .canvas-toolbar button {

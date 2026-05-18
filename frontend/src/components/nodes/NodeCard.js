@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
+  FileText,
   ImageOff,
   Loader2,
+  Lock,
   Maximize2,
 } from 'lucide-react';
 import CommentBadge from './CommentBadge';
@@ -97,6 +100,73 @@ const NodeCard = ({
       ? 'Commenter'
       : 'Viewer';
 
+  const getUrlExtension = (value) => {
+    try {
+      const pathname = new URL(value).pathname || '';
+      const match = pathname.match(/\.([a-z0-9]{2,8})$/i);
+      return match?.[1]?.toUpperCase() || '';
+    } catch {
+      return '';
+    }
+  };
+  const getPreviewIssue = () => {
+    const orphanType = String(node?.orphanType || '').toLowerCase();
+    const pageType = String(node?.pageType || node?.type || '').toLowerCase();
+    const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
+    const extension = getUrlExtension(node?.url);
+    const isFile = node?.isFile || orphanType === 'file' || pageType === 'file' || ['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'PPT', 'PPTX', 'ZIP', 'CSV', 'TXT'].includes(extension);
+    if (isFile) {
+      return {
+        icon: FileText,
+        label: extension ? `${extension} file` : 'File link',
+        text: 'No page preview',
+        variant: 'file',
+      };
+    }
+    if (node?.authRequired) {
+      return {
+        icon: Lock,
+        label: 'Requires login',
+        text: 'Preview unavailable',
+        variant: 'blocked',
+      };
+    }
+    const statusCode = Number(node?.httpStatus ?? node?.statusCode);
+    if (
+      node?.isBroken
+      || orphanType === 'broken'
+      || scanStatus === 'error'
+      || scanStatus === 'failed'
+      || (Number.isFinite(statusCode) && statusCode >= 400)
+    ) {
+      return {
+        icon: AlertTriangle,
+        label: 'Error page',
+        text: 'Preview unavailable',
+        variant: 'error',
+      };
+    }
+    if (node?.isInactive || orphanType === 'inactive' || scanStatus === 'inactive' || statusCode === 0) {
+      return {
+        icon: AlertTriangle,
+        label: 'Inactive page',
+        text: 'Preview unavailable',
+        variant: 'inactive',
+      };
+    }
+    if (node?.thumbnailCaptureFailed) {
+      return {
+        icon: AlertTriangle,
+        label: node.thumbnailCaptureError || 'Capture failed',
+        text: 'Preview unavailable',
+        variant: 'error',
+      };
+    }
+    return null;
+  };
+  const previewIssue = getPreviewIssue();
+  const PlaceholderIcon = previewIssue?.icon || ImageOff;
+
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
     if (showThumbnails) {
@@ -173,11 +243,12 @@ const NodeCard = ({
   }, [thumb, node.id, onThumbnailLoad]);
 
   const handleViewFull = () => {
-    const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || node.thumbnailUrl;
+    const fallbackAssetUrl = !node.url ? (node.thumbnailFullUrl || node.thumbnailUrl) : '';
+    const directAssetUrl = node.fullScreenshotUrl || fallbackAssetUrl;
     const hasDirectImage = !!directAssetUrl;
     const source = directAssetUrl || node.url;
     if (!source) return;
-    onViewImage(source, hasDirectImage, node.id, node.fullScreenshotUrl ? 'full' : 'thumb');
+    onViewImage(source, hasDirectImage, node.id, node.fullScreenshotUrl || node.url ? 'full' : 'thumb');
     if (!node.thumbnailUrl && thumbError) {
       setThumbError(false);
       setThumbLoading(true);
@@ -277,7 +348,7 @@ const NodeCard = ({
                 className="thumb-img"
                 src={thumb}
                 alt={node.title}
-                loading="lazy"
+                loading={canRequestThumbnail ? 'eager' : 'lazy'}
                 ref={thumbImgRef}
                 onLoad={() => {
                   setThumbError(false);
@@ -302,11 +373,14 @@ const NodeCard = ({
               )}
             </>
           ) : (
-            <div className="thumb-placeholder">
-              <ImageOff size={32} strokeWidth={1.5} />
+            <div className={`thumb-placeholder ${previewIssue ? `thumb-placeholder-${previewIssue.variant}` : ''}`}>
+              <PlaceholderIcon size={32} strokeWidth={1.5} />
               <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
+              {previewIssue?.label && (
+                <span className="thumb-placeholder-label">{previewIssue.label}</span>
+              )}
               <span className="thumb-placeholder-text">
-                {thumbLoading ? 'Generating preview' : 'Preview unavailable'}
+                {thumbLoading ? 'Generating preview' : (previewIssue?.text || 'Preview unavailable')}
               </span>
             </div>
           )}

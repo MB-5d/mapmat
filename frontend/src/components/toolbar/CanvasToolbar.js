@@ -24,6 +24,7 @@ import {
 
 import IconButton from '../ui/IconButton';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
+import CaptureIssuesPanel from './CaptureIssuesPanel';
 
 const ToolButton = ({
   active = false,
@@ -99,6 +100,9 @@ const CanvasToolbar = ({
   hasSelectedFullScreenshotAssets,
   thumbnailsAllLabel = 'Get Thumbnails (All)',
   fullScreenshotsAllLabel = 'Get Screenshots (All)',
+  captureIssues = [],
+  onSelectCaptureIssue,
+  onOpenCaptureIssueUrl,
   showImageMenu,
   imageMenuRef,
   hasSelection,
@@ -232,6 +236,15 @@ const CanvasToolbar = ({
               disabled={!hasSelection || !hasSelectedFullScreenshotAssets}
             />
             <div className="canvas-tool-menu-hint">Saves a full-page asset per page</div>
+          </div>
+          <MenuDivider className="canvas-tool-menu-divider" />
+          <div className="canvas-tool-menu-section">
+            <MenuSectionHeader className="canvas-tool-menu-label">Capture issues</MenuSectionHeader>
+            <CaptureIssuesPanel
+              issues={captureIssues}
+              onSelectIssue={onSelectCaptureIssue}
+              onOpenIssueUrl={onOpenCaptureIssueUrl}
+            />
           </div>
         </MenuPanel>
       )}

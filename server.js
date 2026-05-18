@@ -60,6 +60,10 @@ const {
   classifyScanResponse,
   getUrlFallbackTitle,
 } = require('./utils/scanPageClassification');
+const {
+  collectImageCaptureRecords,
+  buildImageCapturePhases,
+} = require('./utils/imageCapturePlan');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -175,6 +179,7 @@ app.use(FEEDBACK_PUBLIC_BASE, express.static(FEEDBACK_STORAGE_DIR));
 app.use('/auth', authRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', apiRouter);
+registerImageCaptureRoutes(app);
 app.use('/api', collaborationRouter);
 app.use('/api', realtimeRouter);
 app.use('/api', coeditingRouter);
@@ -286,6 +291,22 @@ const SCREENSHOT_FULL_JPEG_QUALITY = Math.round(toBoundedNumber(
   process.env.SCREENSHOT_FULL_JPEG_QUALITY,
   { min: 60, max: 92, fallback: 88 }
 ));
+const IMAGE_CAPTURE_MAX_ATTEMPTS = Math.max(
+  1,
+  Number(process.env.IMAGE_CAPTURE_MAX_ATTEMPTS ?? 3)
+);
+const IMAGE_CAPTURE_RETRY_BASE_DELAY_MS = Math.max(
+  100,
+  Number(process.env.IMAGE_CAPTURE_RETRY_BASE_DELAY_MS ?? 800)
+);
+const IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE = Math.max(
+  1,
+  Number(process.env.IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE ?? 12)
+);
+const IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT = Math.max(
+  100,
+  Number(process.env.IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT ?? 2000)
+);
 const SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY = Math.round(toBoundedNumber(
   process.env.SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY,
   { min: 60, max: 92, fallback: 84 }
@@ -322,10 +343,10 @@ const SCREENSHOT_TYPES = Object.freeze({
   thumb: 'thumb',
 });
 const SCREENSHOT_META_SUFFIX = '.meta.json';
-const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v11';
+const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v12';
 const SCREENSHOT_ASSET_FILENAME_PATTERN = /^[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
 const SCREENSHOT_BLOCKED_RESOURCE_TYPES = new Set(['media', 'eventsource', 'websocket']);
-const SCREENSHOT_BLOCKED_URL_PATTERN = /(?:google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|connect\.facebook\.net|hotjar|segment\.io|fullstory|intercom|clarity\.ms|sentry\.io|datadoghq-browser-agent|newrelic|amplitude\.com|mixpanel\.com)/i;
+const SCREENSHOT_BLOCKED_URL_PATTERN = /(?:google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|connect\.facebook\.net|hotjar|segment\.io|fullstory|clarity\.ms|sentry\.io|datadoghq-browser-agent|newrelic|amplitude\.com|mixpanel\.com)/i;
 
 const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -879,6 +900,7 @@ async function installScreenshotRequestFilters(page) {
 const JOB_TYPES = {
   scan: 'scan',
   screenshot: 'screenshot',
+  imageCapture: 'image_capture',
   discovery: 'discovery',
   email: EMAIL_JOB_TYPES.EMAIL,
 };
@@ -887,8 +909,8 @@ const getAllowedJobTypesForRunMode = () => {
   if (process.env.ALLOW_CROSS_MODE_JOB_TYPES === 'true') {
     return ALL_BACKGROUND_JOB_TYPES;
   }
-  if (RUN_MODE === 'worker') return [JOB_TYPES.screenshot];
-  if (RUN_MODE === 'web') return [JOB_TYPES.scan, JOB_TYPES.discovery, JOB_TYPES.email];
+  if (RUN_MODE === 'worker') return [JOB_TYPES.screenshot, JOB_TYPES.imageCapture];
+  if (RUN_MODE === 'web') return [JOB_TYPES.scan, JOB_TYPES.discovery, JOB_TYPES.email, JOB_TYPES.imageCapture];
   return ALL_BACKGROUND_JOB_TYPES;
 };
 const ALLOWED_JOB_TYPES_FOR_RUN_MODE = getAllowedJobTypesForRunMode();
@@ -904,11 +926,18 @@ const parseJobWorkerTypes = (value) => {
   return allowed.length > 0 ? allowed : null;
 };
 const DEFAULT_JOB_WORKER_TYPES = RUN_MODE === 'worker'
-  ? [JOB_TYPES.screenshot]
+  ? [JOB_TYPES.screenshot, JOB_TYPES.imageCapture]
   : (RUN_MODE === 'web'
-    ? [JOB_TYPES.scan, JOB_TYPES.discovery, JOB_TYPES.email]
+    ? [JOB_TYPES.scan, JOB_TYPES.discovery, JOB_TYPES.email, JOB_TYPES.imageCapture]
     : ALL_BACKGROUND_JOB_TYPES);
-const JOB_WORKER_TYPES = parseJobWorkerTypes(process.env.JOB_WORKER_TYPES) || DEFAULT_JOB_WORKER_TYPES;
+const normalizeJobWorkerTypes = (types) => {
+  const normalized = Array.isArray(types) && types.length > 0 ? [...types] : [...DEFAULT_JOB_WORKER_TYPES];
+  if (ALLOWED_JOB_TYPES_FOR_RUN_MODE.includes(JOB_TYPES.imageCapture) && !normalized.includes(JOB_TYPES.imageCapture)) {
+    normalized.push(JOB_TYPES.imageCapture);
+  }
+  return normalized;
+};
+const JOB_WORKER_TYPES = normalizeJobWorkerTypes(parseJobWorkerTypes(process.env.JOB_WORKER_TYPES));
 const JOB_STATUS = {
   queued: 'queued',
   running: 'running',
@@ -985,6 +1014,21 @@ const findActiveDiscoveryJob = async (mapId) => {
   for (const row of rows) {
     const payload = getJobPayload(row);
     if (payload.mapId === mapId || payload.id === mapId) {
+      return row.id;
+    }
+  }
+  return null;
+};
+
+const findActiveImageCaptureJob = async (mapId, captureType) => {
+  const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
+    JOB_TYPES.imageCapture,
+    [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.stopping]
+  );
+
+  for (const row of rows) {
+    const payload = getJobPayload(row);
+    if (payload.mapId === mapId && payload.captureType === captureType) {
       return row.id;
     }
   }
@@ -1148,6 +1192,681 @@ const shouldAbortJob = (id, throttleMs = 1000) => {
     return (await readStatus()) === JOB_STATUS.canceled;
   };
 };
+
+const IMAGE_CAPTURE_STRING_FIELDS = new Set([
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+]);
+
+const IMAGE_CAPTURE_BOOLEAN_FIELDS = new Set([
+  'authRequired',
+  'thumbnailCaptureFailed',
+  'fullScreenshotTruncated',
+]);
+
+function normalizeImageCaptureType(value) {
+  return normalizeScreenshotType(value) || SCREENSHOT_TYPES.thumb;
+}
+
+function normalizeImageCaptureAssetUpdates(assetUpdates = {}) {
+  const normalized = {};
+  Object.entries(assetUpdates || {}).forEach(([key, value]) => {
+    if (value === undefined) return;
+    if (IMAGE_CAPTURE_STRING_FIELDS.has(key)) {
+      if (value === null) {
+        normalized[key] = null;
+        return;
+      }
+      const nextValue = String(value || '').trim();
+      normalized[key] = nextValue || null;
+      return;
+    }
+    if (IMAGE_CAPTURE_BOOLEAN_FIELDS.has(key)) {
+      normalized[key] = Boolean(value);
+    }
+  });
+  return normalized;
+}
+
+function applyImageCaptureUpdatesToTree(node, updatesById, result) {
+  if (!node || typeof node !== 'object') return node;
+
+  let nextNode = node;
+  const patch = updatesById.get(String(node.id || ''));
+  if (patch) {
+    nextNode = { ...node };
+    Object.entries(patch).forEach(([key, value]) => {
+      if (nextNode[key] !== value) {
+        nextNode[key] = value;
+        result.changed = true;
+      }
+    });
+    result.updatedNodeIds.add(String(node.id));
+  }
+
+  if (Array.isArray(node.children)) {
+    let childrenChanged = false;
+    const nextChildren = node.children.map((child) => {
+      const nextChild = applyImageCaptureUpdatesToTree(child, updatesById, result);
+      if (nextChild !== child) childrenChanged = true;
+      return nextChild;
+    });
+    if (childrenChanged) {
+      if (nextNode === node) nextNode = { ...node };
+      nextNode.children = nextChildren;
+      result.changed = true;
+    }
+  }
+
+  return nextNode;
+}
+
+function applyImageCaptureUpdatesToMapData({ root, orphans, updatesById }) {
+  const result = { changed: false, updatedNodeIds: new Set() };
+  const nextRoot = applyImageCaptureUpdatesToTree(root, updatesById, result);
+  const nextOrphans = Array.isArray(orphans)
+    ? orphans.map((orphan) => applyImageCaptureUpdatesToTree(orphan, updatesById, result))
+    : [];
+  return {
+    root: nextRoot,
+    orphans: nextOrphans,
+    changed: result.changed,
+    updatedNodeIds: Array.from(result.updatedNodeIds),
+  };
+}
+
+async function persistImageCaptureNodeAssets({ mapId, nodeId, assetUpdates }) {
+  const result = await persistImageCaptureNodeAssetBatch({
+    mapId,
+    updates: [{ nodeId, assets: assetUpdates }],
+  });
+  return {
+    updated: result.verifiedEntries.length > 0,
+    updatedNodeIds: result.verifiedEntries.map((entry) => entry.nodeId),
+    root: result.root,
+    orphans: result.orphans,
+  };
+}
+
+function flattenImageCaptureNodes(root, orphans = []) {
+  const nodesById = new Map();
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const nodeId = String(node.id || '').trim();
+    if (nodeId) nodesById.set(nodeId, node);
+    if (Array.isArray(node.children)) node.children.forEach(visit);
+  };
+  visit(root);
+  if (Array.isArray(orphans)) orphans.forEach(visit);
+  return nodesById;
+}
+
+function imageCaptureAssetPatchMatchesNode(node, assets) {
+  if (!node || !assets || typeof assets !== 'object') return false;
+  return Object.entries(assets).every(([key, value]) => {
+    if (value === undefined) return true;
+    if (value === null) return node[key] === null || node[key] === undefined || node[key] === '';
+    return node[key] === value;
+  });
+}
+
+async function persistImageCaptureNodeAssetBatch({ mapId, updates }) {
+  const normalizedEntries = (Array.isArray(updates) ? updates : [])
+    .map((entry) => ({
+      nodeId: String(entry?.nodeId || '').trim(),
+      assets: normalizeImageCaptureAssetUpdates(entry?.assets || entry?.assetUpdates || {}),
+      meta: entry?.meta || {},
+    }))
+    .filter((entry) => entry.nodeId && Object.keys(entry.assets).length > 0);
+
+  if (normalizedEntries.length === 0) {
+    return { changed: false, verifiedEntries: [], missingEntries: [] };
+  }
+
+  const mapRow = await mapStore.getMapByIdAsync(mapId);
+  if (!mapRow) throw new Error('Map not found');
+
+  const currentRoot = parseJsonSafe(mapRow.root_data);
+  const currentOrphans = parseJsonSafe(mapRow.orphans_data) || [];
+  const updatesById = new Map();
+  normalizedEntries.forEach((entry) => {
+    updatesById.set(entry.nodeId, {
+      ...(updatesById.get(entry.nodeId) || {}),
+      ...entry.assets,
+    });
+  });
+  const nextMap = applyImageCaptureUpdatesToMapData({
+    root: currentRoot,
+    orphans: currentOrphans,
+    updatesById,
+  });
+
+  if (nextMap.changed) {
+    await mapStore.updateMapByIdAsync(mapId, {
+      rootData: JSON.stringify(nextMap.root),
+      orphansData: nextMap.orphans.length ? JSON.stringify(nextMap.orphans) : null,
+    });
+  }
+
+  const storedMap = await mapStore.getMapByIdAsync(mapId);
+  const storedRoot = parseJsonSafe(storedMap?.root_data);
+  const storedOrphans = parseJsonSafe(storedMap?.orphans_data) || [];
+  const storedNodesById = flattenImageCaptureNodes(storedRoot, storedOrphans);
+  const verifiedEntries = [];
+  const missingEntries = [];
+  normalizedEntries.forEach((entry) => {
+    const node = storedNodesById.get(entry.nodeId);
+    if (imageCaptureAssetPatchMatchesNode(node, entry.assets)) {
+      verifiedEntries.push(entry);
+    } else {
+      missingEntries.push(entry);
+    }
+  });
+
+  return {
+    changed: nextMap.changed,
+    verifiedEntries,
+    missingEntries,
+    root: storedRoot,
+    orphans: storedOrphans,
+  };
+}
+
+function isUsableScreenshotAsset(value) {
+  return validateScreenshotAssetUrl(value).available === true;
+}
+
+function isTerminalThumbnailFailure(node) {
+  return Boolean(
+    node?.thumbnailCaptureFailed
+    && node?.authRequired
+    && String(node?.thumbnailCaptureError || '').toLowerCase().includes('requires')
+  );
+}
+
+function getUrlExtension(value) {
+  try {
+    const pathname = new URL(value).pathname || '';
+    const match = pathname.match(/\.([a-z0-9]{2,8})$/i);
+    return match?.[1]?.toLowerCase() || '';
+  } catch {
+    return '';
+  }
+}
+
+function getImageCaptureSkipReason(node) {
+  const orphanType = String(node?.orphanType || '').toLowerCase();
+  const pageType = String(node?.pageType || node?.type || '').toLowerCase();
+  const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
+  const extension = getUrlExtension(node?.url);
+  const fileExtensions = new Set([
+    'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    'zip', 'rar', '7z', 'csv', 'tsv', 'txt', 'rtf',
+  ]);
+  if (
+    node?.isFile
+    || orphanType === 'file'
+    || pageType === 'file'
+    || fileExtensions.has(extension)
+  ) {
+    return {
+      status: 'skipped',
+      reason: extension ? `${extension.toUpperCase()} file` : 'File link',
+    };
+  }
+
+  if (node?.authRequired) {
+    return { status: 'blocked', reason: 'Requires login' };
+  }
+
+  const statusCode = Number(node?.httpStatus ?? node?.statusCode);
+  if (
+    node?.isBroken
+    || orphanType === 'broken'
+    || scanStatus === 'error'
+    || scanStatus === 'failed'
+    || (Number.isFinite(statusCode) && statusCode >= 400)
+  ) {
+    return { status: 'failed', reason: 'Error page' };
+  }
+
+  if (
+    node?.isInactive
+    || orphanType === 'inactive'
+    || scanStatus === 'inactive'
+    || statusCode === 0
+  ) {
+    return { status: 'skipped', reason: 'Inactive page' };
+  }
+
+  return null;
+}
+
+function getImageCaptureAssetUpdates(captureType, result) {
+  if (captureType === SCREENSHOT_TYPES.full) {
+    const updates = {
+      fullScreenshotUrl: result.url,
+      fullScreenshotTruncated: Boolean(result.truncated),
+      authRequired: false,
+    };
+    if (result.thumbnailUrl) {
+      updates.thumbnailUrl = result.thumbnailUrl;
+      updates.thumbnailCaptureFailed = false;
+      updates.thumbnailCaptureError = null;
+      updates.thumbnailCaptureFailedAt = null;
+    }
+    return updates;
+  }
+
+  return {
+    thumbnailUrl: result.thumbnailUrl || result.url,
+    thumbnailFullUrl: result.thumbnailFullUrl || result.previewUrl || result.url,
+    authRequired: false,
+    thumbnailCaptureFailed: false,
+    thumbnailCaptureError: null,
+    thumbnailCaptureFailedAt: null,
+  };
+}
+
+function getImageCaptureFailureUpdates(captureType, message, { authRequired = false } = {}) {
+  if (captureType !== SCREENSHOT_TYPES.thumb && !authRequired) return {};
+  return {
+    ...(authRequired ? { authRequired: true } : {}),
+    ...(captureType === SCREENSHOT_TYPES.thumb ? {
+      thumbnailCaptureFailed: true,
+      thumbnailCaptureError: message || 'Thumbnail capture failed',
+      thumbnailCaptureFailedAt: new Date().toISOString(),
+    } : {}),
+  };
+}
+
+function getImageCaptureSkipUpdates(captureType, message, { authRequired = false } = {}) {
+  if (captureType !== SCREENSHOT_TYPES.thumb) return {};
+  return {
+    thumbnailUrl: null,
+    thumbnailFullUrl: null,
+    authRequired,
+    thumbnailCaptureFailed: true,
+    thumbnailCaptureError: message || 'Preview unavailable',
+    thumbnailCaptureFailedAt: new Date().toISOString(),
+  };
+}
+
+function validateImageCaptureResult(captureType, result) {
+  if (!result?.url) {
+    return { ok: false, status: 'missing_asset', error: 'No screenshot URL returned' };
+  }
+  if (result.blocked) {
+    return { ok: false, status: 'blocked', error: 'Screenshot captured a blocked page' };
+  }
+  if (captureType === SCREENSHOT_TYPES.full) {
+    if (!/_full_v\d+\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(String(result.url || ''))) {
+      return { ok: false, status: 'missing_asset', error: 'Full screenshot asset was not returned' };
+    }
+    if (Number.isFinite(result.width) && result.width < 1000) {
+      return { ok: false, status: 'low_resolution', error: 'Full screenshot resolution was too low' };
+    }
+    const fullAsset = validateScreenshotAssetUrl(result.url);
+    if (!fullAsset.available) {
+      return { ok: false, status: 'missing_asset', error: 'Saved full screenshot is missing' };
+    }
+    return { ok: true };
+  }
+
+  const smallUrl = result.thumbnailUrl || result.url;
+  const previewUrl = result.thumbnailFullUrl || result.previewUrl || result.url;
+  const smallAsset = validateScreenshotAssetUrl(smallUrl);
+  const previewAsset = validateScreenshotAssetUrl(previewUrl);
+  if (!smallAsset.available || !previewAsset.available) {
+    return { ok: false, status: 'missing_asset', error: 'Saved thumbnail is missing' };
+  }
+  return { ok: true };
+}
+
+function buildImageCaptureTargets({ root, orphans, captureType, scope, nodeIds, force }) {
+  const selectedIds = new Set((Array.isArray(nodeIds) ? nodeIds : [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean));
+  const records = collectImageCaptureRecords(root, orphans);
+  const scopedRecords = records.filter((record) => {
+    if (!record?.node?.url) return false;
+    if (scope === 'selected') return selectedIds.has(record.nodeId);
+    return true;
+  });
+
+  let cached = 0;
+  let unavailable = 0;
+  const skippedRecords = [];
+  const captureRecords = scopedRecords.filter((record) => {
+    const skipReason = getImageCaptureSkipReason(record.node);
+    if (skipReason) {
+      skippedRecords.push({ ...record, skipReason });
+      return false;
+    }
+    if (force) return true;
+    if (captureType === SCREENSHOT_TYPES.full) {
+      if (isUsableScreenshotAsset(record.node.fullScreenshotUrl)) {
+        cached += 1;
+        return false;
+      }
+      return true;
+    }
+    if (isUsableScreenshotAsset(record.node.thumbnailUrl)) {
+      cached += 1;
+      return false;
+    }
+    if (isTerminalThumbnailFailure(record.node)) {
+      unavailable += 1;
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    records,
+    scopedRecords,
+    captureRecords,
+    skippedRecords,
+    workRecords: [...captureRecords, ...skippedRecords].sort(compareImageCaptureWorkRecords),
+    phases: buildImageCapturePhases(captureRecords),
+    cached,
+    unavailable,
+  };
+}
+
+function compareImageCaptureWorkRecords(left, right) {
+  const leftRecord = left?.nodeId ? left : { ...left, nodeId: left?.nodeId };
+  const rightRecord = right?.nodeId ? right : { ...right, nodeId: right?.nodeId };
+  if (leftRecord.groupRank !== rightRecord.groupRank) return leftRecord.groupRank - rightRecord.groupRank;
+  if (leftRecord.treeIndex !== rightRecord.treeIndex) return leftRecord.treeIndex - rightRecord.treeIndex;
+  if (leftRecord.depth !== rightRecord.depth) return leftRecord.depth - rightRecord.depth;
+  const pathOrder = String(leftRecord.orderPath || '').localeCompare(String(rightRecord.orderPath || ''));
+  if (pathOrder !== 0) return pathOrder;
+  return (leftRecord.sourceIndex || 0) - (rightRecord.sourceIndex || 0);
+}
+
+function trimImageCaptureResults(results) {
+  if (!Array.isArray(results)) return [];
+  if (results.length <= IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT) return results;
+  return results.slice(results.length - IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT);
+}
+
+async function getImageCaptureMapForRequest(req, mapId) {
+  let map = null;
+  try {
+    map = await mapStore.getMapAccessibleToUserAsync(mapId, req.user.id);
+  } catch (error) {
+    map = await mapStore.getMapForUserAsync(mapId, req.user.id);
+  }
+  if (!map) return null;
+  const role = permissionPolicy.resolveResourceRole({
+    actorUserId: req.user.id,
+    resourceOwnerUserId: map.user_id,
+    membershipRole: map.membership_role || null,
+  });
+  if (!permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, role)) return null;
+  return map;
+}
+
+async function runImageCaptureJob(jobId, payload) {
+  const mapId = String(payload?.mapId || '').trim();
+  if (!mapId) throw new Error('Missing mapId');
+
+  const captureType = normalizeImageCaptureType(payload?.captureType || payload?.type);
+  const scope = payload?.scope === 'selected' ? 'selected' : 'all';
+  const force = scope === 'selected' || Boolean(payload?.force);
+  const nodeIds = Array.isArray(payload?.nodeIds) ? payload.nodeIds : [];
+  const mapRow = await mapStore.getMapByIdAsync(mapId);
+  if (!mapRow) throw new Error('Map not found');
+
+  const root = parseJsonSafe(mapRow.root_data);
+  const orphans = parseJsonSafe(mapRow.orphans_data) || [];
+  const targetPlan = buildImageCaptureTargets({
+    root,
+    orphans,
+    captureType,
+    scope,
+    nodeIds,
+    force,
+  });
+
+  const startedAt = Date.now();
+  const summary = {
+    mapId,
+    captureType,
+    scope,
+    total: targetPlan.captureRecords.length + targetPlan.skippedRecords.length,
+    eligibleTotal: targetPlan.scopedRecords.length,
+    cached: targetPlan.cached,
+    unavailable: targetPlan.unavailable,
+    completed: 0,
+    captured: 0,
+    failed: 0,
+    blocked: 0,
+    missingAsset: 0,
+    skipped: 0,
+    batchIndex: 0,
+    batchTotal: targetPlan.phases.length,
+    currentNodeId: null,
+    assetUpdateCursor: 0,
+    targetIds: targetPlan.workRecords.map((record) => record.nodeId),
+    results: [],
+    nodeAssetUpdates: [],
+  };
+  await updateJobProgress(jobId, summary);
+
+  const readStatus = createJobStatusReader(jobId, 500);
+  const shouldStop = async () => {
+    const status = await readStatus();
+    return status === JOB_STATUS.canceled || status === JOB_STATUS.stopping;
+  };
+  const publishProgress = async () => {
+    await updateJobProgress(jobId, {
+      ...summary,
+      results: trimImageCaptureResults(summary.results),
+      elapsedMs: Date.now() - startedAt,
+    });
+  };
+
+  const pendingAssetSaves = [];
+  const appendNodeAssetUpdate = (nodeId, assets) => {
+    summary.assetUpdateCursor += 1;
+    summary.nodeAssetUpdates.push({
+      seq: summary.assetUpdateCursor,
+      nodeId,
+      assets,
+    });
+  };
+  const incrementResultCounter = (status) => {
+    if (status === 'saved') summary.captured += 1;
+    else if (status === 'skipped') summary.skipped += 1;
+    else if (status === 'blocked') summary.blocked += 1;
+    else if (status === 'missing_asset' || status === 'low_resolution') summary.missingAsset += 1;
+    else summary.failed += 1;
+  };
+  const recordCompletedResult = (result, assets = null) => {
+    summary.completed += 1;
+    incrementResultCounter(result.status);
+    if (assets && Object.keys(assets).length > 0) {
+      appendNodeAssetUpdate(result.nodeId, assets);
+    }
+    summary.results.push(result);
+  };
+  const queueAssetSave = async (entry) => {
+    if (!entry?.nodeId || !entry?.assets || Object.keys(entry.assets).length === 0) {
+      recordCompletedResult(entry.result);
+      return;
+    }
+    pendingAssetSaves.push(entry);
+    if (pendingAssetSaves.length >= IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE) {
+      await flushAssetSaves();
+    }
+  };
+  async function flushAssetSaves() {
+    if (pendingAssetSaves.length === 0) return;
+    const batch = pendingAssetSaves.splice(0, pendingAssetSaves.length);
+    let persistenceResult;
+    try {
+      persistenceResult = await persistImageCaptureNodeAssetBatch({
+        mapId,
+        updates: batch.map((entry) => ({
+          nodeId: entry.nodeId,
+          assets: entry.assets,
+        })),
+      });
+    } catch (error) {
+      persistenceResult = {
+        verifiedEntries: [],
+        missingEntries: batch.map((entry) => ({
+          ...entry,
+          persistError: error?.message || 'Image asset save failed',
+        })),
+      };
+    }
+
+    const verifiedIds = new Set((persistenceResult.verifiedEntries || []).map((entry) => entry.nodeId));
+    batch.forEach((entry) => {
+      if (verifiedIds.has(entry.nodeId)) {
+        recordCompletedResult(entry.result, entry.assets);
+        return;
+      }
+      recordCompletedResult({
+        nodeId: entry.nodeId,
+        status: 'missing_asset',
+        error: entry.persistError || 'Saved image fields were not found on the map',
+      });
+    });
+  }
+
+  for (const record of targetPlan.skippedRecords) {
+    const reason = record.skipReason?.reason || 'Preview unavailable';
+    const status = record.skipReason?.status || 'skipped';
+    const assetUpdates = getImageCaptureSkipUpdates(captureType, reason, {
+      authRequired: status === 'blocked',
+    });
+    await queueAssetSave({
+      nodeId: record.nodeId,
+      assets: assetUpdates,
+      result: {
+        nodeId: record.nodeId,
+        status,
+        error: reason,
+      },
+    });
+  }
+  if (targetPlan.skippedRecords.length > 0) {
+    await flushAssetSaves();
+    await publishProgress();
+  }
+
+  for (let phaseIndex = 0; phaseIndex < targetPlan.phases.length; phaseIndex += 1) {
+    if (await shouldStop()) {
+      summary.stopped = true;
+      break;
+    }
+    const phase = targetPlan.phases[phaseIndex];
+    summary.batchIndex = phaseIndex + 1;
+    await publishProgress();
+
+    for (const record of phase.records) {
+      if (await shouldStop()) {
+        summary.stopped = true;
+        break;
+      }
+      summary.currentNodeId = record.nodeId;
+      await publishProgress();
+
+      let finalStatus = null;
+      let lastError = null;
+      for (let attempt = 0; attempt < IMAGE_CAPTURE_MAX_ATTEMPTS; attempt += 1) {
+        if (await shouldStop()) {
+          summary.stopped = true;
+          break;
+        }
+        try {
+          const safeUrl = await assertSafeUrl(record.node.url);
+          const result = await captureScreenshot(safeUrl, captureType);
+          const validation = validateImageCaptureResult(captureType, result);
+          if (!validation.ok) {
+            finalStatus = validation.status;
+            lastError = validation.error;
+            if (validation.status === 'blocked') break;
+            if (validation.status === 'low_resolution') break;
+            throw new Error(validation.error);
+          }
+
+          const assetUpdates = getImageCaptureAssetUpdates(captureType, result);
+          await queueAssetSave({
+            nodeId: record.nodeId,
+            assets: assetUpdates,
+            result: {
+              nodeId: record.nodeId,
+              status: 'saved',
+              url: result.url,
+              thumbnailUrl: result.thumbnailUrl || null,
+              width: result.width || null,
+              height: result.height || null,
+            },
+          });
+          finalStatus = 'saved';
+          break;
+        } catch (error) {
+          lastError = error?.message || 'Image capture failed';
+          const authRequired = error?.code === 'SCREENSHOT_AUTH_REQUIRED'
+            || String(lastError).toLowerCase().includes('requires authentication')
+            || String(lastError).toLowerCase().includes('requires login');
+          if (authRequired) {
+            finalStatus = 'blocked';
+            lastError = 'Requires login';
+            break;
+          }
+          if (attempt < IMAGE_CAPTURE_MAX_ATTEMPTS - 1) {
+            await sleep(Math.min(IMAGE_CAPTURE_RETRY_BASE_DELAY_MS * (attempt + 1), 15000));
+          }
+        }
+      }
+
+      if (summary.stopped) break;
+      if (finalStatus !== 'saved') {
+        const status = finalStatus || 'failed';
+        const assetUpdates = getImageCaptureFailureUpdates(
+          captureType,
+          lastError || 'Image capture failed',
+          { authRequired: status === 'blocked' }
+        );
+        if (Object.keys(assetUpdates).length > 0) {
+          await queueAssetSave({
+            nodeId: record.nodeId,
+            assets: assetUpdates,
+            result: {
+              nodeId: record.nodeId,
+              status,
+              error: lastError || 'Image capture failed',
+            },
+          });
+        } else {
+          recordCompletedResult({
+            nodeId: record.nodeId,
+            status,
+            error: lastError || 'Image capture failed',
+          });
+        }
+      }
+      await publishProgress();
+    }
+    await flushAssetSaves();
+    await publishProgress();
+  }
+
+  summary.currentNodeId = null;
+  summary.elapsedMs = Date.now() - startedAt;
+  await flushAssetSaves();
+  await publishProgress();
+  return summary;
+}
 
 const isLikelyBlocked = (title, bodyText) => {
   const haystack = `${title}\n${bodyText}`.toLowerCase();
@@ -3091,8 +3810,10 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
         : SCREENSHOT_THUMB_DEVICE_SCALE_FACTOR,
       reducedMotion: 'reduce',
       extraHTTPHeaders: {
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         DNT: '1',
+        'Upgrade-Insecure-Requests': '1',
       },
     });
     let page = null;
@@ -3401,6 +4122,13 @@ async function processJob(job) {
 
     if (job.type === JOB_TYPES.screenshot) {
       const result = await captureScreenshot(payload.url, payload.type || 'full');
+      if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+      await markJobComplete(jobId, result);
+      return;
+    }
+
+    if (job.type === JOB_TYPES.imageCapture) {
+      const result = await runImageCaptureJob(jobId, payload);
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
       await markJobComplete(jobId, result);
       return;
@@ -3868,6 +4596,113 @@ app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res
     res.status(500).json({ error: message });
   }
 });
+
+function registerImageCaptureRoutes(targetApp) {
+  // Bulk image capture job for thumbnails and full screenshots.
+  targetApp.post('/api/maps/:id/image-capture-jobs', authMiddleware, requireAuth, async (req, res) => {
+    const { id } = req.params;
+    const captureType = normalizeScreenshotType(req.body?.captureType || req.body?.type);
+    if (!captureType) {
+      return res.status(400).json({ error: 'Invalid type. Use full or thumb.' });
+    }
+
+    const scope = req.body?.scope === 'selected' ? 'selected' : 'all';
+    const nodeIds = Array.isArray(req.body?.nodeIds)
+      ? req.body.nodeIds.map((nodeId) => String(nodeId || '').trim()).filter(Boolean)
+      : [];
+    if (scope === 'selected' && nodeIds.length === 0) {
+      return res.status(400).json({ error: 'No selected pages provided' });
+    }
+    if (nodeIds.length > 2000) {
+      return res.status(400).json({ error: 'Too many selected pages' });
+    }
+
+    try {
+      const map = await getImageCaptureMapForRequest(req, id);
+      if (!map) return res.status(404).json({ error: 'Map not found' });
+
+      const existingJobId = await findActiveImageCaptureJob(id, captureType);
+      if (existingJobId) {
+        return res.json({
+          ok: true,
+          alreadyRunning: true,
+          jobId: existingJobId,
+          jobType: JOB_TYPES.imageCapture,
+          mapId: id,
+        });
+      }
+
+      const jobId = await createJob({
+        type: JOB_TYPES.imageCapture,
+        payload: {
+          mapId: id,
+          captureType,
+          scope,
+          nodeIds,
+          force: scope === 'selected' || Boolean(req.body?.force),
+        },
+        req,
+      });
+
+      recordUsage(req, 'screenshot_job', 1, {
+        mapId: id,
+        type: captureType,
+        scope,
+        selected: nodeIds.length,
+      });
+
+      return res.json({
+        ok: true,
+        jobId,
+        jobType: JOB_TYPES.imageCapture,
+        mapId: id,
+      });
+    } catch (error) {
+      console.error('Create image capture job error:', error);
+      return res.status(error?.status || 500).json({ error: error?.message || 'Failed to create image capture job' });
+    }
+  });
+
+  targetApp.get('/api/maps/:id/image-capture-jobs/:jobId', authMiddleware, requireAuth, async (req, res) => {
+    const { id, jobId } = req.params;
+    const includeResult = req.query.include_result !== 'false';
+    const assetUpdateCursor = Number.parseInt(req.query.asset_update_cursor, 10) || 0;
+    const row = await getJobRow(jobId);
+    const payload = getJobPayload(row);
+    if (
+      !row
+      || row.type !== JOB_TYPES.imageCapture
+      || payload.mapId !== id
+      || !isJobVisibleToRequest(row, req)
+    ) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    const job = serializeJobRow(row, includeResult);
+    if (job?.progress && Array.isArray(job.progress.nodeAssetUpdates)) {
+      job.progress.nodeAssetUpdates = job.progress.nodeAssetUpdates.filter((entry) => {
+        const seq = Number(entry?.seq || 0);
+        return seq === 0 || seq > assetUpdateCursor;
+      });
+    }
+    return res.json({ job });
+  });
+
+  targetApp.post('/api/maps/:id/image-capture-jobs/:jobId/cancel', authMiddleware, requireAuth, async (req, res) => {
+    const { id, jobId } = req.params;
+    const row = await getJobRow(jobId);
+    const payload = getJobPayload(row);
+    if (
+      !row
+      || row.type !== JOB_TYPES.imageCapture
+      || payload.mapId !== id
+      || !isJobVisibleToRequest(row, req)
+    ) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    await markJobCanceled(jobId);
+    return res.json({ success: true });
+  });
+}
 
 // Screenshot endpoint - captures full-page screenshot
 // Note: Playwright requires browser binaries which may not be available on all hosts

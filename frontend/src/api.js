@@ -679,6 +679,26 @@ export async function cancelScreenshotJob(id) {
   return fetchApi(`/screenshot-jobs/${id}/cancel`, { method: 'POST' });
 }
 
+export async function createMapImageCaptureJob(mapId, payload, options = {}) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    ...options,
+  });
+}
+
+export async function getMapImageCaptureJob(mapId, jobId, { includeResult = true, assetUpdateCursor = 0, ...options } = {}) {
+  const params = new URLSearchParams();
+  if (!includeResult) params.set('include_result', 'false');
+  if (assetUpdateCursor > 0) params.set('asset_update_cursor', String(assetUpdateCursor));
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}${query}`, options);
+}
+
+export async function cancelMapImageCaptureJob(mapId, jobId) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}/cancel`, { method: 'POST' });
+}
+
 // ============================================
 // COLLABORATION
 // ============================================

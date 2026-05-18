@@ -125,6 +125,11 @@ import {
   identifyAnalyticsUser,
   trackEvent,
 } from './utils/analytics';
+import {
+  buildCaptureIssueFromResult,
+  getReconciledCaptureProgress,
+  normalizeCaptureIssue,
+} from './utils/captureIssues';
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
 const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
@@ -562,6 +567,28 @@ const CLEARABLE_NODE_ASSET_KEYS = new Set([
   'thumbnailFullUrl',
   'fullScreenshotUrl',
 ]);
+const IMAGE_CAPTURE_ASSET_FIELDS = [
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'fullScreenshotTruncated',
+  'authRequired',
+  'thumbnailCaptureFailed',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+];
+const collectImageAssetUpdatesFromNode = (node) => {
+  if (!node) return {};
+  return IMAGE_CAPTURE_ASSET_FIELDS.reduce((acc, field) => {
+    if (node[field] !== undefined) acc[field] = node[field];
+    return acc;
+  }, {});
+};
+const getCaptureAssetUrl = (nodeOrAssets, mode) => (
+  mode === 'screenshot'
+    ? nodeOrAssets?.fullScreenshotUrl
+    : nodeOrAssets?.thumbnailUrl
+);
 const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
   accessPolicy: 'private',
   nonViewerInvitesRequireOwner: true,
@@ -2078,6 +2105,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailLoadedRef = useRef(new Set());
   const thumbnailFinishedRef = useRef(new Set());
   const thumbnailErrorRef = useRef(new Set());
+  const imageCaptureSavedRef = useRef(new Set());
+  const imageCaptureAppliedRef = useRef(new Set());
+  const imageCaptureAssetCursorRef = useRef(0);
+  const captureIssuesRef = useRef(new Map());
   const thumbnailBatchIndexRef = useRef(0);
   const thumbnailBatchTotalRef = useRef(0);
   const thumbnailCompletedRef = useRef(false);
@@ -2090,6 +2121,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const pendingNodeAssetUpdatesRef = useRef(new Map());
   const nodeAssetSaveInFlightRef = useRef(false);
   const nodeAssetSaveRetryTimerRef = useRef(null);
+  const imageCaptureJobRef = useRef(null);
+  const imageCaptureAppliedUpdateKeysRef = useRef(new Set());
   const screenshotAssetValidationSignatureRef = useRef('');
   const thumbnailAuthToastShownRef = useRef(false);
   const thumbnailFailureToastShownRef = useRef(false);
@@ -2110,11 +2143,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     loaded: 0,
     completed: 0,
     failed: 0,
+    skipped: 0,
     avgMs: 0,
     cached: 0,
     unavailable: 0,
     stopped: false,
   });
+  const [captureIssues, setCaptureIssues] = useState([]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -2380,6 +2415,52 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
     return map;
   }, [reportLayout]);
+
+  const visibleCaptureIssues = useMemo(() => {
+    const issueMap = new Map(captureIssues.map((issue) => [issue.id, issue]));
+    const nodes = collectAllNodesWithOrphans(root, orphans);
+    nodes.forEach((node) => {
+      if (!node?.id) return;
+      if (node.thumbnailCaptureFailed) {
+        const issue = normalizeCaptureIssue({
+          nodeId: node.id,
+          pageNumber: reportNumberMap.get(node.id) || node.number || node.pageNumber || '',
+          title: node.title,
+          url: node.url,
+          status: 'failed',
+          error: node.thumbnailCaptureError || 'Preview unavailable',
+          detail: node.thumbnailCaptureError || 'Preview unavailable',
+          node,
+        });
+        issueMap.set(issue.id, issue);
+      }
+      if (invalidThumbnailAssetIds.has(node.id) && node.thumbnailUrl) {
+        const issue = normalizeCaptureIssue({
+          nodeId: node.id,
+          pageNumber: reportNumberMap.get(node.id) || node.number || node.pageNumber || '',
+          title: node.title,
+          url: node.url,
+          status: 'image_load',
+          error: 'Image failed to load',
+          node,
+        });
+        issueMap.set(issue.id, issue);
+      }
+      if (invalidFullScreenshotAssetIds.has(node.id) && node.fullScreenshotUrl) {
+        const issue = normalizeCaptureIssue({
+          nodeId: node.id,
+          pageNumber: reportNumberMap.get(node.id) || node.number || node.pageNumber || '',
+          title: node.title,
+          url: node.url,
+          status: 'missing_asset',
+          error: 'Missing saved asset',
+          node,
+        });
+        issueMap.set(issue.id, issue);
+      }
+    });
+    return Array.from(issueMap.values());
+  }, [captureIssues, invalidFullScreenshotAssetIds, invalidThumbnailAssetIds, orphans, reportNumberMap, root]);
 
   const parentOptions = useMemo(() => {
     if (!root) return [];
@@ -3836,6 +3917,18 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [findNodeByUrlInMap, focusNodeById]);
 
   const canLocateUrlOnMap = useCallback((url) => !!findNodeByUrlInMap(url), [findNodeByUrlInMap]);
+
+  const selectCaptureIssue = useCallback((issue) => {
+    if (!issue?.nodeId) return;
+    setSelectedNodeIds(new Set([issue.nodeId]));
+    setShowImageMenu(false);
+    focusNodeById(issue.nodeId);
+  }, [focusNodeById]);
+
+  const openCaptureIssueUrl = useCallback((issue) => {
+    if (!issue?.url) return;
+    window.open(issue.url, '_blank', 'noopener,noreferrer');
+  }, []);
 
   useEffect(() => {
     if (!root) return;
@@ -5381,8 +5474,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [currentMap?.id, currentMap?.name, currentMap?.project_id, isLiveActive, mapName, projects, showToast, submitLiveDraft]);
 
-  const updateNodeScreenshotAssets = useCallback((nodeId, assetUpdates = {}) => {
+  const updateNodeScreenshotAssets = useCallback((nodeId, assetUpdates = {}, options = {}) => {
     if (!nodeId) return false;
+    const queueSave = options?.queueSave !== false;
     const nextAssets = Object.entries(assetUpdates).filter(([key, value]) => {
       if (value === undefined) return false;
       if (value === null) return true;
@@ -5407,10 +5501,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       acc[key] = typeof value === 'string' && value.trim().length === 0 ? null : value;
       return acc;
     }, {});
-    pendingNodeAssetUpdatesRef.current.set(nodeId, {
-      ...(pendingNodeAssetUpdatesRef.current.get(nodeId) || {}),
-      ...normalizedAssets,
-    });
+    if (queueSave) {
+      pendingNodeAssetUpdatesRef.current.set(nodeId, {
+        ...(pendingNodeAssetUpdatesRef.current.get(nodeId) || {}),
+        ...normalizedAssets,
+      });
+    }
     setRoot(nextMap.root);
     setOrphans(nextMap.orphans);
     return true;
@@ -5627,20 +5723,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     return markedInvalid;
   }, []);
 
-  const handleThumbnailDisplayLoad = useCallback((nodeId) => {
-    if (!nodeId) return;
-    setInvalidThumbnailAssetIds((prev) => {
-      if (!prev.has(nodeId)) return prev;
-      const next = new Set(prev);
-      next.delete(nodeId);
-      return next;
-    });
-  }, []);
-
-  const handleThumbnailDisplayError = useCallback((nodeId) => {
-    clearInvalidThumbnailAsset(nodeId);
-  }, [clearInvalidThumbnailAsset]);
-
   const validateStoredAssetsForNodes = useCallback(async (nodes, assetKey) => {
     const idsByUrl = new Map();
     (nodes || []).forEach((node) => {
@@ -5737,6 +5819,58 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [orphans, root, validateStoredAssetsForNodes]);
 
+  const getCaptureIssueNodeContext = useCallback((nodeId) => {
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    const node = collectAllNodesWithOrphans(latestRoot, latestOrphans)
+      .find((candidate) => String(candidate?.id || '') === String(nodeId || ''));
+    return {
+      node,
+      pageNumber: reportNumberMap.get(nodeId) || node?.number || node?.pageNumber || '',
+      title: node?.title || 'Untitled page',
+      url: node?.url || '',
+    };
+  }, [orphans, reportNumberMap, root]);
+
+  const syncCaptureIssuesState = useCallback(() => {
+    setCaptureIssues(Array.from(captureIssuesRef.current.values()));
+  }, []);
+
+  const clearCaptureIssues = useCallback(() => {
+    captureIssuesRef.current = new Map();
+    setCaptureIssues([]);
+  }, []);
+
+  const clearCaptureIssueForNode = useCallback((nodeId) => {
+    if (!nodeId || captureIssuesRef.current.size === 0) return;
+    let changed = false;
+    const next = new Map();
+    captureIssuesRef.current.forEach((issue, key) => {
+      if (String(issue.nodeId) === String(nodeId)) {
+        changed = true;
+        return;
+      }
+      next.set(key, issue);
+    });
+    if (!changed) return;
+    captureIssuesRef.current = next;
+    syncCaptureIssuesState();
+  }, [syncCaptureIssuesState]);
+
+  const recordCaptureIssue = useCallback((issueInput = {}) => {
+    const nodeId = issueInput.nodeId || issueInput?.result?.nodeId;
+    const context = getCaptureIssueNodeContext(nodeId);
+    const issue = normalizeCaptureIssue({
+      ...issueInput,
+      ...context,
+      nodeId,
+      node: context.node,
+    });
+    captureIssuesRef.current.set(issue.id, issue);
+    syncCaptureIssuesState();
+    return issue;
+  }, [getCaptureIssueNodeContext, syncCaptureIssuesState]);
+
   const getActiveImageCaptureMode = useCallback(() => {
     const total = thumbnailStats.total || 0;
     const completed = thumbnailStats.completed || 0;
@@ -5786,6 +5920,29 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, []);
 
+  const handleThumbnailDisplayLoad = useCallback((nodeId) => {
+    if (!nodeId) return;
+    setInvalidThumbnailAssetIds((prev) => {
+      if (!prev.has(nodeId)) return prev;
+      const next = new Set(prev);
+      next.delete(nodeId);
+      return next;
+    });
+    clearCaptureIssueForNode(nodeId);
+    completeThumbnailCapture(nodeId, { captured: true });
+  }, [clearCaptureIssueForNode, completeThumbnailCapture]);
+
+  const handleThumbnailDisplayError = useCallback((nodeId) => {
+    if (!nodeId) return;
+    clearInvalidThumbnailAsset(nodeId);
+    recordCaptureIssue({
+      nodeId,
+      status: 'image_load',
+      error: 'Image failed to load',
+    });
+    completeThumbnailCapture(nodeId, { captured: false });
+  }, [clearInvalidThumbnailAsset, completeThumbnailCapture, recordCaptureIssue]);
+
   const resetThumbnailQueue = (total, cached = 0, bumpSession = true, mode = 'thumbnail', unavailable = 0) => {
     if (bumpSession) {
       const nextSessionId = thumbnailSessionRef.current + 1;
@@ -5803,6 +5960,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailLoadedRef.current = new Set();
     thumbnailFinishedRef.current = new Set();
     thumbnailErrorRef.current = new Set();
+    imageCaptureSavedRef.current = new Set();
+    imageCaptureAppliedRef.current = new Set();
+    imageCaptureAssetCursorRef.current = 0;
     thumbnailBatchIndexRef.current = 0;
     thumbnailBatchTotalRef.current = 0;
     thumbnailCompletedRef.current = false;
@@ -5819,6 +5979,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       loaded: 0,
       completed: 0,
       failed: 0,
+      skipped: 0,
       avgMs: 0,
       cached,
       unavailable,
@@ -5972,6 +6133,389 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   };
 
+  const findNodeInCurrentMap = useCallback((nodeId) => {
+    const latestRoot = rootRef.current || root;
+    const latestOrphans = orphansRef.current || orphans;
+    return collectAllNodesWithOrphans(latestRoot, latestOrphans)
+      .find((node) => String(node?.id || '') === String(nodeId || '')) || null;
+  }, [orphans, root]);
+
+  const reconcileSavedImageCaptureAssets = useCallback(async ({ mapId, mode, nodeIds }) => {
+    const ids = Array.from(new Set((nodeIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    if (!mapId || ids.length === 0) return;
+    try {
+      const response = await api.getMap(mapId);
+      const savedMap = response?.map;
+      const savedNodes = collectAllNodesWithOrphans(savedMap?.root, savedMap?.orphans || []);
+      const savedById = new Map(savedNodes.map((node) => [String(node?.id || ''), node]));
+      ids.forEach((nodeId) => {
+        const savedNode = savedById.get(nodeId);
+        const assetUrl = getCaptureAssetUrl(savedNode, mode);
+        if (!assetUrl) {
+          recordCaptureIssue({
+            nodeId,
+            status: 'missing_asset',
+            error: 'Saved image fields were not found on the map',
+          });
+          completeThumbnailCapture(nodeId, { captured: false });
+          return;
+        }
+        const assetUpdates = collectImageAssetUpdatesFromNode(savedNode);
+        const applied = updateNodeScreenshotAssets(nodeId, assetUpdates, { queueSave: false });
+        if (!applied && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), mode) !== assetUrl) {
+          recordCaptureIssue({
+            nodeId,
+            status: 'missing_asset',
+            error: 'Saved image fields could not be applied to the canvas',
+          });
+          completeThumbnailCapture(nodeId, { captured: false });
+          return;
+        }
+        imageCaptureAppliedRef.current.add(nodeId);
+        if (mode === 'screenshot') {
+          clearCaptureIssueForNode(nodeId);
+          completeThumbnailCapture(nodeId, { captured: true });
+        } else {
+          bumpThumbnailReload(nodeId);
+        }
+      });
+    } catch (error) {
+      console.warn('Failed to reconcile saved image capture assets', error);
+    }
+  }, [
+    bumpThumbnailReload,
+    clearCaptureIssueForNode,
+    completeThumbnailCapture,
+    findNodeInCurrentMap,
+    recordCaptureIssue,
+    updateNodeScreenshotAssets,
+  ]);
+
+  const applyImageCaptureJobUpdates = useCallback((job, expectedMode) => {
+    const payload = job?.progress || job?.result || {};
+    const updates = Array.isArray(payload.nodeAssetUpdates) ? payload.nodeAssetUpdates : [];
+    let maxAssetSeq = imageCaptureAssetCursorRef.current;
+    const savedButNotApplied = new Set();
+    updates.forEach((entry) => {
+      const nodeId = String(entry?.nodeId || '').trim();
+      const assets = entry?.assets || {};
+      if (!nodeId || !assets || typeof assets !== 'object') return;
+      const seq = Number(entry?.seq || 0);
+      if (seq > maxAssetSeq) maxAssetSeq = seq;
+      const key = `${nodeId}:${JSON.stringify(assets)}`;
+      if (imageCaptureAppliedUpdateKeysRef.current.has(key)) return;
+      imageCaptureAppliedUpdateKeysRef.current.add(key);
+      const applied = updateNodeScreenshotAssets(nodeId, assets, { queueSave: false });
+      const assetUrl = getCaptureAssetUrl(assets, expectedMode);
+      if (applied || (assetUrl && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), expectedMode) === assetUrl)) {
+        imageCaptureAppliedRef.current.add(nodeId);
+      } else if (assetUrl) {
+        savedButNotApplied.add(nodeId);
+      }
+      if (assets.thumbnailUrl) {
+        setInvalidThumbnailAssetIds((prev) => {
+          if (!prev.has(nodeId)) return prev;
+          const updated = new Set(prev);
+          updated.delete(nodeId);
+          return updated;
+        });
+        bumpThumbnailReload(nodeId);
+      }
+      if (assets.fullScreenshotUrl) {
+        setInvalidFullScreenshotAssetIds((prev) => {
+          if (!prev.has(nodeId)) return prev;
+          const updated = new Set(prev);
+          updated.delete(nodeId);
+          return updated;
+        });
+        completeThumbnailCapture(nodeId, { captured: true });
+      }
+    });
+    imageCaptureAssetCursorRef.current = maxAssetSeq;
+
+    if (Array.isArray(payload.targetIds)) {
+      thumbnailExpectedRef.current = new Set(payload.targetIds);
+    }
+
+    const results = Array.isArray(payload.results) ? payload.results : [];
+    results.forEach((result) => {
+      const nodeId = String(result?.nodeId || '').trim();
+      if (!nodeId || !result?.status) return;
+      if (result.status === 'saved') {
+        imageCaptureSavedRef.current.add(nodeId);
+        if (!imageCaptureAppliedRef.current.has(nodeId)) {
+          const node = findNodeInCurrentMap(nodeId);
+          if (getCaptureAssetUrl(node, expectedMode)) {
+            imageCaptureAppliedRef.current.add(nodeId);
+          } else {
+            savedButNotApplied.add(nodeId);
+          }
+        }
+        return;
+      }
+      const context = getCaptureIssueNodeContext(nodeId);
+      recordCaptureIssue(buildCaptureIssueFromResult(result, context.node, context.pageNumber));
+      completeThumbnailCapture(nodeId, { captured: false });
+    });
+    const issueCount = captureIssuesRef.current.size;
+    const progress = getReconciledCaptureProgress({
+      total: Number(payload.total || 0),
+      loadedIds: thumbnailLoadedRef.current,
+      issueCount,
+    });
+    const completed = expectedMode === 'screenshot'
+      ? Number(payload.completed || progress.completed || 0)
+      : progress.completed;
+    const elapsed = Number(payload.elapsedMs || (thumbnailElapsedStartRef.current ? Date.now() - thumbnailElapsedStartRef.current : 0));
+    setThumbnailStats((prev) => ({
+      ...prev,
+      mode: expectedMode,
+      total: Number(payload.total || prev.total || 0),
+      saved: Number(payload.captured || imageCaptureSavedRef.current.size || 0),
+      loaded: expectedMode === 'screenshot'
+        ? Number(payload.captured || imageCaptureAppliedRef.current.size || 0)
+        : thumbnailLoadedRef.current.size,
+      completed,
+      failed: Math.max(
+        Number((payload.failed || 0) + (payload.blocked || 0) + (payload.missingAsset || 0)),
+        thumbnailErrorRef.current.size
+      ),
+      skipped: Number(payload.skipped || 0),
+      cached: Number(payload.cached || prev.cached || 0),
+      unavailable: Number(payload.unavailable || prev.unavailable || 0),
+      avgMs: completed ? Math.round(elapsed / completed) : prev.avgMs,
+    }));
+    return { savedButNotApplied: Array.from(savedButNotApplied) };
+  }, [
+    bumpThumbnailReload,
+    completeThumbnailCapture,
+    findNodeInCurrentMap,
+    getCaptureIssueNodeContext,
+    recordCaptureIssue,
+    updateNodeScreenshotAssets,
+  ]);
+
+  const runMapImageCaptureJob = useCallback(async ({
+    scope,
+    captureType,
+    mode,
+    targets,
+    targetIds,
+    cachedCount = 0,
+    unavailableCount = 0,
+  }) => {
+    if (!currentMap?.id) return false;
+    const mapId = currentMap.id;
+    const total = targets.length;
+    clearCaptureIssues();
+    imageCaptureAppliedUpdateKeysRef.current = new Set();
+    resetThumbnailQueue(total, cachedCount, true, mode, unavailableCount);
+    const runSessionId = thumbnailSessionRef.current;
+    thumbnailExpectedRef.current = new Set(targets.map((node) => node.id));
+    thumbnailElapsedStartRef.current = Date.now();
+    setThumbnailElapsedMs(0);
+    setThumbnailScopeIds(targetIds || new Set(targets.map((node) => node.id)));
+    setShowThumbnails(true);
+    setShowImageMenu(false);
+    trackEvent('screenshot_capture', {
+      type: captureType === 'full' ? 'full' : 'thumbnail',
+      scope,
+      count: total,
+      pipeline: 'job',
+    });
+
+    let jobId = null;
+    try {
+      const response = await api.createMapImageCaptureJob(mapId, {
+        captureType,
+        scope,
+        nodeIds: scope === 'selected' ? Array.from(selectedNodeIds) : [],
+        force: scope === 'selected',
+      });
+      jobId = response?.jobId;
+      if (!jobId) throw new Error('Image capture job did not start');
+      imageCaptureJobRef.current = { mapId, jobId, mode };
+    } catch (error) {
+      imageCaptureJobRef.current = null;
+      if (error?.status === 404 || error?.status === 405) return false;
+      showToast(error.message || 'Failed to start image capture job', 'error');
+      setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+      return true;
+    }
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const waitForCanvasThumbnailLoads = async (expectedTotal) => {
+      if (mode === 'screenshot') return true;
+      const expectedIds = new Set(thumbnailExpectedRef.current);
+      const totalToSettle = expectedTotal || expectedIds.size || total;
+      if (totalToSettle <= 0) return true;
+      const hasIssueForNode = (nodeId) => {
+        let hasIssue = false;
+        captureIssuesRef.current.forEach((issue) => {
+          if (String(issue.nodeId) === String(nodeId)) hasIssue = true;
+        });
+        return hasIssue;
+      };
+      const getSettledCount = () => {
+        const settledIds = new Set();
+        thumbnailLoadedRef.current.forEach((nodeId) => {
+          if (expectedIds.has(nodeId)) settledIds.add(nodeId);
+        });
+        captureIssuesRef.current.forEach((issue) => {
+          const nodeId = String(issue.nodeId || '');
+          if (expectedIds.has(nodeId)) settledIds.add(nodeId);
+        });
+        return Math.min(totalToSettle, settledIds.size);
+      };
+      const updateSettledStats = () => {
+        const completed = getSettledCount();
+        setThumbnailStats((prev) => ({
+          ...prev,
+          loaded: thumbnailLoadedRef.current.size,
+          completed,
+          failed: Math.max(prev.failed || 0, thumbnailErrorRef.current.size),
+        }));
+        return completed;
+      };
+      const startedAt = Date.now();
+      let lastCompleted = updateSettledStats();
+      let lastChangedAt = startedAt;
+      const maxWaitMs = Math.min(120000, Math.max(20000, totalToSettle * 250));
+      while (
+        thumbnailSessionRef.current === runSessionId
+        && !thumbnailStopRequestedRef.current
+        && !screenshotStopRequestedRef.current
+      ) {
+        if (lastCompleted >= totalToSettle) return true;
+        if (Date.now() - startedAt > maxWaitMs || Date.now() - lastChangedAt > 12000) break;
+        await sleep(250);
+        const nextCompleted = updateSettledStats();
+        if (nextCompleted !== lastCompleted) {
+          lastCompleted = nextCompleted;
+          lastChangedAt = Date.now();
+        }
+      }
+      expectedIds.forEach((nodeId) => {
+        if (thumbnailLoadedRef.current.has(nodeId) || hasIssueForNode(nodeId)) return;
+        const node = findNodeInCurrentMap(nodeId);
+        const hasAsset = !!getCaptureAssetUrl(node, 'thumbnail');
+        recordCaptureIssue({
+          nodeId,
+          status: hasAsset ? 'image_load' : 'missing_asset',
+          error: hasAsset
+            ? 'Image failed to load on the canvas'
+            : 'Saved image fields were not found on the map',
+        });
+        completeThumbnailCapture(nodeId, { captured: false });
+      });
+      return updateSettledStats() >= totalToSettle;
+    };
+    try {
+      while (thumbnailSessionRef.current === runSessionId) {
+        if (
+          (mode === 'screenshot' && screenshotStopRequestedRef.current)
+          || (mode !== 'screenshot' && thumbnailStopRequestedRef.current)
+        ) {
+          await api.cancelMapImageCaptureJob(mapId, jobId).catch(() => {});
+          setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+          imageCaptureJobRef.current = null;
+          return true;
+        }
+
+        const includeResult = false;
+        const { job } = await api.getMapImageCaptureJob(mapId, jobId, {
+          includeResult,
+          assetUpdateCursor: imageCaptureAssetCursorRef.current,
+        });
+        const reconciliation = applyImageCaptureJobUpdates(job, mode);
+        if (reconciliation?.savedButNotApplied?.length > 0) {
+          await reconcileSavedImageCaptureAssets({
+            mapId,
+            mode,
+            nodeIds: reconciliation.savedButNotApplied,
+          });
+        }
+
+        if (['complete', 'failed', 'canceled'].includes(job?.status)) {
+          const finalResponse = job.status === 'complete'
+            ? await api.getMapImageCaptureJob(mapId, jobId, {
+                includeResult: true,
+                assetUpdateCursor: imageCaptureAssetCursorRef.current,
+              })
+            : { job };
+          const finalJob = finalResponse.job || job;
+          const finalReconciliation = applyImageCaptureJobUpdates(finalJob, mode);
+          if (finalReconciliation?.savedButNotApplied?.length > 0) {
+            await reconcileSavedImageCaptureAssets({
+              mapId,
+              mode,
+              nodeIds: finalReconciliation.savedButNotApplied,
+            });
+          }
+          imageCaptureJobRef.current = null;
+
+          if (finalJob.status === 'canceled') {
+            setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+            showToast('Image capture stopped', 'warning');
+            return true;
+          }
+          if (finalJob.status === 'failed') {
+            setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+            showToast(finalJob.error || 'Image capture failed', 'error');
+            return true;
+          }
+
+          await validateCurrentMapImageAssets();
+          const summary = finalJob.result || finalJob.progress || {};
+          await waitForCanvasThumbnailLoads(Number(summary.total || targets.length || 0));
+          const shown = mode === 'screenshot'
+            ? Number(summary.captured || imageCaptureAppliedRef.current.size || 0)
+            : thumbnailLoadedRef.current.size;
+          const failed = Number((summary.failed || 0) + (summary.blocked || 0) + (summary.missingAsset || 0));
+          const skipped = Number(summary.skipped || 0);
+          const issueCount = Math.max(failed + skipped, captureIssuesRef.current.size);
+          const label = mode === 'screenshot' ? 'full screenshot' : 'thumbnail';
+          if (issueCount > 0) {
+            showToast(
+              `${shown} ${label}${shown === 1 ? '' : 's'} shown; ${issueCount} need attention`,
+              'warning',
+            );
+          } else {
+            showToast(`${shown} ${label}${shown === 1 ? '' : 's'} shown`, 'success');
+          }
+          trackEvent('screenshot_capture_complete', {
+            type: captureType === 'full' ? 'full' : 'thumbnail',
+            scope,
+            count: shown,
+            failed: issueCount,
+            skipped,
+            pipeline: 'job',
+          });
+          return true;
+        }
+        await sleep(1000);
+      }
+    } catch (error) {
+      imageCaptureJobRef.current = null;
+      showToast(error.message || 'Image capture failed', 'error');
+      setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+      return true;
+    }
+    imageCaptureJobRef.current = null;
+    return true;
+  }, [
+    applyImageCaptureJobUpdates,
+    clearCaptureIssues,
+    completeThumbnailCapture,
+    currentMap?.id,
+    findNodeInCurrentMap,
+    recordCaptureIssue,
+    reconcileSavedImageCaptureAssets,
+    selectedNodeIds,
+    showToast,
+    validateCurrentMapImageAssets,
+  ]);
+
   const handleThumbnailCapture = async (scope) => {
     if (warnCoeditingReadOnly('Thumbnail capture')) {
       return;
@@ -6002,6 +6546,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('No pages with URLs to capture', 'info');
       return;
     }
+    const handledByJob = await runMapImageCaptureJob({
+      scope,
+      captureType: 'thumb',
+      mode: 'thumbnail',
+      targets: candidates,
+      targetIds,
+      cachedCount,
+      unavailableCount,
+    });
+    if (handledByJob) return;
     resetThumbnailQueue(candidates.length, cachedCount, true, 'thumbnail', unavailableCount);
     thumbnailElapsedStartRef.current = Date.now();
     setThumbnailElapsedMs(0);
@@ -6239,6 +6793,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     thumbnailAbortControllersRef.current.forEach((controller) => controller.abort());
     thumbnailAbortControllersRef.current.clear();
+    const activeJob = imageCaptureJobRef.current;
+    if (activeJob?.mapId && activeJob?.jobId) {
+      api.cancelMapImageCaptureJob(activeJob.mapId, activeJob.jobId).catch((error) => {
+        console.warn('Failed to cancel image capture job', error);
+      });
+      imageCaptureJobRef.current = null;
+    }
     setThumbnailQueueSize(0);
     setThumbnailStats((prev) => ({ ...prev, stopped: true }));
     setTimeout(() => {
@@ -6553,6 +7114,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       if (!confirmed) return;
     }
+
+    const handledByJob = await runMapImageCaptureJob({
+      scope,
+      captureType: 'full',
+      mode: 'screenshot',
+      targets,
+      targetIds: new Set(targets.map((node) => node.id)),
+      cachedCount,
+      unavailableCount: 0,
+    });
+    if (handledByJob) return;
 
     setShowImageMenu(false);
     setShowThumbnails(true);
@@ -7569,6 +8141,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setThumbnailScopeIds(mapHasThumbnails ? new Set() : null);
     setShowImageMenu(false);
     setShowThumbnails(mapHasThumbnails);
+    clearCaptureIssues();
     resetThumbnailQueue(0);
     loadMapVersions(map.id);
     setShowProjectsModal(false);
@@ -7580,7 +8153,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`Loaded "${map.name}"`, 'success');
     }
     scheduleResetViewRef.current?.();
-  }, [applyTransform, loadMapVersions, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
+  }, [applyTransform, clearCaptureIssues, loadMapVersions, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
   const loadSavedMapById = useCallback(async (mapId, options = {}) => {
     const { map } = await api.getMap(mapId);
@@ -13581,6 +14154,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                 fullScreenshotsAllLabel: fullScreenshotCaptureStats.hasPartial
                   ? 'Get Screenshots (Remaining)'
                   : 'Get Screenshots (All)',
+                captureIssues: visibleCaptureIssues,
+                onSelectCaptureIssue: selectCaptureIssue,
+                onOpenCaptureIssueUrl: openCaptureIssueUrl,
                 showImageMenu,
                 imageMenuRef,
                 hasSelection: selectedNodeIds.size > 0,
@@ -13685,6 +14261,8 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (remaining <= 0) return null;
           const cached = thumbnailStats.cached || 0;
           const unavailable = thumbnailStats.unavailable || 0;
+          const skipped = thumbnailStats.skipped || 0;
+          const captured = thumbnailStats.loaded || 0;
           const isScreenshotCapture = thumbnailStats.mode === 'screenshot';
           const fallbackItemMs = isScreenshotCapture ? 30000 : 12000;
           const elapsedItemMs = completed > 0
@@ -13695,14 +14273,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           const etaConcurrency = activeConcurrency;
           const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
           const captureLabel = isScreenshotCapture ? 'Screenshots' : 'Thumbnails';
-          const title = `${captureLabel}: Captured ${thumbnailStats.loaded || 0} of ${total}`;
-          const batchLabel = thumbnailStats.batchTotal > 1 && thumbnailStats.batchIndex > 0
-            ? `Batch ${thumbnailStats.batchIndex} of ${thumbnailStats.batchTotal}`
-            : '';
+          const title = `${captureLabel}: ${captured} of ${total}`;
           const metaParts = [
-            batchLabel,
             cached > 0 ? `${cached} already had images` : '',
             unavailable > 0 ? `${unavailable} unavailable` : '',
+            skipped > 0 ? `${skipped} skipped` : '',
             thumbnailStats.failed > 0 ? `${thumbnailStats.failed} failed` : '',
           ].filter(Boolean);
           return (

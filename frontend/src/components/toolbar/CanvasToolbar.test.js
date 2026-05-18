@@ -265,4 +265,81 @@ describe('CanvasToolbar', () => {
 
     expect(onGetThumbnailsAll).toHaveBeenCalledTimes(1);
   });
+
+  test('shows capture issues in the image menu', () => {
+    const onSelectCaptureIssue = jest.fn();
+    const onOpenCaptureIssueUrl = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          captureIssues={[{
+            id: 'n1:file',
+            nodeId: 'n1',
+            pageNumber: '40',
+            title: 'Handbook',
+            url: 'https://example.com/file.pdf',
+            type: 'file',
+            label: 'PDF/file',
+          }]}
+          onSelectCaptureIssue={onSelectCaptureIssue}
+          onOpenCaptureIssueUrl={onOpenCaptureIssueUrl}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Capture issues');
+    expect(container.textContent).toContain('PDF/file');
+    expect(container.textContent).not.toContain('Batch');
+
+    const selectButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Select');
+    const openButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Open');
+
+    act(() => {
+      selectButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSelectCaptureIssue).toHaveBeenCalledTimes(1);
+    expect(onOpenCaptureIssueUrl).toHaveBeenCalledTimes(1);
+  });
 });
