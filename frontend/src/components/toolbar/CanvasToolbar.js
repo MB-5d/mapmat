@@ -169,7 +169,7 @@ const CanvasToolbar = ({
         disabled={!hasMap}
       />
       {showImageMenu && (
-        <MenuPanel className="canvas-tool-menu" role="menu">
+        <MenuPanel className="canvas-tool-menu canvas-tool-menu-images" role="menu">
           {hasAnyThumbnails && (
             <>
               <MenuItem

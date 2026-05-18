@@ -4558,6 +4558,13 @@ body {
   z-index: 2000;
 }
 
+.canvas-tool-menu-images {
+  max-height: min(520px, calc(100vh - 128px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .canvas-tool-menu.canvas-tool-menu-panel {
   min-width: 264px;
   padding: 12px;

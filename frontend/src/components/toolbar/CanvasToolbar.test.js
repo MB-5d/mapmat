@@ -342,4 +342,52 @@ describe('CanvasToolbar', () => {
     expect(onSelectCaptureIssue).toHaveBeenCalledTimes(1);
     expect(onOpenCaptureIssueUrl).toHaveBeenCalledTimes(1);
   });
+
+  test('marks the image menu as scrollable', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.querySelector('.canvas-tool-menu-images')).not.toBeNull();
+  });
 });
