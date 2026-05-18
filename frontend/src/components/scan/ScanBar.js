@@ -14,6 +14,7 @@ import {
 import Icon from '../ui/Icon';
 
 const SCAN_DEPTH_OPTIONS = Array.from({ length: 25 }, (_, index) => index + 1);
+const getScanDepthOptionLabel = (value) => `${value} ${value === 1 ? 'Level' : 'Levels'}`;
 
 const ScanBar = ({
   canEdit,
@@ -91,9 +92,9 @@ const ScanBar = ({
             <div className="layers-panel-list">
               <MenuSectionHeader className="layers-panel-section">Scan depth</MenuSectionHeader>
               <div className={`scan-options-depth-field${optionsDisabled ? ' is-disabled' : ''}`}>
-                <label className="scan-options-depth-label" htmlFor="scan-depth-select">Levels</label>
                 <SelectInput
                   id="scan-depth-select"
+                  aria-label="Scan depth levels"
                   shellClassName="scan-options-depth-select-shell"
                   inputClassName="scan-options-depth-select-input"
                   size="sm"
@@ -103,7 +104,7 @@ const ScanBar = ({
                   onClick={(e) => e.stopPropagation()}
                 >
                   {SCAN_DEPTH_OPTIONS.map((value) => (
-                    <option key={value} value={value}>{value}</option>
+                    <option key={value} value={value}>{getScanDepthOptionLabel(value)}</option>
                   ))}
                 </SelectInput>
               </div>

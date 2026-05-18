@@ -82,8 +82,11 @@ describe('ScanBar', () => {
     expect(urlInput.className).toContain('ui-input');
     expect(depthSelect.className).toContain('ui-select');
     expect(depthSelect.value).toBe('2');
+    expect(depthSelect.getAttribute('aria-label')).toBe('Scan depth levels');
+    expect(depthSelect.options[0].textContent).toBe('1 Level');
+    expect(depthSelect.options[1].textContent).toBe('2 Levels');
     expect(container.textContent).toContain('Scan depth');
-    expect(container.textContent).toContain('Levels');
+    expect(container.querySelector('.scan-options-depth-label')).toBeNull();
     expect(container.textContent).not.toContain('during testing');
     expect(scanButton.className).toContain('ui-btn');
     expect(scanButton.className).toContain('ui-btn--type-primary');

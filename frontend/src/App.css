@@ -4382,7 +4382,7 @@ body {
 
 .scan-options-depth-select-shell {
   --ui-select-min-width: 0;
-  width: 76px;
+  width: 112px;
   border-radius: var(--ui-radius-md);
 }
 
