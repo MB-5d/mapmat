@@ -6,6 +6,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
+const imageAssetStore = require('../stores/imageAssetStore');
 const collaborationStore = require('../stores/collaborationStore');
 const mapCommentStore = require('../stores/mapCommentStore');
 const feedbackStore = require('../stores/feedbackStore');
@@ -30,6 +31,12 @@ const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservabi
 const { buildHealthSnapshot: getEmailHealthSnapshot } = require('../utils/emailProvider');
 const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
 const { analyzeMapInsights } = require('../utils/mapInsights');
+const {
+  extractScreenshotStorageKey,
+  getContentTypeForKey,
+  getScreenshotStorageProvider,
+  statScreenshotObject,
+} = require('../utils/screenshotStorage');
 
 const router = express.Router();
 
@@ -303,6 +310,19 @@ const NODE_ASSET_BOOLEAN_FIELDS = new Set([
   'fullScreenshotTruncated',
 ]);
 
+const NODE_ASSET_IMAGE_URL_FIELDS = new Set([
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+]);
+
+function getNodeAssetManifestType(assetField, assets) {
+  if (assetField === 'fullScreenshotUrl') return 'full';
+  if (assetField === 'thumbnailFullUrl') return 'thumbnail_preview';
+  if (assetField === 'thumbnailUrl' && assets?.fullScreenshotUrl) return 'full_thumbnail';
+  return 'thumbnail';
+}
+
 function collectNodeAssetFields(root, orphans = []) {
   const assetsById = new Map();
   const visit = (node) => {
@@ -379,6 +399,146 @@ function preserveExistingImageAssets({ root, orphans, currentRoot, currentOrphan
       ? orphans.map((orphan) => mergePreservedNodeAssets(orphan, assetsById, result))
       : orphans,
   };
+}
+
+async function getVerifiedManifestAssetUpdatesById(mapId) {
+  let rows = [];
+  try {
+    rows = await imageAssetStore.listSavedImageAssetsByMapAsync(mapId);
+  } catch (error) {
+    console.warn('Image asset manifest read error:', error.message);
+    return new Map();
+  }
+
+  const updatesById = new Map();
+  const missingEntries = [];
+  const verifyRow = async (row) => {
+    const nodeId = String(row.node_id || '').trim();
+    const field = String(row.asset_field || '').trim();
+    const url = String(row.url || '').trim();
+    if (!nodeId || !NODE_ASSET_STRING_FIELDS.has(field) || !url) return null;
+
+    const storageKey = String(row.storage_key || '').trim() || extractScreenshotStorageKey(url);
+    const stats = storageKey ? await statScreenshotObject(storageKey) : null;
+    if (!stats || Number(stats.size || 0) <= 0) {
+      return {
+        missing: {
+          mapId,
+          nodeId,
+          assetField: field,
+          assetType: row.asset_type || field,
+          storageKey: storageKey || null,
+          url,
+          provider: row.provider || getScreenshotStorageProvider(),
+          contentType: storageKey ? getContentTypeForKey(storageKey) : null,
+          status: 'missing',
+          error: 'Missing saved asset',
+        },
+      };
+    }
+
+    return { nodeId, field, url };
+  };
+
+  const validationConcurrency = 16;
+  for (let start = 0; start < (rows || []).length; start += validationConcurrency) {
+    const batch = rows.slice(start, start + validationConcurrency);
+    const results = await Promise.all(batch.map(verifyRow));
+    results.filter(Boolean).forEach((result) => {
+      if (result.missing) {
+        missingEntries.push(result.missing);
+        return;
+      }
+      updatesById.set(result.nodeId, {
+        ...(updatesById.get(result.nodeId) || {}),
+        [result.field]: result.url,
+      });
+    });
+  }
+
+  if (missingEntries.length > 0) {
+    imageAssetStore.markImageAssetsMissingAsync(missingEntries).catch((error) => {
+      console.warn('Image asset manifest missing mark error:', error.message);
+    });
+  }
+
+  return updatesById;
+}
+
+async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}) {
+  const parsed = parseMapFields(mapRow);
+  const updatesById = await getVerifiedManifestAssetUpdatesById(mapRow.id);
+  if (updatesById.size === 0) {
+    return { row: mapRow, parsed, changed: false };
+  }
+
+  const nextMap = applyNodeAssetUpdatesToMapData({
+    root: parsed.root,
+    orphans: parsed.orphans,
+    updatesById,
+  });
+  if (!nextMap.changed) {
+    return { row: mapRow, parsed, changed: false };
+  }
+
+  const sanitizedTree = sanitizeMapTreeForStorage({
+    root: nextMap.root,
+    orphans: nextMap.orphans,
+  });
+  const nextRow = {
+    ...mapRow,
+    root_data: JSON.stringify(sanitizedTree.root),
+    orphans_data: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+  };
+
+  if (persist) {
+    await mapStore.updateMapByIdAsync(mapRow.id, {
+      rootData: nextRow.root_data,
+      orphansData: nextRow.orphans_data,
+    });
+  }
+
+  return {
+    row: nextRow,
+    parsed: {
+      ...parsed,
+      root: sanitizedTree.root,
+      orphans: sanitizedTree.orphans || [],
+    },
+    changed: true,
+  };
+}
+
+async function upsertManifestForNodeAssetUpdates(mapId, updatesById) {
+  const manifestEntries = [];
+  for (const [nodeId, assets] of updatesById.entries()) {
+    for (const [assetField, value] of Object.entries(assets || {})) {
+      if (!NODE_ASSET_IMAGE_URL_FIELDS.has(assetField) || typeof value !== 'string' || !value.trim()) {
+        continue;
+      }
+      const storageKey = extractScreenshotStorageKey(value);
+      const stats = storageKey ? await statScreenshotObject(storageKey) : null;
+      manifestEntries.push({
+        mapId,
+        nodeId,
+        assetField,
+        assetType: getNodeAssetManifestType(assetField, assets),
+        storageKey: storageKey || null,
+        url: value,
+        provider: getScreenshotStorageProvider(),
+        sizeBytes: stats?.size || null,
+        contentType: storageKey ? getContentTypeForKey(storageKey) : null,
+        status: stats && Number(stats.size || 0) > 0 ? 'saved' : 'missing',
+        error: stats && Number(stats.size || 0) > 0 ? null : 'Missing saved asset',
+        capturedAt: new Date().toISOString(),
+        verifiedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  if (manifestEntries.length > 0) {
+    await imageAssetStore.upsertImageAssetsAsync(manifestEntries);
+  }
 }
 
 function normalizeNodeAssetUpdates(rawUpdates) {
@@ -1323,10 +1483,11 @@ router.get('/maps/:id', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
+    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
     res.json({
       map: {
-        ...map,
-        ...parseMapFields(map),
+        ...repaired.row,
+        ...repaired.parsed,
       },
     });
   } catch (error) {
@@ -1550,8 +1711,18 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     let treeRoot = root;
     let treeOrphans = orphans;
     if (root !== undefined || orphans !== undefined) {
-      const currentRoot = safeParse(map.root_data, 'root_data', null);
-      const currentOrphans = safeParse(map.orphans_data, 'orphans_data', []);
+      let currentRoot = safeParse(map.root_data, 'root_data', null);
+      let currentOrphans = safeParse(map.orphans_data, 'orphans_data', []);
+      const manifestUpdatesById = await getVerifiedManifestAssetUpdatesById(id);
+      if (manifestUpdatesById.size > 0) {
+        const repairedCurrent = applyNodeAssetUpdatesToMapData({
+          root: currentRoot,
+          orphans: currentOrphans,
+          updatesById: manifestUpdatesById,
+        });
+        currentRoot = repairedCurrent.root;
+        currentOrphans = repairedCurrent.orphans;
+      }
       const preservedTree = preserveExistingImageAssets({
         root,
         orphans,
@@ -1660,6 +1831,7 @@ router.patch('/maps/:id/node-assets', requireAuth, async (req, res) => {
       rootData: JSON.stringify(sanitizedTree.root),
       orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
     });
+    await upsertManifestForNodeAssetUpdates(id, updatesById);
 
     const updated = await mapStore.getMapByIdAsync(id);
     return res.json({

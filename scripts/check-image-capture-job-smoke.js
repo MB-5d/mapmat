@@ -8,6 +8,7 @@ const http = require('http');
 const net = require('net');
 const os = require('os');
 const path = require('path');
+const Database = require('better-sqlite3');
 
 function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -182,6 +183,20 @@ async function assertAssetLoads(apiBase, assetUrl) {
   return { url: absoluteUrl, bytes: buffer.length };
 }
 
+function getSavedManifestCount(dbPath, mapId) {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM map_image_assets
+      WHERE map_id = ? AND status = 'saved' AND url IS NOT NULL
+    `).get(mapId);
+    return Number(row?.count || 0);
+  } finally {
+    db.close();
+  }
+}
+
 async function run() {
   const backendPort = await getFreePort();
   const fixturePort = await getFreePort();
@@ -294,6 +309,37 @@ async function run() {
         assert(page.thumbnailCaptureFailed, `skipped page missing failure marker for ${page.id}`);
       });
     await assertAssetLoads(apiBase, thumbNodes.find((page) => page.id === 'main-0').thumbnailUrl);
+    const savedManifestCount = getSavedManifestCount(dbPath, mapId);
+    assert(
+      savedManifestCount >= storedThumbnailCount,
+      'manifest saved count should cover stored thumbnails'
+    );
+
+    const mainThumbnailUrl = thumbNodes.find((page) => page.id === 'main-0').thumbnailUrl;
+    const mainThumbnailFilename = path.basename(new URL(mainThumbnailUrl, apiBase).pathname);
+    fs.unlinkSync(path.join(screenshotDir, mainThumbnailFilename));
+    const missingValidation = await fetchJson(`${apiBase}/screenshot-assets/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ urls: [mainThumbnailUrl] }),
+    }, cookieJar);
+    assert.strictEqual(
+      missingValidation.results[mainThumbnailUrl].available,
+      false,
+      'deleted thumbnail should validate as missing'
+    );
+
+    const retryStart = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs`, {
+      method: 'POST',
+      body: JSON.stringify({ captureType: 'thumb', scope: 'all' }),
+    }, cookieJar);
+    const retryJob = await pollImageCaptureJob(apiBase, mapId, retryStart.jobId, cookieJar);
+    assert.strictEqual(retryJob.result.captured, 1, 'missing thumbnail should be recaptured');
+    assert.strictEqual(retryJob.result.missingAsset, 0, 'retry should not count verified asset as missing');
+    const afterRetry = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
+    const afterRetryMain = collectNodes(afterRetry.map.root, afterRetry.map.orphans)
+      .find((page) => page.id === 'main-0');
+    await assertAssetLoads(apiBase, afterRetryMain.thumbnailUrl);
+
     const cursorCheck = await fetchJson(
       `${apiBase}/api/maps/${mapId}/image-capture-jobs/${thumbStart.jobId}?include_result=false&asset_update_cursor=${thumbJob.result.assetUpdateCursor}`,
       {},
@@ -316,6 +362,17 @@ async function run() {
     assert(fullResult?.url && /_full_v\d+\.jpe?g/i.test(fullResult.url), 'full screenshot did not return a full asset');
     assert(Number(fullResult.width) >= 1000, `full screenshot width too low: ${fullResult.width}`);
     await assertAssetLoads(apiBase, fullResult.url);
+    const fullFilename = path.basename(new URL(fullResult.url, apiBase).pathname);
+    fs.unlinkSync(path.join(screenshotDir, fullFilename));
+    const missingFullValidation = await fetchJson(`${apiBase}/screenshot-assets/validate`, {
+      method: 'POST',
+      body: JSON.stringify({ urls: [fullResult.url] }),
+    }, cookieJar);
+    assert.strictEqual(
+      missingFullValidation.results[fullResult.url].available,
+      false,
+      'deleted full screenshot should validate as missing'
+    );
 
     console.log('image capture job smoke ok');
   } finally {

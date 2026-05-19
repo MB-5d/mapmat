@@ -86,3 +86,47 @@ export function getReconciledCaptureProgress({ total = 0, loadedIds, issueCount 
     completed: Math.min(total, loaded + issueCount),
   };
 }
+
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export function formatImageCaptureCompletionToast({
+  shown = 0,
+  label = 'thumbnail',
+  failed = 0,
+  skipped = 0,
+  issueCount = 0,
+  issueLabels = [],
+} = {}) {
+  const safeShown = Math.max(0, Number(shown) || 0);
+  const safeFailed = Math.max(0, Number(failed) || 0);
+  const safeSkipped = Math.max(0, Number(skipped) || 0);
+  const safeIssueCount = Math.max(safeFailed + safeSkipped, Number(issueCount) || 0);
+  const itemLabel = label === 'full screenshot' ? 'full screenshot' : label;
+  const capturedText = safeShown > 0
+    ? `Captured ${pluralize(safeShown, itemLabel)}`
+    : `No ${itemLabel}${itemLabel.endsWith('s') ? '' : 's'} captured`;
+
+  if (safeIssueCount <= 0) {
+    return { message: capturedText, type: 'success' };
+  }
+
+  const problemParts = [];
+  if (safeFailed > 0) problemParts.push(`${pluralize(safeFailed, 'page')} failed`);
+  if (safeSkipped > 0) problemParts.push(`${pluralize(safeSkipped, 'page')} skipped`);
+  const knownProblemCount = safeFailed + safeSkipped;
+  if (knownProblemCount === 0) {
+    problemParts.push(`${pluralize(safeIssueCount, 'page')} ${safeIssueCount === 1 ? 'needs' : 'need'} review`);
+  }
+  const uniqueLabels = Array.from(new Set(
+    (issueLabels || []).map((value) => String(value || '').trim()).filter(Boolean)
+  ));
+  const labelText = uniqueLabels.length > 0
+    ? ` (${uniqueLabels.slice(0, 2).join(', ')}${uniqueLabels.length > 2 ? ', more' : ''})`
+    : '';
+  return {
+    message: `${capturedText}. ${problemParts.join('; ')}${labelText}. Open Capture issues for details.`,
+    type: 'warning',
+  };
+}

@@ -1,6 +1,7 @@
 import {
   CAPTURE_ISSUE_TYPES,
   buildCaptureIssueFromResult,
+  formatImageCaptureCompletionToast,
   getReconciledCaptureProgress,
 } from './captureIssues';
 
@@ -64,5 +65,25 @@ describe('captureIssues', () => {
     expect(progress.loaded).toBe(3);
     expect(progress.completed).toBe(5);
     expect(progress.total).toBe(918);
+  });
+
+  test('formats completion toasts with clear skipped and failed counts', () => {
+    expect(formatImageCaptureCompletionToast({
+      shown: 1,
+      label: 'full screenshot',
+      skipped: 1,
+      issueLabels: ['Inactive page'],
+    })).toEqual({
+      message: 'Captured 1 full screenshot. 1 page skipped (Inactive page). Open Capture issues for details.',
+      type: 'warning',
+    });
+
+    expect(formatImageCaptureCompletionToast({
+      shown: 3,
+      label: 'thumbnail',
+    })).toEqual({
+      message: 'Captured 3 thumbnails',
+      type: 'success',
+    });
   });
 });

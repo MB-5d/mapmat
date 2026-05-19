@@ -23,7 +23,7 @@ describe('ScanBar', () => {
     jest.clearAllMocks();
   });
 
-  test('uses shared input, select, and button primitives for standard scan controls', () => {
+  test('uses shared input and button primitives for standard scan controls', () => {
     const optionsRef = createRef();
     const onClearUrl = jest.fn();
 
@@ -53,8 +53,6 @@ describe('ScanBar', () => {
             scanLayerAvailability={{}}
             scanLayerVisibility={{}}
             onToggleScanLayer={jest.fn()}
-            scanDepth={2}
-            onScanDepthChange={jest.fn()}
             onScan={jest.fn()}
             scanDisabled={false}
             scanTitle="Run scan"
@@ -68,7 +66,6 @@ describe('ScanBar', () => {
     });
 
     const urlInput = container.querySelector('.search-container input:not([type="checkbox"])');
-    const depthSelect = container.querySelector('.scan-options-depth-select-input');
     const scanButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Scan')
     );
@@ -80,12 +77,8 @@ describe('ScanBar', () => {
     );
 
     expect(urlInput.className).toContain('ui-input');
-    expect(depthSelect.className).toContain('ui-select');
-    expect(depthSelect.value).toBe('2');
-    expect(depthSelect.getAttribute('aria-label')).toBe('Scan depth levels');
-    expect(depthSelect.options[0].textContent).toBe('1 Level');
-    expect(depthSelect.options[1].textContent).toBe('2 Levels');
-    expect(container.textContent).toContain('Scan depth');
+    expect(container.querySelector('.scan-options-depth-select-input')).toBeNull();
+    expect(container.textContent).not.toContain('Scan depth');
     expect(container.querySelector('.scan-options-depth-label')).toBeNull();
     expect(container.textContent).not.toContain('during testing');
     expect(scanButton.className).toContain('ui-btn');

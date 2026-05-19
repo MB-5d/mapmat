@@ -97,7 +97,7 @@ export const computeLayout = (
     const parentLayout = nodes.get(parentNode.id);
     if (!parentLayout) return NODE_H;
 
-  const shouldStack = shouldStackChildren(parentNode.children, parentDepth);
+    const shouldStack = shouldStackChildren(parentNode.children, parentDepth);
     const isExpanded = !!expandedStacks[parentNode.id];
 
     // If no children: subtree is just the parent card

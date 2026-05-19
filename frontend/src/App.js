@@ -127,6 +127,7 @@ import {
 } from './utils/analytics';
 import {
   buildCaptureIssueFromResult,
+  formatImageCaptureCompletionToast,
   getReconciledCaptureProgress,
   normalizeCaptureIssue,
 } from './utils/captureIssues';
@@ -134,6 +135,14 @@ import {
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
 const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
 const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
+
+function getImageCaptureJobErrorMessage(error, fallback = 'Image capture failed') {
+  const message = String(error?.message || error?.error || '').trim();
+  if (/unknown job type:\s*image_capture/i.test(message)) {
+    return 'Screenshot capture did not start because staging is still updating. Refresh in a minute and retry.';
+  }
+  return message || fallback;
+}
 
 // ============================================================================
 // SITEMAP TREE COMPONENT (Deterministic Layout with Absolute Positioning)
@@ -1624,9 +1633,8 @@ const normalizeOrphans = (list) => (list || [])
     orphanType: orphan.orphanType || 'orphan',
   }));
 
-const normalizeScanConfig = ({ url, depth, options }) => ({
+const normalizeScanConfig = ({ url, options }) => ({
   url: normalizeUrlForCompare(url || ''),
-  depth: Number.parseInt(depth, 10) || 4,
   options: Object.keys(options || {})
     .sort()
     .reduce((acc, key) => {
@@ -1637,7 +1645,6 @@ const normalizeScanConfig = ({ url, depth, options }) => ({
 
 const scanConfigsHaveOptionChanges = (nextConfig, previousConfig) => {
   if (!nextConfig || !previousConfig) return false;
-  if (nextConfig.depth !== previousConfig.depth) return true;
   const keys = new Set([
     ...Object.keys(nextConfig.options || {}),
     ...Object.keys(previousConfig.options || {}),
@@ -1784,7 +1791,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     crosslinks: false,
   });
   const [showScanOptions, setShowScanOptions] = useState(false);
-  const [scanDepth, setScanDepth] = useState('4');
   const [lastCompletedScanConfig, setLastCompletedScanConfig] = useState(null);
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
@@ -2274,9 +2280,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const isUnsavedScannedMap = hasMap && !currentMap?.id && !isImportedMap;
   const currentScanConfig = useMemo(() => normalizeScanConfig({
     url: urlInput,
-    depth: scanDepth,
     options: scanOptions,
-  }), [urlInput, scanDepth, scanOptions]);
+  }), [urlInput, scanOptions]);
   const hasTopbarRescanChanges = isUnsavedScannedMap
     && scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig);
   useEffect(() => {
@@ -4873,6 +4878,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (!cancelled && version) {
           lastAutosaveVersionAtRef.current = request.changedAt || Date.now();
           lastAutosaveCheckpointKeyRef.current = checkpointKey;
+          if (showVersionHistoryDrawer && canViewActivityValue) {
+            await loadMapActivity(request.mapId, { silent: true, allowToast: false });
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -4886,7 +4894,43 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       cancelled = true;
     };
-  }, [autosaveCheckpointRequest, createVersionFromSnapshot, currentMap?.id, serializeVersionSnapshot]);
+  }, [
+    autosaveCheckpointRequest,
+    canViewActivityValue,
+    createVersionFromSnapshot,
+    currentMap?.id,
+    loadMapActivity,
+    serializeVersionSnapshot,
+    showVersionHistoryDrawer,
+  ]);
+
+  const refreshTimelineAfterImageCapture = useCallback(async () => {
+    if (!currentMap?.id) return;
+    try {
+      const version = await createVersionFromSnapshot({
+        mapId: currentMap.id,
+        name: 'Autosaved',
+      });
+      if (version) {
+        lastAutosaveVersionAtRef.current = Date.now();
+      }
+      if (showVersionHistoryDrawer) {
+        await loadMapVersions(currentMap.id);
+      }
+      if (canViewActivityValue) {
+        await loadMapActivity(currentMap.id, { silent: true, allowToast: false });
+      }
+    } catch (error) {
+      console.warn('Failed to refresh timeline after image capture', error);
+    }
+  }, [
+    canViewActivityValue,
+    createVersionFromSnapshot,
+    currentMap?.id,
+    loadMapActivity,
+    loadMapVersions,
+    showVersionHistoryDrawer,
+  ]);
 
   useEffect(() => {
     if (!isViewingHistoricalVersion) return;
@@ -6307,6 +6351,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!currentMap?.id) return false;
     const mapId = currentMap.id;
     const total = targets.length;
+    const targetIdSet = new Set((targets || []).map((node) => String(node?.id || '')).filter(Boolean));
     clearCaptureIssues();
     imageCaptureAppliedUpdateKeysRef.current = new Set();
     resetThumbnailQueue(total, cachedCount, true, mode, unavailableCount);
@@ -6338,7 +6383,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     } catch (error) {
       imageCaptureJobRef.current = null;
       if (error?.status === 404 || error?.status === 405) return false;
-      showToast(error.message || 'Failed to start image capture job', 'error');
+      showToast(getImageCaptureJobErrorMessage(error, 'Failed to start image capture job'), 'error');
       setThumbnailStats((prev) => ({ ...prev, stopped: true }));
       return true;
     }
@@ -6461,27 +6506,36 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
           if (finalJob.status === 'failed') {
             setThumbnailStats((prev) => ({ ...prev, stopped: true }));
-            showToast(finalJob.error || 'Image capture failed', 'error');
+            showToast(getImageCaptureJobErrorMessage(finalJob, 'Image capture failed'), 'error');
             return true;
           }
 
           await validateCurrentMapImageAssets();
           const summary = finalJob.result || finalJob.progress || {};
           await waitForCanvasThumbnailLoads(Number(summary.total || targets.length || 0));
+          await refreshTimelineAfterImageCapture();
           const shown = mode === 'screenshot'
             ? Number(summary.captured || imageCaptureAppliedRef.current.size || 0)
             : thumbnailLoadedRef.current.size;
           const failed = Number((summary.failed || 0) + (summary.blocked || 0) + (summary.missingAsset || 0));
           const skipped = Number(summary.skipped || 0);
-          const issueCount = Math.max(failed + skipped, captureIssuesRef.current.size);
+          const currentIssues = Array.from(captureIssuesRef.current.values())
+            .filter((issue) => targetIdSet.size === 0 || targetIdSet.has(String(issue.nodeId || '')));
+          const issueCount = Math.max(failed + skipped, currentIssues.length);
+          const issueLabels = currentIssues.map((issue) => issue.label);
           const label = mode === 'screenshot' ? 'full screenshot' : 'thumbnail';
+          const toastResult = formatImageCaptureCompletionToast({
+            shown,
+            label,
+            failed,
+            skipped,
+            issueCount,
+            issueLabels,
+          });
           if (issueCount > 0) {
-            showToast(
-              `${shown} ${label}${shown === 1 ? '' : 's'} shown; ${issueCount} need attention`,
-              'warning',
-            );
+            showToast(toastResult.message, toastResult.type);
           } else {
-            showToast(`${shown} ${label}${shown === 1 ? '' : 's'} shown`, 'success');
+            showToast(toastResult.message, toastResult.type);
           }
           trackEvent('screenshot_capture_complete', {
             type: captureType === 'full' ? 'full' : 'thumbnail',
@@ -6497,7 +6551,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     } catch (error) {
       imageCaptureJobRef.current = null;
-      showToast(error.message || 'Image capture failed', 'error');
+      showToast(getImageCaptureJobErrorMessage(error, 'Image capture failed'), 'error');
       setThumbnailStats((prev) => ({ ...prev, stopped: true }));
       return true;
     }
@@ -6511,6 +6565,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     findNodeInCurrentMap,
     recordCaptureIssue,
     reconcileSavedImageCaptureAssets,
+    refreshTimelineAfterImageCapture,
     selectedNodeIds,
     showToast,
     validateCurrentMapImageAssets,
@@ -8418,7 +8473,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   // History functions
-  const addToHistory = async (url, rootData, pageCount, scanConfig, depthValue, snapshot = null) => {
+  const addToHistory = async (url, rootData, pageCount, scanConfig, snapshot = null) => {
     if (!isLoggedIn) return; // Only save history for logged-in users
 
     const historyOrphans = Array.isArray(snapshot?.orphans) ? snapshot.orphans : orphans;
@@ -8438,7 +8493,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         colors: historyColors,
         connectionColors: historyConnectionColors,
         scan_options: scanConfig || null,
-        scan_depth: Number.isFinite(depthValue) ? depthValue : null,
+        scan_depth: null,
         map_id: null,
       });
 
@@ -8456,7 +8511,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         colors: historyColors,
         connectionColors: historyConnectionColors,
         scan_options: scanConfig || null,
-        scan_depth: Number.isFinite(depthValue) ? depthValue : null,
+        scan_depth: null,
         map_id: null,
       };
 
@@ -8695,13 +8750,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
-    const parsedDepth = Number.parseInt(scanDepth, 10);
-    const depthValue = Number.isFinite(parsedDepth) && parsedDepth > 0
-      ? parsedDepth
-      : 4;
     const requestedScanConfig = normalizeScanConfig({
       url,
-      depth: depthValue,
       options: scanOptions,
     });
     const shouldMergeScanResult = isUnsavedScannedMap
@@ -8719,7 +8769,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
     trackEvent('scan_started', {
-      depth: depthValue,
       authenticated_pages: scanOptions.authenticatedPages ? 'true' : 'false',
     });
 
@@ -8731,7 +8780,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     try {
       const jobResponse = await api.createScanJob({
         url,
-        maxDepth: depthValue,
         options: scanConfig,
       });
       jobId = jobResponse?.jobId;
@@ -8918,14 +8966,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
       })();
       const pageCount = countNodes(merged.root);
-      addToHistory(url, merged.root, pageCount, scanConfig, depthValue, {
+      addToHistory(url, merged.root, pageCount, scanConfig, {
         orphans: merged.orphans,
         connections: nextConnections,
       });
       trackEvent('scan_completed', {
         hostname,
         page_count: pageCount,
-        depth: depthValue,
         partial: isPartialResult ? 'true' : 'false',
         partial_reason: data.partialReason || '',
       });
@@ -12992,15 +13039,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanLayerAvailability={scanLayerAvailability}
         scanLayerVisibility={scanLayerVisibility}
         onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
-        scanDepth={scanDepth}
-        onScanDepthChange={(value) => {
-          const cleaned = value.replace(/[^\d]/g, '');
-          if (!cleaned) {
-            setScanDepth('');
-            return;
-          }
-          setScanDepth(String(Number(cleaned)));
-        }}
         onScan={scan}
         scanLabel={hasTopbarRescanChanges ? 'Update' : 'Scan'}
         scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !hasTopbarRescanChanges)}
@@ -13171,15 +13209,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                     scanLayerAvailability={scanLayerAvailability}
                     scanLayerVisibility={scanLayerVisibility}
                     onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
-                    scanDepth={scanDepth}
-                    onScanDepthChange={(value) => {
-                      const cleaned = value.replace(/[^\d]/g, '');
-                      if (!cleaned) {
-                        setScanDepth('');
-                        return;
-                      }
-                      setScanDepth(String(Number(cleaned)));
-                    }}
                     onScan={scan}
                     scanLabel="Scan"
                     scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
@@ -14147,11 +14176,15 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasFullScreenshotAssets: hasAnyFullScreenshotAssets,
                 hasSelectedFullScreenshotAssets: hasSelectedFullScreenshotAssets,
                 allThumbnailsCaptured,
-                thumbnailsAllLabel: thumbnailCaptureStats.hasPartial
+                thumbnailsAllLabel: invalidThumbnailAssetIds.size > 0
+                  ? 'Retry Missing Thumbnails'
+                  : thumbnailCaptureStats.hasPartial
                   ? 'Get Thumbnails (Remaining)'
                   : 'Get Thumbnails (All)',
                 allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
-                fullScreenshotsAllLabel: fullScreenshotCaptureStats.hasPartial
+                fullScreenshotsAllLabel: invalidFullScreenshotAssetIds.size > 0
+                  ? 'Retry Missing Screenshots'
+                  : fullScreenshotCaptureStats.hasPartial
                   ? 'Get Screenshots (Remaining)'
                   : 'Get Screenshots (All)',
                 captureIssues: visibleCaptureIssues,

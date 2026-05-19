@@ -146,7 +146,7 @@ npm run check:staging:backend
 Expected:
 
 - only warnings for `EMAIL_PROVIDER=log`
-- warning about filesystem-backed screenshots
+- no screenshot storage errors; `SCREENSHOT_STORAGE_PROVIDER=r2` and R2 credentials must be set
 
 ## 4. Prepare the Staging Frontend Env
 
@@ -193,9 +193,9 @@ Database:
 
 Important:
 
-- screenshots are still filesystem-backed
-- for staging, keep this backend single-instance
-- use a persistent volume if possible
+- screenshots must be R2-backed in staging
+- `/screenshots/:filename` stays stable while the backend reads the object from R2
+- local screenshot storage is only for development
 
 Railway dashboard actions:
 

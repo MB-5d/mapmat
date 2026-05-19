@@ -68,9 +68,9 @@ For the current internal alpha, keep staging simple:
 
 Important current infrastructure constraint:
 
-- screenshots are still stored on local disk under `/screenshots` in the backend
-- that is acceptable for early staging only if you keep backend runtime simple
-- do not treat this as horizontally scalable screenshot storage yet
+- screenshots must use `SCREENSHOT_STORAGE_PROVIDER=r2` for durable staging storage
+- `/screenshots/:filename` remains the app-facing URL, but the backend reads from R2 in staging/prod
+- local filesystem storage is only a dev fallback
 
 ## Phase 2: Provision the Backend
 

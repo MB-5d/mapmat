@@ -18,6 +18,7 @@
     "check:scan-job-tree": "node scripts/check-scan-job-tree.js",
     "check:image-capture": "node scripts/check-image-capture-ordering.js",
     "check:image-capture:smoke": "node scripts/check-image-capture-job-smoke.js",
+    "check:screenshot-storage": "node --check utils/screenshotStorage.js && node --check stores/imageAssetStore.js && node --check scripts/check-screenshot-storage.js && node scripts/check-screenshot-storage.js",
     "check:db-health": "node scripts/check-db-health.js",
     "check:db-health:staging": "HEALTH_DB_URL=\"https://api-staging.vellic.io/health/db\" REQUIRE_RUNTIME=postgres REQUIRE_RUNTIME_REQUESTED=postgres EXPECT_RUNTIME_FALLBACK=false node scripts/check-db-health.js",
     "check:db-health:staging:postgres": "npm run check:db-health:staging",

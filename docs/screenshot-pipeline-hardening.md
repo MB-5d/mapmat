@@ -20,9 +20,8 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 - `SCREENSHOT_FULL_MAX_WIDTH=1920`
 - `SCREENSHOT_CLEANUP_INTERVAL_MS=300000`
 - `SCREENSHOT_CLEANUP_MAX_FILES=50`
-- `SCREENSHOT_STORAGE_PROVIDER=local`
+- `SCREENSHOT_STORAGE_PROVIDER=r2` for staging/prod; local remains the dev fallback
 - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
-- `R2_PUBLIC_BASE_URL=https://<public screenshot asset host>`
 - `SCREENSHOT_ACTIVE_LIMIT_PER_IDENTITY=50`
 - `SCREENSHOT_ACTIVE_LIMIT_PER_HOST=25`
 - `SCREENSHOT_ACTIVE_LIMIT_GLOBAL=500`
@@ -34,8 +33,8 @@ Phase 9F revisits full-size screenshot capture and adds safety controls without 
 
 - Run the normal API service with `RUN_MODE=web`.
 - Run a separate Railway worker service from the same image with `RUN_MODE=worker` or `npm run start:worker`.
-- Keep screenshot capture on the web service until local `/screenshots` capture is verified stable.
-- Re-enable R2 and the screenshot worker only after the local capture path passes staging validation.
+- Serve stored assets through `/screenshots/:filename`; staging/prod backs that route with R2.
+- Keep the local filesystem path for development only.
 
 ## API behavior notes
 

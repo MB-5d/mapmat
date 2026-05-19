@@ -8,7 +8,9 @@ const PORT = Number(process.env.SCAN_JOB_TREE_PORT || 4307);
 const API_BASE = process.env.API_BASE || `http://127.0.0.1:${PORT}`;
 const SCAN_URL = process.env.SCAN_JOB_TREE_URL || 'https://flora.ai';
 const MAX_PAGES = Number(process.env.SCAN_JOB_TREE_MAX_PAGES || 1000);
-const MAX_DEPTH = Number(process.env.SCAN_JOB_TREE_MAX_DEPTH || 4);
+const MAX_DEPTH = process.env.SCAN_JOB_TREE_MAX_DEPTH
+  ? Number(process.env.SCAN_JOB_TREE_MAX_DEPTH)
+  : null;
 const MIN_ROOT_CHILDREN = Number(process.env.SCAN_JOB_TREE_MIN_ROOT_CHILDREN || 2);
 const MIN_TOTAL_NODES = Number(process.env.SCAN_JOB_TREE_MIN_TOTAL_NODES || 5);
 const TIMEOUT_MS = Number(process.env.SCAN_JOB_TREE_TIMEOUT_MS || 120000);
@@ -71,14 +73,17 @@ async function waitForScanJob(jobId, accessToken) {
 
 async function runCheck() {
   await waitForHealth();
+  const scanPayload = {
+    url: SCAN_URL,
+    maxPages: MAX_PAGES,
+    options: {},
+  };
+  if (MAX_DEPTH !== null) {
+    scanPayload.maxDepth = MAX_DEPTH;
+  }
   const created = await fetchJson(`${API_BASE}/scan-jobs`, {
     method: 'POST',
-    body: JSON.stringify({
-      url: SCAN_URL,
-      maxPages: MAX_PAGES,
-      maxDepth: MAX_DEPTH,
-      options: {},
-    }),
+    body: JSON.stringify(scanPayload),
   });
 
   if (!created?.jobId || !created?.jobAccessToken) {

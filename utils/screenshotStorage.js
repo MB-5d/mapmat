@@ -3,26 +3,36 @@ const fs = require('fs');
 const path = require('path');
 
 const SCREENSHOT_PUBLIC_BASE = '/screenshots';
-const SCREENSHOT_LOCAL_DIR = path.join(__dirname, '..', 'screenshots');
+const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH || null;
+const SCREENSHOT_LOCAL_DIR = process.env.SCREENSHOT_STORAGE_DIR
+  || process.env.SCREENSHOT_DIR
+  || (railwayVolumeDir ? path.join(railwayVolumeDir, 'screenshots') : path.join(__dirname, '..', 'screenshots'));
 const SCREENSHOT_STORAGE_PROVIDER = String(process.env.SCREENSHOT_STORAGE_PROVIDER || 'local').trim().toLowerCase();
 
 const R2_BUCKET = process.env.R2_BUCKET || process.env.SCREENSHOT_R2_BUCKET || '';
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || '';
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || '';
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || '';
-const R2_PUBLIC_BASE_URL = String(process.env.R2_PUBLIC_BASE_URL || process.env.SCREENSHOT_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
 const R2_ENDPOINT = String(
   process.env.R2_ENDPOINT
   || (R2_ACCOUNT_ID ? `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : '')
 ).replace(/\/+$/, '');
 
+const isR2Selected = () => SCREENSHOT_STORAGE_PROVIDER === 'r2';
+
 const isR2Configured = () => (
-  SCREENSHOT_STORAGE_PROVIDER === 'r2'
+  isR2Selected()
   && R2_BUCKET
   && R2_ENDPOINT
   && R2_ACCESS_KEY_ID
   && R2_SECRET_ACCESS_KEY
 );
+
+function assertR2Configured() {
+  if (!isR2Configured()) {
+    throw new Error('R2 screenshot storage is selected but not fully configured');
+  }
+}
 
 function ensureLocalDir() {
   if (!fs.existsSync(SCREENSHOT_LOCAL_DIR)) {
@@ -32,16 +42,59 @@ function ensureLocalDir() {
 
 ensureLocalDir();
 
-function localPublicUrl(filename, baseUrl) {
-  return `${baseUrl}${SCREENSHOT_PUBLIC_BASE}/${filename}`;
+function normalizeStorageKey(key) {
+  const normalized = path.basename(String(key || '').trim());
+  if (!normalized || normalized !== String(key || '').trim()) {
+    throw new Error('Invalid screenshot storage key');
+  }
+  if (!/^[a-zA-Z0-9._-]+$/.test(normalized)) {
+    throw new Error('Invalid screenshot storage key');
+  }
+  return normalized;
+}
+
+function extractScreenshotStorageKey(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  const extractFromPath = (candidate) => {
+    const cleaned = String(candidate || '').split(/[?#]/)[0];
+    const marker = `${SCREENSHOT_PUBLIC_BASE}/`;
+    const markerIndex = cleaned.indexOf(marker);
+    const basename = markerIndex >= 0
+      ? path.basename(cleaned.slice(markerIndex + marker.length))
+      : path.basename(cleaned);
+    try {
+      return normalizeStorageKey(decodeURIComponent(basename));
+    } catch {
+      return '';
+    }
+  };
+
+  try {
+    return extractFromPath(new URL(raw).pathname);
+  } catch {
+    return extractFromPath(raw);
+  }
 }
 
 function buildPublicUrl(key, baseUrl) {
-  if (isR2Configured()) {
-    if (R2_PUBLIC_BASE_URL) return `${R2_PUBLIC_BASE_URL}/${key}`;
-    return `${R2_ENDPOINT}/${R2_BUCKET}/${key}`;
-  }
-  return localPublicUrl(key, baseUrl);
+  const safeKey = normalizeStorageKey(key);
+  const normalizedBase = String(baseUrl || '').replace(/\/+$/, '');
+  return `${normalizedBase}${SCREENSHOT_PUBLIC_BASE}/${encodeURIComponent(safeKey)}`;
+}
+
+function getScreenshotStorageProvider() {
+  return isR2Selected() ? 'r2' : 'local';
+}
+
+function getContentTypeForKey(key) {
+  const ext = path.extname(String(key || '')).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.json') return 'application/json; charset=utf-8';
+  return 'application/octet-stream';
 }
 
 function hash(value) {
@@ -72,18 +125,19 @@ function encodeKey(key) {
 }
 
 function signedR2Request({ method, key, body = Buffer.alloc(0), contentType = 'application/octet-stream' }) {
+  const safeKey = normalizeStorageKey(key);
   const bodyBuffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body || ''));
   const bodyHash = hash(bodyBuffer);
   const now = amzDate();
   const dateValue = dateStamp(now);
   const host = new URL(R2_ENDPOINT).host;
-  const canonicalUri = `/${encodeURIComponent(R2_BUCKET)}/${encodeKey(key)}`;
+  const canonicalUri = `/${encodeURIComponent(R2_BUCKET)}/${encodeKey(safeKey)}`;
   const headers = {
     host,
     'x-amz-content-sha256': bodyHash,
     'x-amz-date': now,
   };
-  if (method !== 'HEAD') {
+  if (method === 'PUT') {
     headers['content-type'] = contentType;
   }
 
@@ -124,6 +178,7 @@ function signedR2Request({ method, key, body = Buffer.alloc(0), contentType = 'a
 }
 
 async function putR2Object(key, buffer, contentType) {
+  assertR2Configured();
   const request = signedR2Request({
     method: 'PUT',
     key,
@@ -142,6 +197,7 @@ async function putR2Object(key, buffer, contentType) {
 }
 
 async function headR2Object(key) {
+  assertR2Configured();
   const request = signedR2Request({ method: 'HEAD', key });
   const response = await fetch(request.url, {
     method: 'HEAD',
@@ -152,19 +208,43 @@ async function headR2Object(key) {
     throw new Error(`R2 metadata read failed (${response.status})`);
   }
   const modified = response.headers.get('last-modified');
+  const size = Number(response.headers.get('content-length') || 0);
   return {
     mtimeMs: modified ? new Date(modified).getTime() : Date.now(),
+    size: Number.isFinite(size) ? size : 0,
+    contentType: response.headers.get('content-type') || getContentTypeForKey(key),
+  };
+}
+
+async function getR2Object(key) {
+  assertR2Configured();
+  const request = signedR2Request({ method: 'GET', key });
+  const response = await fetch(request.url, {
+    method: 'GET',
+    headers: request.headers,
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`R2 object read failed (${response.status})`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  return {
+    buffer,
+    size: buffer.length,
+    contentType: response.headers.get('content-type') || getContentTypeForKey(key),
   };
 }
 
 async function saveScreenshotObject({ key, buffer, contentType, baseUrl }) {
-  if (isR2Configured()) {
-    await putR2Object(key, buffer, contentType);
-    return buildPublicUrl(key, baseUrl);
+  const safeKey = normalizeStorageKey(key);
+  if (isR2Selected()) {
+    await putR2Object(safeKey, buffer, contentType || getContentTypeForKey(safeKey));
+    return buildPublicUrl(safeKey, baseUrl);
   }
   ensureLocalDir();
-  await fs.promises.writeFile(path.join(SCREENSHOT_LOCAL_DIR, key), buffer);
-  return buildPublicUrl(key, baseUrl);
+  await fs.promises.writeFile(path.join(SCREENSHOT_LOCAL_DIR, safeKey), buffer);
+  return buildPublicUrl(safeKey, baseUrl);
 }
 
 async function saveScreenshotJson({ key, value, baseUrl }) {
@@ -178,50 +258,93 @@ async function saveScreenshotJson({ key, value, baseUrl }) {
 }
 
 async function readScreenshotJson(key) {
-  if (isR2Configured()) return null;
+  const safeKey = normalizeStorageKey(key);
   try {
-    const raw = await fs.promises.readFile(path.join(SCREENSHOT_LOCAL_DIR, key), 'utf8');
+    let raw = null;
+    if (isR2Selected()) {
+      const object = await getR2Object(safeKey);
+      raw = object?.buffer?.toString('utf8') || null;
+    } else {
+      raw = await fs.promises.readFile(path.join(SCREENSHOT_LOCAL_DIR, safeKey), 'utf8');
+    }
+    if (!raw) return null;
     return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-async function statScreenshotObject(key) {
-  if (isR2Configured()) {
+async function readScreenshotObject(key) {
+  const safeKey = normalizeStorageKey(key);
+  if (isR2Selected()) {
     try {
-      return await headR2Object(key);
+      return await getR2Object(safeKey);
+    } catch (error) {
+      console.warn('R2 object read skipped:', error.message);
+      return null;
+    }
+  }
+  try {
+    const filepath = path.join(SCREENSHOT_LOCAL_DIR, safeKey);
+    const buffer = await fs.promises.readFile(filepath);
+    return {
+      buffer,
+      size: buffer.length,
+      contentType: getContentTypeForKey(safeKey),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function statScreenshotObject(key) {
+  const safeKey = normalizeStorageKey(key);
+  if (isR2Selected()) {
+    try {
+      return await headR2Object(safeKey);
     } catch (error) {
       console.warn('R2 metadata read skipped:', error.message);
       return null;
     }
   }
   try {
-    return await fs.promises.stat(path.join(SCREENSHOT_LOCAL_DIR, key));
+    const stats = await fs.promises.stat(path.join(SCREENSHOT_LOCAL_DIR, safeKey));
+    return {
+      mtimeMs: stats.mtimeMs,
+      size: stats.size || 0,
+      contentType: getContentTypeForKey(safeKey),
+      isFile: () => stats.isFile(),
+    };
   } catch {
     return null;
   }
 }
 
 async function listLocalScreenshotFiles() {
-  if (isR2Configured()) return [];
+  if (isR2Selected()) return [];
   ensureLocalDir();
   return fs.promises.readdir(SCREENSHOT_LOCAL_DIR, { withFileTypes: true });
 }
 
 async function removeLocalScreenshotFile(filename) {
-  if (isR2Configured()) return;
-  await fs.promises.unlink(path.join(SCREENSHOT_LOCAL_DIR, filename));
+  if (isR2Selected()) return;
+  await fs.promises.unlink(path.join(SCREENSHOT_LOCAL_DIR, normalizeStorageKey(filename)));
 }
 
 module.exports = {
   SCREENSHOT_LOCAL_DIR,
   SCREENSHOT_PUBLIC_BASE,
+  isR2Selected,
   isR2Configured,
+  getScreenshotStorageProvider,
+  getContentTypeForKey,
+  normalizeStorageKey,
+  extractScreenshotStorageKey,
   buildPublicUrl,
   saveScreenshotObject,
   saveScreenshotJson,
   readScreenshotJson,
+  readScreenshotObject,
   statScreenshotObject,
   listLocalScreenshotFiles,
   removeLocalScreenshotFile,

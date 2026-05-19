@@ -59,7 +59,7 @@ Expected:
 - no errors
 - warnings are acceptable for:
   - `EMAIL_PROVIDER=log`
-  - filesystem-backed screenshots
+- screenshot storage should not warn; staging requires R2-backed screenshots
 
 ## 4. Configure Railway Staging
 

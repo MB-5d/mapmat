@@ -33,6 +33,7 @@ const net = require('net');
 const { probePostgres } = require('./utils/postgresProbe');
 const jobStore = require('./stores/jobStore');
 const mapStore = require('./stores/mapStore');
+const imageAssetStore = require('./stores/imageAssetStore');
 const pageStore = require('./stores/pageStore');
 const usageStore = require('./stores/usageStore');
 const permissionPolicy = require('./policies/permissionPolicy');
@@ -64,6 +65,20 @@ const {
   collectImageCaptureRecords,
   buildImageCapturePhases,
 } = require('./utils/imageCapturePlan');
+const {
+  SCREENSHOT_LOCAL_DIR,
+  SCREENSHOT_PUBLIC_BASE,
+  buildPublicUrl,
+  extractScreenshotStorageKey,
+  getContentTypeForKey,
+  getScreenshotStorageProvider,
+  listLocalScreenshotFiles,
+  readScreenshotObject,
+  removeLocalScreenshotFile,
+  saveScreenshotJson,
+  saveScreenshotObject,
+  statScreenshotObject,
+} = require('./utils/screenshotStorage');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -164,14 +179,26 @@ app.use((err, req, res, next) => {
   return next(err);
 });
 
-const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH || null;
-const SCREENSHOT_DIR = process.env.SCREENSHOT_STORAGE_DIR
-  || process.env.SCREENSHOT_DIR
-  || (railwayVolumeDir ? path.join(railwayVolumeDir, 'screenshots') : path.join(__dirname, 'screenshots'));
+const SCREENSHOT_DIR = SCREENSHOT_LOCAL_DIR;
 if (!fs.existsSync(SCREENSHOT_DIR)) {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 }
-app.use('/screenshots', express.static(SCREENSHOT_DIR));
+app.get(`${SCREENSHOT_PUBLIC_BASE}/:filename`, async (req, res) => {
+  try {
+    const key = extractScreenshotStorageKey(req.params.filename);
+    if (!key) return res.status(404).send('Not found');
+
+    const object = await readScreenshotObject(key);
+    if (!object?.buffer?.length) return res.status(404).send('Not found');
+
+    res.setHeader('Content-Type', object.contentType || getContentTypeForKey(key));
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(object.buffer);
+  } catch (error) {
+    console.warn('Screenshot asset read error:', error.message);
+    return res.status(404).send('Not found');
+  }
+});
 app.use(AVATAR_PUBLIC_BASE, express.static(AVATAR_STORAGE_DIR));
 app.use(FEEDBACK_PUBLIC_BASE, express.static(FEEDBACK_STORAGE_DIR));
 
@@ -452,6 +479,13 @@ const normalizeMaxPagesLimit = (value, fallback = null) => {
   const raw = value === undefined || value === null || value === '' ? fallback : Number(value);
   if (!Number.isFinite(raw) || raw <= 0) return fallback;
   return Math.max(1, Math.floor(raw));
+};
+
+const normalizeScanDepthLimit = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_MAX_DEPTH;
+  return Math.min(Math.max(Math.floor(parsed), 1), SCAN_LIMITS.maxDepthHard);
 };
 
 const getClientIp = (req) => {
@@ -741,7 +775,7 @@ const cleanupStaleScreenshots = async () => {
 
   let entries = [];
   try {
-    entries = fs.readdirSync(SCREENSHOT_DIR, { withFileTypes: true });
+    entries = await listLocalScreenshotFiles();
   } catch (error) {
     console.warn('Screenshot cleanup read error:', error.message);
     return;
@@ -759,7 +793,7 @@ const cleanupStaleScreenshots = async () => {
       const stats = fs.statSync(filepath);
       const ageMs = now - stats.mtimeMs;
       if (ageMs <= SCREENSHOT_CACHE_TTL_MS) continue;
-      fs.unlinkSync(filepath);
+      await removeLocalScreenshotFile(entry.name);
       const metaPath = path.join(SCREENSHOT_DIR, `${entry.name}${SCREENSHOT_META_SUFFIX}`);
       if (fs.existsSync(metaPath)) {
         fs.unlinkSync(metaPath);
@@ -782,48 +816,32 @@ function readScreenshotMeta(metaPath) {
 }
 
 function getScreenshotAssetFilename(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  const parsePathname = (candidate) => {
-    const cleaned = String(candidate || '').split(/[?#]/)[0];
-    const marker = '/screenshots/';
-    const markerIndex = cleaned.indexOf(marker);
-    const basename = markerIndex >= 0
-      ? path.basename(cleaned.slice(markerIndex + marker.length))
-      : path.basename(cleaned);
-    return SCREENSHOT_ASSET_FILENAME_PATTERN.test(basename) ? basename : '';
-  };
-  try {
-    return parsePathname(new URL(raw).pathname);
-  } catch {
-    return parsePathname(raw);
-  }
+  const filename = extractScreenshotStorageKey(value);
+  return SCREENSHOT_ASSET_FILENAME_PATTERN.test(filename) ? filename : '';
 }
 
-function validateScreenshotAssetUrl(value) {
-  const raw = String(value || '').trim();
+async function validateScreenshotAssetUrl(value) {
   const filename = getScreenshotAssetFilename(value);
   if (!filename) {
     return { available: false, reason: 'not_screenshot_asset' };
   }
-  const screenshotStorageProvider = String(process.env.SCREENSHOT_STORAGE_PROVIDER || 'local').toLowerCase();
-  const shouldCheckLocalFile = screenshotStorageProvider === 'local'
-    || raw.startsWith('/screenshots/')
-    || raw.includes('/screenshots/');
-  if (!shouldCheckLocalFile) {
-    return { available: true, filename, reason: 'external_asset_not_checked' };
-  }
-  const filepath = path.join(SCREENSHOT_DIR, filename);
-  try {
-    const stats = fs.statSync(filepath);
+  const stats = await statScreenshotObject(filename);
+  if (stats) {
+    const isFile = typeof stats.isFile === 'function' ? stats.isFile() : true;
     return {
-      available: stats.isFile() && stats.size > 0,
+      available: isFile && Number(stats.size || 0) > 0,
       filename,
       size: stats.size || 0,
+      contentType: stats.contentType || getContentTypeForKey(filename),
+      provider: getScreenshotStorageProvider(),
     };
-  } catch {
-    return { available: false, filename, reason: 'missing_file' };
   }
+  return {
+    available: false,
+    filename,
+    provider: getScreenshotStorageProvider(),
+    reason: 'missing_file',
+  };
 }
 
 function writeScreenshotMeta(metaPath, value) {
@@ -832,6 +850,34 @@ function writeScreenshotMeta(metaPath, value) {
   } catch (error) {
     console.warn('Screenshot metadata write error:', error.message);
   }
+}
+
+async function saveAndVerifyScreenshotFile({ filename, filepath, baseUrl }) {
+  const key = getScreenshotAssetFilename(filename);
+  if (!key) throw new Error('Invalid screenshot asset filename');
+  const buffer = await fs.promises.readFile(filepath);
+  const url = await saveScreenshotObject({
+    key,
+    buffer,
+    contentType: getContentTypeForKey(key),
+    baseUrl,
+  });
+  const stats = await statScreenshotObject(key);
+  if (!stats || Number(stats.size || 0) <= 0) {
+    throw new Error('Saved screenshot asset could not be verified');
+  }
+  return {
+    key,
+    url,
+    size: stats.size || buffer.length,
+    contentType: stats.contentType || getContentTypeForKey(key),
+  };
+}
+
+async function saveAndVerifyScreenshotMeta({ key, value, baseUrl }) {
+  await saveScreenshotJson({ key, value, baseUrl });
+  const stats = await statScreenshotObject(key);
+  return Boolean(stats && Number(stats.size || 0) > 0);
 }
 
 async function resizeScreenshotForCanvas(context, sourcePath, targetPath) {
@@ -904,6 +950,12 @@ const JOB_TYPES = {
   discovery: 'discovery',
   email: EMAIL_JOB_TYPES.EMAIL,
 };
+const normalizeBackgroundJobType = (value) => {
+  const type = String(value || '').trim();
+  if (!type) return '';
+  if (type === 'image-capture' || type === 'imageCapture') return JOB_TYPES.imageCapture;
+  return type;
+};
 const ALL_BACKGROUND_JOB_TYPES = Object.freeze(Object.values(JOB_TYPES));
 const getAllowedJobTypesForRunMode = () => {
   if (process.env.ALLOW_CROSS_MODE_JOB_TYPES === 'true') {
@@ -920,7 +972,7 @@ const parseJobWorkerTypes = (value) => {
   if (raw.toLowerCase() === 'all') return ALLOWED_JOB_TYPES_FOR_RUN_MODE;
   const requested = raw
     .split(',')
-    .map((part) => part.trim())
+    .map((part) => normalizeBackgroundJobType(part))
     .filter(Boolean);
   const allowed = requested.filter((type) => ALLOWED_JOB_TYPES_FOR_RUN_MODE.includes(type));
   return allowed.length > 0 ? allowed : null;
@@ -1313,6 +1365,70 @@ function imageCaptureAssetPatchMatchesNode(node, assets) {
   });
 }
 
+const IMAGE_CAPTURE_ASSET_URL_FIELDS = new Set([
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+]);
+
+function getImageCaptureAssetManifestType(assetField, assets) {
+  if (assetField === 'fullScreenshotUrl') return 'full';
+  if (assetField === 'thumbnailFullUrl') return 'thumbnail_preview';
+  if (assetField === 'thumbnailUrl' && assets?.fullScreenshotUrl) return 'full_thumbnail';
+  return 'thumbnail';
+}
+
+async function verifyImageCaptureAssetFields({ mapId, entry }) {
+  const savedEntries = [];
+  const missingFields = [];
+  const urlEntries = Object.entries(entry.assets || {})
+    .filter(([field, value]) => IMAGE_CAPTURE_ASSET_URL_FIELDS.has(field) && typeof value === 'string' && value.trim());
+
+  if (urlEntries.length === 0) {
+    return { ok: true, savedEntries, missingFields };
+  }
+
+  for (const [assetField, url] of urlEntries) {
+    const storageKey = getScreenshotAssetFilename(url);
+    const stats = storageKey ? await statScreenshotObject(storageKey) : null;
+    const valid = stats && Number(stats.size || 0) > 0;
+    const manifestBase = {
+      mapId,
+      nodeId: entry.nodeId,
+      assetField,
+      assetType: getImageCaptureAssetManifestType(assetField, entry.assets),
+      storageKey: storageKey || null,
+      url,
+      provider: getScreenshotStorageProvider(),
+      width: entry.meta?.width || null,
+      height: entry.meta?.height || null,
+      sizeBytes: stats?.size || null,
+      contentType: stats?.contentType || (storageKey ? getContentTypeForKey(storageKey) : null),
+      capturedAt: entry.meta?.capturedAt || new Date().toISOString(),
+      verifiedAt: new Date().toISOString(),
+    };
+    if (!valid) {
+      missingFields.push({
+        ...manifestBase,
+        status: 'missing',
+        error: 'Missing saved asset',
+      });
+      continue;
+    }
+    savedEntries.push({
+      ...manifestBase,
+      status: 'saved',
+      error: null,
+    });
+  }
+
+  return {
+    ok: missingFields.length === 0,
+    savedEntries,
+    missingFields,
+  };
+}
+
 async function persistImageCaptureNodeAssetBatch({ mapId, updates }) {
   const normalizedEntries = (Array.isArray(updates) ? updates : [])
     .map((entry) => ({
@@ -1355,16 +1471,34 @@ async function persistImageCaptureNodeAssetBatch({ mapId, updates }) {
   const storedRoot = parseJsonSafe(storedMap?.root_data);
   const storedOrphans = parseJsonSafe(storedMap?.orphans_data) || [];
   const storedNodesById = flattenImageCaptureNodes(storedRoot, storedOrphans);
-  const verifiedEntries = [];
+  const mapVerifiedEntries = [];
   const missingEntries = [];
   normalizedEntries.forEach((entry) => {
     const node = storedNodesById.get(entry.nodeId);
     if (imageCaptureAssetPatchMatchesNode(node, entry.assets)) {
-      verifiedEntries.push(entry);
+      mapVerifiedEntries.push(entry);
     } else {
       missingEntries.push(entry);
     }
   });
+
+  const verifiedEntries = [];
+  const manifestEntries = [];
+  for (const entry of mapVerifiedEntries) {
+    const assetVerification = await verifyImageCaptureAssetFields({ mapId, entry });
+    manifestEntries.push(...assetVerification.savedEntries, ...assetVerification.missingFields);
+    if (assetVerification.ok) {
+      verifiedEntries.push(entry);
+    } else {
+      missingEntries.push({
+        ...entry,
+        storageMissing: true,
+      });
+    }
+  }
+  if (manifestEntries.length > 0) {
+    await imageAssetStore.upsertImageAssetsAsync(manifestEntries);
+  }
 
   return {
     changed: nextMap.changed,
@@ -1375,8 +1509,8 @@ async function persistImageCaptureNodeAssetBatch({ mapId, updates }) {
   };
 }
 
-function isUsableScreenshotAsset(value) {
-  return validateScreenshotAssetUrl(value).available === true;
+async function isUsableScreenshotAsset(value) {
+  return (await validateScreenshotAssetUrl(value)).available === true;
 }
 
 function isTerminalThumbnailFailure(node) {
@@ -1495,7 +1629,7 @@ function getImageCaptureSkipUpdates(captureType, message, { authRequired = false
   };
 }
 
-function validateImageCaptureResult(captureType, result) {
+async function validateImageCaptureResult(captureType, result) {
   if (!result?.url) {
     return { ok: false, status: 'missing_asset', error: 'No screenshot URL returned' };
   }
@@ -1509,7 +1643,7 @@ function validateImageCaptureResult(captureType, result) {
     if (Number.isFinite(result.width) && result.width < 1000) {
       return { ok: false, status: 'low_resolution', error: 'Full screenshot resolution was too low' };
     }
-    const fullAsset = validateScreenshotAssetUrl(result.url);
+    const fullAsset = await validateScreenshotAssetUrl(result.url);
     if (!fullAsset.available) {
       return { ok: false, status: 'missing_asset', error: 'Saved full screenshot is missing' };
     }
@@ -1518,15 +1652,17 @@ function validateImageCaptureResult(captureType, result) {
 
   const smallUrl = result.thumbnailUrl || result.url;
   const previewUrl = result.thumbnailFullUrl || result.previewUrl || result.url;
-  const smallAsset = validateScreenshotAssetUrl(smallUrl);
-  const previewAsset = validateScreenshotAssetUrl(previewUrl);
+  const [smallAsset, previewAsset] = await Promise.all([
+    validateScreenshotAssetUrl(smallUrl),
+    validateScreenshotAssetUrl(previewUrl),
+  ]);
   if (!smallAsset.available || !previewAsset.available) {
     return { ok: false, status: 'missing_asset', error: 'Saved thumbnail is missing' };
   }
   return { ok: true };
 }
 
-function buildImageCaptureTargets({ root, orphans, captureType, scope, nodeIds, force }) {
+async function buildImageCaptureTargets({ root, orphans, captureType, scope, nodeIds, force }) {
   const selectedIds = new Set((Array.isArray(nodeIds) ? nodeIds : [])
     .map((id) => String(id || '').trim())
     .filter(Boolean));
@@ -1540,30 +1676,35 @@ function buildImageCaptureTargets({ root, orphans, captureType, scope, nodeIds, 
   let cached = 0;
   let unavailable = 0;
   const skippedRecords = [];
-  const captureRecords = scopedRecords.filter((record) => {
+  const captureRecords = [];
+  for (const record of scopedRecords) {
     const skipReason = getImageCaptureSkipReason(record.node);
     if (skipReason) {
       skippedRecords.push({ ...record, skipReason });
-      return false;
+      continue;
     }
-    if (force) return true;
+    if (force) {
+      captureRecords.push(record);
+      continue;
+    }
     if (captureType === SCREENSHOT_TYPES.full) {
-      if (isUsableScreenshotAsset(record.node.fullScreenshotUrl)) {
+      if (await isUsableScreenshotAsset(record.node.fullScreenshotUrl)) {
         cached += 1;
-        return false;
+        continue;
       }
-      return true;
+      captureRecords.push(record);
+      continue;
     }
-    if (isUsableScreenshotAsset(record.node.thumbnailUrl)) {
+    if (await isUsableScreenshotAsset(record.node.thumbnailUrl)) {
       cached += 1;
-      return false;
+      continue;
     }
     if (isTerminalThumbnailFailure(record.node)) {
       unavailable += 1;
-      return false;
+      continue;
     }
-    return true;
-  });
+    captureRecords.push(record);
+  }
 
   return {
     records,
@@ -1624,7 +1765,7 @@ async function runImageCaptureJob(jobId, payload) {
 
   const root = parseJsonSafe(mapRow.root_data);
   const orphans = parseJsonSafe(mapRow.orphans_data) || [];
-  const targetPlan = buildImageCaptureTargets({
+  const targetPlan = await buildImageCaptureTargets({
     root,
     orphans,
     captureType,
@@ -1715,6 +1856,7 @@ async function runImageCaptureJob(jobId, payload) {
         updates: batch.map((entry) => ({
           nodeId: entry.nodeId,
           assets: entry.assets,
+          meta: entry.result || {},
         })),
       });
     } catch (error) {
@@ -1789,7 +1931,7 @@ async function runImageCaptureJob(jobId, payload) {
         try {
           const safeUrl = await assertSafeUrl(record.node.url);
           const result = await captureScreenshot(safeUrl, captureType);
-          const validation = validateImageCaptureResult(captureType, result);
+          const validation = await validateImageCaptureResult(captureType, result);
           if (!validation.ok) {
             finalStatus = validation.status;
             lastError = validation.error;
@@ -2773,11 +2915,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const seed = normalizeUrl(startUrl);
   if (!seed) throw new Error('Invalid URL');
   const pageLimit = normalizeMaxPagesLimit(maxPages);
-  const depthLimit = clampInt(maxDepth, {
-    min: 1,
-    max: SCAN_LIMITS.maxDepthHard,
-    fallback: DEFAULT_MAX_DEPTH,
-  });
+  const depthLimit = normalizeScanDepthLimit(maxDepth);
 
   const origin = new URL(seed).origin;
   const baseHost = normalizeHost(new URL(seed).hostname);
@@ -2796,6 +2934,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const normalized = normalizeUrl(candidate);
     if (!normalized) return false;
     if (normalized === seed) return true;
+    if (depthLimit === null) return true;
     return getUrlDepth(normalized) <= depthLimit;
   };
 
@@ -2989,7 +3128,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       onProgress({ scanned: visited.size, queued: Math.max(0, queue.length - queueIndex) });
     }
 
-    if (depth > depthLimit || !isWithinScanDepth(url)) return;
+    if ((depthLimit !== null && depth > depthLimit) || !isWithinScanDepth(url)) return;
     if (!allowUrl(url)) return;
 
     let html;
@@ -3113,7 +3252,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       recordDiscovery(link, 'crawl');
 
       const d = depth + 1;
-      if (d > depthLimit || !isWithinScanDepth(link)) {
+      if ((depthLimit !== null && d > depthLimit) || !isWithinScanDepth(link)) {
         scheduleBrokenLinkCheck(link, url);
         continue;
       }
@@ -3753,9 +3892,12 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
   const primaryPath = normalizedType === SCREENSHOT_TYPES.thumb ? thumbSmallPath : filepath;
   const metaPath = path.join(SCREENSHOT_DIR, `${path.basename(primaryPath)}${SCREENSHOT_META_SUFFIX}`);
   const baseUrl = getBaseUrl();
-  const publicUrl = (name) => `${baseUrl}/screenshots/${name}`;
+  const publicUrl = (name) => buildPublicUrl(name, baseUrl);
+  const storageProvider = getScreenshotStorageProvider();
 
   if (
+    storageProvider === 'local'
+    &&
     fs.existsSync(primaryPath)
     && (
       normalizedType !== SCREENSHOT_TYPES.thumb
@@ -3955,6 +4097,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
           const title = await page.title();
           const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 4000) || '');
           const blocked = isLikelyBlocked(title, bodyText);
+          const capturedAt = new Date().toISOString();
 
           let truncated = false;
           let width = null;
@@ -4034,7 +4177,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
             width,
             height,
             durationMs: Date.now() - captureStartedAt,
-            capturedAt: new Date().toISOString(),
+            capturedAt,
           });
 
           return {
@@ -4043,6 +4186,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
             width,
             height,
             durationMs: Date.now() - captureStartedAt,
+            capturedAt,
           };
         } catch (err) {
           lastError = err;
@@ -4065,10 +4209,48 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
     }
   });
 
+  const meta = {
+    url: safeUrl,
+    type: normalizedType,
+    blocked: shotResult?.blocked || false,
+    truncated: shotResult?.truncated || false,
+    width: shotResult?.width || null,
+    height: shotResult?.height || null,
+    durationMs: shotResult?.durationMs || null,
+    capturedAt: shotResult?.capturedAt || new Date().toISOString(),
+  };
+  const primaryAsset = await saveAndVerifyScreenshotFile({
+    filename: path.basename(primaryPath),
+    filepath: primaryPath,
+    baseUrl,
+  });
+  await saveAndVerifyScreenshotMeta({
+    key: `${path.basename(primaryPath)}${SCREENSHOT_META_SUFFIX}`,
+    value: meta,
+    baseUrl,
+  }).catch((error) => {
+    console.warn('Screenshot metadata durable save error:', error.message);
+  });
+  let thumbPreviewAsset = null;
+  let fullSmallAsset = null;
+  if (normalizedType === SCREENSHOT_TYPES.thumb) {
+    thumbPreviewAsset = await saveAndVerifyScreenshotFile({
+      filename: thumbPreviewFilename,
+      filepath: thumbPreviewPath,
+      baseUrl,
+    });
+  } else if (fs.existsSync(fullSmallPath)) {
+    fullSmallAsset = await saveAndVerifyScreenshotFile({
+      filename: fullSmallFilename,
+      filepath: fullSmallPath,
+      baseUrl,
+    });
+  }
+
   const result = {
     url: normalizedType === SCREENSHOT_TYPES.thumb
-      ? publicUrl(thumbSmallFilename)
-      : publicUrl(filename),
+      ? primaryAsset.url
+      : primaryAsset.url,
     cached: false,
     type: normalizedType,
     blocked: shotResult?.blocked || false,
@@ -4078,19 +4260,20 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
     durationMs: shotResult?.durationMs || null,
   };
   if (normalizedType === SCREENSHOT_TYPES.thumb) {
-    result.thumbnailUrl = publicUrl(thumbSmallFilename);
-    result.thumbnailFullUrl = publicUrl(thumbPreviewFilename);
-  } else if (fs.existsSync(fullSmallPath)) {
-    result.thumbnailUrl = publicUrl(fullSmallFilename);
+    result.thumbnailUrl = primaryAsset.url;
+    result.thumbnailFullUrl = thumbPreviewAsset?.url || publicUrl(thumbPreviewFilename);
+  } else if (fullSmallAsset) {
+    result.thumbnailUrl = fullSmallAsset.url;
   }
   return result;
 }
 
 async function processJob(job) {
   const jobId = job.id;
+  const jobType = normalizeBackgroundJobType(job.type);
   const payload = parseJsonSafe(job.payload) || {};
   try {
-    if (job.type === JOB_TYPES.scan) {
+    if (jobType === JOB_TYPES.scan) {
       const progressState = { lastUpdate: 0, lastScanned: 0 };
       const readJobStatus = createJobStatusReader(jobId);
       const progressCb = (progress) => {
@@ -4120,28 +4303,28 @@ async function processJob(job) {
       return;
     }
 
-    if (job.type === JOB_TYPES.screenshot) {
+    if (jobType === JOB_TYPES.screenshot) {
       const result = await captureScreenshot(payload.url, payload.type || 'full');
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
       await markJobComplete(jobId, result);
       return;
     }
 
-    if (job.type === JOB_TYPES.imageCapture) {
+    if (jobType === JOB_TYPES.imageCapture) {
       const result = await runImageCaptureJob(jobId, payload);
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
       await markJobComplete(jobId, result);
       return;
     }
 
-    if (job.type === JOB_TYPES.discovery) {
+    if (jobType === JOB_TYPES.discovery) {
       const result = await runDiscoveryJob(jobId, payload);
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
       await markJobComplete(jobId, result);
       return;
     }
 
-    if (job.type === JOB_TYPES.email) {
+    if (jobType === JOB_TYPES.email) {
       const result = await processEmailDeliveryJobAsync(job);
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
       await markJobComplete(jobId, result);
@@ -4151,7 +4334,7 @@ async function processJob(job) {
     throw new Error(`Unknown job type: ${job.type}`);
   } catch (error) {
     if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
-    console.error(`[jobs] ${job.type} job ${jobId} failed:`, error?.message || error);
+    console.error(`[jobs] ${jobType || job.type} job ${jobId} failed:`, error?.message || error);
     await markJobFailed(jobId, error);
   }
 }
@@ -4294,11 +4477,7 @@ app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit(
   try {
     const safeUrl = await assertSafeUrl(url);
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
-    const maxDepthSafe = clampInt(maxDepth, {
-      min: 1,
-      max: SCAN_LIMITS.maxDepthHard,
-      fallback: DEFAULT_MAX_DEPTH,
-    });
+    const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
 
     recordUsage(req, 'scan', 1, {
       host: new URL(safeUrl).hostname,
@@ -4380,11 +4559,7 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
     }
 
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
-    const maxDepthSafe = clampInt(maxDepth, {
-      min: 1,
-      max: SCAN_LIMITS.maxDepthHard,
-      fallback: DEFAULT_MAX_DEPTH,
-    });
+    const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
 
     recordUsage(req, 'scan_stream', 1, {
       host: new URL(safeUrl).hostname,
@@ -4427,11 +4602,7 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
   try {
     const safeUrl = await assertSafeUrl(url);
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
-    const maxDepthSafe = clampInt(maxDepth, {
-      min: 1,
-      max: SCAN_LIMITS.maxDepthHard,
-      fallback: DEFAULT_MAX_DEPTH,
-    });
+    const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
     const jobAccessToken = crypto.randomBytes(24).toString('hex');
 
     const jobId = await createJob({
@@ -4671,7 +4842,7 @@ function registerImageCaptureRoutes(targetApp) {
     const payload = getJobPayload(row);
     if (
       !row
-      || row.type !== JOB_TYPES.imageCapture
+      || normalizeBackgroundJobType(row.type) !== JOB_TYPES.imageCapture
       || payload.mapId !== id
       || !isJobVisibleToRequest(row, req)
     ) {
@@ -4693,7 +4864,7 @@ function registerImageCaptureRoutes(targetApp) {
     const payload = getJobPayload(row);
     if (
       !row
-      || row.type !== JOB_TYPES.imageCapture
+      || normalizeBackgroundJobType(row.type) !== JOB_TYPES.imageCapture
       || payload.mapId !== id
       || !isJobVisibleToRequest(row, req)
     ) {
@@ -4762,15 +4933,25 @@ app.get('/screenshot', authMiddleware, requireApiKey, async (req, res) => {
   }
 });
 
-app.post('/screenshot-assets/validate', authMiddleware, requireApiKey, (req, res) => {
+app.post('/screenshot-assets/validate', authMiddleware, requireApiKey, async (req, res) => {
   const urls = Array.isArray(req.body?.urls) ? req.body.urls : [];
   const limitedUrls = urls.slice(0, 1500);
   const results = {};
+  const uniqueUrls = [];
   limitedUrls.forEach((url) => {
     const key = String(url || '').trim();
     if (!key || Object.prototype.hasOwnProperty.call(results, key)) return;
-    results[key] = validateScreenshotAssetUrl(key);
+    results[key] = null;
+    uniqueUrls.push(key);
   });
+  const validationConcurrency = 12;
+  for (let start = 0; start < uniqueUrls.length; start += validationConcurrency) {
+    const batch = uniqueUrls.slice(start, start + validationConcurrency);
+    const batchResults = await Promise.all(batch.map((key) => validateScreenshotAssetUrl(key)));
+    batch.forEach((key, index) => {
+      results[key] = batchResults[index];
+    });
+  }
   res.json({
     ok: true,
     total: limitedUrls.length,

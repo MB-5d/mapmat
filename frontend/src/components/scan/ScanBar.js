@@ -5,16 +5,12 @@ import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import { MenuPanel, MenuSectionHeader } from '../ui/Menu';
-import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 import {
   APP_ONLY_MODE,
   TESTER_NOT_READY_MESSAGE,
 } from '../../utils/constants';
 import Icon from '../ui/Icon';
-
-const SCAN_DEPTH_OPTIONS = Array.from({ length: 25 }, (_, index) => index + 1);
-const getScanDepthOptionLabel = (value) => `${value} ${value === 1 ? 'Level' : 'Levels'}`;
 
 const ScanBar = ({
   canEdit,
@@ -29,8 +25,6 @@ const ScanBar = ({
   scanLayerAvailability,
   scanLayerVisibility,
   onToggleScanLayer,
-  scanDepth,
-  onScanDepthChange,
   onScan,
   scanLabel = 'Scan',
   scanDisabled,
@@ -90,24 +84,6 @@ const ScanBar = ({
         {showOptions && (
           <MenuPanel className="layers-panel">
             <div className="layers-panel-list">
-              <MenuSectionHeader className="layers-panel-section">Scan depth</MenuSectionHeader>
-              <div className={`scan-options-depth-field${optionsDisabled ? ' is-disabled' : ''}`}>
-                <SelectInput
-                  id="scan-depth-select"
-                  aria-label="Scan depth levels"
-                  shellClassName="scan-options-depth-select-shell"
-                  inputClassName="scan-options-depth-select-input"
-                  size="sm"
-                  value={scanDepth}
-                  onChange={(e) => onScanDepthChange(e.target.value)}
-                  disabled={optionsDisabled}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {SCAN_DEPTH_OPTIONS.map((value) => (
-                    <option key={value} value={value}>{getScanDepthOptionLabel(value)}</option>
-                  ))}
-                </SelectInput>
-              </div>
               <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
               <CheckboxField
                 className="layers-panel-item scan-options-checkbox"

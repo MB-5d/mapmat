@@ -58,16 +58,14 @@ describe('scan config and differential rescan behavior', () => {
     mergeRescanResults,
   } = __testing;
 
-  test('rescan changes ignore URL-only edits and respond to depth/options changes', () => {
+  test('rescan changes ignore URL-only edits and respond to scan option changes', () => {
     const previous = normalizeScanConfig({
       url: 'https://example.com',
-      depth: 4,
       options: { includeExternal: false, includeImages: true },
     });
 
     expect(scanConfigsHaveOptionChanges(normalizeScanConfig({
       url: 'https://example.com/changed',
-      depth: 4,
       options: { includeExternal: false, includeImages: true },
     }), previous)).toBe(false);
 
@@ -75,11 +73,10 @@ describe('scan config and differential rescan behavior', () => {
       url: 'https://example.com',
       depth: 5,
       options: { includeExternal: false, includeImages: true },
-    }), previous)).toBe(true);
+    }), previous)).toBe(false);
 
     expect(scanConfigsHaveOptionChanges(normalizeScanConfig({
       url: 'https://example.com',
-      depth: 4,
       options: { includeExternal: true, includeImages: true },
     }), previous)).toBe(true);
   });

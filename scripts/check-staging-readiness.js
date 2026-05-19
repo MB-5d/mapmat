@@ -157,7 +157,16 @@ function checkBackend(report) {
     report.info(scope, 'RUN_MODE', `RUN_MODE=${runMode}`);
   }
 
-  report.warn(scope, 'SCREENSHOT_STORAGE', 'Screenshots still use backend filesystem storage. Shared staging should stay single-instance or use a persistent volume.');
+  const screenshotProvider = (getEnvValue('SCREENSHOT_STORAGE_PROVIDER') || 'local').toLowerCase();
+  if (screenshotProvider !== 'r2') {
+    report.error(scope, 'SCREENSHOT_STORAGE_PROVIDER', 'SCREENSHOT_STORAGE_PROVIDER=r2 is required for durable staging screenshots');
+  } else {
+    report.info(scope, 'SCREENSHOT_STORAGE_PROVIDER', 'SCREENSHOT_STORAGE_PROVIDER=r2');
+    requireValue(report, scope, 'R2_BUCKET');
+    requireValue(report, scope, 'R2_ACCOUNT_ID');
+    requireValue(report, scope, 'R2_ACCESS_KEY_ID');
+    requireValue(report, scope, 'R2_SECRET_ACCESS_KEY');
+  }
 }
 
 function checkFrontend(report) {

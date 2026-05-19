@@ -32,8 +32,6 @@ const Topbar = ({
   scanLayerAvailability,
   scanLayerVisibility,
   onToggleScanLayer,
-  scanDepth,
-  onScanDepthChange,
   onScan,
   scanLabel,
   scanDisabled,
@@ -102,8 +100,6 @@ const Topbar = ({
               scanLayerAvailability={scanLayerAvailability}
               scanLayerVisibility={scanLayerVisibility}
               onToggleScanLayer={onToggleScanLayer}
-              scanDepth={scanDepth}
-              onScanDepthChange={onScanDepthChange}
               onScan={onScan}
               scanLabel={scanLabel}
               scanDisabled={scanDisabled}
