@@ -369,6 +369,10 @@ const SCREENSHOT_TYPES = Object.freeze({
   full: 'full',
   thumb: 'thumb',
 });
+const IMAGE_CAPTURE_TARGET_MODES = Object.freeze({
+  remaining: 'remaining',
+  captured: 'captured',
+});
 const SCREENSHOT_META_SUFFIX = '.meta.json';
 const SCREENSHOT_CAPTURE_CACHE_VERSION = 'v12';
 const SCREENSHOT_ASSET_FILENAME_PATTERN = /^[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
@@ -723,6 +727,18 @@ const normalizeScreenshotType = (type) => {
   const normalized = String(type || '').trim().toLowerCase();
   if (!normalized) return SCREENSHOT_TYPES.full;
   if (normalized === SCREENSHOT_TYPES.full || normalized === SCREENSHOT_TYPES.thumb) {
+    return normalized;
+  }
+  return null;
+};
+
+const normalizeImageCaptureTargetMode = (mode) => {
+  const normalized = String(mode || '').trim().toLowerCase();
+  if (!normalized) return IMAGE_CAPTURE_TARGET_MODES.remaining;
+  if (
+    normalized === IMAGE_CAPTURE_TARGET_MODES.remaining
+    || normalized === IMAGE_CAPTURE_TARGET_MODES.captured
+  ) {
     return normalized;
   }
   return null;
@@ -1662,7 +1678,15 @@ async function validateImageCaptureResult(captureType, result) {
   return { ok: true };
 }
 
-async function buildImageCaptureTargets({ root, orphans, captureType, scope, nodeIds, force }) {
+async function buildImageCaptureTargets({
+  root,
+  orphans,
+  captureType,
+  scope,
+  nodeIds,
+  force,
+  targetMode = IMAGE_CAPTURE_TARGET_MODES.remaining,
+}) {
   const selectedIds = new Set((Array.isArray(nodeIds) ? nodeIds : [])
     .map((id) => String(id || '').trim())
     .filter(Boolean));
@@ -1677,9 +1701,22 @@ async function buildImageCaptureTargets({ root, orphans, captureType, scope, nod
   let unavailable = 0;
   const skippedRecords = [];
   const captureRecords = [];
+  const recaptureCapturedOnly = targetMode === IMAGE_CAPTURE_TARGET_MODES.captured;
   for (const record of scopedRecords) {
+    if (recaptureCapturedOnly) {
+      const assetUrl = captureType === SCREENSHOT_TYPES.full
+        ? record.node.fullScreenshotUrl
+        : record.node.thumbnailUrl;
+      const hasUsableAsset = await isUsableScreenshotAsset(assetUrl);
+      if (!hasUsableAsset) {
+        continue;
+      }
+    }
     const skipReason = getImageCaptureSkipReason(record.node);
     if (skipReason) {
+      if (recaptureCapturedOnly) {
+        continue;
+      }
       skippedRecords.push({ ...record, skipReason });
       continue;
     }
@@ -1758,7 +1795,9 @@ async function runImageCaptureJob(jobId, payload) {
 
   const captureType = normalizeImageCaptureType(payload?.captureType || payload?.type);
   const scope = payload?.scope === 'selected' ? 'selected' : 'all';
-  const force = scope === 'selected' || Boolean(payload?.force);
+  const targetMode = normalizeImageCaptureTargetMode(payload?.targetMode)
+    || IMAGE_CAPTURE_TARGET_MODES.remaining;
+  const force = targetMode === IMAGE_CAPTURE_TARGET_MODES.captured || scope === 'selected' || Boolean(payload?.force);
   const nodeIds = Array.isArray(payload?.nodeIds) ? payload.nodeIds : [];
   const mapRow = await mapStore.getMapByIdAsync(mapId);
   if (!mapRow) throw new Error('Map not found');
@@ -1772,6 +1811,7 @@ async function runImageCaptureJob(jobId, payload) {
     scope,
     nodeIds,
     force,
+    targetMode,
   });
 
   const startedAt = Date.now();
@@ -1779,6 +1819,7 @@ async function runImageCaptureJob(jobId, payload) {
     mapId,
     captureType,
     scope,
+    targetMode,
     total: targetPlan.captureRecords.length + targetPlan.skippedRecords.length,
     eligibleTotal: targetPlan.scopedRecords.length,
     cached: targetPlan.cached,
@@ -4776,6 +4817,10 @@ function registerImageCaptureRoutes(targetApp) {
     if (!captureType) {
       return res.status(400).json({ error: 'Invalid type. Use full or thumb.' });
     }
+    const targetMode = normalizeImageCaptureTargetMode(req.body?.targetMode);
+    if (!targetMode) {
+      return res.status(400).json({ error: 'Invalid target mode. Use remaining or captured.' });
+    }
 
     const scope = req.body?.scope === 'selected' ? 'selected' : 'all';
     const nodeIds = Array.isArray(req.body?.nodeIds)
@@ -4810,7 +4855,8 @@ function registerImageCaptureRoutes(targetApp) {
           captureType,
           scope,
           nodeIds,
-          force: scope === 'selected' || Boolean(req.body?.force),
+          targetMode,
+          force: targetMode === IMAGE_CAPTURE_TARGET_MODES.captured || scope === 'selected' || Boolean(req.body?.force),
         },
         req,
       });
@@ -4819,6 +4865,7 @@ function registerImageCaptureRoutes(targetApp) {
         mapId: id,
         type: captureType,
         scope,
+        targetMode,
         selected: nodeIds.length,
       });
 

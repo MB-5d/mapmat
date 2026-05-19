@@ -2339,6 +2339,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     return nodes.some((node) => selectedIds.has(node.id) && hasStoredImageAsset(node.fullScreenshotUrl) && !invalidFullScreenshotAssetIds.has(node.id));
   }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidFullScreenshotAssetIds]);
 
+  const hasAnyDownloadableImages = hasAnyDownloadableThumbnails || hasAnyFullScreenshotAssets;
+  const hasSelectedDownloadableImages = hasSelectedDownloadableThumbnails || hasSelectedFullScreenshotAssets;
+
   const thumbnailCaptureStats = useMemo(() => {
     return getImageCaptureStats({
       rootNode: root,
@@ -6142,7 +6145,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     return batches;
   }, [orderThumbnailNodes, root?.id]);
 
-  const getThumbnailCandidates = (scope, invalidAssetIds = invalidThumbnailAssetIds) => {
+  const getThumbnailCandidates = (
+    scope,
+    invalidAssetIds = invalidThumbnailAssetIds,
+    targetMode = 'remaining',
+  ) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
     const baseIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
     const scopedNodes = scope === 'selected'
@@ -6151,29 +6158,35 @@ export default function App({ currentRoute, navigateToRoute }) {
     const targetNodes = scopedNodes.filter((node) => node?.url);
     const orderedTargets = orderThumbnailNodes(targetNodes);
     const forceRecapture = scope === 'selected';
+    const recaptureCapturedOnly = targetMode === 'captured';
     let cachedCount = 0;
     let unavailableCount = 0;
-    const candidates = forceRecapture
-      ? orderedTargets
-      : orderedTargets.filter((node) => {
-          const hasSavedThumb = hasStoredImageAsset(node.thumbnailUrl) && !invalidAssetIds.has(node.id);
-          if (hasSavedThumb) {
-            cachedCount += 1;
-            return false;
-          }
-          if (hasTerminalThumbnailFailure(node)) {
-            unavailableCount += 1;
-            return false;
-          }
-          return true;
-        });
+    let candidates = [];
+    if (recaptureCapturedOnly) {
+      candidates = orderedTargets.filter((node) => hasStoredImageAsset(node.thumbnailUrl) && !invalidAssetIds.has(node.id));
+    } else if (forceRecapture) {
+      candidates = orderedTargets;
+    } else {
+      candidates = orderedTargets.filter((node) => {
+        const hasSavedThumb = hasStoredImageAsset(node.thumbnailUrl) && !invalidAssetIds.has(node.id);
+        if (hasSavedThumb) {
+          cachedCount += 1;
+          return false;
+        }
+        if (hasTerminalThumbnailFailure(node)) {
+          unavailableCount += 1;
+          return false;
+        }
+        return true;
+      });
+    }
     const targetIds = new Set(candidates.map((node) => node.id));
     return {
       targetIds,
       candidates,
       total: orderedTargets.length,
-      cachedCount: forceRecapture ? 0 : cachedCount,
-      unavailableCount: forceRecapture ? 0 : unavailableCount,
+      cachedCount: forceRecapture || recaptureCapturedOnly ? 0 : cachedCount,
+      unavailableCount: forceRecapture || recaptureCapturedOnly ? 0 : unavailableCount,
     };
   };
 
@@ -6343,6 +6356,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     scope,
     captureType,
     mode,
+    targetMode = 'remaining',
     targets,
     targetIds,
     cachedCount = 0,
@@ -6375,7 +6389,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         captureType,
         scope,
         nodeIds: scope === 'selected' ? Array.from(selectedNodeIds) : [],
-        force: scope === 'selected',
+        targetMode,
+        force: scope === 'selected' || targetMode === 'captured',
       });
       jobId = response?.jobId;
       if (!jobId) throw new Error('Image capture job did not start');
@@ -6571,7 +6586,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     validateCurrentMapImageAssets,
   ]);
 
-  const handleThumbnailCapture = async (scope) => {
+  const handleThumbnailCapture = async (scope, targetMode = 'remaining') => {
     if (warnCoeditingReadOnly('Thumbnail capture')) {
       return;
     }
@@ -6592,7 +6607,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       : allNodes;
     const validatedInvalidIds = await validateStoredAssetsForNodes(scopedNodes, 'thumbnailUrl');
     const invalidIds = new Set([...invalidThumbnailAssetIds, ...validatedInvalidIds]);
-    const { targetIds, candidates, total, cachedCount, unavailableCount } = getThumbnailCandidates(scope, invalidIds);
+    const { targetIds, candidates, total, cachedCount, unavailableCount } = getThumbnailCandidates(scope, invalidIds, targetMode);
     if (total === 0) {
       resetThumbnailQueue(0, 0, true, 'thumbnail');
       setThumbnailScopeIds(new Set());
@@ -6601,10 +6616,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('No pages with URLs to capture', 'info');
       return;
     }
+    if (targetMode === 'captured' && candidates.length === 0) {
+      resetThumbnailQueue(0, 0, true, 'thumbnail');
+      setThumbnailScopeIds(new Set());
+      setShowImageMenu(false);
+      showToast('No captured thumbnails to update', 'info');
+      return;
+    }
     const handledByJob = await runMapImageCaptureJob({
       scope,
       captureType: 'thumb',
       mode: 'thumbnail',
+      targetMode,
       targets: candidates,
       targetIds,
       cachedCount,
@@ -6905,7 +6928,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [showThumbnails, thumbnailStats.completed, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
-  const getFullScreenshotCandidates = (scope, invalidAssetIds = invalidFullScreenshotAssetIds) => {
+  const getFullScreenshotCandidates = (
+    scope,
+    invalidAssetIds = invalidFullScreenshotAssetIds,
+    targetMode = 'remaining',
+  ) => {
     const allNodes = collectAllNodesWithOrphans(root, orphans);
     const scopedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
     const scopedNodes = scope === 'selected'
@@ -6913,13 +6940,19 @@ export default function App({ currentRoute, navigateToRoute }) {
       : allNodes;
     const orderedTargets = orderThumbnailNodes(scopedNodes.filter((node) => node?.url));
     const forceRecapture = scope === 'selected';
-    const candidates = forceRecapture
-      ? orderedTargets
-      : orderedTargets.filter((node) => !hasStoredImageAsset(node.fullScreenshotUrl) || invalidAssetIds.has(node.id));
+    const recaptureCapturedOnly = targetMode === 'captured';
+    let candidates = [];
+    if (recaptureCapturedOnly) {
+      candidates = orderedTargets.filter((node) => hasStoredImageAsset(node.fullScreenshotUrl) && !invalidAssetIds.has(node.id));
+    } else if (forceRecapture) {
+      candidates = orderedTargets;
+    } else {
+      candidates = orderedTargets.filter((node) => !hasStoredImageAsset(node.fullScreenshotUrl) || invalidAssetIds.has(node.id));
+    }
     return {
       candidates,
       total: orderedTargets.length,
-      cachedCount: forceRecapture ? 0 : orderedTargets.length - candidates.length,
+      cachedCount: forceRecapture || recaptureCapturedOnly ? 0 : orderedTargets.length - candidates.length,
     };
   };
 
@@ -6938,84 +6971,68 @@ export default function App({ currentRoute, navigateToRoute }) {
     );
   }, [orphans, root, selectedNodeIds, hasStoredImageAsset, invalidThumbnailAssetIds, invalidFullScreenshotAssetIds, orderThumbnailNodes]);
 
-  const sanitizeAssetFilenamePart = (value, fallback = 'asset') => {
-    const cleaned = String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    return cleaned || fallback;
-  };
+  const buildImageDownloadNodeDescriptors = useCallback((scope) => {
+    const selectedIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
+    const descriptors = [];
 
-  const getAssetExtension = (url, fallback = 'png') => {
-    try {
-      const pathname = new URL(url, window.location.origin).pathname || '';
-      const match = pathname.match(/\.([a-z0-9]+)$/i);
-      return match?.[1]?.toLowerCase() || fallback;
-    } catch {
-      return fallback;
+    const visit = (node, parentPath = []) => {
+      if (!node?.id) return;
+      const number = reportNumberMap.get(node.id) || node.number || node.pageNumber || '';
+      const segment = {
+        id: node.id,
+        number,
+        title: node.title || '',
+        url: node.url || '',
+      };
+      const pathSegments = [...parentPath, segment];
+      if (!selectedIds || selectedIds.has(node.id)) {
+        descriptors.push({
+          ...segment,
+          pathSegments,
+        });
+      }
+      (node.children || []).forEach((child) => visit(child, pathSegments));
+    };
+
+    if (root) visit(root, []);
+    (orphans || []).forEach((orphan) => visit(orphan, []));
+    return descriptors;
+  }, [orphans, reportNumberMap, root, selectedNodeIds]);
+
+  const downloadImageAssets = async (scope) => {
+    if (!currentMap?.id) {
+      showToast('Save this map before downloading images', 'warning');
+      return;
     }
-  };
 
-  const triggerBlobDownload = (blob, filename) => {
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-  };
-
-  const downloadScreenshotAssets = async (scope, assetType) => {
-    const targets = getDownloadableScreenshotTargets(scope, assetType);
-    if (targets.length === 0) {
-      showToast(
-        assetType === 'thumb'
-          ? 'No saved thumbnail assets to download'
-          : 'No saved full screenshot assets to download',
-        'info',
-      );
+    const selectedNodeIdsForRequest = scope === 'selected' ? Array.from(selectedNodeIds) : [];
+    const allTargets = [
+      ...getDownloadableScreenshotTargets(scope, 'thumb'),
+      ...getDownloadableScreenshotTargets(scope, 'full'),
+    ];
+    if (allTargets.length === 0) {
+      showToast('No saved images to download', 'info');
       return;
     }
 
     setShowImageMenu(false);
-    showToast(
-      `Downloading ${targets.length} ${assetType === 'thumb' ? 'thumbnail' : 'full screenshot'} asset${targets.length === 1 ? '' : 's'}...`,
-      'loading',
-      true,
-    );
+    showToast('Preparing image download...', 'loading', true);
 
     try {
-      for (let index = 0; index < targets.length; index += 1) {
-        const node = targets[index];
-        const assetUrl = assetType === 'thumb' ? node.thumbnailUrl : node.fullScreenshotUrl;
-        const response = await fetch(assetUrl, { credentials: 'include' });
-        if (!response.ok) {
-          throw new Error(`Failed to download asset for "${node.title || node.url || node.id}"`);
-        }
-        const blob = await response.blob();
-        const ext = getAssetExtension(assetUrl);
-        const filename = [
-          sanitizeAssetFilenamePart(mapName || currentMap?.name, 'map'),
-          sanitizeAssetFilenamePart(node.title || getHostname(node.url) || node.id, 'page'),
-          assetType === 'thumb' ? 'thumb' : 'full',
-        ].join('-') + `.${ext}`;
-        triggerBlobDownload(blob, filename);
-      }
-      showToast(
-        `Downloaded ${targets.length} ${assetType === 'thumb' ? 'thumbnail' : 'full screenshot'} asset${targets.length === 1 ? '' : 's'}`,
-        'success',
-      );
-      trackEvent('screenshot_download', {
-        asset_type: assetType,
+      await api.downloadMapImages(currentMap.id, {
         scope,
-        count: targets.length,
+        selectedNodeIds: selectedNodeIdsForRequest,
+        nodes: buildImageDownloadNodeDescriptors(scope),
+      });
+      showToast('Downloaded images', 'success');
+      trackEvent('screenshot_download', {
+        asset_type: 'all',
+        scope,
+        count: allTargets.length,
       });
     } catch (error) {
-      console.error('Screenshot asset download error:', error);
-      showToast(error.message || 'Failed to download screenshot assets', 'error');
+      console.error('Image asset download error:', error);
+      showToast(error.message || 'Failed to download images', 'error');
     }
   };
 
@@ -7124,7 +7141,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
-  const handleFullScreenshotCapture = async (scope) => {
+  const handleFullScreenshotCapture = async (scope, targetMode = 'remaining') => {
     if (warnCoeditingReadOnly('Full screenshot capture')) {
       return;
     }
@@ -7146,10 +7163,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       : allNodes;
     const validatedInvalidIds = await validateStoredAssetsForNodes(scopedNodes, 'fullScreenshotUrl');
     const invalidIds = new Set([...invalidFullScreenshotAssetIds, ...validatedInvalidIds]);
-    const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope, invalidIds);
+    const { candidates: targets, total, cachedCount } = getFullScreenshotCandidates(scope, invalidIds, targetMode);
     if (total === 0) {
       setShowImageMenu(false);
       showToast('No pages with URLs to capture', 'info');
+      return;
+    }
+    if (targetMode === 'captured' && targets.length === 0) {
+      setShowImageMenu(false);
+      resetThumbnailQueue(0, 0, true, 'screenshot');
+      setThumbnailScopeIds(new Set());
+      showToast('No captured full screenshots to update', 'info');
       return;
     }
     if (targets.length === 0) {
@@ -7174,6 +7198,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       scope,
       captureType: 'full',
       mode: 'screenshot',
+      targetMode,
       targets,
       targetIds: new Set(targets.map((node) => node.id)),
       cachedCount,
@@ -14160,12 +14185,12 @@ export default function App({ currentRoute, navigateToRoute }) {
                 },
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
-                onDownloadThumbnailsAll: () => downloadScreenshotAssets('all', 'thumb'),
-                onDownloadThumbnailsSelected: () => downloadScreenshotAssets('selected', 'thumb'),
+                onUpdateCapturedThumbnails: () => handleThumbnailCapture('all', 'captured'),
                 onGetFullScreenshotsAll: () => handleFullScreenshotCapture('all'),
                 onGetFullScreenshotsSelected: () => handleFullScreenshotCapture('selected'),
-                onDownloadFullScreenshotsAll: () => downloadScreenshotAssets('all', 'full'),
-                onDownloadFullScreenshotsSelected: () => downloadScreenshotAssets('selected', 'full'),
+                onUpdateCapturedFullScreenshots: () => handleFullScreenshotCapture('all', 'captured'),
+                onDownloadImagesAll: () => downloadImageAssets('all'),
+                onDownloadImagesSelected: () => downloadImageAssets('selected'),
                 onToggleThumbnails: () => {
                   setShowThumbnails((prev) => !prev);
                 },
@@ -14175,6 +14200,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasDownloadableSelectedThumbnails: hasSelectedDownloadableThumbnails,
                 hasFullScreenshotAssets: hasAnyFullScreenshotAssets,
                 hasSelectedFullScreenshotAssets: hasSelectedFullScreenshotAssets,
+                hasDownloadableImages: hasAnyDownloadableImages,
+                hasDownloadableSelectedImages: hasSelectedDownloadableImages,
                 allThumbnailsCaptured,
                 thumbnailsAllLabel: invalidThumbnailAssetIds.size > 0
                   ? 'Retry Missing Thumbnails'

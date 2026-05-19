@@ -145,6 +145,43 @@ async function fetchJson(url, options = {}, cookieJar = { value: '' }) {
   return data;
 }
 
+async function fetchDownload(url, options = {}, cookieJar = { value: '' }) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (cookieJar.value) headers.Cookie = cookieJar.value;
+  if (cookieJar.token && !headers.Authorization) headers.Authorization = `Bearer ${cookieJar.token}`;
+  const res = await fetch(url, { ...options, headers, redirect: 'manual' });
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (!res.ok) {
+    let message = buffer.toString('utf8');
+    try {
+      message = JSON.parse(message).error || message;
+    } catch {
+      // Keep raw text.
+    }
+    throw new Error(`${res.status} ${message || 'request failed'} (${url})`);
+  }
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type') || '',
+    contentDisposition: res.headers.get('content-disposition') || '',
+    buffer,
+  };
+}
+
+function listZipEntryNames(buffer) {
+  const names = [];
+  let offset = 0;
+  while (offset + 30 <= buffer.length && buffer.readUInt32LE(offset) === 0x04034b50) {
+    const compressedSize = buffer.readUInt32LE(offset + 18);
+    const nameLength = buffer.readUInt16LE(offset + 26);
+    const extraLength = buffer.readUInt16LE(offset + 28);
+    const nameStart = offset + 30;
+    names.push(buffer.slice(nameStart, nameStart + nameLength).toString('utf8'));
+    offset = nameStart + nameLength + extraLength + compressedSize;
+  }
+  return names;
+}
+
 async function pollImageCaptureJob(apiBase, mapId, jobId, cookieJar) {
   const deadline = Date.now() + 90000;
   while (Date.now() < deadline) {
@@ -191,6 +228,20 @@ function getSavedManifestCount(dbPath, mapId) {
       FROM map_image_assets
       WHERE map_id = ? AND status = 'saved' AND url IS NOT NULL
     `).get(mapId);
+    return Number(row?.count || 0);
+  } finally {
+    db.close();
+  }
+}
+
+function getStaleManifestCount(dbPath, mapId, nodeId) {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM map_image_assets
+      WHERE map_id = ? AND node_id = ? AND status = 'stale'
+    `).get(mapId, nodeId);
     return Number(row?.count || 0);
   } finally {
     db.close();
@@ -362,17 +413,74 @@ async function run() {
     assert(fullResult?.url && /_full_v\d+\.jpe?g/i.test(fullResult.url), 'full screenshot did not return a full asset');
     assert(Number(fullResult.width) >= 1000, `full screenshot width too low: ${fullResult.width}`);
     await assertAssetLoads(apiBase, fullResult.url);
-    const fullFilename = path.basename(new URL(fullResult.url, apiBase).pathname);
-    fs.unlinkSync(path.join(screenshotDir, fullFilename));
-    const missingFullValidation = await fetchJson(`${apiBase}/screenshot-assets/validate`, {
+
+    const recaptureFullStart = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs`, {
       method: 'POST',
-      body: JSON.stringify({ urls: [fullResult.url] }),
+      body: JSON.stringify({ captureType: 'full', scope: 'all', targetMode: 'captured' }),
     }, cookieJar);
+    const recaptureFullJob = await pollImageCaptureJob(apiBase, mapId, recaptureFullStart.jobId, cookieJar);
+    assert.strictEqual(recaptureFullJob.result.targetMode, 'captured', 'recapture target mode mismatch');
+    assert.strictEqual(recaptureFullJob.result.total, 1, 'captured-only recapture should target one saved full screenshot');
+    assert.strictEqual(recaptureFullJob.result.captured, 1, 'captured-only recapture should refresh the saved full screenshot');
+    assert.strictEqual(recaptureFullJob.result.skipped, 0, 'captured-only recapture should not skip missing full screenshots');
     assert.strictEqual(
-      missingFullValidation.results[fullResult.url].available,
+      recaptureFullJob.result.results.some((result) => result.nodeId !== 'main-0'),
       false,
-      'deleted full screenshot should validate as missing'
+      'captured-only recapture should not capture pages without saved full screenshots'
     );
+
+    const singleDownload = await fetchDownload(`${apiBase}/api/maps/${mapId}/images/download`, {
+      method: 'POST',
+      body: JSON.stringify({
+        scope: 'selected',
+        selectedNodeIds: ['sub-1'],
+      }),
+    }, cookieJar);
+    assert(singleDownload.contentType.includes('image/'), `single image content type mismatch: ${singleDownload.contentType}`);
+    assert(
+      singleDownload.contentDisposition.includes('s1.1-Subdomain-L1'),
+      `single image filename should include page number and name: ${singleDownload.contentDisposition}`
+    );
+    assert(singleDownload.buffer.length > 1000, 'single image download too small');
+
+    const zipDownload = await fetchDownload(`${apiBase}/api/maps/${mapId}/images/download`, {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'all' }),
+    }, cookieJar);
+    assert(zipDownload.contentType.includes('application/zip'), `zip content type mismatch: ${zipDownload.contentType}`);
+    const zipEntries = listZipEntryNames(zipDownload.buffer);
+    assert(zipEntries.length >= storedThumbnailCount, 'zip should include captured image entries');
+    assert(
+      zipEntries.some((entry) => entry.includes('0-Main/0-Main-thumbnail.jpg')),
+      `zip missing numbered root thumbnail entry: ${zipEntries.join(', ')}`
+    );
+    assert(
+      zipEntries.some((entry) => entry.includes('0-Main/0-Main-full.jpg')),
+      `zip missing numbered root full screenshot entry: ${zipEntries.join(', ')}`
+    );
+    assert(
+      zipEntries.some((entry) => entry.includes('s1-Subdomain-root/s1.1-Subdomain-L1/s1.1-Subdomain-L1.jpg')),
+      `zip missing nested subdomain entry: ${zipEntries.join(', ')}`
+    );
+
+    const latestMap = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
+    const rootWithChangedUrl = {
+      ...latestMap.map.root,
+      url: `${fixtureBase}/changed-home`,
+    };
+    const staleSave = await fetchJson(`${apiBase}/api/maps/${mapId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: latestMap.map.name,
+        root: rootWithChangedUrl,
+        orphans: latestMap.map.orphans,
+        connections: latestMap.map.connections,
+        colors: latestMap.map.colors,
+      }),
+    }, cookieJar);
+    assert(!staleSave.map.root.thumbnailUrl, 'URL change should clear stale thumbnailUrl');
+    assert(!staleSave.map.root.fullScreenshotUrl, 'URL change should clear stale fullScreenshotUrl');
+    assert(getStaleManifestCount(dbPath, mapId, 'main-0') >= 1, 'URL change should mark manifest assets stale');
 
     console.log('image capture job smoke ok');
   } finally {

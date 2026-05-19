@@ -89,12 +89,12 @@ const CanvasToolbar = ({
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
-  onDownloadThumbnailsAll,
-  onDownloadThumbnailsSelected,
+  onUpdateCapturedThumbnails,
   onGetFullScreenshotsAll,
   onGetFullScreenshotsSelected,
-  onDownloadFullScreenshotsAll,
-  onDownloadFullScreenshotsSelected,
+  onUpdateCapturedFullScreenshots,
+  onDownloadImagesAll,
+  onDownloadImagesSelected,
   onToggleThumbnails,
   showThumbnails,
   hasAnyThumbnails,
@@ -102,6 +102,8 @@ const CanvasToolbar = ({
   hasDownloadableSelectedThumbnails,
   hasFullScreenshotAssets,
   hasSelectedFullScreenshotAssets,
+  hasDownloadableImages,
+  hasDownloadableSelectedImages,
   thumbnailsAllLabel = 'Get Thumbnails (All)',
   fullScreenshotsAllLabel = 'Get Screenshots (All)',
   captureIssues = [],
@@ -208,15 +210,21 @@ const CanvasToolbar = ({
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Download thumbnails (All)"
-              onClick={onDownloadThumbnailsAll}
+              label="Update Captured Thumbnails"
+              onClick={onUpdateCapturedThumbnails}
               disabled={!hasMap || !hasDownloadableThumbnails}
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Download thumbnails (Selected)"
-              onClick={onDownloadThumbnailsSelected}
-              disabled={!hasSelection || !hasDownloadableSelectedThumbnails}
+              label="Download All"
+              onClick={onDownloadImagesAll}
+              disabled={!hasMap || !hasDownloadableImages}
+            />
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Download Selected"
+              onClick={onDownloadImagesSelected}
+              disabled={!hasSelection || !hasDownloadableSelectedImages}
             />
           </div>
           <MenuDivider className="canvas-tool-menu-divider" />
@@ -236,15 +244,9 @@ const CanvasToolbar = ({
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Download full screenshots (All)"
-              onClick={onDownloadFullScreenshotsAll}
+              label="Update Captured Screenshots"
+              onClick={onUpdateCapturedFullScreenshots}
               disabled={!hasMap || !hasFullScreenshotAssets}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label="Download full screenshots (Selected)"
-              onClick={onDownloadFullScreenshotsSelected}
-              disabled={!hasSelection || !hasSelectedFullScreenshotAssets}
             />
             <div className="canvas-tool-menu-hint">Saves a full-page asset per page</div>
           </div>

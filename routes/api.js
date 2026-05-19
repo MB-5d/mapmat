@@ -35,8 +35,20 @@ const {
   extractScreenshotStorageKey,
   getContentTypeForKey,
   getScreenshotStorageProvider,
+  readScreenshotJson,
+  readScreenshotObject,
   statScreenshotObject,
 } = require('../utils/screenshotStorage');
+const {
+  DOWNLOAD_IMAGE_FIELDS,
+  buildImageDownloadPath,
+  collectFallbackImageDownloadNodes,
+  createZipBuffer,
+  getAssetExtension,
+  normalizeDownloadNodeDescriptors,
+  sanitizeFilenamePart,
+  urlsMatch,
+} = require('../utils/imageDownloadPackage');
 
 const router = express.Router();
 
@@ -356,13 +368,51 @@ function collectNodeAssetFields(root, orphans = []) {
   return assetsById;
 }
 
-function mergePreservedNodeAssets(node, assetsById, result) {
+function collectNodesById(root, orphans = []) {
+  const nodesById = new Map();
+  const visit = (node) => {
+    if (!node || typeof node !== 'object') return;
+    const nodeId = String(node.id || '').trim();
+    if (nodeId) nodesById.set(nodeId, node);
+    if (Array.isArray(node.children)) node.children.forEach(visit);
+  };
+  visit(root);
+  if (Array.isArray(orphans)) orphans.forEach(visit);
+  return nodesById;
+}
+
+function stripStaleImageAssetFields(node) {
+  if (!node || typeof node !== 'object') return node;
+  let nextNode = node;
+  [
+    'thumbnailUrl',
+    'thumbnailFullUrl',
+    'fullScreenshotUrl',
+    'thumbnailCaptureError',
+    'thumbnailCaptureFailedAt',
+    'thumbnailCaptureFailed',
+    'fullScreenshotTruncated',
+  ].forEach((field) => {
+    if (Object.prototype.hasOwnProperty.call(nextNode, field)) {
+      if (nextNode === node) nextNode = { ...node };
+      delete nextNode[field];
+    }
+  });
+  return nextNode;
+}
+
+function mergePreservedNodeAssets(node, assetsById, currentNodesById, result) {
   if (!node || typeof node !== 'object') return node;
   let nextNode = node;
   const nodeId = String(node.id || '').trim();
   const existingAssets = nodeId ? assetsById.get(nodeId) : null;
+  const currentNode = nodeId ? currentNodesById.get(nodeId) : null;
 
-  if (existingAssets) {
+  if (existingAssets && currentNode && !urlsMatch(currentNode.url || '', node.url || '')) {
+    nextNode = stripStaleImageAssetFields(nextNode);
+    result.changed = true;
+    result.staleNodeIds.add(nodeId);
+  } else if (existingAssets) {
     Object.entries(existingAssets).forEach(([field, value]) => {
       if (nextNode[field] !== value) {
         if (nextNode === node) nextNode = { ...node };
@@ -375,7 +425,7 @@ function mergePreservedNodeAssets(node, assetsById, result) {
   if (Array.isArray(node.children)) {
     let childrenChanged = false;
     const nextChildren = node.children.map((child) => {
-      const nextChild = mergePreservedNodeAssets(child, assetsById, result);
+      const nextChild = mergePreservedNodeAssets(child, assetsById, currentNodesById, result);
       if (nextChild !== child) childrenChanged = true;
       return nextChild;
     });
@@ -390,14 +440,16 @@ function mergePreservedNodeAssets(node, assetsById, result) {
 
 function preserveExistingImageAssets({ root, orphans, currentRoot, currentOrphans }) {
   const assetsById = collectNodeAssetFields(currentRoot, currentOrphans);
-  if (assetsById.size === 0) return { root, orphans };
+  if (assetsById.size === 0) return { root, orphans, staleNodeIds: [] };
 
-  const result = { changed: false };
+  const currentNodesById = collectNodesById(currentRoot, currentOrphans);
+  const result = { changed: false, staleNodeIds: new Set() };
   return {
-    root: root !== undefined ? mergePreservedNodeAssets(root, assetsById, result) : root,
+    root: root !== undefined ? mergePreservedNodeAssets(root, assetsById, currentNodesById, result) : root,
     orphans: Array.isArray(orphans)
-      ? orphans.map((orphan) => mergePreservedNodeAssets(orphan, assetsById, result))
+      ? orphans.map((orphan) => mergePreservedNodeAssets(orphan, assetsById, currentNodesById, result))
       : orphans,
+    staleNodeIds: Array.from(result.staleNodeIds),
   };
 }
 
@@ -506,6 +558,130 @@ async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}
       orphans: sanitizedTree.orphans || [],
     },
     changed: true,
+  };
+}
+
+function buildContentDisposition(filename) {
+  const safeFilename = sanitizeFilenamePart(filename, 'download');
+  const quoted = safeFilename.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `attachment; filename="${quoted}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`;
+}
+
+function normalizeSelectedNodeIds(rawNodeIds) {
+  return Array.from(new Set(
+    (Array.isArray(rawNodeIds) ? rawNodeIds : [])
+      .map((nodeId) => String(nodeId || '').trim())
+      .filter(Boolean)
+  ));
+}
+
+async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNodeIds, clientNodes }) {
+  const fallbackDescriptors = normalizeDownloadNodeDescriptors(
+    collectFallbackImageDownloadNodes(parsedMap.root, parsedMap.orphans)
+  );
+  const clientDescriptors = normalizeDownloadNodeDescriptors(clientNodes);
+  const currentNodesById = collectNodesById(parsedMap.root, parsedMap.orphans);
+  const validNodeIds = new Set(currentNodesById.keys());
+  const selectedSet = scope === 'selected' ? new Set(selectedNodeIds) : null;
+  const exportableFields = new Set(DOWNLOAD_IMAGE_FIELDS);
+  const savedRows = await imageAssetStore.listSavedImageAssetsByMapAsync(mapId);
+  const rows = (savedRows || []).filter((row) => {
+    const nodeId = String(row.node_id || '').trim();
+    const assetField = String(row.asset_field || '').trim();
+    if (!validNodeIds.has(nodeId) || !exportableFields.has(assetField)) return false;
+    if (selectedSet && !selectedSet.has(nodeId)) return false;
+    return true;
+  });
+
+  const exportedFieldCountsByNode = new Map();
+  rows.forEach((row) => {
+    const nodeId = String(row.node_id || '').trim();
+    exportedFieldCountsByNode.set(nodeId, (exportedFieldCountsByNode.get(nodeId) || 0) + 1);
+  });
+
+  const files = [];
+  const staleNodeIds = new Set();
+  const missingEntries = [];
+  const usedPaths = new Set();
+
+  for (const row of rows) {
+    const nodeId = String(row.node_id || '').trim();
+    const assetField = String(row.asset_field || '').trim();
+    const storageKey = String(row.storage_key || '').trim() || extractScreenshotStorageKey(row.url);
+    if (!storageKey) continue;
+
+    const node = currentNodesById.get(nodeId);
+    const descriptor = clientDescriptors.get(nodeId)
+      || fallbackDescriptors.get(nodeId)
+      || {
+        id: nodeId,
+        number: '',
+        title: node?.title || '',
+        url: node?.url || '',
+        pathSegments: [],
+      };
+    const currentUrl = descriptor.url || node?.url || '';
+    const metadata = await readScreenshotJson(`${storageKey}.json`);
+    if (metadata?.url && currentUrl && !urlsMatch(metadata.url, currentUrl)) {
+      staleNodeIds.add(nodeId);
+      continue;
+    }
+
+    const object = await readScreenshotObject(storageKey);
+    if (!object?.buffer || Number(object.size || object.buffer.length || 0) <= 0) {
+      missingEntries.push({
+        mapId,
+        nodeId,
+        assetField,
+        assetType: row.asset_type || assetField,
+        storageKey,
+        url: row.url || null,
+        provider: row.provider || getScreenshotStorageProvider(),
+        contentType: row.content_type || getContentTypeForKey(storageKey),
+        status: 'missing',
+        error: 'Missing saved asset',
+      });
+      continue;
+    }
+
+    const extension = getAssetExtension({
+      storageKey,
+      contentType: row.content_type || object.contentType,
+    });
+    const filePath = buildImageDownloadPath({
+      descriptor,
+      assetField,
+      exportedFieldCount: exportedFieldCountsByNode.get(nodeId) || 1,
+      extension,
+      usedPaths,
+    });
+
+    files.push({
+      path: filePath,
+      buffer: object.buffer,
+      contentType: row.content_type || object.contentType || getContentTypeForKey(storageKey),
+      nodeId,
+      assetField,
+    });
+  }
+
+  if (missingEntries.length > 0) {
+    imageAssetStore.markImageAssetsMissingAsync(missingEntries).catch((error) => {
+      console.warn('Image download missing asset mark error:', error.message);
+    });
+  }
+  if (staleNodeIds.size > 0) {
+    imageAssetStore.markImageAssetsStaleByNodeIdsAsync({
+      mapId,
+      nodeIds: Array.from(staleNodeIds),
+    }).catch((error) => {
+      console.warn('Image download stale asset mark error:', error.message);
+    });
+  }
+
+  return {
+    files,
+    staleNodeIds: Array.from(staleNodeIds),
   };
 }
 
@@ -1496,6 +1672,71 @@ router.get('/maps/:id', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/maps/:id/images/download - Download current map images as one file or a zip
+router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const scope = req.body?.scope === 'selected' ? 'selected' : 'all';
+    const selectedNodeIds = normalizeSelectedNodeIds(req.body?.selectedNodeIds || req.body?.nodeIds);
+    if (scope === 'selected' && selectedNodeIds.length === 0) {
+      return res.status(400).json({ error: 'No selected pages provided' });
+    }
+    if (selectedNodeIds.length > 2000) {
+      return res.status(400).json({ error: 'Too many selected pages' });
+    }
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
+
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_READ,
+      failureError: 'Map not found',
+    })) return;
+
+    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
+    const { files, staleNodeIds } = await buildMapImageDownloadFiles({
+      mapId: id,
+      parsedMap: repaired.parsed,
+      scope,
+      selectedNodeIds,
+      clientNodes: req.body?.nodes,
+    });
+
+    if (files.length === 0) {
+      return res.status(404).json({
+        error: staleNodeIds.length > 0
+          ? 'No current saved images to download. Recapture images for pages whose URL changed.'
+          : 'No saved images to download',
+        staleNodeIds,
+      });
+    }
+
+    const baseName = sanitizeFilenamePart(map.name || repaired.parsed.root?.title || 'vellic-images', 'vellic-images');
+    if (files.length === 1) {
+      const file = files[0];
+      const filename = file.path.split('/').pop() || `${baseName}.jpg`;
+      res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+      res.setHeader('Content-Disposition', buildContentDisposition(filename));
+      res.setHeader('Content-Length', file.buffer.length);
+      return res.send(file.buffer);
+    }
+
+    const zipBuffer = createZipBuffer(files);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', buildContentDisposition(`${baseName}-images.zip`));
+    res.setHeader('Content-Length', zipBuffer.length);
+    return res.send(zipBuffer);
+  } catch (error) {
+    console.error('Download map images error:', error);
+    return res.status(500).json({ error: 'Failed to download map images' });
+  }
+});
+
 // GET /api/maps/:id/feature-gates - resolve role + feature access for current actor
 router.get('/maps/:id/feature-gates', requireAuth, async (req, res) => {
   try {
@@ -1710,6 +1951,7 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
     let treeRoot = root;
     let treeOrphans = orphans;
+    let staleImageNodeIds = [];
     if (root !== undefined || orphans !== undefined) {
       let currentRoot = safeParse(map.root_data, 'root_data', null);
       let currentOrphans = safeParse(map.orphans_data, 'orphans_data', []);
@@ -1731,6 +1973,7 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       });
       treeRoot = preservedTree.root;
       treeOrphans = preservedTree.orphans;
+      staleImageNodeIds = preservedTree.staleNodeIds || [];
     }
 
     const sanitizedTree = sanitizeMapTreeForStorage({ root: treeRoot, orphans: treeOrphans });
@@ -1766,6 +2009,16 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
 
     await mapStore.updateMapByIdAsync(id, patch);
+    if (staleImageNodeIds.length > 0) {
+      try {
+        await imageAssetStore.markImageAssetsStaleByNodeIdsAsync({
+          mapId: id,
+          nodeIds: staleImageNodeIds,
+        });
+      } catch (error) {
+        console.warn('Image asset stale mark error:', error.message);
+      }
+    }
 
     const updated = await mapStore.getMapByIdAsync(id);
 

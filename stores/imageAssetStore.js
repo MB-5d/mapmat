@@ -168,6 +168,30 @@ async function markImageAssetsMissingAsync(entries) {
   return upsertImageAssetsAsync(normalizedEntries);
 }
 
+async function markImageAssetsStaleByNodeIdsAsync({ mapId, nodeIds, error = 'Stale after URL change' }) {
+  await ensureImageAssetSchemaAsync();
+  const safeMapId = String(mapId || '').trim();
+  const safeNodeIds = Array.from(new Set(
+    (Array.isArray(nodeIds) ? nodeIds : [])
+      .map((nodeId) => String(nodeId || '').trim())
+      .filter(Boolean)
+  ));
+  if (!safeMapId || safeNodeIds.length === 0) return 0;
+
+  const placeholders = adapter.placeholders(safeNodeIds.length);
+  const result = await adapter.executeAsync(`
+    UPDATE map_image_assets
+    SET status = 'stale',
+        error = ?,
+        verified_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE map_id = ?
+      AND node_id IN (${placeholders})
+      AND status = 'saved'
+  `, [error, safeMapId, ...safeNodeIds]);
+  return result?.changes || 0;
+}
+
 module.exports = {
   ensureImageAssetSchemaAsync,
   buildImageAssetId,
@@ -176,4 +200,5 @@ module.exports = {
   listImageAssetsByMapAsync,
   listSavedImageAssetsByMapAsync,
   markImageAssetsMissingAsync,
+  markImageAssetsStaleByNodeIdsAsync,
 };

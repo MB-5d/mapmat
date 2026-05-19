@@ -93,14 +93,25 @@ async function fetchAdminApi(endpoint, options = {}) {
 }
 
 async function fetchBlob(endpoint, { includeUserToken = true } = {}) {
+  const { blob } = await fetchBlobResponse(endpoint, {}, { includeUserToken });
+  return blob;
+}
+
+async function fetchBlobResponse(endpoint, options = {}, { includeUserToken = true } = {}) {
   const authToken = includeUserToken ? getStoredAuthToken() : null;
-  const headers = {};
+  const headers = {
+    ...(options.headers || {}),
+  };
 
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`;
   }
+  if (options.body && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
     credentials: 'include',
     headers,
   });
@@ -114,10 +125,14 @@ async function fetchBlob(endpoint, { includeUserToken = true } = {}) {
     }
     const error = new Error(payload?.error || 'Request failed');
     error.status = response.status;
+    error.payload = payload;
     throw error;
   }
 
-  return response.blob();
+  return {
+    blob: await response.blob(),
+    filename: getDownloadFilename(response.headers.get('content-disposition')),
+  };
 }
 
 function triggerBlobDownload(blob, filename) {
@@ -129,6 +144,22 @@ function triggerBlobDownload(blob, filename) {
   link.click();
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function getDownloadFilename(contentDisposition) {
+  const header = String(contentDisposition || '');
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const quotedMatch = header.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) return quotedMatch[1].replace(/\\"/g, '"');
+  const plainMatch = header.match(/filename=([^;]+)/i);
+  return plainMatch?.[1]?.trim() || '';
 }
 
 function buildWebSocketUrl(endpoint) {
@@ -471,6 +502,16 @@ export async function updateMapNodeAssets(id, updates) {
     method: 'PATCH',
     body: JSON.stringify({ updates }),
   });
+}
+
+export async function downloadMapImages(id, payload = {}) {
+  const { blob, filename } = await fetchBlobResponse(`/api/maps/${id}/images/download`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  const fallback = payload?.scope === 'selected' ? 'vellic-selected-images.zip' : 'vellic-images.zip';
+  triggerBlobDownload(blob, filename || fallback);
+  return { filename: filename || fallback };
 }
 
 export async function deleteMap(id) {
