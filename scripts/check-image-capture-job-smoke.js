@@ -139,7 +139,10 @@ async function fetchJson(url, options = {}, cookieJar = { value: '' }) {
     data = { raw: text };
   }
   if (!res.ok) {
-    throw new Error(`${res.status} ${data?.error || text || 'request failed'} (${url})`);
+    const error = new Error(`${res.status} ${data?.error || text || 'request failed'} (${url})`);
+    error.status = res.status;
+    error.payload = data;
+    throw error;
   }
   if (data?.token) cookieJar.token = data.token;
   return data;
@@ -239,6 +242,33 @@ function getJobStatus(dbPath, jobId) {
   try {
     const row = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
     return row?.status || null;
+  } finally {
+    db.close();
+  }
+}
+
+function insertActiveImageCaptureJob(dbPath, { jobId, mapId, captureType, scope, targetMode = 'remaining', nodeIds = [] }) {
+  const db = new Database(dbPath, { fileMustExist: true });
+  try {
+    db.prepare(`
+      INSERT INTO jobs (id, type, status, started_at, payload)
+      VALUES (?, 'image_capture', 'running', CURRENT_TIMESTAMP, ?)
+    `).run(jobId, JSON.stringify({
+      mapId,
+      captureType,
+      scope,
+      targetMode,
+      nodeIds,
+    }));
+  } finally {
+    db.close();
+  }
+}
+
+function deleteJob(dbPath, jobId) {
+  const db = new Database(dbPath, { fileMustExist: true });
+  try {
+    db.prepare('DELETE FROM jobs WHERE id = ?').run(jobId);
   } finally {
     db.close();
   }
@@ -351,6 +381,57 @@ async function run() {
     }, cookieJar);
     const mapId = saved.map?.id;
     assert(mapId, 'missing map id');
+
+    const activeAllJobId = `active-all-${Date.now()}`;
+    insertActiveImageCaptureJob(dbPath, {
+      jobId: activeAllJobId,
+      mapId,
+      captureType: 'thumb',
+      scope: 'all',
+      targetMode: 'remaining',
+    });
+    try {
+      await assert.rejects(
+        () => fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs`, {
+          method: 'POST',
+          body: JSON.stringify({
+            captureType: 'thumb',
+            scope: 'selected',
+            nodeIds: ['main-0'],
+            targetMode: 'remaining',
+          }),
+        }, cookieJar),
+        (error) => error.status === 409 && error.payload?.code === 'IMAGE_CAPTURE_JOB_ACTIVE',
+        'different selected capture should not reuse an active all-pages job'
+      );
+    } finally {
+      deleteJob(dbPath, activeAllJobId);
+    }
+
+    const activeSelectedJobId = `active-selected-${Date.now()}`;
+    insertActiveImageCaptureJob(dbPath, {
+      jobId: activeSelectedJobId,
+      mapId,
+      captureType: 'thumb',
+      scope: 'selected',
+      targetMode: 'remaining',
+      nodeIds: ['main-0'],
+    });
+    try {
+      const matchingActive = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          captureType: 'thumb',
+          scope: 'selected',
+          nodeIds: ['main-0'],
+          targetMode: 'remaining',
+        }),
+      }, cookieJar);
+      assert.strictEqual(matchingActive.alreadyRunning, true, 'matching active selected job should be reused');
+      assert.strictEqual(matchingActive.jobId, activeSelectedJobId, 'matching active selected job id mismatch');
+    } finally {
+      deleteJob(dbPath, activeSelectedJobId);
+    }
 
     const thumbStart = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs`, {
       method: 'POST',

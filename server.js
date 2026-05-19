@@ -1088,7 +1088,29 @@ const findActiveDiscoveryJob = async (mapId) => {
   return null;
 };
 
-const findActiveImageCaptureJob = async (mapId, captureType) => {
+const normalizeImageCaptureNodeIdList = (nodeIds) => (
+  Array.from(new Set(
+    (Array.isArray(nodeIds) ? nodeIds : [])
+      .map((nodeId) => String(nodeId || '').trim())
+      .filter(Boolean)
+  )).sort()
+);
+
+const imageCaptureRequestsMatch = (payload, request) => {
+  const payloadScope = payload?.scope === 'selected' ? 'selected' : 'all';
+  const requestScope = request?.scope === 'selected' ? 'selected' : 'all';
+  if (payloadScope !== requestScope) return false;
+  const payloadTargetMode = normalizeImageCaptureTargetMode(payload?.targetMode) || IMAGE_CAPTURE_TARGET_MODES.remaining;
+  const requestTargetMode = normalizeImageCaptureTargetMode(request?.targetMode) || IMAGE_CAPTURE_TARGET_MODES.remaining;
+  if (payloadTargetMode !== requestTargetMode) return false;
+  if (payloadScope !== 'selected') return true;
+  const left = normalizeImageCaptureNodeIdList(payload?.nodeIds);
+  const right = normalizeImageCaptureNodeIdList(request?.nodeIds);
+  if (left.length !== right.length) return false;
+  return left.every((nodeId, index) => nodeId === right[index]);
+};
+
+const findActiveImageCaptureJob = async (mapId, captureType, request = {}) => {
   const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
     JOB_TYPES.imageCapture,
     [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.stopping]
@@ -1097,7 +1119,10 @@ const findActiveImageCaptureJob = async (mapId, captureType) => {
   for (const row of rows) {
     const payload = getJobPayload(row);
     if (payload.mapId === mapId && payload.captureType === captureType) {
-      return row.id;
+      return {
+        id: row.id,
+        matchesRequest: imageCaptureRequestsMatch(payload, request),
+      };
     }
   }
   return null;
@@ -4858,12 +4883,25 @@ function registerImageCaptureRoutes(targetApp) {
       const map = await getImageCaptureMapForRequest(req, id);
       if (!map) return res.status(404).json({ error: 'Map not found' });
 
-      const existingJobId = await findActiveImageCaptureJob(id, captureType);
-      if (existingJobId) {
+      const existingJob = await findActiveImageCaptureJob(id, captureType, {
+        scope,
+        nodeIds,
+        targetMode,
+      });
+      if (existingJob?.id && existingJob.matchesRequest) {
         return res.json({
           ok: true,
           alreadyRunning: true,
-          jobId: existingJobId,
+          jobId: existingJob.id,
+          jobType: JOB_TYPES.imageCapture,
+          mapId: id,
+        });
+      }
+      if (existingJob?.id) {
+        return res.status(409).json({
+          error: 'Another image capture is still running for this map. Stop it or wait for it to finish before starting a different capture.',
+          code: 'IMAGE_CAPTURE_JOB_ACTIVE',
+          jobId: existingJob.id,
           jobType: JOB_TYPES.imageCapture,
           mapId: id,
         });

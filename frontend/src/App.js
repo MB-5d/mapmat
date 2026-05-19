@@ -139,6 +139,9 @@ const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 
 function getImageCaptureJobErrorMessage(error, fallback = 'Image capture failed') {
   const message = String(error?.message || error?.error || '').trim();
+  if (error?.code === 'IMAGE_CAPTURE_JOB_ACTIVE' || error?.payload?.code === 'IMAGE_CAPTURE_JOB_ACTIVE') {
+    return 'Another image capture is still running for this map. Stop it or wait for it to finish before starting a different capture.';
+  }
   if (/unknown job type:\s*image_capture/i.test(message)) {
     return 'Screenshot capture did not start because staging is still updating. Refresh in a minute and retry.';
   }
@@ -5940,7 +5943,29 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const completeThumbnailCapture = useCallback((nodeId, { captured = true } = {}) => {
     if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
-    if (thumbnailFinishedRef.current.has(nodeId)) return;
+    const updateStats = () => {
+      const completedCount = thumbnailFinishedRef.current.size;
+      const capturedCount = thumbnailLoadedRef.current.size;
+      const expectedCount = thumbnailExpectedRef.current.size;
+      setThumbnailStats((prev) => ({
+        ...prev,
+        loaded: capturedCount,
+        completed: completedCount,
+        failed: thumbnailErrorRef.current.size,
+        avgMs: completedCount ? Math.round(thumbnailTotalTimeRef.current / completedCount) : 0,
+      }));
+      if (!thumbnailCompletedRef.current && expectedCount > 0 && completedCount >= expectedCount) {
+        thumbnailCompletedRef.current = true;
+      }
+    };
+    if (thumbnailFinishedRef.current.has(nodeId)) {
+      if (captured && thumbnailErrorRef.current.has(nodeId)) {
+        thumbnailErrorRef.current.delete(nodeId);
+        thumbnailLoadedRef.current.add(nodeId);
+        updateStats();
+      }
+      return;
+    }
     thumbnailFinishedRef.current.add(nodeId);
     if (captured) {
       thumbnailLoadedRef.current.add(nodeId);
@@ -5954,19 +5979,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       thumbnailLoadStartRef.current.delete(nodeId);
     }
     thumbnailAttemptsRef.current.delete(nodeId);
-    const completedCount = thumbnailFinishedRef.current.size;
-    const capturedCount = thumbnailLoadedRef.current.size;
-    const expectedCount = thumbnailExpectedRef.current.size;
-    setThumbnailStats((prev) => ({
-      ...prev,
-      loaded: capturedCount,
-      completed: completedCount,
-      failed: thumbnailErrorRef.current.size,
-      avgMs: completedCount ? Math.round(thumbnailTotalTimeRef.current / completedCount) : 0,
-    }));
-    if (!thumbnailCompletedRef.current && expectedCount > 0 && completedCount >= expectedCount) {
-      thumbnailCompletedRef.current = true;
-    }
+    updateStats();
   }, []);
 
   const handleThumbnailDisplayLoad = useCallback((nodeId) => {
@@ -5983,6 +5996,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleThumbnailDisplayError = useCallback((nodeId) => {
     if (!nodeId) return;
+    if (thumbnailLoadedRef.current.has(nodeId)) return;
     clearInvalidThumbnailAsset(nodeId);
     recordCaptureIssue({
       nodeId,
@@ -6414,24 +6428,25 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
         return hasIssue;
       };
-      const getSettledCount = () => {
+      const getSettledCount = ({ includeImageLoadIssues = false } = {}) => {
         const settledIds = new Set();
         thumbnailLoadedRef.current.forEach((nodeId) => {
           if (expectedIds.has(nodeId)) settledIds.add(nodeId);
         });
         captureIssuesRef.current.forEach((issue) => {
           const nodeId = String(issue.nodeId || '');
+          if (!includeImageLoadIssues && issue.status === 'image_load') return;
           if (expectedIds.has(nodeId)) settledIds.add(nodeId);
         });
         return Math.min(totalToSettle, settledIds.size);
       };
-      const updateSettledStats = () => {
-        const completed = getSettledCount();
+      const updateSettledStats = (options = {}) => {
+        const completed = getSettledCount(options);
         setThumbnailStats((prev) => ({
           ...prev,
           loaded: thumbnailLoadedRef.current.size,
           completed,
-          failed: Math.max(prev.failed || 0, thumbnailErrorRef.current.size),
+          failed: thumbnailErrorRef.current.size,
         }));
         return completed;
       };
@@ -6466,7 +6481,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
         completeThumbnailCapture(nodeId, { captured: false });
       });
-      return updateSettledStats() >= totalToSettle;
+      return updateSettledStats({ includeImageLoadIssues: true }) >= totalToSettle;
     };
     try {
       while (thumbnailSessionRef.current === runSessionId) {
