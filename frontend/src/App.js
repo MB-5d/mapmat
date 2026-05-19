@@ -14208,12 +14208,18 @@ export default function App({ currentRoute, navigateToRoute }) {
                   : thumbnailCaptureStats.hasPartial
                   ? 'Get Thumbnails (Remaining)'
                   : 'Get Thumbnails (All)',
+                thumbnailsSelectedLabel: hasSelectedDownloadableThumbnails
+                  ? 'Recapture'
+                  : 'Get Thumbnails (Selected)',
                 allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
                 fullScreenshotsAllLabel: invalidFullScreenshotAssetIds.size > 0
                   ? 'Retry Missing Screenshots'
                   : fullScreenshotCaptureStats.hasPartial
                   ? 'Get Screenshots (Remaining)'
                   : 'Get Screenshots (All)',
+                fullScreenshotsSelectedLabel: hasSelectedFullScreenshotAssets
+                  ? 'Recapture'
+                  : 'Get Screenshots (Selected)',
                 captureIssues: visibleCaptureIssues,
                 onSelectCaptureIssue: selectCaptureIssue,
                 onOpenCaptureIssueUrl: openCaptureIssueUrl,

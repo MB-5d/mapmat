@@ -105,7 +105,9 @@ const CanvasToolbar = ({
   hasDownloadableImages,
   hasDownloadableSelectedImages,
   thumbnailsAllLabel = 'Get Thumbnails (All)',
+  thumbnailsSelectedLabel = 'Get Thumbnails (Selected)',
   fullScreenshotsAllLabel = 'Get Screenshots (All)',
+  fullScreenshotsSelectedLabel = 'Get Screenshots (Selected)',
   captureIssues = [],
   onSelectCaptureIssue,
   onOpenCaptureIssueUrl,
@@ -204,7 +206,7 @@ const CanvasToolbar = ({
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Get Thumbnails (Selected)"
+              label={thumbnailsSelectedLabel}
               onClick={onGetThumbnailsSelected}
               disabled={!hasSelection || !hasMap}
             />
@@ -238,7 +240,7 @@ const CanvasToolbar = ({
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Get Screenshots (Selected)"
+              label={fullScreenshotsSelectedLabel}
               onClick={onGetFullScreenshotsSelected}
               disabled={!hasSelection || !hasMap}
             />

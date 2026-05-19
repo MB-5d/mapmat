@@ -473,6 +473,75 @@ describe('CanvasToolbar', () => {
     expect(onGetThumbnailsAll).toHaveBeenCalledTimes(1);
   });
 
+  test('uses recapture labels for selected saved image actions', () => {
+    const onGetThumbnailsSelected = jest.fn();
+    const onGetFullScreenshotsSelected = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsSelected={onGetThumbnailsSelected}
+          onGetFullScreenshotsSelected={onGetFullScreenshotsSelected}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+          thumbnailsSelectedLabel="Recapture"
+          fullScreenshotsSelectedLabel="Recapture"
+        />
+      );
+    });
+
+    const recaptureButtons = Array.from(container.querySelectorAll('button'))
+      .filter((button) => button.textContent.includes('Recapture'));
+    expect(recaptureButtons).toHaveLength(2);
+    expect(container.textContent).not.toContain('Get Thumbnails (Selected)');
+    expect(container.textContent).not.toContain('Get Screenshots (Selected)');
+
+    act(() => {
+      recaptureButtons.forEach((button) => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    });
+
+    expect(onGetThumbnailsSelected).toHaveBeenCalledTimes(1);
+    expect(onGetFullScreenshotsSelected).toHaveBeenCalledTimes(1);
+  });
+
   test('shows capture issues in the image menu', () => {
     const onSelectCaptureIssue = jest.fn();
     const onOpenCaptureIssueUrl = jest.fn();
