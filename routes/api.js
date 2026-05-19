@@ -517,8 +517,74 @@ async function getVerifiedManifestAssetUpdatesById(mapId) {
   return updatesById;
 }
 
+async function backfillMapImageAssetManifestFromTree(mapId, parsedMap) {
+  const safeMapId = String(mapId || '').trim();
+  if (!safeMapId) return 0;
+
+  let existingRows = [];
+  try {
+    existingRows = await imageAssetStore.listImageAssetsByMapAsync(safeMapId);
+  } catch (error) {
+    console.warn('Image asset manifest backfill read error:', error.message);
+    return 0;
+  }
+
+  const existingByNodeField = new Map(
+    (existingRows || []).map((row) => [
+      `${String(row.node_id || '').trim()}:${String(row.asset_field || '').trim()}`,
+      row,
+    ])
+  );
+  const assetsById = collectNodeAssetFields(parsedMap.root, parsedMap.orphans);
+  if (assetsById.size === 0) return 0;
+
+  const entries = [];
+  for (const [nodeId, assets] of assetsById.entries()) {
+    for (const [assetField, value] of Object.entries(assets || {})) {
+      if (!NODE_ASSET_IMAGE_URL_FIELDS.has(assetField) || typeof value !== 'string' || !value.trim()) {
+        continue;
+      }
+
+      const existing = existingByNodeField.get(`${nodeId}:${assetField}`);
+      if (
+        existing
+        && String(existing.url || '').trim() === value.trim()
+        && String(existing.status || '').trim() === 'saved'
+      ) {
+        continue;
+      }
+
+      const storageKey = extractScreenshotStorageKey(value);
+      const stats = storageKey ? await statScreenshotObject(storageKey) : null;
+      entries.push({
+        mapId: safeMapId,
+        nodeId,
+        assetField,
+        assetType: getNodeAssetManifestType(assetField, assets),
+        storageKey: storageKey || null,
+        url: value.trim(),
+        provider: getScreenshotStorageProvider(),
+        sizeBytes: stats?.size || null,
+        contentType: storageKey ? getContentTypeForKey(storageKey) : null,
+        status: stats && Number(stats.size || 0) > 0 ? 'saved' : 'missing',
+        error: stats && Number(stats.size || 0) > 0 ? null : 'Missing saved asset',
+        verifiedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  if (entries.length === 0) return 0;
+  try {
+    return await imageAssetStore.upsertImageAssetsAsync(entries);
+  } catch (error) {
+    console.warn('Image asset manifest backfill write error:', error.message);
+    return 0;
+  }
+}
+
 async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}) {
   const parsed = parseMapFields(mapRow);
+  await backfillMapImageAssetManifestFromTree(mapRow.id, parsed);
   const updatesById = await getVerifiedManifestAssetUpdatesById(mapRow.id);
   if (updatesById.size === 0) {
     return { row: mapRow, parsed, changed: false };

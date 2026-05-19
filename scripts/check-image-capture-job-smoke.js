@@ -248,6 +248,15 @@ function getStaleManifestCount(dbPath, mapId, nodeId) {
   }
 }
 
+function deleteImageAssetManifestRows(dbPath, mapId) {
+  const db = new Database(dbPath, { fileMustExist: true });
+  try {
+    db.prepare('DELETE FROM map_image_assets WHERE map_id = ?').run(mapId);
+  } finally {
+    db.close();
+  }
+}
+
 async function run() {
   const backendPort = await getFreePort();
   const fixturePort = await getFreePort();
@@ -429,6 +438,13 @@ async function run() {
       'captured-only recapture should not capture pages without saved full screenshots'
     );
 
+    deleteImageAssetManifestRows(dbPath, mapId);
+    assert.strictEqual(
+      getSavedManifestCount(dbPath, mapId),
+      0,
+      'test setup should remove manifest rows before legacy download check'
+    );
+
     const singleDownload = await fetchDownload(`${apiBase}/api/maps/${mapId}/images/download`, {
       method: 'POST',
       body: JSON.stringify({
@@ -461,6 +477,10 @@ async function run() {
     assert(
       zipEntries.some((entry) => entry.includes('s1-Subdomain-root/s1.1-Subdomain-L1/s1.1-Subdomain-L1.jpg')),
       `zip missing nested subdomain entry: ${zipEntries.join(', ')}`
+    );
+    assert(
+      getSavedManifestCount(dbPath, mapId) >= storedThumbnailCount,
+      'legacy map download should backfill missing manifest rows'
     );
 
     const latestMap = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
