@@ -343,7 +343,10 @@ describe('CanvasToolbar', () => {
     expect(onOpenCaptureIssueUrl).toHaveBeenCalledTimes(1);
   });
 
-  test('marks the image menu as scrollable', () => {
+  test('marks the image menu as scrollable and contains wheel events', () => {
+    const onCanvasWheel = jest.fn();
+    container.addEventListener('wheel', onCanvasWheel);
+
     act(() => {
       root.render(
         <CanvasToolbar
@@ -388,6 +391,13 @@ describe('CanvasToolbar', () => {
       );
     });
 
-    expect(container.querySelector('.canvas-tool-menu-images')).not.toBeNull();
+    const imageMenu = container.querySelector('.canvas-tool-menu-images');
+    expect(imageMenu).not.toBeNull();
+
+    act(() => {
+      imageMenu.dispatchEvent(new WheelEvent('wheel', { bubbles: true, deltaY: 120 }));
+    });
+
+    expect(onCanvasWheel).not.toHaveBeenCalled();
   });
 });

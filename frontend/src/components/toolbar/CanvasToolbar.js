@@ -59,6 +59,10 @@ const ToolButton = ({
   );
 };
 
+const containMenuScroll = (event) => {
+  event.stopPropagation();
+};
+
 const CanvasToolbar = ({
   canEdit,
   canViewComments,
@@ -169,7 +173,14 @@ const CanvasToolbar = ({
         disabled={!hasMap}
       />
       {showImageMenu && (
-        <MenuPanel className="canvas-tool-menu canvas-tool-menu-images" role="menu">
+        <MenuPanel
+          className="canvas-tool-menu canvas-tool-menu-images"
+          role="menu"
+          onWheel={containMenuScroll}
+          onWheelCapture={containMenuScroll}
+          onTouchMove={containMenuScroll}
+          onTouchMoveCapture={containMenuScroll}
+        >
           {hasAnyThumbnails && (
             <>
               <MenuItem
