@@ -46,6 +46,7 @@ import SettingsDrawer from './components/drawers/SettingsDrawer';
 import VersionHistoryDrawer from './components/drawers/VersionHistoryDrawer';
 import ProjectsModal from './components/modals/ProjectsModal';
 import PromptModal from './components/modals/PromptModal';
+import ImageReportDrawer from './components/reports/ImageReportDrawer';
 import ReportDrawer from './components/reports/ReportDrawer';
 import SaveMapModal from './components/modals/SaveMapModal';
 import SaveVersionModal from './components/modals/SaveVersionModal';
@@ -2026,6 +2027,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [showReportDrawer, setShowReportDrawer] = useState(false);
+  const [showImageReportDrawer, setShowImageReportDrawer] = useState(false);
 
   useEffect(() => {
     rootRef.current = root;
@@ -2295,6 +2297,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setSelectionBox(null);
       setThumbnailScopeIds(null);
       setShowImageMenu(false);
+      setShowImageReportDrawer(false);
     }
   }, [hasMap]);
 
@@ -3935,6 +3938,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!issue?.nodeId) return;
     setSelectedNodeIds(new Set([issue.nodeId]));
     setShowImageMenu(false);
+    setShowImageReportDrawer(false);
     focusNodeById(issue.nodeId);
   }, [focusNodeById]);
 
@@ -4803,6 +4807,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setLatestVersionId(null);
       setShowVersionEditPrompt(false);
       setShowVersionHistoryDrawer(false);
+      setShowImageReportDrawer(false);
       versionBaselineRef.current = null;
       lastVersionSnapshotRef.current = '';
       return;
@@ -4986,6 +4991,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowHistoryModal(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
     setShowVersionHistoryDrawer(false);
@@ -5118,6 +5124,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setShowProfileDrawer(false);
         setShowSettingsDrawer(false);
         setShowVersionHistoryDrawer(false);
+        setShowImageReportDrawer(false);
         if (currentRoute?.surface !== ROUTE_SURFACES.SHARE) {
           navigateToRoute(createAppHomeRoute(), { replace: true });
         }
@@ -5140,6 +5147,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setSelectionBox(null);
       setThumbnailScopeIds(null);
       setShowImageMenu(false);
+      setShowImageReportDrawer(false);
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setUrlInput('');
       resetScanLayers();
@@ -5447,6 +5455,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowSettingsDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowVersionHistoryDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
@@ -5457,6 +5466,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowProfileDrawer(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowVersionHistoryDrawer(false);
     setShowProjectsModal(false);
     setShowHistoryModal(false);
@@ -5469,6 +5479,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowProjectsModal(false);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
     setShowVersionHistoryDrawer(false);
@@ -7826,6 +7837,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setActiveVersionId(version.id);
     setShowVersionEditPrompt(false);
     setShowVersionHistoryDrawer(false);
+    setShowImageReportDrawer(false);
     setThumbnailScopeIds(versionHasThumbnails ? new Set() : null);
     setShowThumbnails(versionHasThumbnails);
     const snapshot = serializeVersionSnapshot({
@@ -8147,6 +8159,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setSelectionBox(null);
     setThumbnailScopeIds(null);
     setShowImageMenu(false);
+    setShowImageReportDrawer(false);
     setShowThumbnails(false);
     resetThumbnailQueue(0);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
@@ -8182,6 +8195,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setLatestVersionId(null);
     setShowCommentsPanel(false);
     setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
     setShowVersionHistoryDrawer(false);
     setShowShareModal(false);
     setSelectedNodeIds(new Set());
@@ -8235,6 +8249,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setSelectionBox(null);
     setThumbnailScopeIds(mapHasThumbnails ? new Set() : null);
     setShowImageMenu(false);
+    setShowImageReportDrawer(false);
     setShowThumbnails(mapHasThumbnails);
     clearCaptureIssues();
     resetThumbnailQueue(0);
@@ -9652,6 +9667,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           const next = !prev;
           if (next) {
             setShowReportDrawer(false);
+            setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowProjectsModal(false);
@@ -9665,6 +9681,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           const next = !prev;
           if (next) {
             setShowCommentsPanel(false);
+            setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowVersionHistoryDrawer(false);
@@ -9680,6 +9697,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (next) {
             setShowCommentsPanel(false);
             setShowReportDrawer(false);
+            setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowProjectsModal(false);
@@ -9694,6 +9712,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (next) {
             setShowCommentsPanel(false);
             setShowReportDrawer(false);
+            setShowImageReportDrawer(false);
             setShowProfileDrawer(false);
             setShowSettingsDrawer(false);
             setShowVersionHistoryDrawer(false);
@@ -9741,6 +9760,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (showReportDrawer) {
           setShowReportDrawer(false);
         }
+        if (showImageReportDrawer) {
+          setShowImageReportDrawer(false);
+        }
         if (showProfileDrawer) {
           setShowProfileDrawer(false);
         }
@@ -9767,7 +9789,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for pan/zoom
   const wheelStateRef = useRef({
@@ -14071,6 +14093,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowViewDropdown(false);
                       setShowColorKey(false);
                       setShowReportDrawer(false);
+                      setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowVersionHistoryDrawer(false);
@@ -14089,6 +14112,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowViewDropdown(false);
                       setShowColorKey(false);
                       setShowCommentsPanel(false);
+                      setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowVersionHistoryDrawer(false);
@@ -14196,6 +14220,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     return;
                   }
                   await validateCurrentMapImageAssets();
+                  setShowImageReportDrawer(false);
                   setShowImageMenu(true);
                 },
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
@@ -14236,8 +14261,19 @@ export default function App({ currentRoute, navigateToRoute }) {
                   ? 'Recapture'
                   : 'Get Screenshots (Selected)',
                 captureIssues: visibleCaptureIssues,
-                onSelectCaptureIssue: selectCaptureIssue,
-                onOpenCaptureIssueUrl: openCaptureIssueUrl,
+                onOpenImageReport: () => {
+                  setShowImageMenu(false);
+                  setShowImageReportDrawer(true);
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowCommentsPanel(false);
+                  setShowReportDrawer(false);
+                  setShowProfileDrawer(false);
+                  setShowSettingsDrawer(false);
+                  setShowVersionHistoryDrawer(false);
+                  setShowProjectsModal(false);
+                  setShowHistoryModal(false);
+                },
                 showImageMenu,
                 imageMenuRef,
                 hasSelection: selectedNodeIds.size > 0,
@@ -14261,6 +14297,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setShowColorKey(false);
                       setShowCommentsPanel(false);
                       setShowReportDrawer(false);
+                      setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
                       setShowSettingsDrawer(false);
                       setShowProjectsModal(false);
@@ -14330,6 +14367,14 @@ export default function App({ currentRoute, navigateToRoute }) {
               onLocateUrl={locateUrlOnMap}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
+            />
+            <ImageReportDrawer
+              isOpen={showImageReportDrawer}
+              onClose={() => setShowImageReportDrawer(false)}
+              issues={visibleCaptureIssues}
+              onSelectIssue={selectCaptureIssue}
+              onOpenIssueUrl={openCaptureIssueUrl}
+              reportTitle={reportTitle}
             />
           </DndContext>
         )}
@@ -14406,6 +14451,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         activeSurfaces={{
           commentsPanel: showCommentsPanel,
           reportDrawer: showReportDrawer,
+          imageReportDrawer: showImageReportDrawer,
           shareModal: showShareModal,
           exportModal: showExportModal,
           projectsModal: showProjectsModal,

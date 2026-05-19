@@ -542,9 +542,8 @@ describe('CanvasToolbar', () => {
     expect(onGetFullScreenshotsSelected).toHaveBeenCalledTimes(1);
   });
 
-  test('shows capture issues in the image menu', () => {
-    const onSelectCaptureIssue = jest.fn();
-    const onOpenCaptureIssueUrl = jest.fn();
+  test('shows the image report option instead of inline capture issues', () => {
+    const onOpenImageReport = jest.fn();
 
     act(() => {
       root.render(
@@ -581,8 +580,7 @@ describe('CanvasToolbar', () => {
             type: 'file',
             label: 'PDF/file',
           }]}
-          onSelectCaptureIssue={onSelectCaptureIssue}
-          onOpenCaptureIssueUrl={onOpenCaptureIssueUrl}
+          onOpenImageReport={onOpenImageReport}
           hasSelection={false}
           canUndo={false}
           canRedo={false}
@@ -601,22 +599,20 @@ describe('CanvasToolbar', () => {
       );
     });
 
-    expect(container.textContent).toContain('Capture issues');
-    expect(container.textContent).toContain('PDF/file');
+    expect(container.textContent).toContain('Image report');
+    expect(container.textContent).toContain('Image report1');
+    expect(container.textContent).not.toContain('Capture issues');
+    expect(container.textContent).not.toContain('PDF/file');
     expect(container.textContent).not.toContain('Batch');
 
-    const selectButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent === 'Select');
-    const openButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent === 'Open');
+    const imageReportButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Image report'));
 
     act(() => {
-      selectButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      openButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      imageReportButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onSelectCaptureIssue).toHaveBeenCalledTimes(1);
-    expect(onOpenCaptureIssueUrl).toHaveBeenCalledTimes(1);
+    expect(onOpenImageReport).toHaveBeenCalledTimes(1);
   });
 
   test('marks the image menu as scrollable and contains wheel events', () => {
