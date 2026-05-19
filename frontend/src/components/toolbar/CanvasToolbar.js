@@ -103,10 +103,10 @@ const CanvasToolbar = ({
   hasSelectedFullScreenshotAssets,
   hasDownloadableImages,
   hasDownloadableSelectedImages,
-  thumbnailsAllLabel = 'Get Thumbnails (All)',
-  thumbnailsSelectedLabel = 'Get Thumbnails (Selected)',
-  fullScreenshotsAllLabel = 'Get Screenshots (All)',
-  fullScreenshotsSelectedLabel = 'Get Screenshots (Selected)',
+  thumbnailsAllLabel = 'Get Visible area (All)',
+  thumbnailsSelectedLabel = 'Get Visible area (Selected)',
+  fullScreenshotsAllLabel = 'Get Full page (All)',
+  fullScreenshotsSelectedLabel = 'Get Full page (Selected)',
   captureIssues = [],
   onOpenImageReport,
   showImageMenu,
@@ -187,7 +187,7 @@ const CanvasToolbar = ({
             <>
               <MenuItem
                 className="canvas-tool-menu-toggle"
-                label="View thumbnails"
+                label="View screenshots"
                 endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
                 onClick={onToggleThumbnails}
               />
@@ -195,7 +195,7 @@ const CanvasToolbar = ({
             </>
           )}
           <div className="canvas-tool-menu-section">
-            <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails</MenuSectionHeader>
+            <MenuSectionHeader className="canvas-tool-menu-label">Visible area</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
               label={thumbnailsAllLabel}
@@ -210,26 +210,14 @@ const CanvasToolbar = ({
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Update Captured Thumbnails"
+              label="Update Captured Visible area"
               onClick={onUpdateCapturedThumbnails}
               disabled={!hasMap || !hasDownloadableThumbnails}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label="Download All"
-              onClick={onDownloadImagesAll}
-              disabled={!hasMap || !hasDownloadableImages}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label="Download Selected"
-              onClick={onDownloadImagesSelected}
-              disabled={!hasSelection || !hasDownloadableSelectedImages}
             />
           </div>
           <MenuDivider className="canvas-tool-menu-divider" />
           <div className="canvas-tool-menu-section">
-            <MenuSectionHeader className="canvas-tool-menu-label">Full screenshots</MenuSectionHeader>
+            <MenuSectionHeader className="canvas-tool-menu-label">Full page</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
               label={fullScreenshotsAllLabel}
@@ -244,11 +232,10 @@ const CanvasToolbar = ({
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Update Captured Screenshots"
+              label="Update Captured Full page"
               onClick={onUpdateCapturedFullScreenshots}
               disabled={!hasMap || !hasFullScreenshotAssets}
             />
-            <div className="canvas-tool-menu-hint">Saves a full-page asset per page</div>
           </div>
           <MenuDivider className="canvas-tool-menu-divider" />
           <MenuItem
@@ -257,6 +244,21 @@ const CanvasToolbar = ({
             badge={captureIssues.length > 0 ? `${captureIssues.length}` : null}
             onClick={onOpenImageReport}
           />
+          <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-download-divider" />
+          <div className="canvas-tool-menu-section canvas-tool-menu-download-section">
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Download All"
+              onClick={onDownloadImagesAll}
+              disabled={!hasMap || !hasDownloadableImages}
+            />
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Download Selected"
+              onClick={onDownloadImagesSelected}
+              disabled={!hasSelection || !hasDownloadableSelectedImages}
+            />
+          </div>
         </MenuPanel>
       )}
     </div>

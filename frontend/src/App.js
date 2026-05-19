@@ -14244,22 +14244,22 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasDownloadableSelectedImages: hasSelectedDownloadableImages,
                 allThumbnailsCaptured,
                 thumbnailsAllLabel: invalidThumbnailAssetIds.size > 0
-                  ? 'Retry Missing Thumbnails'
+                  ? 'Retry Missing Visible area'
                   : thumbnailCaptureStats.hasPartial
-                  ? 'Get Thumbnails (Remaining)'
-                  : 'Get Thumbnails (All)',
+                  ? 'Get Visible area (Remaining)'
+                  : 'Get Visible area (All)',
                 thumbnailsSelectedLabel: hasSelectedDownloadableThumbnails
                   ? 'Recapture'
-                  : 'Get Thumbnails (Selected)',
+                  : 'Get Visible area (Selected)',
                 allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
                 fullScreenshotsAllLabel: invalidFullScreenshotAssetIds.size > 0
-                  ? 'Retry Missing Screenshots'
+                  ? 'Retry Missing Full page'
                   : fullScreenshotCaptureStats.hasPartial
-                  ? 'Get Screenshots (Remaining)'
-                  : 'Get Screenshots (All)',
+                  ? 'Get Full page (Remaining)'
+                  : 'Get Full page (All)',
                 fullScreenshotsSelectedLabel: hasSelectedFullScreenshotAssets
                   ? 'Recapture'
-                  : 'Get Screenshots (Selected)',
+                  : 'Get Full page (Selected)',
                 captureIssues: visibleCaptureIssues,
                 onOpenImageReport: () => {
                   setShowImageMenu(false);

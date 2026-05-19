@@ -4559,10 +4559,28 @@ body {
 }
 
 .canvas-tool-menu-images {
+  width: max-content;
+  min-width: 272px;
   max-height: min(520px, calc(100vh - 128px));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
+}
+
+.canvas-tool-menu-images .ui-menu-item {
+  min-height: 32px;
+  font-size: var(--type-body-xs-size);
+  line-height: var(--type-body-xs-line-height);
+}
+
+.canvas-tool-menu-images .ui-menu-item__content,
+.canvas-tool-menu-images .ui-menu-item__label {
+  white-space: nowrap;
+}
+
+.canvas-tool-menu-images .canvas-tool-menu-toggle,
+.canvas-tool-menu-images .canvas-tool-menu-item {
+  white-space: nowrap;
 }
 
 .canvas-tool-menu.canvas-tool-menu-panel {
@@ -4600,6 +4618,10 @@ body {
   line-height: var(--type-body-xs-line-height);
   color: var(--ui-color-muted);
   padding: 0 var(--space-sm) var(--space-xs);
+}
+
+.canvas-tool-menu-download-divider {
+  margin-top: 6px;
 }
 
 .canvas-tool-menu-report-item .ui-menu-item__badge {

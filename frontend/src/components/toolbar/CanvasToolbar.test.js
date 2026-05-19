@@ -200,8 +200,12 @@ describe('CanvasToolbar', () => {
     const buttons = Array.from(container.querySelectorAll('button'));
     const downloadAll = buttons.find((button) => button.textContent.includes('Download All'));
     const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
+    const imageReport = buttons.find((button) => button.textContent.includes('Image report'));
     expect(downloadAll).not.toBeNull();
     expect(downloadSelected).not.toBeNull();
+    expect(imageReport).not.toBeNull();
+    expect(buttons.indexOf(downloadAll)).toBeGreaterThan(buttons.indexOf(imageReport));
+    expect(container.querySelector('.canvas-tool-menu-download-divider')).not.toBeNull();
     expect(buttons.some((button) => button.textContent.includes('Download thumbnails'))).toBe(false);
     expect(buttons.some((button) => button.textContent.includes('Download full screenshots'))).toBe(false);
 
@@ -272,9 +276,9 @@ describe('CanvasToolbar', () => {
     });
 
     let updateThumbnailButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Thumbnails'));
+      .find((button) => button.textContent.includes('Update Captured Visible area'));
     let updateScreenshotButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Screenshots'));
+      .find((button) => button.textContent.includes('Update Captured Full page'));
     expect(updateThumbnailButton.disabled).toBe(true);
     expect(updateScreenshotButton.disabled).toBe(true);
 
@@ -332,9 +336,9 @@ describe('CanvasToolbar', () => {
     });
 
     updateThumbnailButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Thumbnails'));
+      .find((button) => button.textContent.includes('Update Captured Visible area'));
     updateScreenshotButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Screenshots'));
+      .find((button) => button.textContent.includes('Update Captured Full page'));
     expect(updateThumbnailButton.disabled).toBe(false);
     expect(updateScreenshotButton.disabled).toBe(false);
 
@@ -393,13 +397,13 @@ describe('CanvasToolbar', () => {
           hasMap
           hasSavedMap
           showVersionHistory={false}
-          fullScreenshotsAllLabel="Get Screenshots (Remaining)"
+          fullScreenshotsAllLabel="Get Full page (Remaining)"
         />
       );
     });
 
     const remainingButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Get Screenshots (Remaining)'));
+      .find((button) => button.textContent.includes('Get Full page (Remaining)'));
     expect(remainingButton).not.toBeNull();
     expect(remainingButton.disabled).toBe(false);
 
@@ -456,13 +460,13 @@ describe('CanvasToolbar', () => {
           hasMap
           hasSavedMap
           showVersionHistory={false}
-          thumbnailsAllLabel="Get Thumbnails (Remaining)"
+          thumbnailsAllLabel="Get Visible area (Remaining)"
         />
       );
     });
 
     const remainingButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Get Thumbnails (Remaining)'));
+      .find((button) => button.textContent.includes('Get Visible area (Remaining)'));
     expect(remainingButton).not.toBeNull();
     expect(remainingButton.disabled).toBe(false);
 
@@ -529,8 +533,8 @@ describe('CanvasToolbar', () => {
     const recaptureButtons = Array.from(container.querySelectorAll('button'))
       .filter((button) => button.textContent.includes('Recapture'));
     expect(recaptureButtons).toHaveLength(2);
-    expect(container.textContent).not.toContain('Get Thumbnails (Selected)');
-    expect(container.textContent).not.toContain('Get Screenshots (Selected)');
+    expect(container.textContent).not.toContain('Get Visible area (Selected)');
+    expect(container.textContent).not.toContain('Get Full page (Selected)');
 
     act(() => {
       recaptureButtons.forEach((button) => {
@@ -582,6 +586,8 @@ describe('CanvasToolbar', () => {
           }]}
           onOpenImageReport={onOpenImageReport}
           hasSelection={false}
+          hasAnyThumbnails
+          onToggleThumbnails={jest.fn()}
           canUndo={false}
           canRedo={false}
           onUndo={jest.fn()}
@@ -601,6 +607,12 @@ describe('CanvasToolbar', () => {
 
     expect(container.textContent).toContain('Image report');
     expect(container.textContent).toContain('Image report1');
+    expect(container.textContent).toContain('View screenshots');
+    expect(container.textContent).toContain('Visible area');
+    expect(container.textContent).toContain('Full page');
+    expect(container.textContent).not.toContain('Saves a full-page asset per page');
+    expect(container.textContent).not.toContain('Thumbnails');
+    expect(container.textContent).not.toContain('Screenshots');
     expect(container.textContent).not.toContain('Capture issues');
     expect(container.textContent).not.toContain('PDF/file');
     expect(container.textContent).not.toContain('Batch');
