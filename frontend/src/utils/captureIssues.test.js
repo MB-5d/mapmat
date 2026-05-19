@@ -3,6 +3,7 @@ import {
   buildCaptureIssueFromResult,
   formatImageCaptureCompletionToast,
   getReconciledCaptureProgress,
+  shouldShowImageCaptureProgressToast,
 } from './captureIssues';
 
 describe('captureIssues', () => {
@@ -65,6 +66,43 @@ describe('captureIssues', () => {
     expect(progress.loaded).toBe(3);
     expect(progress.completed).toBe(5);
     expect(progress.total).toBe(918);
+  });
+
+  test('keeps progress visible until captured images are applied', () => {
+    expect(shouldShowImageCaptureProgressToast({
+      mode: 'screenshot',
+      total: 3,
+      completed: 3,
+      loaded: 0,
+      failed: 0,
+      skipped: 0,
+    })).toBe(true);
+
+    expect(shouldShowImageCaptureProgressToast({
+      mode: 'screenshot',
+      total: 3,
+      completed: 3,
+      loaded: 3,
+      failed: 0,
+      skipped: 0,
+    })).toBe(false);
+
+    expect(shouldShowImageCaptureProgressToast({
+      mode: 'thumbnail',
+      total: 3,
+      completed: 3,
+      loaded: 1,
+      failed: 2,
+      skipped: 0,
+    })).toBe(false);
+
+    expect(shouldShowImageCaptureProgressToast({
+      mode: 'thumbnail',
+      total: 3,
+      completed: 3,
+      loaded: 3,
+      finalizing: true,
+    })).toBe(true);
   });
 
   test('formats completion toasts with clear skipped and failed counts', () => {

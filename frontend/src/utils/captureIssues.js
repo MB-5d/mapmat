@@ -87,6 +87,16 @@ export function getReconciledCaptureProgress({ total = 0, loadedIds, issueCount 
   };
 }
 
+export function shouldShowImageCaptureProgressToast(stats = {}) {
+  const total = Math.max(0, Number(stats.total) || 0);
+  if (!stats.mode || stats.stopped || total <= 0) return false;
+  if (stats.finalizing) return true;
+  const loaded = Math.max(0, Number(stats.loaded) || 0);
+  const failed = Math.max(0, Number(stats.failed) || 0);
+  const skipped = Math.max(0, Number(stats.skipped) || 0);
+  return Math.min(total, loaded + failed + skipped) < total;
+}
+
 function pluralize(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }

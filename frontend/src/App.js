@@ -130,6 +130,7 @@ import {
   formatImageCaptureCompletionToast,
   getReconciledCaptureProgress,
   normalizeCaptureIssue,
+  shouldShowImageCaptureProgressToast,
 } from './utils/captureIssues';
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
@@ -2153,6 +2154,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     avgMs: 0,
     cached: 0,
     unavailable: 0,
+    finalizing: false,
     stopped: false,
   });
   const [captureIssues, setCaptureIssues] = useState([]);
@@ -4230,7 +4232,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         thumbnailStats.mode
         && (thumbnailStats.total || 0) > 0
         && !thumbnailStats.stopped
-        && (thumbnailStats.completed || 0) < (thumbnailStats.total || 0)
+        && (
+          thumbnailStats.finalizing
+          || (thumbnailStats.completed || 0) < (thumbnailStats.total || 0)
+        )
       )
     );
     if (assetAutosaveSuppressionUntilRef.current > Date.now() || captureAssetSaveIsActive) return;
@@ -4288,7 +4293,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [areMapPermissionsPending, currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [areMapPermissionsPending, currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   useEffect(() => {
     if (!isCollaborativeLiveEditingRestricted) return;
@@ -5919,11 +5924,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [getCaptureIssueNodeContext, syncCaptureIssuesState]);
 
   const getActiveImageCaptureMode = useCallback(() => {
-    const total = thumbnailStats.total || 0;
-    const completed = thumbnailStats.completed || 0;
-    if (!thumbnailStats.mode || thumbnailStats.stopped || total <= 0) return null;
-    return completed < total ? thumbnailStats.mode : null;
-  }, [thumbnailStats.completed, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+    return shouldShowImageCaptureProgressToast(thumbnailStats) ? thumbnailStats.mode : null;
+  }, [thumbnailStats]);
 
   const guardImageCaptureAvailable = useCallback((nextMode) => {
     const activeMode = getActiveImageCaptureMode();
@@ -6032,6 +6034,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       unavailable,
       batchIndex: 0,
       batchTotal: 0,
+      finalizing: false,
       stopped: false,
     });
   };
@@ -6314,30 +6317,25 @@ export default function App({ currentRoute, navigateToRoute }) {
       recordCaptureIssue(buildCaptureIssueFromResult(result, context.node, context.pageNumber));
       completeThumbnailCapture(nodeId, { captured: false });
     });
-    const issueCount = captureIssuesRef.current.size;
+    const failedTotal = Number((payload.failed || 0) + (payload.blocked || 0) + (payload.missingAsset || 0));
+    const skippedTotal = Number(payload.skipped || 0);
+    const issueCount = Math.max(captureIssuesRef.current.size, failedTotal + skippedTotal);
     const progress = getReconciledCaptureProgress({
       total: Number(payload.total || 0),
       loadedIds: thumbnailLoadedRef.current,
       issueCount,
     });
-    const completed = expectedMode === 'screenshot'
-      ? Number(payload.completed || progress.completed || 0)
-      : progress.completed;
+    const completed = progress.completed;
     const elapsed = Number(payload.elapsedMs || (thumbnailElapsedStartRef.current ? Date.now() - thumbnailElapsedStartRef.current : 0));
     setThumbnailStats((prev) => ({
       ...prev,
       mode: expectedMode,
       total: Number(payload.total || prev.total || 0),
       saved: Number(payload.captured || imageCaptureSavedRef.current.size || 0),
-      loaded: expectedMode === 'screenshot'
-        ? Number(payload.captured || imageCaptureAppliedRef.current.size || 0)
-        : thumbnailLoadedRef.current.size,
+      loaded: thumbnailLoadedRef.current.size,
       completed,
-      failed: Math.max(
-        Number((payload.failed || 0) + (payload.blocked || 0) + (payload.missingAsset || 0)),
-        thumbnailErrorRef.current.size
-      ),
-      skipped: Number(payload.skipped || 0),
+      failed: Math.max(failedTotal, thumbnailErrorRef.current.size),
+      skipped: skippedTotal,
       cached: Number(payload.cached || prev.cached || 0),
       unavailable: Number(payload.unavailable || prev.unavailable || 0),
       avgMs: completed ? Math.round(elapsed / completed) : prev.avgMs,
@@ -6525,12 +6523,13 @@ export default function App({ currentRoute, navigateToRoute }) {
             return true;
           }
 
+          setThumbnailStats((prev) => ({ ...prev, finalizing: true }));
           await validateCurrentMapImageAssets();
           const summary = finalJob.result || finalJob.progress || {};
           await waitForCanvasThumbnailLoads(Number(summary.total || targets.length || 0));
           await refreshTimelineAfterImageCapture();
           const shown = mode === 'screenshot'
-            ? Number(summary.captured || imageCaptureAppliedRef.current.size || 0)
+            ? imageCaptureAppliedRef.current.size
             : thumbnailLoadedRef.current.size;
           const failed = Number((summary.failed || 0) + (summary.blocked || 0) + (summary.missingAsset || 0));
           const skipped = Number(summary.skipped || 0);
@@ -6552,6 +6551,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           } else {
             showToast(toastResult.message, toastResult.type);
           }
+          setThumbnailStats((prev) => ({ ...prev, finalizing: false }));
           trackEvent('screenshot_capture_complete', {
             type: captureType === 'full' ? 'full' : 'thumbnail',
             scope,
@@ -6904,7 +6904,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const isActive = (showThumbnails || thumbnailStats.mode === 'screenshot')
       && total > 0
       && !thumbnailStats.stopped
-      && completed < total;
+      && (thumbnailStats.finalizing || completed < total);
     if (!isActive) {
       if (thumbnailElapsedTimerRef.current) {
         clearInterval(thumbnailElapsedTimerRef.current);
@@ -6926,7 +6926,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         thumbnailElapsedTimerRef.current = null;
       }
     };
-  }, [showThumbnails, thumbnailStats.completed, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [showThumbnails, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   const getFullScreenshotCandidates = (
     scope,
@@ -14319,12 +14319,16 @@ export default function App({ currentRoute, navigateToRoute }) {
           </DndContext>
         )}
         {(showThumbnails || thumbnailStats.mode === 'screenshot') && thumbnailStats.total > 0 && (() => {
-          if (thumbnailStats.stopped) return null;
+          if (!shouldShowImageCaptureProgressToast(thumbnailStats)) return null;
           const total = thumbnailStats.total || 0;
-          const completed = thumbnailStats.completed || 0;
           if (total <= 0) return null;
-          const remaining = total - completed;
-          if (remaining <= 0) return null;
+          const settled = Math.min(
+            total,
+            (thumbnailStats.loaded || 0) + (thumbnailStats.failed || 0) + (thumbnailStats.skipped || 0)
+          );
+          const completed = Math.max(thumbnailStats.completed || 0, settled);
+          const remaining = Math.max(0, total - settled);
+          if (remaining <= 0 && !thumbnailStats.finalizing) return null;
           const cached = thumbnailStats.cached || 0;
           const unavailable = thumbnailStats.unavailable || 0;
           const skipped = thumbnailStats.skipped || 0;
