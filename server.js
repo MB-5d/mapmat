@@ -1165,7 +1165,7 @@ const enforceScreenshotJobQueueLimits = async (req, safeUrl) => {
   }
 };
 
-const createJob = async ({ type, payload, req }) => {
+const createJob = async ({ type, payload, req, status = JOB_STATUS.queued }) => {
   const id = crypto.randomUUID();
   const userId = req.user?.id || null;
   const apiKey = getApiKey(req);
@@ -1175,7 +1175,8 @@ const createJob = async ({ type, payload, req }) => {
   await jobStore.insertJobAsync({
     id,
     type,
-    status: JOB_STATUS.queued,
+    status,
+    startedAt: status === JOB_STATUS.running ? new Date().toISOString() : null,
     userId,
     apiKey,
     ipHash,
@@ -4397,6 +4398,26 @@ const runJobLoop = async () => {
   jobLoopRunning = false;
 };
 
+const runClaimedJob = async (jobId) => {
+  const job = await getJobRow(jobId);
+  if (!job) return;
+  activeJobs += 1;
+  try {
+    await processJob(job);
+  } catch (err) {
+    console.error('Job processing error:', err);
+  } finally {
+    activeJobs -= 1;
+    runJobLoop().catch((err) => console.error('Job loop error:', err));
+  }
+};
+
+const scheduleClaimedJob = (jobId) => {
+  setImmediate(() => {
+    runClaimedJob(jobId).catch((err) => console.error('Claimed job error:', err));
+  });
+};
+
 if (JOB_WORKER_TYPES.length > 0) {
   console.log(`[jobs] processor enabled for types=${JOB_WORKER_TYPES.join(',')}`);
   setInterval(() => {
@@ -4848,18 +4869,25 @@ function registerImageCaptureRoutes(targetApp) {
         });
       }
 
+      const jobPayload = {
+        mapId: id,
+        captureType,
+        scope,
+        nodeIds,
+        targetMode,
+        force: targetMode === IMAGE_CAPTURE_TARGET_MODES.captured || scope === 'selected' || Boolean(req.body?.force),
+      };
+      // Claim image-capture jobs here so older generic workers cannot take this newer job type.
+      const claimInCurrentProcess = RUN_WEB && JOB_WORKER_TYPES.includes(JOB_TYPES.imageCapture);
       const jobId = await createJob({
         type: JOB_TYPES.imageCapture,
-        payload: {
-          mapId: id,
-          captureType,
-          scope,
-          nodeIds,
-          targetMode,
-          force: targetMode === IMAGE_CAPTURE_TARGET_MODES.captured || scope === 'selected' || Boolean(req.body?.force),
-        },
+        payload: jobPayload,
         req,
+        status: claimInCurrentProcess ? JOB_STATUS.running : JOB_STATUS.queued,
       });
+      if (claimInCurrentProcess) {
+        scheduleClaimedJob(jobId);
+      }
 
       recordUsage(req, 'screenshot_job', 1, {
         mapId: id,

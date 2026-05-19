@@ -234,6 +234,16 @@ function getSavedManifestCount(dbPath, mapId) {
   }
 }
 
+function getJobStatus(dbPath, jobId) {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db.prepare('SELECT status FROM jobs WHERE id = ?').get(jobId);
+    return row?.status || null;
+  } finally {
+    db.close();
+  }
+}
+
 function getStaleManifestCount(dbPath, mapId, nodeId) {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
   try {
@@ -346,6 +356,11 @@ async function run() {
       method: 'POST',
       body: JSON.stringify({ captureType: 'thumb', scope: 'all' }),
     }, cookieJar);
+    assert.notStrictEqual(
+      getJobStatus(dbPath, thumbStart.jobId),
+      'queued',
+      'image capture jobs should be claimed before generic workers can take them'
+    );
     const thumbJob = await pollImageCaptureJob(apiBase, mapId, thumbStart.jobId, cookieJar);
     assert.strictEqual(thumbJob.result.total, 8, 'thumbnail total mismatch');
     assert.strictEqual(thumbJob.result.captured, 6, 'thumbnail captured mismatch');

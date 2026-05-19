@@ -19,18 +19,20 @@ function insertJobAsync({
   id,
   type,
   status,
+  startedAt,
   userId,
   apiKey,
   ipHash,
   payload,
 }) {
   return adapter.executeAsync(`
-    INSERT INTO jobs (id, type, status, user_id, api_key, ip_hash, payload)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO jobs (id, type, status, started_at, user_id, api_key, ip_hash, payload)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     id,
     type,
     status,
+    startedAt || null,
     userId || null,
     apiKey || null,
     ipHash || null,
