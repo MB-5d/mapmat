@@ -221,6 +221,8 @@ describe('ui primitives', () => {
     expect(toast).not.toBeNull();
     const closeButton = toast.querySelector('.toast-close.ui-icon-btn');
     expect(closeButton).not.toBeNull();
+    expect(closeButton.className).toContain('ui-icon-btn--type-ghost');
+    expect(closeButton.className).toContain('ui-icon-btn--style-mono');
     expect(container.querySelector('.toast-loading .ui-status-alert__spinner')).not.toBeNull();
 
     act(() => {
