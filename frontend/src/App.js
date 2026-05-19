@@ -141,7 +141,7 @@ const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 function getImageCaptureJobErrorMessage(error, fallback = 'Image capture failed') {
   const message = String(error?.message || error?.error || '').trim();
   if (error?.code === 'IMAGE_CAPTURE_JOB_ACTIVE' || error?.payload?.code === 'IMAGE_CAPTURE_JOB_ACTIVE') {
-    return 'Another image capture is still running for this map. Stop it or wait for it to finish before starting a different capture.';
+    return 'A previous image capture is still finishing. Wait a moment, then retry.';
   }
   if (/unknown job type:\s*image_capture/i.test(message)) {
     return 'Screenshot capture did not start because staging is still updating. Refresh in a minute and retry.';
@@ -2149,6 +2149,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [invalidThumbnailAssetIds, setInvalidThumbnailAssetIds] = useState(() => new Set());
   const [invalidFullScreenshotAssetIds, setInvalidFullScreenshotAssetIds] = useState(() => new Set());
   const [thumbnailElapsedMs, setThumbnailElapsedMs] = useState(0);
+  const [activeImageCaptureJob, setActiveImageCaptureJob] = useState(null);
   const [thumbnailStats, setThumbnailStats] = useState({
     mode: null,
     total: 0,
@@ -4240,7 +4241,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         && (thumbnailStats.total || 0) > 0
         && !thumbnailStats.stopped
         && (
-          thumbnailStats.finalizing
+          activeImageCaptureJob
+          || thumbnailStats.finalizing
           || (thumbnailStats.completed || 0) < (thumbnailStats.total || 0)
         )
       )
@@ -4300,7 +4302,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [areMapPermissionsPending, currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [activeImageCaptureJob, areMapPermissionsPending, currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   useEffect(() => {
     if (!isCollaborativeLiveEditingRestricted) return;
@@ -5938,8 +5940,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [getCaptureIssueNodeContext, syncCaptureIssuesState]);
 
   const getActiveImageCaptureMode = useCallback(() => {
+    if (activeImageCaptureJob?.mode) return activeImageCaptureJob.mode;
     return shouldShowImageCaptureProgressToast(thumbnailStats) ? thumbnailStats.mode : null;
-  }, [thumbnailStats]);
+  }, [activeImageCaptureJob, thumbnailStats]);
 
   const guardImageCaptureAvailable = useCallback((nextMode) => {
     const activeMode = getActiveImageCaptureMode();
@@ -6042,6 +6045,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     thumbnailCompletedRef.current = false;
     thumbnailStopRequestedRef.current = false;
     screenshotStopRequestedRef.current = false;
+    imageCaptureJobRef.current = null;
+    setActiveImageCaptureJob(null);
     thumbnailAuthToastShownRef.current = false;
     thumbnailFailureToastShownRef.current = false;
     setThumbnailQueueSize(0);
@@ -6418,10 +6423,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       jobId = response?.jobId;
       if (!jobId) throw new Error('Image capture job did not start');
       imageCaptureJobRef.current = { mapId, jobId, mode };
+      setActiveImageCaptureJob({ mapId, jobId, mode });
     } catch (error) {
       imageCaptureJobRef.current = null;
+      setActiveImageCaptureJob(null);
       if (error?.status === 404 || error?.status === 405) return false;
-      showToast(getImageCaptureJobErrorMessage(error, 'Failed to start image capture job'), 'error');
+      const isActiveJobConflict = error?.code === 'IMAGE_CAPTURE_JOB_ACTIVE'
+        || error?.payload?.code === 'IMAGE_CAPTURE_JOB_ACTIVE';
+      showToast(
+        getImageCaptureJobErrorMessage(error, 'Failed to start image capture job'),
+        isActiveJobConflict ? 'warning' : 'error',
+      );
       setThumbnailStats((prev) => ({ ...prev, stopped: true }));
       return true;
     }
@@ -6465,13 +6477,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       let lastCompleted = updateSettledStats();
       let lastChangedAt = startedAt;
       const maxWaitMs = Math.min(120000, Math.max(20000, totalToSettle * 250));
+      const idleWaitMs = totalToSettle <= 10 ? 30000 : 12000;
       while (
         thumbnailSessionRef.current === runSessionId
         && !thumbnailStopRequestedRef.current
         && !screenshotStopRequestedRef.current
       ) {
         if (lastCompleted >= totalToSettle) return true;
-        if (Date.now() - startedAt > maxWaitMs || Date.now() - lastChangedAt > 12000) break;
+        if (Date.now() - startedAt > maxWaitMs || Date.now() - lastChangedAt > idleWaitMs) break;
         await sleep(250);
         const nextCompleted = updateSettledStats();
         if (nextCompleted !== lastCompleted) {
@@ -6503,6 +6516,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           await api.cancelMapImageCaptureJob(mapId, jobId).catch(() => {});
           setThumbnailStats((prev) => ({ ...prev, stopped: true }));
           imageCaptureJobRef.current = null;
+          setActiveImageCaptureJob(null);
           return true;
         }
 
@@ -6537,6 +6551,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             });
           }
           imageCaptureJobRef.current = null;
+          setActiveImageCaptureJob(null);
 
           if (finalJob.status === 'canceled') {
             setThumbnailStats((prev) => ({ ...prev, stopped: true }));
@@ -6592,11 +6607,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     } catch (error) {
       imageCaptureJobRef.current = null;
+      setActiveImageCaptureJob(null);
       showToast(getImageCaptureJobErrorMessage(error, 'Image capture failed'), 'error');
       setThumbnailStats((prev) => ({ ...prev, stopped: true }));
       return true;
     }
     imageCaptureJobRef.current = null;
+    setActiveImageCaptureJob(null);
     return true;
   }, [
     applyImageCaptureJobUpdates,
@@ -6903,6 +6920,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         console.warn('Failed to cancel image capture job', error);
       });
       imageCaptureJobRef.current = null;
+      setActiveImageCaptureJob(null);
     }
     setThumbnailQueueSize(0);
     setThumbnailStats((prev) => ({ ...prev, stopped: true }));
@@ -6930,7 +6948,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const isActive = (showThumbnails || thumbnailStats.mode === 'screenshot')
       && total > 0
       && !thumbnailStats.stopped
-      && (thumbnailStats.finalizing || completed < total);
+      && (activeImageCaptureJob || thumbnailStats.finalizing || completed < total);
     if (!isActive) {
       if (thumbnailElapsedTimerRef.current) {
         clearInterval(thumbnailElapsedTimerRef.current);
@@ -6952,7 +6970,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         thumbnailElapsedTimerRef.current = null;
       }
     };
-  }, [showThumbnails, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [activeImageCaptureJob, showThumbnails, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   const getFullScreenshotCandidates = (
     scope,
@@ -14379,7 +14397,8 @@ export default function App({ currentRoute, navigateToRoute }) {
           </DndContext>
         )}
         {(showThumbnails || thumbnailStats.mode === 'screenshot') && thumbnailStats.total > 0 && (() => {
-          if (!shouldShowImageCaptureProgressToast(thumbnailStats)) return null;
+          const backendCaptureActive = Boolean(activeImageCaptureJob?.jobId);
+          if (!backendCaptureActive && !shouldShowImageCaptureProgressToast(thumbnailStats)) return null;
           const total = thumbnailStats.total || 0;
           if (total <= 0) return null;
           const settled = Math.min(
@@ -14388,7 +14407,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           );
           const completed = Math.max(thumbnailStats.completed || 0, settled);
           const remaining = Math.max(0, total - settled);
-          if (remaining <= 0 && !thumbnailStats.finalizing) return null;
+          if (remaining <= 0 && !thumbnailStats.finalizing && !backendCaptureActive) return null;
           const cached = thumbnailStats.cached || 0;
           const unavailable = thumbnailStats.unavailable || 0;
           const skipped = thumbnailStats.skipped || 0;
@@ -14405,6 +14424,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           const captureLabel = isScreenshotCapture ? 'Screenshots' : 'Thumbnails';
           const title = `${captureLabel}: ${captured} of ${total}`;
           const metaParts = [
+            backendCaptureActive && remaining <= 0 && !thumbnailStats.finalizing ? 'finishing save' : '',
             cached > 0 ? `${cached} already had images` : '',
             unavailable > 0 ? `${unavailable} unavailable` : '',
             skipped > 0 ? `${skipped} skipped` : '',

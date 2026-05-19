@@ -1110,6 +1110,18 @@ const imageCaptureRequestsMatch = (payload, request) => {
   return left.every((nodeId, index) => nodeId === right[index]);
 };
 
+const getSettledImageCaptureProgress = (row) => {
+  const progress = parseJsonSafe(row?.progress);
+  if (!progress || typeof progress !== 'object') return null;
+  if (progress.stopped) return { status: JOB_STATUS.canceled, result: progress };
+  const total = Math.max(0, Number(progress.total) || 0);
+  const completed = Math.max(0, Number(progress.completed) || 0);
+  if (total > 0 && completed >= total && !progress.currentNodeId) {
+    return { status: JOB_STATUS.complete, result: progress };
+  }
+  return null;
+};
+
 const findActiveImageCaptureJob = async (mapId, captureType, request = {}) => {
   const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
     JOB_TYPES.imageCapture,
@@ -1119,6 +1131,19 @@ const findActiveImageCaptureJob = async (mapId, captureType, request = {}) => {
   for (const row of rows) {
     const payload = getJobPayload(row);
     if (payload.mapId === mapId && payload.captureType === captureType) {
+      if (row.status === JOB_STATUS.stopping) {
+        await markJobCanceled(row.id);
+        continue;
+      }
+      const settledProgress = getSettledImageCaptureProgress(row);
+      if (settledProgress?.status === JOB_STATUS.complete) {
+        await markJobComplete(row.id, settledProgress.result);
+        continue;
+      }
+      if (settledProgress?.status === JOB_STATUS.canceled) {
+        await markJobCanceled(row.id);
+        continue;
+      }
       return {
         id: row.id,
         matchesRequest: imageCaptureRequestsMatch(payload, request),
@@ -4899,7 +4924,7 @@ function registerImageCaptureRoutes(targetApp) {
       }
       if (existingJob?.id) {
         return res.status(409).json({
-          error: 'Another image capture is still running for this map. Stop it or wait for it to finish before starting a different capture.',
+          error: 'A previous image capture is still finishing. Wait a moment, then retry.',
           code: 'IMAGE_CAPTURE_JOB_ACTIVE',
           jobId: existingJob.id,
           jobType: JOB_TYPES.imageCapture,

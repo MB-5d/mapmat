@@ -8,7 +8,7 @@ function listJobPayloadsByTypeAndStatusesAsync(type, statuses) {
   if (!Array.isArray(statuses) || statuses.length === 0) return Promise.resolve([]);
   const placeholders = statuses.map(() => '?').join(', ');
   return adapter.queryAllAsync(`
-    SELECT id, type, status, created_at, started_at, user_id, api_key, ip_hash, payload
+    SELECT id, type, status, created_at, started_at, user_id, api_key, ip_hash, payload, progress, result, error
     FROM jobs
     WHERE type = ? AND status IN (${placeholders})
     ORDER BY created_at ASC

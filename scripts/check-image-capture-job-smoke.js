@@ -247,19 +247,28 @@ function getJobStatus(dbPath, jobId) {
   }
 }
 
-function insertActiveImageCaptureJob(dbPath, { jobId, mapId, captureType, scope, targetMode = 'remaining', nodeIds = [] }) {
+function insertActiveImageCaptureJob(dbPath, {
+  jobId,
+  mapId,
+  captureType,
+  scope,
+  targetMode = 'remaining',
+  nodeIds = [],
+  status = 'running',
+  progress = null,
+}) {
   const db = new Database(dbPath, { fileMustExist: true });
   try {
     db.prepare(`
-      INSERT INTO jobs (id, type, status, started_at, payload)
-      VALUES (?, 'image_capture', 'running', CURRENT_TIMESTAMP, ?)
-    `).run(jobId, JSON.stringify({
+      INSERT INTO jobs (id, type, status, started_at, payload, progress)
+      VALUES (?, 'image_capture', ?, CURRENT_TIMESTAMP, ?, ?)
+    `).run(jobId, status, JSON.stringify({
       mapId,
       captureType,
       scope,
       targetMode,
       nodeIds,
-    }));
+    }), progress ? JSON.stringify(progress) : null);
   } finally {
     db.close();
   }
@@ -432,6 +441,43 @@ async function run() {
     } finally {
       deleteJob(dbPath, activeSelectedJobId);
     }
+
+    const settledActiveJobId = `settled-active-${Date.now()}`;
+    insertActiveImageCaptureJob(dbPath, {
+      jobId: settledActiveJobId,
+      mapId,
+      captureType: 'thumb',
+      scope: 'all',
+      targetMode: 'remaining',
+      progress: {
+        total: 1,
+        completed: 1,
+        captured: 1,
+        failed: 0,
+        blocked: 0,
+        missingAsset: 0,
+        skipped: 0,
+        currentNodeId: null,
+      },
+    });
+    const afterSettledActive = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs`, {
+      method: 'POST',
+      body: JSON.stringify({
+        captureType: 'thumb',
+        scope: 'selected',
+        nodeIds: ['main-0'],
+        targetMode: 'remaining',
+      }),
+    }, cookieJar);
+    assert.notStrictEqual(
+      afterSettledActive.jobId,
+      settledActiveJobId,
+      'settled active job should not be reused'
+    );
+    assert.strictEqual(getJobStatus(dbPath, settledActiveJobId), 'complete', 'settled active job should be repaired');
+    await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs/${afterSettledActive.jobId}/cancel`, {
+      method: 'POST',
+    }, cookieJar);
 
     const thumbStart = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs`, {
       method: 'POST',
