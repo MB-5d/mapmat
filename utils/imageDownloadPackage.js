@@ -1,13 +1,18 @@
 const path = require('path');
 
 const DOWNLOAD_IMAGE_FIELDS = Object.freeze([
-  'thumbnailUrl',
   'fullScreenshotUrl',
+  'thumbnailFullUrl',
 ]);
 
 const DOWNLOAD_IMAGE_FIELD_LABELS = Object.freeze({
-  thumbnailUrl: 'thumbnail',
   fullScreenshotUrl: 'full',
+  thumbnailFullUrl: 'preview',
+});
+
+const pathCollator = new Intl.Collator('en', {
+  numeric: true,
+  sensitivity: 'base',
 });
 
 const zipCrcTable = Array.from({ length: 256 }, (_, index) => {
@@ -68,7 +73,7 @@ function createZipBuffer(files) {
     return header;
   };
 
-  const makeCentralHeader = ({ nameBuffer, dataBuffer, crc, localOffset }) => {
+  const makeCentralHeader = ({ nameBuffer, dataBuffer, crc, localOffset, isDirectory }) => {
     const header = Buffer.alloc(46);
     header.writeUInt32LE(0x02014b50, 0);
     header.writeUInt16LE(20, 4);
@@ -85,13 +90,17 @@ function createZipBuffer(files) {
     header.writeUInt16LE(0, 32);
     header.writeUInt16LE(0, 34);
     header.writeUInt16LE(0, 36);
-    header.writeUInt32LE(0, 38);
+    header.writeUInt32LE(isDirectory ? 0x10 : 0, 38);
     header.writeUInt32LE(localOffset, 42);
     return header;
   };
 
   files.forEach((file) => {
-    const nameBuffer = Buffer.from(file.path, 'utf8');
+    const isDirectory = Boolean(file.directory) || String(file.path || '').endsWith('/');
+    const entryPath = isDirectory && !String(file.path || '').endsWith('/')
+      ? `${file.path}/`
+      : file.path;
+    const nameBuffer = Buffer.from(entryPath, 'utf8');
     const dataBuffer = Buffer.isBuffer(file.buffer) ? file.buffer : Buffer.from(file.buffer || '');
     const crc = getZipCrc32(dataBuffer);
     const localOffset = offset;
@@ -100,7 +109,7 @@ function createZipBuffer(files) {
     push(nameBuffer);
     push(dataBuffer);
 
-    centralDirectory.push({ nameBuffer, dataBuffer, crc, localOffset });
+    centralDirectory.push({ nameBuffer, dataBuffer, crc, localOffset, isDirectory });
   });
 
   const centralStart = offset;
@@ -143,7 +152,9 @@ function urlsMatch(left, right) {
 function sanitizeFilenamePart(value, fallback = 'item') {
   const cleaned = String(value || '')
     .trim()
+    .replace(/[\u2010-\u2015]/g, '-')
     .replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ')
+    .replace(/\s*-\s*/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^\.+|\.+$/g, '')
@@ -152,9 +163,44 @@ function sanitizeFilenamePart(value, fallback = 'item') {
   return cleaned || fallback;
 }
 
-function buildNodeSegment({ number, title, url, id } = {}) {
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getDownloadSiteTitle(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const parts = raw
+    .replace(/[\u2010-\u2015]/g, '-')
+    .split(/\s*(?:[-|\\/:]+)\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : raw;
+}
+
+function stripTrailingSiteTitle(value, siteTitle) {
+  const raw = String(value || '').trim();
+  const site = String(siteTitle || '').trim();
+  if (!raw || !site || raw.toLowerCase() === site.toLowerCase()) return raw;
+  const normalized = raw.replace(/[\u2010-\u2015]/g, '-');
+  const stripped = normalized.replace(
+    new RegExp(`\\s*(?:[-|\\\\/:]+)\\s*${escapeRegExp(site)}\\s*$`, 'i'),
+    ''
+  ).trim();
+  return stripped || raw;
+}
+
+function buildImageDownloadPackageName(mapName) {
+  return `Vellic-${sanitizeFilenamePart(mapName, 'Map')}_images`;
+}
+
+function buildNodeSegment({ number, title, url, id } = {}, options = {}) {
+  if (options.isRootFolder && String(number || '').trim() === '0') {
+    return 'Main site';
+  }
   const safeNumber = sanitizeFilenamePart(number, 'page');
-  const safeTitle = sanitizeFilenamePart(title || getUrlLabel(url) || id, 'Untitled');
+  const displayTitle = stripTrailingSiteTitle(title || getUrlLabel(url) || id, options.siteTitle);
+  const safeTitle = sanitizeFilenamePart(displayTitle, 'Untitled');
   return safeNumber ? `${safeNumber}-${safeTitle}` : safeTitle;
 }
 
@@ -269,32 +315,95 @@ function dedupeFilePath(filePath, usedPaths) {
   return nextPath;
 }
 
+function getDescriptorPathSegments(descriptor) {
+  const safeDescriptor = descriptor || {};
+  return Array.isArray(safeDescriptor.pathSegments) && safeDescriptor.pathSegments.length
+    ? safeDescriptor.pathSegments
+    : [safeDescriptor];
+}
+
+function buildFolderParts(descriptor, options = {}) {
+  return getDescriptorPathSegments(descriptor).map((segment, index) => buildNodeSegment(segment, {
+    siteTitle: options.siteTitle,
+    isRootFolder: index === 0,
+  }));
+}
+
 function buildImageDownloadPath({
   descriptor,
   assetField,
   exportedFieldCount,
   extension,
   usedPaths,
+  siteTitle,
 }) {
   const safeDescriptor = descriptor || {};
-  const pathSegments = Array.isArray(safeDescriptor.pathSegments) && safeDescriptor.pathSegments.length
-    ? safeDescriptor.pathSegments
-    : [safeDescriptor];
-  const folderParts = pathSegments.map((segment) => buildNodeSegment(segment));
-  const fileBase = buildNodeSegment(safeDescriptor);
+  const folderParts = buildFolderParts(safeDescriptor, { siteTitle });
+  const fileBase = buildNodeSegment(safeDescriptor, { siteTitle });
   const suffix = exportedFieldCount > 1 ? `-${DOWNLOAD_IMAGE_FIELD_LABELS[assetField] || 'image'}` : '';
   const filePath = [...folderParts, `${fileBase}${suffix}.${extension}`].join('/');
   return dedupeFilePath(filePath, usedPaths);
 }
 
+function buildImageDownloadDirectoryPaths(descriptors, options = {}) {
+  const usedPaths = new Set();
+  const directories = [];
+
+  (Array.isArray(descriptors) ? descriptors : []).forEach((descriptor) => {
+    const folderParts = buildFolderParts(descriptor, options).filter(Boolean);
+    for (let index = 1; index <= folderParts.length; index += 1) {
+      const directoryPath = folderParts.slice(0, index).join('/');
+      if (!directoryPath || usedPaths.has(directoryPath)) continue;
+      usedPaths.add(directoryPath);
+      directories.push(directoryPath);
+    }
+  });
+
+  return directories.sort(compareImageDownloadPaths);
+}
+
+function compareImageDownloadPaths(left, right) {
+  const normalize = (value) => {
+    const raw = String(value || '').replace(/\/+$/, '');
+    const parts = raw.split('/');
+    if (/^Vellic-.+_images$/i.test(parts[0] || '')) {
+      return parts.slice(1).join('/');
+    }
+    return raw;
+  };
+  const getGroup = (value) => {
+    const normalized = normalize(value);
+    if (!normalized) return -1;
+    if (normalized === 'Main site' || normalized.startsWith('Main site/')) return 0;
+    if (/^0\.\d+/.test(normalized)) return 1;
+    if (/^s\d+/i.test(normalized)) return 2;
+    return 1;
+  };
+  const leftGroup = getGroup(left);
+  const rightGroup = getGroup(right);
+  if (leftGroup !== rightGroup) return leftGroup - rightGroup;
+  return pathCollator.compare(String(left || ''), String(right || ''));
+}
+
+function sortImageDownloadEntries(entries) {
+  return (Array.isArray(entries) ? entries : [])
+    .slice()
+    .sort((left, right) => compareImageDownloadPaths(left.path, right.path));
+}
+
 module.exports = {
   DOWNLOAD_IMAGE_FIELDS,
   DOWNLOAD_IMAGE_FIELD_LABELS,
+  buildImageDownloadDirectoryPaths,
+  buildImageDownloadPackageName,
   buildImageDownloadPath,
   collectFallbackImageDownloadNodes,
+  compareImageDownloadPaths,
   createZipBuffer,
   getAssetExtension,
+  getDownloadSiteTitle,
   normalizeDownloadNodeDescriptors,
   sanitizeFilenamePart,
+  sortImageDownloadEntries,
   urlsMatch,
 };

@@ -41,12 +41,17 @@ const {
 } = require('../utils/screenshotStorage');
 const {
   DOWNLOAD_IMAGE_FIELDS,
+  buildImageDownloadDirectoryPaths,
+  buildImageDownloadPackageName,
   buildImageDownloadPath,
   collectFallbackImageDownloadNodes,
+  compareImageDownloadPaths,
   createZipBuffer,
   getAssetExtension,
+  getDownloadSiteTitle,
   normalizeDownloadNodeDescriptors,
   sanitizeFilenamePart,
+  sortImageDownloadEntries,
   urlsMatch,
 } = require('../utils/imageDownloadPackage');
 
@@ -650,34 +655,10 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
   const validNodeIds = new Set(currentNodesById.keys());
   const selectedSet = scope === 'selected' ? new Set(selectedNodeIds) : null;
   const exportableFields = new Set(DOWNLOAD_IMAGE_FIELDS);
-  const savedRows = await imageAssetStore.listSavedImageAssetsByMapAsync(mapId);
-  const rows = (savedRows || []).filter((row) => {
-    const nodeId = String(row.node_id || '').trim();
-    const assetField = String(row.asset_field || '').trim();
-    if (!validNodeIds.has(nodeId) || !exportableFields.has(assetField)) return false;
-    if (selectedSet && !selectedSet.has(nodeId)) return false;
-    return true;
-  });
-
-  const exportedFieldCountsByNode = new Map();
-  rows.forEach((row) => {
-    const nodeId = String(row.node_id || '').trim();
-    exportedFieldCountsByNode.set(nodeId, (exportedFieldCountsByNode.get(nodeId) || 0) + 1);
-  });
-
-  const files = [];
-  const staleNodeIds = new Set();
-  const missingEntries = [];
-  const usedPaths = new Set();
-
-  for (const row of rows) {
-    const nodeId = String(row.node_id || '').trim();
-    const assetField = String(row.asset_field || '').trim();
-    const storageKey = String(row.storage_key || '').trim() || extractScreenshotStorageKey(row.url);
-    if (!storageKey) continue;
-
+  const siteTitle = getDownloadSiteTitle(parsedMap.root?.title || '');
+  const getDescriptor = (nodeId) => {
     const node = currentNodesById.get(nodeId);
-    const descriptor = clientDescriptors.get(nodeId)
+    return clientDescriptors.get(nodeId)
       || fallbackDescriptors.get(nodeId)
       || {
         id: nodeId,
@@ -686,49 +667,107 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
         url: node?.url || '',
         pathSegments: [],
       };
-    const currentUrl = descriptor.url || node?.url || '';
-    const metadata = await readScreenshotJson(`${storageKey}.json`);
-    if (metadata?.url && currentUrl && !urlsMatch(metadata.url, currentUrl)) {
-      staleNodeIds.add(nodeId);
-      continue;
-    }
+  };
+  const scopedDescriptors = Array.from(validNodeIds)
+    .filter((nodeId) => !selectedSet || selectedSet.has(nodeId))
+    .map(getDescriptor);
+  const directories = buildImageDownloadDirectoryPaths(scopedDescriptors, { siteTitle });
+  const savedRows = await imageAssetStore.listSavedImageAssetsByMapAsync(mapId);
 
-    const object = await readScreenshotObject(storageKey);
-    if (!object?.buffer || Number(object.size || object.buffer.length || 0) <= 0) {
-      missingEntries.push({
-        mapId,
+  const rowsByNode = new Map();
+  (savedRows || []).forEach((row) => {
+    const nodeId = String(row.node_id || '').trim();
+    const assetField = String(row.asset_field || '').trim();
+    if (!validNodeIds.has(nodeId) || !exportableFields.has(assetField)) return;
+    if (selectedSet && !selectedSet.has(nodeId)) return;
+    if (!rowsByNode.has(nodeId)) rowsByNode.set(nodeId, []);
+    rowsByNode.get(nodeId).push(row);
+  });
+
+  const files = [];
+  const staleNodeIds = new Set();
+  const missingEntries = [];
+  const usedPaths = new Set();
+  const fieldPriority = {
+    fullScreenshotUrl: 0,
+    thumbnailFullUrl: 1,
+  };
+  const nodeEntries = Array.from(rowsByNode.entries())
+    .map(([nodeId, rows]) => {
+      const descriptor = getDescriptor(nodeId);
+      return {
+        nodeId,
+        descriptor,
+        sortPath: buildImageDownloadPath({
+          descriptor,
+          assetField: 'fullScreenshotUrl',
+          exportedFieldCount: 1,
+          extension: 'jpg',
+          usedPaths: new Set(),
+          siteTitle,
+        }),
+        rows: rows.slice().sort((left, right) => (
+          (fieldPriority[String(left.asset_field || '').trim()] ?? 99)
+          - (fieldPriority[String(right.asset_field || '').trim()] ?? 99)
+        )),
+      };
+    })
+    .sort((left, right) => compareImageDownloadPaths(left.sortPath, right.sortPath));
+
+  for (const entry of nodeEntries) {
+    const node = currentNodesById.get(entry.nodeId);
+    const currentUrl = entry.descriptor.url || node?.url || '';
+    for (const row of entry.rows) {
+      const nodeId = entry.nodeId;
+      const assetField = String(row.asset_field || '').trim();
+      const storageKey = String(row.storage_key || '').trim() || extractScreenshotStorageKey(row.url);
+      if (!storageKey) continue;
+
+      const metadata = await readScreenshotJson(`${storageKey}.json`);
+      if (metadata?.url && currentUrl && !urlsMatch(metadata.url, currentUrl)) {
+        staleNodeIds.add(nodeId);
+        break;
+      }
+
+      const object = await readScreenshotObject(storageKey);
+      if (!object?.buffer || Number(object.size || object.buffer.length || 0) <= 0) {
+        missingEntries.push({
+          mapId,
+          nodeId,
+          assetField,
+          assetType: row.asset_type || assetField,
+          storageKey,
+          url: row.url || null,
+          provider: row.provider || getScreenshotStorageProvider(),
+          contentType: row.content_type || getContentTypeForKey(storageKey),
+          status: 'missing',
+          error: 'Missing saved asset',
+        });
+        continue;
+      }
+
+      const extension = getAssetExtension({
+        storageKey,
+        contentType: row.content_type || object.contentType,
+      });
+      const filePath = buildImageDownloadPath({
+        descriptor: entry.descriptor,
+        assetField,
+        exportedFieldCount: 1,
+        extension,
+        usedPaths,
+        siteTitle,
+      });
+
+      files.push({
+        path: filePath,
+        buffer: object.buffer,
+        contentType: row.content_type || object.contentType || getContentTypeForKey(storageKey),
         nodeId,
         assetField,
-        assetType: row.asset_type || assetField,
-        storageKey,
-        url: row.url || null,
-        provider: row.provider || getScreenshotStorageProvider(),
-        contentType: row.content_type || getContentTypeForKey(storageKey),
-        status: 'missing',
-        error: 'Missing saved asset',
       });
-      continue;
+      break;
     }
-
-    const extension = getAssetExtension({
-      storageKey,
-      contentType: row.content_type || object.contentType,
-    });
-    const filePath = buildImageDownloadPath({
-      descriptor,
-      assetField,
-      exportedFieldCount: exportedFieldCountsByNode.get(nodeId) || 1,
-      extension,
-      usedPaths,
-    });
-
-    files.push({
-      path: filePath,
-      buffer: object.buffer,
-      contentType: row.content_type || object.contentType || getContentTypeForKey(storageKey),
-      nodeId,
-      assetField,
-    });
   }
 
   if (missingEntries.length > 0) {
@@ -746,7 +785,8 @@ async function buildMapImageDownloadFiles({ mapId, parsedMap, scope, selectedNod
   }
 
   return {
-    files,
+    directories,
+    files: sortImageDownloadEntries(files),
     staleNodeIds: Array.from(staleNodeIds),
   };
 }
@@ -1765,7 +1805,7 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
     })) return;
 
     const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
-    const { files, staleNodeIds } = await buildMapImageDownloadFiles({
+    const { directories, files, staleNodeIds } = await buildMapImageDownloadFiles({
       mapId: id,
       parsedMap: repaired.parsed,
       scope,
@@ -1782,19 +1822,31 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
       });
     }
 
-    const baseName = sanitizeFilenamePart(map.name || repaired.parsed.root?.title || 'vellic-images', 'vellic-images');
+    const packageName = buildImageDownloadPackageName(map.name || repaired.parsed.root?.title || 'Map');
     if (files.length === 1) {
       const file = files[0];
-      const filename = file.path.split('/').pop() || `${baseName}.jpg`;
+      const filename = file.path.split('/').pop() || `${packageName}.jpg`;
       res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
       res.setHeader('Content-Disposition', buildContentDisposition(filename));
       res.setHeader('Content-Length', file.buffer.length);
       return res.send(file.buffer);
     }
 
-    const zipBuffer = createZipBuffer(files);
+    const zipEntries = sortImageDownloadEntries([
+      { path: `${packageName}/`, buffer: Buffer.alloc(0), directory: true },
+      ...(directories || []).map((directoryPath) => ({
+        path: `${packageName}/${directoryPath}/`,
+        buffer: Buffer.alloc(0),
+        directory: true,
+      })),
+      ...files.map((file) => ({
+        ...file,
+        path: `${packageName}/${file.path}`,
+      })),
+    ]);
+    const zipBuffer = createZipBuffer(zipEntries);
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', buildContentDisposition(`${baseName}-images.zip`));
+    res.setHeader('Content-Disposition', buildContentDisposition(`${packageName}.zip`));
     res.setHeader('Content-Length', zipBuffer.length);
     return res.send(zipBuffer);
   } catch (error) {
