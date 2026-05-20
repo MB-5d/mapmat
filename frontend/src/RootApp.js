@@ -42,10 +42,11 @@ function RootApp() {
         surface: ROUTE_SURFACES.SHARE,
         shareId: route.shareId,
         accessLevel: route.accessLevel,
+        orientation: route.orientation,
       },
       { replace: true }
     );
-  }, [navigateToRoute, route.accessLevel, route.legacyShareQuery, route.shareId]);
+  }, [navigateToRoute, route.accessLevel, route.legacyShareQuery, route.orientation, route.shareId]);
 
   useEffect(() => {
     if (!APP_ONLY_MODE || route.surface !== ROUTE_SURFACES.WEBSITE) return;

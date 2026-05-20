@@ -5,6 +5,24 @@ export const ROUTE_SURFACES = Object.freeze({
   ADMIN: 'admin',
 });
 
+export const MAP_ORIENTATIONS = Object.freeze({
+  VERTICAL: 'vertical',
+  HORIZONTAL: 'horizontal',
+});
+
+export const MAP_ORIENTATION_QUERY_PARAM = 'orientation';
+
+export function normalizeMapOrientation(value) {
+  return value === MAP_ORIENTATIONS.HORIZONTAL
+    ? MAP_ORIENTATIONS.HORIZONTAL
+    : MAP_ORIENTATIONS.VERTICAL;
+}
+
+function parseMapOrientation(searchParams) {
+  if (!searchParams?.has(MAP_ORIENTATION_QUERY_PARAM)) return null;
+  return normalizeMapOrientation(searchParams.get(MAP_ORIENTATION_QUERY_PARAM));
+}
+
 function trimSlashes(value) {
   return String(value || '').replace(/^\/+|\/+$/g, '');
 }
@@ -28,6 +46,7 @@ export function parseCurrentRoute(locationLike = window.location) {
   const searchParams = new URLSearchParams(search);
   const legacyShareId = searchParams.get('share');
   const legacyAccess = searchParams.get('access');
+  const orientation = parseMapOrientation(searchParams);
 
   if (legacyShareId) {
     return {
@@ -37,6 +56,7 @@ export function parseCurrentRoute(locationLike = window.location) {
       searchParams,
       shareId: legacyShareId,
       accessLevel: legacyAccess || null,
+      orientation,
       legacyShareQuery: true,
     };
   }
@@ -50,6 +70,7 @@ export function parseCurrentRoute(locationLike = window.location) {
       searchParams,
       shareId: decodeSegment(shareMatch[1]),
       accessLevel: searchParams.get('access') || null,
+      orientation,
       legacyShareQuery: false,
     };
   }
@@ -156,6 +177,9 @@ export function buildRouteUrl(route) {
     if (route.accessLevel) {
       searchParams.set('access', route.accessLevel);
     }
+    if (route.orientation) {
+      searchParams.set(MAP_ORIENTATION_QUERY_PARAM, normalizeMapOrientation(route.orientation));
+    }
     const search = searchParams.toString();
     return search ? `${basePath}?${search}` : basePath;
   }
@@ -210,6 +234,11 @@ export function createInviteAcceptRoute(inviteToken) {
   return { surface: ROUTE_SURFACES.APP, section: 'invite_accept', mapId: null, inviteToken };
 }
 
-export function createShareRoute(shareId, accessLevel = null) {
-  return { surface: ROUTE_SURFACES.SHARE, shareId, accessLevel };
+export function createShareRoute(shareId, accessLevel = null, orientation = null) {
+  return {
+    surface: ROUTE_SURFACES.SHARE,
+    shareId,
+    accessLevel,
+    orientation: orientation ? normalizeMapOrientation(orientation) : null,
+  };
 }

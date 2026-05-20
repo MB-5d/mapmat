@@ -1,5 +1,5 @@
 import { LAYOUT } from '../utils/constants';
-import { shouldStackChildren, getMaxDepth, countNodes } from '../utils/treeUtils';
+import { shouldStackChildren } from '../utils/treeUtils';
 
 // Get node height based on display mode
 export const getNodeH = (showThumbnails) => showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED;
@@ -33,15 +33,15 @@ export const computeLayout = (
   } = LAYOUT;
 
   const {
-    orphanMode = "after-root",     // 'after-root' or 'after-tree'
     orphanStyle = "root",          // 'root' or 'level1'
-    renderOrphanChildren = false,  // leave false until you explicitly want mini-trees
+    orientation: requestedOrientation = "vertical",
   } = options;
+  const orientation = requestedOrientation === "horizontal" ? "horizontal" : "vertical";
 
   const nodes = new Map();
   const connectors = [];
 
-  if (!root) return { nodes, connectors, bounds: { w: 0, h: 0 } };
+  if (!root) return { nodes, connectors, bounds: { w: 0, h: 0 }, orientation };
 
   // Bus line position: midpoint between root bottom and Level 1 top
   // This gives equal visual space above and below the horizontal bus
@@ -63,6 +63,233 @@ export const computeLayout = (
       ...extra,
     });
   };
+
+  const allOrphans = Array.isArray(orphans) ? orphans.filter(Boolean) : [];
+  const subdomainOrphans = allOrphans.filter((o) => o.subdomainRoot);
+  const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
+
+  const getBounds = () => {
+    const all = Array.from(nodes.values());
+    const maxX = Math.max(...all.map((n) => n.x + n.w), NODE_W);
+    const maxY = Math.max(...all.map((n) => n.y + n.h), NODE_H);
+    return { w: maxX + 50, h: maxY + 50 };
+  };
+
+  const horizontalChildrenCache = new Map();
+  const horizontalHeightCache = new Map();
+
+  const getHorizontalChildren = (node, depth) => {
+    const cacheKey = node?.id;
+    if (cacheKey && horizontalChildrenCache.has(cacheKey)) {
+      return horizontalChildrenCache.get(cacheKey);
+    }
+
+    const children = node.children || [];
+    if (!children.length) {
+      if (cacheKey) horizontalChildrenCache.set(cacheKey, []);
+      return [];
+    }
+
+    const shouldStack = shouldStackChildren(children, depth);
+    const isExpanded = !!expandedStacks[node.id];
+
+    if (shouldStack && !isExpanded) {
+      const child = children[0];
+      if (!child) {
+        if (cacheKey) horizontalChildrenCache.set(cacheKey, []);
+        return [];
+      }
+      const result = [{
+        child,
+        stackInfo: {
+          parentId: node.id,
+          totalCount: children.length,
+          collapsed: true,
+        },
+      }];
+      if (cacheKey) horizontalChildrenCache.set(cacheKey, result);
+      return result;
+    }
+
+    const result = children.map((child, idx) => ({
+      child,
+      stackInfo: shouldStack
+        ? {
+            parentId: node.id,
+            totalCount: children.length,
+            expanded: true,
+            showCollapse: idx === 0 || idx === children.length - 1,
+        }
+        : null,
+    }));
+    if (cacheKey) horizontalChildrenCache.set(cacheKey, result);
+    return result;
+  };
+
+  const HORIZONTAL_DEPTH_GAP = Math.max(GAP_L1_X, BUS_Y_GAP);
+  const HORIZONTAL_TREE_GAP_Y = ORPHAN_GROUP_GAP;
+
+  const getHorizontalSubtreeHeight = (node, depth) => {
+    if (node?.id && horizontalHeightCache.has(node.id)) {
+      return horizontalHeightCache.get(node.id);
+    }
+
+    const children = getHorizontalChildren(node, depth);
+    if (!children.length) {
+      if (node?.id) horizontalHeightCache.set(node.id, NODE_H);
+      return NODE_H;
+    }
+
+    const childHeight = children.reduce((sum, { child }) => (
+      sum + getHorizontalSubtreeHeight(child, depth + 1)
+    ), 0);
+    const gaps = GAP_STACK_Y * Math.max(children.length - 1, 0);
+    const height = Math.max(NODE_H, childHeight + gaps);
+    if (node?.id) horizontalHeightCache.set(node.id, height);
+    return height;
+  };
+
+  const layoutHorizontalNode = (
+    node,
+    x,
+    subtreeY,
+    depth,
+    number,
+    context = {},
+    extra = {},
+    childNumberFor = (parentNumber, childIndex) => `${parentNumber}.${childIndex + 1}`
+  ) => {
+    const subtreeH = getHorizontalSubtreeHeight(node, depth);
+    const y = subtreeY + (subtreeH - NODE_H) / 2;
+    setNode(node, x, y, depth, number, { ...context, ...extra });
+
+    const children = getHorizontalChildren(node, depth);
+    if (!children.length) return subtreeH;
+
+    const childHeights = children.map(({ child }) => getHorizontalSubtreeHeight(child, depth + 1));
+    const childGroupH = childHeights.reduce((sum, value) => sum + value, 0)
+      + GAP_STACK_Y * Math.max(children.length - 1, 0);
+    let childY = subtreeY + (subtreeH - childGroupH) / 2;
+    const childX = x + NODE_W + HORIZONTAL_DEPTH_GAP;
+    const childPositions = [];
+
+    children.forEach(({ child, stackInfo }, idx) => {
+      const childNumber = childNumberFor(number, idx, depth);
+      const childExtra = stackInfo ? { stackInfo } : {};
+      layoutHorizontalNode(
+        child,
+        childX,
+        childY,
+        depth + 1,
+        childNumber,
+        context,
+        childExtra,
+        childNumberFor
+      );
+
+      const childLayout = nodes.get(child.id);
+      if (childLayout) {
+        childPositions.push({
+          centerY: childLayout.y + NODE_H / 2,
+        });
+      }
+      childY += childHeights[idx] + GAP_STACK_Y;
+    });
+
+    if (childPositions.length) {
+      const parentCenterY = y + NODE_H / 2;
+      const parentRightX = x + NODE_W;
+      const spineX = parentRightX + HORIZONTAL_DEPTH_GAP / 2;
+      const firstChildY = childPositions[0].centerY;
+      const lastChildY = childPositions[childPositions.length - 1].centerY;
+
+      connectors.push({
+        type: "horizontal-spine",
+        x1: parentRightX,
+        y1: parentCenterY,
+        x2: spineX,
+        y2: parentCenterY,
+      });
+      connectors.push({
+        type: "vertical-spine",
+        x1: spineX,
+        y1: Math.min(parentCenterY, firstChildY),
+        x2: spineX,
+        y2: Math.max(parentCenterY, lastChildY),
+      });
+      childPositions.forEach((pos) => {
+        connectors.push({
+          type: "horizontal-tick",
+          x1: spineX,
+          y1: pos.centerY,
+          x2: childX,
+          y2: pos.centerY,
+        });
+      });
+    }
+
+    return subtreeH;
+  };
+
+  const layoutHorizontalTree = (rootNode, startX, startY, rootNumber, extra = {}, childNumberFor) => {
+    const context = {
+      isSubdomainTree: extra.orphanType === 'subdomain' || extra.isSubdomainTree || false,
+      orphanType: extra.orphanType || null,
+    };
+    return layoutHorizontalNode(
+      rootNode,
+      startX,
+      startY,
+      0,
+      rootNumber,
+      context,
+      { ...extra, ...context },
+      childNumberFor
+    );
+  };
+
+  if (orientation === "horizontal") {
+    let cursorY = ROOT_Y;
+    const startX = 0;
+    const mainNumberFor = (parentNumber, childIndex, depth) => (
+      depth === 0 ? `${childIndex + 1}` : `${parentNumber}.${childIndex + 1}`
+    );
+
+    const mainTreeHeight = layoutHorizontalTree(root, startX, cursorY, "0", { isOrphan: false }, mainNumberFor);
+    cursorY += mainTreeHeight + HORIZONTAL_TREE_GAP_Y;
+
+    const orderedSubdomains = [...subdomainOrphans].reverse();
+    const subdomainCount = orderedSubdomains.length;
+    orderedSubdomains.forEach((orphan, idx) => {
+      const num = `s${subdomainCount - idx}`;
+      const treeHeight = layoutHorizontalTree(orphan, startX, cursorY, num, {
+        isOrphan: true,
+        orphanStyle: 'subdomain',
+        orphanType: 'subdomain',
+      });
+      cursorY += treeHeight + HORIZONTAL_TREE_GAP_Y;
+    });
+
+    const orderedOrphans = [...regularOrphans].reverse();
+    const orphanCount = orderedOrphans.length;
+    orderedOrphans.forEach((orphan, idx) => {
+      const count = orphanCount - idx;
+      const num = orphanStyle === "level1" ? `1.o${count}` : `0.${count}`;
+      const treeHeight = layoutHorizontalTree(orphan, startX, cursorY, num, {
+        isOrphan: true,
+        orphanStyle,
+        orphanType: orphan.orphanType || 'orphan',
+      });
+      cursorY += treeHeight + HORIZONTAL_TREE_GAP_Y;
+    });
+
+    return {
+      nodes,
+      connectors,
+      bounds: getBounds(),
+      orientation,
+    };
+  }
 
   // Calculate subtree width (how far right the deepest child extends from parent's x)
   // This is used to prevent horizontal overlap between Level 1 siblings
@@ -197,10 +424,6 @@ export const computeLayout = (
     const total = cursorY - parentY - GAP_STACK_Y;
     return Math.max(NODE_H, total);
   };
-
-  const allOrphans = Array.isArray(orphans) ? orphans.filter(Boolean) : [];
-  const subdomainOrphans = allOrphans.filter((o) => o.subdomainRoot);
-  const regularOrphans = allOrphans.filter((o) => !o.subdomainRoot);
 
   const layoutRootTree = (rootNode, startX, startY, rootNumber, extra = {}) => {
     const context = {
@@ -361,12 +584,6 @@ export const computeLayout = (
   // 3) Orphans (left of root)
   // ------------------------------------------------------------
 
-  // Main tree right edge (based on actual L1 width; if no children, it's just root)
-  const mainTreeRightEdge =
-    root.children?.length
-      ? (level1X - GAP_L1_X + NODE_W)  // last L1 node right edge
-      : (rootX + NODE_W);
-
   // Where do orphans start?
   // - after-root: start on root row, *one full node-slot* to the right of root
   //              (so 0.1 doesn't feel glued to 0.0)
@@ -378,7 +595,6 @@ export const computeLayout = (
   const orderedOrphans = [...regularOrphans].reverse();
   const orphanCount = orderedOrphans.length;
   orderedOrphans.forEach((orphan, idx) => {
-    const depth = orphanStyle === "level1" ? 1 : 0;
     const count = orphanCount - idx;
     const num = orphanStyle === "level1" ? `1.o${count}` : `0.${count}`;
     const treeWidth = layoutRootTree(orphan, orphanX, orphanY, num, {
@@ -410,13 +626,10 @@ export const computeLayout = (
   // ------------------------------------------------------------
   // Bounds
   // ------------------------------------------------------------
-  const all = Array.from(nodes.values());
-  const maxX = Math.max(...all.map((n) => n.x + n.w), NODE_W);
-  const maxY = Math.max(...all.map((n) => n.y + n.h), NODE_H);
-
   return {
     nodes,
     connectors,
-    bounds: { w: maxX + 50, h: maxY + 50 }, // light padding
+    bounds: getBounds(), // light padding
+    orientation,
   };
 };

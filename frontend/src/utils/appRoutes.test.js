@@ -1,8 +1,10 @@
 import {
+  MAP_ORIENTATIONS,
   ROUTE_SURFACES,
   buildRouteUrl,
   createAdminHomeRoute,
   createAdminUserRoute,
+  createShareRoute,
   parseCurrentRoute,
 } from './appRoutes';
 
@@ -32,5 +34,18 @@ describe('appRoutes admin surface', () => {
   it('builds admin route URLs', () => {
     expect(buildRouteUrl(createAdminHomeRoute())).toBe('/admin');
     expect(buildRouteUrl(createAdminUserRoute('user-123'))).toBe('/admin/users/user-123');
+  });
+
+  it('preserves share map orientation in route URLs', () => {
+    const route = createShareRoute('share-123', 'view', MAP_ORIENTATIONS.HORIZONTAL);
+
+    expect(buildRouteUrl(route)).toBe('/share/share-123?access=view&orientation=horizontal');
+
+    const parsed = parseCurrentRoute({
+      pathname: '/share/share-123',
+      search: '?access=view&orientation=horizontal',
+    });
+
+    expect(parsed.orientation).toBe(MAP_ORIENTATIONS.HORIZONTAL);
   });
 });

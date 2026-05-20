@@ -114,12 +114,14 @@ import { useConsent } from './contexts/ConsentContext';
 import { useCoeditingLive, COEDITING_LIVE_STATUS } from './hooks/useCoeditingLive';
 import {
   ROUTE_SURFACES,
+  MAP_ORIENTATIONS,
   buildRouteUrl,
   createAppHomeRoute,
   createAccessRequestsRoute,
   createInviteInboxRoute,
   createMapRoute,
   createShareRoute,
+  normalizeMapOrientation,
 } from './utils/appRoutes';
 import {
   clearAnalyticsUser,
@@ -1009,6 +1011,7 @@ const SitemapTree = ({
   expandedStacks,
   onToggleStack,
   layout: layoutOverride,
+  orientation = MAP_ORIENTATIONS.VERTICAL,
   selectedNodeIds,
   children,
 }) => {
@@ -1022,14 +1025,16 @@ const SitemapTree = ({
     return computeLayout(data, orphans, showThumbnails, expandedStacks, {
       mode: 'after-root', // or 'after-tree'
       renderOrphanChildren: true,
+      orientation,
     });
-  }, [data, orphans, showThumbnails, expandedStacks, layoutOverride]);
+  }, [data, orphans, showThumbnails, expandedStacks, layoutOverride, orientation]);
 
   const layout = layoutOverride || computedLayout;
 
   // Run invariant checks in development
   useEffect(() => {
     if (!layout || process.env.NODE_ENV === 'production') return;
+    if (layout.orientation === MAP_ORIENTATIONS.HORIZONTAL) return;
     checkLayoutInvariants(layout.nodes, orphans, layout.connectors);
   }, [layout, orphans]);
 
@@ -2048,6 +2053,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
   const [showImageMenu, setShowImageMenu] = useState(false);
+  const [mapOrientation, setMapOrientation] = useState(() => (
+    currentRoute?.orientation || normalizeMapOrientation(currentRoute?.searchParams?.get('orientation'))
+  ));
   const [layers, setLayers] = useState({
     userFlows: true,    // User journey connections
     crossLinks: true,   // Non-hierarchical links
@@ -2082,6 +2090,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [activeDropZone, setActiveDropZone] = useState(null);
   const [dropZones, setDropZones] = useState([]);
   const [dragCursor, setDragCursor] = useState({ x: 0, y: 0 }); // Track cursor for proximity filtering
+
+  useEffect(() => {
+    if (currentRoute?.orientation) {
+      setMapOrientation(currentRoute.orientation);
+    }
+  }, [currentRoute?.orientation]);
 
   const canvasRef = useRef(null);
   const scanJobIdRef = useRef(null);
@@ -3116,12 +3130,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     return computeLayout(renderRoot, visibleOrphans, showThumbnails, expandedStacks, {
       mode: 'after-root',
       renderOrphanChildren: true,
+      orientation: mapOrientation,
     });
-  }, [renderRoot, visibleOrphans, showThumbnails, expandedStacks]);
+  }, [renderRoot, visibleOrphans, showThumbnails, expandedStacks, mapOrientation]);
 
   useEffect(() => {
     layoutRef.current = mapLayout;
   }, [mapLayout]);
+
+  useEffect(() => {
+    if (!mapLayout?.nodes?.size) return;
+    scheduleResetViewRef.current?.();
+  }, [mapLayout?.orientation, mapLayout?.nodes?.size]);
 
   const getNodeStackSelectionIds = useCallback((nodeId) => {
     if (!nodeId) return [];
@@ -10314,7 +10334,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
 
       const shareUrl = new URL(
-        buildRouteUrl(createShareRoute(share.id, permission)),
+        buildRouteUrl(createShareRoute(share.id, permission, mapOrientation)),
         window.location.origin
       );
 
@@ -10334,7 +10354,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         const shareData = { root, orphans, connections, colors, connectionColors, createdAt: Date.now() };
         localStorage.setItem(shareId, JSON.stringify(shareData));
         const shareUrl = new URL(
-          buildRouteUrl(createShareRoute(shareId, permission)),
+          buildRouteUrl(createShareRoute(shareId, permission, mapOrientation)),
           window.location.origin
         );
         await navigator.clipboard.writeText(shareUrl.toString());
@@ -12552,6 +12572,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       // Get depth from the positioned wrapper element
       const positionedWrapper = card.closest('[data-depth]');
       const depth = parseInt(positionedWrapper?.getAttribute('data-depth') || '0', 10);
+      const useHorizontalMapDropZones = mapOrientation === MAP_ORIENTATIONS.HORIZONTAL;
 
       // Root-level orphans/subdomains: allow sibling zones using container targets
       if (!parent && nodeMeta.treeType !== 'root') {
@@ -12563,33 +12584,57 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         if (displayIndex !== -1) {
           const insertIndexBefore = displayCount - displayIndex;
-          zones.push({
-            type: 'sibling-root',
-            layout: 'horizontal',
-            parentId: containerId,
-            index: insertIndexBefore,
-            x: rect.left - 24,
-            y: rect.top + rect.height / 2,
-            allowed: canMoveNode(draggedNodeId, containerId),
-          });
-          if (displayIndex === displayCount - 1) {
-            const insertIndexAfter = displayCount - (displayIndex + 1);
+          if (useHorizontalMapDropZones) {
+            zones.push({
+              type: 'sibling-root',
+              layout: 'vertical',
+              parentId: containerId,
+              index: insertIndexBefore,
+              x: rect.left + rect.width / 2,
+              y: rect.top - 28,
+              allowed: canMoveNode(draggedNodeId, containerId),
+            });
+          } else {
             zones.push({
               type: 'sibling-root',
               layout: 'horizontal',
               parentId: containerId,
-              index: insertIndexAfter,
-              x: rect.right + 24,
+              index: insertIndexBefore,
+              x: rect.left - 24,
               y: rect.top + rect.height / 2,
               allowed: canMoveNode(draggedNodeId, containerId),
             });
+          }
+          if (displayIndex === displayCount - 1) {
+            const insertIndexAfter = displayCount - (displayIndex + 1);
+            if (useHorizontalMapDropZones) {
+              zones.push({
+                type: 'sibling-root',
+                layout: 'vertical',
+                parentId: containerId,
+                index: insertIndexAfter,
+                x: rect.left + rect.width / 2,
+                y: rect.bottom + 28,
+                allowed: canMoveNode(draggedNodeId, containerId),
+              });
+            } else {
+              zones.push({
+                type: 'sibling-root',
+                layout: 'horizontal',
+                parentId: containerId,
+                index: insertIndexAfter,
+                x: rect.right + 24,
+                y: rect.top + rect.height / 2,
+                allowed: canMoveNode(draggedNodeId, containerId),
+              });
+            }
           }
         }
       }
 
       // Add sibling drop zones (before this node)
       // Level 1 (depth=1) uses horizontal layout, Level 2+ (depth>1) uses vertical
-      if (depth === 1 && parent) {
+      if (depth === 1 && parent && !useHorizontalMapDropZones) {
         // Horizontal layout (Level 1) - drop zones to left/right
         zones.push({
           type: 'sibling',
@@ -12612,8 +12657,8 @@ export default function App({ currentRoute, navigateToRoute }) {
             allowed: canMoveNode(draggedNodeId, parent.id),
           });
         }
-      } else if (depth > 1 && parent) {
-        // Vertical layout (Level 2+) - drop zones above/below ONLY
+      } else if (depth > 0 && parent) {
+        // Vertical sibling layout - drop zones above/below ONLY
         zones.push({
           type: 'sibling',
           layout: 'vertical',
@@ -12642,13 +12687,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       // Position below the card with GAP_STACK_Y spacing, center of the zone
       if (!node.children?.length) {
         const childZoneHeight = 200; // Use collapsed height as reference
+        const childZoneWidth = 288;
         zones.push({
           type: 'child',
-          layout: 'vertical',
+          layout: useHorizontalMapDropZones ? 'horizontal' : 'vertical',
           parentId: nodeId,
           index: 0,
-          x: rect.left + rect.width / 2,
-          y: rect.bottom + 60 + childZoneHeight / 2, // Top of zone at rect.bottom + 60
+          x: useHorizontalMapDropZones
+            ? rect.right + 60 + childZoneWidth / 2
+            : rect.left + rect.width / 2,
+          y: useHorizontalMapDropZones
+            ? rect.top + rect.height / 2
+            : rect.bottom + 60 + childZoneHeight / 2,
           allowed: canMoveNode(draggedNodeId, nodeId),
         });
       }
@@ -13444,6 +13494,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   data={renderRoot}
                   orphans={visibleOrphans}
                   layout={mapLayout}
+                  orientation={mapOrientation}
                   showThumbnails={showThumbnails}
                   showCommentBadges={canViewComments()}
                   canEdit={canEdit()}
@@ -14161,6 +14212,10 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                     changeStatusOptions={markerStatusOptions}
                     showChangeSection={showMarkerSection}
+                    mapOrientation={mapOrientation}
+                    onMapOrientationChange={(nextOrientation) => {
+                      setMapOrientation(normalizeMapOrientation(nextOrientation));
+                    }}
                     showViewDropdown={showViewDropdown}
                     onToggleDropdown={() => setShowViewDropdown((prev) => !prev)}
                     viewDropdownRef={viewDropdownRef}
