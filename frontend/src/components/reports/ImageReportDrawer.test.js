@@ -53,6 +53,9 @@ describe('ImageReportDrawer', () => {
   };
 
   const getListText = () => container.querySelector('.image-report-list')?.textContent || '';
+  const getVisibleTitles = () => (
+    Array.from(container.querySelectorAll('.image-report-row-title strong')).map((node) => node.textContent.trim())
+  );
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -140,5 +143,46 @@ describe('ImageReportDrawer', () => {
 
     expect(getListText()).toContain('Portal');
     expect(getListText()).not.toContain('Handbook');
+  });
+
+  test('sorts the issue list with report-style controls', () => {
+    renderDrawer();
+
+    expect(getVisibleTitles()).toEqual(['Handbook', 'Portal']);
+
+    const pageSortButton = Array.from(container.querySelectorAll('.image-report-list-header .report-sort-button')).find(
+      (button) => button.textContent.includes('Page')
+    );
+
+    act(() => {
+      pageSortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      pageSortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(getVisibleTitles()).toEqual(['Portal', 'Handbook']);
+  });
+
+  test('uses a scrollable list area and back to top action', () => {
+    renderDrawer();
+
+    const listShell = container.querySelector('.image-report-list-shell');
+    listShell.scrollTo = jest.fn();
+    listShell.scrollTop = 300;
+
+    act(() => {
+      listShell.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    const backToTop = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Back to top')
+    );
+
+    expect(backToTop).not.toBeUndefined();
+
+    act(() => {
+      backToTop.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(listShell.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
   });
 });

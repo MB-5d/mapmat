@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowUpDown,
+  ArrowUpToLine,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -13,6 +15,7 @@ import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import TextInput from '../ui/TextInput';
+import { comparePageNumbers } from '../../utils/reportUtils';
 
 const UNKNOWN_TYPE = 'unknown';
 
@@ -29,7 +32,10 @@ const ImageReportDrawer = ({
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({});
   const [search, setSearch] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: 'number', direction: 'asc' });
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const bodyRef = useRef(null);
+  const listRef = useRef(null);
 
   const typeOptions = useMemo(() => {
     const optionMap = new Map();
@@ -84,6 +90,10 @@ const ImageReportDrawer = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, shouldRender]);
 
+  useEffect(() => {
+    if (!isOpen) setShowBackToTop(false);
+  }, [isOpen]);
+
   const activeFilterKeys = useMemo(
     () => Object.entries(filters).filter(([, value]) => value).map(([key]) => key),
     [filters]
@@ -111,6 +121,75 @@ const ImageReportDrawer = ({
       ].some((value) => String(value || '').toLowerCase().includes(query));
     });
   }, [activeFilterKeys, filters, issues, search, typeOptions]);
+
+  const issueOrder = useMemo(
+    () => new Map(issues.map((issue, index) => [issue.id || `${issue.nodeId || 'issue'}-${index}`, index])),
+    [issues]
+  );
+
+  const sortedIssues = useMemo(() => {
+    const direction = sortConfig.direction === 'desc' ? -1 : 1;
+    return [...filteredIssues].sort((left, right) => {
+      let result = 0;
+
+      if (sortConfig.key === 'number') {
+        if (!left.pageNumber && right.pageNumber) result = 1;
+        else if (left.pageNumber && !right.pageNumber) result = -1;
+        else result = comparePageNumbers(left.pageNumber, right.pageNumber);
+      } else if (sortConfig.key === 'type') {
+        result = (left.label || left.type || '').localeCompare(right.label || right.type || '', undefined, { sensitivity: 'base' });
+      } else if (sortConfig.key === 'title') {
+        result = (left.title || left.url || '').localeCompare(right.title || right.url || '', undefined, { sensitivity: 'base' });
+      }
+
+      if (result === 0) {
+        const leftKey = left.id || `${left.nodeId || 'issue'}-${filteredIssues.indexOf(left)}`;
+        const rightKey = right.id || `${right.nodeId || 'issue'}-${filteredIssues.indexOf(right)}`;
+        result = (issueOrder.get(leftKey) || 0) - (issueOrder.get(rightKey) || 0);
+      }
+
+      return result * direction;
+    });
+  }, [filteredIssues, issueOrder, sortConfig]);
+
+  const toggleSort = (key) => {
+    setSortConfig((previous) => {
+      if (previous.key === key) {
+        return {
+          key,
+          direction: previous.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return { key, direction: 'asc' };
+    });
+  };
+
+  const renderSortButton = (key, label) => {
+    const isActive = sortConfig.key === key;
+
+    return (
+      <button
+        type="button"
+        className={`report-sort-button ${isActive ? 'active' : ''}`.trim()}
+        onClick={() => toggleSort(key)}
+      >
+        <span>{label}</span>
+        {isActive ? (
+          sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+        ) : (
+          <ArrowUpDown size={14} />
+        )}
+      </button>
+    );
+  };
+
+  const handleListScroll = (event) => {
+    setShowBackToTop(event.currentTarget.scrollTop > 240);
+  };
+
+  const scrollToTop = () => {
+    listRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const safeReportTitle = String(reportTitle || 'Current map');
   const truncatedTitle = safeReportTitle.length > 56
@@ -230,52 +309,82 @@ const ImageReportDrawer = ({
           )}
         </section>
 
-        {filteredIssues.length === 0 ? (
-          <div className="report-empty">
-            {issues.length === 0 ? 'No image issues found.' : 'No image issues match your filters.'}
-          </div>
-        ) : (
-          <div className="image-report-list" role="list">
-            {filteredIssues.map((issue, index) => (
-              <div className="image-report-row" role="listitem" key={issue.id || `${issue.nodeId || 'issue'}-${index}`}>
-                <div className="image-report-row-main">
-                  <div className="image-report-row-content">
-                    <div className="image-report-row-title">
-                      {issue.pageNumber ? <span>{issue.pageNumber}</span> : null}
-                      <strong>{issue.title || 'Untitled page'}</strong>
+        <div
+          className="image-report-list-shell"
+          ref={listRef}
+          onScroll={handleListScroll}
+          role="region"
+          aria-label="Image report issues"
+        >
+          {filteredIssues.length === 0 ? (
+            <div className="report-empty">
+              {issues.length === 0 ? 'No image issues found.' : 'No image issues match your filters.'}
+            </div>
+          ) : (
+            <>
+              <div className="image-report-list-header">
+                {renderSortButton('number', 'Number')}
+                {renderSortButton('type', 'Issue')}
+                {renderSortButton('title', 'Page')}
+                <span>Actions</span>
+              </div>
+              <div className="image-report-list" role="list">
+                {sortedIssues.map((issue, index) => (
+                  <div className="image-report-row" role="listitem" key={issue.id || `${issue.nodeId || 'issue'}-${index}`}>
+                    <div className="image-report-cell image-report-number">
+                      {issue.pageNumber || '--'}
                     </div>
-                    <span className={`capture-issue-label capture-issue-label-${issue.type || UNKNOWN_TYPE}`}>
-                      {issue.label || 'Capture issue'}
-                    </span>
-                    {issue.url ? <span className="image-report-url">{issue.url}</span> : null}
-                    {issue.detail ? <span className="image-report-detail">{issue.detail}</span> : null}
-                  </div>
-                  <div className="image-report-row-actions">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      startIcon={<Locate size={14} />}
-                      onClick={() => onSelectIssue?.(issue)}
-                      disabled={!issue.nodeId}
-                    >
-                      Select
-                    </Button>
-                    {issue.url ? (
+                    <div className="image-report-cell image-report-type">
+                      <span className={`capture-issue-label capture-issue-label-${issue.type || UNKNOWN_TYPE}`}>
+                        {issue.label || 'Capture issue'}
+                      </span>
+                    </div>
+                    <div className="image-report-row-content image-report-cell">
+                      <div className="image-report-row-title">
+                      <strong>{issue.title || 'Untitled page'}</strong>
+                      </div>
+                      {issue.url ? <span className="image-report-url">{issue.url}</span> : null}
+                      {issue.detail ? <span className="image-report-detail">{issue.detail}</span> : null}
+                    </div>
+                    <div className="image-report-row-actions">
                       <Button
                         variant="secondary"
                         size="sm"
-                        startIcon={<ExternalLink size={14} />}
-                        onClick={() => onOpenIssueUrl?.(issue)}
+                        startIcon={<Locate size={14} />}
+                        onClick={() => onSelectIssue?.(issue)}
+                        disabled={!issue.nodeId}
                       >
-                        Open
+                        Select
                       </Button>
-                    ) : null}
+                      {issue.url ? (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          startIcon={<ExternalLink size={14} />}
+                          onClick={() => onOpenIssueUrl?.(issue)}
+                        >
+                          Open
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            </>
+          )}
+        </div>
+        {showBackToTop ? (
+          <Button
+            type="primary"
+            buttonStyle="mono"
+            size="sm"
+            className="drawer-back-to-top"
+            onClick={scrollToTop}
+            startIcon={<ArrowUpToLine />}
+          >
+            Back to top
+          </Button>
+        ) : null}
       </div>
     </aside>
   );

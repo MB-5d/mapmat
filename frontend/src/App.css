@@ -4766,35 +4766,80 @@ body {
   margin-top: 0;
 }
 
+.image-report-drawer .report-drawer-body {
+  overflow: hidden;
+}
+
 .image-report-filters .report-filter-toggle:disabled {
   color: var(--color-text-secondary);
   cursor: default;
   opacity: 0.7;
 }
 
+.image-report-list-shell {
+  flex: 1;
+  min-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow-x: hidden;
+  background: var(--color-bg-primary);
+}
+
+.image-report-list-header,
+.image-report-row {
+  display: grid;
+  grid-template-columns: 72px 132px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.image-report-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 16px;
+  background: var(--color-bg-hover);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.image-report-list-header > span {
+  justify-self: end;
+}
+
 .image-report-list {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--color-bg-primary);
 }
 
 .image-report-row {
   border-bottom: 1px solid var(--color-border);
+  padding: 14px 16px;
 }
 
 .image-report-row:last-child {
   border-bottom: none;
 }
 
-.image-report-row-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  padding: 14px 16px;
-  align-items: start;
+.image-report-cell {
+  min-width: 0;
+}
+
+.image-report-number {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.image-report-type {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .image-report-row-content {
@@ -4811,12 +4856,6 @@ body {
   min-width: 0;
   color: var(--color-text-primary);
   font-size: 13px;
-}
-
-.image-report-row-title span {
-  flex-shrink: 0;
-  color: var(--color-text-secondary);
-  font-weight: 700;
 }
 
 .image-report-row-title strong {
@@ -4843,7 +4882,11 @@ body {
 }
 
 @media (max-width: 640px) {
-  .image-report-row-main {
+  .image-report-list-header {
+    display: none;
+  }
+
+  .image-report-row {
     grid-template-columns: 1fr;
   }
 

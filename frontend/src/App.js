@@ -14232,14 +14232,14 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                   />
                 ),
-                onToggleImageMenu: async () => {
+                onToggleImageMenu: () => {
                   if (showImageMenu) {
                     setShowImageMenu(false);
                     return;
                   }
-                  await validateCurrentMapImageAssets();
                   setShowImageReportDrawer(false);
                   setShowImageMenu(true);
+                  validateCurrentMapImageAssets();
                 },
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),

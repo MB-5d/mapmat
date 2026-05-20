@@ -227,6 +227,20 @@ describe('map image asset persistence', () => {
     expect(payload.root.children[0].thumbnailFullUrl).toBe('/screenshots/preview-about.jpg');
   });
 
+  test('image menu opens before validating saved image assets', () => {
+    const handlerStart = appJs.indexOf('onToggleImageMenu: () => {');
+    const handlerEnd = appJs.indexOf('onGetThumbnailsAll', handlerStart);
+    const handler = appJs.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handler).toContain('setShowImageMenu(true);');
+    expect(handler).toContain('validateCurrentMapImageAssets();');
+    expect(handler.indexOf('setShowImageMenu(true);')).toBeLessThan(
+      handler.indexOf('validateCurrentMapImageAssets();')
+    );
+    expect(handler).not.toContain('await validateCurrentMapImageAssets');
+  });
+
   test('autosave snapshots only track canvas content changes', () => {
     const base = {
       name: 'Original map name',
