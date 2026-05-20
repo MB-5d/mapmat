@@ -14423,6 +14423,14 @@ export default function App({ currentRoute, navigateToRoute }) {
               issues={visibleCaptureIssues}
               onSelectIssue={selectCaptureIssue}
               onOpenIssueUrl={openCaptureIssueUrl}
+              selectedNodeIds={selectedNodeIds}
+              onSelectionChange={(nodeIds) => setSelectedNodeIds(new Set(nodeIds))}
+              onCaptureSelectedThumbnails={() => handleThumbnailCapture('selected')}
+              onCaptureSelectedScreenshots={() => handleFullScreenshotCapture('selected')}
+              onRetryMissingThumbnails={() => handleThumbnailCapture('all')}
+              onRetryMissingScreenshots={() => handleFullScreenshotCapture('all')}
+              hasMissingThumbnails={invalidThumbnailAssetIds.size > 0}
+              hasMissingScreenshots={invalidFullScreenshotAssetIds.size > 0}
               reportTitle={reportTitle}
             />
           </DndContext>

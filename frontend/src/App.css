@@ -4776,6 +4776,39 @@ body {
   opacity: 0.7;
 }
 
+.image-report-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg-primary);
+}
+
+.image-report-actions-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 84px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.image-report-actions-summary strong {
+  color: var(--color-text-primary);
+  font-size: 18px;
+}
+
+.image-report-actions-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .image-report-list-shell {
   flex: 1;
   min-height: 220px;
@@ -4790,7 +4823,7 @@ body {
 .image-report-list-header,
 .image-report-row {
   display: grid;
-  grid-template-columns: 72px 132px minmax(0, 1fr) auto;
+  grid-template-columns: 112px 132px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
 }
@@ -4810,6 +4843,31 @@ body {
 
 .image-report-list-header > span {
   justify-self: end;
+}
+
+.image-report-select-heading,
+.image-report-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.image-report-select-heading .report-sort-button {
+  min-width: 0;
+}
+
+.image-report-select-checkbox {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.image-report-select-checkbox:disabled {
+  cursor: not-allowed;
 }
 
 .image-report-list {
@@ -4834,6 +4892,12 @@ body {
   color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 700;
+}
+
+.image-report-number span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .image-report-type {
@@ -4882,6 +4946,15 @@ body {
 }
 
 @media (max-width: 640px) {
+  .image-report-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .image-report-actions-buttons {
+    justify-content: flex-start;
+  }
+
   .image-report-list-header {
     display: none;
   }

@@ -38,6 +38,12 @@ describe('ImageReportDrawer', () => {
       issues,
       onSelectIssue: jest.fn(),
       onOpenIssueUrl: jest.fn(),
+      selectedNodeIds: new Set(),
+      onSelectionChange: jest.fn(),
+      onCaptureSelectedThumbnails: jest.fn(),
+      onCaptureSelectedScreenshots: jest.fn(),
+      onRetryMissingThumbnails: jest.fn(),
+      onRetryMissingScreenshots: jest.fn(),
       reportTitle: 'QA Report',
       ...nextProps,
     };
@@ -107,6 +113,56 @@ describe('ImageReportDrawer', () => {
 
     expect(props.onSelectIssue).toHaveBeenCalledWith(issues[0]);
     expect(props.onOpenIssueUrl).toHaveBeenCalledWith(issues[0]);
+  });
+
+  test('selects rows, supports shift range selection, and selects all visible rows', () => {
+    const onSelectionChange = jest.fn();
+    renderDrawer({ onSelectionChange });
+
+    const handbookCheckbox = container.querySelector('input[aria-label="Select Handbook"]');
+    const portalCheckbox = container.querySelector('input[aria-label="Select Portal"]');
+    const selectAllCheckbox = container.querySelector('input[aria-label="Select all visible image issues"]');
+
+    act(() => {
+      handbookCheckbox.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(['n1']);
+
+    act(() => {
+      portalCheckbox.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+    });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(['n1', 'n2']);
+
+    act(() => {
+      selectAllCheckbox.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onSelectionChange).toHaveBeenLastCalledWith(['n1', 'n2']);
+  });
+
+  test('runs image capture actions from the drawer toolbar', () => {
+    renderDrawer({
+      selectedNodeIds: new Set(['n1']),
+      hasMissingThumbnails: true,
+      hasMissingScreenshots: true,
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const captureVisible = buttons.find((button) => button.textContent.includes('Capture selected visible area'));
+    const captureFull = buttons.find((button) => button.textContent.includes('Capture selected full page'));
+    const retryVisible = buttons.find((button) => button.textContent.includes('Retry missing visible area'));
+    const retryFull = buttons.find((button) => button.textContent.includes('Retry missing full page'));
+
+    act(() => {
+      captureVisible.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      captureFull.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      retryVisible.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      retryFull.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(props.onCaptureSelectedThumbnails).toHaveBeenCalledTimes(1);
+    expect(props.onCaptureSelectedScreenshots).toHaveBeenCalledTimes(1);
+    expect(props.onRetryMissingThumbnails).toHaveBeenCalledTimes(1);
+    expect(props.onRetryMissingScreenshots).toHaveBeenCalledTimes(1);
   });
 
   test('searches and filters issue rows', () => {

@@ -25,6 +25,14 @@ const ImageReportDrawer = ({
   issues = [],
   onSelectIssue,
   onOpenIssueUrl,
+  selectedNodeIds = new Set(),
+  onSelectionChange,
+  onCaptureSelectedThumbnails,
+  onCaptureSelectedScreenshots,
+  onRetryMissingThumbnails,
+  onRetryMissingScreenshots,
+  hasMissingThumbnails = false,
+  hasMissingScreenshots = false,
   reportTitle = 'Current map',
 }) => {
   const [shouldRender, setShouldRender] = useState(isOpen);
@@ -36,6 +44,7 @@ const ImageReportDrawer = ({
   const [showBackToTop, setShowBackToTop] = useState(false);
   const bodyRef = useRef(null);
   const listRef = useRef(null);
+  const lastSelectedIndexRef = useRef(null);
 
   const typeOptions = useMemo(() => {
     const optionMap = new Map();
@@ -127,6 +136,11 @@ const ImageReportDrawer = ({
     [issues]
   );
 
+  const selectedNodeIdSet = useMemo(
+    () => new Set(selectedNodeIds instanceof Set ? Array.from(selectedNodeIds) : selectedNodeIds || []),
+    [selectedNodeIds]
+  );
+
   const sortedIssues = useMemo(() => {
     const direction = sortConfig.direction === 'desc' ? -1 : 1;
     return [...filteredIssues].sort((left, right) => {
@@ -151,6 +165,64 @@ const ImageReportDrawer = ({
       return result * direction;
     });
   }, [filteredIssues, issueOrder, sortConfig]);
+
+  const selectableReportNodeIds = useMemo(
+    () => Array.from(new Set(issues.map((issue) => issue.nodeId).filter(Boolean))),
+    [issues]
+  );
+
+  const selectableVisibleNodeIds = useMemo(
+    () => Array.from(new Set(sortedIssues.map((issue) => issue.nodeId).filter(Boolean))),
+    [sortedIssues]
+  );
+
+  const selectedCount = selectedNodeIdSet.size;
+  const selectedVisibleCount = selectableVisibleNodeIds.filter((nodeId) => selectedNodeIdSet.has(nodeId)).length;
+  const allVisibleSelected = selectableVisibleNodeIds.length > 0 && selectedVisibleCount === selectableVisibleNodeIds.length;
+  const someVisibleSelected = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  const commitReportSelection = (nextSelection) => {
+    onSelectionChange?.(Array.from(nextSelection));
+  };
+
+  const getReportSelection = () => (
+    new Set(selectableReportNodeIds.filter((nodeId) => selectedNodeIdSet.has(nodeId)))
+  );
+
+  const handleToggleAllVisible = () => {
+    const nextSelection = getReportSelection();
+    if (allVisibleSelected) {
+      selectableVisibleNodeIds.forEach((nodeId) => nextSelection.delete(nodeId));
+    } else {
+      selectableVisibleNodeIds.forEach((nodeId) => nextSelection.add(nodeId));
+    }
+    lastSelectedIndexRef.current = null;
+    commitReportSelection(nextSelection);
+  };
+
+  const handleToggleIssue = (issue, index, event) => {
+    if (!issue.nodeId) return;
+
+    const nextSelection = getReportSelection();
+    const shiftActive = event?.shiftKey || event?.nativeEvent?.shiftKey;
+    if (shiftActive && lastSelectedIndexRef.current != null) {
+      const start = Math.min(lastSelectedIndexRef.current, index);
+      const end = Math.max(lastSelectedIndexRef.current, index);
+      const rangeIssues = sortedIssues.slice(start, end + 1).filter((item) => item.nodeId);
+      const shouldSelectRange = !selectedNodeIdSet.has(issue.nodeId);
+      rangeIssues.forEach((item) => {
+        if (shouldSelectRange) nextSelection.add(item.nodeId);
+        else nextSelection.delete(item.nodeId);
+      });
+    } else if (nextSelection.has(issue.nodeId)) {
+      nextSelection.delete(issue.nodeId);
+    } else {
+      nextSelection.add(issue.nodeId);
+    }
+
+    lastSelectedIndexRef.current = index;
+    commitReportSelection(nextSelection);
+  };
 
   const toggleSort = (key) => {
     setSortConfig((previous) => {
@@ -309,6 +381,47 @@ const ImageReportDrawer = ({
           )}
         </section>
 
+        <section className="image-report-actions" aria-label="Image capture actions">
+          <div className="image-report-actions-summary">
+            <strong>{selectedCount}</strong>
+            <span>selected</span>
+          </div>
+          <div className="image-report-actions-buttons">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onCaptureSelectedThumbnails}
+              disabled={selectedCount === 0}
+            >
+              Capture selected visible area
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onCaptureSelectedScreenshots}
+              disabled={selectedCount === 0}
+            >
+              Capture selected full page
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onRetryMissingThumbnails}
+              disabled={!hasMissingThumbnails}
+            >
+              Retry missing visible area
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onRetryMissingScreenshots}
+              disabled={!hasMissingScreenshots}
+            >
+              Retry missing full page
+            </Button>
+          </div>
+        </section>
+
         <div
           className="image-report-list-shell"
           ref={listRef}
@@ -323,7 +436,20 @@ const ImageReportDrawer = ({
           ) : (
             <>
               <div className="image-report-list-header">
-                {renderSortButton('number', 'Number')}
+                <div className="image-report-select-heading">
+                  <input
+                    type="checkbox"
+                    className="image-report-select-checkbox"
+                    aria-label="Select all visible image issues"
+                    checked={allVisibleSelected}
+                    ref={(element) => {
+                      if (element) element.indeterminate = someVisibleSelected;
+                    }}
+                    onChange={handleToggleAllVisible}
+                    disabled={selectableVisibleNodeIds.length === 0}
+                  />
+                  {renderSortButton('number', 'Number')}
+                </div>
                 {renderSortButton('type', 'Issue')}
                 {renderSortButton('title', 'Page')}
                 <span>Actions</span>
@@ -332,7 +458,15 @@ const ImageReportDrawer = ({
                 {sortedIssues.map((issue, index) => (
                   <div className="image-report-row" role="listitem" key={issue.id || `${issue.nodeId || 'issue'}-${index}`}>
                     <div className="image-report-cell image-report-number">
-                      {issue.pageNumber || '--'}
+                      <input
+                        type="checkbox"
+                        className="image-report-select-checkbox"
+                        aria-label={`Select ${issue.title || 'image issue'}`}
+                        checked={Boolean(issue.nodeId && selectedNodeIdSet.has(issue.nodeId))}
+                        onChange={(event) => handleToggleIssue(issue, index, event)}
+                        disabled={!issue.nodeId}
+                      />
+                      <span>{issue.pageNumber || '--'}</span>
                     </div>
                     <div className="image-report-cell image-report-type">
                       <span className={`capture-issue-label capture-issue-label-${issue.type || UNKNOWN_TYPE}`}>
@@ -341,7 +475,7 @@ const ImageReportDrawer = ({
                     </div>
                     <div className="image-report-row-content image-report-cell">
                       <div className="image-report-row-title">
-                      <strong>{issue.title || 'Untitled page'}</strong>
+                        <strong>{issue.title || 'Untitled page'}</strong>
                       </div>
                       {issue.url ? <span className="image-report-url">{issue.url}</span> : null}
                       {issue.detail ? <span className="image-report-detail">{issue.detail}</span> : null}
