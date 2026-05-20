@@ -2174,6 +2174,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     avgMs: 0,
     cached: 0,
     unavailable: 0,
+    phase: null,
+    recoveryPass: 0,
+    retrying: 0,
     finalizing: false,
     stopped: false,
   });
@@ -2330,11 +2333,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const hasStoredImageAsset = useCallback(isStoredScreenshotAsset, []);
 
-  const hasTerminalThumbnailFailure = useCallback((node) => (
-    Boolean(node?.authRequired)
-    && Boolean(node?.thumbnailCaptureFailed)
-    && String(node?.thumbnailCaptureError || '').toLowerCase().includes('requires login')
-  ), []);
+  const hasTerminalThumbnailFailure = useCallback(() => false, []);
 
   const hasAnyDownloadableThumbnails = useMemo(() => {
     if (!root) return false;
@@ -6074,6 +6073,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       avgMs: 0,
       cached,
       unavailable,
+      phase: null,
+      recoveryPass: 0,
+      retrying: 0,
       batchIndex: 0,
       batchTotal: 0,
       finalizing: false,
@@ -6380,6 +6382,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       skipped: skippedTotal,
       cached: Number(payload.cached || prev.cached || 0),
       unavailable: Number(payload.unavailable || prev.unavailable || 0),
+      phase: payload.phase || prev.phase || 'primary',
+      recoveryPass: Number(payload.recoveryPass || 0),
+      retrying: Number(payload.retrying || 0),
       avgMs: completed ? Math.round(elapsed / completed) : prev.avgMs,
     }));
     return { savedButNotApplied: Array.from(savedButNotApplied) };
@@ -14449,12 +14454,20 @@ export default function App({ currentRoute, navigateToRoute }) {
           const etaMs = Math.ceil((remaining * estimateItemMs) / Math.max(1, etaConcurrency));
           const captureLabel = isScreenshotCapture ? 'Screenshots' : 'Thumbnails';
           const title = `${captureLabel}: ${captured} of ${total}`;
+          const isRecoveryPhase = thumbnailStats.phase === 'recovery';
+          const phaseLabel = isRecoveryPhase
+            ? `Retrying slow pages${thumbnailStats.recoveryPass ? ` (${thumbnailStats.recoveryPass})` : ''}`
+            : 'Capturing';
+          const shouldShowFailureCount = thumbnailStats.failed > 0
+            && (!backendCaptureActive || thumbnailStats.phase === 'complete');
           const metaParts = [
+            backendCaptureActive ? phaseLabel : '',
             backendCaptureActive && remaining <= 0 && !thumbnailStats.finalizing ? 'finishing save' : '',
+            isRecoveryPhase && thumbnailStats.retrying > 0 ? `${thumbnailStats.retrying} retrying` : '',
             cached > 0 ? `${cached} already had images` : '',
             unavailable > 0 ? `${unavailable} unavailable` : '',
             skipped > 0 ? `${skipped} skipped` : '',
-            thumbnailStats.failed > 0 ? `${thumbnailStats.failed} failed` : '',
+            shouldShowFailureCount ? `${thumbnailStats.failed} failed` : '',
           ].filter(Boolean);
           return (
             <Toast

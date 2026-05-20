@@ -322,6 +322,18 @@ const IMAGE_CAPTURE_MAX_ATTEMPTS = Math.max(
   1,
   Number(process.env.IMAGE_CAPTURE_MAX_ATTEMPTS ?? 3)
 );
+const IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS = Math.max(
+  1,
+  Number(process.env.IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS ?? 1)
+);
+const IMAGE_CAPTURE_RECOVERY_MAX_PASSES = Math.max(
+  0,
+  Number(process.env.IMAGE_CAPTURE_RECOVERY_MAX_PASSES ?? 2)
+);
+const IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS = Math.max(
+  1,
+  Number(process.env.IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS ?? Math.min(2, IMAGE_CAPTURE_MAX_ATTEMPTS))
+);
 const IMAGE_CAPTURE_RETRY_BASE_DELAY_MS = Math.max(
   100,
   Number(process.env.IMAGE_CAPTURE_RETRY_BASE_DELAY_MS ?? 800)
@@ -341,6 +353,18 @@ const SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY = Math.round(toBoundedNumber(
 const SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS = Math.max(
   250,
   Number(process.env.SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS ?? 1200)
+);
+const SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
+  SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS,
+  Number(process.env.SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS ?? 45000)
+);
+const SCREENSHOT_RECOVERY_CAPTURE_TIMEOUT_MS = Math.max(
+  SCREENSHOT_CAPTURE_TIMEOUT_MS,
+  Number(process.env.SCREENSHOT_RECOVERY_CAPTURE_TIMEOUT_MS ?? 75000)
+);
+const SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS = Math.max(
+  SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS,
+  Number(process.env.SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS ?? 5000)
 );
 const SCREENSHOT_FULL_WARMUP_MAX_STOPS = Math.max(
   2,
@@ -1581,11 +1605,7 @@ async function isUsableScreenshotAsset(value) {
 }
 
 function isTerminalThumbnailFailure(node) {
-  return Boolean(
-    node?.thumbnailCaptureFailed
-    && node?.authRequired
-    && String(node?.thumbnailCaptureError || '').toLowerCase().includes('requires')
-  );
+  return false;
 }
 
 function getUrlExtension(value) {
@@ -1601,7 +1621,6 @@ function getUrlExtension(value) {
 function getImageCaptureSkipReason(node) {
   const orphanType = String(node?.orphanType || '').toLowerCase();
   const pageType = String(node?.pageType || node?.type || '').toLowerCase();
-  const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
   const extension = getUrlExtension(node?.url);
   const fileExtensions = new Set([
     'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
@@ -1617,30 +1636,6 @@ function getImageCaptureSkipReason(node) {
       status: 'skipped',
       reason: extension ? `${extension.toUpperCase()} file` : 'File link',
     };
-  }
-
-  if (node?.authRequired) {
-    return { status: 'blocked', reason: 'Requires login' };
-  }
-
-  const statusCode = Number(node?.httpStatus ?? node?.statusCode);
-  if (
-    node?.isBroken
-    || orphanType === 'broken'
-    || scanStatus === 'error'
-    || scanStatus === 'failed'
-    || (Number.isFinite(statusCode) && statusCode >= 400)
-  ) {
-    return { status: 'failed', reason: 'Error page' };
-  }
-
-  if (
-    node?.isInactive
-    || orphanType === 'inactive'
-    || scanStatus === 'inactive'
-    || statusCode === 0
-  ) {
-    return { status: 'skipped', reason: 'Inactive page' };
   }
 
   return null;
@@ -1699,9 +1694,6 @@ function getImageCaptureSkipUpdates(captureType, message, { authRequired = false
 async function validateImageCaptureResult(captureType, result) {
   if (!result?.url) {
     return { ok: false, status: 'missing_asset', error: 'No screenshot URL returned' };
-  }
-  if (result.blocked) {
-    return { ok: false, status: 'blocked', error: 'Screenshot captured a blocked page' };
   }
   if (captureType === SCREENSHOT_TYPES.full) {
     if (!/_full_v\d+\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(String(result.url || ''))) {
@@ -1883,6 +1875,9 @@ async function runImageCaptureJob(jobId, payload) {
     skipped: 0,
     batchIndex: 0,
     batchTotal: targetPlan.phases.length,
+    phase: 'primary',
+    recoveryPass: 0,
+    retrying: 0,
     currentNodeId: null,
     assetUpdateCursor: 0,
     targetIds: targetPlan.workRecords.map((record) => record.nodeId),
@@ -1996,106 +1991,225 @@ async function runImageCaptureJob(jobId, payload) {
     await publishProgress();
   }
 
-  for (let phaseIndex = 0; phaseIndex < targetPlan.phases.length; phaseIndex += 1) {
-    if (await shouldStop()) {
-      summary.stopped = true;
-      break;
-    }
-    const phase = targetPlan.phases[phaseIndex];
-    summary.batchIndex = phaseIndex + 1;
-    await publishProgress();
+  const getCaptureOptionsForPhase = (phaseName) => {
+    if (phaseName !== 'recovery') return {};
+    return {
+      captureTimeoutMs: captureType === SCREENSHOT_TYPES.thumb
+        ? SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS
+        : SCREENSHOT_RECOVERY_CAPTURE_TIMEOUT_MS,
+      networkSettleTimeoutMs: SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS,
+    };
+  };
 
-    for (const record of phase.records) {
+  const getNonRecoverableCaptureFailure = (message) => {
+    const text = String(message || '').toLowerCase();
+    if (
+      text.includes('invalid url')
+      || text.includes('invalid url protocol')
+      || text.includes('blocked host')
+      || text.includes('unable to resolve host')
+      || text.includes('err_name_not_resolved')
+      || text.includes('enotfound')
+    ) {
+      return {
+        status: 'skipped',
+        error: message || 'URL unavailable',
+      };
+    }
+    return null;
+  };
+
+  const captureRecordOnce = async (record, phaseName) => {
+    try {
+      const safeUrl = await assertSafeUrl(record.node.url);
+      const result = await captureScreenshot(safeUrl, captureType, getCaptureOptionsForPhase(phaseName));
+      const validation = await validateImageCaptureResult(captureType, result);
+      if (!validation.ok) {
+        return {
+          status: validation.status || 'failed',
+          error: validation.error || 'Image capture failed',
+          retryable: validation.status !== 'low_resolution',
+        };
+      }
+
+      const assetUpdates = getImageCaptureAssetUpdates(captureType, result);
+      await queueAssetSave({
+        nodeId: record.nodeId,
+        assets: assetUpdates,
+        result: {
+          nodeId: record.nodeId,
+          status: 'saved',
+          url: result.url,
+          thumbnailUrl: result.thumbnailUrl || null,
+          width: result.width || null,
+          height: result.height || null,
+        },
+      });
+      return { status: 'saved', retryable: false };
+    } catch (error) {
+      const message = error?.message || 'Image capture failed';
+      const nonRecoverable = getNonRecoverableCaptureFailure(message);
+      if (nonRecoverable) {
+        return {
+          ...nonRecoverable,
+          retryable: false,
+        };
+      }
+      return {
+        status: 'failed',
+        error: message,
+        retryable: true,
+      };
+    }
+  };
+
+  const finalizeCaptureFailure = async (record, status, message) => {
+    const normalizedStatus = status || 'failed';
+    const errorMessage = message || 'Image capture failed';
+    const assetUpdates = normalizedStatus === 'skipped'
+      ? getImageCaptureSkipUpdates(captureType, errorMessage)
+      : getImageCaptureFailureUpdates(
+        captureType,
+        errorMessage,
+        { authRequired: normalizedStatus === 'blocked' }
+      );
+    if (Object.keys(assetUpdates).length > 0) {
+      await queueAssetSave({
+        nodeId: record.nodeId,
+        assets: assetUpdates,
+        result: {
+          nodeId: record.nodeId,
+          status: normalizedStatus,
+          error: errorMessage,
+        },
+      });
+      return;
+    }
+    recordCompletedResult({
+      nodeId: record.nodeId,
+      status: normalizedStatus,
+      error: errorMessage,
+    });
+  };
+
+  const runRecordAttempts = async (record, {
+    phaseName,
+    maxAttempts,
+    finalizeFailures,
+  }) => {
+    let lastOutcome = {
+      status: 'failed',
+      error: 'Image capture failed',
+      retryable: true,
+    };
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       if (await shouldStop()) {
         summary.stopped = true;
         break;
       }
-      summary.currentNodeId = record.nodeId;
+      lastOutcome = await captureRecordOnce(record, phaseName);
+      if (lastOutcome.status === 'saved') return { status: 'saved' };
+      if (!lastOutcome.retryable) break;
+      if (attempt < maxAttempts - 1) {
+        await sleep(Math.min(IMAGE_CAPTURE_RETRY_BASE_DELAY_MS * (attempt + 1), 15000));
+      }
+    }
+
+    if (summary.stopped) return { status: 'stopped' };
+    if (lastOutcome.retryable && !finalizeFailures) {
+      return {
+        status: 'deferred',
+        error: lastOutcome.error,
+      };
+    }
+
+    await finalizeCaptureFailure(record, lastOutcome.status, lastOutcome.error);
+    return {
+      status: lastOutcome.status,
+      error: lastOutcome.error,
+    };
+  };
+
+  const processCapturePhases = async ({
+    phases,
+    phaseName,
+    maxAttempts,
+    finalizeFailures,
+    recoveryPass = 0,
+  }) => {
+    const deferred = [];
+    const retrying = phases.reduce((count, phase) => count + (phase.records?.length || 0), 0);
+    summary.phase = phaseName;
+    summary.recoveryPass = recoveryPass;
+    summary.retrying = phaseName === 'recovery' ? retrying : 0;
+    summary.batchIndex = 0;
+    summary.batchTotal = phases.length;
+    await publishProgress();
+
+    for (let phaseIndex = 0; phaseIndex < phases.length; phaseIndex += 1) {
+      if (await shouldStop()) {
+        summary.stopped = true;
+        break;
+      }
+      const capturePhase = phases[phaseIndex];
+      summary.batchIndex = phaseIndex + 1;
       await publishProgress();
 
-      let finalStatus = null;
-      let lastError = null;
-      for (let attempt = 0; attempt < IMAGE_CAPTURE_MAX_ATTEMPTS; attempt += 1) {
+      for (const record of capturePhase.records) {
         if (await shouldStop()) {
           summary.stopped = true;
           break;
         }
-        try {
-          const safeUrl = await assertSafeUrl(record.node.url);
-          const result = await captureScreenshot(safeUrl, captureType);
-          const validation = await validateImageCaptureResult(captureType, result);
-          if (!validation.ok) {
-            finalStatus = validation.status;
-            lastError = validation.error;
-            if (validation.status === 'blocked') break;
-            if (validation.status === 'low_resolution') break;
-            throw new Error(validation.error);
-          }
+        summary.currentNodeId = record.nodeId;
+        await publishProgress();
 
-          const assetUpdates = getImageCaptureAssetUpdates(captureType, result);
-          await queueAssetSave({
-            nodeId: record.nodeId,
-            assets: assetUpdates,
-            result: {
-              nodeId: record.nodeId,
-              status: 'saved',
-              url: result.url,
-              thumbnailUrl: result.thumbnailUrl || null,
-              width: result.width || null,
-              height: result.height || null,
-            },
-          });
-          finalStatus = 'saved';
-          break;
-        } catch (error) {
-          lastError = error?.message || 'Image capture failed';
-          const authRequired = error?.code === 'SCREENSHOT_AUTH_REQUIRED'
-            || String(lastError).toLowerCase().includes('requires authentication')
-            || String(lastError).toLowerCase().includes('requires login');
-          if (authRequired) {
-            finalStatus = 'blocked';
-            lastError = 'Requires login';
-            break;
-          }
-          if (attempt < IMAGE_CAPTURE_MAX_ATTEMPTS - 1) {
-            await sleep(Math.min(IMAGE_CAPTURE_RETRY_BASE_DELAY_MS * (attempt + 1), 15000));
-          }
-        }
-      }
-
-      if (summary.stopped) break;
-      if (finalStatus !== 'saved') {
-        const status = finalStatus || 'failed';
-        const assetUpdates = getImageCaptureFailureUpdates(
-          captureType,
-          lastError || 'Image capture failed',
-          { authRequired: status === 'blocked' }
-        );
-        if (Object.keys(assetUpdates).length > 0) {
-          await queueAssetSave({
-            nodeId: record.nodeId,
-            assets: assetUpdates,
-            result: {
-              nodeId: record.nodeId,
-              status,
-              error: lastError || 'Image capture failed',
-            },
-          });
-        } else {
-          recordCompletedResult({
-            nodeId: record.nodeId,
-            status,
-            error: lastError || 'Image capture failed',
+        const outcome = await runRecordAttempts(record, {
+          phaseName,
+          maxAttempts,
+          finalizeFailures,
+        });
+        if (outcome.status === 'deferred') {
+          deferred.push({
+            ...record,
+            lastError: outcome.error,
           });
         }
+        await publishProgress();
       }
+      await flushAssetSaves();
       await publishProgress();
+      if (summary.stopped) break;
     }
-    await flushAssetSaves();
-    await publishProgress();
+
+    return deferred;
+  };
+
+  let recoveryRecords = await processCapturePhases({
+    phases: targetPlan.phases,
+    phaseName: 'primary',
+    maxAttempts: IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS,
+    finalizeFailures: IMAGE_CAPTURE_RECOVERY_MAX_PASSES <= 0,
+  });
+
+  for (
+    let recoveryPass = 1;
+    !summary.stopped && recoveryRecords.length > 0 && recoveryPass <= IMAGE_CAPTURE_RECOVERY_MAX_PASSES;
+    recoveryPass += 1
+  ) {
+    recoveryRecords = await processCapturePhases({
+      phases: buildImageCapturePhases(recoveryRecords),
+      phaseName: 'recovery',
+      maxAttempts: IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS,
+      finalizeFailures: recoveryPass >= IMAGE_CAPTURE_RECOVERY_MAX_PASSES,
+      recoveryPass,
+    });
   }
 
   summary.currentNodeId = null;
+  summary.phase = summary.stopped ? summary.phase : 'complete';
+  summary.recoveryPass = 0;
+  summary.retrying = 0;
   summary.elapsedMs = Date.now() - startedAt;
   await flushAssetSaves();
   await publishProgress();
@@ -4070,9 +4184,23 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
       await installScreenshotRequestFilters(page);
 
       let lastError = null;
-      const captureTimeoutMs = normalizedType === SCREENSHOT_TYPES.thumb
+      const defaultCaptureTimeoutMs = normalizedType === SCREENSHOT_TYPES.thumb
         ? SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS
         : SCREENSHOT_CAPTURE_TIMEOUT_MS;
+      const requestedCaptureTimeoutMs = Number(options?.captureTimeoutMs);
+      const captureTimeoutMs = Math.max(
+        5000,
+        Number.isFinite(requestedCaptureTimeoutMs)
+          ? requestedCaptureTimeoutMs
+          : defaultCaptureTimeoutMs
+      );
+      const requestedSettleTimeoutMs = Number(options?.networkSettleTimeoutMs);
+      const networkSettleTimeoutMs = Math.max(
+        250,
+        Number.isFinite(requestedSettleTimeoutMs)
+          ? requestedSettleTimeoutMs
+          : SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS
+      );
       page.setDefaultTimeout(captureTimeoutMs);
       page.setDefaultNavigationTimeout(captureTimeoutMs);
       const maxAttempts = 1;
@@ -4178,10 +4306,12 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
           });
           throwIfAborted();
           await page.waitForLoadState('load', {
-            timeout: normalizedType === SCREENSHOT_TYPES.full ? SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS : 2500,
+            timeout: normalizedType === SCREENSHOT_TYPES.full
+              ? networkSettleTimeoutMs
+              : Math.max(2500, networkSettleTimeoutMs),
           }).catch(() => {});
           if (normalizedType === SCREENSHOT_TYPES.thumb) {
-            await page.waitForLoadState('networkidle', { timeout: SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS }).catch(() => {});
+            await page.waitForLoadState('networkidle', { timeout: networkSettleTimeoutMs }).catch(() => {});
           }
           await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 250 : 150);
           throwIfAborted();

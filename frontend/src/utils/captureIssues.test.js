@@ -54,6 +54,15 @@ describe('captureIssues', () => {
       label: 'Unreachable',
       type: CAPTURE_ISSUE_TYPES.unreachable,
     });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n6', status: 'skipped', error: 'Unable to resolve host' },
+      { id: 'n6', title: 'DNS failure', url: 'https://missing.example.test' },
+      's102'
+    )).toMatchObject({
+      label: 'Unreachable',
+      type: CAPTURE_ISSUE_TYPES.unreachable,
+    });
   });
 
   test('reconciled progress never exceeds loaded images plus issues', () => {
@@ -112,7 +121,7 @@ describe('captureIssues', () => {
       skipped: 1,
       issueLabels: ['Inactive page'],
     })).toEqual({
-      message: 'Captured 1 full screenshot. 1 page skipped (Inactive page). Open Capture issues for details.',
+      message: 'Captured 1 full screenshot. Needs review: 1 page skipped (Inactive page). Open Capture issues for details.',
       type: 'warning',
     });
 

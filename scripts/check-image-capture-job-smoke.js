@@ -49,6 +49,31 @@ function startFixtureServer(port) {
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, `http://127.0.0.1:${port}`).pathname;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    if (pathname === '/slow') {
+      setTimeout(() => {
+        if (res.destroyed || res.writableEnded) return;
+        res.end(`<!doctype html>
+          <html><head><title>Slow page</title></head>
+          <body><main><h1>Slow page loaded</h1><p>This page needs a recovery pass.</p></main></body></html>`);
+      }, 6500);
+      return;
+    }
+    if (pathname === '/rendered-404') {
+      res.statusCode = 404;
+    }
+    if (pathname === '/login') {
+      res.end(`<!doctype html>
+        <html>
+          <head><title>Login</title></head>
+          <body>
+            <main>
+              <h1>Sign in</h1>
+              <form><label>Email <input type="email" /></label><button>Continue</button></form>
+            </main>
+          </body>
+        </html>`);
+      return;
+    }
     res.end(`<!doctype html>
       <html>
         <head>
@@ -91,6 +116,12 @@ function startBackend(port, dbPath, screenshotDir) {
       SCREENSHOT_QUEUE_MAX: '20',
       SCREENSHOT_MAX_CONCURRENCY: '2',
       IMAGE_CAPTURE_MAX_ATTEMPTS: '2',
+      IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS: '1',
+      IMAGE_CAPTURE_RECOVERY_MAX_PASSES: '1',
+      IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS: '1',
+      SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS: '5000',
+      SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS: '12000',
+      SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS: '3000',
       EMAIL_PROVIDER: 'log',
       NODE_ENV: 'test',
     },
@@ -350,11 +381,22 @@ async function run() {
         orphanType: 'file',
       }, {
         id: 'error-0',
-        url: `${fixtureBase}/unreachable`,
-        title: 'Unreachable page',
+        url: `${fixtureBase}/rendered-404`,
+        title: 'Rendered 404 page',
         children: [],
-        isInactive: true,
-        statusCode: 0,
+        isBroken: true,
+        statusCode: 404,
+      }, {
+        id: 'auth-0',
+        url: `${fixtureBase}/login`,
+        title: 'Login page',
+        children: [],
+        authRequired: true,
+      }, {
+        id: 'slow-0',
+        url: `${fixtureBase}/slow`,
+        title: 'Slow page',
+        children: [],
       }],
     };
     const orphans = [{
@@ -489,18 +531,19 @@ async function run() {
       'image capture jobs should be claimed before generic workers can take them'
     );
     const thumbJob = await pollImageCaptureJob(apiBase, mapId, thumbStart.jobId, cookieJar);
-    assert.strictEqual(thumbJob.result.total, 8, 'thumbnail total mismatch');
-    assert.strictEqual(thumbJob.result.captured, 6, 'thumbnail captured mismatch');
-    assert.strictEqual(thumbJob.result.skipped, 2, 'thumbnail skipped mismatch');
+    assert.strictEqual(thumbJob.result.total, 10, 'thumbnail total mismatch');
+    assert.strictEqual(thumbJob.result.captured, 9, 'thumbnail captured mismatch');
+    assert.strictEqual(thumbJob.result.skipped, 1, 'thumbnail skipped mismatch');
+    assert.strictEqual(thumbJob.result.phase, 'complete', 'thumbnail job should finish after recovery');
     assert.strictEqual(thumbJob.result.failed + thumbJob.result.blocked + thumbJob.result.missingAsset, 0, 'thumbnail failures found');
-    assert(Number(thumbJob.result.assetUpdateCursor) >= 8, 'missing asset update cursor');
+    assert(Number(thumbJob.result.assetUpdateCursor) >= 10, 'missing asset update cursor');
 
     const withThumbs = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
     const thumbNodes = collectNodes(withThumbs.map.root, withThumbs.map.orphans);
-    assert.strictEqual(thumbNodes.length, 8, 'loaded node count mismatch');
+    assert.strictEqual(thumbNodes.length, 10, 'loaded node count mismatch');
     const storedThumbnailCount = thumbNodes.filter((page) => page.thumbnailUrl).length;
     assert.strictEqual(storedThumbnailCount, thumbJob.result.captured, 'saved count exceeded stored thumbnails');
-    const skippedIds = new Set(['file-0', 'error-0']);
+    const skippedIds = new Set(['file-0']);
     thumbNodes
       .filter((page) => !skippedIds.has(page.id))
       .forEach((page) => assert(page.thumbnailUrl, `missing thumbnailUrl for ${page.id}`));
@@ -510,6 +553,11 @@ async function run() {
         assert(!page.thumbnailUrl, `skipped page should not keep thumbnailUrl for ${page.id}`);
         assert(page.thumbnailCaptureFailed, `skipped page missing failure marker for ${page.id}`);
       });
+    ['error-0', 'auth-0', 'slow-0'].forEach((nodeId) => {
+      const page = thumbNodes.find((node) => node.id === nodeId);
+      assert(page?.thumbnailUrl, `expected rendered page thumbnail for ${nodeId}`);
+      assert(!page.thumbnailCaptureFailed, `rendered page should not be marked failed for ${nodeId}`);
+    });
     await assertAssetLoads(apiBase, thumbNodes.find((page) => page.id === 'main-0').thumbnailUrl);
     const savedManifestCount = getSavedManifestCount(dbPath, mapId);
     assert(

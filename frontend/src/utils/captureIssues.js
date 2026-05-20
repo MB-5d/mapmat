@@ -27,7 +27,7 @@ export function classifyCaptureIssue({ status, error, node } = {}) {
   if (node?.isFile || orphanType === 'file' || pageType === 'file' || text.includes('pdf') || text.includes('file')) {
     return CAPTURE_ISSUE_TYPES.file;
   }
-  if (node?.authRequired || status === 'blocked' || text.includes('login') || text.includes('authentication')) {
+  if (status === 'blocked' || text.includes('requires login') || text.includes('requires authentication')) {
     return CAPTURE_ISSUE_TYPES.auth;
   }
   if (status === 'missing_asset' || text.includes('missing asset') || text.includes('not found on the map')) {
@@ -43,7 +43,15 @@ export function classifyCaptureIssue({ status, error, node } = {}) {
   if (node?.isInactive || orphanType === 'inactive' || text.includes('inactive')) {
     return CAPTURE_ISSUE_TYPES.inactive;
   }
-  if (statusCode === 0 || text.includes('unreachable')) {
+  if (
+    statusCode === 0
+    || text.includes('unreachable')
+    || text.includes('unable to resolve')
+    || text.includes('blocked host')
+    || text.includes('invalid url')
+    || text.includes('err_name_not_resolved')
+    || text.includes('enotfound')
+  ) {
     return CAPTURE_ISSUE_TYPES.unreachable;
   }
   return CAPTURE_ISSUE_TYPES.error;
@@ -136,7 +144,7 @@ export function formatImageCaptureCompletionToast({
     ? ` (${uniqueLabels.slice(0, 2).join(', ')}${uniqueLabels.length > 2 ? ', more' : ''})`
     : '';
   return {
-    message: `${capturedText}. ${problemParts.join('; ')}${labelText}. Open Capture issues for details.`,
+    message: `${capturedText}. Needs review: ${problemParts.join('; ')}${labelText}. Open Capture issues for details.`,
     type: 'warning',
   };
 }
