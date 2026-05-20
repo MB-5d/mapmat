@@ -47,11 +47,23 @@ function stopChild(child) {
 
 function startFixtureServer(port) {
   const hitCounts = new Map();
+  let activeRequests = 0;
+  let maxActiveRequests = 0;
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, `http://127.0.0.1:${port}`).pathname;
     hitCounts.set(pathname, (hitCounts.get(pathname) || 0) + 1);
+    activeRequests += 1;
+    maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+    let finished = false;
+    const markFinished = () => {
+      if (finished) return;
+      finished = true;
+      activeRequests = Math.max(0, activeRequests - 1);
+    };
+    res.on('finish', markFinished);
+    res.on('close', markFinished);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    if (pathname === '/slow') {
+    if (pathname.startsWith('/slow')) {
       setTimeout(() => {
         if (res.destroyed || res.writableEnded) return;
         res.end(`<!doctype html>
@@ -98,6 +110,7 @@ function startFixtureServer(port) {
       </html>`);
   });
   server.hitCounts = hitCounts;
+  server.getMaxActiveRequests = () => maxActiveRequests;
   return new Promise((resolve, reject) => {
     server.listen(port, '127.0.0.1', () => resolve(server));
     server.on('error', reject);
@@ -122,6 +135,8 @@ function startBackend(port, dbPath, screenshotDir) {
       IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS: '1',
       IMAGE_CAPTURE_RECOVERY_MAX_PASSES: '1',
       IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS: '1',
+      IMAGE_CAPTURE_PRIMARY_CONCURRENCY: '2',
+      IMAGE_CAPTURE_RECOVERY_CONCURRENCY: '1',
       SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS: '12000',
       SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS: '5000',
       SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS: '12000',
@@ -401,6 +416,11 @@ async function run() {
         url: `${fixtureBase}/slow`,
         title: 'Slow page',
         children: [],
+      }, {
+        id: 'slow-1',
+        url: `${fixtureBase}/slow-again`,
+        title: 'Another slow page',
+        children: [],
       }],
     };
     const orphans = [{
@@ -537,8 +557,8 @@ async function run() {
       'image capture jobs should be claimed before generic workers can take them'
     );
     const thumbJob = await pollImageCaptureJob(apiBase, mapId, thumbStart.jobId, cookieJar);
-    assert.strictEqual(thumbJob.result.total, 10, 'thumbnail total mismatch');
-    assert.strictEqual(thumbJob.result.captured, 9, 'thumbnail captured mismatch');
+    assert.strictEqual(thumbJob.result.total, 11, 'thumbnail total mismatch');
+    assert.strictEqual(thumbJob.result.captured, 10, 'thumbnail captured mismatch');
     assert.strictEqual(thumbJob.result.skipped, 1, 'thumbnail skipped mismatch');
     assert.strictEqual(thumbJob.result.phase, 'complete', 'thumbnail job should finish after recovery');
     assert.strictEqual(thumbJob.result.failed + thumbJob.result.blocked + thumbJob.result.missingAsset, 0, 'thumbnail failures found');
@@ -547,10 +567,18 @@ async function run() {
       (fixtureServer.hitCounts.get('/slow') || 0) >= 2,
       'slow pages should fail fast in the primary pass and retry in recovery'
     );
+    assert(
+      (fixtureServer.hitCounts.get('/slow-again') || 0) >= 2,
+      'additional slow pages should retry in recovery'
+    );
+    assert(
+      fixtureServer.getMaxActiveRequests() >= 2,
+      'thumbnail primary pass should capture more than one page at a time'
+    );
 
     const withThumbs = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
     const thumbNodes = collectNodes(withThumbs.map.root, withThumbs.map.orphans);
-    assert.strictEqual(thumbNodes.length, 10, 'loaded node count mismatch');
+    assert.strictEqual(thumbNodes.length, 11, 'loaded node count mismatch');
     const storedThumbnailCount = thumbNodes.filter((page) => page.thumbnailUrl).length;
     assert.strictEqual(storedThumbnailCount, thumbJob.result.captured, 'saved count exceeded stored thumbnails');
     const skippedIds = new Set(['file-0']);
@@ -563,7 +591,7 @@ async function run() {
         assert(!page.thumbnailUrl, `skipped page should not keep thumbnailUrl for ${page.id}`);
         assert(page.thumbnailCaptureFailed, `skipped page missing failure marker for ${page.id}`);
       });
-    ['error-0', 'auth-0', 'slow-0'].forEach((nodeId) => {
+    ['error-0', 'auth-0', 'slow-0', 'slow-1'].forEach((nodeId) => {
       const page = thumbNodes.find((node) => node.id === nodeId);
       assert(page?.thumbnailUrl, `expected rendered page thumbnail for ${nodeId}`);
       assert(!page.thumbnailCaptureFailed, `rendered page should not be marked failed for ${nodeId}`);

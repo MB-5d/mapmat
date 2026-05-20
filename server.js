@@ -354,6 +354,18 @@ const IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS = Math.max(
   500,
   Number(process.env.IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS ?? 2500)
 );
+const IMAGE_CAPTURE_PRIMARY_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.IMAGE_CAPTURE_PRIMARY_CONCURRENCY ?? Math.min(SCREENSHOT_MAX_CONCURRENCY, 3))
+);
+const IMAGE_CAPTURE_RECOVERY_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.IMAGE_CAPTURE_RECOVERY_CONCURRENCY ?? Math.min(SCREENSHOT_MAX_CONCURRENCY, 2))
+);
+const IMAGE_CAPTURE_PROGRESS_MIN_INTERVAL_MS = Math.max(
+  250,
+  Number(process.env.IMAGE_CAPTURE_PROGRESS_MIN_INTERVAL_MS ?? 1000)
+);
 const IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT = Math.max(
   100,
   Number(process.env.IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT ?? 2000)
@@ -1903,16 +1915,26 @@ async function runImageCaptureJob(jobId, payload) {
     const status = await readStatus();
     return status === JOB_STATUS.canceled || status === JOB_STATUS.stopping;
   };
-  const publishProgress = async () => {
-    await updateJobProgress(jobId, {
+  let progressWritePromise = Promise.resolve();
+  let lastProgressPublishedAt = 0;
+  const publishProgress = async ({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && now - lastProgressPublishedAt < IMAGE_CAPTURE_PROGRESS_MIN_INTERVAL_MS) return;
+    lastProgressPublishedAt = now;
+    const snapshot = {
       ...summary,
       results: trimImageCaptureResults(summary.results),
-      elapsedMs: Date.now() - startedAt,
-    });
+      elapsedMs: now - startedAt,
+    };
+    progressWritePromise = progressWritePromise
+      .catch(() => {})
+      .then(() => updateJobProgress(jobId, snapshot));
+    await progressWritePromise;
   };
 
   const pendingAssetSaves = [];
   let lastAssetFlushAt = Date.now();
+  let assetFlushPromise = null;
   const appendNodeAssetUpdate = (nodeId, assets) => {
     summary.assetUpdateCursor += 1;
     summary.nodeAssetUpdates.push({
@@ -1950,41 +1972,51 @@ async function runImageCaptureJob(jobId, payload) {
     }
   };
   async function flushAssetSaves() {
+    while (assetFlushPromise) {
+      await assetFlushPromise;
+    }
     if (pendingAssetSaves.length === 0) return;
     const batch = pendingAssetSaves.splice(0, pendingAssetSaves.length);
-    let persistenceResult;
-    try {
-      persistenceResult = await persistImageCaptureNodeAssetBatch({
-        mapId,
-        updates: batch.map((entry) => ({
-          nodeId: entry.nodeId,
-          assets: entry.assets,
-          meta: entry.result || {},
-        })),
-      });
-    } catch (error) {
-      persistenceResult = {
-        verifiedEntries: [],
-        missingEntries: batch.map((entry) => ({
-          ...entry,
-          persistError: error?.message || 'Image asset save failed',
-        })),
-      };
-    }
-
-    const verifiedIds = new Set((persistenceResult.verifiedEntries || []).map((entry) => entry.nodeId));
-    batch.forEach((entry) => {
-      if (verifiedIds.has(entry.nodeId)) {
-        recordCompletedResult(entry.result, entry.assets);
-        return;
+    assetFlushPromise = (async () => {
+      let persistenceResult;
+      try {
+        persistenceResult = await persistImageCaptureNodeAssetBatch({
+          mapId,
+          updates: batch.map((entry) => ({
+            nodeId: entry.nodeId,
+            assets: entry.assets,
+            meta: entry.result || {},
+          })),
+        });
+      } catch (error) {
+        persistenceResult = {
+          verifiedEntries: [],
+          missingEntries: batch.map((entry) => ({
+            ...entry,
+            persistError: error?.message || 'Image asset save failed',
+          })),
+        };
       }
-      recordCompletedResult({
-        nodeId: entry.nodeId,
-        status: 'missing_asset',
-        error: entry.persistError || 'Saved image fields were not found on the map',
+
+      const verifiedIds = new Set((persistenceResult.verifiedEntries || []).map((entry) => entry.nodeId));
+      batch.forEach((entry) => {
+        if (verifiedIds.has(entry.nodeId)) {
+          recordCompletedResult(entry.result, entry.assets);
+          return;
+        }
+        recordCompletedResult({
+          nodeId: entry.nodeId,
+          status: 'missing_asset',
+          error: entry.persistError || 'Saved image fields were not found on the map',
+        });
       });
-    });
-    lastAssetFlushAt = Date.now();
+      lastAssetFlushAt = Date.now();
+    })();
+    try {
+      await assetFlushPromise;
+    } finally {
+      assetFlushPromise = null;
+    }
   }
 
   for (const record of targetPlan.skippedRecords) {
@@ -2005,7 +2037,7 @@ async function runImageCaptureJob(jobId, payload) {
   }
   if (targetPlan.skippedRecords.length > 0) {
     await flushAssetSaves();
-    await publishProgress();
+    await publishProgress({ force: true });
   }
 
   const getCaptureOptionsForPhase = (phaseName) => {
@@ -2163,12 +2195,15 @@ async function runImageCaptureJob(jobId, payload) {
   }) => {
     const deferred = [];
     const retrying = phases.reduce((count, phase) => count + (phase.records?.length || 0), 0);
+    const concurrency = phaseName === 'recovery'
+      ? IMAGE_CAPTURE_RECOVERY_CONCURRENCY
+      : IMAGE_CAPTURE_PRIMARY_CONCURRENCY;
     summary.phase = phaseName;
     summary.recoveryPass = recoveryPass;
     summary.retrying = phaseName === 'recovery' ? retrying : 0;
     summary.batchIndex = 0;
     summary.batchTotal = phases.length;
-    await publishProgress();
+    await publishProgress({ force: true });
 
     for (let phaseIndex = 0; phaseIndex < phases.length; phaseIndex += 1) {
       if (await shouldStop()) {
@@ -2177,31 +2212,42 @@ async function runImageCaptureJob(jobId, payload) {
       }
       const capturePhase = phases[phaseIndex];
       summary.batchIndex = phaseIndex + 1;
-      await publishProgress();
+      await publishProgress({ force: true });
 
-      for (const record of capturePhase.records) {
-        if (await shouldStop()) {
-          summary.stopped = true;
-          break;
-        }
-        summary.currentNodeId = record.nodeId;
-        await publishProgress();
+      let nextRecordIndex = 0;
+      const records = capturePhase.records || [];
+      const workerCount = Math.min(concurrency, records.length);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (!summary.stopped) {
+          const recordIndex = nextRecordIndex;
+          nextRecordIndex += 1;
+          if (recordIndex >= records.length) return;
 
-        const outcome = await runRecordAttempts(record, {
-          phaseName,
-          maxAttempts,
-          finalizeFailures,
-        });
-        if (outcome.status === 'deferred') {
-          deferred.push({
-            ...record,
-            lastError: outcome.error,
+          if (await shouldStop()) {
+            summary.stopped = true;
+            return;
+          }
+          const record = records[recordIndex];
+          summary.currentNodeId = record.nodeId;
+          await publishProgress();
+
+          const outcome = await runRecordAttempts(record, {
+            phaseName,
+            maxAttempts,
+            finalizeFailures,
           });
+          if (outcome.status === 'deferred') {
+            deferred.push({
+              ...record,
+              lastError: outcome.error,
+            });
+          }
+          await publishProgress();
         }
-        await publishProgress();
-      }
+      });
+      await Promise.all(workers);
       await flushAssetSaves();
-      await publishProgress();
+      await publishProgress({ force: true });
       if (summary.stopped) break;
     }
 
@@ -2235,7 +2281,7 @@ async function runImageCaptureJob(jobId, payload) {
   summary.retrying = 0;
   summary.elapsedMs = Date.now() - startedAt;
   await flushAssetSaves();
-  await publishProgress();
+  await publishProgress({ force: true });
   return summary;
 }
 
