@@ -3793,14 +3793,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     return { scale: nextScale, pan: clampedPan };
   }, [clampPan]);
 
-  const panBy = useCallback((dx, dy, opts) => {
-    const nextPan = {
-      x: panRef.current.x + dx,
-      y: panRef.current.y + dy,
-    };
-    return applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y }, opts);
-  }, [applyTransform]);
-
   const animatePanTo = useCallback((target) => {
     const start = { ...panRef.current };
     const startTime = performance.now();
@@ -9809,11 +9801,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
 
-  // Smooth wheel handling for pan/zoom
+  // Smooth wheel handling for canvas zoom. Press-drag remains the pan control.
   const wheelStateRef = useRef({
-    dx: 0,
     dy: 0,
-    isZoom: false,
     clientX: 0,
     clientY: 0,
     raf: null,
@@ -9822,82 +9812,63 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const wheelState = wheelStateRef.current;
 
     const flushWheel = () => {
-      wheelStateRef.current.raf = null;
+      wheelState.raf = null;
       if (!root) return;
 
-      const { dx, dy: wheelDy, isZoom, clientX, clientY } = wheelStateRef.current;
-      wheelStateRef.current.dx = 0;
-      wheelStateRef.current.dy = 0;
+      const { dy: wheelDy, clientX, clientY } = wheelState;
+      wheelState.dy = 0;
 
-      if (isZoom) {
-        const delta = -wheelDy;
-        const zoomIntensity = 0.002;
-        const currentScale = scaleRef.current;
-        const { min, max } = getZoomBounds();
-        const next = clamp(currentScale * (1 + delta * zoomIntensity), min, max);
-        zoomAtClientPoint(next, clientX, clientY);
-        return;
-      }
-
-      if (dx === 0 && wheelDy === 0) return;
-      panBy(-dx, -wheelDy);
+      if (wheelDy === 0) return;
+      const delta = -wheelDy;
+      const zoomIntensity = 0.002;
+      const currentScale = scaleRef.current;
+      const { min, max } = getZoomBounds();
+      const next = clamp(currentScale * (1 + delta * zoomIntensity), min, max);
+      zoomAtClientPoint(next, clientX, clientY);
     };
 
     const handleWheel = (e) => {
       const wheelTarget = e.target;
       if (
         wheelTarget instanceof Element
-        && wheelTarget.closest('.comment-popover, .comments-panel, .mention-dropdown')
+        && wheelTarget.closest('.comment-popover, .comments-panel, .mention-dropdown, .canvas-toolbar, .canvas-tool-menu, .zoom-controls, .color-key, .layers-panel, .report-drawer, .account-drawer, .settings-drawer, .minimap-navigator')
       ) {
         return;
       }
 
-      // Always preventDefault — the canvas handles all wheel input (zoom + pan).
-      // Letting non-zoom events through causes macOS elastic overscroll, which
-      // shifts getBoundingClientRect() and corrupts subsequent zoom anchors.
+      // Always preventDefault — the canvas handles wheel input as zoom.
+      // Letting events through causes macOS elastic overscroll, which shifts
+      // getBoundingClientRect() and corrupts subsequent zoom anchors.
       e.preventDefault();
       if (!root) return;
 
-      const isZoom = e.ctrlKey || e.metaKey;
-      const ws = wheelStateRef.current;
-
       // Normalize deltaMode before accumulating (Firefox mouse wheel uses LINE mode)
       let dy = e.deltaY;
-      let dx = e.deltaX;
-      if (e.deltaMode === 1) { dy *= 20; dx *= 20; }       // DOM_DELTA_LINE
-      else if (e.deltaMode === 2) { dy *= 400; dx *= 400; } // DOM_DELTA_PAGE
+      if (e.deltaMode === 1) { dy *= 20; }       // DOM_DELTA_LINE
+      else if (e.deltaMode === 2) { dy *= 400; } // DOM_DELTA_PAGE
+      if (dy === 0) return;
 
-      // If gesture type changed mid-frame, flush old gesture before accumulating new one
-      if (ws.raf && ws.isZoom !== isZoom && (ws.dx !== 0 || ws.dy !== 0)) {
-        cancelAnimationFrame(ws.raf);
-        ws.raf = null;
-        flushWheel();
-      }
+      wheelState.dy += dy;
+      wheelState.clientX = e.clientX;
+      wheelState.clientY = e.clientY;
 
-      ws.dx += dx;
-      ws.dy += dy;
-      ws.isZoom = isZoom;
-      if (isZoom) {
-        ws.clientX = e.clientX;
-        ws.clientY = e.clientY;
-      }
-
-      if (!ws.raf) {
-        ws.raf = requestAnimationFrame(flushWheel);
+      if (!wheelState.raf) {
+        wheelState.raf = requestAnimationFrame(flushWheel);
       }
     };
 
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
       canvas.removeEventListener('wheel', handleWheel);
-      if (wheelStateRef.current.raf) {
-        cancelAnimationFrame(wheelStateRef.current.raf);
-        wheelStateRef.current.raf = null;
+      if (wheelState.raf) {
+        cancelAnimationFrame(wheelState.raf);
+        wheelState.raf = null;
       }
     };
-  }, [root, panBy, zoomAtClientPoint]);
+  }, [root, zoomAtClientPoint, getZoomBounds]);
 
   const exportJson = () => {
     if (!root) return;

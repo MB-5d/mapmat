@@ -49,6 +49,20 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('transform: translate(10px, 10px);');
     expect(appCss).toContain('transform: translate(5px, 5px);');
   });
+
+  test('canvas wheel zooms while press-drag remains the pan control', () => {
+    const wheelStart = appJs.indexOf('// Smooth wheel handling for canvas zoom. Press-drag remains the pan control.');
+    const wheelEnd = appJs.indexOf('const exportJson', wheelStart);
+    const wheelHandler = appJs.slice(wheelStart, wheelEnd);
+
+    expect(wheelStart).toBeGreaterThan(-1);
+    expect(wheelHandler).toContain('zoomAtClientPoint(next, clientX, clientY);');
+    expect(wheelHandler).toContain('.canvas-tool-menu');
+    expect(wheelHandler).not.toContain('panBy(');
+    expect(wheelHandler).not.toContain('e.ctrlKey || e.metaKey');
+    expect(appJs).toContain('dragRef.current.dragging = true;');
+    expect(appJs).toContain('applyTransform({ scale: scaleRef.current, x: newPan.x, y: newPan.y });');
+  });
 });
 
 describe('scan config and differential rescan behavior', () => {
