@@ -634,7 +634,13 @@ async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}
 
 function buildContentDisposition(filename) {
   const safeFilename = sanitizeFilenamePart(filename, 'download');
-  const quoted = safeFilename.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const asciiFallback = sanitizeFilenamePart(
+    safeFilename
+      .normalize('NFKD')
+      .replace(/[^\x20-\x7e]+/g, '-'),
+    'download'
+  ).replace(/^[.-]+|[.-]+$/g, '') || 'download';
+  const quoted = asciiFallback.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   return `attachment; filename="${quoted}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`;
 }
 

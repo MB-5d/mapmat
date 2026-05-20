@@ -419,10 +419,12 @@ async function run() {
       children: [],
     }];
 
+    const mapName = 'Image Capture Smoke 👍';
+    const packageName = 'Vellic-Image-Capture-Smoke-👍_images';
     const saved = await fetchJson(`${apiBase}/api/maps`, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Image Capture Smoke',
+        name: mapName,
         url: `${fixtureBase}/`,
         root,
         orphans,
@@ -654,21 +656,29 @@ async function run() {
       body: JSON.stringify({ scope: 'all' }),
     }, cookieJar);
     assert(zipDownload.contentType.includes('application/zip'), `zip content type mismatch: ${zipDownload.contentType}`);
+    assert(
+      zipDownload.contentDisposition.includes('Vellic-Image-Capture-Smoke-_images.zip'),
+      `zip filename fallback should be ASCII-safe: ${zipDownload.contentDisposition}`
+    );
+    assert(
+      zipDownload.contentDisposition.includes(encodeURIComponent(`${packageName}.zip`)),
+      `zip filename* should preserve UTF-8 map name: ${zipDownload.contentDisposition}`
+    );
     const zipEntries = listZipEntryNames(zipDownload.buffer);
     const imageZipEntries = zipEntries.filter((entry) => !entry.endsWith('/'));
     assert(zipEntries.length >= storedThumbnailCount, 'zip should include captured image entries');
-    assert(zipEntries.includes('Vellic-Image-Capture-Smoke_images/'), 'zip should include named package folder');
-    assert(zipEntries.includes('Vellic-Image-Capture-Smoke_images/Main site/'), 'zip should include Main site folder');
+    assert(zipEntries.includes(`${packageName}/`), 'zip should include named package folder');
+    assert(zipEntries.includes(`${packageName}/Main site/`), 'zip should include Main site folder');
     assert(
       imageZipEntries.every((entry) => !entry.includes('-thumbnail')),
       `zip should not include small thumbnail files: ${zipEntries.join(', ')}`
     );
     assert(
-      zipEntries.some((entry) => entry.includes('Vellic-Image-Capture-Smoke_images/Main site/0-Main.jpg')),
+      zipEntries.some((entry) => entry.includes(`${packageName}/Main site/0-Main.jpg`)),
       `zip missing numbered root full screenshot entry: ${zipEntries.join(', ')}`
     );
     assert(
-      zipEntries.some((entry) => entry.includes('Vellic-Image-Capture-Smoke_images/s1-Subdomain-root/s1.1-Subdomain-L1/s1.1-Subdomain-L1.jpg')),
+      zipEntries.some((entry) => entry.includes(`${packageName}/s1-Subdomain-root/s1.1-Subdomain-L1/s1.1-Subdomain-L1.jpg`)),
       `zip missing nested subdomain entry: ${zipEntries.join(', ')}`
     );
     assert(
