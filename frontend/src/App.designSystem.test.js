@@ -63,6 +63,15 @@ describe('UI design-system contract', () => {
     expect(appJs).toContain('dragRef.current.dragging = true;');
     expect(appJs).toContain('applyTransform({ scale: scaleRef.current, x: newPan.x, y: newPan.y });');
   });
+
+  test('canvas map title blocks accidental text selection while rename stays selectable', () => {
+    expect(appCss).toMatch(/\.canvas-map-header \{[\s\S]*user-select: none;/);
+    expect(appCss).toMatch(/\.canvas-map-name-button \{[\s\S]*user-select: none;/);
+    expect(appCss).toMatch(/\.canvas-map-name-text \{[\s\S]*user-select: none;/);
+    expect(appCss).toMatch(/\.canvas-map-name-input \{[\s\S]*user-select: text;/);
+    expect(appCss).toMatch(/\.canvas\.panning,\n\.canvas\.panning \* \{[\s\S]*user-select: none !important;/);
+    expect(appCss).toMatch(/\.canvas\.panning \.canvas-map-name-input \{[\s\S]*user-select: text !important;/);
+  });
 });
 
 describe('scan config and differential rescan behavior', () => {

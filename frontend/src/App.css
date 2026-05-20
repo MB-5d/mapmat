@@ -2307,6 +2307,8 @@ body {
   z-index: 120;
   pointer-events: auto;
   max-width: min(420px, calc(100vw - 160px));
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .canvas-map-pill {
@@ -2335,6 +2337,8 @@ body {
   font-weight: 700;
   cursor: pointer;
   text-align: left;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .canvas-map-name-button:hover:not(.static) {
@@ -2350,6 +2354,8 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: min(260px, calc(100vw - 250px));
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .canvas-map-name-input {
@@ -2364,6 +2370,8 @@ body {
   box-shadow: 0 0 0 2px var(--ui-color-primary);
   border-radius: var(--ui-radius-md);
   padding: 4px 8px;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .canvas-map-collaborators {
@@ -2382,6 +2390,17 @@ body {
 
 .canvas.panning {
   cursor: grabbing;
+}
+
+.canvas.panning,
+.canvas.panning * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+.canvas.panning .canvas-map-name-input {
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 .canvas.comments-mode {
