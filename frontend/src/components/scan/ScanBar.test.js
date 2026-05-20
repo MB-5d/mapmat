@@ -7,6 +7,57 @@ describe('ScanBar', () => {
   let container;
   let root;
 
+  const defaultOptions = {
+    subdomains: false,
+    orphanPages: false,
+    inactivePages: false,
+    errorPages: false,
+    duplicates: false,
+    authenticatedPages: false,
+    files: false,
+    brokenLinks: false,
+    crosslinks: false,
+  };
+
+  const renderScanBar = (props = {}) => {
+    const optionsRef = createRef();
+    const defaults = {
+      canEdit: true,
+      urlInput: 'https://example.com',
+      onUrlInputChange: jest.fn(),
+      onUrlKeyDown: jest.fn(),
+      options: defaultOptions,
+      showOptions: false,
+      optionsRef,
+      onToggleOptions: jest.fn(),
+      onOptionChange: jest.fn(),
+      scanLayerAvailability: {},
+      scanLayerVisibility: {},
+      onToggleScanLayer: jest.fn(),
+      onScan: jest.fn(),
+      scanDisabled: false,
+      scanTitle: 'Run scan',
+      sharedTitle: '',
+      optionsDisabled: false,
+      onClearUrl: jest.fn(),
+      showClearUrl: false,
+    };
+
+    act(() => {
+      root.render(
+        <div className="search-container scan-bar-shell">
+          <ScanBar {...defaults} {...props} />
+        </div>
+      );
+    });
+
+    return { ...defaults, ...props };
+  };
+
+  const getScanButton = () => Array.from(container.querySelectorAll('button')).find((button) =>
+    button.textContent.includes('Scan')
+  );
+
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -24,51 +75,16 @@ describe('ScanBar', () => {
   });
 
   test('uses shared input and button primitives for standard scan controls', () => {
-    const optionsRef = createRef();
     const onClearUrl = jest.fn();
 
-    act(() => {
-      root.render(
-        <div className="search-container scan-bar-shell">
-          <ScanBar
-            canEdit
-            urlInput="https://example.com"
-            onUrlInputChange={jest.fn()}
-            onUrlKeyDown={jest.fn()}
-            options={{
-              subdomains: false,
-              orphanPages: false,
-              inactivePages: false,
-              errorPages: false,
-              duplicates: false,
-              authenticatedPages: false,
-              files: false,
-              brokenLinks: false,
-              crosslinks: false,
-            }}
-            showOptions
-            optionsRef={optionsRef}
-            onToggleOptions={jest.fn()}
-            onOptionChange={jest.fn()}
-            scanLayerAvailability={{}}
-            scanLayerVisibility={{}}
-            onToggleScanLayer={jest.fn()}
-            onScan={jest.fn()}
-            scanDisabled={false}
-            scanTitle="Run scan"
-            sharedTitle=""
-            optionsDisabled={false}
-            onClearUrl={onClearUrl}
-            showClearUrl
-          />
-        </div>
-      );
+    renderScanBar({
+      showOptions: true,
+      onClearUrl,
+      showClearUrl: true,
     });
 
     const urlInput = container.querySelector('.search-container input:not([type="checkbox"])');
-    const scanButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Scan')
-    );
+    const scanButton = getScanButton();
     const optionsButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Options')
     );
@@ -90,5 +106,22 @@ describe('ScanBar', () => {
     expect(clearButton.className).toContain('ui-icon-btn');
     expect(clearButton.className).toContain('ui-icon-btn--type-ghost');
     expect(clearButton.className).toContain('ui-icon-btn--style-mono');
+  });
+
+  test('disables the scan action when the URL is invalid', () => {
+    const onScan = jest.fn();
+    renderScanBar({
+      urlInput: 'not-a-url',
+      onScan,
+      scanDisabled: true,
+      scanTitle: 'Enter a valid URL to scan',
+    });
+
+    const scanButton = getScanButton();
+    expect(scanButton.disabled).toBe(true);
+    expect(scanButton.title).toBe('Enter a valid URL to scan');
+
+    scanButton.click();
+    expect(onScan).not.toHaveBeenCalled();
   });
 });
