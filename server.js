@@ -2374,6 +2374,104 @@ function sameOrigin(a, b) {
   }
 }
 
+const SCAN_FILE_EXTENSIONS = new Map([
+  ['pdf', { fileType: 'PDF', contentType: 'application/pdf' }],
+  ['doc', { fileType: 'Document', contentType: 'application/msword' }],
+  ['docx', { fileType: 'Document', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }],
+  ['xls', { fileType: 'Spreadsheet', contentType: 'application/vnd.ms-excel' }],
+  ['xlsx', { fileType: 'Spreadsheet', contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }],
+  ['ppt', { fileType: 'Presentation', contentType: 'application/vnd.ms-powerpoint' }],
+  ['pptx', { fileType: 'Presentation', contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' }],
+  ['csv', { fileType: 'Data', contentType: 'text/csv' }],
+  ['txt', { fileType: 'Text', contentType: 'text/plain' }],
+  ['zip', { fileType: 'Archive', contentType: 'application/zip' }],
+  ['rar', { fileType: 'Archive', contentType: 'application/vnd.rar' }],
+  ['7z', { fileType: 'Archive', contentType: 'application/x-7z-compressed' }],
+  ['mp4', { fileType: 'Video', contentType: 'video/mp4' }],
+  ['mov', { fileType: 'Video', contentType: 'video/quicktime' }],
+  ['webm', { fileType: 'Video', contentType: 'video/webm' }],
+  ['mp3', { fileType: 'Audio', contentType: 'audio/mpeg' }],
+  ['wav', { fileType: 'Audio', contentType: 'audio/wav' }],
+  ['png', { fileType: 'Image', contentType: 'image/png' }],
+  ['jpg', { fileType: 'Image', contentType: 'image/jpeg' }],
+  ['jpeg', { fileType: 'Image', contentType: 'image/jpeg' }],
+  ['gif', { fileType: 'Image', contentType: 'image/gif' }],
+  ['svg', { fileType: 'Image', contentType: 'image/svg+xml' }],
+  ['webp', { fileType: 'Image', contentType: 'image/webp' }],
+]);
+
+const SCAN_FILE_CONTENT_TYPES = new Map([
+  ['application/pdf', 'PDF'],
+  ['application/msword', 'Document'],
+  ['application/vnd.ms-excel', 'Spreadsheet'],
+  ['application/vnd.ms-powerpoint', 'Presentation'],
+  ['application/zip', 'Archive'],
+  ['application/x-zip-compressed', 'Archive'],
+  ['text/csv', 'Data'],
+]);
+
+const SCAN_FILE_CONTENT_TYPE_PREFIXES = [
+  ['application/vnd.openxmlformats-officedocument.', 'Office file'],
+  ['video/', 'Video'],
+  ['audio/', 'Audio'],
+  ['image/', 'Image'],
+];
+
+function normalizeContentType(contentType) {
+  return String(contentType || '').split(';')[0].trim().toLowerCase();
+}
+
+function getUrlExtension(urlStr) {
+  try {
+    const pathname = new URL(urlStr).pathname || '';
+    const match = pathname.match(/\.([a-z0-9]{2,8})$/i);
+    return match?.[1]?.toLowerCase() || '';
+  } catch {
+    return '';
+  }
+}
+
+function getScanFileInfo(urlStr, contentType = '') {
+  const normalizedContentType = normalizeContentType(contentType);
+  const extension = getUrlExtension(urlStr);
+  const extensionInfo = SCAN_FILE_EXTENSIONS.get(extension);
+  if (extensionInfo) {
+    return {
+      isFile: true,
+      extension,
+      fileType: extensionInfo.fileType,
+      contentType: normalizedContentType || extensionInfo.contentType || null,
+    };
+  }
+
+  const exactContentType = SCAN_FILE_CONTENT_TYPES.get(normalizedContentType);
+  if (exactContentType) {
+    return {
+      isFile: true,
+      extension,
+      fileType: exactContentType,
+      contentType: normalizedContentType,
+    };
+  }
+
+  const prefixMatch = SCAN_FILE_CONTENT_TYPE_PREFIXES.find(([prefix]) => normalizedContentType.startsWith(prefix));
+  if (prefixMatch) {
+    return {
+      isFile: true,
+      extension,
+      fileType: prefixMatch[1],
+      contentType: normalizedContentType,
+    };
+  }
+
+  return {
+    isFile: false,
+    extension,
+    fileType: null,
+    contentType: normalizedContentType || null,
+  };
+}
+
 // Check if URL is same domain or subdomain
 function sameDomain(a, b) {
   try {
@@ -2687,6 +2785,7 @@ async function persistPagesForIa(
 
       const basePlacement = getPlacementForUrl(canonicalUrl, baseHost);
       if (!basePlacement) continue;
+      if (node.isFile || getScanFileInfo(canonicalUrl, node.contentType).isFile) continue;
       if (basePlacement === 'Subdomain') subdomainCount += 1;
 
       await ensureParentChain(canonicalUrl);
@@ -3242,8 +3341,28 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const queue = [];
   const queued = new Set();
   let queueIndex = 0;
+  const filesByUrl = new Map();
+  const addFileArtifact = (url, sourceUrl = null, contentType = null, detectedInfo = null) => {
+    const normalized = normalizeUrl(url);
+    if (!normalized) return;
+    const fileInfo = detectedInfo || getScanFileInfo(normalized, contentType);
+    const existing = filesByUrl.get(normalized);
+    filesByUrl.set(normalized, {
+      url: normalized,
+      sourceUrl: existing?.sourceUrl || sourceUrl || null,
+      contentType: existing?.contentType || fileInfo.contentType || normalizeContentType(contentType) || null,
+      fileType: existing?.fileType || fileInfo.fileType || 'File',
+      extension: existing?.extension || fileInfo.extension || getUrlExtension(normalized) || null,
+    });
+  };
+  const isScanFileUrl = (url) => getScanFileInfo(url).isFile;
+  const allowPageUrl = (candidate) => allowUrl(candidate) && !isScanFileUrl(candidate);
   const enqueue = (url, depth) => {
     if (!url) return;
+    if (isScanFileUrl(url)) {
+      addFileArtifact(url);
+      return;
+    }
     if (!isWithinScanDepth(url)) return;
     if (queued.has(url)) return;
     queued.add(url);
@@ -3320,6 +3439,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         for (const u of urls) {
           const norm = normalizeUrl(u);
           if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
+            if (isScanFileUrl(norm)) {
+              addFileArtifact(norm);
+              continue;
+            }
             recordDiscovery(norm, 'sitemap');
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
             enqueue(norm, 1);
@@ -3335,6 +3458,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
         if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
+          if (isScanFileUrl(norm)) {
+            addFileArtifact(norm);
+            return;
+          }
           recordDiscovery(norm, 'sitemap');
           if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
           enqueue(norm, 1);
@@ -3367,7 +3494,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const errors = [];
   const inactivePages = [];
   const brokenLinks = [];
-  const files = [];
   const linksByUrl = new Map();
   const linkStatusCache = new Map();
   const scheduledBrokenLinkChecks = new Set();
@@ -3405,6 +3531,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     if ((depthLimit !== null && depth > depthLimit) || !isWithinScanDepth(url)) return;
     if (!allowUrl(url)) return;
+    if (isScanFileUrl(url)) {
+      addFileArtifact(url, getParentUrl(url) || null);
+      return;
+    }
 
     let html;
     let status = 0;
@@ -3439,6 +3569,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       return;
     }
 
+    const fetchedFileInfo = getScanFileInfo(finalUrl || url, contentType);
+    const responseIsFile = fetchedFileInfo.isFile || !isHtmlContentType(contentType);
     const classification = classifyScanResponse({ html, status, url, finalUrl });
 
     if (status >= 400) {
@@ -3464,10 +3596,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       }
     }
 
-    if (!isHtmlContentType(contentType)) {
-      if (scanOptions.files) {
-        files.push({ url, sourceUrl: getParentUrl(url) || null, contentType });
-      }
+    if (responseIsFile) {
+      addFileArtifact(finalUrl || url, getParentUrl(url) || null, contentType, fetchedFileInfo);
       return;
     }
 
@@ -3509,17 +3639,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
 
     const links = classification.shouldExtractLinks ? extractLinks(html, finalUrl || url) : [];
-    const allowedLinks = links.filter((link) => allowUrl(link));
+    const allowedLinks = links.filter((link) => allowPageUrl(link));
     linksByUrl.set(url, allowedLinks);
 
     for (const link of links) {
       if (await pollJobStatus()) break;
       if (!allowUrl(link)) continue;
 
-      // Skip obvious assets
-      if (/\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|mp4|mov|mp3|wav)$/i.test(link)) {
+      if (isScanFileUrl(link)) {
         scheduleBrokenLinkCheck(link, url);
-        if (scanOptions.files) files.push({ url: link, sourceUrl: url });
+        addFileArtifact(link, url);
         continue;
       }
 
@@ -4096,7 +4225,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     errors: scanOptions.errorPages ? errors : [],
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
     brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],
-    files: scanOptions.files ? files : [],
+    files: scanOptions.files ? Array.from(filesByUrl.values()) : [],
     crosslinks,
   };
 

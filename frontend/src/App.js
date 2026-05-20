@@ -1565,6 +1565,12 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     const existing = urlNodeMap.get(file.url);
     if (existing) {
       existing.isFile = true;
+      existing.contentType = file.contentType || existing.contentType || null;
+      existing.fileType = file.fileType || existing.fileType || null;
+      existing.extension = file.extension || existing.extension || null;
+      existing.isInactive = false;
+      if (existing.scanStatus === 'inactive') existing.scanStatus = null;
+      if (existing.orphanType === 'inactive') existing.orphanType = 'file';
       return;
     }
 
@@ -1574,6 +1580,9 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             title: getUrlLabel(file.url),
             children: [],
             isFile: true,
+            contentType: file.contentType || null,
+            fileType: file.fileType || null,
+            extension: file.extension || null,
             parentUrl: file.sourceUrl || null,
           };
     if (file.sourceUrl && urlNodeMap.has(file.sourceUrl)) {
