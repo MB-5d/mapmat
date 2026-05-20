@@ -509,9 +509,25 @@ export async function downloadMapImages(id, payload = {}) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  const fallback = payload?.scope === 'selected' ? 'vellic-selected-images.zip' : 'vellic-images.zip';
+  const fallback = getMapImageDownloadFallbackFilename(blob, payload?.scope);
   triggerBlobDownload(blob, filename || fallback);
   return { filename: filename || fallback };
+}
+
+function getMapImageDownloadFallbackFilename(blob, scope) {
+  const type = String(blob?.type || '').toLowerCase();
+  if (type.startsWith('image/')) {
+    const extension = getImageExtensionFromContentType(type);
+    return scope === 'selected' ? `vellic-selected-image.${extension}` : `vellic-image.${extension}`;
+  }
+  return scope === 'selected' ? 'vellic-selected-images.zip' : 'vellic-images.zip';
+}
+
+function getImageExtensionFromContentType(contentType) {
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg';
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  return 'jpg';
 }
 
 export async function deleteMap(id) {
