@@ -50,6 +50,7 @@ const {
   getAssetExtension,
   getDownloadSiteTitle,
   normalizeDownloadNodeDescriptors,
+  orderImageDownloadZipEntries,
   sanitizeFilenamePart,
   sortImageDownloadEntries,
   urlsMatch,
@@ -1838,7 +1839,7 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
       return res.send(file.buffer);
     }
 
-    const zipEntries = sortImageDownloadEntries([
+    const zipEntries = orderImageDownloadZipEntries([
       { path: `${packageName}/`, buffer: Buffer.alloc(0), directory: true },
       ...(directories || []).map((directoryPath) => ({
         path: `${packageName}/${directoryPath}/`,

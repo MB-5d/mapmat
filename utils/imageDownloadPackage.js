@@ -397,6 +397,47 @@ function sortImageDownloadEntries(entries) {
     .sort((left, right) => compareImageDownloadPaths(left.path, right.path));
 }
 
+function orderImageDownloadZipEntries(entries) {
+  const sorted = sortImageDownloadEntries(entries);
+  const childrenByParent = new Map();
+
+  sorted.forEach((entry, index) => {
+    const normalizedPath = String(entry?.path || '').replace(/\/+$/, '');
+    if (!normalizedPath) return;
+    const slashIndex = normalizedPath.lastIndexOf('/');
+    const parentPath = slashIndex === -1 ? '' : normalizedPath.slice(0, slashIndex);
+    const node = { entry, index, path: normalizedPath };
+    if (!childrenByParent.has(parentPath)) childrenByParent.set(parentPath, []);
+    childrenByParent.get(parentPath).push(node);
+  });
+
+  const output = [];
+  const seen = new Set();
+  const visit = (parentPath) => {
+    const children = (childrenByParent.get(parentPath) || [])
+      .slice()
+      .sort((left, right) => left.index - right.index)
+      .reverse();
+    children.forEach((child) => {
+      if (!seen.has(child.path)) {
+        seen.add(child.path);
+        output.push(child.entry);
+      }
+      visit(child.path);
+    });
+  };
+
+  visit('');
+
+  sorted.forEach((entry) => {
+    const normalizedPath = String(entry?.path || '').replace(/\/+$/, '');
+    if (!normalizedPath || seen.has(normalizedPath)) return;
+    output.push(entry);
+  });
+
+  return output;
+}
+
 module.exports = {
   DOWNLOAD_IMAGE_FIELDS,
   DOWNLOAD_IMAGE_FIELD_LABELS,
@@ -409,6 +450,7 @@ module.exports = {
   getAssetExtension,
   getDownloadSiteTitle,
   normalizeDownloadNodeDescriptors,
+  orderImageDownloadZipEntries,
   sanitizeFilenamePart,
   sortImageDownloadEntries,
   urlsMatch,

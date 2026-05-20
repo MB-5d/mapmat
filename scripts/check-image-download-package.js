@@ -11,6 +11,7 @@ const {
   getAssetExtension,
   getDownloadSiteTitle,
   normalizeDownloadNodeDescriptors,
+  orderImageDownloadZipEntries,
   sanitizeFilenamePart,
   sortImageDownloadEntries,
 } = require('../utils/imageDownloadPackage');
@@ -158,6 +159,27 @@ assert.deepStrictEqual(sortedEntries.map((entry) => entry.path), [
 ]);
 
 const packageName = buildImageDownloadPackageName('Example Map');
+const zipEntriesForExtraction = orderImageDownloadZipEntries([
+  { path: `${packageName}/`, buffer: Buffer.alloc(0), directory: true },
+  { path: `${packageName}/Main site/`, buffer: Buffer.alloc(0), directory: true },
+  { path: `${packageName}/Main site/2-Early/`, buffer: Buffer.alloc(0), directory: true },
+  { path: `${packageName}/Main site/10-Late/`, buffer: Buffer.alloc(0), directory: true },
+  { path: `${packageName}/s1-Subdomain/`, buffer: Buffer.alloc(0), directory: true },
+  { path: `${packageName}/s2-Subdomain/`, buffer: Buffer.alloc(0), directory: true },
+  { path: `${packageName}/o1-Orphan/`, buffer: Buffer.alloc(0), directory: true },
+  { path: `${packageName}/o2-Orphan/`, buffer: Buffer.alloc(0), directory: true },
+]);
+assert.deepStrictEqual(zipEntriesForExtraction.map((entry) => entry.path), [
+  `${packageName}/`,
+  `${packageName}/o2-Orphan/`,
+  `${packageName}/o1-Orphan/`,
+  `${packageName}/s2-Subdomain/`,
+  `${packageName}/s1-Subdomain/`,
+  `${packageName}/Main site/`,
+  `${packageName}/Main site/10-Late/`,
+  `${packageName}/Main site/2-Early/`,
+]);
+
 const zip = createZipBuffer([
   { path: `${packageName}/`, buffer: Buffer.alloc(0), directory: true },
   { path: `${packageName}/Main site/`, buffer: Buffer.alloc(0), directory: true },
