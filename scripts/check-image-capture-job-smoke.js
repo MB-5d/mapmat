@@ -364,6 +364,8 @@ async function run() {
   const screenshotDir = path.join(tempDir, 'screenshots');
   const apiBase = `http://127.0.0.1:${backendPort}`;
   const fixtureBase = `http://127.0.0.1:${fixturePort}`;
+  const inactivePort = await getFreePort();
+  const inactiveBase = `http://127.0.0.1:${inactivePort}`;
 
   const fixtureServer = await startFixtureServer(fixturePort);
   const backend = startBackend(backendPort, dbPath, screenshotDir);
@@ -411,6 +413,12 @@ async function run() {
         title: 'Login page',
         children: [],
         authRequired: true,
+      }, {
+        id: 'inactive-0',
+        url: `${inactiveBase}/inactive`,
+        title: 'Inactive page',
+        children: [],
+        scanStatus: 'inactive',
       }, {
         id: 'slow-0',
         url: `${fixtureBase}/slow`,
@@ -557,8 +565,8 @@ async function run() {
       'image capture jobs should be claimed before generic workers can take them'
     );
     const thumbJob = await pollImageCaptureJob(apiBase, mapId, thumbStart.jobId, cookieJar);
-    assert.strictEqual(thumbJob.result.total, 11, 'thumbnail total mismatch');
-    assert.strictEqual(thumbJob.result.captured, 10, 'thumbnail captured mismatch');
+    assert.strictEqual(thumbJob.result.total, 12, 'thumbnail total mismatch');
+    assert.strictEqual(thumbJob.result.captured, 11, 'thumbnail captured mismatch');
     assert.strictEqual(thumbJob.result.skipped, 1, 'thumbnail skipped mismatch');
     assert.strictEqual(thumbJob.result.phase, 'complete', 'thumbnail job should finish after recovery');
     assert.strictEqual(thumbJob.result.failed + thumbJob.result.blocked + thumbJob.result.missingAsset, 0, 'thumbnail failures found');
@@ -578,7 +586,7 @@ async function run() {
 
     const withThumbs = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
     const thumbNodes = collectNodes(withThumbs.map.root, withThumbs.map.orphans);
-    assert.strictEqual(thumbNodes.length, 11, 'loaded node count mismatch');
+    assert.strictEqual(thumbNodes.length, 12, 'loaded node count mismatch');
     const storedThumbnailCount = thumbNodes.filter((page) => page.thumbnailUrl).length;
     assert.strictEqual(storedThumbnailCount, thumbJob.result.captured, 'saved count exceeded stored thumbnails');
     const skippedIds = new Set(['file-0']);
@@ -591,7 +599,7 @@ async function run() {
         assert(!page.thumbnailUrl, `skipped page should not keep thumbnailUrl for ${page.id}`);
         assert(page.thumbnailCaptureFailed, `skipped page missing failure marker for ${page.id}`);
       });
-    ['error-0', 'auth-0', 'slow-0', 'slow-1'].forEach((nodeId) => {
+    ['error-0', 'auth-0', 'inactive-0', 'slow-0', 'slow-1'].forEach((nodeId) => {
       const page = thumbNodes.find((node) => node.id === nodeId);
       assert(page?.thumbnailUrl, `expected rendered page thumbnail for ${nodeId}`);
       assert(!page.thumbnailCaptureFailed, `rendered page should not be marked failed for ${nodeId}`);

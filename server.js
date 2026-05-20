@@ -487,7 +487,7 @@ const isHostBlocked = (hostname) => {
   );
 };
 
-async function assertSafeUrl(rawUrl) {
+async function assertSafeUrl(rawUrl, options = {}) {
   let urlObj;
   try {
     urlObj = new URL(rawUrl);
@@ -509,9 +509,13 @@ async function assertSafeUrl(rawUrl) {
       try {
         records = await dns.lookup(hostname, { all: true, verbatim: true });
       } catch {
+        if (options?.allowUnresolved) return urlObj.toString();
         throw new Error('Unable to resolve host');
       }
-      if (!records.length) throw new Error('Unable to resolve host');
+      if (!records.length) {
+        if (options?.allowUnresolved) return urlObj.toString();
+        throw new Error('Unable to resolve host');
+      }
       if (records.some((rec) => isPrivateIp(rec.address))) {
         throw new Error('Blocked host');
       }
@@ -2076,7 +2080,7 @@ async function runImageCaptureJob(jobId, payload) {
 
   const captureRecordOnce = async (record, phaseName) => {
     try {
-      const safeUrl = await assertSafeUrl(record.node.url);
+      const safeUrl = await assertSafeUrl(record.node.url, { allowUnresolved: true });
       const result = await captureScreenshot(safeUrl, captureType, getCaptureOptionsForPhase(phaseName));
       const validation = await validateImageCaptureResult(captureType, result);
       if (!validation.ok) {
@@ -4267,6 +4271,127 @@ const SCREENSHOT_CAPTURE_STABILIZE_STYLE = `
   }
 `;
 
+function escapeScreenshotHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getBrowserNavigationErrorCode(error) {
+  const message = String(error?.message || error || '');
+  const netMatch = message.match(/net::(ERR_[A-Z0-9_]+)/i);
+  if (netMatch) return netMatch[1].toUpperCase();
+  const nodeMatch = message.match(/\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT)\b/i);
+  if (nodeMatch) return nodeMatch[1].toUpperCase();
+  return '';
+}
+
+function isCapturableBrowserNavigationError(error) {
+  const code = getBrowserNavigationErrorCode(error);
+  return Boolean(code && (
+    code.includes('NAME_NOT_RESOLVED')
+    || code === 'ENOTFOUND'
+    || code === 'EAI_AGAIN'
+    || code.includes('CONNECTION_REFUSED')
+    || code === 'ECONNREFUSED'
+    || code.includes('ADDRESS_UNREACHABLE')
+    || code.includes('INTERNET_DISCONNECTED')
+    || code.includes('CONNECTION_RESET')
+    || code === 'ECONNRESET'
+    || code.includes('CONNECTION_TIMED_OUT')
+    || code === 'ETIMEDOUT'
+  ));
+}
+
+function buildBrowserErrorCaptureHtml(safeUrl, error) {
+  let host = safeUrl;
+  try {
+    host = new URL(safeUrl).hostname;
+  } catch {
+    // Keep the original URL as the host label.
+  }
+  const code = getBrowserNavigationErrorCode(error) || 'ERR_FAILED';
+  const safeHost = escapeScreenshotHtml(host);
+  const safeCode = escapeScreenshotHtml(code);
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>This site can't be reached</title>
+    <style>
+      :root { color-scheme: light; }
+      body {
+        margin: 0;
+        background: #fff;
+        color: #3c4043;
+        font-family: Arial, sans-serif;
+      }
+      main {
+        margin-left: 22%;
+        margin-top: 22vh;
+        max-width: 620px;
+      }
+      .icon {
+        width: 48px;
+        height: 58px;
+        margin-bottom: 32px;
+        border: 4px solid #5f6368;
+        border-radius: 2px;
+        position: relative;
+        box-sizing: border-box;
+      }
+      .icon::before {
+        content: "";
+        position: absolute;
+        right: -4px;
+        top: -4px;
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        border-left: 4px solid #5f6368;
+        border-bottom: 4px solid #5f6368;
+      }
+      .icon::after {
+        content: ":(";
+        position: absolute;
+        left: 8px;
+        bottom: 6px;
+        color: #5f6368;
+        font-size: 20px;
+        font-weight: 700;
+      }
+      h1 {
+        margin: 0 0 18px;
+        color: #202124;
+        font-size: 32px;
+        font-weight: 500;
+      }
+      p {
+        margin: 0 0 18px;
+        font-size: 17px;
+        line-height: 1.5;
+      }
+      .code {
+        color: #5f6368;
+        font-size: 15px;
+        letter-spacing: .01em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="icon" aria-hidden="true"></div>
+      <h1>This site can't be reached</h1>
+      <p>Check if there is a typo in ${safeHost}.</p>
+      <p class="code">${safeCode}</p>
+    </main>
+  </body>
+</html>`;
+}
+
 async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options = {}) {
   const normalizedType = normalizeScreenshotType(type);
   if (!normalizedType) {
@@ -4406,10 +4531,24 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
         const captureStartedAt = Date.now();
         try {
           throwIfAborted();
-          await page.goto(safeUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: captureTimeoutMs,
-          });
+          try {
+            await page.goto(safeUrl, {
+              waitUntil: 'domcontentloaded',
+              timeout: captureTimeoutMs,
+            });
+          } catch (navigationError) {
+            if (!isCapturableBrowserNavigationError(navigationError)) {
+              throw navigationError;
+            }
+            await page.goto('about:blank', {
+              waitUntil: 'domcontentloaded',
+              timeout: Math.min(captureTimeoutMs, 3000),
+            }).catch(() => {});
+            await page.setContent(buildBrowserErrorCaptureHtml(safeUrl, navigationError), {
+              waitUntil: 'domcontentloaded',
+              timeout: Math.min(captureTimeoutMs, 3000),
+            });
+          }
           throwIfAborted();
           await page.waitForTimeout(normalizedType === SCREENSHOT_TYPES.thumb ? 450 : 650);
           await page.addStyleTag({ content: SCREENSHOT_CAPTURE_STABILIZE_STYLE }).catch(() => {});
