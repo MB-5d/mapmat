@@ -1,5 +1,8 @@
 /* eslint-disable no-console */
 const API_BASE = process.env.API_BASE || 'http://localhost:4002';
+const SMOKE_AUTH_EMAIL = String(process.env.SMOKE_AUTH_EMAIL || '').trim();
+const SMOKE_AUTH_PASSWORD = String(process.env.SMOKE_AUTH_PASSWORD || '');
+const SMOKE_AUTH_TOKEN = String(process.env.SMOKE_AUTH_TOKEN || '').trim();
 
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -12,6 +15,9 @@ function randomEmail() {
 async function fetchWithCookie(url, options = {}, cookieJar) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (cookieJar.value) headers.Cookie = cookieJar.value;
+  if (cookieJar.token && !headers.Authorization && !headers.authorization) {
+    headers.Authorization = `Bearer ${cookieJar.token}`;
+  }
   const res = await fetch(url, { ...options, headers, redirect: 'manual' });
   const setCookie = res.headers.get('set-cookie');
   if (setCookie) {
@@ -28,16 +34,65 @@ async function fetchWithCookie(url, options = {}, cookieJar) {
   return { res, data };
 }
 
-async function testSaveLoadShare() {
-  const cookieJar = { value: '' };
+function assertOk(result, label) {
+  if (!result.res.ok) {
+    throw new Error(`${label} failed: ${result.data?.error || result.res.status}`);
+  }
+}
+
+async function validateAuthenticatedSession(cookieJar) {
+  const me = await fetchWithCookie(`${API_BASE}/auth/me`, {}, cookieJar);
+  assertOk(me, 'auth session check');
+  if (!me.data?.user?.id) throw new Error('auth session check failed: missing user');
+}
+
+async function loginWithConfiguredCredentials(cookieJar) {
+  if (SMOKE_AUTH_TOKEN) {
+    cookieJar.token = SMOKE_AUTH_TOKEN;
+    await validateAuthenticatedSession(cookieJar);
+    return true;
+  }
+
+  if (!SMOKE_AUTH_EMAIL || !SMOKE_AUTH_PASSWORD) return false;
+
+  const login = await fetchWithCookie(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify({ email: SMOKE_AUTH_EMAIL, password: SMOKE_AUTH_PASSWORD }),
+  }, cookieJar);
+  assertOk(login, 'login');
+  if (login.data?.token) cookieJar.token = login.data.token;
+  await validateAuthenticatedSession(cookieJar);
+  return true;
+}
+
+async function loginWithTestAuthFallback(cookieJar) {
   const email = randomEmail();
   const password = 'testpass123';
-
-  const signup = await fetchWithCookie(`${API_BASE}/auth/signup`, {
+  const login = await fetchWithCookie(`${API_BASE}/auth/login`, {
     method: 'POST',
-    body: JSON.stringify({ email, password, name: 'Smoke Test' }),
+    body: JSON.stringify({ email, password }),
   }, cookieJar);
-  if (!signup.res.ok) throw new Error(`signup failed: ${signup.data?.error || signup.res.status}`);
+
+  if (!login.res.ok) {
+    throw new Error(
+      'smoke auth failed: set SMOKE_AUTH_EMAIL and SMOKE_AUTH_PASSWORD for a verified smoke account, '
+      + 'or enable TEST_AUTH_ENABLED for temporary internal checks'
+    );
+  }
+
+  if (login.data?.token) cookieJar.token = login.data.token;
+  await validateAuthenticatedSession(cookieJar);
+}
+
+async function authenticateSmokeUser(cookieJar) {
+  const usedConfiguredCredentials = await loginWithConfiguredCredentials(cookieJar);
+  if (usedConfiguredCredentials) return;
+  await loginWithTestAuthFallback(cookieJar);
+}
+
+async function testSaveLoadShare() {
+  const cookieJar = { value: '', token: '' };
+  await authenticateSmokeUser(cookieJar);
 
   const payload = {
     name: 'Smoke Map',
@@ -52,12 +107,12 @@ async function testSaveLoadShare() {
     method: 'POST',
     body: JSON.stringify(payload),
   }, cookieJar);
-  if (!save.res.ok) throw new Error(`save map failed: ${save.data?.error || save.res.status}`);
+  assertOk(save, 'save map');
   const mapId = save.data?.map?.id;
   if (!mapId) throw new Error('save map: missing map.id');
 
   const getMap = await fetchWithCookie(`${API_BASE}/api/maps/${mapId}`, {}, cookieJar);
-  if (!getMap.res.ok) throw new Error(`get map failed: ${getMap.data?.error || getMap.res.status}`);
+  assertOk(getMap, 'get map');
 
   const map = getMap.data?.map;
   if (!map?.root) throw new Error('get map: missing root');
@@ -68,7 +123,7 @@ async function testSaveLoadShare() {
     method: 'POST',
     body: JSON.stringify({ root: map.root, orphans: map.orphans, connections: map.connections, colors: map.colors }),
   }, cookieJar);
-  if (!share.res.ok) throw new Error(`create share failed: ${share.data?.error || share.res.status}`);
+  assertOk(share, 'create share');
   const shareId = share.data?.share?.id;
   if (!shareId) throw new Error('share: missing id');
 
