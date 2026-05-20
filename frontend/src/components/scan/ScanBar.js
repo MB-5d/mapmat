@@ -6,10 +6,7 @@ import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import { MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import TextInput from '../ui/TextInput';
-import {
-  APP_ONLY_MODE,
-  TESTER_NOT_READY_MESSAGE,
-} from '../../utils/constants';
+import { APP_ONLY_MODE } from '../../utils/constants';
 import Icon from '../ui/Icon';
 
 const ScanBar = ({
@@ -84,79 +81,81 @@ const ScanBar = ({
         {showOptions && (
           <MenuPanel className="layers-panel">
             <div className="layers-panel-list">
-              <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.subdomains}
-                onChange={() => onOptionChange('subdomains')}
-                disabled={optionsDisabled}
-                label="Subdomains"
-              />
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.orphanPages}
-                onChange={() => onOptionChange('orphanPages')}
-                disabled={optionsDisabled}
-                label="Orphan Pages"
-              />
-              <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.inactivePages}
-                onChange={() => onOptionChange('inactivePages')}
-                disabled={optionsDisabled}
-                label="Inactive pages"
-              />
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.errorPages}
-                onChange={() => onOptionChange('errorPages')}
-                disabled={optionsDisabled}
-                label="Error pages"
-              />
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.duplicates}
-                onChange={() => onOptionChange('duplicates')}
-                disabled={optionsDisabled}
-                label="Duplicates"
-              />
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.authenticatedPages}
-                onChange={() => onOptionChange('authenticatedPages')}
-                disabled={optionsDisabled || APP_ONLY_MODE}
-                label="Authenticated Pages"
-              />
-              {APP_ONLY_MODE && (
-                <div className="layers-panel-hint">
-                  {TESTER_NOT_READY_MESSAGE}
-                </div>
-              )}
-
-              <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.files}
-                onChange={() => onOptionChange('files')}
-                disabled={optionsDisabled}
-                label="Files / Downloads"
-              />
-              <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.brokenLinks}
-                onChange={() => onOptionChange('brokenLinks')}
-                disabled={optionsDisabled}
-                label="Broken links"
-              />
-              <CheckboxField
-                className="layers-panel-item scan-options-checkbox"
-                checked={options.crosslinks}
-                onChange={() => onOptionChange('crosslinks')}
-                disabled={optionsDisabled}
-                label="Crosslinks"
-              />
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.subdomains}
+                  onChange={() => onOptionChange('subdomains')}
+                  disabled={optionsDisabled}
+                  label="Subdomains"
+                />
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.orphanPages}
+                  onChange={() => onOptionChange('orphanPages')}
+                  disabled={optionsDisabled}
+                  label="Orphan Pages"
+                />
+              </div>
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.inactivePages}
+                  onChange={() => onOptionChange('inactivePages')}
+                  disabled={optionsDisabled}
+                  label="Inactive pages"
+                />
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.errorPages}
+                  onChange={() => onOptionChange('errorPages')}
+                  disabled={optionsDisabled}
+                  label="Error pages"
+                />
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.duplicates}
+                  onChange={() => onOptionChange('duplicates')}
+                  disabled={optionsDisabled}
+                  label="Duplicates"
+                />
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.authenticatedPages}
+                  onChange={() => onOptionChange('authenticatedPages')}
+                  disabled={optionsDisabled || APP_ONLY_MODE}
+                  label="Authenticated Pages"
+                />
+              </div>
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.files}
+                  onChange={() => onOptionChange('files')}
+                  disabled={optionsDisabled}
+                  label="Files / Downloads"
+                />
+              </div>
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.brokenLinks}
+                  onChange={() => onOptionChange('brokenLinks')}
+                  disabled={optionsDisabled}
+                  label="Broken links"
+                />
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
+                  checked={options.crosslinks}
+                  onChange={() => onOptionChange('crosslinks')}
+                  disabled={optionsDisabled}
+                  label="Crosslinks"
+                />
+              </div>
             </div>
           </MenuPanel>
         )}

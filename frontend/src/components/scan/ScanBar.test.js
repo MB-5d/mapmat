@@ -97,6 +97,9 @@ describe('ScanBar', () => {
     expect(container.textContent).not.toContain('Scan depth');
     expect(container.querySelector('.scan-options-depth-label')).toBeNull();
     expect(container.textContent).not.toContain('during testing');
+    expect(container.textContent).not.toContain('Not ready for testing yet');
+    expect(container.querySelector('.layers-panel-hint')).toBeNull();
+    expect(container.querySelectorAll('.scan-options-group')).toHaveLength(4);
     expect(scanButton.className).toContain('ui-btn');
     expect(scanButton.className).toContain('ui-btn--type-primary');
     expect(scanButton.className).toContain('ui-btn--style-brand');

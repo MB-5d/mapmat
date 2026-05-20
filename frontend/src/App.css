@@ -4355,6 +4355,16 @@ body {
 .scan-options .layers-panel {
   top: calc(100% + 1px);
   left: 0;
+  width: max-content;
+  min-width: 228px;
+}
+
+.scan-options .layers-panel-list {
+  border-top: none;
+}
+
+.scan-options-group:not(:last-child) {
+  margin-bottom: 4px;
 }
 
 .layers-panel-header {
@@ -4479,6 +4489,10 @@ body {
 
 .scan-options-checkbox .ui-checkbox-field__content {
   flex: 1;
+}
+
+.scan-options-checkbox .ui-checkbox-field__label {
+  white-space: nowrap;
 }
 
 .change-chip-group {
@@ -11741,7 +11755,8 @@ body {
   position: absolute;
   left: 0;
   top: calc(100% + 6px);
-  min-width: 200px;
+  width: max-content;
+  min-width: 228px;
 }
 
 .layers-panel-item .ui-select-shell {
@@ -11751,6 +11766,10 @@ body {
 [data-theme="dark"] .scan-options .layers-panel {
   background: var(--ui-color-surface);
   border: 1px solid var(--ui-color-border);
+}
+
+[data-theme="dark"] .scan-options .layers-panel-list {
+  border-top: none;
 }
 
 /* ============================================
