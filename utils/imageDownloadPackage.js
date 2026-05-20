@@ -195,13 +195,19 @@ function buildImageDownloadPackageName(mapName) {
 }
 
 function buildNodeSegment({ number, title, url, id } = {}, options = {}) {
-  if (options.isRootFolder && String(number || '').trim() === '0') {
+  const safeNumber = sanitizeFilenamePart(normalizeDownloadNumber(number), 'page');
+  if (options.isRootFolder && safeNumber === '0') {
     return 'Main site';
   }
-  const safeNumber = sanitizeFilenamePart(number, 'page');
   const displayTitle = stripTrailingSiteTitle(title || getUrlLabel(url) || id, options.siteTitle);
   const safeTitle = sanitizeFilenamePart(displayTitle, 'Untitled');
   return safeNumber ? `${safeNumber}-${safeTitle}` : safeTitle;
+}
+
+function normalizeDownloadNumber(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return raw;
+  return raw.replace(/^0\.(\d+)(?=\.|$)/, 'o$1');
 }
 
 function getUrlLabel(value) {
@@ -258,11 +264,11 @@ function collectFallbackImageDownloadNodes(root, orphans = []) {
   const regularOrphans = list.filter((node) => !node?.subdomainRoot);
   const subdomainOrphans = list.filter((node) => node?.subdomainRoot);
 
-  regularOrphans.forEach((node, index) => {
-    visit(node, `0.${index + 1}`, []);
-  });
   subdomainOrphans.forEach((node, index) => {
     visit(node, `s${index + 1}`, []);
+  });
+  regularOrphans.forEach((node, index) => {
+    visit(node, `o${index + 1}`, []);
   });
 
   return descriptors;
@@ -375,9 +381,9 @@ function compareImageDownloadPaths(left, right) {
     const normalized = normalize(value);
     if (!normalized) return -1;
     if (normalized === 'Main site' || normalized.startsWith('Main site/')) return 0;
-    if (/^0\.\d+/.test(normalized)) return 1;
-    if (/^s\d+/i.test(normalized)) return 2;
-    return 1;
+    if (/^s\d+/i.test(normalized)) return 1;
+    if (/^(?:o\d+|0\.\d+)/i.test(normalized)) return 2;
+    return 2;
   };
   const leftGroup = getGroup(left);
   const rightGroup = getGroup(right);

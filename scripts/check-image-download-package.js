@@ -88,6 +88,13 @@ assert.deepStrictEqual(
   'subdomain folder path should match map hierarchy'
 );
 
+const orphan = descriptors.get('orphan');
+assert.deepStrictEqual(
+  orphan.pathSegments.map((segment) => segment.number),
+  ['o1'],
+  'orphan folder path should use orphan numbering'
+);
+
 const usedPaths = new Set();
 const detailPath = buildImageDownloadPath({
   descriptor: detail,
@@ -136,10 +143,18 @@ assert.deepStrictEqual(directories.slice(0, 3), [
 const sortedEntries = sortImageDownloadEntries([
   { path: 'Main site/10-Late/10-Late.jpg', buffer: Buffer.from('ten') },
   { path: 'Main site/2-Early/2-Early.jpg', buffer: Buffer.from('two') },
+  { path: 's2-Subdomain/s2-Subdomain.jpg', buffer: Buffer.from('sub-two') },
+  { path: 's1-Subdomain/s1-Subdomain.jpg', buffer: Buffer.from('sub-one') },
+  { path: 'o2-Orphan/o2-Orphan.jpg', buffer: Buffer.from('orphan-two') },
+  { path: 'o1-Orphan/o1-Orphan.jpg', buffer: Buffer.from('orphan-one') },
 ]);
 assert.deepStrictEqual(sortedEntries.map((entry) => entry.path), [
   'Main site/2-Early/2-Early.jpg',
   'Main site/10-Late/10-Late.jpg',
+  's1-Subdomain/s1-Subdomain.jpg',
+  's2-Subdomain/s2-Subdomain.jpg',
+  'o1-Orphan/o1-Orphan.jpg',
+  'o2-Orphan/o2-Orphan.jpg',
 ]);
 
 const packageName = buildImageDownloadPackageName('Example Map');
