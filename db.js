@@ -108,9 +108,13 @@ db.exec(`
     connections_data TEXT,
     colors TEXT,
     connection_colors TEXT,
+    is_bookmarked INTEGER NOT NULL DEFAULT 0,
+    bookmarked_by_user_id TEXT,
+    bookmarked_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (map_id) REFERENCES maps(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (bookmarked_by_user_id) REFERENCES users(id) ON DELETE SET NULL
   );
 
   -- Scan history table
@@ -238,6 +242,9 @@ ensureColumn('map_versions', 'orphans_data', 'TEXT');
 ensureColumn('map_versions', 'connections_data', 'TEXT');
 ensureColumn('map_versions', 'connection_colors', 'TEXT');
 ensureColumn('map_versions', 'notes', 'TEXT');
+ensureColumn('map_versions', 'is_bookmarked', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('map_versions', 'bookmarked_by_user_id', 'TEXT');
+ensureColumn('map_versions', 'bookmarked_at', 'DATETIME');
 ensureColumn('shares', 'orphans_data', 'TEXT');
 ensureColumn('shares', 'connections_data', 'TEXT');
 ensureColumn('shares', 'connection_colors', 'TEXT');

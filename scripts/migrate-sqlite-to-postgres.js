@@ -79,7 +79,8 @@ const TABLES = [
     conflictKey: 'id',
     columns: [
       'id', 'map_id', 'user_id', 'version_number', 'name', 'notes', 'root_data', 'orphans_data',
-      'connections_data', 'colors', 'connection_colors', 'created_at',
+      'connections_data', 'colors', 'connection_colors', 'is_bookmarked', 'bookmarked_by_user_id',
+      'bookmarked_at', 'created_at',
     ],
   },
   {
@@ -170,6 +171,9 @@ CREATE TABLE IF NOT EXISTS map_versions (
   connections_data TEXT,
   colors TEXT,
   connection_colors TEXT,
+  is_bookmarked INTEGER DEFAULT 0,
+  bookmarked_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  bookmarked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

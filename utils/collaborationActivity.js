@@ -24,6 +24,7 @@ const ACTIVITY_TYPES = Object.freeze({
   COMMENT_REOPENED: 'comment.reopened',
   COMMENT_DELETED: 'comment.deleted',
   VERSION_SAVED: 'map.version.saved',
+  VERSION_BOOKMARKED: 'map.version.bookmarked',
   CONTENT_METADATA_UPDATED: 'content.metadata.updated',
   CONTENT_NODE_ADDED: 'content.node.added',
   CONTENT_NODE_UPDATED: 'content.node.updated',

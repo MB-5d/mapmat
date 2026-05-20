@@ -35,9 +35,10 @@ describe('VersionHistoryDrawer', () => {
           activeVersionId={null}
           latestVersionId={null}
           isLoading={false}
-          onAddVersion={jest.fn()}
-          canAddVersion
-          canViewActivity
+          onBookmarkVersion={jest.fn()}
+          canBookmarkVersion={false}
+          canViewActivity={false}
+          currentUser={{ name: 'Alex' }}
           activity={[]}
           isActivityLoading={false}
           {...props}
@@ -55,6 +56,18 @@ describe('VersionHistoryDrawer', () => {
       button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     return button;
+  };
+
+  const setInputValue = (element, value) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(element, value);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  const setTextareaValue = (element, value) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(element, value);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
   beforeEach(() => {
@@ -93,14 +106,16 @@ describe('VersionHistoryDrawer', () => {
     await clickByText(dateLabel(currentDate));
 
     expect(container.textContent).toContain('Client review');
-    expect(container.textContent).toContain('Current');
-    expect(container.textContent).toContain('Manual');
-    expect(container.textContent).toContain('Autosaved');
+    expect(container.textContent).toContain('Version 3');
+    expect(container.textContent).not.toContain('Current');
+    expect(container.textContent).not.toContain('Manual');
+    expect(container.textContent).not.toContain('Autosaved');
   });
 
   test('groups activity by month and date while keeping actor details in activity rows', async () => {
     const currentDate = isoDateForOffset(0, 10);
     await renderDrawer({
+      canViewActivity: true,
       activity: [
         {
           id: 'a1',
@@ -126,11 +141,42 @@ describe('VersionHistoryDrawer', () => {
     expect(container.textContent).toContain('Edit');
   });
 
-  test('uses shared controls for timeline actions', async () => {
-    await renderDrawer();
+  test('bookmarks an existing version from the row action', async () => {
+    const currentDate = isoDateForOffset(0, 12);
+    const onBookmarkVersion = jest.fn().mockResolvedValue({});
+    await renderDrawer({
+      canBookmarkVersion: true,
+      onBookmarkVersion,
+      versions: [
+        { id: 'v-auto', version_number: 3, name: 'Autosaved', created_at: currentDate },
+      ],
+    });
 
-    const addButton = container.querySelector('button[aria-label="Add version"]');
-    expect(addButton.className).toContain('ui-icon-btn');
+    await clickByText(dateLabel(currentDate));
+
+    const bookmarkButton = container.querySelector('button[aria-label="Bookmark version"]');
+    expect(bookmarkButton.className).toContain('ui-icon-btn');
+    await act(async () => {
+      bookmarkButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const titleInput = container.querySelector('input');
+    const notesInput = container.querySelector('textarea');
+    await act(async () => {
+      setInputValue(titleInput, 'Launch checkpoint');
+      setTextareaValue(notesInput, 'Ready for review');
+    });
+
+    await clickByText('Save');
+
+    expect(onBookmarkVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'v-auto' }),
+      { name: 'Launch checkpoint', notes: 'Ready for review' }
+    );
+  });
+
+  test('uses shared controls for back-to-top action', async () => {
+    await renderDrawer();
 
     const body = container.querySelector('.account-drawer-body');
     await act(async () => {

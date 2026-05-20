@@ -49,7 +49,6 @@ import PromptModal from './components/modals/PromptModal';
 import ImageReportDrawer from './components/reports/ImageReportDrawer';
 import ReportDrawer from './components/reports/ReportDrawer';
 import SaveMapModal from './components/modals/SaveMapModal';
-import SaveVersionModal from './components/modals/SaveVersionModal';
 import ShareModal from './components/modals/ShareModal';
 import ScanBar from './components/scan/ScanBar';
 import ScanProgressModal from './components/scan/ScanProgressModal';
@@ -1880,7 +1879,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showSaveMapModal, setShowSaveMapModal] = useState(false);
   const [isSavingMap, setIsSavingMap] = useState(false);
   const [showVersionHistoryDrawer, setShowVersionHistoryDrawer] = useState(false);
-  const [showSaveVersionModal, setShowSaveVersionModal] = useState(false);
   const [welcomeModalDismissedForSession, setWelcomeModalDismissedForSession] = useState(false);
   const [welcomeModalHidden, setWelcomeModalHidden] = useState(() => readWelcomeModalHidden());
   const [welcomeDontShowAgain, setWelcomeDontShowAgain] = useState(false);
@@ -1893,7 +1891,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [activeVersionId, setActiveVersionId] = useState(null);
   const [latestVersionId, setLatestVersionId] = useState(null);
   const [showVersionEditPrompt, setShowVersionEditPrompt] = useState(false);
-  const [saveVersionMeta, setSaveVersionMeta] = useState({ number: 1, timestamp: '' });
   const [duplicateMapConfig, setDuplicateMapConfig] = useState(null);
   const [pendingLoadMap, setPendingLoadMap] = useState(null);
   const [createMapMode, setCreateMapMode] = useState(false);
@@ -7722,52 +7719,29 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
-  const openSaveVersionModal = () => {
-    if (!currentMap?.id || !root) {
-      showToast('Save the map first', 'warning');
-      return;
-    }
+  const handleBookmarkVersion = async (version, { name, notes } = {}) => {
+    if (!currentMap?.id || !version?.id) return null;
     if (!canSaveVersion()) {
-      showToast('You can view version history on this map, but only owners and editors can save versions.', 'info');
-      return;
-    }
-    if (warnCoeditingReadOnly('This map')) return;
-    const nextNumber = (mapVersions[0]?.version_number || 0) + 1;
-    setSaveVersionMeta({
-      number: nextNumber,
-      timestamp: new Date().toLocaleString(),
-    });
-    setShowSaveVersionModal(true);
-  };
-
-  const handleSaveVersion = async (name, notes) => {
-    if (!currentMap?.id) return;
-    if (!canSaveVersion()) {
-      setShowSaveVersionModal(false);
-      showToast('Only owners and editors can save versions on this map.', 'info');
-      return;
+      throw new Error('Only owners and editors can bookmark versions on this map.');
     }
     if (warnCoeditingReadOnly('This map')) {
-      setShowSaveVersionModal(false);
-      return;
+      throw new Error('This map is read-only right now.');
     }
-    try {
-      const version = await createVersionFromSnapshot({
-        mapId: currentMap.id,
-        name,
-        notes,
-        allowDuplicate: true,
-      });
-      if (version) {
-        showToast('Version saved', 'success');
-      } else {
-        showToast('No changes to save', 'info');
+
+    const { version: updatedVersion } = await api.updateMapVersion(currentMap.id, version.id, {
+      name,
+      notes,
+    });
+    if (updatedVersion) {
+      setMapVersions((prev) => prev.map((item) => (
+        item.id === updatedVersion.id ? { ...item, ...updatedVersion } : item
+      )));
+      if (showVersionHistoryDrawer && canViewActivityValue) {
+        loadMapActivity(currentMap.id, { silent: true, allowToast: false });
       }
-    } catch (error) {
-      showToast(error.message || 'Failed to save version', 'error');
-    } finally {
-      setShowSaveVersionModal(false);
+      showToast('Version bookmarked', 'success');
     }
+    return updatedVersion;
   };
 
   const duplicateCurrentMap = () => {
@@ -14572,15 +14546,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         saving={isSavingMap}
       />
 
-      <SaveVersionModal
-        show={showSaveVersionModal}
-        onClose={() => setShowSaveVersionModal(false)}
-        onSave={handleSaveVersion}
-        versionNumber={saveVersionMeta.number}
-        timestamp={saveVersionMeta.timestamp}
-        defaultName="Updated"
-      />
-
       <ProjectsModal
         show={showProjectsModal}
         onClose={() => {
@@ -14719,9 +14684,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         activeVersionId={activeVersionForDrawer}
         latestVersionId={latestVersionForDrawer}
         isLoading={isVersionLoading}
-        onAddVersion={openSaveVersionModal}
-        canAddVersion={canSaveVersion()}
+        onBookmarkVersion={handleBookmarkVersion}
+        canBookmarkVersion={canSaveVersion()}
         canViewActivity={canViewActivity()}
+        currentUser={currentUser}
         activity={activityForDrawer}
         isActivityLoading={isActivityDrawerLoading}
       />

@@ -1,20 +1,23 @@
 import React, { useRef, useState } from 'react';
 import {
   ArrowUpToLine,
+  Bookmark,
   BookmarkPlus,
   ChevronDown,
   ChevronRight,
   MessageSquare,
-  Plus,
+  Pencil,
   Users,
 } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
-import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import Field from '../ui/Field';
 import IconButton from '../ui/IconButton';
 import { EditIcon } from '../ui/icons';
 import SegmentedControl from '../ui/SegmentedControl';
+import TextInput from '../ui/TextInput';
+import TextareaInput from '../ui/TextareaInput';
 
 const VIEW_TABS = Object.freeze({
   VERSIONS: 'versions',
@@ -108,6 +111,14 @@ function formatActorLabel(actor) {
   return 'Someone';
 }
 
+function formatOptionalActorLabel(actor) {
+  const name = String(actor?.name || '').trim();
+  if (name) return name;
+  const email = String(actor?.email || '').trim();
+  if (email) return email.split('@')[0];
+  return '';
+}
+
 function getActivityIcon(eventScope) {
   switch (eventScope) {
     case 'comment':
@@ -134,18 +145,34 @@ function getActivityScopeLabel(eventScope) {
   }
 }
 
-function getVersionBadges(version, isCurrent) {
+function getNormalizedVersionName(version) {
+  return String(version?.name || '').trim();
+}
+
+function isDefaultVersionName(name) {
+  const normalized = String(name || '').trim().toLowerCase();
+  return !normalized || normalized === 'autosaved' || normalized === 'updated';
+}
+
+function isBookmarkedVersion(version) {
   const normalizedName = String(version?.name || '').trim().toLowerCase();
-  const badges = [];
-  if (isCurrent) badges.push({ label: 'Current', style: 'brand' });
-  if (normalizedName === 'initial' || Number(version?.version_number) === 1) {
-    badges.push({ label: 'Initial', style: 'neutral' });
-  } else if (normalizedName === 'autosaved') {
-    badges.push({ label: 'Autosaved', style: 'info' });
-  } else if (normalizedName && normalizedName !== 'updated') {
-    badges.push({ label: 'Manual', style: 'success' });
-  }
-  return badges;
+  return Boolean(Number(version?.is_bookmarked || 0) || version?.isBookmarked)
+    || (!!normalizedName && !['autosaved', 'updated', 'initial'].includes(normalizedName));
+}
+
+function getVersionDisplayName(version) {
+  const name = getNormalizedVersionName(version);
+  const normalizedName = name.toLowerCase();
+  if (isBookmarkedVersion(version)) return name || `Version ${version?.version_number || ''}`.trim();
+  if (normalizedName === 'initial' || Number(version?.version_number) === 1) return 'Initial version';
+  return `Version ${version?.version_number || ''}`.trim();
+}
+
+function getBookmarkDraftTitle(version) {
+  const name = getNormalizedVersionName(version);
+  return isDefaultVersionName(name) || name.toLowerCase() === 'initial'
+    ? `Version ${version?.version_number || ''}`.trim()
+    : name;
 }
 
 const VersionHistoryDrawer = ({
@@ -157,9 +184,10 @@ const VersionHistoryDrawer = ({
   activeVersionId,
   latestVersionId,
   isLoading,
-  onAddVersion,
-  canAddVersion = false,
+  onBookmarkVersion,
+  canBookmarkVersion = false,
   canViewActivity = false,
+  currentUser = null,
   activity = [],
   isActivityLoading = false,
 }) => {
@@ -168,6 +196,10 @@ const VersionHistoryDrawer = ({
   const [activeView, setActiveView] = useState(VIEW_TABS.VERSIONS);
   const [expandedMonths, setExpandedMonths] = useState(() => ({ [getCurrentMonthKey()]: true }));
   const [expandedDates, setExpandedDates] = useState({});
+  const [editingVersionId, setEditingVersionId] = useState(null);
+  const [bookmarkDraft, setBookmarkDraft] = useState({ name: '', notes: '' });
+  const [bookmarkError, setBookmarkError] = useState('');
+  const [savingBookmarkId, setSavingBookmarkId] = useState(null);
   const viewOptions = [
     { value: VIEW_TABS.VERSIONS, label: 'Versions' },
     { value: VIEW_TABS.ACTIVITY, label: 'Activity' },
@@ -184,6 +216,8 @@ const VersionHistoryDrawer = ({
   React.useEffect(() => {
     if (!isOpen) {
       setShowBackToTop(false);
+      setEditingVersionId(null);
+      setBookmarkError('');
       return;
     }
     if (!canViewActivity && activeView !== VIEW_TABS.VERSIONS) {
@@ -220,6 +254,45 @@ const VersionHistoryDrawer = ({
 
   const scrollToTop = () => {
     bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const startBookmarkEdit = (version) => {
+    setEditingVersionId(version.id);
+    setBookmarkDraft({
+      name: getBookmarkDraftTitle(version),
+      notes: String(version?.notes || ''),
+    });
+    setBookmarkError('');
+  };
+
+  const cancelBookmarkEdit = () => {
+    setEditingVersionId(null);
+    setBookmarkDraft({ name: '', notes: '' });
+    setBookmarkError('');
+  };
+
+  const handleBookmarkSubmit = async (event, version) => {
+    event.preventDefault();
+    const name = bookmarkDraft.name.trim();
+    if (!name) {
+      setBookmarkError('Name is required');
+      return;
+    }
+    if (!onBookmarkVersion) return;
+
+    setSavingBookmarkId(version.id);
+    setBookmarkError('');
+    try {
+      await onBookmarkVersion(version, {
+        name,
+        notes: bookmarkDraft.notes.trim(),
+      });
+      cancelBookmarkEdit();
+    } catch (error) {
+      setBookmarkError(error.message || 'Could not update this version');
+    } finally {
+      setSavingBookmarkId(null);
+    }
   };
 
   const renderGroupedTimeline = (groups, renderItem, emptyLabel) => {
@@ -280,39 +353,100 @@ const VersionHistoryDrawer = ({
     const isActive = version.id === activeVersionId;
     const currentId = activeVersionId || latestVersionId;
     const isCurrent = version.id === currentId;
-    const badges = getVersionBadges(version, isCurrent);
-    const isNamed = badges.some((badge) => badge.label === 'Manual');
+    const isBookmarked = isBookmarkedVersion(version);
+    const isEditing = editingVersionId === version.id;
+    const bookmarkerLabel = formatOptionalActorLabel(version.bookmarkedBy)
+      || formatOptionalActorLabel({
+        name: version.bookmarked_by_name,
+        email: version.bookmarked_by_email,
+      });
 
     return (
-      <button
+      <div
         key={version.id}
-        type="button"
-        className={`version-history-item${isActive ? ' active' : ''}`}
-        onClick={() => onRestoreVersion(version)}
+        className={`version-history-item${isActive ? ' active' : ''}${isBookmarked ? ' bookmarked' : ''}${isEditing ? ' editing' : ''}`}
       >
-        <span className={`version-history-marker${isNamed ? ' named' : ''}${isCurrent ? ' current' : ''}`} />
-        <div className="version-history-main">
-          <div className="version-history-title-row">
-            <span className="version-history-title">{version.name || 'Updated'}</span>
-            {badges.map((badge) => (
-              <Badge
-                key={badge.label}
-                className="version-history-badge"
-                label={badge.label}
-                badgeStyle={badge.style}
-                size="sm"
-              />
-            ))}
+        <button
+          type="button"
+          className="version-history-restore"
+          onClick={() => onRestoreVersion(version)}
+        >
+          <span className={`version-history-marker${isBookmarked ? ' bookmarked' : ''}${isCurrent ? ' current' : ''}`} />
+          <div className="version-history-main">
+            <div className="version-history-title-row">
+              {isBookmarked ? <Bookmark size={14} className="version-history-title-icon" aria-hidden="true" /> : null}
+              <span className="version-history-title">{getVersionDisplayName(version)}</span>
+            </div>
+            {version.notes ? (
+              <div className="version-history-notes">{version.notes}</div>
+            ) : null}
+            {isBookmarked && bookmarkerLabel ? (
+              <div className="version-history-actor">Marked by {bookmarkerLabel}</div>
+            ) : null}
           </div>
-          {version.notes ? (
-            <div className="version-history-notes">{version.notes}</div>
-          ) : null}
-        </div>
-        <div className="version-history-meta">
-          <div className="version-history-number">v{version.version_number}</div>
-          <div>{formatTimestamp(version.created_at)}</div>
-        </div>
-      </button>
+          <div className="version-history-meta">
+            <div className="version-history-number">v{version.version_number}</div>
+            <div>{formatTimestamp(version.created_at)}</div>
+          </div>
+        </button>
+        {canBookmarkVersion ? (
+          <div className="version-history-row-actions">
+            <IconButton
+              variant="ghost"
+              size="sm"
+              className="version-history-bookmark-action"
+              icon={isBookmarked ? <Pencil /> : <BookmarkPlus />}
+              onClick={() => startBookmarkEdit(version)}
+              aria-label={isBookmarked ? 'Edit version bookmark' : 'Bookmark version'}
+              title={isBookmarked ? 'Edit bookmark' : 'Bookmark version'}
+            />
+          </div>
+        ) : null}
+        {isEditing ? (
+          <form className="version-history-bookmark-editor" onSubmit={(event) => handleBookmarkSubmit(event, version)}>
+            <Field label="Name" required error={bookmarkError}>
+              <TextInput
+                size="sm"
+                value={bookmarkDraft.name}
+                invalid={!!bookmarkError}
+                onChange={(event) => {
+                  setBookmarkDraft((current) => ({ ...current, name: event.target.value }));
+                  if (bookmarkError && event.target.value.trim()) setBookmarkError('');
+                }}
+                placeholder={`Version ${version.version_number}`}
+                autoFocus
+              />
+            </Field>
+            <Field label="Description (optional)">
+              <TextareaInput
+                size="sm"
+                value={bookmarkDraft.notes}
+                onChange={(event) => setBookmarkDraft((current) => ({ ...current, notes: event.target.value }))}
+                placeholder="Add context for this version"
+                rows={3}
+              />
+            </Field>
+            <div className="version-history-bookmark-editor-footer">
+              <div className="version-history-bookmark-byline">
+                Marked by {formatActorLabel(currentUser)}
+              </div>
+              <div className="version-history-bookmark-editor-actions">
+                <Button variant="secondary" size="sm" onClick={cancelBookmarkEdit}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  htmlType="submit"
+                  loading={savingBookmarkId === version.id}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </form>
+        ) : null}
+      </div>
     );
   };
 
@@ -381,18 +515,6 @@ const VersionHistoryDrawer = ({
       onClose={onClose}
       title="Map Timeline"
       subtitle={canViewActivity ? 'Versions and recent activity' : 'Version history'}
-      actions={canAddVersion ? (
-        <IconButton
-          type="secondary"
-          buttonStyle="brand"
-          size="lg"
-          className="version-history-add"
-          icon={<Plus />}
-          onClick={onAddVersion}
-          aria-label="Add version"
-          title="Add Version"
-        />
-      ) : null}
       className="version-history-drawer"
       bodyRef={bodyRef}
       onBodyScroll={handleScroll}

@@ -529,6 +529,13 @@ export async function createMapVersion(mapId, payload) {
   });
 }
 
+export async function updateMapVersion(mapId, versionId, payload) {
+  return fetchApi(`/api/maps/${mapId}/versions/${versionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getMapComments(mapId) {
   return fetchApi(`/api/maps/${mapId}/comments`);
 }

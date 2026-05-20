@@ -6137,26 +6137,45 @@ body {
 }
 
 .version-history-item {
+  position: relative;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.version-history-restore {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 6px 4px 6px 12px;
-  border-radius: 10px;
+  padding: 6px 40px 6px 12px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: color 0.2s, transform 0.2s;
-  position: relative;
+  font: inherit;
+  transition: background 0.16s ease;
 }
 
-.version-history-item:hover {
-  background: transparent;
+.version-history-item:hover .version-history-restore {
+  background: var(--color-bg-hover);
 }
 
-.version-history-item.active {
-  background: transparent;
+.version-history-item.active .version-history-restore {
+  background: var(--color-bg-hover);
+}
+
+.version-history-item.bookmarked {
+  border-color: rgba(99, 102, 241, 0.24);
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.version-history-item.editing {
+  border-color: rgba(99, 102, 241, 0.32);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
 }
 
 .version-history-main {
@@ -6164,6 +6183,7 @@ body {
   flex-direction: column;
   gap: 6px;
   min-width: 0;
+  flex: 1;
 }
 
 .version-history-title-row {
@@ -6178,12 +6198,20 @@ body {
   color: var(--color-text-primary);
 }
 
-.version-history-badge {
+.version-history-title-icon {
   flex-shrink: 0;
+  color: var(--color-primary);
 }
 
 .version-history-notes {
   font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.version-history-actor,
+.version-history-bookmark-byline {
+  font-size: 11px;
+  font-weight: 600;
   color: var(--color-text-secondary);
 }
 
@@ -6194,6 +6222,7 @@ body {
   gap: 4px;
   font-size: 12px;
   color: var(--color-text-secondary);
+  flex-shrink: 0;
 }
 
 .version-history-number {
@@ -6214,8 +6243,7 @@ body {
 .version-history-marker {
   position: absolute;
   left: -18px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 18px;
   width: 10px;
   height: 10px;
   border-radius: 999px;
@@ -6223,7 +6251,7 @@ body {
   border: 2px solid var(--color-bg);
 }
 
-.version-history-marker.named {
+.version-history-marker.bookmarked {
   width: 12px;
   height: 12px;
   left: -19px;
@@ -6247,6 +6275,48 @@ body {
   flex-shrink: 0;
 }
 
+.version-history-row-actions {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+}
+
+.version-history-item:hover .version-history-row-actions,
+.version-history-item:focus-within .version-history-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.version-history-bookmark-action {
+  background: var(--color-bg-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.version-history-bookmark-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 12px 12px;
+}
+
+.version-history-bookmark-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.version-history-bookmark-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .version-history-empty {
   font-size: 13px;
   color: var(--color-text-secondary);
@@ -6259,8 +6329,12 @@ body {
 }
 
 .activity-history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
   cursor: default;
   align-items: flex-start;
+  padding: 4px;
   padding-top: 4px;
   padding-bottom: 4px;
 }

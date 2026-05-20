@@ -1,5 +1,6 @@
 const adapter = require('./dbAdapter');
 let ensureMapInsightsSchemaPromise = null;
+let ensureMapVersionBookmarkSchemaPromise = null;
 
 async function ensureColumnAsync(table, column, type) {
   let rows = [];
@@ -29,6 +30,21 @@ async function ensureMapInsightsSchemaAsync() {
     await ensureMapInsightsSchemaPromise;
   } catch (error) {
     ensureMapInsightsSchemaPromise = null;
+    throw error;
+  }
+}
+
+async function ensureMapVersionBookmarkSchemaAsync() {
+  if (ensureMapVersionBookmarkSchemaPromise) return ensureMapVersionBookmarkSchemaPromise;
+  ensureMapVersionBookmarkSchemaPromise = (async () => {
+    await ensureColumnAsync('map_versions', 'is_bookmarked', 'INTEGER DEFAULT 0');
+    await ensureColumnAsync('map_versions', 'bookmarked_by_user_id', 'TEXT');
+    await ensureColumnAsync('map_versions', 'bookmarked_at', 'TIMESTAMP');
+  })();
+  try {
+    await ensureMapVersionBookmarkSchemaPromise;
+  } catch (error) {
+    ensureMapVersionBookmarkSchemaPromise = null;
     throw error;
   }
 }
@@ -294,20 +310,38 @@ async function listPersistedScreenshotFilenamesAsync() {
   return Array.from(filenames);
 }
 
-function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
+async function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
+  await ensureMapVersionBookmarkSchemaAsync();
   return adapter.queryAllAsync(`
-    SELECT * FROM map_versions
-    WHERE map_id = ? AND user_id = ?
-    ORDER BY created_at DESC
+    SELECT
+      map_versions.*,
+      creator.name AS created_by_name,
+      creator.email AS created_by_email,
+      bookmarker.name AS bookmarked_by_name,
+      bookmarker.email AS bookmarked_by_email
+    FROM map_versions
+    LEFT JOIN users AS creator ON creator.id = map_versions.user_id
+    LEFT JOIN users AS bookmarker ON bookmarker.id = map_versions.bookmarked_by_user_id
+    WHERE map_versions.map_id = ? AND map_versions.user_id = ?
+    ORDER BY map_versions.created_at DESC
     LIMIT ?
   `, [mapId, userId, limit]);
 }
 
-function listMapVersionsByMapAsync(mapId, limit = 25) {
+async function listMapVersionsByMapAsync(mapId, limit = 25) {
+  await ensureMapVersionBookmarkSchemaAsync();
   return adapter.queryAllAsync(`
-    SELECT * FROM map_versions
-    WHERE map_id = ?
-    ORDER BY created_at DESC
+    SELECT
+      map_versions.*,
+      creator.name AS created_by_name,
+      creator.email AS created_by_email,
+      bookmarker.name AS bookmarked_by_name,
+      bookmarker.email AS bookmarked_by_email
+    FROM map_versions
+    LEFT JOIN users AS creator ON creator.id = map_versions.user_id
+    LEFT JOIN users AS bookmarker ON bookmarker.id = map_versions.bookmarked_by_user_id
+    WHERE map_versions.map_id = ?
+    ORDER BY map_versions.created_at DESC
     LIMIT ?
   `, [mapId, limit]);
 }
@@ -363,6 +397,32 @@ function createMapVersionAsync({
   ]);
 }
 
+async function updateMapVersionBookmarkAsync({
+  mapId,
+  versionId,
+  name,
+  notes,
+  bookmarkedByUserId,
+}) {
+  await ensureMapVersionBookmarkSchemaAsync();
+  return adapter.executeAsync(`
+    UPDATE map_versions
+    SET
+      name = ?,
+      notes = ?,
+      is_bookmarked = 1,
+      bookmarked_by_user_id = ?,
+      bookmarked_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND map_id = ?
+  `, [
+    name,
+    notes || null,
+    bookmarkedByUserId,
+    versionId,
+    mapId,
+  ]);
+}
+
 function listMapVersionIdsForUserMapAsync(mapId, userId) {
   return adapter.queryAllAsync(`
     SELECT id FROM map_versions
@@ -385,12 +445,25 @@ async function deleteMapVersionsByIdsAsync(ids) {
   return (await adapter.executeAsync(`DELETE FROM map_versions WHERE id IN (${placeholders})`, ids)).changes || 0;
 }
 
-function getMapVersionByIdAsync(versionId) {
-  return adapter.queryOneAsync('SELECT * FROM map_versions WHERE id = ?', [versionId]);
+async function getMapVersionByIdAsync(versionId) {
+  await ensureMapVersionBookmarkSchemaAsync();
+  return adapter.queryOneAsync(`
+    SELECT
+      map_versions.*,
+      creator.name AS created_by_name,
+      creator.email AS created_by_email,
+      bookmarker.name AS bookmarked_by_name,
+      bookmarker.email AS bookmarked_by_email
+    FROM map_versions
+    LEFT JOIN users AS creator ON creator.id = map_versions.user_id
+    LEFT JOIN users AS bookmarker ON bookmarker.id = map_versions.bookmarked_by_user_id
+    WHERE map_versions.id = ?
+  `, [versionId]);
 }
 
 module.exports = {
   ensureMapInsightsSchemaAsync,
+  ensureMapVersionBookmarkSchemaAsync,
   listMapsByUserAsync,
   listMapsAccessibleToUserAsync,
   countMapsByUserAsync,
@@ -411,6 +484,7 @@ module.exports = {
   getNextMapVersionNumberAsync,
   getNextMapVersionNumberByMapAsync,
   createMapVersionAsync,
+  updateMapVersionBookmarkAsync,
   listMapVersionIdsForUserMapAsync,
   listMapVersionIdsByMapAsync,
   deleteMapVersionsByIdsAsync,

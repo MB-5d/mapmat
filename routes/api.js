@@ -956,6 +956,33 @@ function parseMapVersionFields(row) {
   };
 }
 
+function serializeMapVersion(row) {
+  const fields = parseMapVersionFields(row);
+  if (!fields) return null;
+  const isBookmarked = Boolean(Number(row.is_bookmarked || 0));
+
+  return {
+    ...row,
+    ...fields,
+    isBookmarked,
+    bookmarkedAt: row.bookmarked_at || null,
+    createdBy: row.user_id ? {
+      userId: row.user_id,
+      name: row.created_by_name || null,
+      email: row.created_by_email || null,
+    } : null,
+    bookmarkedBy: row.bookmarked_by_user_id ? {
+      userId: row.bookmarked_by_user_id,
+      name: row.bookmarked_by_name || null,
+      email: row.bookmarked_by_email || null,
+    } : null,
+    created_by_name: undefined,
+    created_by_email: undefined,
+    bookmarked_by_name: undefined,
+    bookmarked_by_email: undefined,
+  };
+}
+
 function parseJsonArray(raw, fallback = []) {
   if (raw === null || raw === undefined || raw === '') return fallback;
   try {
@@ -2280,10 +2307,7 @@ router.get('/maps/:id/versions', requireAuth, async (req, res) => {
       : await mapStore.listMapVersionsForUserMapAsync(id, req.user.id, 25);
 
     const parsed = versions
-      .map((v) => {
-        const fields = parseMapVersionFields(v);
-        return fields ? { ...v, ...fields } : null;
-      })
+      .map((v) => serializeMapVersion(v))
       .filter(Boolean);
 
     res.json({ versions: parsed });
@@ -2372,15 +2396,78 @@ router.post('/maps/:id/versions', requireAuth, async (req, res) => {
       },
     }, { label: 'map version save' });
 
-    res.json({
-      version: {
-        ...saved,
-        ...parseMapFields(saved),
-      },
-    });
+    res.json({ version: serializeMapVersion(saved) });
   } catch (error) {
     console.error('Create map version error:', error);
     res.status(500).json({ error: 'Failed to create map version' });
+  }
+});
+
+// PATCH /api/maps/:id/versions/:versionId - Bookmark and rename an existing version
+router.patch('/maps/:id/versions/:versionId', requireAuth, async (req, res) => {
+  try {
+    const { id, versionId } = req.params;
+    const title = String(req.body?.name || '').trim();
+    const notes = String(req.body?.notes || '').trim();
+
+    if (!title) {
+      return res.status(400).json({ error: 'Version name is required' });
+    }
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_VERSION_UPDATE,
+      failureError: 'Map not found',
+    })) return;
+
+    const existingVersion = await mapStore.getMapVersionByIdAsync(versionId);
+    if (!existingVersion || existingVersion.map_id !== id) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+
+    await mapStore.updateMapVersionBookmarkAsync({
+      mapId: id,
+      versionId,
+      name: title,
+      notes,
+      bookmarkedByUserId: req.user.id,
+    });
+
+    const saved = await mapStore.getMapVersionByIdAsync(versionId);
+
+    await ensureCollaborationActivitySchemaAsync();
+    const actorRole = permissionPolicy.resolveResourceRole({
+      actorUserId: req.user?.id || null,
+      resourceOwnerUserId: map.user_id || null,
+      membershipRole: map.membership_role || map.membershipRole || null,
+    });
+    await recordMapActivityBestEffortAsync({
+      mapId: id,
+      actorUserId: req.user.id,
+      actorRole,
+      eventType: ACTIVITY_TYPES.VERSION_BOOKMARKED,
+      eventScope: ACTIVITY_SCOPES.VERSION,
+      entityType: 'version',
+      entityId: versionId,
+      summary: `Bookmarked version ${saved.version_number}: ${title}`,
+      payload: {
+        versionId,
+        versionNumber: saved.version_number,
+        name: title,
+        notes: notes || null,
+      },
+    }, { label: 'map version bookmark' });
+
+    res.json({ version: serializeMapVersion(saved) });
+  } catch (error) {
+    console.error('Update map version error:', error);
+    res.status(500).json({ error: 'Failed to update version' });
   }
 });
 
