@@ -14160,13 +14160,13 @@ export default function App({ currentRoute, navigateToRoute }) {
                 hasDownloadableSelectedImages: hasSelectedDownloadableImages,
                 allThumbnailsCaptured,
                 thumbnailsAllLabel: invalidThumbnailAssetIds.size > 0
-                  ? 'Retry Missing Visible area'
+                  ? 'Retry Missing Thumbnails'
                   : thumbnailCaptureStats.hasPartial
-                  ? 'Get Visible area (Remaining)'
-                  : 'Get Visible area (All)',
+                  ? 'Get Thumbnails (Remaining)'
+                  : 'Get Thumbnails (All)',
                 thumbnailsSelectedLabel: hasSelectedDownloadableThumbnails
                   ? 'Recapture'
-                  : 'Get Visible area (Selected)',
+                  : 'Get Thumbnails (Selected)',
                 allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
                 fullScreenshotsAllLabel: invalidFullScreenshotAssetIds.size > 0
                   ? 'Retry Missing Full page'

@@ -103,8 +103,8 @@ const CanvasToolbar = ({
   hasSelectedFullScreenshotAssets,
   hasDownloadableImages,
   hasDownloadableSelectedImages,
-  thumbnailsAllLabel = 'Get Visible area (All)',
-  thumbnailsSelectedLabel = 'Get Visible area (Selected)',
+  thumbnailsAllLabel = 'Get Thumbnails (All)',
+  thumbnailsSelectedLabel = 'Get Thumbnails (Selected)',
   fullScreenshotsAllLabel = 'Get Full page (All)',
   fullScreenshotsSelectedLabel = 'Get Full page (Selected)',
   captureIssues = [],
@@ -195,7 +195,7 @@ const CanvasToolbar = ({
             </>
           )}
           <div className="canvas-tool-menu-section">
-            <MenuSectionHeader className="canvas-tool-menu-label">Visible area</MenuSectionHeader>
+            <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails (visible area)</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
               label={thumbnailsAllLabel}
@@ -210,7 +210,7 @@ const CanvasToolbar = ({
             />
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Update Captured Visible area"
+              label="Update Captured Thumbnails"
               onClick={onUpdateCapturedThumbnails}
               disabled={!hasMap || !hasDownloadableThumbnails}
             />
