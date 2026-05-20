@@ -53,6 +53,7 @@ Current Phase 10D live-edit support is intentionally limited to the Phase 10C sy
 - `node.add`
 - `node.update` (shallow field edits only)
 - `node.delete`
+- `node.move`
 - `link.add`
 - `link.update`
 - `link.delete`
@@ -62,7 +63,6 @@ Current Phase 10D live-edit support is intentionally limited to the Phase 10C sy
 
 These flows are still available outside live mode, but are blocked during live mode so the frontend does not diverge from the current sync engine contract:
 
-- drag-to-reparent / structural node moves
 - orphan/subdomain type moves through the edit modal
 - comments
 - annotation markers

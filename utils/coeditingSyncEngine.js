@@ -1,6 +1,7 @@
 const adapter = require('../stores/dbAdapter');
 const mapStore = require('../stores/mapStore');
 const coeditingStore = require('../stores/coeditingStore');
+const { applyBranchMoveToMap } = require('../frontend/src/utils/treeMoveUtils');
 
 const LIVE_OP_REPLAY_LIMIT_DEFAULT = 200;
 const LIVE_OP_REPLAY_LIMIT_MAX = 500;
@@ -448,6 +449,32 @@ function applyNodeDelete(document, operation) {
   removeConnectionsForNodeIds(document, collectNodeIds(removedNode));
 }
 
+function applyNodeMove(document, operation) {
+  const result = applyBranchMoveToMap({
+    root: document.root,
+    orphans: document.orphans,
+    nodeId: operation.payload.nodeId,
+    targetParentId: operation.payload.targetParentId,
+    insertIndex: operation.payload.insertIndex,
+    rootChanges: operation.payload.rootChanges,
+  });
+
+  if (!result.ok) {
+    throw new CoeditingSyncError(
+      'COEDITING_INVALID_NODE_MOVE',
+      result.error || 'Node move is invalid',
+      /not found/i.test(result.error || '') ? 404 : 400,
+      {
+        nodeId: operation.payload.nodeId,
+        targetParentId: operation.payload.targetParentId,
+      }
+    );
+  }
+
+  document.root = result.root;
+  document.orphans = result.orphans;
+}
+
 function ensureLinkIndex(document, linkId) {
   const index = normalizeConnections(document.connections).findIndex((connection) => connection.id === linkId);
   if (index === -1) {
@@ -624,6 +651,9 @@ function applyOperationToDocument(document, operation) {
       break;
     case 'node.delete':
       applyNodeDelete(nextDocument, operation);
+      break;
+    case 'node.move':
+      applyNodeMove(nextDocument, operation);
       break;
     case 'link.add':
       applyLinkAdd(nextDocument, operation);

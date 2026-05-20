@@ -152,6 +152,30 @@ async function main() {
       },
     },
     {
+      type: 'node.add',
+      payload: {
+        nodeId: 'node-b',
+        parentId: 'root',
+        afterNodeId: 'node-a',
+        node: {
+          title: 'Child B',
+          url: 'https://example.com/b',
+          children: [],
+        },
+      },
+    },
+    {
+      type: 'node.move',
+      payload: {
+        nodeId: 'node-a',
+        targetParentId: 'node-b',
+        insertIndex: 0,
+        rootChanges: {
+          annotations: { status: 'moved', tags: [], note: '', meta: { updatedAt: 'now' } },
+        },
+      },
+    },
+    {
       type: 'link.add',
       payload: {
         linkId: 'link-a',
@@ -174,7 +198,10 @@ async function main() {
   assert.strictEqual(replayed.name, 'Live Map');
   assert.strictEqual(replayed.notes, 'sync enabled');
   assert.strictEqual(replayed.root.children.length, 1);
-  assert.strictEqual(replayed.root.children[0].title, 'Child A Updated');
+  assert.strictEqual(replayed.root.children[0].id, 'node-b');
+  assert.strictEqual(replayed.root.children[0].children[0].id, 'node-a');
+  assert.strictEqual(replayed.root.children[0].children[0].title, 'Child A Updated');
+  assert.strictEqual(replayed.root.children[0].children[0].annotations.status, 'moved');
   assert.strictEqual(replayed.connections.length, 1);
   assert.strictEqual(replayed.connections[0].id, 'link-a');
   assert.strictEqual(replayed.connections[0].sourceNodeId, 'root');
@@ -186,7 +213,8 @@ async function main() {
       nodeId: 'node-a',
     },
   });
-  assert.strictEqual(afterDelete.root.children.length, 0);
+  assert.strictEqual(afterDelete.root.children.length, 1);
+  assert.strictEqual(afterDelete.root.children[0].children.length, 0);
   assert.strictEqual(afterDelete.connections.length, 0);
 
   expectSyncError(() => applyOperationToDocument(baseDocument, {
@@ -202,6 +230,25 @@ async function main() {
       nodeId: 'root',
     },
   }), 'COEDITING_ROOT_DELETE_FORBIDDEN');
+
+  expectSyncError(() => applyOperationToDocument({
+    ...baseDocument,
+    root: {
+      ...baseDocument.root,
+      children: [{
+        id: 'parent',
+        title: 'Parent',
+        children: [{ id: 'child', title: 'Child', children: [] }],
+      }],
+    },
+  }, {
+    type: 'node.move',
+    payload: {
+      nodeId: 'parent',
+      targetParentId: 'child',
+      insertIndex: 0,
+    },
+  }), 'COEDITING_INVALID_NODE_MOVE');
 
   await assertSavedMapDriftRefreshesLiveSnapshot();
 

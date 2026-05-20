@@ -60,19 +60,32 @@ function main() {
   assert.strictEqual(normalized.payload.parentId, null);
   assert.strictEqual(normalized.payload.afterNodeId, null);
 
-  expectInvalid(
+  const normalizedMove = normalizeOperationEnvelope(
     {
-      opId: 'op-123456',
+      opId: 'op-123457',
       mapId: validMapId,
       sessionId: 'session-abc123',
       actorId: validActorId,
       baseVersion: 0,
       timestamp: '2026-03-13T18:15:00.000Z',
-      type: 'node.move',
-      payload: {},
+      type: OP_TYPES.NODE_MOVE,
+      payload: {
+        nodeId: 'node-1',
+        targetParentId: '__orphans__',
+        insertIndex: '2',
+        rootChanges: {
+          annotations: { status: 'moved' },
+        },
+      },
     },
-    'type'
+    {
+      expectedMapId: validMapId,
+      expectedActorId: validActorId,
+    }
   );
+  assert.strictEqual(normalizedMove.payload.targetParentId, '__orphans__');
+  assert.strictEqual(normalizedMove.payload.insertIndex, 2);
+  assert.strictEqual(normalizedMove.payload.rootChanges.annotations.status, 'moved');
 
   expectInvalid(
     {

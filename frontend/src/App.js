@@ -135,10 +135,18 @@ import {
   normalizeCaptureIssue,
   shouldShowImageCaptureProgressToast,
 } from './utils/captureIssues';
+const treeMoveUtils = require('./utils/treeMoveUtils');
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
 const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
 const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
+const {
+  DEFAULT_ORPHAN_CONTAINER_ID,
+  DEFAULT_SUBDOMAIN_CONTAINER_ID,
+  applyBranchMoveToMap,
+  collectNodeIds: collectBranchNodeIds,
+  getBranchMoveBlockReason,
+} = treeMoveUtils;
 
 function getImageCaptureJobErrorMessage(error, fallback = 'Image capture failed') {
   const message = String(error?.message || error?.error || '').trim();
@@ -663,6 +671,8 @@ const buildLiveOperationToastMessage = (operation, participant = null) => {
     }
     case 'node.delete':
       return `${actorLabel} deleted a node`;
+    case 'node.move':
+      return `${actorLabel} moved a branch`;
     case 'link.add':
       return `${actorLabel} added a link`;
     case 'link.update':
@@ -1013,6 +1023,7 @@ const SitemapTree = ({
   layout: layoutOverride,
   orientation = MAP_ORIENTATIONS.VERTICAL,
   selectedNodeIds,
+  activeBranchNodeIds,
   children,
 }) => {
   const toggleStack = (nodeId) => {
@@ -1125,6 +1136,7 @@ const SitemapTree = ({
         const shouldWrapStack = !!stackInfo?.collapsed;
 
         const isSelected = selectedNodeIds?.has(nodeData.node.id);
+        const isBranchDragging = activeBranchNodeIds?.has(nodeData.node.id);
         const card = (
           <DraggableNodeCard
             node={nodeData.node}
@@ -1148,7 +1160,7 @@ const SitemapTree = ({
             onViewImage={onViewImage}
             onAddNote={onAddNote}
             onViewNotes={onViewNotes}
-            activeId={activeId}
+            activeId={isBranchDragging ? nodeData.node.id : activeId}
             isGhosted={isGhosted}
             badges={badges}
             showPageNumbers={showPageNumbers}
@@ -1274,8 +1286,8 @@ const collectNodeAndDescendantIds = (node, result = []) => {
 };
 
 const hasAssignedUrl = (node) => typeof node?.url === 'string' && node.url.trim() !== '';
-const ORPHAN_CONTAINER_ID = '__orphans__';
-const SUBDOMAIN_CONTAINER_ID = '__subdomains__';
+const ORPHAN_CONTAINER_ID = DEFAULT_ORPHAN_CONTAINER_ID;
+const SUBDOMAIN_CONTAINER_ID = DEFAULT_SUBDOMAIN_CONTAINER_ID;
 const HOME_PARENT_ID = '__home__';
 const ORPHAN_PARENT_ID = '__orphan_root__';
 const SUBDOMAIN_PARENT_ID = '__subdomain_root__';
@@ -2090,6 +2102,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [activeDropZone, setActiveDropZone] = useState(null);
   const [dropZones, setDropZones] = useState([]);
   const [dragCursor, setDragCursor] = useState({ x: 0, y: 0 }); // Track cursor for proximity filtering
+  const activeBranchNodeIds = useMemo(
+    () => (activeNode ? collectBranchNodeIds(activeNode) : new Set()),
+    [activeNode]
+  );
 
   useEffect(() => {
     if (currentRoute?.orientation) {
@@ -11805,6 +11821,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     node.annotations = buildAnnotations({ status: 'moved' }, node.annotations);
   };
 
+  const buildMoveRootChanges = (node) => {
+    if (!shouldAutoMarkMoved) return null;
+    if (!hasAssignedUrl(node)) return null;
+    const currentStatus = node?.annotations?.status || 'none';
+    if (currentStatus === 'moved' || currentStatus === 'deleted' || currentStatus === 'to_delete') return null;
+    return {
+      annotations: buildAnnotations({ status: 'moved' }, node.annotations),
+    };
+  };
+
   const saveNodeChanges = (updatedNode) => {
     // Helper to find parent in a tree
     const findParentInTree = (tree, nodeId, parent = null) => {
@@ -12364,169 +12390,45 @@ export default function App({ currentRoute, navigateToRoute }) {
   // ========== DRAG & DROP ==========
 
   const moveNode = (nodeId, newParentId, insertIndex) => {
-    if (isLiveActive) {
-      warnLiveModeUnsupported('Drag-to-reparent is disabled in live editing until structural moves are supported.');
-      return;
-    }
     if (!root || nodeId === root.id) return;
     if (nodeId === newParentId) return;
-    const sourceMeta = forestIndex.nodes.get(nodeId);
-    const targetMeta = forestIndex.nodes.get(newParentId);
-    if (!sourceMeta) return;
-    if (!canMoveNode(nodeId, newParentId)) return;
+    const sourceNode = getNodeById(nodeId);
+    const rootChanges = buildMoveRootChanges(sourceNode);
 
-    const getTreeRootById = (treeRootId, rootTree, orphanTrees) => {
-      if (!treeRootId) return null;
-      if (rootTree?.id === treeRootId) return rootTree;
-      return orphanTrees.find(o => o.id === treeRootId) || null;
-    };
-
-    const sourceTreeRoot = getTreeRootById(sourceMeta.treeRootId, root, orphans);
-    const targetTreeRoot = targetMeta
-      ? getTreeRootById(targetMeta.treeRootId, root, orphans)
-      : null;
-    if (!sourceTreeRoot) return;
-
-    // Prevent dropping into a descendant within the same tree
-    if (targetMeta && sourceMeta.treeRootId === targetMeta.treeRootId) {
-      if (isDescendantOf(sourceTreeRoot, newParentId, nodeId)) return;
-    }
-
-    const removeFromTree = (tree, targetId) => {
-      if (!tree?.children?.length) return null;
-      const idx = tree.children.findIndex(c => c.id === targetId);
-      if (idx !== -1) {
-        return tree.children.splice(idx, 1)[0];
+    if (isLiveActive && currentMap?.id) {
+      const result = queueLiveDraftWithUndo({
+        type: 'node.move',
+        payload: {
+          nodeId,
+          targetParentId: newParentId,
+          insertIndex,
+          rootChanges,
+        },
+      });
+      if (!result.ok) {
+        showToast(result.error || 'Failed to move branch', 'error');
       }
-      for (const child of tree.children) {
-        const removed = removeFromTree(child, targetId);
-        if (removed) return removed;
-      }
-      return null;
-    };
-
-    const clearTreeFlags = (node) => {
-      if (!node) return;
-      if (node.subdomainRoot) node.subdomainRoot = false;
-      if (node.orphanType === 'orphan' || node.orphanType === 'subdomain') {
-        delete node.orphanType;
-      }
-      node.children?.forEach(clearTreeFlags);
-    };
-
-    const applyTreeTypeFlags = (node, treeType) => {
-      if (!node) return;
-      if (treeType === 'subdomain') {
-        node.orphanType = 'subdomain';
-        node.subdomainRoot = false;
-      } else if (treeType === 'orphan') {
-        node.orphanType = 'orphan';
-        node.subdomainRoot = false;
-      }
-      node.children?.forEach((child) => applyTreeTypeFlags(child, treeType));
-    };
-
-    const purgeNodeFromTree = (tree, targetId) => {
-      if (!tree?.children?.length) return;
-      tree.children = tree.children.filter((child) => child.id !== targetId);
-      tree.children.forEach((child) => purgeNodeFromTree(child, targetId));
-    };
-
-    const applyRootFlags = (node, type) => {
-      if (!node) return;
-      if (type === 'subdomain') {
-        node.subdomainRoot = true;
-        if (!node.orphanType || node.orphanType === 'orphan') node.orphanType = 'subdomain';
-      } else {
-        node.subdomainRoot = false;
-        if (!node.orphanType || node.orphanType === 'subdomain') node.orphanType = 'orphan';
-      }
-    };
-
-    saveStateForUndo();
-
-    let nextRoot = structuredClone(root);
-    let nextOrphans = structuredClone(orphans);
-
-    const getMutableTreeRoot = (treeRootId) => (
-      treeRootId === nextRoot?.id
-        ? nextRoot
-        : nextOrphans.find(o => o.id === treeRootId)
-    );
-
-    const sourceTree = getMutableTreeRoot(sourceMeta.treeRootId);
-    if (!sourceTree) return;
-
-    let removedNode = null;
-    let oldParent = null;
-    let oldIndex = -1;
-
-    if (sourceTree.id === nodeId) {
-      // Removing an orphan/subdomain tree root
-      if (sourceTree.id === nextRoot?.id) return;
-      const idx = nextOrphans.findIndex(o => o.id === nodeId);
-      if (idx === -1) return;
-      removedNode = nextOrphans.splice(idx, 1)[0];
-    } else {
-      oldParent = findParent(sourceTree, nodeId);
-      if (oldParent) {
-        oldIndex = oldParent.children.findIndex(c => c.id === nodeId);
-      }
-      removedNode = removeFromTree(sourceTree, nodeId);
-    }
-
-    if (!removedNode) return;
-
-    maybeMarkNodeMoved(removedNode);
-
-    if (nextRoot) purgeNodeFromTree(nextRoot, nodeId);
-    nextOrphans = nextOrphans.filter((orphan) => orphan.id !== nodeId);
-    nextOrphans.forEach((orphan) => purgeNodeFromTree(orphan, nodeId));
-
-    if (newParentId === ORPHAN_CONTAINER_ID || newParentId === SUBDOMAIN_CONTAINER_ID) {
-      const isSubdomain = newParentId === SUBDOMAIN_CONTAINER_ID;
-      const orderedRoots = nextOrphans.filter(o => !!o.subdomainRoot === isSubdomain);
-      const rootIds = orderedRoots.map(o => o.id);
-      const fullIndex = (() => {
-        if (rootIds.length === 0) return nextOrphans.length;
-        if (insertIndex >= rootIds.length) {
-          const lastId = rootIds[rootIds.length - 1];
-          const lastIdx = nextOrphans.findIndex(o => o.id === lastId);
-          return lastIdx === -1 ? nextOrphans.length : lastIdx + 1;
-        }
-        const targetId = rootIds[insertIndex];
-        const targetIdx = nextOrphans.findIndex(o => o.id === targetId);
-        return targetIdx === -1 ? nextOrphans.length : targetIdx;
-      })();
-
-      clearTreeFlags(removedNode);
-      applyRootFlags(removedNode, isSubdomain ? 'subdomain' : 'orphan');
-      nextOrphans.splice(fullIndex, 0, removedNode);
-      setRoot(nextRoot);
-      setOrphans(nextOrphans);
       return;
     }
 
-    const targetTree = targetTreeRoot ? getMutableTreeRoot(targetMeta.treeRootId) : null;
-    if (!targetTree) return;
-    const newParent = findNodeById(targetTree, newParentId);
-    if (!newParent) return;
-
-    let adjustedIndex = insertIndex;
-    if (targetMeta && sourceMeta.treeRootId === targetMeta.treeRootId && oldParent?.id === newParentId && oldIndex !== -1) {
-      if (oldIndex < insertIndex) adjustedIndex = insertIndex - 1;
+    const result = applyBranchMoveToMap({
+      root,
+      orphans,
+      nodeId,
+      targetParentId: newParentId,
+      insertIndex,
+      rootChanges,
+      orphanContainerId: ORPHAN_CONTAINER_ID,
+      subdomainContainerId: SUBDOMAIN_CONTAINER_ID,
+    });
+    if (!result.ok) {
+      if (result.error) showToast(result.error, 'warning');
+      return;
     }
 
-    clearTreeFlags(removedNode);
-    if (targetMeta?.treeType === 'orphan' || targetMeta?.treeType === 'subdomain') {
-      applyTreeTypeFlags(removedNode, targetMeta.treeType);
-    }
-
-    newParent.children = newParent.children || [];
-    newParent.children.splice(adjustedIndex, 0, removedNode);
-
-    setRoot(nextRoot);
-    setOrphans(nextOrphans);
+    saveStateForUndo();
+    setRoot(result.root);
+    setOrphans(result.orphans);
   };
 
   // Calculate all valid drop zones based on current DOM positions
@@ -12770,6 +12672,29 @@ export default function App({ currentRoute, navigateToRoute }) {
     return nearest;
   };
 
+  const getDndCursorPoint = (event) => {
+    const delta = event?.delta || { x: 0, y: 0 };
+    const activatorEvent = event?.activatorEvent;
+    const touch = activatorEvent?.touches?.[0] || activatorEvent?.changedTouches?.[0];
+    const clientX = typeof activatorEvent?.clientX === 'number' ? activatorEvent.clientX : touch?.clientX;
+    const clientY = typeof activatorEvent?.clientY === 'number' ? activatorEvent.clientY : touch?.clientY;
+
+    if (typeof clientX === 'number' && typeof clientY === 'number') {
+      return {
+        x: clientX + delta.x,
+        y: clientY + delta.y,
+      };
+    }
+
+    const activatorRect = event?.active?.rect?.current?.initial;
+    if (!activatorRect) return null;
+
+    return {
+      x: activatorRect.left + activatorRect.width / 2 + delta.x,
+      y: activatorRect.top + activatorRect.height / 2 + delta.y,
+    };
+  };
+
   // dnd-kit drag handlers
   const handleDndDragStart = (event) => {
     const { active } = event;
@@ -12783,20 +12708,17 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const handleDndDragMove = (event) => {
-    const { active, delta } = event;
+    const { active } = event;
     if (!active) return;
 
-    const activatorRect = active.rect.current.initial;
-    if (!activatorRect) return;
-
-    const currentX = activatorRect.left + activatorRect.width / 2 + delta.x;
-    const currentY = activatorRect.top + activatorRect.height / 2 + delta.y;
+    const cursorPoint = getDndCursorPoint(event);
+    if (!cursorPoint) return;
 
     // Store cursor position for proximity filtering
-    setDragCursor({ x: currentX, y: currentY });
+    setDragCursor(cursorPoint);
 
     // Find nearest drop zone
-    const nearest = findNearestDropZone(currentX, currentY, active.id, 80, { includeDisabled: true });
+    const nearest = findNearestDropZone(cursorPoint.x, cursorPoint.y, active.id, 80, { includeDisabled: true });
     setActiveDropZone(nearest);
   };
 
@@ -12804,14 +12726,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     const { active } = event;
     const draggedNodeId = active.id;
 
-    // Get final pointer position from the event
-    // dnd-kit provides activatorEvent which has the original pointer position
-    // We need to calculate final position from delta
-    const delta = event.delta || { x: 0, y: 0 };
-    const activatorRect = active.rect.current.initial;
-    if (activatorRect) {
-      const finalX = activatorRect.left + activatorRect.width / 2 + delta.x;
-      const finalY = activatorRect.top + activatorRect.height / 2 + delta.y;
+    const cursorPoint = getDndCursorPoint(event);
+    if (cursorPoint) {
+      const finalX = cursorPoint.x;
+      const finalY = cursorPoint.y;
 
       // Find nearest drop zone
       const dropZone = findNearestDropZone(finalX, finalY, draggedNodeId, 80);
@@ -12902,72 +12820,20 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [commitColorUndoIfChanged, root, orphans, connections, colors, connectionColors]);
 
   const getMoveBlockReason = useCallback((sourceId, targetParentId) => {
-    if (!sourceId || !targetParentId) return 'Select a valid drop target.';
-    const sourceMeta = forestIndex.nodes.get(sourceId);
-    if (!sourceMeta) return null;
-
-    if (targetParentId === ORPHAN_CONTAINER_ID) {
-      if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
-        return 'Subdomain page with a URL can only move within its own subdomain.';
-      }
-      return null;
-    }
-
-    if (targetParentId === SUBDOMAIN_CONTAINER_ID && sourceMeta.hasUrl) {
-      return 'Subdomain root requires a blank URL.';
-    }
-
-    const targetMeta = forestIndex.nodes.get(targetParentId);
-    if (!targetMeta) return null;
-
-    const targetTree = forestIndex.trees.get(targetMeta.treeRootId);
-    if (!targetTree) return null;
-
-    if (targetTree.type === 'subdomain' && sourceMeta.hasUrl && sourceMeta.treeType !== 'subdomain') {
-      return 'Pages with URLs can’t be moved under a subdomain. Clear the URL first.';
-    }
-
-    if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
-      if (sourceMeta.treeRootId !== targetMeta.treeRootId) {
-        return 'Subdomain page with a URL can only move within its own subdomain.';
-      }
-    }
-
-    return null;
-  }, [forestIndex]);
+    return getBranchMoveBlockReason({
+      root,
+      orphans,
+      nodeId: sourceId,
+      targetParentId,
+      orphanContainerId: ORPHAN_CONTAINER_ID,
+      subdomainContainerId: SUBDOMAIN_CONTAINER_ID,
+    });
+  }, [orphans, root]);
 
   // Centralized drag/move rules for tree movement
   const canMoveNode = useCallback((sourceId, targetParentId) => {
-    if (!sourceId || !targetParentId) return false;
-    const sourceMeta = forestIndex.nodes.get(sourceId);
-    if (!sourceMeta) return false;
-
-    // Subdomain pages with URLs are locked to their own subdomain tree
-    if (sourceMeta.treeType === 'subdomain' && sourceMeta.hasUrl) {
-      const targetMeta = forestIndex.nodes.get(targetParentId);
-      return !!targetMeta && sourceMeta.treeRootId === targetMeta.treeRootId;
-    }
-
-    // Any node without an assigned URL can be dragged anywhere
-    if (!sourceMeta.hasUrl) return true;
-
-    // Container-level drops (root-level orphan/subdomain)
-    if (targetParentId === ORPHAN_CONTAINER_ID) return true;
-    if (targetParentId === SUBDOMAIN_CONTAINER_ID) return !sourceMeta.hasUrl;
-
-    const targetMeta = forestIndex.nodes.get(targetParentId);
-    if (!targetMeta) return false;
-
-    const targetTree = forestIndex.trees.get(targetMeta.treeRootId);
-    if (!targetTree) return false;
-
-    if (targetTree.type === 'subdomain' && sourceMeta.hasUrl && sourceMeta.treeType !== 'subdomain') {
-      return false;
-    }
-
-    // Root/Orphan/Subdomain-without-URL can move anywhere else
-    return true;
-  }, [forestIndex]);
+    return !getMoveBlockReason(sourceId, targetParentId);
+  }, [getMoveBlockReason]);
 
   // Process imported file (shared by both browse and drag-drop)
   const processImportFile = async (file) => {
@@ -13552,6 +13418,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onThumbnailLoad={handleThumbnailDisplayLoad}
                   onThumbnailError={handleThumbnailDisplayError}
                   expandedStacks={expandedStacks}
+                  activeBranchNodeIds={activeBranchNodeIds}
                   onToggleStack={(nodeId) => {
                     setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
                   }}

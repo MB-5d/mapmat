@@ -13,6 +13,7 @@ const OP_TYPES = Object.freeze({
   NODE_ADD: 'node.add',
   NODE_UPDATE: 'node.update',
   NODE_DELETE: 'node.delete',
+  NODE_MOVE: 'node.move',
   LINK_ADD: 'link.add',
   LINK_UPDATE: 'link.update',
   LINK_DELETE: 'link.delete',
@@ -189,6 +190,43 @@ function normalizeNodeDeletePayload(payload, errors) {
   };
 }
 
+function normalizeNonNegativeInteger(raw, field, errors, fallback = 0) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  const parsed = typeof raw === 'string' ? Number.parseInt(raw, 10) : raw;
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    pushError(errors, field, 'Must be a non-negative integer');
+    return fallback;
+  }
+  return parsed;
+}
+
+function normalizeNodeMovePayload(payload, errors) {
+  const allowed = ['nodeId', 'targetParentId', 'insertIndex', 'rootChanges'];
+  ensureAllowedKeys(payload, allowed, 'payload', errors);
+
+  let rootChanges = null;
+  if (payload.rootChanges !== null && payload.rootChanges !== undefined) {
+    if (!isPlainObject(payload.rootChanges)) {
+      pushError(errors, 'payload.rootChanges', 'Must be an object');
+    } else {
+      const changeKeys = Object.keys(payload.rootChanges);
+      changeKeys.forEach((key) => {
+        if (key !== 'annotations') {
+          pushError(errors, `payload.rootChanges.${key}`, 'Unsupported field');
+        }
+      });
+      rootChanges = { ...payload.rootChanges };
+    }
+  }
+
+  return {
+    nodeId: normalizePatternedString(payload.nodeId, 'payload.nodeId', ENTITY_ID_PATTERN, errors),
+    targetParentId: normalizePatternedString(payload.targetParentId, 'payload.targetParentId', ENTITY_ID_PATTERN, errors),
+    insertIndex: normalizeNonNegativeInteger(payload.insertIndex, 'payload.insertIndex', errors, 0),
+    rootChanges,
+  };
+}
+
 function normalizeLinkAddPayload(payload, errors) {
   const allowed = ['linkId', 'sourceId', 'targetId', 'link'];
   ensureAllowedKeys(payload, allowed, 'payload', errors);
@@ -280,6 +318,8 @@ function normalizePayload(type, rawPayload, errors) {
       return normalizeNodeUpdatePayload(rawPayload, errors);
     case OP_TYPES.NODE_DELETE:
       return normalizeNodeDeletePayload(rawPayload, errors);
+    case OP_TYPES.NODE_MOVE:
+      return normalizeNodeMovePayload(rawPayload, errors);
     case OP_TYPES.LINK_ADD:
       return normalizeLinkAddPayload(rawPayload, errors);
     case OP_TYPES.LINK_UPDATE:

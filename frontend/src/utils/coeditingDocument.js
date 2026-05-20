@@ -1,3 +1,7 @@
+const treeMoveUtils = require('./treeMoveUtils');
+
+const { applyBranchMoveToMap } = treeMoveUtils;
+
 class CoeditingDocumentError extends Error {
   constructor(code, message, details = null) {
     super(message);
@@ -12,7 +16,9 @@ function isPlainObject(value) {
 }
 
 function cloneDocument(document) {
-  return structuredClone(document || {});
+  return typeof structuredClone === 'function'
+    ? structuredClone(document || {})
+    : JSON.parse(JSON.stringify(document || {}));
 }
 
 function normalizeConnections(connections) {
@@ -281,6 +287,31 @@ function applyNodeDelete(document, operation) {
   removeConnectionsForNodeIds(document, collectNodeIds(removedNode));
 }
 
+function applyNodeMove(document, operation) {
+  const result = applyBranchMoveToMap({
+    root: document.root,
+    orphans: document.orphans,
+    nodeId: operation.payload.nodeId,
+    targetParentId: operation.payload.targetParentId,
+    insertIndex: operation.payload.insertIndex,
+    rootChanges: operation.payload.rootChanges,
+  });
+
+  if (!result.ok) {
+    throw new CoeditingDocumentError(
+      'COEDITING_INVALID_NODE_MOVE',
+      result.error || 'Node move is invalid',
+      {
+        nodeId: operation.payload.nodeId,
+        targetParentId: operation.payload.targetParentId,
+      }
+    );
+  }
+
+  document.root = result.root;
+  document.orphans = result.orphans;
+}
+
 function validateLinkEndpoints(document, sourceNodeId, targetNodeId) {
   if (!sourceNodeId || !targetNodeId) {
     throw new CoeditingDocumentError(
@@ -434,6 +465,9 @@ export function applyOperationToDocument(document, operation) {
       break;
     case 'node.delete':
       applyNodeDelete(nextDocument, operation);
+      break;
+    case 'node.move':
+      applyNodeMove(nextDocument, operation);
       break;
     case 'link.add':
       applyLinkAdd(nextDocument, operation);
