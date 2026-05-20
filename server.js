@@ -270,6 +270,14 @@ const SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
   Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? 20000)
 );
+const SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
+  5000,
+  Number(process.env.SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS ?? 6000)
+);
+const SCREENSHOT_PRIMARY_NETWORK_SETTLE_TIMEOUT_MS = Math.max(
+  250,
+  Number(process.env.SCREENSHOT_PRIMARY_NETWORK_SETTLE_TIMEOUT_MS ?? 750)
+);
 const SCREENSHOT_CACHE_TTL_MS = Math.max(
   60000,
   Number(process.env.SCREENSHOT_CACHE_TTL_MS ?? 604800000)
@@ -341,6 +349,10 @@ const IMAGE_CAPTURE_RETRY_BASE_DELAY_MS = Math.max(
 const IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE = Math.max(
   1,
   Number(process.env.IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE ?? 12)
+);
+const IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS = Math.max(
+  500,
+  Number(process.env.IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS ?? 2500)
 );
 const IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT = Math.max(
   100,
@@ -1900,6 +1912,7 @@ async function runImageCaptureJob(jobId, payload) {
   };
 
   const pendingAssetSaves = [];
+  let lastAssetFlushAt = Date.now();
   const appendNodeAssetUpdate = (nodeId, assets) => {
     summary.assetUpdateCursor += 1;
     summary.nodeAssetUpdates.push({
@@ -1929,7 +1942,10 @@ async function runImageCaptureJob(jobId, payload) {
       return;
     }
     pendingAssetSaves.push(entry);
-    if (pendingAssetSaves.length >= IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE) {
+    if (
+      pendingAssetSaves.length >= IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE
+      || Date.now() - lastAssetFlushAt >= IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS
+    ) {
       await flushAssetSaves();
     }
   };
@@ -1968,6 +1984,7 @@ async function runImageCaptureJob(jobId, payload) {
         error: entry.persistError || 'Saved image fields were not found on the map',
       });
     });
+    lastAssetFlushAt = Date.now();
   }
 
   for (const record of targetPlan.skippedRecords) {
@@ -1992,7 +2009,13 @@ async function runImageCaptureJob(jobId, payload) {
   }
 
   const getCaptureOptionsForPhase = (phaseName) => {
-    if (phaseName !== 'recovery') return {};
+    if (phaseName !== 'recovery') {
+      if (captureType !== SCREENSHOT_TYPES.thumb) return {};
+      return {
+        captureTimeoutMs: SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS,
+        networkSettleTimeoutMs: SCREENSHOT_PRIMARY_NETWORK_SETTLE_TIMEOUT_MS,
+      };
+    }
     return {
       captureTimeoutMs: captureType === SCREENSHOT_TYPES.thumb
         ? SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS

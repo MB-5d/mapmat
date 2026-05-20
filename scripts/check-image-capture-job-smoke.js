@@ -46,8 +46,10 @@ function stopChild(child) {
 }
 
 function startFixtureServer(port) {
+  const hitCounts = new Map();
   const server = http.createServer((req, res) => {
     const pathname = new URL(req.url, `http://127.0.0.1:${port}`).pathname;
+    hitCounts.set(pathname, (hitCounts.get(pathname) || 0) + 1);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     if (pathname === '/slow') {
       setTimeout(() => {
@@ -95,6 +97,7 @@ function startFixtureServer(port) {
         </body>
       </html>`);
   });
+  server.hitCounts = hitCounts;
   return new Promise((resolve, reject) => {
     server.listen(port, '127.0.0.1', () => resolve(server));
     server.on('error', reject);
@@ -119,7 +122,8 @@ function startBackend(port, dbPath, screenshotDir) {
       IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS: '1',
       IMAGE_CAPTURE_RECOVERY_MAX_PASSES: '1',
       IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS: '1',
-      SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS: '5000',
+      SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS: '12000',
+      SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS: '5000',
       SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS: '12000',
       SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS: '3000',
       EMAIL_PROVIDER: 'log',
@@ -539,6 +543,10 @@ async function run() {
     assert.strictEqual(thumbJob.result.phase, 'complete', 'thumbnail job should finish after recovery');
     assert.strictEqual(thumbJob.result.failed + thumbJob.result.blocked + thumbJob.result.missingAsset, 0, 'thumbnail failures found');
     assert(Number(thumbJob.result.assetUpdateCursor) >= 10, 'missing asset update cursor');
+    assert(
+      (fixtureServer.hitCounts.get('/slow') || 0) >= 2,
+      'slow pages should fail fast in the primary pass and retry in recovery'
+    );
 
     const withThumbs = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
     const thumbNodes = collectNodes(withThumbs.map.root, withThumbs.map.orphans);
