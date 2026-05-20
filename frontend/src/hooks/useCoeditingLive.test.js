@@ -26,6 +26,18 @@ function createDeferred() {
   return { promise, resolve, reject };
 }
 
+function createMockSocket() {
+  return {
+    readyState: 1,
+    send: jest.fn(),
+    close: jest.fn(),
+    onopen: null,
+    onmessage: null,
+    onclose: null,
+    onerror: null,
+  };
+}
+
 describe('useCoeditingLive', () => {
   let latestLiveState = null;
   let applyDocument;
@@ -117,15 +129,7 @@ describe('useCoeditingLive', () => {
     latestLiveState = null;
     applyDocument = jest.fn();
     onWarn = jest.fn();
-    socket = {
-      readyState: 1,
-      send: jest.fn(),
-      close: jest.fn(),
-      onopen: null,
-      onmessage: null,
-      onclose: null,
-      onerror: null,
-    };
+    socket = createMockSocket();
     container = document.createElement('div');
     document.body.appendChild(container);
     renderedRoot = createRoot(container);
@@ -234,5 +238,152 @@ describe('useCoeditingLive', () => {
     const latestDocument = applyDocument.mock.calls[applyDocument.mock.calls.length - 1][0];
     expect(latestDocument.root.children).toHaveLength(1);
     expect(latestDocument.root.children[0].id).toBe('node-1');
+  });
+
+  it('refreshes the document and opens a fresh socket after an idle disconnect', async () => {
+    await connectLiveSession();
+
+    const staleSocket = socket;
+    const nextSocket = createMockSocket();
+    openCoeditingSocket.mockClear();
+    getCoeditingLiveDocument.mockClear();
+    openCoeditingSocket.mockReturnValue(nextSocket);
+
+    act(() => {
+      staleSocket.onclose?.();
+    });
+
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.RECONNECTING);
+    expect(staleSocket.close).toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getCoeditingLiveDocument).toHaveBeenCalledWith('map-1');
+    expect(openCoeditingSocket).toHaveBeenCalledWith('map-1');
+    expect(latestLiveState.liveStatus).not.toBe(COEDITING_LIVE_STATUS.OUT_OF_SYNC);
+
+    act(() => {
+      nextSocket.onopen?.();
+    });
+
+    act(() => {
+      nextSocket.onmessage?.({
+        data: JSON.stringify({
+          type: 'welcome',
+          heartbeatIntervalSec: 20,
+        }),
+      });
+    });
+
+    act(() => {
+      nextSocket.onmessage?.({
+        data: JSON.stringify({
+          type: 'joined',
+          heartbeatIntervalSec: 20,
+          participants: [],
+        }),
+      });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.CONNECTED);
+    expect(latestLiveState.liveStatusDetail).toBe('Connected');
+  });
+
+  it('manual resync closes a stale socket and clears out-of-sync after rejoining', async () => {
+    await connectLiveSession();
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          type: 'error',
+          code: 'COEDITING_READ_ONLY_FALLBACK',
+        }),
+      });
+    });
+
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.OUT_OF_SYNC);
+
+    const staleSocket = socket;
+    const nextSocket = createMockSocket();
+    openCoeditingSocket.mockReturnValue(nextSocket);
+    getCoeditingLiveDocument.mockClear();
+
+    let resyncPromise;
+    await act(async () => {
+      resyncPromise = latestLiveState.resync();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(staleSocket.close).toHaveBeenCalled();
+    expect(getCoeditingLiveDocument).toHaveBeenCalledWith('map-1');
+
+    act(() => {
+      nextSocket.onopen?.();
+    });
+
+    act(() => {
+      nextSocket.onmessage?.({
+        data: JSON.stringify({
+          type: 'welcome',
+          heartbeatIntervalSec: 20,
+        }),
+      });
+    });
+
+    act(() => {
+      nextSocket.onmessage?.({
+        data: JSON.stringify({
+          type: 'joined',
+          heartbeatIntervalSec: 20,
+          participants: [],
+        }),
+      });
+    });
+
+    let resyncResult;
+    await act(async () => {
+      resyncResult = await resyncPromise;
+    });
+
+    expect(resyncResult).toBe(true);
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.CONNECTED);
+    expect(latestLiveState.liveStatusDetail).toBe('Connected');
+  });
+
+  it('manual resync failure keeps the hook out of sync', async () => {
+    await connectLiveSession();
+
+    act(() => {
+      socket.onmessage?.({
+        data: JSON.stringify({
+          type: 'error',
+          code: 'COEDITING_READ_ONLY_FALLBACK',
+        }),
+      });
+    });
+
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.OUT_OF_SYNC);
+
+    openCoeditingSocket.mockClear();
+    getCoeditingLiveDocument.mockRejectedValueOnce(new Error('Live document unavailable'));
+
+    let resyncResult;
+    await act(async () => {
+      resyncResult = await latestLiveState.resync();
+    });
+
+    expect(resyncResult).toBe(false);
+    expect(openCoeditingSocket).not.toHaveBeenCalled();
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.OUT_OF_SYNC);
+    expect(latestLiveState.liveStatusDetail).toBe('Live document unavailable');
   });
 });

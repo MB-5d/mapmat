@@ -4212,7 +4212,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     isLiveActive
     && hasMap
     && currentMap?.id
-    && liveStatus !== COEDITING_LIVE_STATUS.CONNECTED
+    && liveStatus === COEDITING_LIVE_STATUS.OUT_OF_SYNC
   );
   const commentPopoverReadOnlyMessage = useMemo(() => {
     if (effectiveFeatureGates.mapComment) return '';

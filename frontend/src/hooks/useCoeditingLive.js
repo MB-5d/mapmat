@@ -24,6 +24,7 @@ const STATUS = Object.freeze({
 const CLIENT_NAME = 'web';
 const DEFAULT_HEARTBEAT_SEC = 20;
 const RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
+const JOIN_TIMEOUT_MS = 8000;
 const MAX_SELECTION_IDS = 12;
 
 function clampInt(value, fallback, { min, max }) {
@@ -409,123 +410,214 @@ export function useCoeditingLive({
     });
   }, [enabled, sendSocketJson]);
 
-  const scheduleReconnect = useCallback(() => {
-    if (!enabled || manualStopRef.current) return;
-    clearReconnectTimer();
-    resetHeartbeat();
-    setLiveStatus(STATUS.RECONNECTING, 'Reconnecting to live editing…');
-    const attempt = Math.min(reconnectAttemptRef.current, RECONNECT_DELAYS_MS.length - 1);
-    const delay = RECONNECT_DELAYS_MS[attempt];
-    reconnectAttemptRef.current += 1;
-    reconnectTimerRef.current = window.setTimeout(async () => {
+  const openLiveSocket = useCallback(({ requireJoin = false } = {}) => {
+    if (!enabled || !mapId) return Promise.resolve(false);
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let joined = false;
+      let joinTimer = null;
+      let socket = null;
+
+      const settle = (value, error = null) => {
+        if (settled) return;
+        settled = true;
+        if (joinTimer) {
+          window.clearTimeout(joinTimer);
+          joinTimer = null;
+        }
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(value);
+      };
+
+      const closeSocketSilently = () => {
+        if (!socket) return;
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onclose = null;
+        socket.onerror = null;
+        if (socketRef.current === socket) {
+          socketRef.current = null;
+        }
+        try {
+          socket.close();
+        } catch {
+          // Ignore close errors during retry cleanup.
+        }
+      };
+
+      if (requireJoin) {
+        joinTimer = window.setTimeout(() => {
+          closeSocketSilently();
+          joiningRef.current = false;
+          settle(false, new Error('Timed out while rejoining live editing'));
+        }, JOIN_TIMEOUT_MS);
+      }
+
       try {
-        await hydrateFromServer({ preferReplay: true });
+        socket = openCoeditingSocket(mapId);
+        socketRef.current = socket;
       } catch (error) {
-        markOutOfSync(error?.message || 'Failed to resync live document');
+        settle(false, error);
         return;
       }
-      try {
-        const socket = openCoeditingSocket(mapId);
-        socketRef.current = socket;
 
-        socket.onopen = () => {
-          setLiveStatus(STATUS.CONNECTING, 'Joining live room…');
-        };
+      socket.onopen = () => {
+        setLiveStatus(STATUS.CONNECTING, 'Joining live room…');
+      };
 
-        socket.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data);
-            if (!message?.type) return;
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (!message?.type) return;
 
-            if (message.type === 'welcome') {
-              heartbeatIntervalSecRef.current = message.heartbeatIntervalSec || DEFAULT_HEARTBEAT_SEC;
-              sendSocketJson({
-                type: 'join',
-                sessionId: sessionIdRef.current,
-                clientName: CLIENT_NAME,
-                accessMode,
-              });
-              return;
-            }
-
-            if (message.type === 'joined') {
-              joiningRef.current = true;
-              reconnectAttemptRef.current = 0;
-              const roomMode = String(message.roomMode || '').trim().toLowerCase();
-              const isReadOnlyRoom = roomMode === 'read_only';
-              const isReadOnlyViewer = isReadOnlyRoom && !canEdit;
-              participantsRef.current = Array.isArray(message.participants) ? message.participants : [];
-              setLiveStatus(
-                isReadOnlyRoom && canEdit ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED,
-                isReadOnlyViewer
-                  ? 'Read-only live updates'
-                  : (isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected')
-              );
-              setParticipants(participantsRef.current);
-              resetHeartbeat();
-              heartbeatTimerRef.current = window.setInterval(() => {
-                sendSocketJson({ type: 'heartbeat' });
-              }, (message.heartbeatIntervalSec || DEFAULT_HEARTBEAT_SEC) * 1000);
-              broadcastSelectionNow();
-              if (!isReadOnlyRoom) {
-                flushQueue();
-              }
-              return;
-            }
-
-            if (message.type === 'presence.sync') {
-              participantsRef.current = Array.isArray(message.participants) ? message.participants : [];
-              setParticipants(participantsRef.current);
-              return;
-            }
-
-            if (message.type === 'operation.committed') {
-              const applied = acceptCommittedOperation(message.operation, {
-                liveDocumentSummary: message.liveDocument,
-              });
-              if (applied) {
-                onCommittedOperationRef.current?.(message.operation, {
-                  participant: participantsRef.current.find(
-                    (participant) => participant?.actorId && participant.actorId === message.operation?.actorId
-                  ) || null,
-                });
-              }
-              return;
-            }
-
-            if (message.type === 'session.replaced') {
-              cleanupSocket();
-              scheduleReconnect();
-              return;
-            }
-
-            if (message.type === 'error') {
-              if (message.code === 'COEDITING_READ_ONLY_FALLBACK') {
-                markOutOfSync('Live editing is temporarily read-only');
-                return;
-              }
-              if (message.error) {
-                setStatusDetail(message.error);
-              }
-            }
-          } catch {
-            // Ignore invalid messages and let heartbeat/reconnect recover.
+          if (message.type === 'welcome') {
+            heartbeatIntervalSecRef.current = message.heartbeatIntervalSec || DEFAULT_HEARTBEAT_SEC;
+            sendSocketJson({
+              type: 'join',
+              sessionId: sessionIdRef.current,
+              clientName: CLIENT_NAME,
+              accessMode,
+            });
+            return;
           }
-        };
 
-        socket.onerror = () => {
-          setStatusDetail('Socket error');
-        };
+          if (message.type === 'joined') {
+            joiningRef.current = true;
+            joined = true;
+            reconnectAttemptRef.current = 0;
+            const roomMode = String(message.roomMode || '').trim().toLowerCase();
+            const isReadOnlyRoom = roomMode === 'read_only';
+            const isReadOnlyViewer = isReadOnlyRoom && !canEdit;
+            participantsRef.current = Array.isArray(message.participants) ? message.participants : [];
+            setLiveStatus(
+              isReadOnlyRoom && canEdit ? STATUS.OUT_OF_SYNC : STATUS.CONNECTED,
+              isReadOnlyViewer
+                ? 'Read-only live updates'
+                : (isReadOnlyRoom ? 'Live editing is temporarily read-only' : 'Connected')
+            );
+            setParticipants(participantsRef.current);
+            resetHeartbeat();
+            heartbeatTimerRef.current = window.setInterval(() => {
+              sendSocketJson({ type: 'heartbeat' });
+            }, (message.heartbeatIntervalSec || DEFAULT_HEARTBEAT_SEC) * 1000);
+            broadcastSelectionNow();
+            if (!isReadOnlyRoom) {
+              flushQueue();
+              settle(true);
+            } else if (canEdit) {
+              if (requireJoin) {
+                settle(false, new Error('Live editing is temporarily read-only'));
+              } else {
+                settle(false);
+              }
+            } else {
+              settle(true);
+            }
+            return;
+          }
 
-        socket.onclose = () => {
-          joiningRef.current = false;
-          scheduleReconnect();
-        };
+          if (message.type === 'presence.sync') {
+            participantsRef.current = Array.isArray(message.participants) ? message.participants : [];
+            setParticipants(participantsRef.current);
+            return;
+          }
+
+          if (message.type === 'operation.committed') {
+            const applied = acceptCommittedOperation(message.operation, {
+              liveDocumentSummary: message.liveDocument,
+            });
+            if (applied) {
+              onCommittedOperationRef.current?.(message.operation, {
+                participant: participantsRef.current.find(
+                  (participant) => participant?.actorId && participant.actorId === message.operation?.actorId
+                ) || null,
+              });
+            }
+            return;
+          }
+
+          if (message.type === 'session.replaced') {
+            cleanupSocket();
+            scheduleReconnectRef.current?.({ immediate: true });
+            return;
+          }
+
+          if (message.type === 'error') {
+            if (message.code === 'COEDITING_READ_ONLY_FALLBACK') {
+              markOutOfSync('Live editing is temporarily read-only');
+              return;
+            }
+            if (message.error) {
+              setStatusDetail(message.error);
+            }
+          }
+        } catch {
+          // Ignore invalid messages and let heartbeat/reconnect recover.
+        }
+      };
+
+      socket.onerror = () => {
+        setStatusDetail('Socket error');
+      };
+
+      socket.onclose = () => {
+        joiningRef.current = false;
+        if (requireJoin && !joined) {
+          settle(false, new Error('Failed to rejoin live editing'));
+          return;
+        }
+        if (!manualStopRef.current) {
+          scheduleReconnectRef.current?.();
+        }
+        if (!joined) {
+          settle(false);
+        }
+      };
+    });
+  }, [
+    acceptCommittedOperation,
+    accessMode,
+    broadcastSelectionNow,
+    canEdit,
+    cleanupSocket,
+    enabled,
+    flushQueue,
+    mapId,
+    markOutOfSync,
+    resetHeartbeat,
+    sendSocketJson,
+    setLiveStatus,
+  ]);
+
+  const scheduleReconnect = useCallback(({ immediate = false, refreshBeforeConnect = true } = {}) => {
+    if (!enabled || manualStopRef.current) return;
+    clearReconnectTimer();
+    cleanupSocket();
+    setLiveStatus(STATUS.RECONNECTING, 'Reconnecting to live editing…');
+    const attempt = Math.min(reconnectAttemptRef.current, RECONNECT_DELAYS_MS.length - 1);
+    const delay = immediate ? 0 : RECONNECT_DELAYS_MS[attempt];
+    if (!immediate) {
+      reconnectAttemptRef.current += 1;
+    }
+    reconnectTimerRef.current = window.setTimeout(async () => {
+      reconnectTimerRef.current = null;
+      try {
+        if (refreshBeforeConnect) {
+          await hydrateFromServer();
+        }
+        await openLiveSocket();
       } catch (error) {
-    markOutOfSync(error?.message || 'Failed to open live transport');
+        if (!manualStopRef.current) {
+          setStatusDetail(error?.message || 'Reconnecting to live editing…');
+          scheduleReconnectRef.current?.();
+        }
       }
     }, delay);
-  }, [acceptCommittedOperation, accessMode, broadcastSelectionNow, canEdit, cleanupSocket, clearReconnectTimer, enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, resetHeartbeat, sendSocketJson, setLiveStatus]);
+  }, [cleanupSocket, clearReconnectTimer, enabled, hydrateFromServer, openLiveSocket, setLiveStatus]);
 
   useEffect(() => {
     currentMapIdRef.current = mapId || null;
@@ -564,7 +656,7 @@ export function useCoeditingLive({
     hydrateFromServerRef.current()
       .then(() => {
         if (disposed || manualStopRef.current || currentMapIdRef.current !== mapId) return;
-        scheduleReconnectRef.current?.();
+        scheduleReconnectRef.current?.({ refreshBeforeConnect: false });
       })
       .catch((error) => {
         if (disposed || manualStopRef.current || currentMapIdRef.current !== mapId) return;
@@ -632,23 +724,17 @@ export function useCoeditingLive({
   const resync = useCallback(async () => {
     if (!enabled || !mapId) return false;
     try {
+      clearReconnectTimer();
+      cleanupSocket();
+      reconnectAttemptRef.current = 0;
       setLiveStatus(STATUS.RECONNECTING, 'Resyncing live document…');
       await hydrateFromServer();
-      setLiveStatus(
-        joiningRef.current ? STATUS.CONNECTED : STATUS.RECONNECTING,
-        joiningRef.current ? 'Connected' : 'Reconnecting to live editing…'
-      );
-      if (!socketRef.current || socketRef.current.readyState > WebSocket.OPEN) {
-        scheduleReconnect();
-      } else {
-        flushQueue();
-      }
-      return true;
+      return await openLiveSocket({ requireJoin: true });
     } catch (error) {
       markOutOfSync(error?.message || 'Failed to resync live document');
       return false;
     }
-  }, [enabled, flushQueue, hydrateFromServer, mapId, markOutOfSync, scheduleReconnect, setLiveStatus]);
+  }, [cleanupSocket, clearReconnectTimer, enabled, hydrateFromServer, mapId, markOutOfSync, openLiveSocket, setLiveStatus]);
 
   const resetToDocument = useCallback((document) => {
     if (!enabled || !mapId || !document) return false;
