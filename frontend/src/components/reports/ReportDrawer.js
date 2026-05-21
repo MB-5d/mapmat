@@ -462,6 +462,7 @@ const ReportDrawer = ({
                   </div>
                   <div className="report-cell report-cell-count">{entry.types.length}</div>
                   <button
+                    type="button"
                     className="report-map-link"
                     onClick={(event) => {
                       event.stopPropagation();

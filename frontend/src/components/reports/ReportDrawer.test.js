@@ -187,6 +187,24 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('Pricing OG');
   });
 
+  test('locates a report row on the map from the row action', () => {
+    const onLocateNode = jest.fn();
+    renderDrawer({ onLocateNode });
+
+    const seeOnMapButton = Array.from(container.querySelectorAll('.report-map-link')).find((button) =>
+      button.textContent.includes('See on map')
+    );
+
+    expect(seeOnMapButton.type).toBe('button');
+
+    act(() => {
+      seeOnMapButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onLocateNode).toHaveBeenCalledWith('2');
+    expect(container.textContent).not.toContain('Canonical:');
+  });
+
   test('runs insights from the empty state', () => {
     const onRunInsights = jest.fn();
     renderDrawer({ onRunInsights });

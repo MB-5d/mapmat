@@ -4258,10 +4258,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     }, { skipPanClamp: true });
   }, [applyTransform, currentMap?.id, mapOrientation, showThumbnails, useLargeMapSurface]);
 
-  const animatePanTo = useCallback((target) => {
+  const animatePanTo = useCallback((target, options = {}) => {
     const start = { ...panRef.current };
     const startTime = performance.now();
     const duration = 360;
+    const { skipPanClamp = false } = options;
 
     const tick = (now) => {
       const elapsed = Math.min((now - startTime) / duration, 1);
@@ -4270,7 +4271,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         x: start.x + (target.x - start.x) * ease,
         y: start.y + (target.y - start.y) * ease,
       };
-      applyTransform({ scale: scaleRef.current, x: next.x, y: next.y });
+      applyTransform({ scale: scaleRef.current, x: next.x, y: next.y }, { skipPanClamp });
       if (elapsed < 1) {
         requestAnimationFrame(tick);
       }
@@ -4423,7 +4424,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         x: (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scale,
         y: canvas.clientHeight / 2 - nodeCenterY * scale,
       };
-      animatePanTo(targetPan);
+      animatePanTo(targetPan, { skipPanClamp: true });
     };
 
     requestAnimationFrame(() => {
@@ -4456,6 +4457,23 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [findNodeByUrlInMap, focusNodeById]);
 
   const canLocateUrlOnMap = useCallback((url) => !!findNodeByUrlInMap(url), [findNodeByUrlInMap]);
+
+  const locateReportNodeOnMap = useCallback((nodeId) => {
+    if (!nodeId) return;
+    setSelectedNodeIds(new Set([nodeId]));
+    setShowReportDrawer(false);
+    requestAnimationFrame(() => {
+      focusNodeById(nodeId);
+    });
+  }, [focusNodeById]);
+
+  const locateReportUrlOnMap = useCallback((url) => {
+    if (!url) return false;
+    const match = findNodeByUrlInMap(url);
+    if (!match?.id) return false;
+    locateReportNodeOnMap(match.id);
+    return true;
+  }, [findNodeByUrlInMap, locateReportNodeOnMap]);
 
   const selectCaptureIssue = useCallback((issue) => {
     if (!issue?.nodeId) return;
@@ -15077,10 +15095,8 @@ export default function App({ currentRoute, navigateToRoute }) {
               insightsLoading={insightsLoading}
               insightsError={insightsError}
               onRunInsights={runMapInsights}
-              onLocateNode={(nodeId) => {
-                focusNodeById(nodeId);
-              }}
-              onLocateUrl={locateUrlOnMap}
+              onLocateNode={locateReportNodeOnMap}
+              onLocateUrl={locateReportUrlOnMap}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
               scanMeta={scanMeta}
