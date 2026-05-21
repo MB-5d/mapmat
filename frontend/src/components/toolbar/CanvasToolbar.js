@@ -15,6 +15,7 @@ import {
   MessageSquare,
   MousePointer2,
   Palette,
+  Ratio,
   RefreshCcw,
   Redo2,
   Share2,
@@ -85,6 +86,8 @@ const CanvasToolbar = ({
   onToggleLegendMenu,
   legendMenuRef,
   legendPanel,
+  mapOrientation = 'vertical',
+  onToggleOrientation,
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
@@ -134,6 +137,8 @@ const CanvasToolbar = ({
   const undoBlockedByLive = !canUndo && !!undoRedoDisabledReason;
   const redoBlockedByLive = !canRedo && !!undoRedoDisabledReason;
   const shareUnavailable = !hasSavedMap;
+  const isHorizontalOrientation = mapOrientation === 'horizontal';
+  const orientationLabel = `Orientation: ${isHorizontalOrientation ? 'Horizontal' : 'Vertical'}`;
 
   return (
   <div className="canvas-toolbar" data-feedback-id="canvas-toolbar" data-feedback-label="Canvas toolbar">
@@ -311,6 +316,15 @@ const CanvasToolbar = ({
         </MenuPanel>
       )}
     </div>
+    <ToolButton
+      active={isHorizontalOrientation}
+      onClick={onToggleOrientation}
+      icon={<Ratio />}
+      label={orientationLabel}
+      title={orientationLabel}
+      disabled={!hasMap}
+      aria-pressed={isHorizontalOrientation}
+    />
 
     {canEdit && <div className="canvas-toolbar-divider" />}
 

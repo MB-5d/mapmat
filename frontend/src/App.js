@@ -14070,10 +14070,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                     changeStatusOptions={markerStatusOptions}
                     showChangeSection={showMarkerSection}
-                    mapOrientation={mapOrientation}
-                    onMapOrientationChange={(nextOrientation) => {
-                      setMapOrientation(normalizeMapOrientation(nextOrientation));
-                    }}
                     showViewDropdown={showViewDropdown}
                     onToggleDropdown={() => setShowViewDropdown((prev) => !prev)}
                     viewDropdownRef={viewDropdownRef}
@@ -14116,6 +14112,16 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                   />
                 ),
+                mapOrientation,
+                onToggleOrientation: () => {
+                  setMapOrientation((currentOrientation) => (
+                    normalizeMapOrientation(currentOrientation) === MAP_ORIENTATIONS.HORIZONTAL
+                      ? MAP_ORIENTATIONS.VERTICAL
+                      : MAP_ORIENTATIONS.HORIZONTAL
+                  ));
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                },
                 onToggleImageMenu: () => {
                   if (showImageMenu) {
                     setShowImageMenu(false);

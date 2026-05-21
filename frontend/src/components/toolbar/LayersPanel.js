@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowDown, ArrowRight, Check, ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 
 import { MenuItem, MenuSectionHeader } from '../ui/Menu';
 
@@ -17,8 +17,6 @@ const LayersPanel = ({
   onToggleChangeStatus,
   changeStatusOptions = [],
   showChangeSection = false,
-  mapOrientation = 'vertical',
-  onMapOrientationChange,
   showViewDropdown,
   onToggleDropdown,
   viewDropdownRef,
@@ -53,40 +51,8 @@ const LayersPanel = ({
     />
   );
 
-  const OrientationOption = ({ value, label, icon }) => {
-    const active = mapOrientation === value;
-    return (
-      <MenuItem
-        className="layers-panel-item"
-        icon={icon}
-        label={label}
-        selected={active}
-        onClick={() => onMapOrientationChange?.(value)}
-        role="menuitemradio"
-        aria-checked={active}
-        endSlot={active ? (
-          <span className="layers-panel-toggle">
-            <Check size={16} />
-          </span>
-        ) : null}
-      />
-    );
-  };
-
   const panelList = (
     <div className="layers-panel-list">
-          <MenuSectionHeader className="layers-panel-section">Orientation</MenuSectionHeader>
-          <OrientationOption
-            value="vertical"
-            label="Vertical"
-            icon={<ArrowDown size={16} />}
-          />
-          <OrientationOption
-            value="horizontal"
-            label="Horizontal"
-            icon={<ArrowRight size={16} />}
-          />
-
           {showScanLayers && (
             <>
               {hasPlacementLayers && (

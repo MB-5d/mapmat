@@ -140,6 +140,54 @@ describe('CanvasToolbar', () => {
     expect(saveButton.disabled).toBe(true);
   });
 
+  test('shows orientation as a top-level toolbar action next to legend', () => {
+    const onToggleOrientation = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit={false}
+          canViewComments={false}
+          canViewVersionHistory={false}
+          activeTool="select"
+          connectionTool={null}
+          showCommentsPanel={false}
+          showReportDrawer={false}
+          showLayersMenu={false}
+          layersMenuRef={{ current: null }}
+          showLegendMenu={false}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+          mapOrientation="horizontal"
+          onToggleOrientation={onToggleOrientation}
+        />
+      );
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const legendButton = container.querySelector('button[aria-label="Legend"]');
+    const orientationButton = container.querySelector('button[aria-label="Orientation: Horizontal"]');
+
+    expect(orientationButton).not.toBeNull();
+    expect(orientationButton.className).toContain('active');
+    expect(orientationButton.getAttribute('aria-pressed')).toBe('true');
+    expect(buttons.indexOf(orientationButton)).toBe(buttons.indexOf(legendButton) + 1);
+
+    act(() => {
+      orientationButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onToggleOrientation).toHaveBeenCalledTimes(1);
+  });
+
   test('uses combined image download actions', () => {
     const onDownloadImagesAll = jest.fn();
     const onDownloadImagesSelected = jest.fn();
