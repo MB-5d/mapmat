@@ -3366,8 +3366,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [root, savedMapCommentsByNode, useBackendComments]);
 
   const largeMapNodeCount = useMemo(() => (
-    countLargeMapNodes(root, orphans)
-  ), [orphans, root]);
+    currentMap?.largeMapShell
+      ? Number(currentMap.nodeCount || 0)
+      : countLargeMapNodes(root, orphans)
+  ), [currentMap?.largeMapShell, currentMap?.nodeCount, orphans, root]);
 
   const useLargeMapSurface = shouldUseLargeMapSurface({
     nodeCount: largeMapNodeCount,
@@ -3375,7 +3377,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   });
 
   // Build a unified index for root + orphan + subdomain trees
-  const forestIndex = useMemo(() => buildForestIndex(root, orphans), [root, orphans]);
+  const forestIndex = useMemo(() => (
+    useLargeMapSurface ? { nodes: new Map(), trees: new Map() } : buildForestIndex(root, orphans)
+  ), [root, orphans, useLargeMapSurface]);
 
   const mapLayout = useMemo(() => {
     if (useLargeMapSurface) return null;
@@ -4645,6 +4649,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (
       !currentMap?.id
       || !root
+      || currentMap?.largeMapShell
       || isImportedMap
       || isViewingHistoricalVersion
       || isCollaborativeLiveEditingRestricted
@@ -4720,7 +4725,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [activeImageCaptureJob, areMapPermissionsPending, currentMap?.id, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [activeImageCaptureJob, areMapPermissionsPending, currentMap?.id, currentMap?.largeMapShell, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   useEffect(() => {
     if (!isCollaborativeLiveEditingRestricted) return;
@@ -5232,9 +5237,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       lastVersionSnapshotRef.current = '';
       return;
     }
+    if (currentMap?.largeMapShell) {
+      setMapVersions([]);
+      setActiveVersionId(null);
+      setLatestVersionId(null);
+      versionBaselineRef.current = null;
+      lastVersionSnapshotRef.current = '';
+      return;
+    }
     loadMapVersions(currentMap.id);
     lastAutosaveVersionAtRef.current = 0;
-  }, [currentMap?.id, loadMapVersions]);
+  }, [currentMap?.id, currentMap?.largeMapShell, loadMapVersions]);
 
   useEffect(() => {
     if (currentMap?.id) {
@@ -8550,7 +8563,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (pendingLoadMap) {
         const mapToLoad = pendingLoadMap;
         setPendingLoadMap(null);
-        loadMap(mapToLoad);
+        if (mapToLoad.root) {
+          loadMap(mapToLoad);
+        } else if (mapToLoad.id) {
+          await loadSavedMapById(mapToLoad.id);
+        }
         return;
       }
       if (wasNewMap && lastHistoryId && lastScanUrl && root?.url === lastScanUrl) {
@@ -8710,7 +8727,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowThumbnails(mapHasThumbnails);
     clearCaptureIssues();
     resetThumbnailQueue(0);
-    loadMapVersions(map.id);
+    setMapVersions([]);
+    setLatestVersionId(null);
     setShowProjectsModal(false);
     setEditingProjectId(null);
     setEditingMapId(null);
@@ -8720,9 +8738,85 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`Loaded "${map.name}"`, 'success');
     }
     scheduleResetViewRef.current?.();
-  }, [applyTransform, clearCaptureIssues, loadMapVersions, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
+  }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
+
+  const loadLargeMapShell = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    const rootSummary = map?.rootSummary || {};
+    const shellRoot = {
+      id: rootSummary.id || `map-${map.id}-root`,
+      title: rootSummary.title || map.name || 'Untitled Map',
+      url: rootSummary.url || map.url || '',
+      children: [],
+    };
+    resetAutosaveTracking({
+      snapshot: serializeMapAutosaveSnapshot({
+        name: map?.name || '',
+        root: shellRoot,
+        orphans: [],
+        connections: [],
+        colors: map?.colors || DEFAULT_COLORS,
+        connectionColors: map?.connectionColors || DEFAULT_CONNECTION_COLORS,
+        project_id: map?.project_id || null,
+      }),
+    });
+    setMapPermissions(null);
+    resetScanLayers();
+    setHasCreatedShareLink(false);
+    setCurrentShareAccess(null);
+    setExpandedStacks({});
+    setRoot(shellRoot);
+    setOrphans([]);
+    setConnections([]);
+    setColors(map.colors || DEFAULT_COLORS);
+    setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
+    setCurrentMap({
+      ...map,
+      root: shellRoot,
+      orphans: [],
+      connections: [],
+      largeMapShell: true,
+    });
+    setMapInsights(null);
+    setInsightsError('');
+    if (!skipNavigation) {
+      navigateToRoute(createMapRoute(map.id));
+    }
+    setMapSaveConflict(null);
+    setMapName(map.name || '');
+    setActiveVersionId(null);
+    setShowVersionEditPrompt(false);
+    versionBaselineRef.current = null;
+    setSelectedNodeIds(new Set());
+    setSelectionBox(null);
+    setThumbnailScopeIds(map.hasThumbnails ? new Set() : null);
+    setShowImageMenu(false);
+    setShowImageReportDrawer(false);
+    setShowThumbnails(!!map.hasThumbnails);
+    clearCaptureIssues();
+    resetThumbnailQueue(0);
+    setMapVersions([]);
+    setLatestVersionId(null);
+    setShowProjectsModal(false);
+    setEditingProjectId(null);
+    setEditingMapId(null);
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    setUrlInput(shellRoot.url || '');
+    if (!silent) {
+      showToast(`Loaded "${map.name}"`, 'success');
+    }
+  }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
   const loadSavedMapById = useCallback(async (mapId, options = {}) => {
+    const { map: summary } = await api.getMapSummary(mapId);
+    if (!summary) {
+      const error = new Error('Map not found');
+      error.status = 404;
+      throw error;
+    }
+    if (shouldUseLargeMapSurface({ nodeCount: summary.nodeCount, hasSavedMap: true })) {
+      loadLargeMapShell(summary, options);
+      return summary;
+    }
     const { map } = await api.getMap(mapId);
     if (!map) {
       const error = new Error('Map not found');
@@ -8731,7 +8825,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     loadMap(map, options);
     return map;
-  }, [loadMap]);
+  }, [loadLargeMapShell, loadMap]);
 
   useEffect(() => {
     loadSavedMapByIdRef.current = loadSavedMapById;
@@ -8888,8 +8982,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const mapId = mapSaveConflict?.mapId || currentMap?.id;
     if (!mapId) return;
     try {
-      const { map } = await api.getMap(mapId);
-      loadMap(map);
+      await loadSavedMapById(mapId);
       setMapSaveConflict(null);
       showToast('Loaded latest map changes', 'success');
     } catch (error) {
@@ -8938,7 +9031,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
-  const handleLoadMapRequest = (map) => {
+  const handleLoadMapRequest = async (map) => {
     if (hasMap && !currentMap?.id) {
       setPendingLoadMap(map);
       setCreateMapMode(false);
@@ -8947,7 +9040,17 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowSaveMapModal(true);
       return;
     }
-    loadMap(map);
+    if (map?.root) {
+      loadMap(map);
+      return;
+    }
+    if (map?.id) {
+      try {
+        await loadSavedMapById(map.id);
+      } catch (error) {
+        showToast(error.message || 'Failed to load map', 'error');
+      }
+    }
   };
 
   const deleteMap = async (projectId, mapId) => {
@@ -11432,14 +11535,23 @@ export default function App({ currentRoute, navigateToRoute }) {
     applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
   };
 
-  const handleLargeMapNodeExpand = (sceneNode) => {
-    if (!sceneNode?.id) return;
-    const node = findNodeInCurrentMap(sceneNode.id) || sceneNode;
-    const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || '';
-    const fallbackAssetUrl = !node.url ? (node.thumbnailUrl || sceneNode.thumbnailUrl) : '';
-    const source = directAssetUrl || fallbackAssetUrl || node.url || sceneNode.url;
-    if (!source) return;
-    viewFullScreenshot(source, Boolean(directAssetUrl || fallbackAssetUrl), node.id || sceneNode.id, 'full');
+  const handleLargeMapNodeExpand = async (sceneNode) => {
+    if (!sceneNode?.id || !currentMap?.id) return;
+    try {
+      const response = await api.getMapNode(currentMap.id, sceneNode.id);
+      const node = response?.node || sceneNode;
+      const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || '';
+      if (directAssetUrl) {
+        viewFullScreenshot(directAssetUrl, true, node.id || sceneNode.id, 'full');
+        return;
+      }
+      const sourceUrl = node.url || sceneNode.url;
+      if (sourceUrl) {
+        viewFullScreenshot(sourceUrl, false, null, 'full');
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to load image for this page', 'error');
+    }
   };
 
   // ========== CONNECTION LINE FUNCTIONS ==========

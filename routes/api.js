@@ -56,7 +56,7 @@ const {
   sortImageDownloadEntries,
   urlsMatch,
 } = require('../utils/imageDownloadPackage');
-const { buildMapScene } = require('../utils/mapScene');
+const { buildMapScene, countMapNodes } = require('../utils/mapScene');
 
 const router = express.Router();
 const NODE_ASSET_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
@@ -422,6 +422,45 @@ function collectNodesById(root, orphans = []) {
   visit(root);
   if (Array.isArray(orphans)) orphans.forEach(visit);
   return nodesById;
+}
+
+function hasThumbnailAsset(root, orphans = []) {
+  let found = false;
+  const visit = (node) => {
+    if (!node || typeof node !== 'object' || found) return;
+    if (typeof node.thumbnailUrl === 'string' && node.thumbnailUrl.trim()) {
+      found = true;
+      return;
+    }
+    if (Array.isArray(node.children)) node.children.forEach(visit);
+  };
+  visit(root);
+  if (Array.isArray(orphans)) orphans.forEach(visit);
+  return found;
+}
+
+function summarizeMapRow(row) {
+  const root = safeParse(row.root_data, 'root_data', null);
+  const orphans = safeParse(row.orphans_data, 'orphans_data', []);
+  const colors = safeParse(row.colors, 'colors', null);
+  const connectionColors = safeParse(row.connection_colors, 'connection_colors', null);
+  return {
+    ...row,
+    rootSummary: root ? {
+      id: root.id || null,
+      title: root.title || root.url || row.name || 'Untitled Map',
+      url: root.url || row.url || '',
+    } : null,
+    nodeCount: countMapNodes(root, orphans),
+    hasThumbnails: hasThumbnailAsset(root, orphans),
+    colors,
+    connectionColors,
+    root_data: undefined,
+    orphans_data: undefined,
+    connections_data: undefined,
+    connection_colors: undefined,
+    insights_data: undefined,
+  };
 }
 
 function stripStaleImageAssetFields(node) {
@@ -1806,16 +1845,36 @@ router.get('/maps', requireAuth, async (req, res) => {
         projectId: project_id || null,
       });
 
-    // Parse JSON fields
-    const parsed = maps.map(m => ({
-      ...m,
-      ...parseMapFields(m),
-    }));
+    const parsed = maps.map(summarizeMapRow);
 
     res.json({ maps: parsed, pagination: { limit, offset, total } });
   } catch (error) {
     console.error('Get maps error:', error);
     res.status(500).json({ error: 'Failed to get maps' });
+  }
+});
+
+// GET /api/maps/:id/summary - Get lightweight map metadata without full tree JSON
+router.get('/maps/:id/summary', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapWithProjectAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapWithProjectForUserAsync(id, req.user.id);
+
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_READ,
+      failureError: 'Map not found',
+    })) return;
+
+    res.json({ map: summarizeMapRow(map) });
+  } catch (error) {
+    console.error('Get map summary error:', error);
+    res.status(500).json({ error: 'Failed to get map summary' });
   }
 });
 
@@ -1862,6 +1921,44 @@ router.get('/maps/:id/scene', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Get map scene error:', error);
     res.status(500).json({ error: 'Failed to get map scene' });
+  }
+});
+
+// GET /api/maps/:id/nodes/:nodeId - Get one node on demand for large-map actions
+router.get('/maps/:id/nodes/:nodeId', requireAuth, async (req, res) => {
+  try {
+    const { id, nodeId } = req.params;
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapWithProjectAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapWithProjectForUserAsync(id, req.user.id);
+
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_READ,
+      failureError: 'Map not found',
+    })) return;
+
+    const parsed = parseMapFields(map);
+    const node = collectNodesById(parsed.root, parsed.orphans || []).get(String(nodeId || '').trim());
+    if (!node) return res.status(404).json({ error: 'Node not found' });
+
+    return res.json({
+      node: {
+        id: node.id,
+        title: node.title || node.url || 'Untitled',
+        url: node.url || '',
+        thumbnailUrl: node.thumbnailUrl || '',
+        thumbnailFullUrl: node.thumbnailFullUrl || '',
+        fullScreenshotUrl: node.fullScreenshotUrl || '',
+        authRequired: !!node.authRequired,
+      },
+    });
+  } catch (error) {
+    console.error('Get map node error:', error);
+    return res.status(500).json({ error: 'Failed to get map node' });
   }
 });
 
