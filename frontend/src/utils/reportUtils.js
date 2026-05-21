@@ -1,21 +1,23 @@
 import { getSeoValue } from './seoMetadata';
 import { getDepthColor } from './constants';
+import { isRenderableTextUrl } from './url';
 
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
   if (!node) return [];
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
+  const isRenderableText = isRenderableTextUrl(node.url);
   if (!node.isMissing
     && !node.isDuplicate
     && !node.isBroken
     && !node.isInactive
     && !node.isError
-    && !node.isFile
+    && (!node.isFile || isRenderableText)
     && !node.authRequired
     && orphanType !== 'broken'
     && orphanType !== 'inactive'
-    && orphanType !== 'file'
+    && (orphanType !== 'file' || isRenderableText)
     && orphanType !== 'orphan'
     && !isSubdomain) {
     types.add('standard');
@@ -27,7 +29,7 @@ export const getReportTypesForNode = (node, overrides = {}) => {
   if (node.isError) types.add('errorPages');
   if (orphanType === 'orphan') types.add('orphanPages');
   if (isSubdomain) types.add('subdomains');
-  if (node.isFile || orphanType === 'file') types.add('files');
+  if (!isRenderableText && (node.isFile || orphanType === 'file')) types.add('files');
   if (node.authRequired) types.add('authenticatedPages');
   return Array.from(types);
 };
@@ -36,9 +38,10 @@ export const getReportPageType = (node, overrides = {}) => {
   if (!node) return 'Standard';
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
+  const isRenderableText = isRenderableTextUrl(node.url);
   if (node.pageType === 'Home') return 'Home';
   if (isSubdomain) return 'Subdomain';
-  if (orphanType === 'file' || node.isFile) return 'File';
+  if (!isRenderableText && (orphanType === 'file' || node.isFile)) return 'File';
   if (orphanType === 'orphan') return 'Orphan';
   if (node.isMissing) return 'Missing';
   if (node.isDuplicate) return 'Duplicate';

@@ -64,7 +64,7 @@ import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
 import CanvasMapHeader from './components/toolbar/CanvasMapHeader';
 import Topbar from './components/toolbar/Topbar';
-import { getHostname } from './utils/url';
+import { getHostname, isRenderableTextUrl } from './utils/url';
 import {
   APP_ONLY_MODE,
   API_BASE,
@@ -191,9 +191,10 @@ const escapeXml = (value) => String(value ?? '')
 const normalizeBriefText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 const getAiExportPageType = (node = {}, fallback = 'Page') => {
-  if (node.pageType) return node.pageType;
+  const isRenderableText = isRenderableTextUrl(node.url);
+  if (node.pageType && !(isRenderableText && String(node.pageType).toLowerCase() === 'file')) return node.pageType;
   if (node.subdomainRoot) return 'Subdomain';
-  if (node.isFile || node.orphanType === 'file') return 'File';
+  if (!isRenderableText && (node.isFile || node.orphanType === 'file')) return 'File';
   if (node.isMissing) return 'Missing';
   if (node.isDuplicate) return 'Duplicate';
   if (node.isBroken || node.orphanType === 'broken') return 'Broken';
@@ -1057,13 +1058,14 @@ const SitemapTree = ({
     if (node.isDuplicate) badges.push('Duplicate');
     if (node.isMissing) badges.push('Missing');
     const orphanType = nodeMeta?.orphanType || node.orphanType;
+    const isRenderableText = isRenderableTextUrl(node.url);
     const isSubdomainTree = node.subdomainRoot || nodeMeta?.isSubdomainTree || orphanType === 'subdomain';
     const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
     if (isSubdomainTree && badgeVisibility?.subdomains) badges.push('Subdomain');
     if (orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
-    if (orphanType === 'file' && badgeVisibility?.files) badges.push('File');
+    if (!isRenderableText && orphanType === 'file' && badgeVisibility?.files) badges.push('File');
     if (orphanType === 'broken' && !isOrphanRoot && badgeVisibility?.brokenLinks) badges.push('Broken Link');
-    if (node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
+    if (!isRenderableText && node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
     if (node.isBroken && !isOrphanRoot && badgeVisibility?.brokenLinks && !badges.includes('Broken Link')) {
       badges.push('Broken Link');
     }
@@ -1447,7 +1449,7 @@ const getNodePlacement = (nodeMeta) => {
 };
 
 const getNodeType = (node, nodeMeta) => {
-  if (node?.isFile || nodeMeta?.orphanType === 'file') return 'file';
+  if (!isRenderableTextUrl(node?.url) && (node?.isFile || nodeMeta?.orphanType === 'file')) return 'file';
   return 'page';
 };
 

@@ -1647,18 +1647,43 @@ function getUrlExtension(value) {
   }
 }
 
+const RENDERABLE_TEXT_FILE_EXTENSIONS = new Set([
+  'txt', 'csv', 'tsv', 'rtf', 'md', 'markdown', 'log',
+]);
+
+const RENDERABLE_TEXT_CONTENT_TYPES = new Set([
+  'text/plain',
+  'text/csv',
+  'text/tab-separated-values',
+  'text/markdown',
+  'text/x-markdown',
+  'text/rtf',
+  'application/rtf',
+]);
+
+function isRenderableTextFileExtension(extension) {
+  return RENDERABLE_TEXT_FILE_EXTENSIONS.has(String(extension || '').toLowerCase());
+}
+
+function isRenderableTextContentType(contentType) {
+  return RENDERABLE_TEXT_CONTENT_TYPES.has(normalizeContentType(contentType));
+}
+
 function getImageCaptureSkipReason(node) {
   const orphanType = String(node?.orphanType || '').toLowerCase();
   const pageType = String(node?.pageType || node?.type || '').toLowerCase();
   const extension = getUrlExtension(node?.url);
+  const isRenderableTextFile = isRenderableTextFileExtension(extension);
   const fileExtensions = new Set([
     'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-    'zip', 'rar', '7z', 'csv', 'tsv', 'txt', 'rtf',
+    'zip', 'rar', '7z',
   ]);
   if (
-    node?.isFile
-    || orphanType === 'file'
-    || pageType === 'file'
+    (!isRenderableTextFile && (
+      node?.isFile
+      || orphanType === 'file'
+      || pageType === 'file'
+    ))
     || fileExtensions.has(extension)
   ) {
     return {
@@ -2439,6 +2464,18 @@ function getUrlExtension(urlStr) {
 function getScanFileInfo(urlStr, contentType = '') {
   const normalizedContentType = normalizeContentType(contentType);
   const extension = getUrlExtension(urlStr);
+  if (
+    isRenderableTextFileExtension(extension)
+    || isRenderableTextContentType(normalizedContentType)
+  ) {
+    return {
+      isFile: false,
+      extension,
+      fileType: null,
+      contentType: normalizedContentType || SCAN_FILE_EXTENSIONS.get(extension)?.contentType || null,
+    };
+  }
+
   const extensionInfo = SCAN_FILE_EXTENSIONS.get(extension);
   if (extensionInfo) {
     return {
@@ -2973,8 +3010,11 @@ async function fetchPage(url, extraHeaders = {}) {
 }
 
 function isHtmlContentType(contentType) {
-  if (!contentType) return true;
-  return contentType.includes('text/html') || contentType.includes('application/xhtml+xml');
+  const normalizedContentType = normalizeContentType(contentType);
+  if (!normalizedContentType) return true;
+  return normalizedContentType.includes('text/html')
+    || normalizedContentType.includes('application/xhtml+xml')
+    || isRenderableTextContentType(normalizedContentType);
 }
 
 async function checkLinkStatus(url, extraHeaders = {}) {

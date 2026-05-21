@@ -15,7 +15,7 @@ import NodeActionBar from './NodeActionBar';
 import NodeBadge from './NodeBadge';
 import Badge from '../ui/Badge';
 
-import { getHostname } from '../../utils/url';
+import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
 
 const NODE_STATUS_BADGE_STYLE = {
@@ -100,21 +100,18 @@ const NodeCard = ({
       ? 'Commenter'
       : 'Viewer';
 
-  const getUrlExtension = (value) => {
-    try {
-      const pathname = new URL(value).pathname || '';
-      const match = pathname.match(/\.([a-z0-9]{2,8})$/i);
-      return match?.[1]?.toUpperCase() || '';
-    } catch {
-      return '';
-    }
-  };
   const getPreviewIssue = () => {
     const orphanType = String(node?.orphanType || '').toLowerCase();
     const pageType = String(node?.pageType || node?.type || '').toLowerCase();
     const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
-    const extension = getUrlExtension(node?.url);
-    const isFile = node?.isFile || orphanType === 'file' || pageType === 'file' || ['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'PPT', 'PPTX', 'ZIP', 'CSV', 'TXT'].includes(extension);
+    const extension = getUrlExtension(node?.url).toUpperCase();
+    const isRenderableText = isRenderableTextUrl(node?.url);
+    const isFile = !isRenderableText && (
+      node?.isFile
+      || orphanType === 'file'
+      || pageType === 'file'
+      || ['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'PPT', 'PPTX', 'ZIP'].includes(extension)
+    );
     if (isFile) {
       return {
         icon: FileText,

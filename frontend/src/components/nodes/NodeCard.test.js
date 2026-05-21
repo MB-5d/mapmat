@@ -260,4 +260,30 @@ describe('NodeCard', () => {
 
     expect(onRequestThumbnail).not.toHaveBeenCalled();
   });
+
+  test('does not treat renderable text URLs as uncapturable files', async () => {
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'node-1',
+            title: 'Alignment transcript',
+            url: 'https://alignment.anthropic.com/2025/transcripts/output_monitor_correct2.txt',
+            isFile: true,
+            orphanType: 'file',
+          }}
+          number="77.1"
+          color="#0ea5e9"
+          showThumbnails
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).not.toContain('TXT file');
+    expect(container.textContent).not.toContain('No page preview');
+  });
 });

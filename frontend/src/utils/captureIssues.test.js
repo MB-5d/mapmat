@@ -63,6 +63,21 @@ describe('captureIssues', () => {
       label: 'Unreachable',
       type: CAPTURE_ISSUE_TYPES.unreachable,
     });
+
+    expect(buildCaptureIssueFromResult(
+      { nodeId: 'n7', status: 'image_load', error: 'Image failed to load' },
+      {
+        id: 'n7',
+        title: 'Transcript',
+        url: 'https://example.com/transcript.txt',
+        isFile: true,
+        orphanType: 'file',
+      },
+      's77'
+    )).toMatchObject({
+      label: 'Image failed to load',
+      type: CAPTURE_ISSUE_TYPES.imageLoad,
+    });
   });
 
   test('reconciled progress never exceeds loaded images plus issues', () => {

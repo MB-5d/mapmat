@@ -1,3 +1,5 @@
+import { isRenderableTextUrl } from './url';
+
 export const CAPTURE_ISSUE_TYPES = Object.freeze({
   file: 'file',
   inactive: 'inactive',
@@ -24,7 +26,12 @@ export function classifyCaptureIssue({ status, error, node } = {}) {
   const text = `${status || ''} ${error || ''}`.toLowerCase();
   const orphanType = String(node?.orphanType || '').toLowerCase();
   const pageType = String(node?.pageType || node?.type || '').toLowerCase();
-  if (node?.isFile || orphanType === 'file' || pageType === 'file' || text.includes('pdf') || text.includes('file')) {
+  const isRenderableText = isRenderableTextUrl(node?.url);
+  if (
+    (!isRenderableText && (node?.isFile || orphanType === 'file' || pageType === 'file'))
+    || text.includes('pdf')
+    || text.includes('file')
+  ) {
     return CAPTURE_ISSUE_TYPES.file;
   }
   if (status === 'blocked' || text.includes('requires login') || text.includes('requires authentication')) {
