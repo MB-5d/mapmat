@@ -12975,8 +12975,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     saveMapModalProjectId || 'none',
     saveMapModalName || 'untitled',
   ].join(':');
-  const canvasGridSize = Math.max(4, Math.round(16 * (scale || 1)));
-  const canvasGridDotRadius = Math.max(0.22, Math.min(0.75, 0.75 * (canvasGridSize / 16)));
+  const canvasGridScale = scale || 1;
+  const canvasGridSize = Math.max(4, Math.round(16 * canvasGridScale));
+  const canvasGridDotRadius = canvasGridScale < 0.5 ? 0.5 : (canvasGridScale > 2 ? 1 : 0.75);
 
   return (
     <AuthProvider value={authValue}>
