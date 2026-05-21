@@ -189,7 +189,7 @@ const getCanvasGridMetrics = (scaleValue) => {
   const canvasGridScale = scaleValue || 1;
   return {
     size: Math.max(4, Math.round(16 * canvasGridScale)),
-    dotRadius: canvasGridScale < 0.5 ? 0.5 : (canvasGridScale > 2 ? 1 : 0.75),
+    dotRadius: canvasGridScale < 0.5 ? 0.25 : (canvasGridScale > 2 ? 1 : 0.75),
   };
 };
 
@@ -13384,9 +13384,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   ].join(':');
   const canvasRenderScale = scaleRef.current || scale || 1;
   const canvasRenderPan = panRef.current || pan;
-  const canvasGridScale = canvasRenderScale;
-  const canvasGridSize = Math.max(4, Math.round(16 * canvasGridScale));
-  const canvasGridDotRadius = canvasGridScale < 0.5 ? 0.5 : (canvasGridScale > 2 ? 1 : 0.75);
+  const canvasGridMetrics = getCanvasGridMetrics(canvasRenderScale);
+  const canvasGridSize = canvasGridMetrics.size;
+  const canvasGridDotRadius = canvasGridMetrics.dotRadius;
 
   return (
     <AuthProvider value={authValue}>

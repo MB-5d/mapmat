@@ -38,9 +38,10 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('.canvas.has-map::before');
     expect(appCss).toContain('background-position: var(--canvas-pan-x, 0px) var(--canvas-pan-y, 0px);');
     expect(appCss).toContain('var(--canvas-grid-dot-radius, 0.75px)');
-    expect(appJs).toContain('const canvasGridScale = canvasRenderScale;');
-    expect(appJs).toContain('const canvasGridSize = Math.max(4, Math.round(16 * canvasGridScale));');
-    expect(appJs).toContain('const canvasGridDotRadius = canvasGridScale < 0.5 ? 0.5 : (canvasGridScale > 2 ? 1 : 0.75);');
+    expect(appJs).toContain('const getCanvasGridMetrics = (scaleValue) => {');
+    expect(appJs).toContain('size: Math.max(4, Math.round(16 * canvasGridScale)),');
+    expect(appJs).toContain('dotRadius: canvasGridScale < 0.5 ? 0.25 : (canvasGridScale > 2 ? 1 : 0.75),');
+    expect(appJs).toContain('const canvasGridMetrics = getCanvasGridMetrics(canvasRenderScale);');
     expect(appJs).toContain('const CANVAS_EDGE_PADDING_MAX = 400;');
     expect(appJs).toContain('const minPanX = viewportWidth - padding - scaledRight;');
     expect(appJs).toContain('const maxPanX = padding - scaledLeft;');
