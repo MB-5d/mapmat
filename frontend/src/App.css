@@ -4629,6 +4629,20 @@ body {
   white-space: nowrap;
 }
 
+.canvas-tool-menu-images .ui-menu-item:disabled,
+.canvas-tool-menu-images .canvas-tool-menu-item:disabled {
+  color: var(--ui-control-disabled-content);
+  background: transparent;
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.canvas-tool-menu-images .ui-menu-item:disabled:hover,
+.canvas-tool-menu-images .canvas-tool-menu-item:disabled:hover {
+  color: var(--ui-control-disabled-content);
+  background: transparent;
+}
+
 .canvas-tool-menu.canvas-tool-menu-panel {
   min-width: 264px;
   padding: 12px;

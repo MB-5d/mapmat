@@ -280,6 +280,176 @@ describe('CanvasToolbar', () => {
     expect(onDownloadImagesSelected).toHaveBeenCalledTimes(1);
   });
 
+  test('requires a saved map before image capture actions are available', () => {
+    const onGetThumbnailsAll = jest.fn();
+    const onGetThumbnailsSelected = jest.fn();
+    const onUpdateCapturedThumbnails = jest.fn();
+    const onGetFullScreenshotsAll = jest.fn();
+    const onGetFullScreenshotsSelected = jest.fn();
+    const onUpdateCapturedFullScreenshots = jest.fn();
+    const onDownloadImagesAll = jest.fn();
+    const onDownloadImagesSelected = jest.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsAll={onGetThumbnailsAll}
+          onGetThumbnailsSelected={onGetThumbnailsSelected}
+          onUpdateCapturedThumbnails={onUpdateCapturedThumbnails}
+          onGetFullScreenshotsAll={onGetFullScreenshotsAll}
+          onGetFullScreenshotsSelected={onGetFullScreenshotsSelected}
+          onUpdateCapturedFullScreenshots={onUpdateCapturedFullScreenshots}
+          onDownloadImagesAll={onDownloadImagesAll}
+          onDownloadImagesSelected={onDownloadImagesSelected}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection
+          hasDownloadableThumbnails
+          hasFullScreenshotAssets
+          hasDownloadableImages
+          hasDownloadableSelectedImages
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap={false}
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Save this map before capturing screenshots.');
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const captureButtons = [
+      'Get Thumbnails (All)',
+      'Get Thumbnails (Selected)',
+      'Update Captured Thumbnails',
+      'Get Full page (All)',
+      'Get Full page (Selected)',
+      'Update Captured Full page',
+    ].map((label) => buttons.find((button) => button.textContent.includes(label)));
+
+    captureButtons.forEach((button) => {
+      expect(button).not.toBeNull();
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Save this map before capturing screenshots.');
+    });
+
+    const downloadAll = buttons.find((button) => button.textContent.includes('Download All'));
+    const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
+    expect(downloadAll.disabled).toBe(true);
+    expect(downloadSelected.disabled).toBe(true);
+
+    act(() => {
+      [...captureButtons, downloadAll, downloadSelected].forEach((button) => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    });
+
+    expect(onGetThumbnailsAll).not.toHaveBeenCalled();
+    expect(onGetThumbnailsSelected).not.toHaveBeenCalled();
+    expect(onUpdateCapturedThumbnails).not.toHaveBeenCalled();
+    expect(onGetFullScreenshotsAll).not.toHaveBeenCalled();
+    expect(onGetFullScreenshotsSelected).not.toHaveBeenCalled();
+    expect(onUpdateCapturedFullScreenshots).not.toHaveBeenCalled();
+    expect(onDownloadImagesAll).not.toHaveBeenCalled();
+    expect(onDownloadImagesSelected).not.toHaveBeenCalled();
+  });
+
+  test('keeps selected image actions visibly disabled when nothing is selected', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onDownloadImagesSelected={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          hasDownloadableSelectedImages
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const selectedActions = [
+      buttons.find((button) => button.textContent.includes('Get Thumbnails (Selected)')),
+      buttons.find((button) => button.textContent.includes('Get Full page (Selected)')),
+      buttons.find((button) => button.textContent.includes('Download Selected')),
+    ];
+
+    selectedActions.forEach((button) => {
+      expect(button).not.toBeNull();
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Select pages first');
+    });
+  });
+
   test('uses captured image update actions only when saved images exist', () => {
     const onUpdateCapturedThumbnails = jest.fn();
     const onUpdateCapturedFullScreenshots = jest.fn();

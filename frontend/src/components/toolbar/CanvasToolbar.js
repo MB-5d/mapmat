@@ -65,6 +65,8 @@ const containMenuScroll = (event) => {
   event.stopPropagation();
 };
 
+const IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE = 'Save this map before capturing screenshots.';
+
 const CanvasToolbar = ({
   canEdit,
   canViewComments,
@@ -144,6 +146,10 @@ const CanvasToolbar = ({
   const shareUnavailable = !hasSavedMap;
   const isHorizontalOrientation = mapOrientation === 'horizontal';
   const orientationLabel = `Orientation: ${isHorizontalOrientation ? 'Horizontal' : 'Vertical'}`;
+  const imageCaptureRequiresSave = hasMap && !hasSavedMap;
+  const imageCaptureDisabled = !hasMap || imageCaptureRequiresSave;
+  const imageCaptureDisabledReason = imageCaptureRequiresSave ? IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE : undefined;
+  const selectionRequiredReason = imageCaptureDisabledReason || (!hasSelection ? 'Select pages first' : undefined);
 
   return (
   <div className="canvas-toolbar" data-feedback-id="canvas-toolbar" data-feedback-label="Canvas toolbar">
@@ -204,25 +210,33 @@ const CanvasToolbar = ({
               <MenuDivider className="canvas-tool-menu-divider" />
             </>
           )}
+          {imageCaptureRequiresSave && (
+            <div className="canvas-tool-menu-hint" role="note">
+              {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
+            </div>
+          )}
           <div className="canvas-tool-menu-section">
             <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails (visible area)</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
               label={thumbnailsAllLabel}
               onClick={onGetThumbnailsAll}
-              disabled={!hasMap}
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
             />
             <MenuItem
               className="canvas-tool-menu-item"
               label={thumbnailsSelectedLabel}
               onClick={onGetThumbnailsSelected}
-              disabled={!hasSelection || !hasMap}
+              disabled={imageCaptureDisabled || !hasSelection}
+              title={selectionRequiredReason}
             />
             <MenuItem
               className="canvas-tool-menu-item"
               label="Update Captured Thumbnails"
               onClick={onUpdateCapturedThumbnails}
-              disabled={!hasMap || !hasDownloadableThumbnails}
+              disabled={imageCaptureDisabled || !hasDownloadableThumbnails}
+              title={imageCaptureDisabledReason}
             />
           </div>
           <MenuDivider className="canvas-tool-menu-divider" />
@@ -232,19 +246,22 @@ const CanvasToolbar = ({
               className="canvas-tool-menu-item"
               label={fullScreenshotsAllLabel}
               onClick={onGetFullScreenshotsAll}
-              disabled={!hasMap}
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
             />
             <MenuItem
               className="canvas-tool-menu-item"
               label={fullScreenshotsSelectedLabel}
               onClick={onGetFullScreenshotsSelected}
-              disabled={!hasSelection || !hasMap}
+              disabled={imageCaptureDisabled || !hasSelection}
+              title={selectionRequiredReason}
             />
             <MenuItem
               className="canvas-tool-menu-item"
               label="Update Captured Full page"
               onClick={onUpdateCapturedFullScreenshots}
-              disabled={!hasMap || !hasFullScreenshotAssets}
+              disabled={imageCaptureDisabled || !hasFullScreenshotAssets}
+              title={imageCaptureDisabledReason}
             />
           </div>
           <MenuDivider className="canvas-tool-menu-divider" />
@@ -260,13 +277,14 @@ const CanvasToolbar = ({
               className="canvas-tool-menu-item"
               label="Download All"
               onClick={onDownloadImagesAll}
-              disabled={!hasMap || !hasDownloadableImages}
+              disabled={!hasSavedMap || !hasMap || !hasDownloadableImages}
             />
             <MenuItem
               className="canvas-tool-menu-item"
               label="Download Selected"
               onClick={onDownloadImagesSelected}
-              disabled={!hasSelection || !hasDownloadableSelectedImages}
+              disabled={!hasSavedMap || !hasSelection || !hasDownloadableSelectedImages}
+              title={!hasSavedMap ? imageCaptureDisabledReason : (!hasSelection ? 'Select pages first' : undefined)}
             />
           </div>
         </MenuPanel>

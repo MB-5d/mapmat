@@ -6002,7 +6002,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     return false;
   }, [getActiveImageCaptureMode, showToast]);
 
-  const guardImageCapturePersistenceReady = useCallback(() => true, []);
+  const guardImageCapturePersistenceReady = useCallback(() => {
+    if (currentMap?.id) return true;
+    showToast('Save this map before capturing screenshots', 'info');
+    return false;
+  }, [currentMap?.id, showToast]);
 
   const completeThumbnailCapture = useCallback((nodeId, { captured = true } = {}) => {
     if (!nodeId || !thumbnailExpectedRef.current.has(nodeId)) return;
