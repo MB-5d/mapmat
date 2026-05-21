@@ -5,6 +5,7 @@ const {
   computeSceneLayout,
   countMapNodes,
   getThumbnailLod,
+  getTargetStackParents,
 } = require('../utils/mapScene');
 
 const root = {
@@ -121,6 +122,20 @@ assert.strictEqual(largeNodes.get('large-parent-0').number, '1');
 assert.strictEqual(largeNodes.get('large-parent-0').x, 0);
 assert.strictEqual(largeNodes.get('large-child-0-0').x, DEFAULT_LAYOUT.INDENT_X);
 assert.strictEqual(largeNodes.get('large-child-0-0').stackInfo.collapsed, true);
+
+const targetStackParents = getTargetStackParents(largeRoot, [], 'large-child-0-49');
+assert.deepStrictEqual(targetStackParents, ['large-parent-0']);
+
+const targetScene = buildMapScene({
+  root: largeRoot,
+  viewport: { x: -500000, y: -500000, w: 500, h: 500, zoom: 1 },
+  targetNodeId: 'large-child-0-49',
+  showThumbnails: false,
+});
+assert(targetScene.expandedStackIds.includes('large-parent-0'));
+assert(targetScene.targetNode, 'target scene should expose the requested hidden stack child');
+assert.strictEqual(targetScene.targetNode.id, 'large-child-0-49');
+assert(targetScene.nodes.some((node) => node.id === 'large-child-0-49'));
 
 const emptyViewportScene = buildMapScene({
   root: largeRoot,

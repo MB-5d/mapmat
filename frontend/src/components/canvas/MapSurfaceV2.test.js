@@ -117,6 +117,39 @@ describe('MapSurfaceV2', () => {
     expect(getScene).toHaveBeenCalledTimes(2);
   });
 
+  test('passes expanded stack ids to large-map scene requests', async () => {
+    const getScene = jest.fn().mockResolvedValue({
+      scene: {
+        mapId: 'map-1',
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
+        nodes: [],
+        connectors: [],
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <MapSurfaceV2
+          mapId="map-1"
+          getScene={getScene}
+          getViewState={() => ({ pan: { x: 0, y: 0 }, scale: 1 })}
+          canvasSize={{ width: 1000, height: 700 }}
+          orientation="vertical"
+          showThumbnails={false}
+          colors={{}}
+          selectedNodeIds={new Set()}
+          expandedStacks={{ stackB: true, stackA: true, stackC: false }}
+        />
+      );
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    expect(getScene).toHaveBeenCalled();
+    expect(getScene.mock.calls[0][1].expandedStacks).toBe('stackA,stackB');
+  });
+
   test('renders existing node card UI for visible scene nodes', async () => {
     const getScene = jest.fn().mockResolvedValue({
       scene: {

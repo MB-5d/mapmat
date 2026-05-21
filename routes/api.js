@@ -1913,6 +1913,8 @@ router.get('/maps/:id/scene', requireAuth, async (req, res) => {
         zoom: req.query?.zoom,
         overscan: req.query?.overscan,
       },
+      expandedStacks: req.query?.expandedStacks,
+      targetNodeId: req.query?.targetNodeId,
     });
 
     res.json({

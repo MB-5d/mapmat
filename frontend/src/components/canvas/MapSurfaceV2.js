@@ -55,6 +55,7 @@ const MapSurfaceV2 = ({
   onThumbnailError,
   onSceneLoaded,
   activeBranchNodeIds,
+  expandedStacks,
 }) => {
   const surfaceRef = useRef(null);
   const worldRef = useRef(null);
@@ -83,6 +84,14 @@ const MapSurfaceV2 = ({
     };
   }, [getViewState]);
 
+  const expandedStackIds = useMemo(() => (
+    Object.entries(expandedStacks || {})
+      .filter(([, expanded]) => !!expanded)
+      .map(([id]) => id)
+      .filter(Boolean)
+      .sort()
+  ), [expandedStacks]);
+
   const applyWorldTransform = useCallback((view) => {
     const world = worldRef.current;
     if (!world) return;
@@ -104,8 +113,9 @@ const MapSurfaceV2 = ({
       orientation,
       thumbnails: showThumbnails && !safeMode ? '1' : '0',
       overscan: SCENE_OVERSCAN_PX,
+      expandedStacks: expandedStackIds.join(','),
     };
-  }, [canvasSize?.height, canvasSize?.width, orientation, safeMode, showThumbnails]);
+  }, [canvasSize?.height, canvasSize?.width, expandedStackIds, orientation, safeMode, showThumbnails]);
 
   const fetchScene = useCallback((view) => {
     if (!mapId || !getScene) return;
@@ -119,6 +129,7 @@ const MapSurfaceV2 = ({
       Math.round(params.zoom * 100) / 100,
       params.orientation,
       params.thumbnails,
+      params.expandedStacks,
     ].join(':');
     if (fetchKey === lastFetchKeyRef.current) return;
     lastFetchKeyRef.current = fetchKey;

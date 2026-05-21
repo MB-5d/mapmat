@@ -188,6 +188,16 @@ const CANVAS_EDGE_PADDING_MAX = 400;
 const CANVAS_NODE_OVERSCAN_PX = 1200;
 const CANVAS_PERF_PROBE_INTERVAL_MS = 2000;
 const CANVAS_TRANSFORM_COMMIT_IDLE_MS = 120;
+const FOCUS_NODE_MAX_ATTEMPTS = 14;
+const FOCUS_NODE_RETRY_MS = 160;
+
+const getExpandedStackIds = (expandedStacks = {}) => (
+  Object.entries(expandedStacks || {})
+    .filter(([, expanded]) => !!expanded)
+    .map(([id]) => id)
+    .filter(Boolean)
+    .sort()
+);
 
 const clampCanvasPanAxis = (value, min, max) => {
   if (min <= max) return Math.max(min, Math.min(max, value));
@@ -4287,6 +4297,66 @@ export default function App({ currentRoute, navigateToRoute }) {
     applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y });
   }, [applyTransform]);
 
+  const focusLargeMapNodeById = useCallback(async (nodeId) => {
+    const canvas = canvasRef.current;
+    if (!nodeId || !canvas || !currentMap?.id) return false;
+
+    const scaleValue = scaleRef.current || 1;
+    const panValue = panRef.current || { x: 0, y: 0 };
+    const expandedStackIds = getExpandedStackIds(expandedStacks);
+
+    try {
+      const response = await api.getMapScene(currentMap.id, {
+        x: (0 - panValue.x) / scaleValue,
+        y: (0 - panValue.y) / scaleValue,
+        w: (canvasSize.width || canvas.clientWidth || 1) / scaleValue,
+        h: (canvasSize.height || canvas.clientHeight || 1) / scaleValue,
+        zoom: scaleValue,
+        orientation: mapOrientation,
+        thumbnails: showThumbnails ? '1' : '0',
+        overscan: CANVAS_NODE_OVERSCAN_PX,
+        expandedStacks: expandedStackIds.join(','),
+        targetNodeId: nodeId,
+      });
+
+      const scene = response?.scene || {};
+      const targetNode = scene.targetNode
+        || (scene.nodes || []).find((node) => node?.id === nodeId);
+      if (!targetNode) return false;
+
+      if (Array.isArray(scene.expandedStackIds) && scene.expandedStackIds.length) {
+        setExpandedStacks((prev) => {
+          const next = { ...prev };
+          scene.expandedStackIds.forEach((id) => {
+            if (id) next[id] = true;
+          });
+          return next;
+        });
+      }
+
+      const leftShift = Math.min(240, canvas.clientWidth * 0.25);
+      const nodeCenterX = targetNode.x + targetNode.w / 2;
+      const nodeCenterY = targetNode.y + targetNode.h / 2;
+      applyTransform({
+        scale: scaleValue,
+        x: (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scaleValue,
+        y: canvas.clientHeight / 2 - nodeCenterY * scaleValue,
+      }, { skipPanClamp: true });
+      return true;
+    } catch (error) {
+      console.warn('Large map focus failed', error);
+      return false;
+    }
+  }, [
+    applyTransform,
+    canvasSize.height,
+    canvasSize.width,
+    currentMap?.id,
+    expandedStacks,
+    mapOrientation,
+    showThumbnails,
+  ]);
+
   const findStackParentsForNode = useCallback((node, targetId, depth = 0) => {
     if (!node) return null;
     if (node.id === targetId) return [];
@@ -4304,6 +4374,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const focusNodeById = useCallback((nodeId) => {
     if (!nodeId || !canvasRef.current) return;
+
+    if (useLargeMapSurface) {
+      focusLargeMapNodeById(nodeId);
+      return;
+    }
 
     let stackParents = findStackParentsForNode(root, nodeId, 0);
     if (!stackParents) {
@@ -4326,15 +4401,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     const moveToNode = (attempt = 0) => {
       const layout = layoutRef.current;
       if (!layout || !canvasRef.current) {
-        if (attempt < 3) {
-          setTimeout(() => moveToNode(attempt + 1), 120);
+        if (attempt < FOCUS_NODE_MAX_ATTEMPTS) {
+          setTimeout(() => moveToNode(attempt + 1), FOCUS_NODE_RETRY_MS);
         }
         return;
       }
       const nodeData = layout.nodes.get(nodeId);
       if (!nodeData) {
-        if (attempt < 3) {
-          setTimeout(() => moveToNode(attempt + 1), 120);
+        if (attempt < FOCUS_NODE_MAX_ATTEMPTS) {
+          setTimeout(() => moveToNode(attempt + 1), FOCUS_NODE_RETRY_MS);
         }
         return;
       }
@@ -4354,7 +4429,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     requestAnimationFrame(() => {
       setTimeout(() => moveToNode(0), 80);
     });
-  }, [animatePanTo, findStackParentsForNode, orphans, root]);
+  }, [animatePanTo, findStackParentsForNode, focusLargeMapNodeById, orphans, root, useLargeMapSurface]);
 
   const findNodeByUrlInMap = useCallback((url) => {
     if (!url) return null;
@@ -14061,6 +14136,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onThumbnailError={handleThumbnailDisplayError}
                     onSceneLoaded={handleLargeMapSceneLoaded}
                     activeBranchNodeIds={activeBranchNodeIds}
+                    expandedStacks={expandedStacks}
                   />
                 ) : (
                 <SitemapTree

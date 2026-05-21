@@ -103,6 +103,59 @@ function shouldStackChildren(children, depth) {
   return depth >= 1;
 }
 
+function normalizeExpandedStacks(input) {
+  const expanded = {};
+  const addId = (value) => {
+    const id = String(value || '').trim();
+    if (id) expanded[id] = true;
+  };
+
+  if (typeof input === 'string') {
+    input.split(',').forEach(addId);
+  } else if (Array.isArray(input)) {
+    input.forEach(addId);
+  } else if (input && typeof input === 'object') {
+    Object.entries(input).forEach(([id, value]) => {
+      if (value) addId(id);
+    });
+  }
+
+  return expanded;
+}
+
+function findStackParentsForNode(node, targetId, depth = 0) {
+  if (!node || !targetId) return null;
+  if (String(node.id || '') === targetId) return [];
+
+  const children = getChildren(node);
+  if (!children.length) return null;
+
+  const shouldStack = shouldStackChildren(children, depth);
+  for (const child of children) {
+    const path = findStackParentsForNode(child, targetId, depth + 1);
+    if (path) {
+      return shouldStack && node.id ? [String(node.id), ...path] : path;
+    }
+  }
+
+  return null;
+}
+
+function getTargetStackParents(root, orphans, targetNodeId) {
+  const targetId = String(targetNodeId || '').trim();
+  if (!targetId) return [];
+
+  const rootPath = findStackParentsForNode(root, targetId, 0);
+  if (rootPath) return rootPath;
+
+  for (const orphan of Array.isArray(orphans) ? orphans : []) {
+    const path = findStackParentsForNode(orphan, targetId, 0);
+    if (path) return path;
+  }
+
+  return [];
+}
+
 function addNode(nodes, nodeById, node, x, y, depth, number, nodeHeight, extra = {}) {
   const layoutNode = {
     id: String(node.id || ''),
@@ -663,10 +716,11 @@ function createLayoutResult(nodes, connectors) {
 function computeSceneLayout(root, orphans = [], {
   orientation = 'vertical',
   showThumbnails = true,
+  expandedStacks = {},
 } = {}) {
   return orientation === 'horizontal'
-    ? computeHorizontalLayout(root, orphans, showThumbnails)
-    : computeVerticalLayout(root, orphans, showThumbnails);
+    ? computeHorizontalLayout(root, orphans, showThumbnails, expandedStacks)
+    : computeVerticalLayout(root, orphans, showThumbnails, expandedStacks);
 }
 
 function getThumbnailLod(zoom) {
@@ -717,10 +771,28 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
   };
 }
 
-function buildMapScene({ root, orphans = [], viewport = {}, orientation = 'vertical', showThumbnails = true } = {}) {
+function buildMapScene({
+  root,
+  orphans = [],
+  viewport = {},
+  orientation = 'vertical',
+  showThumbnails = true,
+  expandedStacks = {},
+  targetNodeId = '',
+} = {}) {
   const normalizedViewport = normalizeViewport(viewport);
   const thumbnailLod = showThumbnails ? getThumbnailLod(normalizedViewport.zoom) : 'none';
-  const layout = computeSceneLayout(root, orphans, { orientation, showThumbnails });
+  const targetId = String(targetNodeId || '').trim();
+  const sceneExpandedStacks = normalizeExpandedStacks(expandedStacks);
+  const targetStackParents = getTargetStackParents(root, orphans, targetId);
+  targetStackParents.forEach((id) => {
+    sceneExpandedStacks[id] = true;
+  });
+  const layout = computeSceneLayout(root, orphans, {
+    orientation,
+    showThumbnails,
+    expandedStacks: sceneExpandedStacks,
+  });
   const homeLayoutNode = layout.nodes.find((node) => !node.isOrphan && node.depth === 0)
     || layout.nodes[0]
     || null;
@@ -728,6 +800,16 @@ function buildMapScene({ root, orphans = [], viewport = {}, orientation = 'verti
     .filter((node) => rectsIntersect(getNodeBounds(node), normalizedViewport))
     .map((node) => sanitizeSceneNode(node, { thumbnailLod }));
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
+  const targetLayoutNode = targetId
+    ? layout.nodes.find((node) => node.id === targetId)
+    : null;
+  const targetNode = targetLayoutNode
+    ? sanitizeSceneNode(targetLayoutNode, { thumbnailLod })
+    : null;
+  if (targetNode && !visibleNodeIds.has(targetNode.id)) {
+    visibleNodes.push(targetNode);
+    visibleNodeIds.add(targetNode.id);
+  }
   const connectors = layout.connectors.filter((connector) => (
     rectsIntersect(getConnectorBounds(connector), normalizedViewport)
   ));
@@ -741,6 +823,8 @@ function buildMapScene({ root, orphans = [], viewport = {}, orientation = 'verti
     thumbnailLod,
     viewport: normalizedViewport,
     homeNode: homeLayoutNode ? sanitizeSceneNode(homeLayoutNode, { thumbnailLod: 'none' }) : null,
+    targetNode,
+    expandedStackIds: Object.keys(sceneExpandedStacks).filter((id) => sceneExpandedStacks[id]),
     nodes: visibleNodes,
     connectors,
     visibleNodeIds: Array.from(visibleNodeIds),
@@ -753,6 +837,7 @@ module.exports = {
   computeSceneLayout,
   countMapNodes,
   getThumbnailLod,
+  getTargetStackParents,
   normalizeViewport,
   rectsIntersect,
 };
