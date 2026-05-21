@@ -1,6 +1,8 @@
 const assert = require('assert');
 const {
+  DEFAULT_LAYOUT,
   buildMapScene,
+  computeSceneLayout,
   countMapNodes,
   getThumbnailLod,
 } = require('../utils/mapScene');
@@ -39,6 +41,38 @@ assert.strictEqual(getThumbnailLod(0.1), 'none');
 assert.strictEqual(getThumbnailLod(0.4), 'preview');
 assert.strictEqual(getThumbnailLod(1), 'thumbnail');
 
+const normalLayout = computeSceneLayout(root, [], { showThumbnails: true });
+const normalNodes = new Map(normalLayout.nodes.map((node) => [node.id, node]));
+assert.strictEqual(normalNodes.get('root').x, 0);
+assert.strictEqual(normalNodes.get('child-0').number, '1');
+assert.strictEqual(normalNodes.get('child-0').x, 0);
+assert.strictEqual(normalNodes.get('child-0').y, DEFAULT_LAYOUT.NODE_H_THUMB + DEFAULT_LAYOUT.BUS_Y_GAP);
+assert.strictEqual(normalNodes.get('child-1').x, DEFAULT_LAYOUT.NODE_W + DEFAULT_LAYOUT.GAP_L1_X);
+
+const branchRoot = {
+  id: 'branch-root',
+  title: 'Branch Root',
+  children: [
+    {
+      id: 'branch-a',
+      title: 'Branch A',
+      children: [{ id: 'branch-a-1', title: 'Branch A.1' }],
+    },
+    { id: 'branch-b', title: 'Branch B' },
+  ],
+};
+const branchLayout = computeSceneLayout(branchRoot, [], { showThumbnails: false });
+const branchNodes = new Map(branchLayout.nodes.map((node) => [node.id, node]));
+assert.strictEqual(branchNodes.get('branch-root').x, 0);
+assert.strictEqual(branchNodes.get('branch-a').x, 0);
+assert.strictEqual(branchNodes.get('branch-a').y, DEFAULT_LAYOUT.NODE_H_COLLAPSED + DEFAULT_LAYOUT.BUS_Y_GAP);
+assert.strictEqual(branchNodes.get('branch-a-1').x, DEFAULT_LAYOUT.INDENT_X);
+assert.strictEqual(
+  branchNodes.get('branch-a-1').y,
+  DEFAULT_LAYOUT.NODE_H_COLLAPSED + DEFAULT_LAYOUT.BUS_Y_GAP
+    + DEFAULT_LAYOUT.NODE_H_COLLAPSED + DEFAULT_LAYOUT.GAP_STACK_Y
+);
+
 const farOutScene = buildMapScene({
   root,
   viewport: { x: -200, y: -200, w: 1000, h: 800, zoom: 0.1 },
@@ -74,10 +108,19 @@ const largeScene = buildMapScene({
   showThumbnails: true,
 });
 assert.strictEqual(countMapNodes(largeRoot), 5101);
+assert(largeScene.nodeCount < countMapNodes(largeRoot));
 assert(largeScene.visibleNodeCount < largeScene.nodeCount);
 assert(largeScene.homeNode, 'large scenes should include home node even when viewport is sparse');
 assert.strictEqual(largeScene.homeNode.id, 'large-root');
 assert(largeScene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
+
+const largeLayout = computeSceneLayout(largeRoot, [], { showThumbnails: false });
+const largeNodes = new Map(largeLayout.nodes.map((node) => [node.id, node]));
+assert.strictEqual(largeNodes.get('large-root').x, 0);
+assert.strictEqual(largeNodes.get('large-parent-0').number, '1');
+assert.strictEqual(largeNodes.get('large-parent-0').x, 0);
+assert.strictEqual(largeNodes.get('large-child-0-0').x, DEFAULT_LAYOUT.INDENT_X);
+assert.strictEqual(largeNodes.get('large-child-0-0').stackInfo.collapsed, true);
 
 const emptyViewportScene = buildMapScene({
   root: largeRoot,
