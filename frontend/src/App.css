@@ -165,6 +165,7 @@ body {
 .ui-btn--primary:hover:not(:disabled) {
   background: var(--ui-button-brand-fill-hover);
   border-color: var(--ui-button-brand-fill-hover);
+  color: var(--ui-button-brand-contrast);
 }
 
 .ui-btn--type-primary.ui-btn--style-mono {
@@ -9657,24 +9658,7 @@ body {
 }
 
 .share-email-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   padding: 12px 20px;
-  background: var(--ui-color-icon-hover);
-  border: 1px solid var(--ui-color-border);
-  border-radius: var(--ui-radius-md);
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--ui-color-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.share-email-btn:hover {
-  background: var(--ui-color-border);
-  color: var(--ui-color-text);
 }
 
 .share-collab-invite-row {
@@ -10943,17 +10927,6 @@ body {
 
 [data-theme="dark"] .share-permission-desc {
   color: var(--ui-color-muted);
-}
-
-[data-theme="dark"] .share-email-btn {
-  background: var(--ui-color-surface);
-  border-color: var(--ui-color-border);
-  color: var(--ui-color-text);
-}
-
-[data-theme="dark"] .share-email-btn:hover {
-  background: var(--ui-color-icon-hover);
-  color: var(--ui-color-text);
 }
 
 [data-theme="dark"] .live-selection-highlight {

@@ -27,6 +27,14 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('color: var(--ui-control-disabled-content);');
   });
 
+  test('brand filled button hover keeps contrast text and is not overridden by share modal styles', () => {
+    expect(appCss).toMatch(
+      /\.ui-btn--type-primary\.ui-btn--style-brand:hover:not\(:disabled\),\n\.ui-btn--primary:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-button-brand-fill-hover\);[\s\S]*border-color: var\(--ui-button-brand-fill-hover\);[\s\S]*color: var\(--ui-button-brand-contrast\);[\s\S]*\}/
+    );
+    expect(appCss).not.toContain('.share-email-btn:hover');
+    expect(appCss).not.toMatch(/\.share-email-btn \{[^}]*color:/);
+  });
+
   test('top scan bar is limited to unsaved scans and supports clear/update states', () => {
     expect(appJs).toContain('showScanBar={isUnsavedScannedMap');
     expect(appJs).toContain("scanLabel={hasTopbarRescanChanges ? 'Update' : 'Scan'}");

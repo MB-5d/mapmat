@@ -74,4 +74,36 @@ describe('ShareModal', () => {
       access_requests_enabled: false,
     });
   });
+
+  test('email send action uses shared brand filled button styling', () => {
+    act(() => {
+      root.render(
+        <ShareModal
+          show
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="view"
+          onChangePermission={jest.fn()}
+          linkCopied={false}
+          onCopyLink={jest.fn()}
+          shareEmails=""
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={jest.fn()}
+          collaborationEnabled={false}
+          collaborationMemberships={[]}
+          collaborationInvites={[]}
+          collaborationAccessRequests={[]}
+        />
+      );
+    });
+
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.trim() === 'Send'
+    );
+
+    expect(sendButton).toBeTruthy();
+    expect(sendButton.className).toContain('ui-btn');
+    expect(sendButton.className).toContain('ui-btn--type-primary');
+    expect(sendButton.className).toContain('ui-btn--style-brand');
+  });
 });
