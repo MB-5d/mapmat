@@ -3579,6 +3579,51 @@ function extractLinks(html, baseUrl) {
   return Array.from(links);
 }
 
+async function extractRenderedLinks(url) {
+  let page = null;
+  try {
+    const browserInstance = await getBrowser();
+    page = await browserInstance.newPage({
+      viewport: { width: 1365, height: 900 },
+      userAgent: 'Mozilla/5.0 (compatible; VellicBot/1.0)',
+    });
+    page.setDefaultTimeout(12000);
+    page.setDefaultNavigationTimeout(12000);
+    const response = await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: 12000,
+    });
+    await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    const links = await page.$$eval('a[href]', (anchors) => (
+      anchors
+        .map((anchor) => anchor.href)
+        .filter(Boolean)
+    ));
+    return {
+      links: Array.from(new Set(links)),
+      status: response?.status?.() || null,
+      finalUrl: response?.url?.() || url,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      links: [],
+      status: null,
+      finalUrl: url,
+      error: error?.message || 'rendered discovery failed',
+    };
+  } finally {
+    if (page) {
+      await page.close().catch(() => {});
+    }
+  }
+}
+
+function countScanTreeNodes(node) {
+  if (!node) return 0;
+  return 1 + (node.children || []).reduce((sum, child) => sum + countScanTreeNodes(child), 0);
+}
+
 function normalizeScanOptions(options = {}) {
   return {
     thumbnails: Boolean(options.thumbnails),
@@ -3604,6 +3649,36 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const origin = scanScope.origin;
   const baseHost = scanScope.baseHost;
   const allowSubdomains = scanOptions.subdomains;
+  const scanDiagnostics = {
+    seedUrl: seed,
+    finalUrl: null,
+    rootStatus: null,
+    rootContentType: null,
+    rootTitleSource: null,
+    rootClassification: null,
+    rootExtractedLinks: 0,
+    rootAllowedLinks: 0,
+    queuedCount: 0,
+    visitedCount: 0,
+    pageMapCount: 0,
+    rootChildCount: 0,
+    treeNodeCount: 0,
+    sitemapUrlsFound: 0,
+    sitemapUrlsQueued: 0,
+    robotsSitemapUrlsFound: 0,
+    commonPathQueued: 0,
+    commonPathActive: 0,
+    renderedDiscoveryTried: false,
+    renderedLinksFound: 0,
+    renderedLinksQueued: 0,
+    rejectedByScope: 0,
+    rejectedAsFile: 0,
+    failedFetches: 0,
+    errorCount: 0,
+    authCount: 0,
+    inactiveCount: 0,
+    collapseReason: null,
+  };
   const allowUrl = (candidate) => {
     const normalized = normalizeUrl(candidate);
     if (!normalized) return false;
@@ -3667,16 +3742,21 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
   const isScanFileUrl = (url) => getScanFileInfo(url).isFile;
   const allowPageUrl = (candidate) => allowUrl(candidate) && !isScanFileUrl(candidate);
-  const enqueue = (url, depth) => {
+  const enqueue = (url, depth, source = 'crawl') => {
     if (!url) return;
     if (isScanFileUrl(url)) {
+      scanDiagnostics.rejectedAsFile += 1;
       addFileArtifact(url);
       return;
     }
     if (!isWithinScanDepth(url)) return;
     if (queued.has(url)) return;
     queued.add(url);
-    queue.push({ url, depth });
+    queue.push({ url, depth, source });
+    scanDiagnostics.queuedCount += 1;
+    if (source === 'common_path') scanDiagnostics.commonPathQueued += 1;
+    if (source === 'sitemap') scanDiagnostics.sitemapUrlsQueued += 1;
+    if (source === 'rendered') scanDiagnostics.renderedLinksQueued += 1;
   };
   enqueue(seed, 0);
   recordDiscovery(seed, 'crawl');
@@ -3700,8 +3780,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   for (const path of commonPaths) {
     const commonUrl = normalizeUrl(`${origin}${path}`);
     if (commonUrl && isWithinScanDepth(commonUrl)) {
-      recordDiscovery(commonUrl, 'crawl');
-      enqueue(commonUrl, 1);
+      recordDiscovery(commonUrl, 'common_path');
+      enqueue(commonUrl, 1, 'common_path');
     }
   }
 
@@ -3748,14 +3828,19 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const urls = sitemapRes.data.split('\n').map((u) => u.trim()).filter(Boolean);
         for (const u of urls) {
           const norm = normalizeUrl(u);
+          if (!norm) continue;
+          scanDiagnostics.sitemapUrlsFound += 1;
           if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
             if (isScanFileUrl(norm)) {
+              scanDiagnostics.rejectedAsFile += 1;
               addFileArtifact(norm);
               continue;
             }
             recordDiscovery(norm, 'sitemap');
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-            enqueue(norm, 1);
+            enqueue(norm, 1, 'sitemap');
+          } else if (norm && !allowUrl(norm)) {
+            scanDiagnostics.rejectedByScope += 1;
           }
         }
         return;
@@ -3767,14 +3852,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       $('url > loc').each((_, el) => {
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
+        if (norm) scanDiagnostics.sitemapUrlsFound += 1;
         if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
           if (isScanFileUrl(norm)) {
+            scanDiagnostics.rejectedAsFile += 1;
             addFileArtifact(norm);
             return;
           }
           recordDiscovery(norm, 'sitemap');
           if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-          enqueue(norm, 1);
+          enqueue(norm, 1, 'sitemap');
+        } else if (norm && !allowUrl(norm)) {
+          scanDiagnostics.rejectedByScope += 1;
         }
       });
 
@@ -3793,6 +3882,36 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
+  const processRobotsSitemaps = async () => {
+    if (await pollJobStatus()) return;
+    try {
+      const robotsRes = await axios.get(`${origin}/robots.txt`, {
+        timeout: 8000,
+        headers: { 'User-Agent': 'VellicBot/1.0' },
+        validateStatus: (s) => s >= 200 && s < 400,
+      });
+      const sitemapUrls = String(robotsRes.data || '')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .map((line) => line.match(/^sitemap:\s*(.+)$/i)?.[1]?.trim())
+        .filter(Boolean);
+      for (const sitemapUrl of sitemapUrls) {
+        if (await pollJobStatus()) return;
+        const normalizedSitemap = normalizeUrl(sitemapUrl);
+        if (!normalizedSitemap) continue;
+        if (!getPlacementForUrl(normalizedSitemap, scanScope)) {
+          scanDiagnostics.rejectedByScope += 1;
+          continue;
+        }
+        scanDiagnostics.robotsSitemapUrlsFound += 1;
+        await processSitemap(normalizedSitemap);
+      }
+    } catch {
+      // robots.txt is optional.
+    }
+  };
+
+  await processRobotsSitemaps();
   await processSitemap(`${origin}/sitemap.xml`);
   for (const altSitemap of ['/sitemap_index.xml', '/sitemap-index.xml', '/sitemap.txt']) {
     if (stopRequested) break;
@@ -3830,7 +3949,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     return null;
   };
 
-  const processCrawlItem = async ({ url, depth }) => {
+  const processCrawlItem = async ({ url, depth, source = 'crawl' }) => {
     visited.add(url);
     const discoveryIndex = discoveryCounter++;
 
@@ -3859,6 +3978,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       finalUrl = res.finalUrl || url;
       responseTime = res.responseTime;
     } catch (e) {
+      scanDiagnostics.failedFetches += 1;
       // Still store node with fallback title so tree doesn't break
       if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
       if (scanOptions.inactivePages) inactivePages.push({ url, status: 0, reason: 'fetch_failed' });
@@ -3887,11 +4007,19 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     const classification = classifyScanResponse({ html, status, url, finalUrl });
+    if (url === seed) {
+      scanDiagnostics.finalUrl = finalUrl || url;
+      scanDiagnostics.rootStatus = status;
+      scanDiagnostics.rootContentType = normalizeContentType(contentType);
+      scanDiagnostics.rootTitleSource = classification.titleSource;
+      scanDiagnostics.rootClassification = classification.scanStatus;
+    }
     if (status >= 400) {
       const shouldKeep = (scanOptions.errorPages && (classification.isErrorStatus || classification.isBlockedStatus))
         || (scanOptions.authenticatedPages && classification.isAuthStatus)
         || (scanOptions.inactivePages && classification.isInactiveStatus);
       if (classification.isErrorStatus && scanOptions.errorPages) {
+        scanDiagnostics.errorCount += 1;
         errors.push({
           url,
           status,
@@ -3903,6 +4031,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         });
       }
       if (scanOptions.inactivePages && classification.isInactiveStatus) {
+        scanDiagnostics.inactiveCount += 1;
         inactivePages.push({ url, status, blockedReason: classification.blockedReason });
       }
       if (scanOptions.brokenLinks) {
@@ -3954,16 +4083,29 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
     });
+    if (source === 'common_path' && status >= 200 && status < 400) {
+      scanDiagnostics.commonPathActive += 1;
+    }
+    if (classification.isAuthStatus) scanDiagnostics.authCount += 1;
+    if (classification.isInactiveStatus) scanDiagnostics.inactiveCount += 1;
 
     const links = classification.shouldExtractLinks ? extractLinks(html, finalUrl || url) : [];
     const allowedLinks = links.filter((link) => allowPageUrl(link));
     linksByUrl.set(url, allowedLinks);
+    if (url === seed) {
+      scanDiagnostics.rootExtractedLinks = links.length;
+      scanDiagnostics.rootAllowedLinks = allowedLinks.length;
+    }
 
     for (const link of links) {
       if (await pollJobStatus()) break;
-      if (!allowUrl(link)) continue;
+      if (!allowUrl(link)) {
+        scanDiagnostics.rejectedByScope += 1;
+        continue;
+      }
 
       if (isScanFileUrl(link)) {
+        scanDiagnostics.rejectedAsFile += 1;
         scheduleBrokenLinkCheck(link, url);
         addFileArtifact(link, url);
         continue;
@@ -4012,7 +4154,53 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     SCAN_PAGE_CONCURRENCY,
     Math.max(1, pageLimit === null ? SCAN_PAGE_CONCURRENCY : pageLimit)
   );
-  await Promise.all(Array.from({ length: workerCount }, crawlWorker));
+  const runCrawlWorkers = async () => {
+    await Promise.all(Array.from({ length: workerCount }, crawlWorker));
+  };
+  await runCrawlWorkers();
+
+  const shouldTryRenderedDiscovery = () => {
+    if (stopRequested) return false;
+    if (pageLimit !== null && visited.size >= pageLimit) return false;
+    if ((linksByUrl.get(seed) || []).length > 0) return false;
+    if (pageMap.size > 1) return false;
+    return true;
+  };
+
+  if (shouldTryRenderedDiscovery()) {
+    scanDiagnostics.renderedDiscoveryTried = true;
+    const rendered = await extractRenderedLinks(seed);
+    scanDiagnostics.renderedLinksFound = rendered.links.length;
+    if (rendered.error) scanDiagnostics.renderedDiscoveryError = rendered.error;
+    const normalizedRenderedLinks = rendered.links
+      .map((link) => normalizeUrl(link))
+      .filter(Boolean);
+    const allowedRenderedLinks = normalizedRenderedLinks.filter((link) => allowPageUrl(link));
+    linksByUrl.set(seed, allowedRenderedLinks);
+    scanDiagnostics.rootExtractedLinks = Math.max(scanDiagnostics.rootExtractedLinks, normalizedRenderedLinks.length);
+    scanDiagnostics.rootAllowedLinks = Math.max(scanDiagnostics.rootAllowedLinks, allowedRenderedLinks.length);
+    for (const link of normalizedRenderedLinks) {
+      if (await pollJobStatus()) break;
+      if (!allowUrl(link)) {
+        scanDiagnostics.rejectedByScope += 1;
+        continue;
+      }
+      if (isScanFileUrl(link)) {
+        scanDiagnostics.rejectedAsFile += 1;
+        addFileArtifact(link, seed);
+        continue;
+      }
+      recordLinkEdge(seed, link);
+      recordDiscovery(link, 'rendered');
+      if (!referrerMap.has(link) && link !== seed) {
+        referrerMap.set(link, seed);
+      }
+      enqueue(link, 1, 'rendered');
+    }
+    if (!stopRequested && queueIndex < queue.length) {
+      await runCrawlWorkers();
+    }
+  }
 
   if (scanOptions.brokenLinks && brokenLinkCandidates.length && !stopRequested) {
     await runWithConcurrency(
@@ -4496,6 +4684,36 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   prunedOrphanNodes.forEach(stripInternalFields);
   subdomainNodes.forEach(stripInternalFields);
 
+  scanDiagnostics.visitedCount = visited.size;
+  scanDiagnostics.pageMapCount = pageMap.size;
+  scanDiagnostics.rootChildCount = root?.children?.length || 0;
+  scanDiagnostics.treeNodeCount = countScanTreeNodes(root);
+
+  const hasRootOnlyCollapseSignal = scanDiagnostics.rootAllowedLinks > 0
+    || scanDiagnostics.sitemapUrlsQueued > 0
+    || scanDiagnostics.commonPathActive > 0
+    || scanDiagnostics.renderedLinksQueued > 0
+    || pageMap.size > 1;
+  if (!partialReason && scanDiagnostics.treeNodeCount <= 1 && hasRootOnlyCollapseSignal) {
+    partialReason = 'scan_collapsed';
+    const reasons = [];
+    if (scanDiagnostics.rootAllowedLinks > 0) reasons.push('root_links_found');
+    if (scanDiagnostics.sitemapUrlsQueued > 0) reasons.push('sitemap_urls_queued');
+    if (scanDiagnostics.commonPathActive > 0) reasons.push('common_paths_active');
+    if (scanDiagnostics.renderedLinksQueued > 0) reasons.push('rendered_links_queued');
+    if (pageMap.size > 1) reasons.push('page_map_has_pages');
+    scanDiagnostics.collapseReason = reasons.join(',') || 'root_only_with_discovery_signals';
+    console.warn('[scan] Root-only scan collapse detected:', {
+      seed,
+      collapseReason: scanDiagnostics.collapseReason,
+      treeNodeCount: scanDiagnostics.treeNodeCount,
+      pageMapCount: scanDiagnostics.pageMapCount,
+      rootAllowedLinks: scanDiagnostics.rootAllowedLinks,
+      sitemapUrlsQueued: scanDiagnostics.sitemapUrlsQueued,
+      renderedLinksQueued: scanDiagnostics.renderedLinksQueued,
+    });
+  }
+
   if (scanOptions.duplicates) {
     const canonicalToRootUrl = new Map();
     const collectCanonical = (node) => {
@@ -4563,6 +4781,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       allowSubdomains: scanScope.allowSubdomains,
       exactOnly: scanScope.exactOnly,
     },
+    scanDiagnostics,
     crosslinks,
   };
 

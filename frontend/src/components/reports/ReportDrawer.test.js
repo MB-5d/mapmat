@@ -254,6 +254,20 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('Add a clear description.');
   });
 
+  test('shows scan collapse diagnostics in the report', () => {
+    renderDrawer({
+      scanMeta: {
+        partialReason: 'scan_collapsed',
+        scanDiagnostics: {
+          collapseReason: 'root_links_found',
+        },
+      },
+    });
+
+    expect(container.textContent).toContain('Scan only confirmed the homepage.');
+    expect(container.textContent).toContain('root_links_found');
+  });
+
   test('shows insights loading and error states', () => {
     renderDrawer({ insightsLoading: true });
 

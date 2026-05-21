@@ -125,6 +125,10 @@ import {
   normalizeMapOrientation,
 } from './utils/appRoutes';
 import {
+  getCollapsedScanMessage,
+  shouldPreserveExistingMapForCollapsedScan,
+} from './utils/scanCompletion';
+import {
   clearAnalyticsUser,
   identifyAnalyticsUser,
   trackEvent,
@@ -2177,6 +2181,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const mapNameEditStartRef = useRef('');
   const scheduleResetViewRef = useRef(null);
   const centerHomeRef = useRef(null);
+  const largeMapHomeSceneKeyRef = useRef('');
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
@@ -4222,6 +4227,26 @@ export default function App({ currentRoute, navigateToRoute }) {
     pan: panRef.current,
     scale: scaleRef.current,
   }), []);
+
+  const handleLargeMapSceneLoaded = useCallback((scene) => {
+    if (!useLargeMapSurface || !scene?.homeNode || !canvasRef.current) return;
+    const sceneKey = [
+      currentMap?.id || 'unsaved',
+      scene.mapUpdatedAt || '',
+      mapOrientation,
+      showThumbnails ? 'thumbs' : 'cards',
+    ].join(':');
+    if (largeMapHomeSceneKeyRef.current === sceneKey) return;
+    largeMapHomeSceneKeyRef.current = sceneKey;
+
+    const node = scene.homeNode;
+    const nextScale = scaleRef.current || 1;
+    applyTransform({
+      scale: nextScale,
+      x: canvasRef.current.clientWidth / 2 - (node.x + node.w / 2) * nextScale,
+      y: canvasRef.current.clientHeight / 2 - (node.y + node.h / 2) * nextScale,
+    }, { skipPanClamp: true });
+  }, [applyTransform, currentMap?.id, mapOrientation, showThumbnails, useLargeMapSurface]);
 
   const animatePanTo = useCallback((target) => {
     const start = { ...panRef.current };
@@ -8520,6 +8545,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
 
       setCurrentMap(savedMap);
+      largeMapHomeSceneKeyRef.current = '';
       navigateToRoute(createMapRoute(savedMap.id));
       resetAutosaveTracking({
         snapshot: serializeMapAutosaveSnapshot({
@@ -8702,6 +8728,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
+    largeMapHomeSceneKeyRef.current = '';
     const mapHasThumbnails = mapHasThumbnailAsset(map.root, map.orphans || []);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
@@ -9457,6 +9484,13 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       const isStoppedPartial = data.partial === true && data.partialReason === 'stopped_by_user';
       const isPartialResult = data.partial === true;
+      const hostname = (() => {
+        try {
+          return new URL(url).hostname;
+        } catch {
+          return '';
+        }
+      })();
 
       let merged = { root: data.root, orphans: data.orphans || [] };
       try {
@@ -9464,6 +9498,30 @@ export default function App({ currentRoute, navigateToRoute }) {
       } catch (err) {
         console.error('Scan artifact merge failed:', err);
         showToast('Scan completed with partial data', 'warning');
+      }
+
+      if (shouldMergeScanResult && shouldPreserveExistingMapForCollapsedScan({
+        result: data,
+        nextRoot: merged.root,
+        existingRoot: root,
+      })) {
+        streamHandled = true;
+        setScanMeta({
+          brokenLinks: data.brokenLinks || [],
+          partial: true,
+          partialReason: data.partialReason || null,
+          scanDiagnostics: data.scanDiagnostics || null,
+        });
+        trackEvent('scan_completed', {
+          hostname,
+          page_count: countNodes(root),
+          partial: 'true',
+          partial_reason: data.partialReason || '',
+          preserved_existing_map: 'true',
+        });
+        showToast(getCollapsedScanMessage(hostname), 'warning');
+        resetScanUi();
+        return;
       }
 
       const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
@@ -9524,6 +9582,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         brokenLinks: data.brokenLinks || [],
         partial: isPartialResult,
         partialReason: data.partialReason || null,
+        scanDiagnostics: data.scanDiagnostics || null,
       });
       setScanLayerAvailability({
         placementPrimary: true,
@@ -9573,13 +9632,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           setMapName('Untitled Map');
         }
       }
-      const hostname = (() => {
-        try {
-          return new URL(url).hostname;
-        } catch {
-          return '';
-        }
-      })();
       const pageCount = countNodes(merged.root);
       addToHistory(url, merged.root, pageCount, scanConfig, {
         orphans: merged.orphans,
@@ -9593,6 +9645,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       if (isStoppedPartial) {
         showToast(`Scan stopped. Showing current results${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (data.partialReason === 'scan_collapsed') {
+        showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
       } else if (isPartialResult) {
         showToast(`Scan complete with partial data${hostname ? `: ${hostname}` : ''}`, 'warning');
       } else {
@@ -13968,6 +14022,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onNodeContextMenu={openLargeMapNodeMenu}
                     onNodeDoubleClick={handleLargeMapNodeDoubleClick}
                     onNodeExpand={handleLargeMapNodeExpand}
+                    onSceneLoaded={handleLargeMapSceneLoaded}
                   />
                 ) : (
                 <SitemapTree
@@ -14914,6 +14969,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               onLocateUrl={locateUrlOnMap}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
+              scanMeta={scanMeta}
             />
             <ImageReportDrawer
               isOpen={showImageReportDrawer}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowUpToLine,
   ArrowUpDown,
   ChevronDown,
@@ -57,6 +58,7 @@ const ReportDrawer = ({
   onLocateUrl,
   reportTitle,
   reportTimestamp,
+  scanMeta,
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'number', direction: 'asc' });
   const [activeTab, setActiveTab] = useState('report');
@@ -131,6 +133,9 @@ const ReportDrawer = ({
     () => typeOptions.filter(option => filterCounts[option.key] > 0),
     [typeOptions, filterCounts]
   );
+  const scanCollapseReason = scanMeta?.partialReason === 'scan_collapsed'
+    ? (scanMeta?.scanDiagnostics?.collapseReason || 'Root-only scan returned after discovery signals were found')
+    : '';
 
   const activeFilterKeys = useMemo(
     () => Object.entries(filters).filter(([, value]) => value).map(([key]) => key),
@@ -324,6 +329,15 @@ const ReportDrawer = ({
       >
         {activeTab === 'report' ? (
           <>
+        {scanCollapseReason && (
+          <div className="ui-status-alert ui-status-alert--warning report-scan-alert">
+            <AlertTriangle size={16} className="ui-status-alert__icon" />
+            <div className="ui-status-alert__content">
+              <strong>Scan only confirmed the homepage.</strong>
+              <span>Reason: {scanCollapseReason}</span>
+            </div>
+          </div>
+        )}
         <section className="report-summary">
           <div className="report-total-card">
             <div className="report-total-value">{stats.total}</div>

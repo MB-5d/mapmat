@@ -97,6 +97,7 @@ const MapSurfaceV2 = ({
   onNodeContextMenu,
   onNodeDoubleClick,
   onNodeExpand,
+  onSceneLoaded,
 }) => {
   const canvasRef = useRef(null);
   const imageCacheRef = useRef(null);
@@ -165,6 +166,7 @@ const MapSurfaceV2 = ({
     if (!mapId || !getScene) return;
     const params = getSceneParams(view);
     const fetchKey = [
+      mapId,
       Math.round(params.x / 180),
       Math.round(params.y / 180),
       Math.round(params.w / 180),
@@ -185,6 +187,7 @@ const MapSurfaceV2 = ({
         const nextScene = response?.scene || null;
         if (!nextScene || controller.signal.aborted) return;
         setScene(nextScene);
+        onSceneLoaded?.(nextScene);
         setError('');
         setLoading(false);
       } catch (err) {
@@ -193,7 +196,7 @@ const MapSurfaceV2 = ({
         setLoading(false);
       }
     }, SCENE_FETCH_IDLE_MS);
-  }, [getScene, getSceneParams, mapId]);
+  }, [getScene, getSceneParams, mapId, onSceneLoaded]);
 
   const requestVisibleImages = useCallback((nodes, view) => {
     const cache = imageCacheRef.current;

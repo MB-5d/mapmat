@@ -30,6 +30,8 @@ const scene = buildMapScene({
 assert.strictEqual(countMapNodes(root), 41);
 assert(scene.nodeCount >= 41);
 assert(scene.visibleNodeCount > 0);
+assert(scene.homeNode, 'scene should include home node position for initial centering');
+assert.strictEqual(scene.homeNode.id, 'root');
 assert(scene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
 assert(scene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'thumbnailFullUrl')));
 assert(scene.nodes.some((node) => node.thumbnailUrl));
@@ -73,6 +75,17 @@ const largeScene = buildMapScene({
 });
 assert.strictEqual(countMapNodes(largeRoot), 5101);
 assert(largeScene.visibleNodeCount < largeScene.nodeCount);
+assert(largeScene.homeNode, 'large scenes should include home node even when viewport is sparse');
+assert.strictEqual(largeScene.homeNode.id, 'large-root');
 assert(largeScene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
+
+const emptyViewportScene = buildMapScene({
+  root: largeRoot,
+  viewport: { x: -500000, y: -500000, w: 500, h: 500, zoom: 1 },
+  showThumbnails: true,
+});
+assert.strictEqual(emptyViewportScene.visibleNodeCount, 0);
+assert(emptyViewportScene.homeNode, 'empty viewport scene should still expose home node for centering');
+assert.strictEqual(emptyViewportScene.homeNode.id, 'large-root');
 
 console.log('map scene checks passed');

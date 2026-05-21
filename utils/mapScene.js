@@ -349,6 +349,9 @@ function buildMapScene({ root, orphans = [], viewport = {}, orientation = 'verti
   const normalizedViewport = normalizeViewport(viewport);
   const thumbnailLod = showThumbnails ? getThumbnailLod(normalizedViewport.zoom) : 'none';
   const layout = computeSceneLayout(root, orphans, { orientation, showThumbnails });
+  const homeLayoutNode = layout.nodes.find((node) => !node.isOrphan && node.depth === 0)
+    || layout.nodes[0]
+    || null;
   const visibleNodes = layout.nodes
     .filter((node) => rectsIntersect(getNodeBounds(node), normalizedViewport))
     .map((node) => sanitizeSceneNode(node, { thumbnailLod }));
@@ -365,6 +368,7 @@ function buildMapScene({ root, orphans = [], viewport = {}, orientation = 'verti
     visibleConnectorCount: connectors.length,
     thumbnailLod,
     viewport: normalizedViewport,
+    homeNode: homeLayoutNode ? sanitizeSceneNode(homeLayoutNode, { thumbnailLod: 'none' }) : null,
     nodes: visibleNodes,
     connectors,
     visibleNodeIds: Array.from(visibleNodeIds),
