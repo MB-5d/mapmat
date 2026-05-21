@@ -5,6 +5,7 @@ import {
   BookmarkPlus,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   MessageSquare,
   Pencil,
   Users,
@@ -378,56 +379,58 @@ const VersionHistoryDrawer = ({
         key={version.id}
         className={`version-history-item${isActive ? ' active' : ''}${isBookmarked ? ' bookmarked' : ''}${isEditing ? ' editing' : ''}`}
       >
-        {hasNotes ? (
-          <IconButton
-            variant="ghost"
-            size="sm"
-            className="version-history-note-toggle"
-            icon={detailsExpanded ? <ChevronDown /> : <ChevronRight />}
-            onClick={() => toggleVersionDetails(version.id)}
-            aria-label={detailsExpanded ? 'Hide version details' : 'Show version details'}
-            aria-expanded={detailsExpanded}
-            aria-controls={detailsId}
-            title={detailsExpanded ? 'Hide details' : 'Show details'}
-          />
-        ) : null}
-        <button
-          type="button"
-          className={`version-history-restore${hasNotes ? ' has-note-toggle' : ''}`}
-          onClick={() => onRestoreVersion(version)}
-        >
-          <span className={`version-history-marker${isBookmarked ? ' bookmarked' : ''}${isCurrent ? ' current' : ''}`} />
-          <div className="version-history-main">
-            <div className="version-history-title-row">
-              {isBookmarked ? <Bookmark size={14} className="version-history-title-icon" aria-hidden="true" /> : null}
-              <span className="version-history-title">{getVersionDisplayName(version)}</span>
+        <span className={`version-history-marker${isBookmarked ? ' bookmarked' : ''}${isCurrent ? ' current' : ''}`} />
+        <div className="version-history-content">
+          <div className="version-history-row">
+            <button
+              type="button"
+              className="version-history-restore"
+              onClick={() => onRestoreVersion(version)}
+            >
+              <div className="version-history-main">
+                <div className="version-history-title-row">
+                  {isBookmarked ? <Bookmark size={14} className="version-history-title-icon" aria-hidden="true" /> : null}
+                  <span className="version-history-title">{getVersionDisplayName(version)}</span>
+                </div>
+              </div>
+            </button>
+            {canBookmarkVersion ? (
+              <IconButton
+                variant="ghost"
+                size="sm"
+                className="version-history-inline-action"
+                icon={isBookmarked ? <Pencil /> : <BookmarkPlus />}
+                onClick={() => startBookmarkEdit(version)}
+                aria-label={isBookmarked ? 'Edit version bookmark' : 'Bookmark version'}
+                title={isBookmarked ? 'Edit bookmark' : 'Bookmark version'}
+              />
+            ) : null}
+            <div className="version-history-meta">
+              <div className="version-history-number">v{version.version_number}</div>
+              {hasNotes ? (
+                <IconButton
+                  variant="ghost"
+                  size="sm"
+                  className="version-history-detail-toggle"
+                  icon={detailsExpanded ? <ChevronUp /> : <ChevronDown />}
+                  onClick={() => toggleVersionDetails(version.id)}
+                  aria-label={detailsExpanded ? 'Hide version details' : 'Show version details'}
+                  aria-expanded={detailsExpanded}
+                  aria-controls={detailsId}
+                  title={detailsExpanded ? 'Hide details' : 'Show details'}
+                />
+              ) : null}
             </div>
           </div>
-          <div className="version-history-meta">
-            <div className="version-history-number">v{version.version_number}</div>
-          </div>
-        </button>
-        {hasNotes && detailsExpanded ? (
-          <div className="version-history-details" id={detailsId}>
-            <div className="version-history-notes">{version.notes}</div>
-            {isBookmarked && bookmarkerLabel ? (
-              <div className="version-history-actor">Marked by {bookmarkerLabel}</div>
-            ) : null}
-          </div>
-        ) : null}
-        {canBookmarkVersion ? (
-          <div className="version-history-row-actions">
-            <IconButton
-              variant="ghost"
-              size="sm"
-              className="version-history-bookmark-action"
-              icon={isBookmarked ? <Pencil /> : <BookmarkPlus />}
-              onClick={() => startBookmarkEdit(version)}
-              aria-label={isBookmarked ? 'Edit version bookmark' : 'Bookmark version'}
-              title={isBookmarked ? 'Edit bookmark' : 'Bookmark version'}
-            />
-          </div>
-        ) : null}
+          {hasNotes && detailsExpanded ? (
+            <div className="version-history-details" id={detailsId}>
+              <div className="version-history-notes">{version.notes}</div>
+              {isBookmarked && bookmarkerLabel ? (
+                <div className="version-history-actor">Marked by {bookmarkerLabel}</div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         {isEditing ? (
           <form className="version-history-bookmark-editor" onSubmit={(event) => handleBookmarkSubmit(event, version)}>
             <Field label="Name" required error={bookmarkError}>

@@ -124,6 +124,7 @@ describe('VersionHistoryDrawer', () => {
   test('keeps version notes collapsed until expanded', async () => {
     const currentDate = isoDateForOffset(0, 12);
     await renderDrawer({
+      canBookmarkVersion: true,
       versions: [
         {
           id: 'v-note',
@@ -143,7 +144,16 @@ describe('VersionHistoryDrawer', () => {
     expect(container.textContent).not.toContain('Only got ~450 in the first try');
     expect(container.textContent).not.toContain('Marked by New guy');
 
+    const row = container.querySelector('.version-history-row');
+    const titleButton = row.querySelector('.version-history-restore');
+    const editButton = row.querySelector('button[aria-label="Edit version bookmark"]');
     const toggle = container.querySelector('button[aria-label="Show version details"]');
+    const meta = row.querySelector('.version-history-meta');
+    const rowChildren = Array.from(row.children);
+    expect(titleButton.textContent).toContain('Thumbnails captured');
+    expect(rowChildren.indexOf(editButton)).toBeGreaterThan(rowChildren.indexOf(titleButton));
+    expect(rowChildren.indexOf(editButton)).toBeLessThan(rowChildren.indexOf(meta));
+    expect(meta.contains(toggle)).toBe(true);
     expect(toggle).toBeTruthy();
     await act(async () => {
       toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -151,6 +161,7 @@ describe('VersionHistoryDrawer', () => {
 
     expect(container.textContent).toContain('Only got ~450 in the first try');
     expect(container.textContent).toContain('Marked by New guy');
+    expect(container.querySelector('button[aria-label="Hide version details"]')).toBeTruthy();
   });
 
   test('groups activity by month and date while keeping actor details in activity rows', async () => {
