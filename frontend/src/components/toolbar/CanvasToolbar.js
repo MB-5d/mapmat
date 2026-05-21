@@ -1,5 +1,7 @@
 import React from 'react';
 import {
+  ArrowDownFromLine,
+  ArrowRightFromLine,
   Bookmark,
   CopyPlus,
   Download,
@@ -87,7 +89,10 @@ const CanvasToolbar = ({
   legendMenuRef,
   legendPanel,
   mapOrientation = 'vertical',
-  onToggleOrientation,
+  showOrientationMenu,
+  onToggleOrientationMenu,
+  orientationMenuRef,
+  onMapOrientationChange,
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
@@ -316,15 +321,41 @@ const CanvasToolbar = ({
         </MenuPanel>
       )}
     </div>
-    <ToolButton
-      active={isHorizontalOrientation}
-      onClick={onToggleOrientation}
-      icon={<Ratio />}
-      label={orientationLabel}
-      title={orientationLabel}
-      disabled={!hasMap}
-      aria-pressed={isHorizontalOrientation}
-    />
+    <div className="canvas-tool-menu-wrapper" ref={orientationMenuRef}>
+      <ToolButton
+        active={showOrientationMenu}
+        onClick={onToggleOrientationMenu}
+        icon={<Ratio />}
+        label="Orientation"
+        title={orientationLabel}
+        disabled={!hasMap}
+        aria-expanded={showOrientationMenu}
+        aria-haspopup="menu"
+      />
+      {showOrientationMenu && (
+        <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+          <MenuSectionHeader className="canvas-tool-menu-label">Orientation</MenuSectionHeader>
+          <MenuItem
+            className="canvas-tool-menu-item"
+            icon={<ArrowDownFromLine size={16} />}
+            label="Vertical"
+            selected={!isHorizontalOrientation}
+            role="menuitemradio"
+            aria-checked={!isHorizontalOrientation}
+            onClick={() => onMapOrientationChange?.('vertical')}
+          />
+          <MenuItem
+            className="canvas-tool-menu-item"
+            icon={<ArrowRightFromLine size={16} />}
+            label="Horizontal"
+            selected={isHorizontalOrientation}
+            role="menuitemradio"
+            aria-checked={isHorizontalOrientation}
+            onClick={() => onMapOrientationChange?.('horizontal')}
+          />
+        </MenuPanel>
+      )}
+    </div>
 
     {canEdit && <div className="canvas-toolbar-divider" />}
 

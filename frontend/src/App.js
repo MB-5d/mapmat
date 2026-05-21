@@ -2072,6 +2072,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
+  const [showOrientationMenu, setShowOrientationMenu] = useState(false);
   const [showImageMenu, setShowImageMenu] = useState(false);
   const [mapOrientation, setMapOrientation] = useState(() => (
     currentRoute?.orientation || normalizeMapOrientation(currentRoute?.searchParams?.get('orientation'))
@@ -2142,6 +2143,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const suppressNodeClickRef = useRef(false);
   const viewDropdownRef = useRef(null);
   const colorKeyRef = useRef(null);
+  const orientationMenuRef = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
   const blankUploadInputRef = useRef(null);
@@ -2245,6 +2247,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showColorKey]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (orientationMenuRef.current && !orientationMenuRef.current.contains(e.target)) {
+        setShowOrientationMenu(false);
+      }
+    };
+    if (showOrientationMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showOrientationMenu]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -9820,12 +9834,15 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (showColorKey) {
           setShowColorKey(false);
         }
+        if (showOrientationMenu) {
+          setShowOrientationMenu(false);
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, showOrientationMenu, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for canvas zoom. Press-drag remains the pan control.
   const wheelStateRef = useRef({
@@ -13990,6 +14007,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       markMentionCommentsRead();
                       setShowViewDropdown(false);
                       setShowColorKey(false);
+                      setShowOrientationMenu(false);
                       setShowReportDrawer(false);
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
@@ -14009,6 +14027,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     if (next) {
                       setShowViewDropdown(false);
                       setShowColorKey(false);
+                      setShowOrientationMenu(false);
                       setShowCommentsPanel(false);
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
@@ -14026,6 +14045,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     const next = !prev;
                     if (next) {
                       setShowColorKey(false);
+                      setShowOrientationMenu(false);
                     }
                     return next;
                   });
@@ -14081,6 +14101,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     const next = !prev;
                     if (next) {
                       setShowViewDropdown(false);
+                      setShowOrientationMenu(false);
                     }
                     return next;
                   });
@@ -14113,20 +14134,30 @@ export default function App({ currentRoute, navigateToRoute }) {
                   />
                 ),
                 mapOrientation,
-                onToggleOrientation: () => {
-                  setMapOrientation((currentOrientation) => (
-                    normalizeMapOrientation(currentOrientation) === MAP_ORIENTATIONS.HORIZONTAL
-                      ? MAP_ORIENTATIONS.VERTICAL
-                      : MAP_ORIENTATIONS.HORIZONTAL
-                  ));
-                  setShowViewDropdown(false);
-                  setShowColorKey(false);
+                showOrientationMenu,
+                onToggleOrientationMenu: () => {
+                  setShowOrientationMenu((prev) => {
+                    const next = !prev;
+                    if (next) {
+                      setShowViewDropdown(false);
+                      setShowColorKey(false);
+                    }
+                    return next;
+                  });
+                },
+                orientationMenuRef,
+                onMapOrientationChange: (nextOrientation) => {
+                  setMapOrientation(normalizeMapOrientation(nextOrientation));
+                  setShowOrientationMenu(false);
                 },
                 onToggleImageMenu: () => {
                   if (showImageMenu) {
                     setShowImageMenu(false);
                     return;
                   }
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowOrientationMenu(false);
                   setShowImageReportDrawer(false);
                   setShowImageMenu(true);
                   validateCurrentMapImageAssets();

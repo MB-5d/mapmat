@@ -140,8 +140,9 @@ describe('CanvasToolbar', () => {
     expect(saveButton.disabled).toBe(true);
   });
 
-  test('shows orientation as a top-level toolbar action next to legend', () => {
-    const onToggleOrientation = jest.fn();
+  test('shows orientation as a top-level toolbar menu next to legend', () => {
+    const onToggleOrientationMenu = jest.fn();
+    const onMapOrientationChange = jest.fn();
 
     act(() => {
       root.render(
@@ -167,25 +168,38 @@ describe('CanvasToolbar', () => {
           hasSavedMap
           showVersionHistory={false}
           mapOrientation="horizontal"
-          onToggleOrientation={onToggleOrientation}
+          showOrientationMenu
+          onToggleOrientationMenu={onToggleOrientationMenu}
+          orientationMenuRef={{ current: null }}
+          onMapOrientationChange={onMapOrientationChange}
         />
       );
     });
 
     const buttons = Array.from(container.querySelectorAll('button'));
     const legendButton = container.querySelector('button[aria-label="Legend"]');
-    const orientationButton = container.querySelector('button[aria-label="Orientation: Horizontal"]');
+    const orientationButton = container.querySelector('button[aria-label="Orientation"]');
+    const verticalButton = buttons.find((button) => button.textContent.includes('Vertical'));
+    const horizontalButton = buttons.find((button) => button.textContent.includes('Horizontal'));
 
     expect(orientationButton).not.toBeNull();
     expect(orientationButton.className).toContain('active');
-    expect(orientationButton.getAttribute('aria-pressed')).toBe('true');
+    expect(orientationButton.getAttribute('aria-expanded')).toBe('true');
     expect(buttons.indexOf(orientationButton)).toBe(buttons.indexOf(legendButton) + 1);
+    expect(container.querySelector('.canvas-tool-menu-label').textContent).toBe('Orientation');
+    expect(verticalButton).not.toBeNull();
+    expect(horizontalButton).not.toBeNull();
+    expect(verticalButton.getAttribute('aria-checked')).toBe('false');
+    expect(horizontalButton.getAttribute('aria-checked')).toBe('true');
+    expect(horizontalButton.className).toContain('ui-menu-item--selected');
 
     act(() => {
       orientationButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      verticalButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onToggleOrientation).toHaveBeenCalledTimes(1);
+    expect(onToggleOrientationMenu).toHaveBeenCalledTimes(1);
+    expect(onMapOrientationChange).toHaveBeenCalledWith('vertical');
   });
 
   test('uses combined image download actions', () => {
