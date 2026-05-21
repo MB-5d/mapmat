@@ -541,7 +541,7 @@ const appSemantics = {
     'ui-control-disabled-content': 'var(--color-plum-300)',
     'ui-color-accent-soft': 'rgba(99, 102, 241, 0.18)',
     'ui-color-accent-soft-border': 'rgba(129, 140, 248, 0.7)',
-    'ui-canvas-grid-dot': 'rgba(107, 90, 128, 0.45)',
+    'ui-canvas-grid-dot': 'rgba(86, 69, 110, 0.45)',
     'ui-canvas-scrim': 'rgba(13, 8, 18, 0.9)',
     'ui-route-gate-surface': 'rgba(26, 16, 34, 0.96)',
     'ui-route-gate-warning-surface': 'linear-gradient(180deg, rgba(42, 29, 8, 0.98) 0%, rgba(26, 16, 34, 0.98) 100%)',
