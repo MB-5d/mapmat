@@ -56,6 +56,7 @@ const {
   sortImageDownloadEntries,
   urlsMatch,
 } = require('../utils/imageDownloadPackage');
+const { buildMapScene } = require('../utils/mapScene');
 
 const router = express.Router();
 const NODE_ASSET_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
@@ -1818,6 +1819,52 @@ router.get('/maps', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/maps/:id/scene - Get a viewport-sized canvas scene for large maps
+router.get('/maps/:id/scene', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapWithProjectAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapWithProjectForUserAsync(id, req.user.id);
+
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_READ,
+      failureError: 'Map not found',
+    })) return;
+
+    const parsed = parseMapFields(map);
+    const scene = buildMapScene({
+      root: parsed.root,
+      orphans: parsed.orphans || [],
+      orientation: req.query?.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+      showThumbnails: parseBooleanLike(req.query?.thumbnails, true),
+      viewport: {
+        x: req.query?.x,
+        y: req.query?.y,
+        w: req.query?.w,
+        h: req.query?.h,
+        zoom: req.query?.zoom,
+        overscan: req.query?.overscan,
+      },
+    });
+
+    res.json({
+      scene: {
+        mapId: id,
+        mapUpdatedAt: map.updated_at || null,
+        ...scene,
+      },
+    });
+  } catch (error) {
+    console.error('Get map scene error:', error);
+    res.status(500).json({ error: 'Failed to get map scene' });
+  }
+});
+
 // GET /api/maps/:id - Get a specific map
 router.get('/maps/:id', requireAuth, async (req, res) => {
   try {
@@ -1835,13 +1882,19 @@ router.get('/maps/:id', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
+    const parsed = parseMapFields(map);
     res.json({
       map: {
-        ...repaired.row,
-        ...repaired.parsed,
+        ...map,
+        ...parsed,
       },
     });
+
+    setTimeout(() => {
+      repairMapImageAssetsFromManifest(map, { persist: true }).catch((error) => {
+        console.warn('Deferred map image asset repair error:', error.message);
+      });
+    }, 0);
   } catch (error) {
     console.error('Get map error:', error);
     res.status(500).json({ error: 'Failed to get map' });

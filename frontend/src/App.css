@@ -3076,6 +3076,57 @@ body {
   z-index: 1;
 }
 
+.content.large-map-content {
+  position: fixed;
+  inset: 0;
+  transform: none !important;
+  width: 100%;
+  height: 100%;
+  will-change: auto;
+  overflow: hidden;
+}
+
+.large-map-surface-v2 {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.large-map-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.large-map-surface-status,
+.large-map-performance-pill {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  z-index: 4;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border-subtle);
+  border-radius: 999px;
+  background: var(--ui-surface-elevated);
+  color: var(--ui-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: var(--ui-shadow-popover);
+  pointer-events: none;
+}
+
+.large-map-surface-error {
+  color: var(--ui-status-danger-text);
+  border-color: var(--ui-status-danger-border);
+}
+
+.large-map-performance-pill {
+  left: 20px;
+  right: auto;
+  color: var(--ui-text-primary);
+}
+
 .selection-rect {
   position: absolute;
   border: 1px dashed var(--color-primary);

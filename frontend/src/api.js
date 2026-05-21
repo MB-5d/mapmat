@@ -477,6 +477,15 @@ export async function getMap(id) {
   return fetchApi(`/api/maps/${id}`);
 }
 
+export async function getMapScene(id, params = {}, options = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    query.set(key, String(value));
+  });
+  return fetchApi(`/api/maps/${id}/scene${query.toString() ? `?${query.toString()}` : ''}`, options);
+}
+
 export async function saveMap(data) {
   return fetchApi('/api/maps', {
     method: 'POST',

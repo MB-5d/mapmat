@@ -23,6 +23,7 @@ import modifyIllustrationDark from './assets/home/modify-illustration-dark.png';
 import modifyIllustration from './assets/home/modify-illustration.png';
 import uploadIllustrationDark from './assets/home/upload-illustration-dark.png';
 import uploadIllustration from './assets/home/upload-illustration.png';
+import MapSurfaceV2 from './components/canvas/MapSurfaceV2';
 import { DraggableNodeCard, DragOverlayTree } from './components/nodes/NodeCard';
 import CommentPopover from './components/comments/CommentPopover';
 import CommentsPanel from './components/comments/CommentsPanel';
@@ -143,6 +144,10 @@ import {
   isDataImageUrl,
   shouldRenderConnectionForVisibleNodes,
 } from './utils/canvasPerformance';
+import {
+  countMapNodes as countLargeMapNodes,
+  shouldUseLargeMapSurface,
+} from './utils/largeMapPerformance';
 const treeMoveUtils = require('./utils/treeMoveUtils');
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
@@ -1307,6 +1312,21 @@ const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
   if (rootNode) walk(rootNode);
   orphanNodes.forEach(walk);
   return result;
+};
+
+const mapHasThumbnailAsset = (rootNode, orphanNodes = []) => {
+  let found = false;
+  const walk = (node) => {
+    if (!node || found) return;
+    if (node.thumbnailUrl) {
+      found = true;
+      return;
+    }
+    node.children?.forEach(walk);
+  };
+  if (rootNode) walk(rootNode);
+  (Array.isArray(orphanNodes) ? orphanNodes : []).forEach(walk);
+  return found;
 };
 
 const isStoredScreenshotAsset = (value) => {
@@ -3345,17 +3365,27 @@ export default function App({ currentRoute, navigateToRoute }) {
     return attachCommentsToNodeTree(root, savedMapCommentsByNode);
   }, [root, savedMapCommentsByNode, useBackendComments]);
 
+  const largeMapNodeCount = useMemo(() => (
+    countLargeMapNodes(root, orphans)
+  ), [orphans, root]);
+
+  const useLargeMapSurface = shouldUseLargeMapSurface({
+    nodeCount: largeMapNodeCount,
+    hasSavedMap: !!currentMap?.id,
+  });
+
   // Build a unified index for root + orphan + subdomain trees
   const forestIndex = useMemo(() => buildForestIndex(root, orphans), [root, orphans]);
 
   const mapLayout = useMemo(() => {
+    if (useLargeMapSurface) return null;
     if (!renderRoot) return null;
     return computeLayout(renderRoot, visibleOrphans, showThumbnails, expandedStacks, {
       mode: 'after-root',
       renderOrphanChildren: true,
       orientation: mapOrientation,
     });
-  }, [renderRoot, visibleOrphans, showThumbnails, expandedStacks, mapOrientation]);
+  }, [expandedStacks, mapOrientation, renderRoot, showThumbnails, useLargeMapSurface, visibleOrphans]);
 
   useEffect(() => {
     layoutRef.current = mapLayout;
@@ -3387,6 +3417,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [getNodeStackSelectionIds]);
 
   const brokenConnections = useMemo(() => {
+    if (useLargeMapSurface) return [];
     const visibleNodes = collectAllNodesWithOrphans(renderRoot, visibleOrphans);
     const nodeById = new Map(visibleNodes.map((node) => [node.id, node]));
     const urlToId = new Map();
@@ -3446,7 +3477,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         return { id: `broken-${sourceId}-${targetId}-${index}`, sourceId, targetId };
       })
       .filter(Boolean);
-  }, [scanMeta.brokenLinks, renderRoot, visibleOrphans, forestIndex]);
+  }, [scanMeta.brokenLinks, renderRoot, visibleOrphans, forestIndex, useLargeMapSurface]);
 
   const autoCrosslinkConnections = useMemo(
     () => connections.filter((conn) => conn.type === 'crosslink' && conn.autoRoute),
@@ -4123,7 +4154,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const applyCanvasTransformDom = useCallback((nextScale, nextPan) => {
     const content = contentRef.current;
-    if (content) {
+    if (content && content.dataset.largeMapSurface !== '1') {
       content.style.transform = `translate(${nextPan.x}px, ${nextPan.y}px) scale(${nextScale})`;
     }
     const canvas = canvasRef.current;
@@ -4182,6 +4213,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     scheduleTransformStateCommit();
     return { scale: nextScale, pan: clampedPan };
   }, [applyCanvasTransformDom, clampPan, scheduleTransformStateCommit]);
+
+  const getLargeMapViewState = useCallback(() => ({
+    pan: panRef.current,
+    scale: scaleRef.current,
+  }), []);
 
   const animatePanTo = useCallback((target) => {
     const start = { ...panRef.current };
@@ -6227,15 +6263,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [hasStoredImageAsset]);
 
   useEffect(() => {
-    if (!currentMap?.id || !root || thumbnailStats.mode) return undefined;
+    if (!currentMap?.id || !root || thumbnailStats.mode || useLargeMapSurface) return undefined;
     const nodes = collectAllNodesWithOrphans(root, orphans).filter((node) => node?.id);
     const assetTokens = [];
     nodes.forEach((node) => {
       if (hasStoredImageAsset(node.thumbnailUrl)) {
         assetTokens.push(`t:${node.id}:${node.thumbnailUrl}`);
-      }
-      if (hasStoredImageAsset(node.fullScreenshotUrl)) {
-        assetTokens.push(`f:${node.id}:${node.fullScreenshotUrl}`);
       }
     });
     if (assetTokens.length === 0) return undefined;
@@ -6244,7 +6277,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     const timer = setTimeout(() => {
       screenshotAssetValidationSignatureRef.current = signature;
       validateStoredAssetsForNodes(nodes, 'thumbnailUrl');
-      validateStoredAssetsForNodes(nodes, 'fullScreenshotUrl');
     }, 500);
     return () => clearTimeout(timer);
   }, [
@@ -6253,6 +6285,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     orphans,
     root,
     thumbnailStats.mode,
+    useLargeMapSurface,
     validateStoredAssetsForNodes,
   ]);
 
@@ -8652,7 +8685,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
-    const mapHasThumbnails = collectAllNodesWithOrphans(map.root, map.orphans || []).some((node) => !!node.thumbnailUrl);
+    const mapHasThumbnails = mapHasThumbnailAsset(map.root, map.orphans || []);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
     setConnections(map.connections || []);
@@ -11359,6 +11392,56 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
+  const openLargeMapNodeMenu = (nodeId, event) => {
+    if (!nodeId || !event) return;
+    if (!canEdit()) return;
+    if (!contentRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (connectionMenu) {
+      setConnectionMenu(null);
+    }
+
+    const contentRect = contentRef.current.getBoundingClientRect();
+    const stackTargetIds = getNodeStackSelectionIds(nodeId);
+    const hasSelection = stackTargetIds.some((id) => selectedNodeIds?.has(id));
+    const targetIds = hasSelection
+      ? Array.from(new Set([...Array.from(selectedNodeIds || []), ...stackTargetIds]))
+      : stackTargetIds;
+    if (!hasSelection) {
+      setSelectedNodeIds(new Set(stackTargetIds));
+    }
+
+    setNodeMenu({
+      nodeId,
+      x: event.clientX - contentRect.left,
+      y: event.clientY - contentRect.top,
+      targetIds,
+    });
+  };
+
+  const handleLargeMapNodeDoubleClick = (nodeData) => {
+    if (!nodeData || !canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const nextScale = scaleRef.current < 0.95 ? 1 : Math.min(1.6, scaleRef.current * 1.2);
+    const nextPan = {
+      x: canvas.clientWidth / 2 - (nodeData.x + nodeData.w / 2) * nextScale,
+      y: canvas.clientHeight / 2 - (nodeData.y + nodeData.h / 2) * nextScale,
+    };
+    applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
+  };
+
+  const handleLargeMapNodeExpand = (sceneNode) => {
+    if (!sceneNode?.id) return;
+    const node = findNodeInCurrentMap(sceneNode.id) || sceneNode;
+    const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || '';
+    const fallbackAssetUrl = !node.url ? (node.thumbnailUrl || sceneNode.thumbnailUrl) : '';
+    const source = directAssetUrl || fallbackAssetUrl || node.url || sceneNode.url;
+    if (!source) return;
+    viewFullScreenshot(source, Boolean(directAssetUrl || fallbackAssetUrl), node.id || sceneNode.id, 'full');
+  };
+
   // ========== CONNECTION LINE FUNCTIONS ==========
 
   const SNAP_RADIUS = 30; // Magnetic snap radius in canvas pixels
@@ -13695,14 +13778,17 @@ export default function App({ currentRoute, navigateToRoute }) {
           >
             <div className="content-shell" ref={contentShellRef}>
             <div
-              className={`content ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
+              className={`content ${useLargeMapSurface ? 'large-map-content' : ''} ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
               ref={contentRef}
+              data-large-map-surface={useLargeMapSurface ? '1' : undefined}
               style={{
                 // PAN/ZOOM INVARIANT:
                 // This transform must ONLY be translate(px, px) scale(n).
                 // No %, no centering, no layout transforms.
                 // Do not modify without understanding world-space math.
-                transform: `translate(${canvasRenderPan.x}px, ${canvasRenderPan.y}px) scale(${canvasRenderScale})`,
+                transform: useLargeMapSurface
+                  ? 'none'
+                  : `translate(${canvasRenderPan.x}px, ${canvasRenderPan.y}px) scale(${canvasRenderScale})`,
                 transformOrigin: '0 0',
               }}
               onMouseMove={(e) => {
@@ -13715,7 +13801,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 else if (draggingEndpoint) handleEndpointDragEnd();
               }}
             >
-                {selectionBox && (
+                {!useLargeMapSurface && selectionBox && (
                   <div
                     className="selection-rect"
                     style={{
@@ -13727,7 +13813,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   />
                 )}
 
-                {liveSelectionBadges.map((badge) => (
+                {!useLargeMapSurface && liveSelectionBadges.map((badge) => (
                   <div
                     key={badge.nodeId}
                     className="live-selection-highlight"
@@ -13756,6 +13842,22 @@ export default function App({ currentRoute, navigateToRoute }) {
                   </div>
                 ))}
 
+                {useLargeMapSurface ? (
+                  <MapSurfaceV2
+                    mapId={currentMap?.id}
+                    getScene={api.getMapScene}
+                    getViewState={getLargeMapViewState}
+                    canvasSize={canvasSize}
+                    orientation={mapOrientation}
+                    showThumbnails={showThumbnails}
+                    colors={colors}
+                    selectedNodeIds={selectedNodeIds}
+                    onNodeClick={handleNodeClick}
+                    onNodeContextMenu={openLargeMapNodeMenu}
+                    onNodeDoubleClick={handleLargeMapNodeDoubleClick}
+                    onNodeExpand={handleLargeMapNodeExpand}
+                  />
+                ) : (
                 <SitemapTree
                   data={renderRoot}
                   orphans={visibleOrphans}
@@ -14189,6 +14291,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 })()}
               </svg>
                 </SitemapTree>
+                )}
 
               {/* Connection context menu */}
               {connectionMenu && (
