@@ -45,6 +45,31 @@ const missingPage = classifyScanResponse({
 assert.strictEqual(missingPage.scanStatus, 'error');
 assert.strictEqual(missingPage.isErrorStatus, true);
 assert.strictEqual(missingPage.isInactiveStatus, false);
+assert.strictEqual(missingPage.isViewableError, false);
+assert.strictEqual(missingPage.metadataAvailable, false);
+
+const viewableServerError = classifyScanResponse({
+  url: 'https://example.com/status',
+  finalUrl: 'https://example.com/status',
+  status: 500,
+  html: '<html><head><title>Status Dashboard</title><meta name="description" content="Live status details"></head><body><h1>Status Dashboard</h1><a href="/history">History</a></body></html>',
+});
+assert.strictEqual(viewableServerError.scanStatus, 'error');
+assert.strictEqual(viewableServerError.isErrorStatus, true);
+assert.strictEqual(viewableServerError.isViewableError, true);
+assert.strictEqual(viewableServerError.metadataAvailable, true);
+assert.strictEqual(viewableServerError.shouldExtractLinks, true);
+assert.strictEqual(viewableServerError.title, 'Status Dashboard');
+assert.strictEqual(viewableServerError.titleSource, 'html');
+
+const socialTitleFallback = classifyScanResponse({
+  url: 'https://example.com/social-title',
+  finalUrl: 'https://example.com/social-title',
+  status: 200,
+  html: '<html><head><meta property="og:title" content="Shared Title"><meta name="twitter:title" content="Tweet Title"></head><body><h1>Body Title</h1></body></html>',
+});
+assert.strictEqual(socialTitleFallback.title, 'Shared Title');
+assert.strictEqual(socialTitleFallback.titleSource, 'html');
 
 const forbiddenCrawlerBlock = classifyScanResponse({
   url: 'https://example.com/protected-by-bot-rules',

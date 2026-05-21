@@ -2379,11 +2379,64 @@ function getUrlDepth(urlStr) {
   }
 }
 
-function getPlacementForUrl(urlStr, baseHost) {
+function isLocalOrIpHost(hostname) {
+  const host = normalizeHost(String(hostname || '')).replace(/^\[|\]$/g, '');
+  return host === 'localhost'
+    || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+    || host.includes(':');
+}
+
+function getRootDomain(hostname) {
+  const host = normalizeHost(String(hostname || ''));
+  if (!host || isLocalOrIpHost(host)) return host;
+  const parts = host.split('.').filter(Boolean);
+  if (parts.length <= 2) return host;
+  const secondLevel = parts[parts.length - 2] || '';
+  if (secondLevel.length <= 3 && parts.length > 2) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+}
+
+function createScanScope(startUrl, allowSubdomains = false) {
+  const normalized = normalizeUrl(startUrl);
+  if (!normalized) throw new Error('Invalid URL');
+  const parsed = new URL(normalized);
+  const baseHost = normalizeHost(parsed.hostname);
+  const rootDomain = getRootDomain(baseHost);
+  return {
+    seed: normalized,
+    origin: parsed.origin,
+    baseHost,
+    rootDomain,
+    allowSubdomains: Boolean(allowSubdomains),
+    exactOnly: isLocalOrIpHost(baseHost) || !rootDomain,
+  };
+}
+
+function normalizeScanScope(scopeOrBaseHost) {
+  if (scopeOrBaseHost && typeof scopeOrBaseHost === 'object') return scopeOrBaseHost;
+  const baseHost = normalizeHost(String(scopeOrBaseHost || ''));
+  return {
+    baseHost,
+    rootDomain: getRootDomain(baseHost),
+    allowSubdomains: true,
+    exactOnly: isLocalOrIpHost(baseHost),
+  };
+}
+
+function getPlacementForUrl(urlStr, scopeOrBaseHost) {
   try {
     const host = normalizeHost(new URL(urlStr).hostname);
-    if (host === baseHost) return 'Primary';
-    if (host.endsWith(`.${baseHost}`)) return 'Subdomain';
+    const scope = normalizeScanScope(scopeOrBaseHost);
+    if (host === scope.baseHost) return 'Primary';
+    if (
+      scope.allowSubdomains
+      && !scope.exactOnly
+      && getRootDomain(host) === scope.rootDomain
+    ) {
+      return 'Subdomain';
+    }
     return null;
   } catch {
     return null;
@@ -2514,20 +2567,10 @@ function getScanFileInfo(urlStr, contentType = '') {
   };
 }
 
-// Check if URL is same domain or subdomain
 function sameDomain(a, b) {
   try {
     const ua = new URL(a);
     const ub = new URL(b);
-    // Get root domain (last 2 parts for most TLDs)
-    const getRootDomain = (hostname) => {
-      const parts = normalizeHost(hostname).split('.');
-      // Handle common TLDs like .co.uk, .com.au etc
-      if (parts.length > 2 && parts[parts.length - 2].length <= 3) {
-        return parts.slice(-3).join('.');
-      }
-      return parts.slice(-2).join('.');
-    };
     return getRootDomain(ua.hostname) === getRootDomain(ub.hostname);
   } catch {
     return false;
@@ -2614,6 +2657,19 @@ const PAGE_TYPE_PAGE = 'Page';
 const PAGE_TYPE_VIRTUAL = 'Virtual Node';
 const PAGE_SEVERITY_WARNING = 'Warning';
 
+const getHttpErrorType = (statusCode) => {
+  const status = Number(statusCode);
+  if (!Number.isFinite(status) || status < 400) return null;
+  return status >= 500 ? '5xx' : '4xx';
+};
+
+const getHttpErrorLabel = (statusCode) => {
+  const status = Number(statusCode);
+  if (!Number.isFinite(status) || status < 400) return null;
+  if (status === 404) return 'HTTP 404 / Not Found';
+  return `HTTP ${status}`;
+};
+
 const getStatusFromHttp = (statusCode) => {
   if (statusCode >= 200 && statusCode < 300) return PAGE_STATUS_ACTIVE;
   if (statusCode >= 300 && statusCode < 400) return PAGE_STATUS_REDIRECT;
@@ -2642,17 +2698,18 @@ const getSeverityForPage = ({ placement, status }) => {
 
 async function persistPagesForIa(
   nodes,
-  baseHost,
+  scanScopeOrBaseHost,
   discoverySourceByUrl = new Map(),
   linksInCounts = new Map()
 ) {
+  const scanScope = normalizeScanScope(scanScopeOrBaseHost);
   if (!nodes || nodes.size === 0) {
     return {
       totalSaved: 0,
       virtualInserted: 0,
       subdomainCount: 0,
       queryBehavior: 'preserved',
-      domainParsing: 'base-host-fallback',
+      domainParsing: 'root-domain-fallback',
     };
   }
 
@@ -2793,7 +2850,7 @@ async function persistPagesForIa(
       parentUrl = getParentUrl(parentUrl);
     }
     for (const parent of chain) {
-      const basePlacement = getPlacementForUrl(parent, baseHost);
+      const basePlacement = getPlacementForUrl(parent, scanScope);
       if (!basePlacement) continue;
       const depth = getUrlDepth(parent);
       const parentParent = getParentUrl(parent);
@@ -2825,7 +2882,7 @@ async function persistPagesForIa(
       if (persisted.has(canonicalUrl)) continue;
       persisted.add(canonicalUrl);
 
-      const basePlacement = getPlacementForUrl(canonicalUrl, baseHost);
+      const basePlacement = getPlacementForUrl(canonicalUrl, scanScope);
       if (!basePlacement) continue;
       if (node.isFile || getScanFileInfo(canonicalUrl, node.contentType).isFile) continue;
       if (basePlacement === 'Subdomain') subdomainCount += 1;
@@ -2876,7 +2933,7 @@ async function persistPagesForIa(
 
       const existing = await readExisting(url);
       if (!existing) continue;
-      const basePlacement = getPlacementForUrl(url, baseHost);
+      const basePlacement = getPlacementForUrl(url, scanScope);
       if (!basePlacement) continue;
 
       const nextLinksIn = (Number.isFinite(existing.links_in) ? existing.links_in : 0) + count;
@@ -2929,7 +2986,7 @@ async function persistPagesForIa(
     virtualInserted,
     subdomainCount,
     queryBehavior: 'preserved',
-    domainParsing: 'base-host-fallback',
+    domainParsing: 'root-domain-fallback',
   };
 }
 
@@ -3184,7 +3241,8 @@ const runDiscoveryJob = async (jobId, payload) => {
   const baseUrl = resolveMapBaseUrl(mapRow);
   if (!baseUrl) throw new Error('Map url not found');
 
-  const baseHost = normalizeHost(new URL(baseUrl).hostname);
+  const scanScope = createScanScope(baseUrl, true);
+  const baseHost = scanScope.baseHost;
   const abortCheck = shouldAbortJob(jobId);
 
   const nodes = new Map();
@@ -3250,7 +3308,7 @@ const runDiscoveryJob = async (jobId, payload) => {
 
   let iaSummary = null;
   if (nodes.size) {
-    iaSummary = await persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
+    iaSummary = await persistPagesForIa(nodes, scanScope, discoverySourceByUrl, linksInCounts);
   }
 
   return {
@@ -3331,18 +3389,18 @@ function normalizeScanOptions(options = {}) {
 
 async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null, readJobStatus = null) {
   const scanOptions = normalizeScanOptions(options);
-  const seed = normalizeUrl(startUrl);
-  if (!seed) throw new Error('Invalid URL');
+  const scanScope = createScanScope(startUrl, scanOptions.subdomains);
+  const seed = scanScope.seed;
   const pageLimit = normalizeMaxPagesLimit(maxPages);
   const depthLimit = normalizeScanDepthLimit(maxDepth);
 
-  const origin = new URL(seed).origin;
-  const baseHost = normalizeHost(new URL(seed).hostname);
+  const origin = scanScope.origin;
+  const baseHost = scanScope.baseHost;
   const allowSubdomains = scanOptions.subdomains;
   const allowUrl = (candidate) => {
     const normalized = normalizeUrl(candidate);
     if (!normalized) return false;
-    const placement = getPlacementForUrl(normalized, baseHost);
+    const placement = getPlacementForUrl(normalized, scanScope);
     if (!placement) return false;
     if (!allowSubdomains) {
       return placement === 'Primary' && sameOrigin(normalized, origin);
@@ -3467,7 +3525,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (processedSitemaps.has(normalizedSitemap)) return;
     if (processedSitemaps.size >= MAX_SITEMAPS) return;
 
-    const placement = getPlacementForUrl(normalizedSitemap, baseHost);
+    const placement = getPlacementForUrl(normalizedSitemap, scanScope);
     if (!placement) return;
 
     processedSitemaps.add(normalizedSitemap);
@@ -3616,8 +3674,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     const fetchedFileInfo = getScanFileInfo(finalUrl || url, contentType);
     const responseIsFile = fetchedFileInfo.isFile || !isHtmlContentType(contentType);
-    const classification = classifyScanResponse({ html, status, url, finalUrl });
+    if (responseIsFile) {
+      addFileArtifact(finalUrl || url, getParentUrl(url) || null, contentType, fetchedFileInfo);
+      return;
+    }
 
+    const classification = classifyScanResponse({ html, status, url, finalUrl });
     if (status >= 400) {
       const shouldKeep = (scanOptions.errorPages && (classification.isErrorStatus || classification.isBlockedStatus))
         || (scanOptions.authenticatedPages && classification.isAuthStatus)
@@ -3628,6 +3690,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           status,
           authRequired: false,
           blockedReason: classification.blockedReason,
+          httpErrorType: getHttpErrorType(status),
+          httpErrorLabel: getHttpErrorLabel(status),
+          isViewableError: classification.isViewableError,
         });
       }
       if (scanOptions.inactivePages && classification.isInactiveStatus) {
@@ -3641,17 +3706,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       }
     }
 
-    if (responseIsFile) {
-      addFileArtifact(finalUrl || url, getParentUrl(url) || null, contentType, fetchedFileInfo);
-      return;
-    }
-
     const seoMetadata = classification.shouldExtractMetadata
       ? extractSeoMetadata(html, finalUrl || url)
       : {};
     const title = classification.shouldExtractMetadata
       ? extractTitle(html, finalUrl || url)
-      : classification.fallbackTitle;
+      : (classification.isErrorStatus ? (classification.title || classification.fallbackTitle) : classification.fallbackTitle);
     const parentUrl = getParentUrl(finalUrl || url);
     const canonicalUrl = classification.shouldExtractMetadata
       ? (normalizeUrl(seoMetadata.canonicalUrl) || extractCanonicalUrl(html, finalUrl || url))
@@ -3673,6 +3733,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       thumbnailUrl: undefined,
       discoveryIndex,
       httpStatus: status,
+      errorStatus: classification.isErrorStatus ? status : null,
+      isError: classification.isErrorStatus,
+      httpErrorType: classification.isErrorStatus ? getHttpErrorType(status) : null,
+      httpErrorLabel: classification.isErrorStatus ? getHttpErrorLabel(status) : null,
+      isViewableError: classification.isViewableError,
       wasRedirect,
       responseTime,
       titleSource: classification.titleSource,
@@ -3809,6 +3874,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       thumbnailUrl: meta.thumbnailUrl || undefined,
       httpStatus: meta.httpStatus ?? null,
       statusCode: meta.httpStatus ?? null,
+      errorStatus: meta.errorStatus ?? null,
+      isError: Boolean(meta.isError),
+      httpErrorType: meta.httpErrorType || null,
+      httpErrorLabel: meta.httpErrorLabel || null,
+      isViewableError: Boolean(meta.isViewableError),
       wasRedirect: meta.wasRedirect || false,
       redirectTarget: meta.wasRedirect ? (meta.finalUrl || url) : null,
       responseTime: Number.isFinite(meta.responseTime) ? meta.responseTime : null,
@@ -3818,6 +3888,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       isBlocked: false,
       scanStatus: meta.scanStatus || null,
       metadataAvailable: meta.metadataAvailable !== false,
+      isVirtualMissing: false,
       children: [],
     });
   }
@@ -3865,6 +3936,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         authRequired: false,
         thumbnailUrl: undefined,
         isMissing: true,
+        isVirtualMissing: true,
+        scanStatus: 'missing',
         children: [],
       });
       const key = getCanonicalKey(parentUrl);
@@ -4077,6 +4150,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           authRequired: sourceNode?.authRequired || false,
           thumbnailUrl: sourceNode?.thumbnailUrl || undefined,
           isMissing: sourceNode ? false : true,
+          isVirtualMissing: sourceNode ? false : true,
+          scanStatus: sourceNode?.scanStatus || (sourceNode ? null : 'missing'),
           orphanType: 'orphan',
           children: [],
         });
@@ -4167,6 +4242,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const key = getCanonicalKey(node.url);
     if (key && (sitemapKeys.has(key) || scannedKeys.has(key))) {
       node.isMissing = false;
+      node.isVirtualMissing = false;
     }
   });
 
@@ -4185,8 +4261,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       const key = getCanonicalKey(node.url);
       if (node.discoveryIndex !== null && node.discoveryIndex !== undefined) {
         node.isMissing = false;
+        node.isVirtualMissing = false;
       } else if (key && (sitemapKeys.has(key) || scannedKeys.has(key))) {
         node.isMissing = false;
+        node.isVirtualMissing = false;
       }
     }
     node.children?.forEach(clearMissingIfKnown);
@@ -4233,7 +4311,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   }
 
   try {
-    const iaSummary = await persistPagesForIa(nodes, baseHost, discoverySourceByUrl, linksInCounts);
+    const iaSummary = await persistPagesForIa(nodes, scanScope, discoverySourceByUrl, linksInCounts);
     console.log(
       `[scan] IA summary: saved=${iaSummary.totalSaved}, virtual=${iaSummary.virtualInserted}, subdomains=${iaSummary.subdomainCount}, queries=${iaSummary.queryBehavior}, domain=${iaSummary.domainParsing}`
     );
@@ -4271,6 +4349,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
     brokenLinks: scanOptions.brokenLinks ? brokenLinks : [],
     files: scanOptions.files ? Array.from(filesByUrl.values()) : [],
+    scanScope: {
+      seed,
+      baseHost: scanScope.baseHost,
+      rootDomain: scanScope.rootDomain,
+      allowSubdomains: scanScope.allowSubdomains,
+      exactOnly: scanScope.exactOnly,
+    },
     crosslinks,
   };
 

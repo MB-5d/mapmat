@@ -405,6 +405,10 @@ const ReportDrawer = ({
             const isExpanded = expandedRow === entry.id;
             const pageInsight = pageInsightLookup.get(entry.id) || pageInsightLookup.get(entry.url) || null;
             const seoRows = [
+              ['HTTP status', entry.httpErrorLabel || (entry.statusCode ? `HTTP ${entry.statusCode}` : '')],
+              ['Error type', entry.isViewableError ? 'Viewable HTTP error' : entry.httpErrorType],
+              ['Scan status', entry.isVirtualMissing ? 'Missing virtual page' : entry.scanStatus],
+              ['Reason', entry.blockedReason],
               ['Description', entry.description],
               ['Meta keywords', entry.metaKeywords],
               ['Canonical', entry.canonicalUrl],

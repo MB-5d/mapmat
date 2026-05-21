@@ -1,6 +1,7 @@
 import { getSeoValue } from './seoMetadata';
 import { getDepthColor } from './constants';
 import { isRenderableTextUrl } from './url';
+import { getNodeHttpErrorLabel, getNodeStatusCode, isVirtualMissingNode } from './scanStatus';
 
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
@@ -8,7 +9,7 @@ export const getReportTypesForNode = (node, overrides = {}) => {
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
   const isRenderableText = isRenderableTextUrl(node.url);
-  if (!node.isMissing
+  if (!isVirtualMissingNode(node)
     && !node.isDuplicate
     && !node.isBroken
     && !node.isInactive
@@ -22,7 +23,7 @@ export const getReportTypesForNode = (node, overrides = {}) => {
     && !isSubdomain) {
     types.add('standard');
   }
-  if (node.isMissing) types.add('missing');
+  if (isVirtualMissingNode(node)) types.add('missing');
   if (node.isDuplicate) types.add('duplicates');
   if (node.isBroken || orphanType === 'broken') types.add('brokenLinks');
   if (node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (node.isInactive || orphanType === 'inactive')) types.add('inactivePages');
@@ -43,7 +44,7 @@ export const getReportPageType = (node, overrides = {}) => {
   if (isSubdomain) return 'Subdomain';
   if (!isRenderableText && (orphanType === 'file' || node.isFile)) return 'File';
   if (orphanType === 'orphan') return 'Orphan';
-  if (node.isMissing) return 'Missing';
+  if (isVirtualMissingNode(node)) return 'Missing';
   if (node.isDuplicate) return 'Duplicate';
   return 'Standard';
 };
@@ -80,6 +81,13 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
       pageType: getReportPageType(node, { isSubdomain, orphanType }),
       levelColor,
       thumbnailUrl: node.thumbnailUrl || '',
+      statusCode: getNodeStatusCode(node),
+      httpErrorType: node.httpErrorType || '',
+      httpErrorLabel: getNodeHttpErrorLabel(node),
+      isViewableError: Boolean(node.isViewableError),
+      isVirtualMissing: isVirtualMissingNode(node),
+      blockedReason: node.blockedReason || '',
+      scanStatus: node.scanStatus || '',
       showFullTitle,
     });
     node.children?.forEach((child) => visit(child, { isSubdomain, orphanType }));

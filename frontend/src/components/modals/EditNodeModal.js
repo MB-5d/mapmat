@@ -10,6 +10,7 @@ import TextareaInput from '../ui/TextareaInput';
 import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
 import { getSeoMetadata, normalizeMetaTagsForInput, normalizeText } from '../../utils/seoMetadata';
 import { isDataImageUrl } from '../../utils/canvasPerformance';
+import { getNodeHttpErrorLabel, getNodeStatusCode, isVirtualMissingNode } from '../../utils/scanStatus';
 
 const PAGE_TYPE_HOME = 'Home';
 const PAGE_TYPE_PAGE = 'Page';
@@ -116,6 +117,16 @@ const EditNodeModal = ({
   const canShowDuplicateSourceOnMap = duplicateSourceUrl
     && typeof onLocateUrl === 'function'
     && (typeof canLocateUrl !== 'function' || canLocateUrl(duplicateSourceUrl));
+  const statusCode = getNodeStatusCode(node);
+  const httpErrorLabel = getNodeHttpErrorLabel(node);
+  const scanStatusRows = [
+    statusCode !== null ? ['HTTP status', httpErrorLabel || `HTTP ${statusCode}`] : null,
+    node?.isViewableError ? ['Error type', 'Viewable HTTP error'] : null,
+    isVirtualMissingNode(node) ? ['Scan label', 'Missing virtual page'] : null,
+    node?.authRequired ? ['Scan label', 'Auth required'] : null,
+    node?.isInactive ? ['Scan label', 'Inactive'] : null,
+    node?.blockedReason ? ['Reason', node.blockedReason.replace(/_/g, ' ')] : null,
+  ].filter(Boolean);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -304,6 +315,18 @@ const EditNodeModal = ({
             placeholder="https://example.com/page"
           />
         </Field>
+
+        {scanStatusRows.length ? (
+          <div className="edit-node-duplicate-section">
+            <div className="edit-node-section-title">Scan Status</div>
+            {scanStatusRows.map(([label, value], index) => (
+              <div className="edit-node-duplicate-row" key={`${label}-${index}`}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {duplicateSourceUrl ? (
           <div className="edit-node-duplicate-section">

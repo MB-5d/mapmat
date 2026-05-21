@@ -224,7 +224,7 @@ function hasReliableContentMetadata(page, statusCode = null) {
   const node = page?.node || {};
   const blocked = Boolean(node.blockedReason || node.isChallengePage || node.authRequired);
   const errorStatus = statusCode !== null && statusCode >= 400;
-  if (blocked || errorStatus) return false;
+  if (blocked || (errorStatus && !node.isViewableError)) return false;
   if (node.metadataAvailable === false) return false;
   if (detectChallengePage('', page?.title || node.title || '').isChallengePage) return false;
   return true;

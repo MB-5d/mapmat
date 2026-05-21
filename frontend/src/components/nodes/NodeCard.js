@@ -17,6 +17,7 @@ import Badge from '../ui/Badge';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
+import { getNodeHttpErrorLabel } from '../../utils/scanStatus';
 
 const NODE_STATUS_BADGE_STYLE = {
   new: 'info',
@@ -130,6 +131,8 @@ const NodeCard = ({
       };
     }
     const statusCode = Number(node?.httpStatus ?? node?.statusCode);
+    const isViewableError = Boolean(node?.isViewableError && Number.isFinite(statusCode) && statusCode >= 400);
+    if (isViewableError) return null;
     if (
       node?.isBroken
       || orphanType === 'broken'
@@ -139,7 +142,7 @@ const NodeCard = ({
     ) {
       return {
         icon: AlertTriangle,
-        label: 'Error page',
+        label: getNodeHttpErrorLabel(node) || 'Error page',
         text: 'Preview unavailable',
         variant: 'error',
       };

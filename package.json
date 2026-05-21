@@ -16,6 +16,7 @@
     "check:backend:postgres": "DB_PROVIDER=postgres npm run check:backend",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:scan-job-tree": "node scripts/check-scan-job-tree.js",
+    "check:scan-labeling-fixture": "node scripts/check-scan-labeling-fixture.js",
     "check:image-capture": "node scripts/check-image-capture-ordering.js",
     "check:image-capture:smoke": "node scripts/check-image-capture-job-smoke.js",
     "check:image-download": "node --check utils/imageDownloadPackage.js && node scripts/check-image-download-package.js",

@@ -13,11 +13,17 @@ const NODE_BADGE_STYLE = {
   Inactive: 'neutral',
 };
 
+const getBadgeStyle = (label, badgeStyle) => {
+  if (badgeStyle) return badgeStyle;
+  if (/^HTTP\s+\d+/i.test(String(label || ''))) return 'error';
+  return NODE_BADGE_STYLE[label] || 'neutral';
+};
+
 const NodeBadge = ({ label, className, children, badgeStyle, ...props }) => (
   <Badge
     className={classNames('node-badge', className)}
     type="hollow"
-    badgeStyle={badgeStyle || NODE_BADGE_STYLE[label] || 'neutral'}
+    badgeStyle={getBadgeStyle(label, badgeStyle)}
     size="sm"
     label={children ?? label}
     aria-hidden="true"

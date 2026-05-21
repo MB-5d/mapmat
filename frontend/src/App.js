@@ -65,6 +65,7 @@ import RightRail from './components/toolbar/RightRail';
 import CanvasMapHeader from './components/toolbar/CanvasMapHeader';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname, isRenderableTextUrl } from './utils/url';
+import { getNodeHttpErrorLabel, isVirtualMissingNode } from './utils/scanStatus';
 import {
   APP_ONLY_MODE,
   API_BASE,
@@ -218,7 +219,7 @@ const getAiExportPageType = (node = {}, fallback = 'Page') => {
   if (node.pageType && !(isRenderableText && String(node.pageType).toLowerCase() === 'file')) return node.pageType;
   if (node.subdomainRoot) return 'Subdomain';
   if (!isRenderableText && (node.isFile || node.orphanType === 'file')) return 'File';
-  if (node.isMissing) return 'Missing';
+  if (isVirtualMissingNode(node)) return 'Missing';
   if (node.isDuplicate) return 'Duplicate';
   if (node.isBroken || node.orphanType === 'broken') return 'Broken';
   if (node.orphanType === 'orphan') return 'Orphan';
@@ -1104,7 +1105,7 @@ const SitemapTree = ({
   const getBadgesForNode = (node, nodeMeta) => {
     const badges = [];
     if (node.isDuplicate) badges.push('Duplicate');
-    if (node.isMissing) badges.push('Missing');
+    if (isVirtualMissingNode(node)) badges.push('Missing');
     const orphanType = nodeMeta?.orphanType || node.orphanType;
     const isRenderableText = isRenderableTextUrl(node.url);
     const isSubdomainTree = node.subdomainRoot || nodeMeta?.isSubdomainTree || orphanType === 'subdomain';
@@ -1120,7 +1121,7 @@ const SitemapTree = ({
     if (node.authRequired && badgeVisibility?.authenticatedPages) {
       badges.push('Auth');
     } else if (node.isError && badgeVisibility?.errorPages) {
-      badges.push('Error');
+      badges.push(getNodeHttpErrorLabel(node) || 'Error');
     } else if ((node.isInactive || orphanType === 'inactive') && badgeVisibility?.inactivePages && !badges.includes('Inactive')) {
       badges.push('Inactive');
     }
@@ -1470,6 +1471,59 @@ const normalizeUrlForCompare = (raw) => {
   }
 };
 
+const normalizeScanHost = (hostname) => String(hostname || '').replace(/^www\./i, '').toLowerCase();
+
+const isLocalOrIpHost = (hostname) => {
+  const host = normalizeScanHost(hostname).replace(/^\[|\]$/g, '');
+  return host === 'localhost'
+    || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+    || host.includes(':');
+};
+
+const getRootDomain = (hostname) => {
+  const host = normalizeScanHost(hostname);
+  if (!host || isLocalOrIpHost(host)) return host;
+  const parts = host.split('.').filter(Boolean);
+  if (parts.length <= 2) return host;
+  const secondLevel = parts[parts.length - 2] || '';
+  if (secondLevel.length <= 3 && parts.length > 2) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+};
+
+const buildScanScope = (rootNode, scanResult = {}) => {
+  try {
+    const seed = scanResult.scanScope?.seed || rootNode?.url;
+    const parsed = new URL(seed);
+    const baseHost = normalizeScanHost(scanResult.scanScope?.baseHost || parsed.hostname);
+    const rootDomain = scanResult.scanScope?.rootDomain || getRootDomain(baseHost);
+    return {
+      baseHost,
+      rootDomain,
+      allowSubdomains: Boolean(scanResult.scanScope?.allowSubdomains),
+      exactOnly: Boolean(scanResult.scanScope?.exactOnly) || isLocalOrIpHost(baseHost),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const isUrlInScanScope = (url, scanScope) => {
+  if (!scanScope || !url) return true;
+  try {
+    const host = normalizeScanHost(new URL(url).hostname);
+    if (host === scanScope.baseHost) return true;
+    return Boolean(
+      scanScope.allowSubdomains
+        && !scanScope.exactOnly
+        && getRootDomain(host) === scanScope.rootDomain
+    );
+  } catch {
+    return false;
+  }
+};
+
 const buildRootUrlSet = (rootNode) => {
   const set = new Set();
   const addUrl = (url) => {
@@ -1539,6 +1593,8 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     ...orphan,
     orphanType: orphan.orphanType || 'orphan',
   }));
+  const scanScope = buildScanScope(rootNode, scanResult);
+  const isArtifactInScope = (url) => isUrlInScanScope(url, scanScope);
   const rootUrlSet = buildRootUrlSet(rootNode);
   const urlNodeMap = buildUrlNodeMap(rootNode, mergedOrphans);
   const normalizedUrlNodeMap = new Map();
@@ -1583,11 +1639,19 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
             seoMetadata: node.seoMetadata || existing.seoMetadata,
             titleSource: node.titleSource || existing.titleSource,
             blockedReason: node.blockedReason || existing.blockedReason,
+            httpStatus: node.httpStatus ?? existing.httpStatus,
+            statusCode: node.statusCode ?? existing.statusCode,
+            errorStatus: node.errorStatus ?? existing.errorStatus,
+            httpErrorType: node.httpErrorType || existing.httpErrorType,
+            httpErrorLabel: node.httpErrorLabel || existing.httpErrorLabel,
+            isViewableError: node.isViewableError ?? existing.isViewableError,
+            isError: node.isError ?? existing.isError,
             isChallengePage: false,
             isBlocked: false,
             scanStatus: node.scanStatus || existing.scanStatus,
             metadataAvailable: node.metadataAvailable ?? existing.metadataAvailable,
             isMissing: false,
+            isVirtualMissing: false,
           });
         }
         if (node.children?.length) {
@@ -1609,12 +1673,17 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     return normalized;
   };
 
+  indexNodeUrls(rootNode);
+  mergedOrphans.forEach(indexNodeUrls);
+
   (scanResult.subdomains || []).forEach((node) => {
+    if (!isArtifactInScope(node?.url)) return;
     addOrphanNode({ ...node, subdomainRoot: true }, 'subdomain');
   });
 
   (scanResult.files || []).forEach((file) => {
     if (!file?.url) return;
+    if (!isArtifactInScope(file.url)) return;
     const existing = urlNodeMap.get(file.url);
     if (existing) {
       existing.isFile = true;
@@ -1622,22 +1691,29 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       existing.fileType = file.fileType || existing.fileType || null;
       existing.extension = file.extension || existing.extension || null;
       existing.isInactive = false;
+      existing.isError = false;
+      existing.errorStatus = null;
+      existing.httpErrorType = null;
+      existing.httpErrorLabel = null;
+      existing.isViewableError = false;
+      existing.isMissing = false;
+      existing.isVirtualMissing = false;
       if (existing.scanStatus === 'inactive') existing.scanStatus = null;
       if (existing.orphanType === 'inactive') existing.orphanType = 'file';
       return;
     }
 
-          const newNode = {
-            id: makeNodeIdFromUrl(file.url),
-            url: file.url,
-            title: getUrlLabel(file.url),
-            children: [],
-            isFile: true,
-            contentType: file.contentType || null,
-            fileType: file.fileType || null,
-            extension: file.extension || null,
-            parentUrl: file.sourceUrl || null,
-          };
+    const newNode = {
+      id: makeNodeIdFromUrl(file.url),
+      url: file.url,
+      title: getUrlLabel(file.url),
+      children: [],
+      isFile: true,
+      contentType: file.contentType || null,
+      fileType: file.fileType || null,
+      extension: file.extension || null,
+      parentUrl: file.sourceUrl || null,
+    };
     if (file.sourceUrl && urlNodeMap.has(file.sourceUrl)) {
       const parent = urlNodeMap.get(file.sourceUrl);
       parent.children = parent.children || [];
@@ -1651,18 +1727,28 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
 
   (scanResult.errors || []).forEach((error) => {
     if (!error?.url) return;
+    if (!isArtifactInScope(error.url)) return;
     const node = urlNodeMap.get(error.url);
     if (!node) return;
+    if (node.isFile || node.orphanType === 'file') return;
     if (node.scanStatus === 'scan_limited') return;
     node.isError = true;
     node.errorStatus = error.status;
+    node.httpStatus = node.httpStatus ?? error.status ?? null;
+    node.statusCode = node.statusCode ?? error.status ?? null;
+    node.httpErrorType = error.httpErrorType || node.httpErrorType || null;
+    node.httpErrorLabel = error.httpErrorLabel || node.httpErrorLabel || getNodeHttpErrorLabel(node) || null;
+    node.isViewableError = Boolean(error.isViewableError || node.isViewableError);
     node.blockedReason = error.blockedReason || node.blockedReason || null;
     node.scanStatus = 'error';
+    node.isMissing = false;
+    node.isVirtualMissing = false;
     if (error.authRequired) node.authRequired = true;
   });
 
   (scanResult.brokenLinks || []).forEach((link) => {
     if (!link?.url) return;
+    if (!isArtifactInScope(link.url)) return;
     let existing = urlNodeMap.get(link.url);
     if (!existing) {
       const normalized = normalizeUrlForCompare(link.url);
@@ -1674,13 +1760,17 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
 
   (scanResult.inactivePages || []).forEach((inactive) => {
     if (!inactive?.url) return;
+    if (!isArtifactInScope(inactive.url)) return;
     const inactiveStatus = Number(inactive.status || 0);
     if (inactiveStatus >= 400) return;
     const existing = urlNodeMap.get(inactive.url);
     if (existing) {
       if (existing.scanStatus === 'scan_limited' || existing.isError || existing.authRequired) return;
+      if (existing.isFile || existing.orphanType === 'file') return;
       existing.isInactive = true;
       existing.scanStatus = 'inactive';
+      existing.isMissing = false;
+      existing.isVirtualMissing = false;
       return;
     }
     addOrphanNode({
@@ -1689,10 +1779,11 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
       title: getUrlLabel(inactive.url),
       children: [],
       isInactive: true,
+      isVirtualMissing: false,
     }, 'inactive');
   });
 
-  // Seed normalized map for existing nodes in case we missed any
+  // Refresh normalized map with any artifact nodes added above.
   indexNodeUrls(rootNode);
   mergedOrphans.forEach(indexNodeUrls);
 
@@ -10434,6 +10525,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         const title = row.title || row.url || '';
         const urlLines = pdf.splitTextToSize(row.url || '', 240);
         const seoLines = [
+          row.httpErrorLabel ? `HTTP status: ${row.httpErrorLabel}` : '',
+          row.isViewableError ? 'Error type: Viewable HTTP error' : '',
           row.description ? `Description: ${row.description}` : '',
           row.metaKeywords ? `Keywords: ${row.metaKeywords}` : '',
           row.canonicalUrl ? `Canonical: ${row.canonicalUrl}` : '',

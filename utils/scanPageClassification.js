@@ -30,6 +30,16 @@ const AUTH_BODY_PATTERNS = [
   /unauthorized/i,
 ];
 
+const GENERIC_ERROR_TITLE_PATTERNS = [
+  /^404\b/i,
+  /^not found$/i,
+  /^page not found$/i,
+  /^error$/i,
+  /^server error$/i,
+  /^internal server error$/i,
+  /^something went wrong$/i,
+];
+
 function getUrlFallbackTitle(url) {
   try {
     const parsed = new URL(url);
@@ -48,10 +58,20 @@ function extractHtmlTitle(html) {
   try {
     const $ = cheerio.load(html || '');
     const title = normalizeText($('title').first().text());
+    const openGraphTitle = normalizeText($('meta[property="og:title"], meta[name="og:title"]').first().attr('content'));
+    const twitterTitle = normalizeText($('meta[name="twitter:title"], meta[property="twitter:title"]').first().attr('content'));
     const h1 = normalizeText($('h1').first().text());
-    return { title, h1, bodyText: normalizeText($('body').first().text()).slice(0, 4000) };
+    const bestTitle = title || openGraphTitle || twitterTitle || h1;
+    return {
+      title: bestTitle,
+      htmlTitle: title,
+      openGraphTitle,
+      twitterTitle,
+      h1,
+      bodyText: normalizeText($('body').first().text()).slice(0, 4000),
+    };
   } catch {
-    return { title: '', h1: '', bodyText: '' };
+    return { title: '', htmlTitle: '', openGraphTitle: '', twitterTitle: '', h1: '', bodyText: '' };
   }
 }
 
@@ -74,9 +94,12 @@ function classifyScanResponse({ html = '', status = 0, url = '', finalUrl = '' }
   const looksAuthRequired = AUTH_BODY_PATTERNS.some((pattern) => pattern.test(`${title} ${bodyText}`));
   const isAuthStatus = normalizedStatus === 401 || (normalizedStatus === 403 && looksAuthRequired);
   const isBlockedStatus = challenge.isChallengePage || normalizedStatus === 403 || normalizedStatus === 429;
-  const isErrorStatus = normalizedStatus >= 500 || normalizedStatus === 404 || normalizedStatus === 410;
+  const hasHttpErrorStatus = normalizedStatus >= 400;
+  const isErrorStatus = hasHttpErrorStatus && !isAuthStatus && !isBlockedStatus;
   const isInactiveStatus = normalizedStatus === 0;
-  const isMetadataReliable = !isAuthStatus && !isBlockedStatus && !isErrorStatus && !isInactiveStatus;
+  const hasGenericErrorTitle = title && GENERIC_ERROR_TITLE_PATTERNS.some((pattern) => pattern.test(title));
+  const isViewableError = isErrorStatus && Boolean(title) && !hasGenericErrorTitle;
+  const isMetadataReliable = !isAuthStatus && !isBlockedStatus && !isInactiveStatus && (!isErrorStatus || isViewableError);
   let blockedReason = challenge.blockedReason;
   let scanStatus = 'active';
 
@@ -103,6 +126,8 @@ function classifyScanResponse({ html = '', status = 0, url = '', finalUrl = '' }
     isAuthStatus,
     isBlockedStatus,
     isErrorStatus,
+    hasHttpErrorStatus,
+    isViewableError,
     isInactiveStatus,
     isChallengePage: challenge.isChallengePage,
     blockedReason,
