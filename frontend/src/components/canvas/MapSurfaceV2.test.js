@@ -116,4 +116,50 @@ describe('MapSurfaceV2', () => {
 
     expect(getScene).toHaveBeenCalledTimes(2);
   });
+
+  test('renders existing node card UI for visible scene nodes', async () => {
+    const getScene = jest.fn().mockResolvedValue({
+      scene: {
+        mapId: 'map-1',
+        bounds: { w: 900, h: 600 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
+        visibleNodeCount: 1,
+        nodes: [{
+          id: 'home',
+          title: 'Home Page',
+          url: 'https://example.com',
+          number: '0',
+          depth: 0,
+          x: 0,
+          y: 0,
+          w: 288,
+          h: 200,
+        }],
+        connectors: [],
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <MapSurfaceV2
+          mapId="map-1"
+          getScene={getScene}
+          getViewState={() => ({ pan: { x: 0, y: 0 }, scale: 1 })}
+          canvasSize={{ width: 1000, height: 700 }}
+          orientation="vertical"
+          showThumbnails={false}
+          colors={{}}
+          selectedNodeIds={new Set()}
+          showPageNumbers
+        />
+      );
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    expect(container.querySelector('.node-card')).not.toBeNull();
+    expect(container.querySelector('.large-map-canvas')).toBeNull();
+    expect(container.textContent).toContain('Home Page');
+  });
 });

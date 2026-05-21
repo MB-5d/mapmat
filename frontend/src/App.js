@@ -11610,6 +11610,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
+  const handleLargeMapNodeViewImage = (source, isDirectImage, nodeId, captureType) => {
+    if (isDirectImage) {
+      viewFullScreenshot(source, true, nodeId, captureType);
+      return;
+    }
+    handleLargeMapNodeExpand({ id: nodeId, url: source });
+  };
+
   // ========== CONNECTION LINE FUNCTIONS ==========
 
   const SNAP_RADIUS = 30; // Magnetic snap radius in canvas pixels
@@ -14021,13 +14029,38 @@ export default function App({ currentRoute, navigateToRoute }) {
                     canvasSize={canvasSize}
                     orientation={mapOrientation}
                     showThumbnails={showThumbnails}
+                    showCommentBadges={canViewComments()}
+                    canEdit={canEdit()}
+                    canComment={canComment()}
+                    showCommentAction={!!effectiveFeatureGates.mapComment}
+                    commentActionLabel={canComment() ? 'Comments' : 'View comments'}
+                    showExternalLinkAction={canEdit()}
+                    showDeleteAction={showDirectNodeDeleteAction}
+                    connectionTool={connectionTool}
+                    snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
+                    onAnchorMouseDown={handleAnchorMouseDown}
                     colors={colors}
                     selectedNodeIds={selectedNodeIds}
                     onNodeClick={handleNodeClick}
                     onNodeContextMenu={openLargeMapNodeMenu}
                     onNodeDoubleClick={handleLargeMapNodeDoubleClick}
                     onNodeExpand={handleLargeMapNodeExpand}
+                    onViewImage={handleLargeMapNodeViewImage}
+                    onDelete={requestDeleteNode}
+                    onEdit={openEditModal}
+                    onDuplicate={duplicateNode}
+                    onAddNote={(node) => openCommentPopover(node)}
+                    onViewNotes={(node) => openCommentPopover(node)}
+                    activeId={activeId}
+                    showPageNumbers={layers.pageNumbers}
+                    thumbnailRequestIds={thumbnailScopeIds}
+                    thumbnailSessionId={thumbnailSessionId}
+                    thumbnailReloadMap={thumbnailReloadMap}
+                    thumbnailCaptureStopped={thumbnailStats.stopped}
+                    onThumbnailLoad={handleThumbnailDisplayLoad}
+                    onThumbnailError={handleThumbnailDisplayError}
                     onSceneLoaded={handleLargeMapSceneLoaded}
+                    activeBranchNodeIds={activeBranchNodeIds}
                   />
                 ) : (
                 <SitemapTree

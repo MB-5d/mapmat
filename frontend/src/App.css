@@ -3101,10 +3101,12 @@ body {
   pointer-events: auto;
 }
 
-.large-map-canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
+.large-map-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
 }
 
 .large-map-surface-status,
