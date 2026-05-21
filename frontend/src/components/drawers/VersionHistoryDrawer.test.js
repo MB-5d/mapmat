@@ -20,6 +20,14 @@ const dateLabel = (dateString) => new Date(dateString).toLocaleDateString([], {
   year: 'numeric',
 });
 
+const timestampLabel = (dateString) => new Date(dateString).toLocaleString([], {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+
 describe('VersionHistoryDrawer', () => {
   let container;
   let root;
@@ -110,6 +118,39 @@ describe('VersionHistoryDrawer', () => {
     expect(container.textContent).not.toContain('Current');
     expect(container.textContent).not.toContain('Manual');
     expect(container.textContent).not.toContain('Autosaved');
+    expect(container.textContent).not.toContain(timestampLabel(currentDate));
+  });
+
+  test('keeps version notes collapsed until expanded', async () => {
+    const currentDate = isoDateForOffset(0, 12);
+    await renderDrawer({
+      versions: [
+        {
+          id: 'v-note',
+          version_number: 2,
+          name: 'Thumbnails captured',
+          notes: 'Only got ~450 in the first try',
+          isBookmarked: true,
+          bookmarkedBy: { name: 'New guy' },
+          created_at: currentDate,
+        },
+      ],
+    });
+
+    await clickByText(dateLabel(currentDate));
+
+    expect(container.textContent).toContain('Thumbnails captured');
+    expect(container.textContent).not.toContain('Only got ~450 in the first try');
+    expect(container.textContent).not.toContain('Marked by New guy');
+
+    const toggle = container.querySelector('button[aria-label="Show version details"]');
+    expect(toggle).toBeTruthy();
+    await act(async () => {
+      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Only got ~450 in the first try');
+    expect(container.textContent).toContain('Marked by New guy');
   });
 
   test('groups activity by month and date while keeping actor details in activity rows', async () => {

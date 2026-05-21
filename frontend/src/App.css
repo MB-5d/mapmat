@@ -6174,17 +6174,16 @@ body {
   transition: background 0.16s ease;
 }
 
+.version-history-restore.has-note-toggle {
+  padding-left: 36px;
+}
+
 .version-history-item:hover .version-history-restore {
   background: var(--color-bg-hover);
 }
 
 .version-history-item.active .version-history-restore {
   background: var(--color-bg-hover);
-}
-
-.version-history-item.bookmarked {
-  border-color: rgba(99, 102, 241, 0.24);
-  background: rgba(99, 102, 241, 0.06);
 }
 
 .version-history-item.editing {
@@ -6208,7 +6207,9 @@ body {
 }
 
 .version-history-title {
-  font-weight: 600;
+  font-size: var(--type-label-md-size);
+  line-height: var(--type-label-md-line-height);
+  font-weight: var(--type-label-md-weight);
   color: var(--color-text-primary);
 }
 
@@ -6220,6 +6221,13 @@ body {
 .version-history-notes {
   font-size: 12px;
   color: var(--color-text-secondary);
+}
+
+.version-history-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 12px 10px 36px;
 }
 
 .version-history-actor,
@@ -6265,13 +6273,6 @@ body {
   border: 2px solid var(--color-bg);
 }
 
-.version-history-marker.bookmarked {
-  width: 12px;
-  height: 12px;
-  left: -19px;
-  background: var(--color-primary);
-}
-
 .version-history-marker.current {
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
 }
@@ -6302,6 +6303,13 @@ body {
 .version-history-item:focus-within .version-history-row-actions {
   opacity: 1;
   pointer-events: auto;
+}
+
+.version-history-note-toggle {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  z-index: 2;
 }
 
 .version-history-bookmark-action {

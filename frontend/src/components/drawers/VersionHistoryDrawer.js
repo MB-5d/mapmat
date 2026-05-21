@@ -200,6 +200,7 @@ const VersionHistoryDrawer = ({
   const [bookmarkDraft, setBookmarkDraft] = useState({ name: '', notes: '' });
   const [bookmarkError, setBookmarkError] = useState('');
   const [savingBookmarkId, setSavingBookmarkId] = useState(null);
+  const [expandedVersionNotes, setExpandedVersionNotes] = useState({});
   const viewOptions = [
     { value: VIEW_TABS.VERSIONS, label: 'Versions' },
     { value: VIEW_TABS.ACTIVITY, label: 'Activity' },
@@ -218,6 +219,7 @@ const VersionHistoryDrawer = ({
       setShowBackToTop(false);
       setEditingVersionId(null);
       setBookmarkError('');
+      setExpandedVersionNotes({});
       return;
     }
     if (!canViewActivity && activeView !== VIEW_TABS.VERSIONS) {
@@ -295,6 +297,13 @@ const VersionHistoryDrawer = ({
     }
   };
 
+  const toggleVersionDetails = (versionId) => {
+    setExpandedVersionNotes((current) => ({
+      ...current,
+      [versionId]: !current[versionId],
+    }));
+  };
+
   const renderGroupedTimeline = (groups, renderItem, emptyLabel) => {
     if (groups.length === 0) {
       return <div className="version-history-empty">{emptyLabel}</div>;
@@ -355,6 +364,9 @@ const VersionHistoryDrawer = ({
     const isCurrent = version.id === currentId;
     const isBookmarked = isBookmarkedVersion(version);
     const isEditing = editingVersionId === version.id;
+    const hasNotes = !!String(version?.notes || '').trim();
+    const detailsExpanded = !!expandedVersionNotes[version.id];
+    const detailsId = `version-details-${version.id}`;
     const bookmarkerLabel = formatOptionalActorLabel(version.bookmarkedBy)
       || formatOptionalActorLabel({
         name: version.bookmarked_by_name,
@@ -366,9 +378,22 @@ const VersionHistoryDrawer = ({
         key={version.id}
         className={`version-history-item${isActive ? ' active' : ''}${isBookmarked ? ' bookmarked' : ''}${isEditing ? ' editing' : ''}`}
       >
+        {hasNotes ? (
+          <IconButton
+            variant="ghost"
+            size="sm"
+            className="version-history-note-toggle"
+            icon={detailsExpanded ? <ChevronDown /> : <ChevronRight />}
+            onClick={() => toggleVersionDetails(version.id)}
+            aria-label={detailsExpanded ? 'Hide version details' : 'Show version details'}
+            aria-expanded={detailsExpanded}
+            aria-controls={detailsId}
+            title={detailsExpanded ? 'Hide details' : 'Show details'}
+          />
+        ) : null}
         <button
           type="button"
-          className="version-history-restore"
+          className={`version-history-restore${hasNotes ? ' has-note-toggle' : ''}`}
           onClick={() => onRestoreVersion(version)}
         >
           <span className={`version-history-marker${isBookmarked ? ' bookmarked' : ''}${isCurrent ? ' current' : ''}`} />
@@ -377,18 +402,19 @@ const VersionHistoryDrawer = ({
               {isBookmarked ? <Bookmark size={14} className="version-history-title-icon" aria-hidden="true" /> : null}
               <span className="version-history-title">{getVersionDisplayName(version)}</span>
             </div>
-            {version.notes ? (
-              <div className="version-history-notes">{version.notes}</div>
-            ) : null}
+          </div>
+          <div className="version-history-meta">
+            <div className="version-history-number">v{version.version_number}</div>
+          </div>
+        </button>
+        {hasNotes && detailsExpanded ? (
+          <div className="version-history-details" id={detailsId}>
+            <div className="version-history-notes">{version.notes}</div>
             {isBookmarked && bookmarkerLabel ? (
               <div className="version-history-actor">Marked by {bookmarkerLabel}</div>
             ) : null}
           </div>
-          <div className="version-history-meta">
-            <div className="version-history-number">v{version.version_number}</div>
-            <div>{formatTimestamp(version.created_at)}</div>
-          </div>
-        </button>
+        ) : null}
         {canBookmarkVersion ? (
           <div className="version-history-row-actions">
             <IconButton
