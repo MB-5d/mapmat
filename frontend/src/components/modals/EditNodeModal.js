@@ -9,8 +9,8 @@ import TextInput from '../ui/TextInput';
 import TextareaInput from '../ui/TextareaInput';
 import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
 import { getSeoMetadata, normalizeMetaTagsForInput, normalizeText } from '../../utils/seoMetadata';
-import { isDataImageUrl } from '../../utils/canvasPerformance';
 import { getNodeHttpErrorLabel, getNodeStatusCode, isVirtualMissingNode } from '../../utils/scanStatus';
+import { isDataImageUrl } from '../../utils/canvasPerformance';
 
 const PAGE_TYPE_HOME = 'Home';
 const PAGE_TYPE_PAGE = 'Page';
