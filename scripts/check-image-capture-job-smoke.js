@@ -268,6 +268,43 @@ function collectNodes(root, orphans = []) {
   return nodes;
 }
 
+const IMAGE_ASSET_FIELDS = [
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+  'thumbnailCaptureFailed',
+  'fullScreenshotTruncated',
+  'authRequired',
+];
+
+function stripNodeImageAssets(node) {
+  if (!node || typeof node !== 'object') return node;
+  const next = { ...node };
+  IMAGE_ASSET_FIELDS.forEach((field) => {
+    delete next[field];
+  });
+  if (Array.isArray(node.children)) {
+    next.children = node.children.map(stripNodeImageAssets);
+  }
+  return next;
+}
+
+function stripPersistedMapImageAssetFields(dbPath, mapId) {
+  const db = new Database(dbPath, { fileMustExist: true });
+  try {
+    const row = db.prepare('SELECT root_data, orphans_data FROM maps WHERE id = ?').get(mapId);
+    assert(row, 'map row missing before image asset strip');
+    const root = stripNodeImageAssets(JSON.parse(row.root_data));
+    const orphans = row.orphans_data ? JSON.parse(row.orphans_data).map(stripNodeImageAssets) : [];
+    db.prepare('UPDATE maps SET root_data = ?, orphans_data = ? WHERE id = ?')
+      .run(JSON.stringify(root), orphans.length ? JSON.stringify(orphans) : null, mapId);
+  } finally {
+    db.close();
+  }
+}
+
 async function assertAssetLoads(apiBase, assetUrl) {
   assert(assetUrl, 'missing asset url');
   const absoluteUrl = new URL(assetUrl, apiBase).toString();
@@ -698,6 +735,35 @@ async function run() {
       false,
       'captured-only recapture should not capture pages without saved full screenshots'
     );
+
+    assert(getSavedManifestCount(dbPath, mapId) > 0, 'manifest rows should exist before reload repair checks');
+
+    stripPersistedMapImageAssetFields(dbPath, mapId);
+    const repairedReload = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
+    const repairedReloadMain = collectNodes(repairedReload.map.root, repairedReload.map.orphans)
+      .find((page) => page.id === 'main-0');
+    assert(repairedReloadMain?.thumbnailUrl, 'map reload should restore thumbnailUrl from manifest');
+    assert(repairedReloadMain?.thumbnailFullUrl, 'map reload should restore thumbnailFullUrl from manifest');
+    assert(repairedReloadMain?.fullScreenshotUrl, 'map reload should restore fullScreenshotUrl from manifest');
+    await assertAssetLoads(apiBase, repairedReloadMain.thumbnailUrl);
+    await assertAssetLoads(apiBase, repairedReloadMain.fullScreenshotUrl);
+
+    stripPersistedMapImageAssetFields(dbPath, mapId);
+    const repairedSummary = await fetchJson(`${apiBase}/api/maps/${mapId}/summary`, {}, cookieJar);
+    assert.strictEqual(repairedSummary.map?.hasThumbnails, true, 'map summary should restore thumbnail state from manifest');
+
+    stripPersistedMapImageAssetFields(dbPath, mapId);
+    const repairedScene = await fetchJson(`${apiBase}/api/maps/${mapId}/scene?zoom=1&thumbnails=true`, {}, cookieJar);
+    const sceneMain = (repairedScene.scene?.nodes || []).find((page) => page.id === 'main-0');
+    assert(sceneMain?.thumbnailUrl, 'map scene should restore thumbnailUrl from manifest');
+    await assertAssetLoads(apiBase, sceneMain.thumbnailUrl);
+
+    stripPersistedMapImageAssetFields(dbPath, mapId);
+    const repairedNode = await fetchJson(`${apiBase}/api/maps/${mapId}/nodes/main-0`, {}, cookieJar);
+    assert(repairedNode.node?.thumbnailUrl, 'node read should restore thumbnailUrl from manifest');
+    assert(repairedNode.node?.fullScreenshotUrl, 'node read should restore fullScreenshotUrl from manifest');
+    await assertAssetLoads(apiBase, repairedNode.node.thumbnailUrl);
+    await assertAssetLoads(apiBase, repairedNode.node.fullScreenshotUrl);
 
     deleteImageAssetManifestRows(dbPath, mapId);
     assert.strictEqual(

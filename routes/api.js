@@ -685,7 +685,7 @@ async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}
     root: nextMap.root,
     orphans: nextMap.orphans,
   });
-  const nextRow = {
+  let nextRow = {
     ...mapRow,
     root_data: JSON.stringify(sanitizedTree.root),
     orphans_data: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
@@ -696,14 +696,16 @@ async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}
       rootData: nextRow.root_data,
       orphansData: nextRow.orphans_data,
     });
+    nextRow = await mapStore.getMapByIdAsync(mapRow.id) || nextRow;
   }
+  const nextParsed = parseMapFields(nextRow);
 
   return {
     row: nextRow,
     parsed: {
-      ...parsed,
-      root: sanitizedTree.root,
-      orphans: sanitizedTree.orphans || [],
+      ...nextParsed,
+      root: nextParsed.root || sanitizedTree.root,
+      orphans: nextParsed.orphans || sanitizedTree.orphans || [],
     },
     changed: true,
   };
@@ -1871,7 +1873,8 @@ router.get('/maps/:id/summary', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    res.json({ map: summarizeMapRow(map) });
+    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
+    res.json({ map: summarizeMapRow(repaired.row) });
   } catch (error) {
     console.error('Get map summary error:', error);
     res.status(500).json({ error: 'Failed to get map summary' });
@@ -1895,7 +1898,8 @@ router.get('/maps/:id/scene', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const parsed = parseMapFields(map);
+    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
+    const parsed = repaired.parsed;
     const scene = buildMapScene({
       root: parsed.root,
       orphans: parsed.orphans || [],
@@ -1914,7 +1918,7 @@ router.get('/maps/:id/scene', requireAuth, async (req, res) => {
     res.json({
       scene: {
         mapId: id,
-        mapUpdatedAt: map.updated_at || null,
+        mapUpdatedAt: repaired.row?.updated_at || map.updated_at || null,
         ...scene,
       },
     });
@@ -1941,7 +1945,8 @@ router.get('/maps/:id/nodes/:nodeId', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const parsed = parseMapFields(map);
+    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
+    const parsed = repaired.parsed;
     const node = collectNodesById(parsed.root, parsed.orphans || []).get(String(nodeId || '').trim());
     if (!node) return res.status(404).json({ error: 'Node not found' });
 
@@ -1979,19 +1984,14 @@ router.get('/maps/:id', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const parsed = parseMapFields(map);
+    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
+    const parsed = repaired.parsed;
     res.json({
       map: {
-        ...map,
+        ...repaired.row,
         ...parsed,
       },
     });
-
-    setTimeout(() => {
-      repairMapImageAssetsFromManifest(map, { persist: true }).catch((error) => {
-        console.warn('Deferred map image asset repair error:', error.message);
-      });
-    }, 0);
   } catch (error) {
     console.error('Get map error:', error);
     res.status(500).json({ error: 'Failed to get map' });
