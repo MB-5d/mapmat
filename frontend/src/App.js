@@ -6864,6 +6864,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (!currentMap?.id || !root || isViewingHistoricalVersion) return undefined;
+    if (currentMap?.largeMapShell) return undefined;
     if (activeImageCaptureJob?.jobId) return undefined;
     const localCaptureActive = thumbnailStats.mode
       && !thumbnailStats.stopped
@@ -6900,6 +6901,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     activeImageCaptureJob?.jobId,
     applyImageCaptureJobUpdates,
     currentMap?.id,
+    currentMap?.largeMapShell,
     isViewingHistoricalVersion,
     root,
     thumbnailStats.completed,
@@ -13942,7 +13944,10 @@ export default function App({ currentRoute, navigateToRoute }) {
             onDragMove={handleDndDragMove}
             onDragEnd={handleDndDragEnd}
           >
-            <div className="content-shell" ref={contentShellRef}>
+            <div
+              className={`content-shell ${useLargeMapSurface ? 'large-map-shell' : ''}`}
+              ref={contentShellRef}
+            >
             <div
               className={`content ${useLargeMapSurface ? 'large-map-content' : ''} ${drawingConnection ? 'drawing-connection' : ''} ${draggingEndpoint ? 'dragging-endpoint' : ''}`}
               ref={contentRef}
