@@ -68,13 +68,14 @@ const NodeCard = ({
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
-  const [thumbKey, setThumbKey] = useState(0);
   const [shouldLoadThumb, setShouldLoadThumb] = useState(false);
   const cardRef = useRef(null);
   const thumbImgRef = useRef(null);
 
   const thumb = node.thumbnailUrl
-    ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbKey}`
+    ? (thumbnailReloadKey
+      ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbnailReloadKey}`
+      : node.thumbnailUrl)
     : null;
   const hasThumb = Boolean(thumb);
   const canRequestThumbnail = !!(thumbnailRequestIds && thumbnailRequestIds.has(node.id));
@@ -171,9 +172,6 @@ const NodeCard = ({
       setThumbError(false);
       setThumbLoading(canRequestThumbnail && !hasExistingThumbnail);
       setShouldLoadThumb(hasExistingThumbnail);
-      if (hasExistingThumbnail || canRequestThumbnail) {
-        setThumbKey(k => k + 1);
-      }
     }
   }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail, thumbnailSessionId]);
 
@@ -200,7 +198,6 @@ const NodeCard = ({
     if (!thumbnailReloadKey) return;
     setThumbError(false);
     setThumbLoading(true);
-    setThumbKey(k => k + 1);
   }, [thumbnailReloadKey, showThumbnails, canRequestThumbnail]);
 
   useEffect(() => {
@@ -228,7 +225,7 @@ const NodeCard = ({
       }
     }, 120000);
     return () => clearTimeout(timeout);
-  }, [showThumbnails, thumbLoading, thumbKey, thumb, canRequestThumbnail, node.id, node.url, onThumbnailError]);
+  }, [showThumbnails, thumbLoading, thumb, canRequestThumbnail, node.id, node.url, onThumbnailError]);
 
   useEffect(() => {
     if (!thumb || !thumbImgRef.current) return;
@@ -249,7 +246,6 @@ const NodeCard = ({
     if (!node.thumbnailUrl && thumbError) {
       setThumbError(false);
       setThumbLoading(true);
-      setThumbKey(k => k + 1);
     }
   };
 
@@ -346,6 +342,10 @@ const NodeCard = ({
                 src={thumb}
                 alt={node.title}
                 loading={canRequestThumbnail ? 'eager' : 'lazy'}
+                decoding="async"
+                fetchpriority="low"
+                width="288"
+                height="152"
                 ref={thumbImgRef}
                 onLoad={() => {
                   setThumbError(false);

@@ -9,6 +9,7 @@ import TextInput from '../ui/TextInput';
 import TextareaInput from '../ui/TextareaInput';
 import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
 import { getSeoMetadata, normalizeMetaTagsForInput, normalizeText } from '../../utils/seoMetadata';
+import { isDataImageUrl } from '../../utils/canvasPerformance';
 
 const PAGE_TYPE_HOME = 'Home';
 const PAGE_TYPE_PAGE = 'Page';
@@ -53,6 +54,7 @@ const EditNodeModal = ({
   rootTree,
   onClose,
   onSave,
+  onUploadNodeImageAsset,
   onDelete,
   onLocateUrl,
   canLocateUrl,
@@ -82,6 +84,8 @@ const EditNodeModal = ({
     node?.parentId ?? specialParentOptions[0]?.value ?? ''
   );
   const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const initialSeoMetadata = getSeoMetadata(node);
   const [description, setDescription] = useState(node?.description || initialSeoMetadata.description || '');
   const [metaTags, setMetaTags] = useState(normalizeMetaTagsForInput(node?.metaTags, initialSeoMetadata));
@@ -113,8 +117,10 @@ const EditNodeModal = ({
     && typeof onLocateUrl === 'function'
     && (typeof canLocateUrl !== 'function' || canLocateUrl(duplicateSourceUrl));
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isSubmitting) return;
+    setSubmitError('');
     const trimmedNote = annotationNote.trim();
     const tags = annotationTags
       .split(',')
@@ -146,24 +152,43 @@ const EditNodeModal = ({
       }),
     });
 
-    onSave({
-      ...node,
-      title,
-      url,
-      pageType,
-      parentId,
-      thumbnailUrl,
-      description,
-      metaTags,
-      canonicalUrl,
-      seoMetadata: nextSeoMetadata,
-      annotations: {
-        status: annotationStatus || 'none',
-        tags,
-        note: trimmedNote,
-      },
-    });
-    onClose();
+    let savedThumbnailUrl = thumbnailUrl;
+    try {
+      setIsSubmitting(true);
+      if (isDataImageUrl(thumbnailUrl)) {
+        if (typeof onUploadNodeImageAsset !== 'function') {
+          throw new Error('Save this map before uploading image files.');
+        }
+        const result = await onUploadNodeImageAsset({
+          nodeId: node?.id || '',
+          imageDataUrl: thumbnailUrl,
+        });
+        savedThumbnailUrl = result?.assetUrl || result?.thumbnailUrl || '';
+      }
+
+      onSave({
+        ...node,
+        title,
+        url,
+        pageType,
+        parentId,
+        thumbnailUrl: savedThumbnailUrl,
+        description,
+        metaTags,
+        canonicalUrl,
+        seoMetadata: nextSeoMetadata,
+        annotations: {
+          status: annotationStatus || 'none',
+          tags,
+          note: trimmedNote,
+        },
+      });
+      onClose();
+    } catch (error) {
+      setSubmitError(error?.message || 'Failed to save page');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddNewType = () => {
@@ -182,6 +207,7 @@ const EditNodeModal = ({
 
     const reader = new FileReader();
     reader.onload = (loadEvent) => {
+      setSubmitError('');
       setThumbnailUrl(loadEvent.target.result);
     };
     reader.readAsDataURL(file);
@@ -236,27 +262,30 @@ const EditNodeModal = ({
       footer={(
         <>
           {canDelete ? (
-            <Button type="button" variant="danger" onClick={() => onDelete(node.id)}>
+            <Button type="button" variant="danger" onClick={() => onDelete(node.id)} disabled={isSubmitting}>
               Delete
             </Button>
           ) : null}
           <div className="edit-node-modal__footer-actions">
-            <Button type="button" variant="secondary" onClick={onClose}>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button
               type="submit"
               form="edit-node-form"
               variant="primary"
-              disabled={!isFormValid}
+              disabled={!isFormValid || isSubmitting}
             >
-              {isHomePageCreation ? 'Add Home Page' : mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
+              {isSubmitting
+                ? 'Saving...'
+                : isHomePageCreation ? 'Add Home Page' : mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
             </Button>
           </div>
         </>
       )}
     >
       <form onSubmit={handleSubmit} className="edit-node-form" id="edit-node-form">
+        {submitError ? <div className="form-error">{submitError}</div> : null}
         <Field label="Page Title" required>
           <TextInput
             type="text"
@@ -417,7 +446,10 @@ const EditNodeModal = ({
                 const file = event.dataTransfer.files[0];
                 if (file && file.type.startsWith('image/')) {
                   const reader = new FileReader();
-                  reader.onload = (loadEvent) => setThumbnailUrl(loadEvent.target.result);
+                  reader.onload = (loadEvent) => {
+                    setSubmitError('');
+                    setThumbnailUrl(loadEvent.target.result);
+                  };
                   reader.readAsDataURL(file);
                 }
               }}

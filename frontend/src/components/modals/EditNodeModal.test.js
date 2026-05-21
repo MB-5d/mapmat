@@ -200,6 +200,51 @@ describe('EditNodeModal', () => {
     expect(container.textContent).toContain('Missing meta description');
   });
 
+  test('uploads inline thumbnail data before saving', async () => {
+    const onSave = jest.fn();
+    const onClose = jest.fn();
+    const onUploadNodeImageAsset = jest.fn().mockResolvedValue({
+      assetUrl: '/screenshots/uploaded-node-thumb.png',
+    });
+
+    await act(async () => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Uploaded page',
+            url: 'https://example.com/page',
+            pageType: 'Page',
+            thumbnailUrl: 'data:image/png;base64,aW1hZ2U=',
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={onClose}
+          onSave={onSave}
+          onUploadNodeImageAsset={onUploadNodeImageAsset}
+          mode="edit"
+        />
+      );
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Changes')
+    );
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onUploadNodeImageAsset).toHaveBeenCalledWith({
+      nodeId: 'node-1',
+      imageDataUrl: 'data:image/png;base64,aW1hZ2U=',
+    });
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      thumbnailUrl: '/screenshots/uploaded-node-thumb.png',
+    }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   test('shows delete action in edit mode when provided', () => {
     const onDelete = jest.fn();
 

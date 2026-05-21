@@ -151,6 +151,37 @@ describe('NodeCard', () => {
     expect(container.querySelector('.thumb-placeholder')).toBeNull();
   });
 
+  test('renders only the thumbnail image on the node card', async () => {
+    const onViewImage = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'node-1',
+            title: 'Captured page',
+            url: 'https://example.com/page',
+            thumbnailUrl: '/screenshots/page_thumb_small_v8.jpg',
+            fullScreenshotUrl: '/screenshots/page_full_v8.jpg',
+          }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={onViewImage}
+        />
+      );
+    });
+
+    const image = container.querySelector('.thumb-img');
+    expect(image?.getAttribute('src')).toBe('/screenshots/page_thumb_small_v8.jpg');
+    expect(container.innerHTML).not.toContain('/screenshots/page_full_v8.jpg');
+    expect(image?.getAttribute('decoding')).toBe('async');
+    expect(image?.getAttribute('fetchpriority')).toBe('low');
+  });
+
   test('retries an existing thumbnail display when the capture session changes', async () => {
     const onThumbnailError = jest.fn();
     const node = {

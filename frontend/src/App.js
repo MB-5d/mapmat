@@ -134,6 +134,14 @@ import {
   normalizeCaptureIssue,
   shouldShowImageCaptureProgressToast,
 } from './utils/captureIssues';
+import {
+  countVisibleThumbnails,
+  filterVisibleLayoutConnectors,
+  filterVisibleLayoutNodes,
+  getCanvasViewportWorldBounds,
+  isDataImageUrl,
+  shouldRenderConnectionForVisibleNodes,
+} from './utils/canvasPerformance';
 const treeMoveUtils = require('./utils/treeMoveUtils');
 
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
@@ -167,11 +175,26 @@ const MIN_SCALE = 0.05;
 const MAX_SCALE = 4;
 const INTERACTIVE_MIN_SCALE = 0.1;
 const CANVAS_EDGE_PADDING_MAX = 400;
+const CANVAS_NODE_OVERSCAN_PX = 1200;
+const CANVAS_PERF_PROBE_INTERVAL_MS = 2000;
+const CANVAS_TRANSFORM_COMMIT_IDLE_MS = 120;
 
 const clampCanvasPanAxis = (value, min, max) => {
   if (min <= max) return Math.max(min, Math.min(max, value));
   return Math.max(max, Math.min(min, value));
 };
+
+const getCanvasGridMetrics = (scaleValue) => {
+  const canvasGridScale = scaleValue || 1;
+  return {
+    size: Math.max(4, Math.round(16 * canvasGridScale)),
+    dotRadius: canvasGridScale < 0.5 ? 0.5 : (canvasGridScale > 2 ? 1 : 0.75),
+  };
+};
+
+const waitForNextPaint = () => new Promise((resolve) => {
+  requestAnimationFrame(() => requestAnimationFrame(resolve));
+});
 
 const parseEnvBool = (value, fallback = false) => {
   if (value === undefined || value === null || value === '') return fallback;
@@ -857,6 +880,11 @@ const stripNodeForMapSave = (node) => {
   delete next._childUrls;
   delete next._treeDepth;
   delete next._treeSize;
+  ['thumbnailUrl', 'thumbnailFullUrl', 'fullScreenshotUrl'].forEach((field) => {
+    if (isDataImageUrl(next[field])) {
+      delete next[field];
+    }
+  });
   if (Array.isArray(node.children)) {
     next.children = node.children.map(stripNodeForMapSave);
   }
@@ -1022,6 +1050,7 @@ const SitemapTree = ({
   onToggleStack,
   layout: layoutOverride,
   orientation = MAP_ORIENTATIONS.VERTICAL,
+  viewportBounds = null,
   selectedNodeIds,
   activeBranchNodeIds,
   children,
@@ -1048,6 +1077,25 @@ const SitemapTree = ({
     if (layout.orientation === MAP_ORIENTATIONS.HORIZONTAL) return;
     checkLayoutInvariants(layout.nodes, orphans, layout.connectors);
   }, [layout, orphans]);
+
+  const alwaysVisibleNodeIds = useMemo(() => {
+    const ids = new Set();
+    if (activeId) ids.add(activeId);
+    if (activeBranchNodeIds) {
+      activeBranchNodeIds.forEach((id) => ids.add(id));
+    }
+    return ids;
+  }, [activeId, activeBranchNodeIds]);
+
+  const visibleNodeData = useMemo(() => (
+    layout
+      ? filterVisibleLayoutNodes(layout.nodes, viewportBounds, { alwaysIncludeIds: alwaysVisibleNodeIds })
+      : []
+  ), [layout, viewportBounds, alwaysVisibleNodeIds]);
+
+  const visibleLayoutConnectors = useMemo(() => (
+    layout ? filterVisibleLayoutConnectors(layout.connectors, viewportBounds) : []
+  ), [layout, viewportBounds]);
 
   if (!data || !layout) return null;
 
@@ -1080,7 +1128,7 @@ const SitemapTree = ({
   };
 
   // Convert connector data to SVG path strings
-  const connectorPaths = layout.connectors.map(c => {
+  const connectorPaths = visibleLayoutConnectors.map(c => {
     if (c.type === 'horizontal-bus' || c.type === 'horizontal-tick') {
       return `M ${c.x1} ${c.y1} L ${c.x2} ${c.y2}`;
     }
@@ -1097,6 +1145,9 @@ const SitemapTree = ({
         minWidth: layout.bounds.w,
         minHeight: layout.bounds.h,
       }}
+      data-layout-node-count={layout.nodes.size}
+      data-rendered-node-count={visibleNodeData.length}
+      data-rendered-connector-count={visibleLayoutConnectors.length}
     >
       {/* Single SVG overlay for all connectors */}
       <svg
@@ -1117,7 +1168,7 @@ const SitemapTree = ({
       {children}
 
       {/* Render all nodes with absolute positioning */}
-      {Array.from(layout.nodes.values()).map(nodeData => {
+      {visibleNodeData.map(nodeData => {
         const color = getDepthColor(colors, nodeData.depth);
         const isRoot = nodeData.node.id === data.id;
         const badges = getBadgesForNode(nodeData.node, nodeData);
@@ -1868,8 +1919,15 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [disableCanvasCulling, setDisableCanvasCulling] = useState(false);
   const scaleRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
+  const transformCommitRef = useRef({ raf: null, timer: null });
+  const canvasPerformanceRef = useRef({
+    fullImageRequests: 0,
+    longTasks: 0,
+    longTaskMs: 0,
+  });
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [connectionColors, setConnectionColors] = useState(DEFAULT_CONNECTION_COLORS);
   const [showColorKey, setShowColorKey] = useState(false);
@@ -3804,6 +3862,112 @@ export default function App({ currentRoute, navigateToRoute }) {
     return { minX, minY, maxX, maxY };
   }, [mapLayout]);
 
+  const canvasViewportBounds = useMemo(() => {
+    if (disableCanvasCulling) return null;
+    return getCanvasViewportWorldBounds({
+      pan,
+      scale,
+      canvasSize,
+      overscanPx: CANVAS_NODE_OVERSCAN_PX,
+    });
+  }, [canvasSize, disableCanvasCulling, pan, scale]);
+
+  const visibleCanvasNodeData = useMemo(() => (
+    mapLayout
+      ? filterVisibleLayoutNodes(mapLayout.nodes, canvasViewportBounds, {
+          alwaysIncludeIds: activeBranchNodeIds,
+        })
+      : []
+  ), [activeBranchNodeIds, canvasViewportBounds, mapLayout]);
+
+  const visibleCanvasNodeIds = useMemo(() => (
+    new Set(visibleCanvasNodeData.map((nodeData) => nodeData?.node?.id).filter(Boolean))
+  ), [visibleCanvasNodeData]);
+
+  const visibleAutoCrosslinkConnections = useMemo(() => (
+    autoCrosslinkConnections.filter((conn) => (
+      shouldRenderConnectionForVisibleNodes(conn, visibleCanvasNodeIds)
+    ))
+  ), [autoCrosslinkConnections, visibleCanvasNodeIds]);
+
+  const visibleBrokenConnections = useMemo(() => (
+    brokenConnections.filter((conn) => (
+      shouldRenderConnectionForVisibleNodes(conn, visibleCanvasNodeIds)
+    ))
+  ), [brokenConnections, visibleCanvasNodeIds]);
+
+  const visibleCanvasConnections = useMemo(() => (
+    connections.filter((conn) => (
+      shouldRenderConnectionForVisibleNodes(conn, visibleCanvasNodeIds)
+    ))
+  ), [connections, visibleCanvasNodeIds]);
+
+  useEffect(() => {
+    if (typeof PerformanceObserver === 'undefined') return undefined;
+    const observers = [];
+    try {
+      const resourceObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach((entry) => {
+          const name = String(entry?.name || '');
+          if (entry?.initiatorType === 'img' && /\/screenshots\/[^/?#]+_full_v\d+\.(?:jpe?g|png|webp)/i.test(name)) {
+            canvasPerformanceRef.current.fullImageRequests += 1;
+          }
+        });
+      });
+      resourceObserver.observe({ type: 'resource', buffered: true });
+      observers.push(resourceObserver);
+    } catch {
+      // Resource timing support varies by browser.
+    }
+    try {
+      const longTaskObserver = new PerformanceObserver((list) => {
+        list.getEntries().forEach((entry) => {
+          canvasPerformanceRef.current.longTasks += 1;
+          canvasPerformanceRef.current.longTaskMs += Number(entry.duration || 0);
+        });
+      });
+      longTaskObserver.observe({ type: 'longtask', buffered: true });
+      observers.push(longTaskObserver);
+    } catch {
+      // Long task timing is not supported in all browsers.
+    }
+    return () => observers.forEach((observer) => observer.disconnect());
+  }, []);
+
+  useEffect(() => {
+    if (!mapLayout?.nodes?.size || typeof window === 'undefined') return undefined;
+    const publishSnapshot = () => {
+      const content = contentRef.current;
+      const memory = typeof performance !== 'undefined' && performance?.memory?.usedJSHeapSize
+        ? Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)
+        : null;
+      const renderedNodes = content?.querySelectorAll('[data-node-card="1"]').length || 0;
+      const renderedThumbnails = content?.querySelectorAll('img.thumb-img').length || 0;
+      const renderedFullImages = Array.from(content?.querySelectorAll('img') || [])
+        .filter((image) => /\/screenshots\/[^/?#]+_full_v\d+\.(?:jpe?g|png|webp)/i.test(image.currentSrc || image.src || ''))
+        .length;
+      const snapshot = {
+        totalNodes: mapLayout.nodes.size,
+        visibleNodes: visibleCanvasNodeData.length,
+        renderedNodes,
+        visibleThumbnails: countVisibleThumbnails(visibleCanvasNodeData, showThumbnails),
+        renderedThumbnails,
+        renderedFullImages,
+        fullImageRequests: canvasPerformanceRef.current.fullImageRequests,
+        longTasks: canvasPerformanceRef.current.longTasks,
+        longTaskMs: Math.round(canvasPerformanceRef.current.longTaskMs),
+        memoryMb: memory,
+      };
+      window.__vellicCanvasPerf = snapshot;
+      if (window.localStorage?.getItem('vellic:canvas-perf') === 'debug') {
+        console.table(snapshot);
+      }
+    };
+    publishSnapshot();
+    const interval = window.setInterval(publishSnapshot, CANVAS_PERF_PROBE_INTERVAL_MS);
+    return () => window.clearInterval(interval);
+  }, [mapLayout, showThumbnails, visibleCanvasNodeData]);
+
   const clampPan = useCallback((newPan, scaleArg = scaleRef.current) => {
     if (!canvasRef.current || !worldBounds) return newPan;
     const bounds = worldBounds;
@@ -3829,6 +3993,47 @@ export default function App({ currentRoute, navigateToRoute }) {
     return { x: clampedX, y: clampedY };
   }, [worldBounds]);
 
+  const applyCanvasTransformDom = useCallback((nextScale, nextPan) => {
+    const content = contentRef.current;
+    if (content) {
+      content.style.transform = `translate(${nextPan.x}px, ${nextPan.y}px) scale(${nextScale})`;
+    }
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const grid = getCanvasGridMetrics(nextScale);
+      canvas.style.setProperty('--canvas-pan-x', `${nextPan.x || 0}px`);
+      canvas.style.setProperty('--canvas-pan-y', `${nextPan.y || 0}px`);
+      canvas.style.setProperty('--canvas-grid-size', `${grid.size}px`);
+      canvas.style.setProperty('--canvas-grid-dot-radius', `${grid.dotRadius}px`);
+    }
+  }, []);
+
+  const scheduleTransformStateCommit = useCallback(() => {
+    if (transformCommitRef.current.timer) {
+      clearTimeout(transformCommitRef.current.timer);
+    }
+    transformCommitRef.current.timer = setTimeout(() => {
+      transformCommitRef.current.timer = null;
+      if (transformCommitRef.current.raf) return;
+      transformCommitRef.current.raf = requestAnimationFrame(() => {
+        transformCommitRef.current.raf = null;
+        setScale(scaleRef.current);
+        setPan(panRef.current);
+      });
+    }, CANVAS_TRANSFORM_COMMIT_IDLE_MS);
+  }, []);
+
+  useEffect(() => () => {
+    if (transformCommitRef.current.timer) {
+      clearTimeout(transformCommitRef.current.timer);
+      transformCommitRef.current.timer = null;
+    }
+    if (transformCommitRef.current.raf) {
+      cancelAnimationFrame(transformCommitRef.current.raf);
+      transformCommitRef.current.raf = null;
+    }
+  }, []);
+
   const applyTransform = useCallback((next, { skipPanClamp = false } = {}) => {
     const rawScale = next?.scale ?? scaleRef.current;
     const safeScale = Number.isFinite(rawScale) ? rawScale : 1;
@@ -3845,10 +4050,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     scaleRef.current = nextScale;
     panRef.current = clampedPan;
-    setScale(nextScale);
-    setPan(clampedPan);
+    applyCanvasTransformDom(nextScale, clampedPan);
+    scheduleTransformStateCommit();
     return { scale: nextScale, pan: clampedPan };
-  }, [clampPan]);
+  }, [applyCanvasTransformDom, clampPan, scheduleTransformStateCommit]);
 
   const animatePanTo = useCallback((target) => {
     const start = { ...panRef.current };
@@ -10040,6 +10245,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast('Generating PDF...', 'info', true);
 
     try {
+      setDisableCanvasCulling(true);
+      await waitForNextPaint();
       // Dynamically import dependencies
       const [{ jsPDF }, { toSvg }] = await Promise.all([
         import('jspdf'),
@@ -10167,6 +10374,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       // Restore grid and transform state on error
       if (contentRef.current) contentRef.current.classList.remove('export-mode');
       applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
+    } finally {
+      setDisableCanvasCulling(false);
     }
   };
 
@@ -10424,6 +10633,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     try {
       showToast('Generating PNG...', 'info', true);
+      setDisableCanvasCulling(true);
+      await waitForNextPaint();
 
       // Reset to 1:1 scale for accurate capture
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
@@ -10524,6 +10735,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     } finally {
       // Restore original transform state
       applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
+      setDisableCanvasCulling(false);
     }
   };
 
@@ -11837,6 +12049,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   };
 
+  const uploadNodeImageAsset = useCallback(async ({ nodeId, imageDataUrl }) => {
+    if (!currentMap?.id) {
+      throw new Error('Save this map before uploading image files.');
+    }
+    return api.uploadMapNodeAsset(currentMap.id, { nodeId, imageDataUrl });
+  }, [currentMap?.id]);
+
   const saveNodeChanges = (updatedNode) => {
     // Helper to find parent in a tree
     const findParentInTree = (tree, nodeId, parent = null) => {
@@ -12996,7 +13215,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     saveMapModalProjectId || 'none',
     saveMapModalName || 'untitled',
   ].join(':');
-  const canvasGridScale = scale || 1;
+  const canvasRenderScale = scaleRef.current || scale || 1;
+  const canvasRenderPan = panRef.current || pan;
+  const canvasGridScale = canvasRenderScale;
   const canvasGridSize = Math.max(4, Math.round(16 * canvasGridScale));
   const canvasGridDotRadius = canvasGridScale < 0.5 ? 0.5 : (canvasGridScale > 2 ? 1 : 0.75);
 
@@ -13040,8 +13261,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         className={`canvas ${hasMap ? 'has-map' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
         style={{
-          '--canvas-pan-x': `${pan.x || 0}px`,
-          '--canvas-pan-y': `${pan.y || 0}px`,
+          '--canvas-pan-x': `${canvasRenderPan.x || 0}px`,
+          '--canvas-pan-y': `${canvasRenderPan.y || 0}px`,
           '--canvas-grid-size': `${canvasGridSize}px`,
           '--canvas-grid-dot-radius': `${canvasGridDotRadius}px`,
         }}
@@ -13314,7 +13535,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 // This transform must ONLY be translate(px, px) scale(n).
                 // No %, no centering, no layout transforms.
                 // Do not modify without understanding world-space math.
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                transform: `translate(${canvasRenderPan.x}px, ${canvasRenderPan.y}px) scale(${canvasRenderScale})`,
                 transformOrigin: '0 0',
               }}
               onMouseMove={(e) => {
@@ -13385,7 +13606,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   snapTarget={drawingConnection?.snapTarget || draggingEndpoint?.snapTarget}
                   onAnchorMouseDown={handleAnchorMouseDown}
                   colors={colors}
-                  scale={scale}
+                  scale={canvasRenderScale}
                   onDelete={requestDeleteNode}
                   onEdit={openEditModal}
                   onDuplicate={duplicateNode}
@@ -13425,6 +13646,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onThumbnailLoad={handleThumbnailDisplayLoad}
                   onThumbnailError={handleThumbnailDisplayError}
                   expandedStacks={expandedStacks}
+                  viewportBounds={canvasViewportBounds}
                   activeBranchNodeIds={activeBranchNodeIds}
                   onToggleStack={(nodeId) => {
                     setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
@@ -13484,7 +13706,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   </filter>
                 </defs>
 
-                {layers.crossLinks && autoCrosslinkConnections.map((conn) => {
+                {layers.crossLinks && visibleAutoCrosslinkConnections.map((conn) => {
                   const path = conn.sourceAnchor && conn.targetAnchor
                     ? generateConnectionPath(conn)
                     : (() => {
@@ -13543,7 +13765,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   );
                 })}
 
-                {layers.brokenLinks && brokenConnections.map((conn) => {
+                {layers.brokenLinks && visibleBrokenConnections.map((conn) => {
                   const path = getBrokenLinkPathForConnection(conn);
                   if (!path) return null;
                   const isHovered = hoveredConnection === conn.id;
@@ -13594,7 +13816,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 })}
 
                 {/* Render completed connections */}
-                {connections
+                {visibleCanvasConnections
                   .filter(conn => {
                     if (conn.type === 'userflow' && !layers.userFlows) return false;
                     if (conn.type === 'crosslink' && !layers.crossLinks) return false;
@@ -14758,6 +14980,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           rootTree={root}
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
+          onUploadNodeImageAsset={uploadNodeImageAsset}
           onDelete={(nodeId) => {
             setEditModalNode(null);
             requestDeleteNode(nodeId);

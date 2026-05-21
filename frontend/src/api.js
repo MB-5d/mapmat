@@ -504,6 +504,13 @@ export async function updateMapNodeAssets(id, updates) {
   });
 }
 
+export async function uploadMapNodeAsset(id, payload) {
+  return fetchApi(`/api/maps/${id}/node-assets/upload`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function downloadMapImages(id, payload = {}) {
   const { blob, filename } = await fetchBlobResponse(`/api/maps/${id}/images/download`, {
     method: 'POST',

@@ -50,6 +50,8 @@ const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
           key={imageUrl}
           src={imageUrl}
           alt="Full page view"
+          decoding="async"
+          fetchpriority="high"
           onLoad={onLoad}
           onError={onError}
           style={{ opacity: loading ? 0 : 1 }}

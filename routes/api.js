@@ -37,6 +37,7 @@ const {
   getScreenshotStorageProvider,
   readScreenshotJson,
   readScreenshotObject,
+  saveScreenshotObject,
   statScreenshotObject,
 } = require('../utils/screenshotStorage');
 const {
@@ -57,6 +58,41 @@ const {
 } = require('../utils/imageDownloadPackage');
 
 const router = express.Router();
+const NODE_ASSET_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
+
+function parseNodeAssetDataImage(imageDataUrl) {
+  const match = String(imageDataUrl || '').match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!match) {
+    const error = new Error('Upload a PNG, JPG, or WebP image.');
+    error.status = 400;
+    throw error;
+  }
+  const contentType = match[1].toLowerCase().replace('image/jpg', 'image/jpeg');
+  const buffer = Buffer.from(match[2].replace(/\s+/g, ''), 'base64');
+  if (!buffer.length) {
+    const error = new Error('Uploaded image is empty.');
+    error.status = 400;
+    throw error;
+  }
+  if (buffer.length > NODE_ASSET_UPLOAD_MAX_BYTES) {
+    const error = new Error('Choose an image under 4 MB.');
+    error.status = 413;
+    throw error;
+  }
+  const extension = contentType === 'image/png'
+    ? 'png'
+    : contentType === 'image/webp'
+      ? 'webp'
+      : 'jpg';
+  return { buffer, contentType, extension };
+}
+
+function getNodeAssetUploadBaseUrl(req) {
+  if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  }
+  return `${req.protocol}://${req.get('host')}`;
+}
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -2183,6 +2219,57 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Update map error:', error);
     res.status(500).json({ error: 'Failed to update map' });
+  }
+});
+
+// POST /api/maps/:id/node-assets/upload - Store an inline node image as a durable asset URL
+router.post('/maps/:id/node-assets/upload', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const nodeId = String(req.body?.nodeId || '').trim();
+    const parsedImage = parseNodeAssetDataImage(req.body?.imageDataUrl);
+
+    const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
+    const map = collaborationEnabled
+      ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
+      : await mapStore.getMapForUserAsync(id, req.user.id);
+    if (!ensureResourceAction({
+      req,
+      res,
+      resource: map,
+      action: permissionPolicy.ACTIONS.MAP_UPDATE,
+      failureError: 'Map not found',
+    })) return;
+
+    if (nodeId) {
+      const currentRoot = safeParse(map.root_data, 'root_data', null);
+      const currentOrphans = safeParse(map.orphans_data, 'orphans_data', []);
+      const currentNodesById = collectNodesById(currentRoot, currentOrphans);
+      if (!currentNodesById.has(nodeId)) {
+        return res.status(404).json({ error: 'Node not found' });
+      }
+    }
+
+    const filename = [
+      'node',
+      String(id).replace(/[^a-zA-Z0-9_-]+/g, '').slice(0, 24) || 'map',
+      String(nodeId).replace(/[^a-zA-Z0-9_-]+/g, '').slice(0, 32) || 'node',
+      Date.now(),
+      uuidv4().replace(/-/g, '').slice(0, 12),
+    ].join('_') + `.${parsedImage.extension}`;
+    const assetUrl = await saveScreenshotObject({
+      key: filename,
+      buffer: parsedImage.buffer,
+      contentType: parsedImage.contentType,
+      baseUrl: getNodeAssetUploadBaseUrl(req),
+    });
+    return res.json({
+      assetUrl,
+      updatedNodeIds: nodeId ? [nodeId] : [],
+    });
+  } catch (error) {
+    console.error('Upload map node asset error:', error);
+    return res.status(error?.status || 500).json({ error: error?.message || 'Failed to upload node image' });
   }
 });
 
