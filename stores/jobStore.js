@@ -93,20 +93,51 @@ function markJobFailedAsync(id, failedStatus, errorText) {
   `, [failedStatus, errorText, id]);
 }
 
-function markJobCanceledAsync(id, canceledStatus, queuedStatus, runningStatus) {
-  return adapter.executeAsync(`
-    UPDATE jobs
-    SET status = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND status IN (?, ?)
-  `, [canceledStatus, id, queuedStatus, runningStatus]);
+function normalizeStatuses(statuses) {
+  return statuses.flat().map((status) => String(status || '').trim()).filter(Boolean);
 }
 
-function markJobStoppingAsync(id, stoppingStatus, queuedStatus, runningStatus) {
+function updateJobStatusAsync(id, nextStatus, allowedStatuses = []) {
+  const statuses = normalizeStatuses(Array.isArray(allowedStatuses) ? allowedStatuses : [allowedStatuses]);
+  if (statuses.length === 0) {
+    return adapter.executeAsync('UPDATE jobs SET status = ? WHERE id = ?', [nextStatus, id]);
+  }
+  const placeholders = adapter.placeholders(statuses.length);
   return adapter.executeAsync(`
     UPDATE jobs
     SET status = ?
-    WHERE id = ? AND status IN (?, ?)
-  `, [stoppingStatus, id, queuedStatus, runningStatus]);
+    WHERE id = ? AND status IN (${placeholders})
+  `, [nextStatus, id, ...statuses]);
+}
+
+function markJobCanceledAsync(id, canceledStatus, ...activeStatuses) {
+  const statuses = normalizeStatuses(activeStatuses);
+  if (statuses.length === 0) {
+    return adapter.executeAsync(`
+      UPDATE jobs
+      SET status = ?, finished_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [canceledStatus, id]);
+  }
+  const placeholders = adapter.placeholders(statuses.length);
+  return adapter.executeAsync(`
+    UPDATE jobs
+    SET status = ?, finished_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status IN (${placeholders})
+  `, [canceledStatus, id, ...statuses]);
+}
+
+function markJobStoppingAsync(id, stoppingStatus, ...activeStatuses) {
+  const statuses = normalizeStatuses(activeStatuses);
+  if (statuses.length === 0) {
+    return adapter.executeAsync('UPDATE jobs SET status = ? WHERE id = ?', [stoppingStatus, id]);
+  }
+  const placeholders = adapter.placeholders(statuses.length);
+  return adapter.executeAsync(`
+    UPDATE jobs
+    SET status = ?
+    WHERE id = ? AND status IN (${placeholders})
+  `, [stoppingStatus, id, ...statuses]);
 }
 
 async function getJobStatusAsync(id) {
@@ -138,6 +169,7 @@ module.exports = {
   insertJobAsync,
   takeNextQueuedJobAsync,
   updateJobProgressAsync,
+  updateJobStatusAsync,
   markJobCompleteAsync,
   markJobFailedAsync,
   markJobCanceledAsync,

@@ -62,8 +62,12 @@ const {
   getUrlFallbackTitle,
 } = require('./utils/scanPageClassification');
 const {
+  IMAGE_CAPTURE_SCALE_TIERS,
   collectImageCaptureRecords,
   buildImageCapturePhases,
+  buildImageCaptureStages,
+  getImageCaptureScaleTier,
+  getImageCaptureStageSize,
 } = require('./utils/imageCapturePlan');
 const {
   SCREENSHOT_LOCAL_DIR,
@@ -351,6 +355,14 @@ const IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE = Math.max(
   1,
   Number(process.env.IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE ?? 12)
 );
+const IMAGE_CAPTURE_LARGE_THUMB_SAVE_BATCH_SIZE = Math.max(
+  IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE,
+  Number(process.env.IMAGE_CAPTURE_LARGE_THUMB_SAVE_BATCH_SIZE ?? 100)
+);
+const IMAGE_CAPTURE_LARGE_FULL_SAVE_BATCH_SIZE = Math.max(
+  IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE,
+  Number(process.env.IMAGE_CAPTURE_LARGE_FULL_SAVE_BATCH_SIZE ?? 50)
+);
 const IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS = Math.max(
   500,
   Number(process.env.IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS ?? 2500)
@@ -370,6 +382,14 @@ const IMAGE_CAPTURE_PROGRESS_MIN_INTERVAL_MS = Math.max(
 const IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT = Math.max(
   100,
   Number(process.env.IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT ?? 2000)
+);
+const IMAGE_CAPTURE_PROGRESS_ASSET_UPDATE_LIMIT = Math.max(
+  100,
+  Number(process.env.IMAGE_CAPTURE_PROGRESS_ASSET_UPDATE_LIMIT ?? 2000)
+);
+const IMAGE_CAPTURE_MANIFEST_VALIDATION_CONCURRENCY = Math.max(
+  1,
+  Number(process.env.IMAGE_CAPTURE_MANIFEST_VALIDATION_CONCURRENCY ?? 24)
 );
 const SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY = Math.round(toBoundedNumber(
   process.env.SCREENSHOT_THUMB_PREVIEW_JPEG_QUALITY,
@@ -1062,6 +1082,7 @@ const JOB_WORKER_TYPES = normalizeJobWorkerTypes(parseJobWorkerTypes(process.env
 const JOB_STATUS = {
   queued: 'queued',
   running: 'running',
+  paused: 'paused',
   stopping: 'stopping',
   complete: 'complete',
   failed: 'failed',
@@ -1178,7 +1199,7 @@ const getSettledImageCaptureProgress = (row) => {
 const findActiveImageCaptureJob = async (mapId, captureType, request = {}) => {
   const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
     JOB_TYPES.imageCapture,
-    [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.stopping]
+    [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.paused, JOB_STATUS.stopping]
   );
 
   for (const row of rows) {
@@ -1202,6 +1223,33 @@ const findActiveImageCaptureJob = async (mapId, captureType, request = {}) => {
         matchesRequest: imageCaptureRequestsMatch(payload, request),
       };
     }
+  }
+  return null;
+};
+
+const findAnyActiveImageCaptureJob = async (mapId) => {
+  const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
+    JOB_TYPES.imageCapture,
+    [JOB_STATUS.queued, JOB_STATUS.running, JOB_STATUS.paused, JOB_STATUS.stopping]
+  );
+
+  for (const row of rows) {
+    const payload = getJobPayload(row);
+    if (payload.mapId !== mapId) continue;
+    if (row.status === JOB_STATUS.stopping) {
+      await markJobCanceled(row.id);
+      continue;
+    }
+    const settledProgress = getSettledImageCaptureProgress(row);
+    if (settledProgress?.status === JOB_STATUS.complete) {
+      await markJobComplete(row.id, settledProgress.result);
+      continue;
+    }
+    if (settledProgress?.status === JOB_STATUS.canceled) {
+      await markJobCanceled(row.id);
+      continue;
+    }
+    return row;
   }
   return null;
 };
@@ -1290,6 +1338,7 @@ const createJob = async ({ type, payload, req, status = JOB_STATUS.queued }) => 
 };
 
 let activeJobs = 0;
+const activeJobIds = new Set();
 
 const takeNextJob = () => jobStore.takeNextQueuedJobAsync({
   queuedStatus: JOB_STATUS.queued,
@@ -1327,7 +1376,9 @@ const markJobCanceled = async (id) => {
     id,
     JOB_STATUS.canceled,
     JOB_STATUS.queued,
-    JOB_STATUS.running
+    JOB_STATUS.running,
+    JOB_STATUS.paused,
+    JOB_STATUS.stopping
   );
 };
 
@@ -1336,8 +1387,17 @@ const markJobStopping = async (id) => {
     id,
     JOB_STATUS.stopping,
     JOB_STATUS.queued,
-    JOB_STATUS.running
+    JOB_STATUS.running,
+    JOB_STATUS.paused
   );
+};
+
+const markJobPaused = async (id) => {
+  await jobStore.updateJobStatusAsync(id, JOB_STATUS.paused, [JOB_STATUS.running]);
+};
+
+const markJobResumed = async (id) => {
+  await jobStore.updateJobStatusAsync(id, JOB_STATUS.running, [JOB_STATUS.paused]);
 };
 
 const createJobStatusReader = (id, throttleMs = 1000) => {
@@ -1633,6 +1693,99 @@ async function isUsableScreenshotAsset(value) {
   return (await validateScreenshotAssetUrl(value)).available === true;
 }
 
+function getImageCaptureManifestPrimaryField(captureType) {
+  return captureType === SCREENSHOT_TYPES.full ? 'fullScreenshotUrl' : 'thumbnailUrl';
+}
+
+function getSavedImageCaptureManifestRows(manifestRows, captureType = null) {
+  const primaryField = captureType ? getImageCaptureManifestPrimaryField(captureType) : null;
+  return (Array.isArray(manifestRows) ? manifestRows : []).filter((row) => {
+    if (String(row?.status || 'saved') !== 'saved') return false;
+    if (!row?.url) return false;
+    if (primaryField && row.asset_field !== primaryField) return false;
+    return true;
+  });
+}
+
+function getSavedImageCaptureManifestNodeIds(manifestRows, captureType) {
+  return new Set(
+    getSavedImageCaptureManifestRows(manifestRows, captureType)
+      .map((row) => String(row.node_id || '').trim())
+      .filter(Boolean)
+  );
+}
+
+async function verifySavedImageCaptureManifestRows({ mapId, manifestRows }) {
+  const savedRows = getSavedImageCaptureManifestRows(manifestRows);
+  if (savedRows.length === 0) return [];
+
+  const verifiedRows = [];
+  const missingEntries = [];
+  for (let start = 0; start < savedRows.length; start += IMAGE_CAPTURE_MANIFEST_VALIDATION_CONCURRENCY) {
+    const batch = savedRows.slice(start, start + IMAGE_CAPTURE_MANIFEST_VALIDATION_CONCURRENCY);
+    const results = await Promise.all(batch.map((row) => validateScreenshotAssetUrl(row.url)));
+    batch.forEach((row, index) => {
+      if (results[index]?.available) {
+        verifiedRows.push(row);
+        return;
+      }
+      missingEntries.push({
+        mapId,
+        nodeId: row.node_id,
+        assetField: row.asset_field,
+        assetType: row.asset_type,
+        storageKey: row.storage_key,
+        url: row.url,
+        provider: row.provider || getScreenshotStorageProvider(),
+        width: row.width,
+        height: row.height,
+        sizeBytes: row.size_bytes,
+        contentType: row.content_type,
+        error: 'Missing saved asset',
+      });
+    });
+  }
+
+  if (missingEntries.length > 0) {
+    await imageAssetStore.markImageAssetsMissingAsync(missingEntries);
+  }
+  return verifiedRows;
+}
+
+async function repairImageCaptureMapFieldsFromManifest({ mapId, root, orphans, manifestRows }) {
+  const updatesById = new Map();
+  getSavedImageCaptureManifestRows(manifestRows).forEach((row) => {
+    const nodeId = String(row.node_id || '').trim();
+    const assetField = String(row.asset_field || '').trim();
+    const url = String(row.url || '').trim();
+    if (!nodeId || !url || !IMAGE_CAPTURE_ASSET_URL_FIELDS.has(assetField)) return;
+    updatesById.set(nodeId, {
+      ...(updatesById.get(nodeId) || {}),
+      [assetField]: url,
+      ...(assetField === 'thumbnailUrl' ? {
+        thumbnailCaptureFailed: false,
+        thumbnailCaptureError: null,
+        thumbnailCaptureFailedAt: null,
+      } : {}),
+    });
+  });
+
+  if (updatesById.size === 0) return { root, orphans, changed: false };
+
+  const nextMap = applyImageCaptureUpdatesToMapData({ root, orphans, updatesById });
+  if (!nextMap.changed) return { root, orphans, changed: false };
+
+  await mapStore.updateMapByIdAsync(mapId, {
+    rootData: JSON.stringify(nextMap.root),
+    orphansData: nextMap.orphans.length ? JSON.stringify(nextMap.orphans) : null,
+  });
+  return {
+    root: nextMap.root,
+    orphans: nextMap.orphans,
+    changed: true,
+  };
+}
+
 function isTerminalThumbnailFailure(node) {
   return false;
 }
@@ -1783,6 +1936,7 @@ async function buildImageCaptureTargets({
   nodeIds,
   force,
   targetMode = IMAGE_CAPTURE_TARGET_MODES.remaining,
+  manifestRows = [],
 }) {
   const selectedIds = new Set((Array.isArray(nodeIds) ? nodeIds : [])
     .map((id) => String(id || '').trim())
@@ -1799,15 +1953,13 @@ async function buildImageCaptureTargets({
   const skippedRecords = [];
   const captureRecords = [];
   const recaptureCapturedOnly = targetMode === IMAGE_CAPTURE_TARGET_MODES.captured;
-  for (const record of scopedRecords) {
+  const savedManifestNodeIds = getSavedImageCaptureManifestNodeIds(manifestRows, captureType);
+  const targetScopedRecords = recaptureCapturedOnly
+    ? scopedRecords.filter((record) => savedManifestNodeIds.has(record.nodeId))
+    : scopedRecords;
+  for (const record of targetScopedRecords) {
     if (recaptureCapturedOnly) {
-      const assetUrl = captureType === SCREENSHOT_TYPES.full
-        ? record.node.fullScreenshotUrl
-        : record.node.thumbnailUrl;
-      const hasUsableAsset = await isUsableScreenshotAsset(assetUrl);
-      if (!hasUsableAsset) {
-        continue;
-      }
+      if (!savedManifestNodeIds.has(record.nodeId)) continue;
     }
     const skipReason = getImageCaptureSkipReason(record.node);
     if (skipReason) {
@@ -1821,15 +1973,7 @@ async function buildImageCaptureTargets({
       captureRecords.push(record);
       continue;
     }
-    if (captureType === SCREENSHOT_TYPES.full) {
-      if (await isUsableScreenshotAsset(record.node.fullScreenshotUrl)) {
-        cached += 1;
-        continue;
-      }
-      captureRecords.push(record);
-      continue;
-    }
-    if (await isUsableScreenshotAsset(record.node.thumbnailUrl)) {
+    if (savedManifestNodeIds.has(record.nodeId)) {
       cached += 1;
       continue;
     }
@@ -1842,7 +1986,7 @@ async function buildImageCaptureTargets({
 
   return {
     records,
-    scopedRecords,
+    scopedRecords: targetScopedRecords,
     captureRecords,
     skippedRecords,
     workRecords: [...captureRecords, ...skippedRecords].sort(compareImageCaptureWorkRecords),
@@ -1867,6 +2011,19 @@ function trimImageCaptureResults(results) {
   if (!Array.isArray(results)) return [];
   if (results.length <= IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT) return results;
   return results.slice(results.length - IMAGE_CAPTURE_PROGRESS_RESULT_LIMIT);
+}
+
+function trimImageCaptureAssetUpdates(updates) {
+  if (!Array.isArray(updates)) return [];
+  if (updates.length <= IMAGE_CAPTURE_PROGRESS_ASSET_UPDATE_LIMIT) return updates;
+  return updates.slice(updates.length - IMAGE_CAPTURE_PROGRESS_ASSET_UPDATE_LIMIT);
+}
+
+function getImageCaptureAssetSaveBatchSize(captureType, scaleTier) {
+  if (scaleTier !== IMAGE_CAPTURE_SCALE_TIERS.large) return IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE;
+  return captureType === SCREENSHOT_TYPES.full
+    ? IMAGE_CAPTURE_LARGE_FULL_SAVE_BATCH_SIZE
+    : IMAGE_CAPTURE_LARGE_THUMB_SAVE_BATCH_SIZE;
 }
 
 async function getImageCaptureMapForRequest(req, mapId) {
@@ -1899,8 +2056,21 @@ async function runImageCaptureJob(jobId, payload) {
   const mapRow = await mapStore.getMapByIdAsync(mapId);
   if (!mapRow) throw new Error('Map not found');
 
-  const root = parseJsonSafe(mapRow.root_data);
-  const orphans = parseJsonSafe(mapRow.orphans_data) || [];
+  let root = parseJsonSafe(mapRow.root_data);
+  let orphans = parseJsonSafe(mapRow.orphans_data) || [];
+  const savedManifestRows = await imageAssetStore.listSavedImageAssetsByMapAsync(mapId);
+  const manifestRows = await verifySavedImageCaptureManifestRows({
+    mapId,
+    manifestRows: savedManifestRows,
+  });
+  const repairedMap = await repairImageCaptureMapFieldsFromManifest({
+    mapId,
+    root,
+    orphans,
+    manifestRows,
+  });
+  root = repairedMap.root;
+  orphans = repairedMap.orphans;
   const targetPlan = await buildImageCaptureTargets({
     root,
     orphans,
@@ -1909,42 +2079,50 @@ async function runImageCaptureJob(jobId, payload) {
     nodeIds,
     force,
     targetMode,
+    manifestRows,
   });
 
   const startedAt = Date.now();
+  const scaleTier = getImageCaptureScaleTier(captureType, targetPlan.captureRecords.length);
+  const stageSize = getImageCaptureStageSize(captureType, targetPlan.captureRecords.length);
+  const stages = buildImageCaptureStages(targetPlan.captureRecords, captureType);
+  const assetSaveBatchSize = getImageCaptureAssetSaveBatchSize(captureType, scaleTier);
   const summary = {
     mapId,
     captureType,
     scope,
     targetMode,
-    total: targetPlan.captureRecords.length + targetPlan.skippedRecords.length,
+    scaleTier,
+    stageIndex: stages.length ? 1 : 0,
+    stageTotal: stages.length,
+    stageSize,
+    total: targetPlan.scopedRecords.length,
     eligibleTotal: targetPlan.scopedRecords.length,
     cached: targetPlan.cached,
     unavailable: targetPlan.unavailable,
-    completed: 0,
+    completed: targetPlan.cached + targetPlan.unavailable,
     captured: 0,
+    saved: targetPlan.cached,
+    verified: targetPlan.cached,
     failed: 0,
     blocked: 0,
     missingAsset: 0,
     skipped: 0,
     batchIndex: 0,
-    batchTotal: targetPlan.phases.length,
-    phase: 'primary',
+    batchTotal: 0,
+    phase: 'preparing',
     recoveryPass: 0,
     retrying: 0,
+    paused: false,
     currentNodeId: null,
     assetUpdateCursor: 0,
-    targetIds: targetPlan.workRecords.map((record) => record.nodeId),
+    targetIds: targetPlan.scopedRecords.map((record) => record.nodeId),
     results: [],
     nodeAssetUpdates: [],
   };
   await updateJobProgress(jobId, summary);
 
   const readStatus = createJobStatusReader(jobId, 500);
-  const shouldStop = async () => {
-    const status = await readStatus();
-    return status === JOB_STATUS.canceled || status === JOB_STATUS.stopping;
-  };
   let progressWritePromise = Promise.resolve();
   let lastProgressPublishedAt = 0;
   const publishProgress = async ({ force = false } = {}) => {
@@ -1954,6 +2132,7 @@ async function runImageCaptureJob(jobId, payload) {
     const snapshot = {
       ...summary,
       results: trimImageCaptureResults(summary.results),
+      nodeAssetUpdates: trimImageCaptureAssetUpdates(summary.nodeAssetUpdates),
       elapsedMs: now - startedAt,
     };
     progressWritePromise = progressWritePromise
@@ -1974,7 +2153,11 @@ async function runImageCaptureJob(jobId, payload) {
     });
   };
   const incrementResultCounter = (status) => {
-    if (status === 'saved') summary.captured += 1;
+    if (status === 'saved') {
+      summary.captured += 1;
+      summary.saved += 1;
+      summary.verified += 1;
+    }
     else if (status === 'skipped') summary.skipped += 1;
     else if (status === 'blocked') summary.blocked += 1;
     else if (status === 'missing_asset' || status === 'low_resolution') summary.missingAsset += 1;
@@ -1995,7 +2178,7 @@ async function runImageCaptureJob(jobId, payload) {
     }
     pendingAssetSaves.push(entry);
     if (
-      pendingAssetSaves.length >= IMAGE_CAPTURE_ASSET_SAVE_BATCH_SIZE
+      pendingAssetSaves.length >= assetSaveBatchSize
       || Date.now() - lastAssetFlushAt >= IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS
     ) {
       await flushAssetSaves();
@@ -2008,6 +2191,9 @@ async function runImageCaptureJob(jobId, payload) {
     if (pendingAssetSaves.length === 0) return;
     const batch = pendingAssetSaves.splice(0, pendingAssetSaves.length);
     assetFlushPromise = (async () => {
+      const previousPhase = summary.phase;
+      summary.phase = 'saving';
+      await publishProgress({ force: true });
       let persistenceResult;
       try {
         persistenceResult = await persistImageCaptureNodeAssetBatch({
@@ -2041,6 +2227,7 @@ async function runImageCaptureJob(jobId, payload) {
         });
       });
       lastAssetFlushAt = Date.now();
+      summary.phase = previousPhase;
     })();
     try {
       await assetFlushPromise;
@@ -2071,7 +2258,7 @@ async function runImageCaptureJob(jobId, payload) {
   }
 
   const getCaptureOptionsForPhase = (phaseName) => {
-    if (phaseName !== 'recovery') {
+    if (phaseName !== 'recovering') {
       if (captureType !== SCREENSHOT_TYPES.thumb) return {};
       return {
         captureTimeoutMs: SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS,
@@ -2092,9 +2279,6 @@ async function runImageCaptureJob(jobId, payload) {
       text.includes('invalid url')
       || text.includes('invalid url protocol')
       || text.includes('blocked host')
-      || text.includes('unable to resolve host')
-      || text.includes('err_name_not_resolved')
-      || text.includes('enotfound')
     ) {
       return {
         status: 'skipped',
@@ -2102,6 +2286,22 @@ async function runImageCaptureJob(jobId, payload) {
       };
     }
     return null;
+  };
+
+  const waitIfPaused = async () => {
+    let status = await readStatus();
+    if (status !== JOB_STATUS.paused) {
+      return status === JOB_STATUS.canceled || status === JOB_STATUS.stopping;
+    }
+    summary.paused = true;
+    await publishProgress({ force: true });
+    while (status === JOB_STATUS.paused) {
+      await sleep(1000);
+      status = await readStatus();
+    }
+    summary.paused = false;
+    await publishProgress({ force: true });
+    return status === JOB_STATUS.canceled || status === JOB_STATUS.stopping;
   };
 
   const captureRecordOnce = async (record, phaseName) => {
@@ -2189,7 +2389,7 @@ async function runImageCaptureJob(jobId, payload) {
     };
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (await shouldStop()) {
+      if (await waitIfPaused()) {
         summary.stopped = true;
         break;
       }
@@ -2225,23 +2425,22 @@ async function runImageCaptureJob(jobId, payload) {
   }) => {
     const deferred = [];
     const retrying = phases.reduce((count, phase) => count + (phase.records?.length || 0), 0);
-    const concurrency = phaseName === 'recovery'
+    const concurrency = phaseName === 'recovering'
       ? IMAGE_CAPTURE_RECOVERY_CONCURRENCY
       : IMAGE_CAPTURE_PRIMARY_CONCURRENCY;
     summary.phase = phaseName;
     summary.recoveryPass = recoveryPass;
-    summary.retrying = phaseName === 'recovery' ? retrying : 0;
+    summary.retrying = phaseName === 'recovering' ? retrying : 0;
     summary.batchIndex = 0;
-    summary.batchTotal = phases.length;
+    summary.batchTotal = 0;
     await publishProgress({ force: true });
 
     for (let phaseIndex = 0; phaseIndex < phases.length; phaseIndex += 1) {
-      if (await shouldStop()) {
+      if (await waitIfPaused()) {
         summary.stopped = true;
         break;
       }
       const capturePhase = phases[phaseIndex];
-      summary.batchIndex = phaseIndex + 1;
       await publishProgress({ force: true });
 
       let nextRecordIndex = 0;
@@ -2253,7 +2452,7 @@ async function runImageCaptureJob(jobId, payload) {
           nextRecordIndex += 1;
           if (recordIndex >= records.length) return;
 
-          if (await shouldStop()) {
+          if (await waitIfPaused()) {
             summary.stopped = true;
             return;
           }
@@ -2284,29 +2483,37 @@ async function runImageCaptureJob(jobId, payload) {
     return deferred;
   };
 
-  let recoveryRecords = await processCapturePhases({
-    phases: targetPlan.phases,
-    phaseName: 'primary',
-    maxAttempts: IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS,
-    finalizeFailures: IMAGE_CAPTURE_RECOVERY_MAX_PASSES <= 0,
-  });
-
-  for (
-    let recoveryPass = 1;
-    !summary.stopped && recoveryRecords.length > 0 && recoveryPass <= IMAGE_CAPTURE_RECOVERY_MAX_PASSES;
-    recoveryPass += 1
-  ) {
-    recoveryRecords = await processCapturePhases({
-      phases: buildImageCapturePhases(recoveryRecords),
-      phaseName: 'recovery',
-      maxAttempts: IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS,
-      finalizeFailures: recoveryPass >= IMAGE_CAPTURE_RECOVERY_MAX_PASSES,
-      recoveryPass,
+  for (const stage of stages) {
+    if (summary.stopped) break;
+    summary.stageIndex = stage.stageIndex;
+    summary.stageTotal = stage.stageTotal;
+    summary.stageSize = stage.stageSize;
+    summary.scaleTier = stage.scaleTier;
+    let recoveryRecords = await processCapturePhases({
+      phases: stage.phases,
+      phaseName: 'capturing',
+      maxAttempts: IMAGE_CAPTURE_PRIMARY_MAX_ATTEMPTS,
+      finalizeFailures: IMAGE_CAPTURE_RECOVERY_MAX_PASSES <= 0,
     });
+
+    for (
+      let recoveryPass = 1;
+      !summary.stopped && recoveryRecords.length > 0 && recoveryPass <= IMAGE_CAPTURE_RECOVERY_MAX_PASSES;
+      recoveryPass += 1
+    ) {
+      recoveryRecords = await processCapturePhases({
+        phases: buildImageCapturePhases(recoveryRecords),
+        phaseName: 'recovering',
+        maxAttempts: IMAGE_CAPTURE_RECOVERY_MAX_ATTEMPTS,
+        finalizeFailures: recoveryPass >= IMAGE_CAPTURE_RECOVERY_MAX_PASSES,
+        recoveryPass,
+      });
+    }
   }
 
   summary.currentNodeId = null;
-  summary.phase = summary.stopped ? summary.phase : 'complete';
+  const reviewCount = summary.failed + summary.blocked + summary.missingAsset + summary.skipped + summary.unavailable;
+  summary.phase = summary.stopped ? summary.phase : (reviewCount > 0 ? 'needs_review' : 'complete');
   summary.recoveryPass = 0;
   summary.retrying = 0;
   summary.elapsedMs = Date.now() - startedAt;
@@ -4955,6 +5162,8 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
 
 async function processJob(job) {
   const jobId = job.id;
+  if (activeJobIds.has(jobId)) return;
+  activeJobIds.add(jobId);
   const jobType = normalizeBackgroundJobType(job.type);
   const payload = parseJsonSafe(job.payload) || {};
   try {
@@ -5021,6 +5230,8 @@ async function processJob(job) {
     if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
     console.error(`[jobs] ${jobType || job.type} job ${jobId} failed:`, error?.message || error);
     await markJobFailed(jobId, error);
+  } finally {
+    activeJobIds.delete(jobId);
   }
 }
 
@@ -5565,6 +5776,17 @@ function registerImageCaptureRoutes(targetApp) {
     }
   });
 
+  targetApp.get('/api/maps/:id/image-capture-jobs/active', authMiddleware, requireAuth, async (req, res) => {
+    const { id } = req.params;
+    const map = await getImageCaptureMapForRequest(req, id);
+    if (!map) return res.status(404).json({ error: 'Map not found' });
+    const row = await findAnyActiveImageCaptureJob(id);
+    if (!row) {
+      return res.json({ job: null });
+    }
+    return res.json({ job: serializeJobRow(row, true) });
+  });
+
   targetApp.get('/api/maps/:id/image-capture-jobs/:jobId', authMiddleware, requireAuth, async (req, res) => {
     const { id, jobId } = req.params;
     const includeResult = req.query.include_result !== 'false';
@@ -5602,6 +5824,41 @@ function registerImageCaptureRoutes(targetApp) {
       return res.status(404).json({ error: 'Job not found' });
     }
     await markJobCanceled(jobId);
+    return res.json({ success: true });
+  });
+
+  targetApp.post('/api/maps/:id/image-capture-jobs/:jobId/pause', authMiddleware, requireAuth, async (req, res) => {
+    const { id, jobId } = req.params;
+    const row = await getJobRow(jobId);
+    const payload = getJobPayload(row);
+    if (
+      !row
+      || normalizeBackgroundJobType(row.type) !== JOB_TYPES.imageCapture
+      || payload.mapId !== id
+      || !isJobVisibleToRequest(row, req)
+    ) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    await markJobPaused(jobId);
+    return res.json({ success: true });
+  });
+
+  targetApp.post('/api/maps/:id/image-capture-jobs/:jobId/resume', authMiddleware, requireAuth, async (req, res) => {
+    const { id, jobId } = req.params;
+    const row = await getJobRow(jobId);
+    const payload = getJobPayload(row);
+    if (
+      !row
+      || normalizeBackgroundJobType(row.type) !== JOB_TYPES.imageCapture
+      || payload.mapId !== id
+      || !isJobVisibleToRequest(row, req)
+    ) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    await markJobResumed(jobId);
+    if (RUN_WEB && JOB_WORKER_TYPES.includes(JOB_TYPES.imageCapture)) {
+      scheduleClaimedJob(jobId);
+    }
     return res.json({ success: true });
   });
 }

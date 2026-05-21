@@ -93,12 +93,23 @@ export function buildCaptureIssueFromResult(result = {}, node = {}, pageNumber =
   });
 }
 
-export function getReconciledCaptureProgress({ total = 0, loadedIds, issueCount = 0 } = {}) {
+export function getReconciledCaptureProgress({
+  total = 0,
+  loadedIds,
+  issueCount = 0,
+  saved,
+  verified,
+  captured,
+} = {}) {
   const loaded = loadedIds?.size || 0;
+  const savedCount = Math.max(0, Number(saved ?? verified ?? captured ?? loaded) || 0);
+  const verifiedCount = Math.max(savedCount, Number(verified ?? savedCount) || 0);
   return {
     total,
     loaded,
-    completed: Math.min(total, loaded + issueCount),
+    saved: savedCount,
+    verified: verifiedCount,
+    completed: Math.min(total, savedCount + issueCount),
   };
 }
 
@@ -106,10 +117,11 @@ export function shouldShowImageCaptureProgressToast(stats = {}) {
   const total = Math.max(0, Number(stats.total) || 0);
   if (!stats.mode || stats.stopped || total <= 0) return false;
   if (stats.finalizing) return true;
-  const loaded = Math.max(0, Number(stats.loaded) || 0);
+  const saved = Math.max(0, Number(stats.saved ?? stats.verified ?? stats.captured ?? 0) || 0);
   const failed = Math.max(0, Number(stats.failed) || 0);
   const skipped = Math.max(0, Number(stats.skipped) || 0);
-  return Math.min(total, loaded + failed + skipped) < total;
+  const unavailable = Math.max(0, Number(stats.unavailable) || 0);
+  return Math.min(total, saved + failed + skipped + unavailable) < total;
 }
 
 function pluralize(count, singular, plural = `${singular}s`) {

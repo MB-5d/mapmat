@@ -6878,6 +6878,12 @@ body {
   min-width: 0;
 }
 
+.image-capture-toast__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .image-capture-toast__body {
   display: flex;
   flex-direction: column;

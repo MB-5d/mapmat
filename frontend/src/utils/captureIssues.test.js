@@ -92,11 +92,12 @@ describe('captureIssues', () => {
     expect(progress.total).toBe(918);
   });
 
-  test('keeps progress visible until captured images are applied', () => {
+  test('keeps progress visible until saved assets and issues cover the job total', () => {
     expect(shouldShowImageCaptureProgressToast({
       mode: 'screenshot',
       total: 3,
       completed: 3,
+      saved: 0,
       loaded: 0,
       failed: 0,
       skipped: 0,
@@ -106,6 +107,7 @@ describe('captureIssues', () => {
       mode: 'screenshot',
       total: 3,
       completed: 3,
+      saved: 3,
       loaded: 3,
       failed: 0,
       skipped: 0,
@@ -115,6 +117,7 @@ describe('captureIssues', () => {
       mode: 'thumbnail',
       total: 3,
       completed: 3,
+      saved: 1,
       loaded: 1,
       failed: 2,
       skipped: 0,

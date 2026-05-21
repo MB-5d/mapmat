@@ -526,6 +526,8 @@ async function run() {
       }, cookieJar);
       assert.strictEqual(matchingActive.alreadyRunning, true, 'matching active selected job should be reused');
       assert.strictEqual(matchingActive.jobId, activeSelectedJobId, 'matching active selected job id mismatch');
+      const activeInfo = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs/active`, {}, cookieJar);
+      assert.strictEqual(activeInfo.job?.id, activeSelectedJobId, 'active endpoint should return running image capture job');
     } finally {
       deleteJob(dbPath, activeSelectedJobId);
     }
@@ -576,11 +578,22 @@ async function run() {
       'queued',
       'image capture jobs should be claimed before generic workers can take them'
     );
+    const activeJobInfo = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs/active`, {}, cookieJar);
+    assert.strictEqual(activeJobInfo.job?.id, thumbStart.jobId, 'active endpoint should expose running image capture job');
+    await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs/${thumbStart.jobId}/pause`, {
+      method: 'POST',
+    }, cookieJar);
+    assert.strictEqual(getJobStatus(dbPath, thumbStart.jobId), 'paused', 'pause should mark image capture job paused');
+    const pausedJobInfo = await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs/active`, {}, cookieJar);
+    assert.strictEqual(pausedJobInfo.job?.status, 'paused', 'active endpoint should expose paused image capture job');
+    await fetchJson(`${apiBase}/api/maps/${mapId}/image-capture-jobs/${thumbStart.jobId}/resume`, {
+      method: 'POST',
+    }, cookieJar);
     const thumbJob = await pollImageCaptureJob(apiBase, mapId, thumbStart.jobId, cookieJar);
     assert.strictEqual(thumbJob.result.total, 13, 'thumbnail total mismatch');
     assert.strictEqual(thumbJob.result.captured, 12, 'thumbnail captured mismatch');
     assert.strictEqual(thumbJob.result.skipped, 1, 'thumbnail skipped mismatch');
-    assert.strictEqual(thumbJob.result.phase, 'complete', 'thumbnail job should finish after recovery');
+    assert.strictEqual(thumbJob.result.phase, 'needs_review', 'thumbnail job should surface skipped files for review');
     assert.strictEqual(thumbJob.result.failed + thumbJob.result.blocked + thumbJob.result.missingAsset, 0, 'thumbnail failures found');
     assert(Number(thumbJob.result.assetUpdateCursor) >= 10, 'missing asset update cursor');
     assert(

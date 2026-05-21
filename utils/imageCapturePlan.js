@@ -10,9 +10,52 @@ const GROUP_RANK = Object.freeze({
   [TREE_TYPES.orphan]: 2,
 });
 
+const IMAGE_CAPTURE_SCALE_TIERS = Object.freeze({
+  small: 'small',
+  medium: 'medium',
+  large: 'large',
+});
+
+const IMAGE_CAPTURE_STAGE_SIZES = Object.freeze({
+  thumb: 500,
+  full: 100,
+});
+
+const IMAGE_CAPTURE_SCALE_LIMITS = Object.freeze({
+  thumb: Object.freeze({
+    smallMax: 250,
+    mediumMax: 2000,
+  }),
+  full: Object.freeze({
+    smallMax: 50,
+    mediumMax: 500,
+  }),
+});
+
 function normalizeId(value) {
   const id = String(value || '').trim();
   return id || null;
+}
+
+function normalizeCaptureType(value) {
+  return String(value || '').trim().toLowerCase() === 'full' ? 'full' : 'thumb';
+}
+
+function getImageCaptureScaleTier(captureType, count) {
+  const normalizedType = normalizeCaptureType(captureType);
+  const total = Math.max(0, Number(count) || 0);
+  const limits = IMAGE_CAPTURE_SCALE_LIMITS[normalizedType];
+  if (total <= limits.smallMax) return IMAGE_CAPTURE_SCALE_TIERS.small;
+  if (total <= limits.mediumMax) return IMAGE_CAPTURE_SCALE_TIERS.medium;
+  return IMAGE_CAPTURE_SCALE_TIERS.large;
+}
+
+function getImageCaptureStageSize(captureType, count) {
+  const normalizedType = normalizeCaptureType(captureType);
+  const total = Math.max(0, Number(count) || 0);
+  const tier = getImageCaptureScaleTier(normalizedType, total);
+  if (tier !== IMAGE_CAPTURE_SCALE_TIERS.large) return Math.max(1, total || 1);
+  return IMAGE_CAPTURE_STAGE_SIZES[normalizedType];
 }
 
 function parsePageNumber(value) {
@@ -144,9 +187,35 @@ function buildImageCapturePhases(records) {
     }));
 }
 
+function buildImageCaptureStages(records, captureType = 'thumb') {
+  const sortedRecords = [...(records || [])].sort(compareCaptureRecords);
+  const stageSize = getImageCaptureStageSize(captureType, sortedRecords.length);
+  const scaleTier = getImageCaptureScaleTier(captureType, sortedRecords.length);
+  const chunks = [];
+  for (let start = 0; start < sortedRecords.length; start += stageSize) {
+    chunks.push(sortedRecords.slice(start, start + stageSize));
+  }
+  const stageTotal = Math.max(1, chunks.length);
+  if (chunks.length === 0) chunks.push([]);
+  return chunks.map((stageRecords, index) => ({
+    stageIndex: index + 1,
+    stageTotal,
+    scaleTier,
+    stageSize,
+    records: stageRecords,
+    phases: buildImageCapturePhases(stageRecords),
+  }));
+}
+
 module.exports = {
   TREE_TYPES,
+  IMAGE_CAPTURE_SCALE_TIERS,
+  IMAGE_CAPTURE_STAGE_SIZES,
   collectImageCaptureRecords,
   buildImageCapturePhases,
+  buildImageCaptureStages,
   compareCaptureRecords,
+  getImageCaptureScaleTier,
+  getImageCaptureStageSize,
+  normalizeCaptureType,
 };

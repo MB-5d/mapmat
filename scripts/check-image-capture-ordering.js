@@ -5,6 +5,9 @@ const {
   TREE_TYPES,
   collectImageCaptureRecords,
   buildImageCapturePhases,
+  buildImageCaptureStages,
+  getImageCaptureScaleTier,
+  getImageCaptureStageSize,
 } = require('../utils/imageCapturePlan');
 
 function node(id, children = [], extra = {}) {
@@ -23,6 +26,20 @@ function makeWideTree(prefix, firstLevelCount, secondLevelCount) {
       node(`${prefix}-${levelOneIndex}-${levelTwoIndex}`)
     )))
   )));
+}
+
+function makeRecords(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    node: node(`stage-${index}`),
+    nodeId: `stage-${index}`,
+    treeType: TREE_TYPES.main,
+    groupRank: 0,
+    treeIndex: 0,
+    depth: 0,
+    orderPath: `0.${String(index).padStart(5, '0')}`,
+    sourceIndex: index,
+    pageNumber: { hasNumber: true, parts: [index], raw: String(index) },
+  }));
 }
 
 const root = makeWideTree('main', 40, 22); // 921 main records
@@ -75,4 +92,28 @@ phases.forEach((phase) => {
   assert.strictEqual(phaseDepths.size, 1, 'phase mixed depth levels');
 });
 
-console.log(`image capture ordering ok: ${records.length} records, ${phases.length} phases`);
+assert.strictEqual(getImageCaptureScaleTier('thumb', 250), 'small', '250 thumbnails should be small');
+assert.strictEqual(getImageCaptureScaleTier('thumb', 2000), 'medium', '2000 thumbnails should be medium');
+assert.strictEqual(getImageCaptureScaleTier('thumb', 3700), 'large', '3700 thumbnails should be large');
+assert.strictEqual(getImageCaptureScaleTier('full', 50), 'small', '50 full screenshots should be small');
+assert.strictEqual(getImageCaptureScaleTier('full', 500), 'medium', '500 full screenshots should be medium');
+assert.strictEqual(getImageCaptureScaleTier('full', 800), 'large', '800 full screenshots should be large');
+assert.strictEqual(getImageCaptureStageSize('thumb', 3700), 500, 'large thumbnail stage size mismatch');
+assert.strictEqual(getImageCaptureStageSize('full', 800), 100, 'large full screenshot stage size mismatch');
+
+const thumbStages = buildImageCaptureStages(makeRecords(3700), 'thumb');
+assert.strictEqual(thumbStages.length, 8, '3700 thumbnails should plan 8 stages');
+assert.strictEqual(thumbStages[0].records.length, 500, 'first thumbnail stage size mismatch');
+assert.strictEqual(thumbStages[7].records.length, 200, 'last thumbnail stage size mismatch');
+assert.strictEqual(thumbStages[0].stageTotal, 8, 'thumbnail stage total mismatch');
+
+const mediumThumbStages = buildImageCaptureStages(makeRecords(2000), 'thumb');
+assert.strictEqual(mediumThumbStages.length, 1, 'medium thumbnails should stay in one stage');
+assert.strictEqual(mediumThumbStages[0].scaleTier, 'medium', 'medium thumbnail tier mismatch');
+
+const fullStages = buildImageCaptureStages(makeRecords(800), 'full');
+assert.strictEqual(fullStages.length, 8, '800 full screenshots should plan 8 stages');
+assert.strictEqual(fullStages[0].records.length, 100, 'first full screenshot stage size mismatch');
+assert.strictEqual(fullStages[7].records.length, 100, 'last full screenshot stage size mismatch');
+
+console.log(`image capture ordering ok: ${records.length} records, ${phases.length} phases, ${thumbStages.length} large thumbnail stages`);

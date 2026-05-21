@@ -766,8 +766,20 @@ export async function getMapImageCaptureJob(mapId, jobId, { includeResult = true
   return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}${query}`, options);
 }
 
+export async function getActiveMapImageCaptureJob(mapId, options = {}) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/active`, options);
+}
+
 export async function cancelMapImageCaptureJob(mapId, jobId) {
   return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}/cancel`, { method: 'POST' });
+}
+
+export async function pauseMapImageCaptureJob(mapId, jobId) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}/pause`, { method: 'POST' });
+}
+
+export async function resumeMapImageCaptureJob(mapId, jobId) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}/resume`, { method: 'POST' });
 }
 
 // ============================================
