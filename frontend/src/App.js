@@ -691,6 +691,10 @@ const getImageCaptureStageTotalForCount = (mode, count) => {
   if (getImageCaptureScaleTierForCount(mode, total) !== IMAGE_CAPTURE_SCALE_TIERS.large) return 1;
   return Math.max(1, Math.ceil(total / limits.stageSize));
 };
+const getLargeMapAutoCenterKey = ({ mapId, orientation } = {}) => [
+  mapId || 'unsaved',
+  orientation || 'vertical',
+].join(':');
 const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
   accessPolicy: 'private',
   nonViewerInvitesRequireOwner: true,
@@ -2015,6 +2019,7 @@ export const __testing = {
   applyNodeAssetUpdatesToMap,
   isStoredScreenshotAsset,
   getImageCaptureStats,
+  getLargeMapAutoCenterKey,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -4260,12 +4265,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     largeMapVisibleNodesRef.current = Array.isArray(scene?.nodes) ? scene.nodes : [];
     if (!scene?.homeNode || !canvasRef.current) return;
     largeMapHomeNodeRef.current = scene.homeNode;
-    const sceneKey = [
-      currentMap?.id || 'unsaved',
-      scene.mapUpdatedAt || '',
-      mapOrientation,
-      showThumbnails ? 'thumbs' : 'cards',
-    ].join(':');
+    const sceneKey = getLargeMapAutoCenterKey({
+      mapId: currentMap?.id,
+      orientation: mapOrientation,
+    });
     if (largeMapHomeSceneKeyRef.current === sceneKey) return;
     largeMapHomeSceneKeyRef.current = sceneKey;
 
@@ -4274,7 +4277,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (nextTransform) {
       applyTransform(nextTransform, { skipPanClamp: true });
     }
-  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, showThumbnails, useLargeMapSurface]);
+  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, useLargeMapSurface]);
 
   const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
     let homeNode = largeMapHomeNodeRef.current;

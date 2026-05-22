@@ -305,6 +305,19 @@ function stripPersistedMapImageAssetFields(dbPath, mapId) {
   }
 }
 
+function getPersistedMapNode(dbPath, mapId, nodeId) {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db.prepare('SELECT root_data, orphans_data FROM maps WHERE id = ?').get(mapId);
+    assert(row, 'map row missing before persisted node read');
+    const root = row.root_data ? JSON.parse(row.root_data) : null;
+    const orphans = row.orphans_data ? JSON.parse(row.orphans_data) : [];
+    return collectNodes(root, orphans).find((node) => String(node?.id || '') === String(nodeId || '')) || null;
+  } finally {
+    db.close();
+  }
+}
+
 async function assertAssetLoads(apiBase, assetUrl) {
   assert(assetUrl, 'missing asset url');
   const absoluteUrl = new URL(assetUrl, apiBase).toString();
@@ -756,7 +769,13 @@ async function run() {
     const repairedScene = await fetchJson(`${apiBase}/api/maps/${mapId}/scene?zoom=1&thumbnails=true`, {}, cookieJar);
     const sceneMain = (repairedScene.scene?.nodes || []).find((page) => page.id === 'main-0');
     assert(sceneMain?.thumbnailUrl, 'map scene should restore thumbnailUrl from manifest');
+    assert(!Object.prototype.hasOwnProperty.call(sceneMain, 'fullScreenshotUrl'), 'map scene should not expose fullScreenshotUrl');
+    assert(!Object.prototype.hasOwnProperty.call(sceneMain, 'thumbnailFullUrl'), 'map scene should not expose thumbnailFullUrl');
     await assertAssetLoads(apiBase, sceneMain.thumbnailUrl);
+    const persistedSceneMain = getPersistedMapNode(dbPath, mapId, 'main-0');
+    assert(!persistedSceneMain?.thumbnailUrl, 'map scene should not persist repaired thumbnailUrl during viewport reads');
+    assert(!persistedSceneMain?.thumbnailFullUrl, 'map scene should not persist repaired thumbnailFullUrl during viewport reads');
+    assert(!persistedSceneMain?.fullScreenshotUrl, 'map scene should not persist repaired fullScreenshotUrl during viewport reads');
 
     stripPersistedMapImageAssetFields(dbPath, mapId);
     const repairedNode = await fetchJson(`${apiBase}/api/maps/${mapId}/nodes/main-0`, {}, cookieJar);

@@ -698,7 +698,7 @@ async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}
     });
     nextRow = await mapStore.getMapByIdAsync(mapRow.id) || nextRow;
   }
-  const nextParsed = parseMapFields(nextRow);
+  const nextParsed = persist ? parseMapFields(nextRow) : {};
 
   return {
     row: nextRow,
@@ -1898,7 +1898,7 @@ router.get('/maps/:id/scene', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
+    const repaired = await repairMapImageAssetsFromManifest(map, { persist: false });
     const parsed = repaired.parsed;
     const scene = buildMapScene({
       root: parsed.root,
