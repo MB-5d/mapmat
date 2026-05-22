@@ -1,14 +1,23 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { getDepthColor } from '../../utils/constants';
 import { DraggableNodeCard } from '../nodes/NodeCard';
 
-const SCENE_OVERSCAN_PX = 1400;
-const SCENE_FETCH_IDLE_MS = 120;
+const SCENE_FETCH_IDLE_MS = 80;
 const MAX_HEAP_MB_BEFORE_SAFE_MODE = 900;
 
 const getConnectorPath = (connector) => (
   `M ${connector.x1} ${connector.y1} L ${connector.x2} ${connector.y2}`
+);
+
+const getSceneOverscan = (scale) => {
+  if (scale < 0.2) return 3600;
+  if (scale < 0.5) return 2600;
+  return 1800;
+};
+
+const getNodeTransform = (node, view) => (
+  `translate(${node.x * view.scale + view.pan.x}px, ${node.y * view.scale + view.pan.y}px) scale(${view.scale})`
 );
 
 const toSceneNodeData = (node) => ({
@@ -60,6 +69,7 @@ const MapSurfaceV2 = ({
 }) => {
   const surfaceRef = useRef(null);
   const worldRef = useRef(null);
+  const connectorGroupRef = useRef(null);
   const sceneRef = useRef(null);
   const fetchTimerRef = useRef(null);
   const fetchAbortRef = useRef(null);
@@ -93,13 +103,20 @@ const MapSurfaceV2 = ({
       .sort()
   ), [expandedStacks]);
 
-  const applyWorldTransform = useCallback((view) => {
+  const applyViewportTransform = useCallback((view, { force = false } = {}) => {
     const world = worldRef.current;
+    const cssTransform = `translate(${view.pan.x}px, ${view.pan.y}px) scale(${view.scale})`;
+    if (!force && cssTransform === lastTransformRef.current) return;
+    lastTransformRef.current = cssTransform;
+    if (connectorGroupRef.current) {
+      connectorGroupRef.current.setAttribute('transform', `translate(${view.pan.x} ${view.pan.y}) scale(${view.scale})`);
+    }
     if (!world) return;
-    const transform = `translate(${view.pan.x}px, ${view.pan.y}px) scale(${view.scale})`;
-    if (transform === lastTransformRef.current) return;
-    lastTransformRef.current = transform;
-    world.style.transform = transform;
+    world.querySelectorAll('[data-large-map-node="1"]').forEach((element) => {
+      const x = Number(element.getAttribute('data-world-x') || 0);
+      const y = Number(element.getAttribute('data-world-y') || 0);
+      element.style.transform = `translate(${x * view.scale + view.pan.x}px, ${y * view.scale + view.pan.y}px) scale(${view.scale})`;
+    });
   }, []);
 
   const getSceneParams = useCallback((view) => {
@@ -113,7 +130,7 @@ const MapSurfaceV2 = ({
       zoom: view.scale,
       orientation,
       thumbnails: showThumbnails && !safeMode ? '1' : '0',
-      overscan: SCENE_OVERSCAN_PX,
+      overscan: getSceneOverscan(view.scale),
       expandedStacks: expandedStackIds.join(','),
     };
   }, [canvasSize?.height, canvasSize?.width, expandedStackIds, orientation, safeMode, showThumbnails]);
@@ -131,6 +148,7 @@ const MapSurfaceV2 = ({
       params.orientation,
       params.thumbnails,
       params.expandedStacks,
+      params.overscan,
     ].join(':');
     if (fetchKey === lastFetchKeyRef.current) return;
     lastFetchKeyRef.current = fetchKey;
@@ -163,7 +181,7 @@ const MapSurfaceV2 = ({
     let raf = null;
     const tick = () => {
       const view = getCurrentView();
-      applyWorldTransform(view);
+      applyViewportTransform(view);
       fetchScene(view);
       const memory = typeof performance !== 'undefined' && performance?.memory?.usedJSHeapSize
         ? Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)
@@ -177,7 +195,7 @@ const MapSurfaceV2 = ({
     return () => {
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [applyWorldTransform, fetchScene, getCurrentView]);
+  }, [applyViewportTransform, fetchScene, getCurrentView]);
 
   useEffect(() => () => {
     if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
@@ -192,6 +210,10 @@ const MapSurfaceV2 = ({
     (scene?.connectors || []).map(getConnectorPath)
   ), [scene?.connectors]);
 
+  useLayoutEffect(() => {
+    applyViewportTransform(getCurrentView(), { force: true });
+  }, [applyViewportTransform, getCurrentView, scene?.nodes, scene?.connectors]);
+
   const handleViewImage = useCallback((source, isDirectImage, nodeId, captureType) => {
     if (onViewImage) {
       onViewImage(source, isDirectImage, nodeId, captureType);
@@ -201,32 +223,30 @@ const MapSurfaceV2 = ({
   }, [onNodeExpand, onViewImage]);
 
   const renderThumbnails = showThumbnails && !safeMode;
+  const currentView = getCurrentView();
+  const connectorTransform = `translate(${currentView.pan.x} ${currentView.pan.y}) scale(${currentView.scale})`;
 
   return (
     <div className="large-map-surface-v2" data-large-map-surface="1" ref={surfaceRef}>
       <div
         ref={worldRef}
         className="large-map-world sitemap-tree-absolute"
-        style={{
-          width: scene?.bounds?.w || 1,
-          height: scene?.bounds?.h || 1,
-          minWidth: scene?.bounds?.w || 1,
-          minHeight: scene?.bounds?.h || 1,
-        }}
         data-layout-node-count={scene?.nodeCount || 0}
         data-rendered-node-count={sceneNodes.length}
         data-rendered-connector-count={scene?.visibleConnectorCount || 0}
       >
         <svg className="connector-overlay" aria-hidden="true">
-          {connectorPaths.map((path, index) => (
-            <path
-              key={`${path}-${index}`}
-              d={path}
-              fill="none"
-              stroke="var(--ui-connection-map-default)"
-              strokeWidth="var(--ui-connection-map-stroke-width)"
-            />
-          ))}
+          <g ref={connectorGroupRef} transform={connectorTransform}>
+            {connectorPaths.map((path, index) => (
+              <path
+                key={`${path}-${index}`}
+                d={path}
+                fill="none"
+                stroke="var(--ui-connection-map-default)"
+                strokeWidth="var(--ui-connection-map-stroke-width)"
+              />
+            ))}
+          </g>
         </svg>
 
         {sceneNodes.map((nodeData) => {
@@ -283,12 +303,19 @@ const MapSurfaceV2 = ({
             <div
               key={node.id}
               className="sitemap-node-positioned"
+              data-large-map-node="1"
               data-node-id={node.id}
               data-depth={node.depth}
+              data-world-x={node.x}
+              data-world-y={node.y}
               style={{
                 position: 'absolute',
-                left: node.x,
-                top: node.y,
+                left: 0,
+                top: 0,
+                width: node.w,
+                height: node.h,
+                transform: getNodeTransform(node, currentView),
+                transformOrigin: '0 0',
               }}
               onDoubleClick={() => onNodeDoubleClick?.(node)}
               onClick={(event) => onNodeClick?.(node, event)}
@@ -311,7 +338,6 @@ const MapSurfaceV2 = ({
 
       {loading && <div className="large-map-surface-status">Loading map surface...</div>}
       {error && <div className="large-map-surface-status large-map-surface-error">{error}</div>}
-      {safeMode && <div className="large-map-performance-pill">Performance mode</div>}
     </div>
   );
 };

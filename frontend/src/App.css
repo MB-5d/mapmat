@@ -3103,14 +3103,15 @@ body {
 
 .large-map-world {
   position: absolute;
-  left: 0;
-  top: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   transform-origin: 0 0;
-  will-change: transform;
+  overflow: visible;
+  contain: layout style;
 }
 
-.large-map-surface-status,
-.large-map-performance-pill {
+.large-map-surface-status {
   position: absolute;
   right: 20px;
   bottom: 20px;
@@ -3129,12 +3130,6 @@ body {
 .large-map-surface-error {
   color: var(--ui-status-danger-text);
   border-color: var(--ui-status-danger-border);
-}
-
-.large-map-performance-pill {
-  left: 20px;
-  right: auto;
-  color: var(--ui-text-primary);
 }
 
 .selection-rect {

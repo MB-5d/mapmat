@@ -193,7 +193,9 @@ describe('MapSurfaceV2', () => {
 
     expect(container.querySelector('.node-card')).not.toBeNull();
     expect(container.querySelector('.large-map-canvas')).toBeNull();
+    expect(container.querySelector('.large-map-world').style.width).toBe('');
     expect(container.textContent).toContain('Home Page');
+    expect(container.textContent).not.toContain('Performance mode');
   });
 
   test('renders and toggles collapsed stack controls for large maps', async () => {
