@@ -274,6 +274,25 @@ describe('map image asset persistence', () => {
     expect(handler).not.toContain('await validateCurrentMapImageAssets');
   });
 
+  test('report see on map keeps the report drawer open while focusing the node', () => {
+    const handlerStart = appJs.indexOf('const locateReportNodeOnMap = useCallback((nodeId) => {');
+    const handlerEnd = appJs.indexOf('const locateReportUrlOnMap', handlerStart);
+    const handler = appJs.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    expect(handler).toContain('setSelectedNodeIds(new Set([nodeId]));');
+    expect(handler).toContain('focusNodeById(nodeId);');
+    expect(handler).not.toContain('setShowReportDrawer(false);');
+  });
+
+  test('large maps keep area selection enabled', () => {
+    expect(appJs).toContain('largeMapVisibleNodesRef.current = Array.isArray(scene?.nodes) ? scene.nodes : [];');
+    expect(appJs).toContain('largeMapVisibleNodesRef.current.forEach((node) => {');
+    expect(appJs).toContain('getViewportSelectionRectStyle(selectionBox');
+    expect(appJs).not.toContain('{!useLargeMapSurface && selectionBox && (');
+  });
+
   test('autosave snapshots only track canvas content changes', () => {
     const base = {
       name: 'Original map name',

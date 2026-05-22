@@ -87,6 +87,10 @@ import {
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
 import { getCenteredNodeTransform as getCenteredCanvasNodeTransform } from './utils/canvasView';
 import {
+  getViewportSelectionRectStyle,
+  nodeIntersectsSelectionRect,
+} from './utils/canvasSelection';
+import {
   buildExpandedStackMap,
   getMaxDepth,
   countNodes,
@@ -2194,6 +2198,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const centerHomeRef = useRef(null);
   const largeMapHomeSceneKeyRef = useRef('');
   const largeMapHomeNodeRef = useRef(null);
+  const largeMapVisibleNodesRef = useRef([]);
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
@@ -4251,7 +4256,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, []);
 
   const handleLargeMapSceneLoaded = useCallback((scene) => {
-    if (!useLargeMapSurface || !scene?.homeNode || !canvasRef.current) return;
+    if (!useLargeMapSurface) return;
+    largeMapVisibleNodesRef.current = Array.isArray(scene?.nodes) ? scene.nodes : [];
+    if (!scene?.homeNode || !canvasRef.current) return;
     largeMapHomeNodeRef.current = scene.homeNode;
     const sceneKey = [
       currentMap?.id || 'unsaved',
@@ -4511,7 +4518,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const locateReportNodeOnMap = useCallback((nodeId) => {
     if (!nodeId) return;
     setSelectedNodeIds(new Set([nodeId]));
-    setShowReportDrawer(false);
     requestAnimationFrame(() => {
       focusNodeById(nodeId);
     });
@@ -8797,6 +8803,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     largeMapHomeNodeRef.current = null;
+    largeMapVisibleNodesRef.current = [];
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null, notes: notes?.trim() || '' });
     navigateToRoute(createAppHomeRoute());
@@ -8823,6 +8830,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     largeMapHomeNodeRef.current = null;
+    largeMapVisibleNodesRef.current = [];
     setRoot(null);
     setOrphans([]);
     setConnections([]);
@@ -8877,6 +8885,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setExpandedStacks({});
     largeMapHomeSceneKeyRef.current = '';
     largeMapHomeNodeRef.current = null;
+    largeMapVisibleNodesRef.current = [];
     const mapHasThumbnails = mapHasThumbnailAsset(map.root, map.orphans || []);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
@@ -8941,6 +8950,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setExpandedStacks({});
     largeMapHomeSceneKeyRef.current = '';
     largeMapHomeNodeRef.current = null;
+    largeMapVisibleNodesRef.current = [];
     setRoot(shellRoot);
     setOrphans([]);
     setConnections([]);
@@ -9920,6 +9930,30 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (e.key === 'Enter') scan();
   };
 
+  const collectNodesInSelectionRect = useCallback((rect) => {
+    const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
+
+    if (useLargeMapSurface) {
+      largeMapVisibleNodesRef.current.forEach((node) => {
+        if (nodeIntersectsSelectionRect(rect, node)) {
+          addNodeAndStackSelection(next, node.id);
+        }
+      });
+      return next;
+    }
+
+    const layout = layoutRef.current;
+    if (layout?.nodes?.size) {
+      layout.nodes.forEach((nodeData) => {
+        if (nodeIntersectsSelectionRect(rect, nodeData)) {
+          addNodeAndStackSelection(next, nodeData.node.id);
+        }
+      });
+    }
+
+    return next;
+  }, [addNodeAndStackSelection, useLargeMapSurface]);
+
   const onPointerDown = (e) => {
     if (!hasMap) return;
     if (e.button !== 0) return;
@@ -10002,22 +10036,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setSelectionBox(rect);
 
       if (rect.w > 2 || rect.h > 2) {
-        const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
-        const layout = layoutRef.current;
-        if (layout?.nodes?.size) {
-          layout.nodes.forEach((nodeData) => {
-            const nx = nodeData.x;
-            const ny = nodeData.y;
-            const nw = nodeData.w;
-            const nh = nodeData.h;
-            const intersects = rect.x <= nx + nw
-              && rect.x + rect.w >= nx
-              && rect.y <= ny + nh
-              && rect.y + rect.h >= ny;
-            if (intersects) addNodeAndStackSelection(next, nodeData.node.id);
-          });
-        }
-        setSelectedNodeIds(next);
+        setSelectedNodeIds(collectNodesInSelectionRect(rect));
       }
       return;
     }
@@ -10046,22 +10065,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           h: Math.abs(current.y - start.y),
         };
         if (!selectionStartedOnNodeRef.current && (rect.w > 2 || rect.h > 2)) {
-          const next = new Set(selectionAdditiveRef.current ? selectionBaseRef.current : []);
-          const layout = layoutRef.current;
-          if (layout?.nodes?.size) {
-            layout.nodes.forEach((nodeData) => {
-              const nx = nodeData.x;
-              const ny = nodeData.y;
-              const nw = nodeData.w;
-              const nh = nodeData.h;
-              const intersects = rect.x <= nx + nw
-                && rect.x + rect.w >= nx
-                && rect.y <= ny + nh
-                && rect.y + rect.h >= ny;
-              if (intersects) addNodeAndStackSelection(next, nodeData.node.id);
-            });
-          }
-          setSelectedNodeIds(next);
+          setSelectedNodeIds(collectNodesInSelectionRect(rect));
         } else if (selectionStartNodeRef.current && moved < 3) {
           const nodeId = selectionStartNodeRef.current;
           const targetIds = getNodeStackSelectionIds(nodeId);
@@ -14124,15 +14128,20 @@ export default function App({ currentRoute, navigateToRoute }) {
                 else if (draggingEndpoint) handleEndpointDragEnd();
               }}
             >
-                {!useLargeMapSurface && selectionBox && (
+                {selectionBox && (
                   <div
                     className="selection-rect"
-                    style={{
-                      left: selectionBox.x,
-                      top: selectionBox.y,
-                      width: selectionBox.w,
-                      height: selectionBox.h,
-                    }}
+                    style={useLargeMapSurface
+                      ? getViewportSelectionRectStyle(selectionBox, {
+                        pan: panRef.current,
+                        scale: scaleRef.current || 1,
+                      })
+                      : {
+                        left: selectionBox.x,
+                        top: selectionBox.y,
+                        width: selectionBox.w,
+                        height: selectionBox.h,
+                      }}
                   />
                 )}
 
