@@ -56,6 +56,7 @@ const MapSurfaceV2 = ({
   onSceneLoaded,
   activeBranchNodeIds,
   expandedStacks,
+  onToggleStack,
 }) => {
   const surfaceRef = useRef(null);
   const worldRef = useRef(null);
@@ -233,6 +234,51 @@ const MapSurfaceV2 = ({
           const isRoot = scene?.homeNode?.id === node.id;
           const isSelected = selectedNodeIds?.has(node.id);
           const isBranchDragging = activeBranchNodeIds?.has(node.id);
+          const stackInfo = node.stackInfo;
+          const stackToggleParentId = stackInfo?.parentId;
+          const shouldWrapStack = !!stackInfo?.collapsed;
+          const card = (
+            <DraggableNodeCard
+              node={node}
+              number={node.number}
+              color={getDepthColor(colors, node.depth)}
+              showThumbnails={renderThumbnails}
+              showCommentBadges={showCommentBadges}
+              canEdit={canEdit}
+              canComment={canComment}
+              showCommentAction={showCommentAction}
+              commentActionLabel={commentActionLabel}
+              showExternalLinkAction={showExternalLinkAction}
+              showDeleteAction={showDeleteAction}
+              connectionTool={connectionTool}
+              snapTarget={snapTarget}
+              onAnchorMouseDown={onAnchorMouseDown}
+              isRoot={isRoot}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              onDuplicate={onDuplicate}
+              onViewImage={handleViewImage}
+              onAddNote={onAddNote}
+              onViewNotes={onViewNotes}
+              activeId={isBranchDragging ? node.id : activeId}
+              badges={[]}
+              showPageNumbers={showPageNumbers}
+              showAnnotations
+              thumbnailRequestIds={thumbnailRequestIds}
+              thumbnailSessionId={thumbnailSessionId}
+              thumbnailReloadKey={thumbnailReloadMap?.[node.id] || 0}
+              thumbnailCaptureStopped={thumbnailCaptureStopped}
+              onThumbnailLoad={onThumbnailLoad}
+              onThumbnailError={onThumbnailError}
+              stackInfo={stackInfo}
+              onToggleStack={() => {
+                if (stackToggleParentId !== undefined && stackToggleParentId !== null) {
+                  onToggleStack?.(stackToggleParentId);
+                }
+              }}
+              isSelected={isSelected}
+            />
+          );
           return (
             <div
               key={node.id}
@@ -248,40 +294,16 @@ const MapSurfaceV2 = ({
               onClick={(event) => onNodeClick?.(node, event)}
               onContextMenu={(event) => onNodeContextMenu?.(node.id, event)}
             >
-              <DraggableNodeCard
-                node={node}
-                number={node.number}
-                color={getDepthColor(colors, node.depth)}
-                showThumbnails={renderThumbnails}
-                showCommentBadges={showCommentBadges}
-                canEdit={canEdit}
-                canComment={canComment}
-                showCommentAction={showCommentAction}
-                commentActionLabel={commentActionLabel}
-                showExternalLinkAction={showExternalLinkAction}
-                showDeleteAction={showDeleteAction}
-                connectionTool={connectionTool}
-                snapTarget={snapTarget}
-                onAnchorMouseDown={onAnchorMouseDown}
-                isRoot={isRoot}
-                onDelete={onDelete}
-                onEdit={onEdit}
-                onDuplicate={onDuplicate}
-                onViewImage={handleViewImage}
-                onAddNote={onAddNote}
-                onViewNotes={onViewNotes}
-                activeId={isBranchDragging ? node.id : activeId}
-                badges={[]}
-                showPageNumbers={showPageNumbers}
-                showAnnotations
-                thumbnailRequestIds={thumbnailRequestIds}
-                thumbnailSessionId={thumbnailSessionId}
-                thumbnailReloadKey={thumbnailReloadMap?.[node.id] || 0}
-                thumbnailCaptureStopped={thumbnailCaptureStopped}
-                onThumbnailLoad={onThumbnailLoad}
-                onThumbnailError={onThumbnailError}
-                isSelected={isSelected}
-              />
+              {shouldWrapStack ? (
+                <div className="stacked-node-wrapper">
+                  <div className="stacked-node-ghost stacked-node-ghost-3" />
+                  <div className="stacked-node-ghost stacked-node-ghost-2" />
+                  <div className="stacked-node-ghost stacked-node-ghost-1" />
+                  {card}
+                </div>
+              ) : (
+                card
+              )}
             </div>
           );
         })}

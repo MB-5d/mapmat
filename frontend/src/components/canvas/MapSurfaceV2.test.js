@@ -195,4 +195,61 @@ describe('MapSurfaceV2', () => {
     expect(container.querySelector('.large-map-canvas')).toBeNull();
     expect(container.textContent).toContain('Home Page');
   });
+
+  test('renders and toggles collapsed stack controls for large maps', async () => {
+    const getScene = jest.fn().mockResolvedValue({
+      scene: {
+        mapId: 'map-1',
+        bounds: { w: 900, h: 900 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
+        visibleNodeCount: 1,
+        nodes: [{
+          id: 'child-1',
+          title: 'Child Page',
+          url: 'https://example.com/child',
+          number: '1.1',
+          depth: 2,
+          x: 40,
+          y: 336,
+          w: 288,
+          h: 200,
+          stackInfo: {
+            parentId: 'parent-1',
+            totalCount: 12,
+            collapsed: true,
+          },
+        }],
+        connectors: [],
+      },
+    });
+    const onToggleStack = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <MapSurfaceV2
+          mapId="map-1"
+          getScene={getScene}
+          getViewState={() => ({ pan: { x: 0, y: 0 }, scale: 1 })}
+          canvasSize={{ width: 1000, height: 700 }}
+          orientation="vertical"
+          showThumbnails={false}
+          colors={{}}
+          selectedNodeIds={new Set()}
+          onToggleStack={onToggleStack}
+        />
+      );
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    expect(container.textContent).toContain('+11 more');
+    expect(container.querySelector('.stacked-node-wrapper')).not.toBeNull();
+
+    await act(async () => {
+      container.querySelector('.stack-toggle').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onToggleStack).toHaveBeenCalledWith('parent-1');
+  });
 });

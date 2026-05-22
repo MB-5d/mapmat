@@ -14155,6 +14155,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onSceneLoaded={handleLargeMapSceneLoaded}
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
+                    onToggleStack={(nodeId) => {
+                      setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
+                    }}
                   />
                 ) : (
                 <SitemapTree

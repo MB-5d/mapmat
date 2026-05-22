@@ -768,6 +768,7 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     thumbnailCaptureError: node.thumbnailCaptureError || '',
     isOrphan: !!layoutNode.isOrphan,
     orphanType: layoutNode.orphanType || node.orphanType || null,
+    stackInfo: layoutNode.stackInfo || null,
   };
 }
 

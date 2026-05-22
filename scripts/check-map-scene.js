@@ -122,6 +122,17 @@ assert.strictEqual(largeNodes.get('large-parent-0').number, '1');
 assert.strictEqual(largeNodes.get('large-parent-0').x, 0);
 assert.strictEqual(largeNodes.get('large-child-0-0').x, DEFAULT_LAYOUT.INDENT_X);
 assert.strictEqual(largeNodes.get('large-child-0-0').stackInfo.collapsed, true);
+const stackedSceneChild = largeScene.nodes.find((node) => node.id === 'large-child-0-0');
+assert(stackedSceneChild?.stackInfo?.collapsed, 'scene nodes should preserve collapsed stack metadata');
+
+const expandedLayout = computeSceneLayout(largeRoot, [], {
+  showThumbnails: false,
+  expandedStacks: { 'large-parent-0': true },
+});
+const expandedNodes = new Map(expandedLayout.nodes.map((node) => [node.id, node]));
+assert(expandedNodes.has('large-child-0-49'), 'expanded stacks should expose hidden siblings');
+assert.strictEqual(expandedNodes.get('large-child-0-0').stackInfo.showCollapse, true);
+assert.strictEqual(expandedNodes.get('large-child-0-49').stackInfo.showCollapse, true);
 
 const targetStackParents = getTargetStackParents(largeRoot, [], 'large-child-0-49');
 assert.deepStrictEqual(targetStackParents, ['large-parent-0']);
