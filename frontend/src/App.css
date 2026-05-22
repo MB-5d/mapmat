@@ -6236,7 +6236,7 @@ body {
 .version-history-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   min-height: 32px;
   padding: 6px 8px 6px 12px;
   border-radius: var(--radius-md);
@@ -6346,7 +6346,8 @@ body {
 .version-history-marker {
   position: absolute;
   left: -18px;
-  top: 18px;
+  top: 16px;
+  transform: translateY(-50%);
   width: 10px;
   height: 10px;
   border-radius: 999px;
@@ -6375,6 +6376,7 @@ body {
   opacity: 0;
   pointer-events: none;
   flex-shrink: 0;
+  margin-left: 4px;
   transition: opacity 0.16s ease;
 }
 

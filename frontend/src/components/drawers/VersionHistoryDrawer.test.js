@@ -17,6 +17,12 @@ const dateLabel = (dateString) => new Date(dateString).toLocaleDateString([], {
   weekday: 'short',
   month: 'short',
   day: 'numeric',
+});
+
+const dateLabelWithYear = (dateString) => new Date(dateString).toLocaleDateString([], {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
   year: 'numeric',
 });
 
@@ -109,6 +115,7 @@ describe('VersionHistoryDrawer', () => {
     expect(container.textContent).toContain(monthLabel(currentDate));
     expect(container.textContent).toContain(dateLabel(currentDate));
     expect(container.textContent).toContain(monthLabel(previousDate));
+    expect(container.textContent).not.toContain(dateLabelWithYear(currentDate));
     expect(container.textContent).not.toContain('Client review');
 
     await clickByText(dateLabel(currentDate));
