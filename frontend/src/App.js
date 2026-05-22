@@ -85,6 +85,7 @@ import {
   getMapNameConflictMessage,
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import { getCenteredNodeTransform as getCenteredCanvasNodeTransform } from './utils/canvasView';
 import {
   buildExpandedStackMap,
   getMaxDepth,
@@ -2192,6 +2193,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scheduleResetViewRef = useRef(null);
   const centerHomeRef = useRef(null);
   const largeMapHomeSceneKeyRef = useRef('');
+  const largeMapHomeNodeRef = useRef(null);
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
@@ -4238,8 +4240,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     scale: scaleRef.current,
   }), []);
 
+  const getCenteredNodeTransform = useCallback((node, nextScale = scaleRef.current || 1) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !node) return null;
+    return getCenteredCanvasNodeTransform(node, {
+      canvasWidth: canvas.clientWidth,
+      canvasHeight: canvas.clientHeight,
+      scale: nextScale,
+    });
+  }, []);
+
   const handleLargeMapSceneLoaded = useCallback((scene) => {
     if (!useLargeMapSurface || !scene?.homeNode || !canvasRef.current) return;
+    largeMapHomeNodeRef.current = scene.homeNode;
     const sceneKey = [
       currentMap?.id || 'unsaved',
       scene.mapUpdatedAt || '',
@@ -4249,14 +4262,51 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (largeMapHomeSceneKeyRef.current === sceneKey) return;
     largeMapHomeSceneKeyRef.current = sceneKey;
 
-    const node = scene.homeNode;
     const nextScale = scaleRef.current || 1;
-    applyTransform({
-      scale: nextScale,
-      x: canvasRef.current.clientWidth / 2 - (node.x + node.w / 2) * nextScale,
-      y: canvasRef.current.clientHeight / 2 - (node.y + node.h / 2) * nextScale,
-    }, { skipPanClamp: true });
-  }, [applyTransform, currentMap?.id, mapOrientation, showThumbnails, useLargeMapSurface]);
+    const nextTransform = getCenteredNodeTransform(scene.homeNode, nextScale);
+    if (nextTransform) {
+      applyTransform(nextTransform, { skipPanClamp: true });
+    }
+  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, showThumbnails, useLargeMapSurface]);
+
+  const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
+    let homeNode = largeMapHomeNodeRef.current;
+
+    if (!homeNode && currentMap?.id) {
+      try {
+        const viewScale = scaleRef.current || 1;
+        const panValue = panRef.current || { x: 0, y: 0 };
+        const canvas = canvasRef.current;
+        const response = await api.getMapScene(currentMap.id, {
+          x: (0 - panValue.x) / viewScale,
+          y: (0 - panValue.y) / viewScale,
+          w: (canvas?.clientWidth || 1) / viewScale,
+          h: (canvas?.clientHeight || 1) / viewScale,
+          zoom: viewScale,
+          orientation: mapOrientation,
+          thumbnails: showThumbnails ? '1' : '0',
+          overscan: CANVAS_NODE_OVERSCAN_PX,
+          expandedStacks: getExpandedStackIds(expandedStacks).join(','),
+        });
+        homeNode = response?.scene?.homeNode || null;
+        if (homeNode) largeMapHomeNodeRef.current = homeNode;
+      } catch (error) {
+        console.warn('Large map reset failed', error);
+      }
+    }
+
+    const nextTransform = getCenteredNodeTransform(homeNode, nextScale);
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [
+    applyTransform,
+    currentMap?.id,
+    expandedStacks,
+    getCenteredNodeTransform,
+    mapOrientation,
+    showThumbnails,
+  ]);
 
   const animatePanTo = useCallback((target, options = {}) => {
     const start = { ...panRef.current };
@@ -8746,6 +8796,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setInsightsError('');
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
+    largeMapHomeNodeRef.current = null;
     setIsImportedMap(false);
     setCurrentMap({ name: trimmedName, project_id: projectId || null, notes: notes?.trim() || '' });
     navigateToRoute(createAppHomeRoute());
@@ -8771,6 +8822,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     resetScanLayers();
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
+    largeMapHomeNodeRef.current = null;
     setRoot(null);
     setOrphans([]);
     setConnections([]);
@@ -8824,6 +8876,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setCurrentShareAccess(null);
     setExpandedStacks({});
     largeMapHomeSceneKeyRef.current = '';
+    largeMapHomeNodeRef.current = null;
     const mapHasThumbnails = mapHasThumbnailAsset(map.root, map.orphans || []);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
@@ -8886,6 +8939,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
+    largeMapHomeSceneKeyRef.current = '';
+    largeMapHomeNodeRef.current = null;
     setRoot(shellRoot);
     setOrphans([]);
     setConnections([]);
@@ -10132,40 +10187,36 @@ export default function App({ currentRoute, navigateToRoute }) {
     zoomAtClientPoint(nextScale, cx, cy);
   }, [zoomAtClientPoint]);
 
-  const centerHome = useCallback(() => {
-    const canvas = canvasRef.current;
+  const centerHome = useCallback((nextScale = scaleRef.current || 1, { skipPanClamp = true } = {}) => {
     const layout = layoutRef.current;
-    if (!canvas || !layout || layout.nodes.size === 0) return;
+    if (!layout || layout.nodes.size === 0) return false;
 
     const rootId = renderRoot?.id || root?.id;
     let rootNode = rootId ? layout.nodes.get(rootId) : null;
     if (!rootNode) {
       rootNode = Array.from(layout.nodes.values()).find((node) => node.depth === 0) || null;
     }
-    if (!rootNode) return;
+    if (!rootNode) return false;
 
-    const targetX = canvas.clientWidth / 2;
-    const targetY = canvas.clientHeight / 2;
-    const scale = scaleRef.current;
+    const nextTransform = getCenteredNodeTransform(rootNode, nextScale);
+    if (!nextTransform) return false;
 
-    const nodeCenterX = rootNode.x + rootNode.w / 2;
-    const nodeCenterY = rootNode.y + rootNode.h / 2;
-
-    const nextPan = {
-      x: targetX - nodeCenterX * scale,
-      y: targetY - nodeCenterY * scale,
-    };
-
-    applyTransform({ scale, x: nextPan.x, y: nextPan.y });
-  }, [applyTransform, renderRoot, root]);
+    applyTransform(nextTransform, { skipPanClamp });
+    return true;
+  }, [applyTransform, getCenteredNodeTransform, renderRoot, root]);
   centerHomeRef.current = centerHome;
 
   const resetView = useCallback(() => {
-    applyTransform({ scale: 1, x: 0, y: 0 });
-    requestAnimationFrame(() => {
-      centerHome();
-    });
-  }, [applyTransform, centerHome]);
+    if (useLargeMapSurface) {
+      centerLargeMapHome(1);
+      return;
+    }
+
+    const didCenter = centerHome(1, { skipPanClamp: true });
+    if (!didCenter) {
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    }
+  }, [applyTransform, centerHome, centerLargeMapHome, useLargeMapSurface]);
 
   const scheduleResetView = useCallback((attempts = 8) => {
     if (attempts <= 0) return;
