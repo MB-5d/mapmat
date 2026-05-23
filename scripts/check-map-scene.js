@@ -38,6 +38,7 @@ assert.strictEqual(scene.homeNode.id, 'root');
 assert(scene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
 assert(scene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'thumbnailFullUrl')));
 assert(scene.nodes.some((node) => node.thumbnailUrl));
+assert(scene.nodes.some((node) => node.hasThumbnail === true));
 assert.strictEqual(getThumbnailLod(0.1), 'none');
 assert.strictEqual(getThumbnailLod(0.4), 'preview');
 assert.strictEqual(getThumbnailLod(1), 'thumbnail');
@@ -80,6 +81,7 @@ const farOutScene = buildMapScene({
   showThumbnails: true,
 });
 assert(farOutScene.nodes.every((node) => node.thumbnailUrl === ''));
+assert(farOutScene.nodes.some((node) => node.hasThumbnail === true));
 
 const noThumbnailScene = buildMapScene({
   root,
@@ -87,6 +89,7 @@ const noThumbnailScene = buildMapScene({
   showThumbnails: false,
 });
 assert(noThumbnailScene.nodes.every((node) => node.thumbnailUrl === ''));
+assert(noThumbnailScene.nodes.some((node) => node.hasThumbnail === true));
 
 const largeRoot = {
   id: 'large-root',
@@ -124,6 +127,8 @@ assert.strictEqual(largeNodes.get('large-child-0-0').x, DEFAULT_LAYOUT.INDENT_X)
 assert.strictEqual(largeNodes.get('large-child-0-0').stackInfo.collapsed, true);
 const stackedSceneChild = largeScene.nodes.find((node) => node.id === 'large-child-0-0');
 assert(stackedSceneChild?.stackInfo?.collapsed, 'scene nodes should preserve collapsed stack metadata');
+assert(stackedSceneChild.stackInfo.selectionIds.includes('large-child-0-49'));
+assert.strictEqual(stackedSceneChild.stackInfo.selectionIds.length, 50);
 
 const expandedLayout = computeSceneLayout(largeRoot, [], {
   showThumbnails: false,

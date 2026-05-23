@@ -695,6 +695,52 @@ const getLargeMapAutoCenterKey = ({ mapId, orientation } = {}) => [
   mapId || 'unsaved',
   orientation || 'vertical',
 ].join(':');
+const LARGE_MAP_CACHE_ASSET_FIELDS = [
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'fullScreenshotTruncated',
+  'authRequired',
+  'thumbnailCaptureFailed',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+];
+const hasLargeMapAssetValue = (value) => value !== undefined && value !== null && value !== '';
+const mergeLargeMapNodeSnapshot = (
+  existingNode,
+  incomingNode,
+  { preserveExistingAssetsOnEmpty = true } = {},
+) => {
+  if (!existingNode && !incomingNode) return null;
+  const existing = existingNode || {};
+  const incoming = incomingNode || {};
+  const next = {
+    ...existing,
+    ...incoming,
+  };
+
+  if (preserveExistingAssetsOnEmpty) {
+    LARGE_MAP_CACHE_ASSET_FIELDS.forEach((field) => {
+      if (!hasLargeMapAssetValue(incoming[field]) && hasLargeMapAssetValue(existing[field])) {
+        next[field] = existing[field];
+      }
+    });
+  }
+
+  next.hasThumbnail = Boolean(
+    next.thumbnailUrl
+      || incoming.hasThumbnail
+      || (preserveExistingAssetsOnEmpty && existing.hasThumbnail)
+  );
+  delete next.children;
+  return next;
+};
+const getLargeMapStackSelectionIdsFromNode = (node, fallbackId = null) => {
+  const fallback = String(fallbackId || node?.id || '').trim();
+  const rawIds = Array.isArray(node?.stackInfo?.selectionIds) ? node.stackInfo.selectionIds : [];
+  const ids = rawIds.map((id) => String(id || '').trim()).filter(Boolean);
+  return ids.length ? Array.from(new Set(ids)) : (fallback ? [fallback] : []);
+};
 const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
   accessPolicy: 'private',
   nonViewerInvitesRequireOwner: true,
@@ -1419,6 +1465,14 @@ const ORPHAN_PARENT_ID = '__orphan_root__';
 const SUBDOMAIN_PARENT_ID = '__subdomain_root__';
 const PAGE_TYPE_HOME = 'Home';
 const PAGE_TYPE_PAGE = 'Page';
+const getLargeMapEditParentId = (node) => {
+  if (!node) return '';
+  if (node.parentId) return node.parentId;
+  if (!node.isOrphan && !node.orphanType) return '';
+  return node.subdomainRoot || node.orphanType === 'subdomain'
+    ? SUBDOMAIN_PARENT_ID
+    : ORPHAN_PARENT_ID;
+};
 
 // Build a unified index for root + orphan + subdomain trees
 const buildForestIndex = (rootNode, orphanNodes = []) => {
@@ -2020,6 +2074,9 @@ export const __testing = {
   isStoredScreenshotAsset,
   getImageCaptureStats,
   getLargeMapAutoCenterKey,
+  mergeLargeMapNodeSnapshot,
+  getLargeMapStackSelectionIdsFromNode,
+  getLargeMapEditParentId,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -2204,7 +2261,15 @@ export default function App({ currentRoute, navigateToRoute }) {
   const largeMapHomeSceneKeyRef = useRef('');
   const largeMapHomeNodeRef = useRef(null);
   const largeMapVisibleNodesRef = useRef([]);
+  const largeMapNodeCacheRef = useRef(new Map());
+  const [largeMapNodeCacheVersion, setLargeMapNodeCacheVersion] = useState(0);
   const handledAuthRedirectKeyRef = useRef('');
+
+  useEffect(() => {
+    largeMapNodeCacheRef.current = new Map();
+    largeMapVisibleNodesRef.current = [];
+    setLargeMapNodeCacheVersion((version) => version + 1);
+  }, [currentMap?.id]);
 
   useEffect(() => {
     const authSuccess = currentRoute?.searchParams?.get('auth_success') || '';
@@ -3427,9 +3492,54 @@ export default function App({ currentRoute, navigateToRoute }) {
     scheduleResetViewRef.current?.();
   }, [mapLayout?.orientation, mapLayout?.nodes?.size]);
 
+  const mergeLargeMapNodeCache = useCallback((
+    incomingNodes,
+    { preserveExistingAssetsOnEmpty = true } = {},
+  ) => {
+    const nodes = Array.isArray(incomingNodes) ? incomingNodes : [incomingNodes].filter(Boolean);
+    if (!nodes.length) return false;
+
+    let changed = false;
+    nodes.forEach((node) => {
+      const id = String(node?.id || '').trim();
+      if (!id) return;
+      const existing = largeMapNodeCacheRef.current.get(id);
+      const merged = mergeLargeMapNodeSnapshot(existing, node, { preserveExistingAssetsOnEmpty });
+      if (JSON.stringify(existing || null) !== JSON.stringify(merged || null)) {
+        largeMapNodeCacheRef.current.set(id, merged);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      setLargeMapNodeCacheVersion((version) => version + 1);
+    }
+    return changed;
+  }, []);
+
+  const mergeLargeMapNodeAssetCache = useCallback((nodeId, assets) => {
+    const id = String(nodeId || '').trim();
+    if (!id || !assets || typeof assets !== 'object') return false;
+    return mergeLargeMapNodeCache({
+      id,
+      ...assets,
+      hasThumbnail: Boolean(assets.thumbnailUrl),
+    }, { preserveExistingAssetsOnEmpty: true });
+  }, [mergeLargeMapNodeCache]);
+
+  const getLargeMapNodeSnapshot = useCallback((nodeId) => (
+    largeMapNodeCacheRef.current.get(String(nodeId || '').trim()) || null
+  ), []);
+
   const getNodeStackSelectionIds = useCallback((nodeId) => {
     if (!nodeId) return [];
     const fallbackIds = [nodeId];
+    if (useLargeMapSurface) {
+      const id = String(nodeId || '').trim();
+      const cachedNode = largeMapNodeCacheRef.current.get(id);
+      const visibleNode = largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id));
+      return getLargeMapStackSelectionIdsFromNode(cachedNode || visibleNode, id);
+    }
     const layoutNode = layoutRef.current?.nodes?.get(nodeId);
     const stackInfo = layoutNode?.stackInfo;
     if (!stackInfo?.collapsed || !stackInfo.parentId) {
@@ -3441,7 +3551,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const stackChildren = Array.isArray(stackParent?.children) ? stackParent.children : [];
     const stackIds = stackChildren.reduce((ids, child) => collectNodeAndDescendantIds(child, ids), []);
     return stackIds.length ? stackIds : fallbackIds;
-  }, [root, orphans]);
+  }, [root, orphans, useLargeMapSurface]);
 
   const addNodeAndStackSelection = useCallback((targetSet, nodeId) => {
     getNodeStackSelectionIds(nodeId).forEach((id) => targetSet.add(id));
@@ -4262,7 +4372,15 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleLargeMapSceneLoaded = useCallback((scene) => {
     if (!useLargeMapSurface) return;
-    largeMapVisibleNodesRef.current = Array.isArray(scene?.nodes) ? scene.nodes : [];
+    const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
+    if (rawNodes.length) {
+      mergeLargeMapNodeCache(rawNodes, { preserveExistingAssetsOnEmpty: true });
+    }
+    largeMapVisibleNodesRef.current = rawNodes.map((node) => (
+      mergeLargeMapNodeSnapshot(largeMapNodeCacheRef.current.get(String(node?.id || '').trim()), node, {
+        preserveExistingAssetsOnEmpty: true,
+      }) || node
+    ));
     if (!scene?.homeNode || !canvasRef.current) return;
     largeMapHomeNodeRef.current = scene.homeNode;
     const sceneKey = getLargeMapAutoCenterKey({
@@ -4277,7 +4395,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (nextTransform) {
       applyTransform(nextTransform, { skipPanClamp: true });
     }
-  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, useLargeMapSurface]);
+  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, mergeLargeMapNodeCache, useLargeMapSurface]);
 
   const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
     let homeNode = largeMapHomeNodeRef.current;
@@ -6801,6 +6919,28 @@ export default function App({ currentRoute, navigateToRoute }) {
     invalidAssetIds = invalidThumbnailAssetIds,
     targetMode = 'remaining',
   ) => {
+    if (useLargeMapSurface && scope === 'selected') {
+      const selectedIds = Array.from(selectedNodeIds || [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean);
+      const candidates = selectedIds.map((id) => {
+        const cachedNode = largeMapNodeCacheRef.current.get(id);
+        const visibleNode = largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id));
+        return {
+          id,
+          ...(cachedNode || visibleNode || {}),
+          url: cachedNode?.url || visibleNode?.url || '__large_map_selected_node__',
+        };
+      });
+      return {
+        targetIds: new Set(selectedIds),
+        candidates,
+        total: selectedIds.length,
+        cachedCount: 0,
+        unavailableCount: 0,
+      };
+    }
+
     const allNodes = collectAllNodesWithOrphans(root, orphans);
     const baseIds = scope === 'selected' ? new Set(selectedNodeIds) : null;
     const scopedNodes = scope === 'selected'
@@ -6842,11 +6982,17 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const findNodeInCurrentMap = useCallback((nodeId) => {
+    const id = String(nodeId || '').trim();
+    if (useLargeMapSurface) {
+      return largeMapNodeCacheRef.current.get(id)
+        || largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id))
+        || null;
+    }
     const latestRoot = rootRef.current || root;
     const latestOrphans = orphansRef.current || orphans;
     return collectAllNodesWithOrphans(latestRoot, latestOrphans)
-      .find((node) => String(node?.id || '') === String(nodeId || '')) || null;
-  }, [orphans, root]);
+      .find((node) => String(node?.id || '') === id) || null;
+  }, [orphans, root, useLargeMapSurface]);
 
   const reconcileSavedImageCaptureAssets = useCallback(async ({ mapId, mode, nodeIds }) => {
     const ids = Array.from(new Set((nodeIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
@@ -6869,8 +7015,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           return;
         }
         const assetUpdates = collectImageAssetUpdatesFromNode(savedNode);
+        const cached = useLargeMapSurface
+          ? mergeLargeMapNodeCache(savedNode, { preserveExistingAssetsOnEmpty: false })
+          : false;
         const applied = updateNodeScreenshotAssets(nodeId, assetUpdates, { queueSave: false });
-        if (!applied && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), mode) !== assetUrl) {
+        if (!applied && !cached && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), mode) !== assetUrl) {
           recordCaptureIssue({
             nodeId,
             status: 'missing_asset',
@@ -6895,8 +7044,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     clearCaptureIssueForNode,
     completeThumbnailCapture,
     findNodeInCurrentMap,
+    mergeLargeMapNodeCache,
     recordCaptureIssue,
     updateNodeScreenshotAssets,
+    useLargeMapSurface,
   ]);
 
   const applyImageCaptureJobUpdates = useCallback((job, expectedMode) => {
@@ -6913,9 +7064,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       const key = `${nodeId}:${JSON.stringify(assets)}`;
       if (imageCaptureAppliedUpdateKeysRef.current.has(key)) return;
       imageCaptureAppliedUpdateKeysRef.current.add(key);
+      const cached = useLargeMapSurface ? mergeLargeMapNodeAssetCache(nodeId, assets) : false;
       const applied = updateNodeScreenshotAssets(nodeId, assets, { queueSave: false });
       const assetUrl = getCaptureAssetUrl(assets, expectedMode);
-      if (applied || (assetUrl && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), expectedMode) === assetUrl)) {
+      if (applied || cached || (assetUrl && getCaptureAssetUrl(findNodeInCurrentMap(nodeId), expectedMode) === assetUrl)) {
         imageCaptureAppliedRef.current.add(nodeId);
       } else if (assetUrl) {
         savedButNotApplied.add(nodeId);
@@ -7010,8 +7162,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     completeThumbnailCapture,
     findNodeInCurrentMap,
     getCaptureIssueNodeContext,
+    mergeLargeMapNodeAssetCache,
     recordCaptureIssue,
     updateNodeScreenshotAssets,
+    useLargeMapSurface,
   ]);
 
   useEffect(() => {
@@ -11747,6 +11901,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     try {
       const response = await api.getMapNode(currentMap.id, sceneNode.id);
       const node = response?.node || sceneNode;
+      mergeLargeMapNodeCache(node, { preserveExistingAssetsOnEmpty: false });
       const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || '';
       if (directAssetUrl) {
         viewFullScreenshot(directAssetUrl, true, node.id || sceneNode.id, 'full');
@@ -12547,7 +12702,34 @@ export default function App({ currentRoute, navigateToRoute }) {
     return null;
   };
 
-  const openEditModal = (node) => {
+  const openEditModal = async (node) => {
+    if (useLargeMapSurface && currentMap?.id && node?.id) {
+      const cachedNode = largeMapNodeCacheRef.current.get(String(node.id));
+      const fallbackNode = mergeLargeMapNodeSnapshot(cachedNode, node, {
+        preserveExistingAssetsOnEmpty: true,
+      }) || node;
+      try {
+        const response = await api.getMapNode(currentMap.id, node.id);
+        const fetchedNode = mergeLargeMapNodeSnapshot(fallbackNode, response?.node, {
+          preserveExistingAssetsOnEmpty: false,
+        }) || fallbackNode;
+        mergeLargeMapNodeCache(fetchedNode, { preserveExistingAssetsOnEmpty: false });
+        setEditModalNode({
+          ...fetchedNode,
+          parentId: getLargeMapEditParentId(fetchedNode),
+        });
+      } catch (error) {
+        console.warn('Failed to load large-map node details', error);
+        setEditModalNode({
+          ...fallbackNode,
+          parentId: getLargeMapEditParentId(fallbackNode),
+        });
+        showToast(error?.message || 'Some page details could not be loaded', 'warning');
+      }
+      setEditModalMode('edit');
+      return;
+    }
+
     const orphanRoot = findOrphanTreeRoot(node.id);
     if (orphanRoot) {
       const orphanParent = findParent(orphanRoot, node.id);
@@ -14216,6 +14398,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onThumbnailLoad={handleThumbnailDisplayLoad}
                     onThumbnailError={handleThumbnailDisplayError}
                     onSceneLoaded={handleLargeMapSceneLoaded}
+                    getNodeSnapshot={getLargeMapNodeSnapshot}
+                    nodeSnapshotVersion={largeMapNodeCacheVersion}
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
                     onToggleStack={(nodeId) => {

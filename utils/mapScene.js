@@ -82,6 +82,14 @@ function getChildren(node) {
   return Array.isArray(node?.children) ? node.children.filter(Boolean) : [];
 }
 
+function collectNodeAndDescendantIds(node, result = []) {
+  if (!node || typeof node !== 'object') return result;
+  const id = String(node.id || '').trim();
+  if (id) result.push(id);
+  getChildren(node).forEach((child) => collectNodeAndDescendantIds(child, result));
+  return result;
+}
+
 function countMapNodes(root, orphans = []) {
   const seen = new Set();
   let count = 0;
@@ -214,12 +222,14 @@ function computeHorizontalLayout(root, orphans, showThumbnails, expandedStacks =
     const isExpanded = !!expandedStacks[node.id];
     let result;
     if (shouldStack && !isExpanded) {
+      const selectionIds = children.reduce((ids, child) => collectNodeAndDescendantIds(child, ids), []);
       result = [{
         child: children[0],
         stackInfo: {
           parentId: node.id,
           totalCount: children.length,
           collapsed: true,
+          selectionIds,
         },
       }];
     } else {
@@ -465,12 +475,14 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
       const stackChild = children[0];
       if (!stackChild) return NODE_H;
       const childNumber = `${numberPrefix}.1`;
+      const selectionIds = children.reduce((ids, child) => collectNodeAndDescendantIds(child, ids), []);
       setNode(stackChild, childX, cursorY, parentDepth + 1, childNumber, {
         ...context,
         stackInfo: {
           parentId: parentNode.id,
           totalCount: children.length,
           collapsed: true,
+          selectionIds,
         },
       });
 
@@ -731,7 +743,8 @@ function getThumbnailLod(zoom) {
 
 function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
   const node = layoutNode.node || {};
-  const thumbnailUrl = thumbnailLod === 'none' ? '' : String(node.thumbnailUrl || '');
+  const rawThumbnailUrl = String(node.thumbnailUrl || '');
+  const thumbnailUrl = thumbnailLod === 'none' ? '' : rawThumbnailUrl;
   const annotations = node.annotations && typeof node.annotations === 'object'
     ? {
       status: node.annotations.status || 'none',
@@ -739,6 +752,14 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
       note: typeof node.annotations.note === 'string' ? node.annotations.note.slice(0, 240) : '',
     }
     : {};
+  const stackInfo = layoutNode.stackInfo
+    ? {
+      ...layoutNode.stackInfo,
+      selectionIds: Array.isArray(layoutNode.stackInfo.selectionIds)
+        ? layoutNode.stackInfo.selectionIds.map((id) => String(id || '')).filter(Boolean)
+        : undefined,
+    }
+    : null;
   return {
     id: layoutNode.id,
     title: node.title || node.label || node.url || 'Untitled',
@@ -750,6 +771,7 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     w: layoutNode.w,
     h: layoutNode.h,
     thumbnailUrl,
+    hasThumbnail: !!rawThumbnailUrl,
     thumbnailLod,
     annotations,
     comments: Array.isArray(node.comments) ? node.comments.slice(0, 20) : [],
@@ -768,7 +790,7 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     thumbnailCaptureError: node.thumbnailCaptureError || '',
     isOrphan: !!layoutNode.isOrphan,
     orphanType: layoutNode.orphanType || node.orphanType || null,
-    stackInfo: layoutNode.stackInfo || null,
+    stackInfo,
   };
 }
 
@@ -837,6 +859,7 @@ module.exports = {
   buildMapScene,
   computeSceneLayout,
   countMapNodes,
+  collectNodeAndDescendantIds,
   getThumbnailLod,
   getTargetStackParents,
   normalizeViewport,

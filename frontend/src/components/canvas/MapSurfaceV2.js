@@ -25,6 +25,19 @@ const toSceneNodeData = (node) => ({
   node,
 });
 
+const mergeSceneNodeSnapshot = (sceneNode, snapshot) => {
+  if (!snapshot) return sceneNode;
+  return {
+    ...snapshot,
+    ...sceneNode,
+    thumbnailUrl: sceneNode.thumbnailUrl || snapshot.thumbnailUrl || '',
+    thumbnailFullUrl: snapshot.thumbnailFullUrl || sceneNode.thumbnailFullUrl || '',
+    fullScreenshotUrl: sceneNode.fullScreenshotUrl || '',
+    hasThumbnail: Boolean(sceneNode.hasThumbnail || snapshot.hasThumbnail || sceneNode.thumbnailUrl || snapshot.thumbnailUrl),
+    stackInfo: sceneNode.stackInfo || snapshot.stackInfo || null,
+  };
+};
+
 const MapSurfaceV2 = ({
   mapId,
   getScene,
@@ -63,6 +76,8 @@ const MapSurfaceV2 = ({
   onThumbnailLoad,
   onThumbnailError,
   onSceneLoaded,
+  getNodeSnapshot,
+  nodeSnapshotVersion = 0,
   activeBranchNodeIds,
   expandedStacks,
   onToggleStack,
@@ -202,9 +217,12 @@ const MapSurfaceV2 = ({
     if (fetchAbortRef.current) fetchAbortRef.current.abort();
   }, []);
 
-  const sceneNodes = useMemo(() => (
-    (scene?.nodes || []).map(toSceneNodeData)
-  ), [scene?.nodes]);
+  const sceneNodes = useMemo(() => {
+    void nodeSnapshotVersion;
+    return (scene?.nodes || [])
+      .map((node) => mergeSceneNodeSnapshot(node, getNodeSnapshot?.(node.id)))
+      .map(toSceneNodeData);
+  }, [getNodeSnapshot, nodeSnapshotVersion, scene?.nodes]);
 
   const connectorPaths = useMemo(() => (
     (scene?.connectors || []).map(getConnectorPath)

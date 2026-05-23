@@ -198,6 +198,60 @@ describe('MapSurfaceV2', () => {
     expect(container.textContent).not.toContain('Performance mode');
   });
 
+  test('keeps cached thumbnails when the scene response omits LOD image URLs', async () => {
+    const getScene = jest.fn().mockResolvedValue({
+      scene: {
+        mapId: 'map-1',
+        bounds: { w: 900, h: 600 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 262 },
+        visibleNodeCount: 1,
+        nodes: [{
+          id: 'home',
+          title: 'Home Page',
+          url: 'https://example.com',
+          number: '0',
+          depth: 0,
+          x: 0,
+          y: 0,
+          w: 288,
+          h: 262,
+          thumbnailUrl: '',
+          hasThumbnail: true,
+        }],
+        connectors: [],
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <MapSurfaceV2
+          mapId="map-1"
+          getScene={getScene}
+          getViewState={() => ({ pan: { x: 0, y: 0 }, scale: 1 })}
+          canvasSize={{ width: 1000, height: 700 }}
+          orientation="vertical"
+          showThumbnails
+          colors={{}}
+          selectedNodeIds={new Set()}
+          getNodeSnapshot={() => ({
+            id: 'home',
+            thumbnailUrl: '/screenshots/home_thumb_v1.jpg',
+            thumbnailFullUrl: '/screenshots/home_full_thumb_v1.jpg',
+            fullScreenshotUrl: '/screenshots/home_full_v1.jpg',
+          })}
+          nodeSnapshotVersion={1}
+        />
+      );
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    const image = container.querySelector('.thumb-img');
+    expect(image).not.toBeNull();
+    expect(image.getAttribute('src')).toContain('/screenshots/home_thumb_v1.jpg');
+  });
+
   test('renders and toggles collapsed stack controls for large maps', async () => {
     const getScene = jest.fn().mockResolvedValue({
       scene: {

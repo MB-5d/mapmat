@@ -424,6 +424,34 @@ function collectNodesById(root, orphans = []) {
   return nodesById;
 }
 
+function findNodeContext(root, orphans = [], targetNodeId) {
+  const targetId = String(targetNodeId || '').trim();
+  if (!targetId) return null;
+
+  const visit = (node, parent = null, treeRoot = null) => {
+    if (!node || typeof node !== 'object') return null;
+    const currentTreeRoot = treeRoot || node;
+    if (String(node.id || '').trim() === targetId) {
+      return { node, parent, treeRoot: currentTreeRoot };
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) {
+      const found = visit(child, node, currentTreeRoot);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const rootMatch = visit(root, null, root);
+  if (rootMatch) return { ...rootMatch, isOrphan: false };
+
+  for (const orphan of Array.isArray(orphans) ? orphans : []) {
+    const orphanMatch = visit(orphan, null, orphan);
+    if (orphanMatch) return { ...orphanMatch, isOrphan: true };
+  }
+
+  return null;
+}
+
 function hasThumbnailAsset(root, orphans = []) {
   let found = false;
   const visit = (node) => {
@@ -1949,18 +1977,48 @@ router.get('/maps/:id/nodes/:nodeId', requireAuth, async (req, res) => {
 
     const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
     const parsed = repaired.parsed;
-    const node = collectNodesById(parsed.root, parsed.orphans || []).get(String(nodeId || '').trim());
+    const context = findNodeContext(parsed.root, parsed.orphans || [], nodeId);
+    const node = context?.node || null;
     if (!node) return res.status(404).json({ error: 'Node not found' });
+
+    const orphanType = context?.isOrphan
+      ? (context.treeRoot?.subdomainRoot ? 'subdomain' : (context.treeRoot?.orphanType || node.orphanType || 'orphan'))
+      : null;
 
     return res.json({
       node: {
         id: node.id,
         title: node.title || node.url || 'Untitled',
         url: node.url || '',
+        parentId: context.parent?.id || '',
+        isOrphan: !!context.isOrphan,
+        orphanType,
+        subdomainRoot: !!node.subdomainRoot,
+        pageType: node.pageType || node.type || '',
+        type: node.type || node.pageType || '',
+        description: node.description || '',
+        metaTags: node.metaTags || '',
+        canonicalUrl: node.canonicalUrl || '',
+        seoMetadata: node.seoMetadata || null,
+        annotations: node.annotations || null,
+        comments: Array.isArray(node.comments) ? node.comments : [],
         thumbnailUrl: node.thumbnailUrl || '',
         thumbnailFullUrl: node.thumbnailFullUrl || '',
         fullScreenshotUrl: node.fullScreenshotUrl || '',
         authRequired: !!node.authRequired,
+        isBroken: !!node.isBroken,
+        isInactive: !!node.isInactive,
+        isFile: !!node.isFile,
+        isError: !!node.isError,
+        isViewableError: !!node.isViewableError,
+        httpStatus: node.httpStatus ?? node.statusCode ?? null,
+        statusCode: node.statusCode ?? node.httpStatus ?? null,
+        scanStatus: node.scanStatus || node.status || '',
+        blockedReason: node.blockedReason || '',
+        thumbnailCaptureFailed: !!node.thumbnailCaptureFailed,
+        thumbnailCaptureError: node.thumbnailCaptureError || '',
+        thumbnailCaptureFailedAt: node.thumbnailCaptureFailedAt || null,
+        fullScreenshotTruncated: !!node.fullScreenshotTruncated,
       },
     });
   } catch (error) {
