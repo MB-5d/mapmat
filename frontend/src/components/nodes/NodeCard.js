@@ -197,11 +197,12 @@ const NodeCard = ({
 
   useEffect(() => {
     if (!showThumbnails) return;
-    if (!canRequestThumbnail) return;
     if (!thumbnailReloadKey) return;
+    if (!thumb) return;
     setThumbError(false);
-    setThumbLoading(true);
-  }, [thumbnailReloadKey, showThumbnails, canRequestThumbnail]);
+    setThumbLoading(canRequestThumbnail);
+    setShouldLoadThumb(true);
+  }, [thumbnailReloadKey, showThumbnails, canRequestThumbnail, thumb]);
 
   useEffect(() => {
     if (!thumbnailCaptureStopped) return;

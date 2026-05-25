@@ -80,7 +80,8 @@ const farOutScene = buildMapScene({
   viewport: { x: -200, y: -200, w: 1000, h: 800, zoom: 0.1 },
   showThumbnails: true,
 });
-assert(farOutScene.nodes.every((node) => node.thumbnailUrl === ''));
+assert.strictEqual(farOutScene.thumbnailLod, 'preview');
+assert(farOutScene.nodes.some((node) => node.thumbnailUrl));
 assert(farOutScene.nodes.some((node) => node.hasThumbnail === true));
 
 const noThumbnailScene = buildMapScene({
@@ -128,6 +129,24 @@ assert.strictEqual(largeNodes.get('large-child-0-0').stackInfo.collapsed, true);
 const stackedSceneChild = largeScene.nodes.find((node) => node.id === 'large-child-0-0');
 assert(stackedSceneChild?.stackInfo?.collapsed, 'scene nodes should preserve collapsed stack metadata');
 assert(stackedSceneChild.stackInfo.selectionIds.includes('large-child-0-49'));
+
+const crowdedRoot = {
+  id: 'crowded-root',
+  title: 'Crowded Root',
+  children: Array.from({ length: 1000 }, (_, index) => ({
+    id: `crowded-child-${index}`,
+    title: `Crowded Child ${index}`,
+    thumbnailUrl: `/screenshots/crowded_${index}_thumb_v1.jpg`,
+  })),
+};
+const crowdedFarOutScene = buildMapScene({
+  root: crowdedRoot,
+  viewport: { x: -10000, y: -10000, w: 400000, h: 50000, zoom: 0.1 },
+  showThumbnails: true,
+});
+assert(crowdedFarOutScene.visibleNodeCount > 900, 'crowded low-zoom scene should exceed thumbnail URL limit');
+assert.strictEqual(crowdedFarOutScene.thumbnailLod, 'none');
+assert(crowdedFarOutScene.nodes.every((node) => node.thumbnailUrl === ''));
 assert.strictEqual(stackedSceneChild.stackInfo.selectionIds.length, 50);
 
 const expandedLayout = computeSceneLayout(largeRoot, [], {

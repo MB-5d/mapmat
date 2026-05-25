@@ -238,6 +238,60 @@ describe('NodeCard', () => {
     expect(container.querySelector('.thumb-placeholder')).toBeNull();
   });
 
+  test('retries a saved thumbnail display when its reload key changes', async () => {
+    const onThumbnailError = jest.fn();
+    const node = {
+      id: 'node-1',
+      title: 'Already captured',
+      url: 'https://example.com/page',
+      thumbnailUrl: 'https://assets.example/thumb.jpg',
+    };
+
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={node}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          thumbnailReloadKey={0}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
+          onThumbnailError={onThumbnailError}
+        />
+      );
+    });
+
+    act(() => {
+      container.querySelector('.thumb-img').dispatchEvent(new Event('error'));
+    });
+
+    expect(container.querySelector('.thumb-placeholder')).not.toBeNull();
+
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={node}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          thumbnailReloadKey={1}
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
+          onThumbnailError={onThumbnailError}
+        />
+      );
+    });
+
+    expect(container.querySelector('.thumb-img')).not.toBeNull();
+    expect(container.querySelector('.thumb-img')?.getAttribute('src')).toBe('https://assets.example/thumb.jpg?_=1');
+    expect(container.querySelector('.thumb-placeholder')).toBeNull();
+  });
+
   test('does not report a display error timeout before a thumbnail asset exists', async () => {
     jest.useFakeTimers();
     const onThumbnailError = jest.fn();

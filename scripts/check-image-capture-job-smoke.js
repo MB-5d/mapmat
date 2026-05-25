@@ -342,6 +342,20 @@ function getSavedManifestCount(dbPath, mapId) {
   }
 }
 
+function getImageActivityCount(dbPath, mapId) {
+  const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+  try {
+    const row = db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM map_activity_events
+      WHERE map_id = ? AND event_type = 'content.images.updated'
+    `).get(mapId);
+    return Number(row?.count || 0);
+  } finally {
+    db.close();
+  }
+}
+
 function getJobStatus(dbPath, jobId) {
   const db = new Database(dbPath, { readonly: true, fileMustExist: true });
   try {
@@ -657,6 +671,10 @@ async function run() {
     assert(
       fixtureServer.getMaxActiveRequests() >= 2,
       'thumbnail primary pass should capture more than one page at a time'
+    );
+    assert(
+      getImageActivityCount(dbPath, mapId) >= 1,
+      'thumbnail capture should add an activity entry'
     );
 
     const withThumbs = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);

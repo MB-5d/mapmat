@@ -741,6 +741,13 @@ function getThumbnailLod(zoom) {
   return 'thumbnail';
 }
 
+const LOW_ZOOM_THUMBNAIL_VISIBLE_NODE_LIMIT = 900;
+
+function resolveSceneThumbnailLod(requestedLod, { visibleNodeCount = 0 } = {}) {
+  if (requestedLod !== 'none') return requestedLod;
+  return visibleNodeCount <= LOW_ZOOM_THUMBNAIL_VISIBLE_NODE_LIMIT ? 'preview' : 'none';
+}
+
 function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
   const node = layoutNode.node || {};
   const rawThumbnailUrl = String(node.thumbnailUrl || '');
@@ -804,7 +811,7 @@ function buildMapScene({
   targetNodeId = '',
 } = {}) {
   const normalizedViewport = normalizeViewport(viewport);
-  const thumbnailLod = showThumbnails ? getThumbnailLod(normalizedViewport.zoom) : 'none';
+  const requestedThumbnailLod = showThumbnails ? getThumbnailLod(normalizedViewport.zoom) : 'none';
   const targetId = String(targetNodeId || '').trim();
   const sceneExpandedStacks = normalizeExpandedStacks(expandedStacks);
   const targetStackParents = getTargetStackParents(root, orphans, targetId);
@@ -819,8 +826,14 @@ function buildMapScene({
   const homeLayoutNode = layout.nodes.find((node) => !node.isOrphan && node.depth === 0)
     || layout.nodes[0]
     || null;
-  const visibleNodes = layout.nodes
-    .filter((node) => rectsIntersect(getNodeBounds(node), normalizedViewport))
+  const visibleLayoutNodes = layout.nodes
+    .filter((node) => rectsIntersect(getNodeBounds(node), normalizedViewport));
+  const thumbnailLod = showThumbnails
+    ? resolveSceneThumbnailLod(requestedThumbnailLod, {
+      visibleNodeCount: visibleLayoutNodes.length,
+    })
+    : 'none';
+  const visibleNodes = visibleLayoutNodes
     .map((node) => sanitizeSceneNode(node, { thumbnailLod }));
   const visibleNodeIds = new Set(visibleNodes.map((node) => node.id));
   const targetLayoutNode = targetId

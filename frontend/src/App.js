@@ -650,6 +650,9 @@ const IMAGE_CAPTURE_SCALE_LIMITS = Object.freeze({
   }),
 });
 const SCREENSHOT_ASSET_VALIDATION_BATCH_SIZE = 100;
+const THUMBNAIL_DISPLAY_RETRY_DELAY_MS = 1200;
+const THUMBNAIL_DISPLAY_MAX_VALIDATED_RETRIES = 2;
+const LARGE_MAP_THUMBNAIL_INFO_NODE_COUNT = 500;
 const SCREENSHOT_ASSET_FILENAME_PATTERN = /(?:^|\/)[a-f0-9]{64}_(?:full|thumb|thumb_preview|thumb_small|full_thumb|full_viewport)_v\d+\.(?:jpe?g|png|webp)$/i;
 const CLEARABLE_NODE_ASSET_KEYS = new Set([
   'thumbnailUrl',
@@ -2262,12 +2265,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   const largeMapHomeNodeRef = useRef(null);
   const largeMapVisibleNodesRef = useRef([]);
   const largeMapNodeCacheRef = useRef(new Map());
+  const largeMapThumbnailInfoToastKeyRef = useRef('');
   const [largeMapNodeCacheVersion, setLargeMapNodeCacheVersion] = useState(0);
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
     largeMapNodeCacheRef.current = new Map();
     largeMapVisibleNodesRef.current = [];
+    largeMapThumbnailInfoToastKeyRef.current = '';
     setLargeMapNodeCacheVersion((version) => version + 1);
   }, [currentMap?.id]);
 
@@ -2468,6 +2473,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const imageCaptureAppliedUpdateKeysRef = useRef(new Set());
   const imageCaptureReattachMapRef = useRef(null);
   const screenshotAssetValidationSignatureRef = useRef('');
+  const thumbnailDisplayRetryRef = useRef(new Map());
   const thumbnailAuthToastShownRef = useRef(false);
   const thumbnailFailureToastShownRef = useRef(false);
   const MAX_THUMBNAIL_CONCURRENCY = 3;
@@ -2658,6 +2664,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     setInvalidThumbnailAssetIds(new Set());
     setInvalidFullScreenshotAssetIds(new Set());
+    thumbnailDisplayRetryRef.current = new Map();
     screenshotAssetValidationSignatureRef.current = '';
   }, [currentMap?.id]);
 
@@ -4373,6 +4380,19 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleLargeMapSceneLoaded = useCallback((scene) => {
     if (!useLargeMapSurface) return;
     const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
+    const sceneNodeCount = Number(scene?.nodeCount || 0);
+    const hasSceneThumbnails = rawNodes.some((node) => node?.hasThumbnail || node?.thumbnailUrl);
+    if (
+      showThumbnails
+      && hasSceneThumbnails
+      && sceneNodeCount >= LARGE_MAP_THUMBNAIL_INFO_NODE_COUNT
+    ) {
+      const toastKey = `${currentMap?.id || 'unsaved'}:${sceneNodeCount}`;
+      if (largeMapThumbnailInfoToastKeyRef.current !== toastKey) {
+        largeMapThumbnailInfoToastKeyRef.current = toastKey;
+        showToast('Large map thumbnails may take a moment to fill in. Zoom or pan if some look blank.', 'info');
+      }
+    }
     if (rawNodes.length) {
       mergeLargeMapNodeCache(rawNodes, { preserveExistingAssetsOnEmpty: true });
     }
@@ -4395,7 +4415,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (nextTransform) {
       applyTransform(nextTransform, { skipPanClamp: true });
     }
-  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, mergeLargeMapNodeCache, useLargeMapSurface]);
+  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
 
   const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
     let homeNode = largeMapHomeNodeRef.current;
@@ -6610,18 +6630,28 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [orphans, root, validateStoredAssetsForNodes]);
 
-  const getCaptureIssueNodeContext = useCallback((nodeId) => {
+  const findNodeInCurrentMap = useCallback((nodeId) => {
+    const id = String(nodeId || '').trim();
+    if (useLargeMapSurface) {
+      return largeMapNodeCacheRef.current.get(id)
+        || largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id))
+        || null;
+    }
     const latestRoot = rootRef.current || root;
     const latestOrphans = orphansRef.current || orphans;
-    const node = collectAllNodesWithOrphans(latestRoot, latestOrphans)
-      .find((candidate) => String(candidate?.id || '') === String(nodeId || ''));
+    return collectAllNodesWithOrphans(latestRoot, latestOrphans)
+      .find((node) => String(node?.id || '') === id) || null;
+  }, [orphans, root, useLargeMapSurface]);
+
+  const getCaptureIssueNodeContext = useCallback((nodeId) => {
+    const node = findNodeInCurrentMap(nodeId);
     return {
       node,
       pageNumber: reportNumberMap.get(nodeId) || node?.number || node?.pageNumber || '',
       title: node?.title || 'Untitled page',
       url: node?.url || '',
     };
-  }, [orphans, reportNumberMap, root]);
+  }, [findNodeInCurrentMap, reportNumberMap]);
 
   const syncCaptureIssuesState = useCallback(() => {
     setCaptureIssues(Array.from(captureIssuesRef.current.values()));
@@ -6725,6 +6755,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleThumbnailDisplayLoad = useCallback((nodeId) => {
     if (!nodeId) return;
+    thumbnailDisplayRetryRef.current.delete(String(nodeId));
     setInvalidThumbnailAssetIds((prev) => {
       if (!prev.has(nodeId)) return prev;
       const next = new Set(prev);
@@ -6738,6 +6769,45 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleThumbnailDisplayError = useCallback((nodeId) => {
     if (!nodeId) return;
     if (thumbnailLoadedRef.current.has(nodeId)) return;
+    const id = String(nodeId);
+    const node = findNodeInCurrentMap(id);
+    const thumbnailUrl = String(node?.thumbnailUrl || '').trim();
+    if (hasStoredImageAsset(thumbnailUrl)) {
+      const retryCount = thumbnailDisplayRetryRef.current.get(id) || 0;
+      validateStoredAssetsForNodes([node], 'thumbnailUrl')
+        .then((missingIds) => {
+          if (missingIds?.has(id)) {
+            thumbnailDisplayRetryRef.current.delete(id);
+            clearInvalidThumbnailAsset(id);
+            recordCaptureIssue({
+              nodeId: id,
+              status: 'image_load',
+              error: 'Image failed to load',
+            });
+            completeThumbnailCapture(id, { captured: false });
+            return;
+          }
+
+          setInvalidThumbnailAssetIds((prev) => {
+            if (!prev.has(id)) return prev;
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+          clearCaptureIssueForNode(id);
+          if (retryCount < THUMBNAIL_DISPLAY_MAX_VALIDATED_RETRIES) {
+            thumbnailDisplayRetryRef.current.set(id, retryCount + 1);
+            window.setTimeout(() => bumpThumbnailReload(id), THUMBNAIL_DISPLAY_RETRY_DELAY_MS * (retryCount + 1));
+          }
+        })
+        .catch(() => {
+          if (retryCount < THUMBNAIL_DISPLAY_MAX_VALIDATED_RETRIES) {
+            thumbnailDisplayRetryRef.current.set(id, retryCount + 1);
+            window.setTimeout(() => bumpThumbnailReload(id), THUMBNAIL_DISPLAY_RETRY_DELAY_MS * (retryCount + 1));
+          }
+        });
+      return;
+    }
     clearInvalidThumbnailAsset(nodeId);
     recordCaptureIssue({
       nodeId,
@@ -6745,7 +6815,16 @@ export default function App({ currentRoute, navigateToRoute }) {
       error: 'Image failed to load',
     });
     completeThumbnailCapture(nodeId, { captured: false });
-  }, [clearInvalidThumbnailAsset, completeThumbnailCapture, recordCaptureIssue]);
+  }, [
+    bumpThumbnailReload,
+    clearCaptureIssueForNode,
+    clearInvalidThumbnailAsset,
+    completeThumbnailCapture,
+    findNodeInCurrentMap,
+    hasStoredImageAsset,
+    recordCaptureIssue,
+    validateStoredAssetsForNodes,
+  ]);
 
   const resetThumbnailQueue = (total, cached = 0, bumpSession = true, mode = 'thumbnail', unavailable = 0) => {
     if (bumpSession) {
@@ -6767,6 +6846,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     imageCaptureSavedRef.current = new Set();
     imageCaptureAppliedRef.current = new Set();
     imageCaptureAssetCursorRef.current = 0;
+    thumbnailDisplayRetryRef.current = new Map();
     thumbnailBatchIndexRef.current = 0;
     thumbnailBatchTotalRef.current = 0;
     thumbnailCompletedRef.current = false;
@@ -6980,19 +7060,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       unavailableCount: forceRecapture || recaptureCapturedOnly ? 0 : unavailableCount,
     };
   };
-
-  const findNodeInCurrentMap = useCallback((nodeId) => {
-    const id = String(nodeId || '').trim();
-    if (useLargeMapSurface) {
-      return largeMapNodeCacheRef.current.get(id)
-        || largeMapVisibleNodesRef.current.find((node) => sameId(node?.id, id))
-        || null;
-    }
-    const latestRoot = rootRef.current || root;
-    const latestOrphans = orphansRef.current || orphans;
-    return collectAllNodesWithOrphans(latestRoot, latestOrphans)
-      .find((node) => String(node?.id || '') === id) || null;
-  }, [orphans, root, useLargeMapSurface]);
 
   const reconcileSavedImageCaptureAssets = useCallback(async ({ mapId, mode, nodeIds }) => {
     const ids = Array.from(new Set((nodeIds || []).map((id) => String(id || '').trim()).filter(Boolean)));

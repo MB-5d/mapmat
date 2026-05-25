@@ -83,6 +83,12 @@ const {
   saveScreenshotObject,
   statScreenshotObject,
 } = require('./utils/screenshotStorage');
+const {
+  ACTIVITY_SCOPES,
+  ACTIVITY_TYPES,
+  ensureCollaborationActivitySchemaAsync,
+  recordMapActivityBestEffortAsync,
+} = require('./utils/collaborationActivity');
 
 // Initialize database (creates tables if needed)
 const db = require('./db');
@@ -1195,6 +1201,58 @@ const getSettledImageCaptureProgress = (row) => {
   }
   return null;
 };
+
+function getImageCaptureActivityLabel(captureType) {
+  return captureType === SCREENSHOT_TYPES.full ? 'full screenshots' : 'thumbnails';
+}
+
+async function recordImageCaptureCompletionActivity({ jobId, mapRow, summary }) {
+  const mapId = String(summary?.mapId || mapRow?.id || '').trim();
+  const updatedCount = Math.max(0, Number(summary?.captured || 0) || 0);
+  if (!mapId || updatedCount <= 0) return;
+
+  const label = getImageCaptureActivityLabel(summary?.captureType);
+  const pageText = `${updatedCount} page${updatedCount === 1 ? '' : 's'}`;
+  let actorUserId = null;
+  try {
+    const job = await jobStore.getJobByIdAsync(jobId);
+    actorUserId = job?.user_id || null;
+  } catch {
+    actorUserId = null;
+  }
+  const actorRole = permissionPolicy.resolveResourceRole({
+    actorUserId,
+    resourceOwnerUserId: mapRow?.user_id || null,
+    membershipRole: null,
+  });
+
+  try {
+    await ensureCollaborationActivitySchemaAsync();
+    await recordMapActivityBestEffortAsync({
+      mapId,
+      actorUserId,
+      actorRole,
+      eventType: ACTIVITY_TYPES.CONTENT_IMAGES_UPDATED,
+      eventScope: ACTIVITY_SCOPES.CONTENT,
+      entityType: 'map',
+      entityId: mapId,
+      summary: `Updated ${label} for ${pageText}`,
+      payload: {
+        jobId,
+        captureType: summary?.captureType || null,
+        scope: summary?.scope || null,
+        targetMode: summary?.targetMode || null,
+        updatedCount,
+        saved: Number(summary?.saved || 0) || 0,
+        total: Number(summary?.total || 0) || 0,
+        failed: Number(summary?.failed || 0) || 0,
+        skipped: Number(summary?.skipped || 0) || 0,
+      },
+    }, { label: 'image capture complete' });
+  } catch (error) {
+    console.error('Record image capture activity error:', error);
+  }
+}
 
 const findActiveImageCaptureJob = async (mapId, captureType, request = {}) => {
   const rows = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
@@ -2519,6 +2577,7 @@ async function runImageCaptureJob(jobId, payload) {
   summary.elapsedMs = Date.now() - startedAt;
   await flushAssetSaves();
   await publishProgress({ force: true });
+  await recordImageCaptureCompletionActivity({ jobId, mapRow, summary });
   return summary;
 }
 

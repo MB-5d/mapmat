@@ -29,6 +29,7 @@ const ACTIVITY_TYPES = Object.freeze({
   CONTENT_NODE_ADDED: 'content.node.added',
   CONTENT_NODE_UPDATED: 'content.node.updated',
   CONTENT_NODE_DELETED: 'content.node.deleted',
+  CONTENT_IMAGES_UPDATED: 'content.images.updated',
   CONTENT_LINK_ADDED: 'content.link.added',
   CONTENT_LINK_UPDATED: 'content.link.updated',
   CONTENT_LINK_DELETED: 'content.link.deleted',
