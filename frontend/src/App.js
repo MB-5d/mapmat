@@ -2267,6 +2267,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const largeMapNodeCacheRef = useRef(new Map());
   const largeMapThumbnailInfoToastKeyRef = useRef('');
   const [largeMapNodeCacheVersion, setLargeMapNodeCacheVersion] = useState(0);
+  const [largeMapSceneRefreshKey, setLargeMapSceneRefreshKey] = useState(0);
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
@@ -3474,6 +3475,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     nodeCount: largeMapNodeCount,
     hasSavedMap: !!currentMap?.id,
   });
+
+  const requestLargeMapSceneRefresh = useCallback(() => {
+    if (!useLargeMapSurface || !currentMap?.id) return false;
+    setLargeMapSceneRefreshKey((key) => key + 1);
+    return true;
+  }, [currentMap?.id, useLargeMapSurface]);
 
   // Build a unified index for root + orphan + subdomain trees
   const forestIndex = useMemo(() => (
@@ -7237,7 +7244,6 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (!currentMap?.id || !root || isViewingHistoricalVersion) return undefined;
-    if (currentMap?.largeMapShell) return undefined;
     if (activeImageCaptureJob?.jobId) return undefined;
     const localCaptureActive = thumbnailStats.mode
       && !thumbnailStats.stopped
@@ -7261,6 +7267,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setShowThumbnails(true);
         setActiveImageCaptureJob({ mapId, jobId: job.id, mode, status: job.status });
         applyImageCaptureJobUpdates(job, mode);
+        requestLargeMapSceneRefresh();
       })
       .catch((error) => {
         imageCaptureReattachMapRef.current = null;
@@ -7274,8 +7281,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     activeImageCaptureJob?.jobId,
     applyImageCaptureJobUpdates,
     currentMap?.id,
-    currentMap?.largeMapShell,
     isViewingHistoricalVersion,
+    requestLargeMapSceneRefresh,
     root,
     thumbnailStats.completed,
     thumbnailStats.mode,
@@ -7394,6 +7401,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               nodeIds: finalReconciliation.savedButNotApplied,
             });
           }
+          requestLargeMapSceneRefresh();
           imageCaptureJobRef.current = null;
           setActiveImageCaptureJob(null);
 
@@ -7463,6 +7471,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentMap?.id,
     reconcileSavedImageCaptureAssets,
     refreshTimelineAfterImageCapture,
+    requestLargeMapSceneRefresh,
     selectedNodeIds,
     showToast,
   ]);
@@ -14467,6 +14476,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onSceneLoaded={handleLargeMapSceneLoaded}
                     getNodeSnapshot={getLargeMapNodeSnapshot}
                     nodeSnapshotVersion={largeMapNodeCacheVersion}
+                    sceneRefreshKey={largeMapSceneRefreshKey}
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
                     onToggleStack={(nodeId) => {

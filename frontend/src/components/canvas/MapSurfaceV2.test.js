@@ -117,6 +117,47 @@ describe('MapSurfaceV2', () => {
     expect(getScene).toHaveBeenCalledTimes(2);
   });
 
+  test('fetches a fresh scene when the refresh key changes', async () => {
+    const getScene = jest.fn().mockResolvedValue({
+      scene: {
+        mapId: 'map-1',
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
+        nodes: [],
+        connectors: [],
+      },
+    });
+
+    const renderSurface = (sceneRefreshKey) => (
+      <MapSurfaceV2
+        mapId="map-1"
+        getScene={getScene}
+        getViewState={() => ({ pan: { x: 0, y: 0 }, scale: 1 })}
+        canvasSize={{ width: 1000, height: 700 }}
+        orientation="vertical"
+        showThumbnails={false}
+        colors={{}}
+        selectedNodeIds={new Set()}
+        sceneRefreshKey={sceneRefreshKey}
+      />
+    );
+
+    await act(async () => {
+      root.render(renderSurface(0));
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    await act(async () => {
+      root.render(renderSurface(1));
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    expect(getScene).toHaveBeenCalledTimes(2);
+  });
+
   test('passes expanded stack ids to large-map scene requests', async () => {
     const getScene = jest.fn().mockResolvedValue({
       scene: {
@@ -221,6 +262,7 @@ describe('MapSurfaceV2', () => {
         connectors: [],
       },
     });
+    const onViewImage = jest.fn();
 
     await act(async () => {
       root.render(
@@ -233,6 +275,7 @@ describe('MapSurfaceV2', () => {
           showThumbnails
           colors={{}}
           selectedNodeIds={new Set()}
+          onViewImage={onViewImage}
           getNodeSnapshot={() => ({
             id: 'home',
             thumbnailUrl: '/screenshots/home_thumb_v1.jpg',
@@ -250,6 +293,12 @@ describe('MapSurfaceV2', () => {
     const image = container.querySelector('.thumb-img');
     expect(image).not.toBeNull();
     expect(image.getAttribute('src')).toContain('/screenshots/home_thumb_v1.jpg');
+
+    await act(async () => {
+      container.querySelector('.thumb-fullsize-btn').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onViewImage).toHaveBeenCalledWith('/screenshots/home_full_v1.jpg', true, 'home', 'full');
   });
 
   test('renders and toggles collapsed stack controls for large maps', async () => {

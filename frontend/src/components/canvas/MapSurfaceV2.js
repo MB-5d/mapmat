@@ -32,7 +32,8 @@ const mergeSceneNodeSnapshot = (sceneNode, snapshot) => {
     ...sceneNode,
     thumbnailUrl: sceneNode.thumbnailUrl || snapshot.thumbnailUrl || '',
     thumbnailFullUrl: snapshot.thumbnailFullUrl || sceneNode.thumbnailFullUrl || '',
-    fullScreenshotUrl: sceneNode.fullScreenshotUrl || '',
+    fullScreenshotUrl: sceneNode.fullScreenshotUrl || snapshot.fullScreenshotUrl || '',
+    fullScreenshotTruncated: Boolean(sceneNode.fullScreenshotTruncated || snapshot.fullScreenshotTruncated),
     hasThumbnail: Boolean(sceneNode.hasThumbnail || snapshot.hasThumbnail || sceneNode.thumbnailUrl || snapshot.thumbnailUrl),
     stackInfo: sceneNode.stackInfo || snapshot.stackInfo || null,
   };
@@ -78,6 +79,7 @@ const MapSurfaceV2 = ({
   onSceneLoaded,
   getNodeSnapshot,
   nodeSnapshotVersion = 0,
+  sceneRefreshKey = 0,
   activeBranchNodeIds,
   expandedStacks,
   onToggleStack,
@@ -164,6 +166,7 @@ const MapSurfaceV2 = ({
       params.thumbnails,
       params.expandedStacks,
       params.overscan,
+      sceneRefreshKey,
     ].join(':');
     if (fetchKey === lastFetchKeyRef.current) return;
     lastFetchKeyRef.current = fetchKey;
@@ -186,11 +189,11 @@ const MapSurfaceV2 = ({
         setLoading(false);
       }
     }, SCENE_FETCH_IDLE_MS);
-  }, [getScene, getSceneParams, mapId, onSceneLoaded]);
+  }, [getScene, getSceneParams, mapId, onSceneLoaded, sceneRefreshKey]);
 
   useEffect(() => {
     fetchScene(getCurrentView());
-  }, [fetchScene, getCurrentView, orientation, safeMode, showThumbnails]);
+  }, [fetchScene, getCurrentView, orientation, safeMode, sceneRefreshKey, showThumbnails]);
 
   useEffect(() => {
     let raf = null;

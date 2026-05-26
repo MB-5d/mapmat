@@ -144,10 +144,28 @@ const crowdedFarOutScene = buildMapScene({
   viewport: { x: -10000, y: -10000, w: 400000, h: 50000, zoom: 0.1 },
   showThumbnails: true,
 });
-assert(crowdedFarOutScene.visibleNodeCount > 900, 'crowded low-zoom scene should exceed thumbnail URL limit');
-assert.strictEqual(crowdedFarOutScene.thumbnailLod, 'none');
-assert(crowdedFarOutScene.nodes.every((node) => node.thumbnailUrl === ''));
+assert(crowdedFarOutScene.visibleNodeCount <= 1600, 'moderately crowded low-zoom scene should stay within thumbnail URL limit');
+assert.strictEqual(crowdedFarOutScene.thumbnailLod, 'preview');
+assert(crowdedFarOutScene.nodes.some((node) => node.thumbnailUrl));
 assert.strictEqual(stackedSceneChild.stackInfo.selectionIds.length, 50);
+
+const veryCrowdedRoot = {
+  id: 'very-crowded-root',
+  title: 'Very Crowded Root',
+  children: Array.from({ length: 1700 }, (_, index) => ({
+    id: `very-crowded-child-${index}`,
+    title: `Very Crowded Child ${index}`,
+    thumbnailUrl: `/screenshots/very_crowded_${index}_thumb_v1.jpg`,
+  })),
+};
+const veryCrowdedFarOutScene = buildMapScene({
+  root: veryCrowdedRoot,
+  viewport: { x: -10000, y: -10000, w: 1000000, h: 50000, zoom: 0.1 },
+  showThumbnails: true,
+});
+assert(veryCrowdedFarOutScene.visibleNodeCount > 1600, 'very crowded low-zoom scene should exceed thumbnail URL limit');
+assert.strictEqual(veryCrowdedFarOutScene.thumbnailLod, 'none');
+assert(veryCrowdedFarOutScene.nodes.every((node) => node.thumbnailUrl === ''));
 
 const expandedLayout = computeSceneLayout(largeRoot, [], {
   showThumbnails: false,

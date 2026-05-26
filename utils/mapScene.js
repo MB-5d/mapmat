@@ -741,7 +741,7 @@ function getThumbnailLod(zoom) {
   return 'thumbnail';
 }
 
-const LOW_ZOOM_THUMBNAIL_VISIBLE_NODE_LIMIT = 900;
+const LOW_ZOOM_THUMBNAIL_VISIBLE_NODE_LIMIT = 1600;
 
 function resolveSceneThumbnailLod(requestedLod, { visibleNodeCount = 0 } = {}) {
   if (requestedLod !== 'none') return requestedLod;
