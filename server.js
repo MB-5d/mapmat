@@ -2612,6 +2612,110 @@ async function getBrowser() {
   return browser;
 }
 
+const SCAN_AUTH_SESSION_TTL_MS = Math.max(
+  5 * 60 * 1000,
+  Number(process.env.SCAN_AUTH_SESSION_TTL_MS || 30 * 60 * 1000)
+);
+const SCAN_AUTH_PRECHECK_MAX_PAGES = Math.max(
+  1,
+  Math.min(25, Number(process.env.SCAN_AUTH_PRECHECK_MAX_PAGES || 8))
+);
+const SCAN_AUTH_PRECHECK_MAX_DEPTH = Math.max(
+  1,
+  Math.min(4, Number(process.env.SCAN_AUTH_PRECHECK_MAX_DEPTH || 2))
+);
+const scanAuthSessions = new Map();
+
+function getScanAuthOwnerKey(req) {
+  return req.user?.id
+    ? `user:${req.user.id}`
+    : `anon:${req.ip || req.headers?.['x-forwarded-for'] || 'unknown'}`;
+}
+
+function normalizePlaywrightStorageState(value) {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    cookies: Array.isArray(value.cookies) ? value.cookies : [],
+    origins: Array.isArray(value.origins) ? value.origins : [],
+  };
+}
+
+function createScanAuthSession({ safeUrl, req, storageState = null }) {
+  const scope = createScanScope(safeUrl, false);
+  const now = Date.now();
+  const id = crypto.randomBytes(18).toString('hex');
+  const normalizedStorageState = normalizePlaywrightStorageState(storageState);
+  const session = {
+    id,
+    ownerKey: getScanAuthOwnerKey(req),
+    seedUrl: safeUrl,
+    baseHost: scope.baseHost,
+    origin: scope.origin,
+    createdAt: now,
+    expiresAt: now + SCAN_AUTH_SESSION_TTL_MS,
+    storageState: normalizedStorageState,
+    status: normalizedStorageState ? 'ready' : 'pending',
+  };
+  scanAuthSessions.set(id, session);
+  return session;
+}
+
+function cleanupExpiredScanAuthSessions() {
+  const now = Date.now();
+  scanAuthSessions.forEach((session, id) => {
+    if (!session || session.expiresAt <= now) {
+      scanAuthSessions.delete(id);
+    }
+  });
+}
+
+function isHostnameInAuthScope(hostname, session) {
+  const normalizedHost = normalizeHost(hostname);
+  const baseHost = normalizeHost(session?.baseHost || '');
+  return Boolean(normalizedHost && baseHost && (
+    normalizedHost === baseHost || normalizedHost.endsWith(`.${baseHost}`)
+  ));
+}
+
+function getScanAuthSessionForRequest(req, sessionId, safeUrl = null) {
+  cleanupExpiredScanAuthSessions();
+  const id = String(sessionId || '').trim();
+  if (!id) return null;
+  const session = scanAuthSessions.get(id);
+  if (!session) return null;
+  if (session.ownerKey !== getScanAuthOwnerKey(req)) return null;
+  if (safeUrl && !isHostnameInAuthScope(new URL(safeUrl).hostname, session)) return null;
+  return session;
+}
+
+function getReadyScanAuthStorageState(req, sessionId, safeUrl) {
+  const session = getScanAuthSessionForRequest(req, sessionId, safeUrl);
+  if (!session || session.status !== 'ready' || !session.storageState) return null;
+  return session.storageState;
+}
+
+function getReadyScanAuthStorageStateForJob({ sessionId, ownerKey, safeUrl }) {
+  cleanupExpiredScanAuthSessions();
+  const session = scanAuthSessions.get(String(sessionId || '').trim());
+  if (!session || session.status !== 'ready' || !session.storageState) return null;
+  if (ownerKey && session.ownerKey !== ownerKey) return null;
+  if (safeUrl && !isHostnameInAuthScope(new URL(safeUrl).hostname, session)) return null;
+  return session.storageState;
+}
+
+async function createAuthenticatedBrowserContext(storageState, viewport = { width: 1365, height: 900 }) {
+  const browserInstance = await getBrowser();
+  return browserInstance.newContext({
+    ...(storageState ? { storageState } : {}),
+    viewport,
+    userAgent: 'Mozilla/5.0 (compatible; VellicBot/1.0)',
+    extraHTTPHeaders: {
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+    },
+  });
+}
+
 const DEFAULT_MAX_DEPTH = SCAN_LIMITS.maxDepthDefault;
 
 function normalizeUrl(raw) {
@@ -3332,6 +3436,32 @@ async function fetchPage(url, extraHeaders = {}) {
   return { html: res.data, status: res.status, contentType: res.headers['content-type'], finalUrl, responseTime };
 }
 
+async function fetchPageWithBrowserContext(context, url) {
+  const startedAt = Date.now();
+  let page = null;
+  try {
+    page = await context.newPage();
+    page.setDefaultTimeout(20000);
+    page.setDefaultNavigationTimeout(20000);
+    const response = await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000,
+    });
+    await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    const html = await page.content();
+    const finalUrl = normalizeUrl(response?.url?.() || page.url() || url);
+    return {
+      html,
+      status: response?.status?.() || 0,
+      contentType: response?.headers?.()?.['content-type'] || 'text/html',
+      finalUrl,
+      responseTime: Date.now() - startedAt,
+    };
+  } finally {
+    if (page) await page.close().catch(() => {});
+  }
+}
+
 function isHtmlContentType(contentType) {
   const normalizedContentType = normalizeContentType(contentType);
   if (!normalizedContentType) return true;
@@ -3370,6 +3500,18 @@ async function checkLinkStatus(url, extraHeaders = {}) {
       validateStatus: () => true,
     });
     return { status: getRes.status };
+  } catch (e) {
+    return { status: 0, error: e.message };
+  }
+}
+
+async function checkLinkStatusWithBrowserContext(context, url) {
+  try {
+    const response = await context.request.get(url, {
+      timeout: 10000,
+      maxRedirects: 5,
+    });
+    return { status: response.status() };
   } catch (e) {
     return { status: 0, error: e.message };
   }
@@ -3638,14 +3780,15 @@ function extractLinks(html, baseUrl) {
   return Array.from(links);
 }
 
-async function extractRenderedLinks(url) {
+async function extractRenderedLinks(url, context = null) {
   let page = null;
+  let ownedContext = null;
   try {
-    const browserInstance = await getBrowser();
-    page = await browserInstance.newPage({
-      viewport: { width: 1365, height: 900 },
-      userAgent: 'Mozilla/5.0 (compatible; VellicBot/1.0)',
-    });
+    if (!context) {
+      ownedContext = await createAuthenticatedBrowserContext(null);
+    }
+    const activeContext = context || ownedContext;
+    page = await activeContext.newPage();
     page.setDefaultTimeout(12000);
     page.setDefaultNavigationTimeout(12000);
     const response = await page.goto(url, {
@@ -3674,6 +3817,9 @@ async function extractRenderedLinks(url) {
   } finally {
     if (page) {
       await page.close().catch(() => {});
+    }
+    if (ownedContext) {
+      await ownedContext.close().catch(() => {});
     }
   }
 }
@@ -3704,6 +3850,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const seed = scanScope.seed;
   const pageLimit = normalizeMaxPagesLimit(maxPages);
   const depthLimit = normalizeScanDepthLimit(maxDepth);
+  const authStorageState = normalizePlaywrightStorageState(options.authSessionStorageState);
+  const authContext = authStorageState
+    ? await createAuthenticatedBrowserContext(authStorageState)
+    : null;
 
   const origin = scanScope.origin;
   const baseHost = scanScope.baseHost;
@@ -4030,7 +4180,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let finalUrl = url;
     let responseTime = null;
     try {
-      const res = await fetchPage(url, extraHeaders);
+      const res = authContext
+        ? await fetchPageWithBrowserContext(authContext, url)
+        : await fetchPage(url, extraHeaders);
       html = res.html;
       status = res.status;
       contentType = res.contentType;
@@ -4228,7 +4380,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   if (shouldTryRenderedDiscovery()) {
     scanDiagnostics.renderedDiscoveryTried = true;
-    const rendered = await extractRenderedLinks(seed);
+    const rendered = await extractRenderedLinks(seed, authContext);
     scanDiagnostics.renderedLinksFound = rendered.links.length;
     if (rendered.error) scanDiagnostics.renderedDiscoveryError = rendered.error;
     const normalizedRenderedLinks = rendered.links
@@ -4267,7 +4419,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       SCAN_BROKEN_LINK_CONCURRENCY,
       async ({ link, sourceUrl }) => {
         if (await pollJobStatus()) return;
-        const statusResult = await checkLinkStatus(link, extraHeaders);
+        const statusResult = authContext
+          ? await checkLinkStatusWithBrowserContext(authContext, link)
+          : await checkLinkStatus(link, extraHeaders);
         linkStatusCache.set(link, statusResult.status);
         if (statusResult.status >= 400 || statusResult.status === 0) {
           brokenLinks.push({
@@ -4849,6 +5003,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     result.partialReason = partialReason;
   }
 
+  if (authContext) {
+    await authContext.close().catch(() => {});
+  }
+
   return result;
 }
 
@@ -5085,6 +5243,7 @@ async function captureScreenshot(safeUrl, type = SCREENSHOT_TYPES.full, options 
       ? { width: SCREENSHOT_THUMB_VIEWPORT_WIDTH, height: SCREENSHOT_THUMB_VIEWPORT_HEIGHT }
       : { width: SCREENSHOT_FULL_VIEWPORT_WIDTH, height: SCREENSHOT_FULL_VIEWPORT_HEIGHT };
     const context = await b.newContext({
+      ...(options?.storageState ? { storageState: options.storageState } : {}),
       userAgent: ua,
       viewport,
       deviceScaleFactor: normalizedType === SCREENSHOT_TYPES.full
@@ -5448,6 +5607,16 @@ async function processJob(job) {
     if (jobType === JOB_TYPES.scan) {
       const progressState = { lastUpdate: 0, lastScanned: 0 };
       const readJobStatus = createJobStatusReader(jobId);
+      const authSessionStorageState = payload.options?.authSessionId
+        ? getReadyScanAuthStorageStateForJob({
+          sessionId: payload.options.authSessionId,
+          ownerKey: payload.authSessionOwnerKey,
+          safeUrl: payload.url,
+        })
+        : null;
+      if (payload.options?.authSessionId && !authSessionStorageState) {
+        throw new Error('Authenticated scan session expired before the scan started');
+      }
       const progressCb = (progress) => {
         const now = Date.now();
         if (progress.scanned - progressState.lastScanned < 5 && now - progressState.lastUpdate < 500) {
@@ -5464,7 +5633,10 @@ async function processJob(job) {
         payload.url,
         payload.maxPages,
         payload.maxDepth,
-        payload.options || {},
+        {
+          ...(payload.options || {}),
+          ...(authSessionStorageState ? { authSessionStorageState } : {}),
+        },
         progressCb,
         readJobStatus
       );
@@ -5509,6 +5681,9 @@ async function processJob(job) {
     console.error(`[jobs] ${jobType || job.type} job ${jobId} failed:`, error?.message || error);
     await markJobFailed(jobId, error);
   } finally {
+    if (payload.options?.authSessionId) {
+      scanAuthSessions.delete(payload.options.authSessionId);
+    }
     activeJobIds.delete(jobId);
   }
 }
@@ -5664,14 +5839,132 @@ app.get('/health/coediting', async (_req, res) => {
   }
 });
 
+app.post('/scan-auth/precheck', authMiddleware, scanLimiter, requireApiKey, async (req, res) => {
+  const { url, options } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    const safeUrl = await assertSafeUrl(url);
+    const result = await crawlSite(
+      safeUrl,
+      SCAN_AUTH_PRECHECK_MAX_PAGES,
+      SCAN_AUTH_PRECHECK_MAX_DEPTH,
+      {
+        ...(options || {}),
+        thumbnails: false,
+        authenticatedPages: true,
+      }
+    );
+    const nodes = [];
+    const visit = (node) => {
+      if (!node) return;
+      nodes.push(node);
+      (node.children || []).forEach(visit);
+    };
+    visit(result.root);
+    (result.orphans || []).forEach(visit);
+    let authNodes = nodes.filter((node) => node?.authRequired);
+    if (authNodes.length === 0) {
+      const scope = createScanScope(safeUrl, Boolean(options?.subdomains));
+      const rootPage = await fetchPage(safeUrl);
+      const rootClassification = classifyScanResponse({
+        html: rootPage.html,
+        status: rootPage.status,
+        url: safeUrl,
+        finalUrl: rootPage.finalUrl || safeUrl,
+      });
+      const directAuthUrls = [];
+      if (rootClassification.isAuthStatus) {
+        directAuthUrls.push(safeUrl);
+      } else if (rootClassification.shouldExtractLinks) {
+        const directLinks = extractLinks(rootPage.html, rootPage.finalUrl || safeUrl)
+          .map((link) => normalizeUrl(link))
+          .filter(Boolean)
+          .filter((link) => getPlacementForUrl(link, scope))
+          .slice(0, SCAN_AUTH_PRECHECK_MAX_PAGES);
+        for (const link of directLinks) {
+          const page = await fetchPage(link).catch(() => null);
+          if (!page) continue;
+          const classification = classifyScanResponse({
+            html: page.html,
+            status: page.status,
+            url: link,
+            finalUrl: page.finalUrl || link,
+          });
+          if (classification.isAuthStatus) directAuthUrls.push(link);
+        }
+      }
+      authNodes = directAuthUrls.map((authUrl) => ({ url: authUrl, authRequired: true }));
+    }
+    return res.json({
+      authRequired: authNodes.length > 0,
+      authCount: authNodes.length,
+      sampleUrls: authNodes.slice(0, 5).map((node) => node.url).filter(Boolean),
+      scanDiagnostics: result.scanDiagnostics || null,
+    });
+  } catch (error) {
+    const message = error.message || 'Authenticated scan pre-check failed';
+    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+      ? 400
+      : 500;
+    return res.status(status).json({ error: message });
+  }
+});
+
+app.post('/scan-auth/sessions', authMiddleware, requireApiKey, async (req, res) => {
+  const { url, storageState } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'Missing url' });
+
+  try {
+    const safeUrl = await assertSafeUrl(url);
+    const session = createScanAuthSession({ safeUrl, req, storageState });
+    return res.json({
+      sessionId: session.id,
+      status: session.status,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      origin: session.origin,
+      interactiveSupported: false,
+      loginUrl: safeUrl,
+      message: session.status === 'ready'
+        ? 'Authenticated scan session ready'
+        : 'Interactive target-site login requires a remote browser capture layer in this deployment',
+    });
+  } catch (error) {
+    const message = error.message || 'Failed to create authenticated scan session';
+    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+      ? 400
+      : 500;
+    return res.status(status).json({ error: message });
+  }
+});
+
+app.get('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) => {
+  const session = getScanAuthSessionForRequest(req, req.params.id);
+  if (!session) return res.status(404).json({ error: 'Authenticated scan session not found' });
+  return res.json({
+    sessionId: session.id,
+    status: session.status,
+    expiresAt: new Date(session.expiresAt).toISOString(),
+    origin: session.origin,
+    ready: session.status === 'ready' && !!session.storageState,
+  });
+});
+
+app.delete('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) => {
+  const session = getScanAuthSessionForRequest(req, req.params.id);
+  if (session) scanAuthSessions.delete(session.id);
+  return res.json({ success: true });
+});
+
 app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
-  const { url, maxPages, maxDepth, options } = req.body || {};
+  const { url, maxPages, maxDepth, options, authSessionId } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
     const safeUrl = await assertSafeUrl(url);
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
+    const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || options?.authSessionId, safeUrl);
 
     recordUsage(req, 'scan', 1, {
       host: new URL(safeUrl).hostname,
@@ -5683,7 +5976,10 @@ app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit(
       safeUrl,
       maxPagesSafe,
       maxDepthSafe,
-      options || {}
+      {
+        ...(options || {}),
+        ...(authSessionStorageState ? { authSessionStorageState } : {}),
+      }
     );
     res.json(result);
   } catch (e) {
@@ -5697,7 +5993,7 @@ app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit(
 
 // SSE endpoint for scan with progress updates
 app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_stream'), async (req, res) => {
-  const { url, maxPages, maxDepth, options } = req.query;
+  const { url, maxPages, maxDepth, options, authSessionId } = req.query;
   if (!url) {
     return res.status(400).json({ error: 'Missing url parameter' });
   }
@@ -5754,6 +6050,7 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
 
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
+    const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || parsedOptions?.authSessionId, safeUrl);
 
     recordUsage(req, 'scan_stream', 1, {
       host: new URL(safeUrl).hostname,
@@ -5765,7 +6062,10 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
       safeUrl,
       maxPagesSafe,
       maxDepthSafe,
-      parsedOptions,
+      {
+        ...parsedOptions,
+        ...(authSessionStorageState ? { authSessionStorageState } : {}),
+      },
       (progress) => sendEvent('progress', progress),
       () => aborted
     );
@@ -5790,13 +6090,17 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
 
 // Background scan jobs
 app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_job'), async (req, res) => {
-  const { url, maxPages, maxDepth, options } = req.body || {};
+  const { url, maxPages, maxDepth, options, authSessionId } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
   try {
     const safeUrl = await assertSafeUrl(url);
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
+    const readyAuthSession = getScanAuthSessionForRequest(req, authSessionId || options?.authSessionId, safeUrl);
+    if ((authSessionId || options?.authSessionId) && (!readyAuthSession || readyAuthSession.status !== 'ready')) {
+      return res.status(400).json({ error: 'Authenticated scan session is missing or expired' });
+    }
     const jobAccessToken = crypto.randomBytes(24).toString('hex');
 
     const jobId = await createJob({
@@ -5805,7 +6109,11 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
         url: safeUrl,
         maxPages: maxPagesSafe,
         maxDepth: maxDepthSafe,
-        options: options || {},
+        options: {
+          ...(options || {}),
+          ...(readyAuthSession ? { authSessionId: readyAuthSession.id } : {}),
+        },
+        authSessionOwnerKey: readyAuthSession?.ownerKey || null,
         accessToken: jobAccessToken,
       },
       req,
@@ -6144,7 +6452,7 @@ function registerImageCaptureRoutes(targetApp) {
 // Screenshot endpoint - captures full-page screenshot
 // Note: Playwright requires browser binaries which may not be available on all hosts
 app.get('/screenshot', authMiddleware, requireApiKey, async (req, res) => {
-  const { url } = req.query;
+  const { url, authSessionId } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
   const screenshotType = normalizeScreenshotType(req.query?.type);
   if (!screenshotType) {
@@ -6176,7 +6484,11 @@ app.get('/screenshot', authMiddleware, requireApiKey, async (req, res) => {
 
   try {
     recordUsage(req, 'screenshot', 1, { host: new URL(safeUrl).hostname, type: screenshotType });
-    const result = await captureScreenshot(safeUrl, screenshotType, { signal: abortController.signal });
+    const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId, safeUrl);
+    const result = await captureScreenshot(safeUrl, screenshotType, {
+      signal: abortController.signal,
+      ...(authSessionStorageState ? { storageState: authSessionStorageState } : {}),
+    });
     if (clientGone) return;
     res.json(result);
   } catch (e) {

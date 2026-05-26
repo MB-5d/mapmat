@@ -2327,6 +2327,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authContextMessage, setAuthContextMessage] = useState('');
   const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
+  const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -9774,7 +9775,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
-  const scan = async (overrideUrl, preserveName = false) => {
+  const scan = async (overrideUrl, preserveName = false, authFlow = {}) => {
     let urlToScan = urlInput;
     if (typeof overrideUrl === 'string') {
       urlToScan = overrideUrl;
@@ -9791,6 +9792,28 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
     const shouldMergeScanResult = isUnsavedScannedMap
       && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig);
+
+    if (!authFlow.skipAuthPrecheck) {
+      try {
+        const precheck = await api.precheckScanAuth({
+          url,
+          options: scanOptions,
+        });
+        if (precheck?.authRequired) {
+          setScanAuthPrompt({
+            url,
+            preserveName,
+            authCount: precheck.authCount || 0,
+            sampleUrls: precheck.sampleUrls || [],
+            loading: false,
+            error: '',
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('Authenticated scan pre-check failed:', err);
+      }
+    }
 
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
@@ -9809,6 +9832,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     const scanConfig = {
       ...scanOptions,
+      ...(authFlow.authSessionId ? { authenticatedPages: true } : {}),
     };
     let jobId;
     let jobAccessToken = null;
@@ -9816,6 +9840,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const jobResponse = await api.createScanJob({
         url,
         options: scanConfig,
+        ...(authFlow.authSessionId ? { authSessionId: authFlow.authSessionId } : {}),
       });
       jobId = jobResponse?.jobId;
       jobAccessToken = jobResponse?.jobAccessToken || null;
@@ -10157,6 +10182,41 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       showScanError('Lost connection while receiving scan progress');
     };
+  };
+
+  const continueScanWithoutTargetAuth = () => {
+    const prompt = scanAuthPrompt;
+    if (!prompt?.url) return;
+    setScanAuthPrompt(null);
+    scan(prompt.url, prompt.preserveName, { skipAuthPrecheck: true });
+  };
+
+  const startTargetAuthLogin = async () => {
+    const prompt = scanAuthPrompt;
+    if (!prompt?.url || prompt.loading) return;
+    setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
+    try {
+      const session = await api.createScanAuthSession({ url: prompt.url });
+      if (session?.status === 'ready' && session?.sessionId) {
+        setScanAuthPrompt(null);
+        scan(prompt.url, prompt.preserveName, {
+          skipAuthPrecheck: true,
+          authSessionId: session.sessionId,
+        });
+        return;
+      }
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: session?.message || 'Target-site login is not available in this environment yet.',
+      } : current);
+    } catch (err) {
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: err?.message || 'Failed to start target-site login.',
+      } : current);
+    }
   };
 
   const onKeyDownUrl = (e) => {
@@ -15817,6 +15877,52 @@ export default function App({ currentRoute, navigateToRoute }) {
         onContinueScan={dismissScanConfirm}
         onDismissScanError={dismissScanError}
       />
+
+      {scanAuthPrompt && (
+        <Modal
+          show
+          onClose={() => setScanAuthPrompt(null)}
+          title="This scan may need login"
+          className="scan-auth-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={continueScanWithoutTargetAuth}
+                disabled={scanAuthPrompt.loading}
+              >
+                Continue without login
+              </Button>
+              <Button
+                variant="primary"
+                onClick={startTargetAuthLogin}
+                loading={scanAuthPrompt.loading}
+              >
+                Log in to this site
+              </Button>
+            </>
+          )}
+        >
+          <div className="scan-auth-modal-body">
+            <p>
+              Vellic found {scanAuthPrompt.authCount || 'some'} page{scanAuthPrompt.authCount === 1 ? '' : 's'} that may require login.
+              One login session would apply to this whole scan.
+            </p>
+            {scanAuthPrompt.sampleUrls?.length ? (
+              <ul className="scan-auth-samples">
+                {scanAuthPrompt.sampleUrls.slice(0, 3).map((sampleUrl) => (
+                  <li key={sampleUrl}>{sampleUrl}</li>
+                ))}
+              </ul>
+            ) : null}
+            {scanAuthPrompt.error ? (
+              <StatusAlert tone="warning" title="Login connection unavailable">
+                {scanAuthPrompt.error}
+              </StatusAlert>
+            ) : null}
+          </div>
+        </Modal>
+      )}
 
       <ImageOverlay
         imageUrl={fullImageUrl}

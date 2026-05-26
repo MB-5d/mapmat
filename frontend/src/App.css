@@ -9997,6 +9997,34 @@ body {
   padding: 16px 20px;
 }
 
+.scan-auth-modal {
+  max-width: 520px;
+}
+
+.scan-auth-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.scan-auth-modal-body p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.scan-auth-samples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .scan-animation {
   position: relative;
   width: 84px;

@@ -713,6 +713,30 @@ export async function createScanJob(payload) {
   });
 }
 
+export async function precheckScanAuth(payload) {
+  return fetchApi('/scan-auth/precheck', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createScanAuthSession(payload) {
+  return fetchApi('/scan-auth/sessions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getScanAuthSession(sessionId) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}`);
+}
+
+export async function deleteScanAuthSession(sessionId) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function getScanJob(id, { includeResult = true, accessToken = null } = {}) {
   return fetchApi(buildScanJobPath(id, { includeResult, accessToken }));
 }

@@ -18,6 +18,7 @@
     "check:scan-job-tree": "node scripts/check-scan-job-tree.js",
     "check:scan-collapse-fixture": "node scripts/check-scan-collapse-fixture.js",
     "check:scan-labeling-fixture": "node scripts/check-scan-labeling-fixture.js",
+    "check:scan-auth-session": "node scripts/check-scan-auth-session.js",
     "check:image-capture": "node scripts/check-image-capture-ordering.js",
     "check:image-capture:smoke": "node scripts/check-image-capture-job-smoke.js",
     "check:image-download": "node --check utils/imageDownloadPackage.js && node scripts/check-image-download-package.js",
