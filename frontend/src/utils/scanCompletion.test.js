@@ -1,8 +1,10 @@
 import {
   countScanResultNodes,
   getCollapsedScanMessage,
+  getRootOnlyScanFailureMessage,
   isCollapsedScanResult,
   shouldPreserveExistingMapForCollapsedScan,
+  shouldRejectFreshRootOnlyScan,
 } from './scanCompletion';
 
 const rootOnly = { id: 'root', children: [] };
@@ -22,6 +24,27 @@ test('preserves an existing multi-node map when the next result collapsed to one
   })).toBe(true);
 });
 
+test('preserves an existing multi-node map when root discovery failed to one node', () => {
+  expect(shouldPreserveExistingMapForCollapsedScan({
+    result: { partial: true, partialReason: 'root_discovery_failed' },
+    nextRoot: rootOnly,
+    existingRoot: multiNode,
+  })).toBe(true);
+});
+
+test('rejects a fresh degraded root-only scan instead of showing it as success', () => {
+  expect(shouldRejectFreshRootOnlyScan({
+    result: { partial: true, partialReason: 'root_discovery_failed' },
+    nextRoot: rootOnly,
+    existingRoot: rootOnly,
+  })).toBe(true);
+  expect(shouldRejectFreshRootOnlyScan({
+    result: { partial: true, partialReason: 'scan_collapsed' },
+    nextRoot: rootOnly,
+    existingRoot: rootOnly,
+  })).toBe(true);
+});
+
 test('allows true one-node scans when there is no existing multi-node map to protect', () => {
   expect(countScanResultNodes(rootOnly)).toBe(1);
   expect(shouldPreserveExistingMapForCollapsedScan({
@@ -33,4 +56,5 @@ test('allows true one-node scans when there is no existing multi-node map to pro
 
 test('uses a warning message that names the affected hostname', () => {
   expect(getCollapsedScanMessage('example.com')).toContain('example.com');
+  expect(getRootOnlyScanFailureMessage('example.com')).toContain('example.com');
 });

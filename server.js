@@ -3927,16 +3927,25 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     queuedCount: 0,
     visitedCount: 0,
     pageMapCount: 0,
+    fetchedPageCount: 0,
+    queueRemaining: 0,
     rootChildCount: 0,
     treeNodeCount: 0,
     sitemapUrlsFound: 0,
     sitemapUrlsQueued: 0,
     robotsSitemapUrlsFound: 0,
+    robotsSitemapUrlsQueued: 0,
+    sitemapFetchFailures: 0,
+    robotsFetchFailed: false,
+    discoveryErrors: [],
     commonPathQueued: 0,
     commonPathActive: 0,
     renderedDiscoveryTried: false,
     renderedLinksFound: 0,
     renderedLinksQueued: 0,
+    renderedDiscoveryError: null,
+    treeRepairApplied: false,
+    treeRepairAdded: 0,
     rejectedByScope: 0,
     rejectedAsFile: 0,
     failedFetches: 0,
@@ -3975,6 +3984,15 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (source === 'crawl' || !existing) {
       discoverySourceByUrl.set(normalized, source);
     }
+  };
+
+  const recordDiscoveryError = ({ source, url, status = null, message = '' }) => {
+    scanDiagnostics.discoveryErrors.push({
+      source,
+      url: normalizeUrl(url) || url || null,
+      status,
+      message: String(message || 'discovery failed').slice(0, 300),
+    });
   };
 
   const recordLinkEdge = (fromUrl, toUrl) => {
@@ -4021,7 +4039,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     queue.push({ url, depth, source });
     scanDiagnostics.queuedCount += 1;
     if (source === 'common_path') scanDiagnostics.commonPathQueued += 1;
-    if (source === 'sitemap') scanDiagnostics.sitemapUrlsQueued += 1;
+    if (source === 'sitemap' || source === 'robots_sitemap') scanDiagnostics.sitemapUrlsQueued += 1;
+    if (source === 'robots_sitemap') scanDiagnostics.robotsSitemapUrlsQueued += 1;
     if (source === 'rendered') scanDiagnostics.renderedLinksQueued += 1;
   };
   enqueue(seed, 0);
@@ -4071,7 +4090,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const processedSitemaps = new Set();
   const MAX_SITEMAPS = 12;
 
-  const processSitemap = async (sitemapUrl) => {
+  const processSitemap = async (sitemapUrl, source = 'sitemap') => {
     if (await pollJobStatus()) return;
     const normalizedSitemap = normalizeUrl(sitemapUrl);
     if (!normalizedSitemap) return;
@@ -4102,9 +4121,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
               addFileArtifact(norm);
               continue;
             }
-            recordDiscovery(norm, 'sitemap');
+            recordDiscovery(norm, source);
             if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-            enqueue(norm, 1, 'sitemap');
+            enqueue(norm, 1, source);
           } else if (norm && !allowUrl(norm)) {
             scanDiagnostics.rejectedByScope += 1;
           }
@@ -4125,9 +4144,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
             addFileArtifact(norm);
             return;
           }
-          recordDiscovery(norm, 'sitemap');
+          recordDiscovery(norm, source);
           if (!sitemapOrder.has(norm)) sitemapOrder.set(norm, sitemapOrder.size);
-          enqueue(norm, 1, 'sitemap');
+          enqueue(norm, 1, source);
         } else if (norm && !allowUrl(norm)) {
           scanDiagnostics.rejectedByScope += 1;
         }
@@ -4140,11 +4159,19 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
       for (const loc of subSitemaps) {
         if (await pollJobStatus()) return;
-        await processSitemap(loc);
+        await processSitemap(loc, source);
         if (stopRequested) return;
       }
-    } catch {
-      // Not available, continue
+    } catch (error) {
+      const status = error?.response?.status || null;
+      if (status === 404 && source !== 'robots_sitemap') return;
+      scanDiagnostics.sitemapFetchFailures += 1;
+      recordDiscoveryError({
+        source,
+        url: normalizedSitemap,
+        status,
+        message: error?.message || 'sitemap fetch failed',
+      });
     }
   };
 
@@ -4170,10 +4197,18 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           continue;
         }
         scanDiagnostics.robotsSitemapUrlsFound += 1;
-        await processSitemap(normalizedSitemap);
+        await processSitemap(normalizedSitemap, 'robots_sitemap');
       }
-    } catch {
-      // robots.txt is optional.
+    } catch (error) {
+      const status = error?.response?.status || null;
+      if (status === 404) return;
+      scanDiagnostics.robotsFetchFailed = true;
+      recordDiscoveryError({
+        source: 'robots',
+        url: `${origin}/robots.txt`,
+        status,
+        message: error?.message || 'robots fetch failed',
+      });
     }
   };
 
@@ -4245,6 +4280,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       contentType = res.contentType;
       finalUrl = res.finalUrl || url;
       responseTime = res.responseTime;
+      scanDiagnostics.fetchedPageCount += 1;
     } catch (e) {
       scanDiagnostics.failedFetches += 1;
       // Still store node with fallback title so tree doesn't break
@@ -4429,8 +4465,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const shouldTryRenderedDiscovery = () => {
     if (stopRequested) return false;
+    if (scanDiagnostics.renderedDiscoveryTried) return false;
     if (pageLimit !== null && visited.size >= pageLimit) return false;
-    if ((linksByUrl.get(seed) || []).length > 0) return false;
     if (pageMap.size > 1) return false;
     return true;
   };
@@ -4439,7 +4475,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     scanDiagnostics.renderedDiscoveryTried = true;
     const rendered = await extractRenderedLinks(seed, authContext);
     scanDiagnostics.renderedLinksFound = rendered.links.length;
-    if (rendered.error) scanDiagnostics.renderedDiscoveryError = rendered.error;
+    if (rendered.error) {
+      scanDiagnostics.renderedDiscoveryError = rendered.error;
+      recordDiscoveryError({
+        source: 'rendered',
+        url: seed,
+        message: rendered.error,
+      });
+    }
     const normalizedRenderedLinks = rendered.links
       .map((link) => normalizeUrl(link))
       .filter(Boolean);
@@ -4889,6 +4932,22 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   };
 
   const root = nodes.get(rootUrl);
+  if (root && (!root.children || root.children.length === 0) && pageMap.size > 1) {
+    let repairedCount = 0;
+    nodes.forEach((node) => {
+      if (!node?.url || node.url === rootUrl) return;
+      if (node.isMissing || node.isDuplicate) return;
+      if (!pageMap.has(node.url)) return;
+      const nodeHost = normalizeHost(new URL(node.url).hostname);
+      if (nodeHost !== rootHostNormalized) return;
+      pushUniqueChild(root, node);
+      repairedCount += 1;
+    });
+    if (repairedCount > 0) {
+      scanDiagnostics.treeRepairApplied = true;
+      scanDiagnostics.treeRepairAdded = repairedCount;
+    }
+  }
   computeStats(root);
   subdomainNodes.forEach(computeStats);
   orphanNodes.forEach(computeStats);
@@ -4956,6 +5015,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   scanDiagnostics.visitedCount = visited.size;
   scanDiagnostics.pageMapCount = pageMap.size;
+  scanDiagnostics.queueRemaining = Math.max(0, queue.length - queueIndex);
   scanDiagnostics.rootChildCount = root?.children?.length || 0;
   scanDiagnostics.treeNodeCount = countScanTreeNodes(root);
 
@@ -4981,6 +5041,32 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       rootAllowedLinks: scanDiagnostics.rootAllowedLinks,
       sitemapUrlsQueued: scanDiagnostics.sitemapUrlsQueued,
       renderedLinksQueued: scanDiagnostics.renderedLinksQueued,
+    });
+  }
+
+  const hasDiscoveryFailureSignal = (
+    scanDiagnostics.sitemapFetchFailures > 0
+    && (scanDiagnostics.robotsSitemapUrlsFound > 0 || scanDiagnostics.sitemapUrlsQueued > 0)
+  ) || (
+    Boolean(scanDiagnostics.renderedDiscoveryError)
+    && (
+      scanDiagnostics.rootAllowedLinks > 0
+      || scanDiagnostics.sitemapUrlsFound > 0
+      || scanDiagnostics.robotsSitemapUrlsFound > 0
+    )
+  );
+  if (!partialReason && scanDiagnostics.treeNodeCount <= 1 && hasDiscoveryFailureSignal) {
+    partialReason = 'root_discovery_failed';
+    scanDiagnostics.collapseReason = [
+      scanDiagnostics.sitemapFetchFailures > 0 ? 'sitemap_fetch_failed' : null,
+      scanDiagnostics.robotsFetchFailed ? 'robots_fetch_failed' : null,
+      scanDiagnostics.renderedDiscoveryError ? 'rendered_discovery_failed' : null,
+    ].filter(Boolean).join(',') || 'root_discovery_failed';
+    console.warn('[scan] Root discovery failed with one-node result:', {
+      seed,
+      collapseReason: scanDiagnostics.collapseReason,
+      treeNodeCount: scanDiagnostics.treeNodeCount,
+      pageMapCount: scanDiagnostics.pageMapCount,
     });
   }
 

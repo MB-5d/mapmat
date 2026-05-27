@@ -1,4 +1,5 @@
 export const SCAN_COLLAPSED_PARTIAL_REASON = 'scan_collapsed';
+export const ROOT_DISCOVERY_FAILED_PARTIAL_REASON = 'root_discovery_failed';
 
 export const countScanResultNodes = (node) => {
   if (!node) return 0;
@@ -9,13 +10,32 @@ export const isCollapsedScanResult = (result) => (
   result?.partial === true && result?.partialReason === SCAN_COLLAPSED_PARTIAL_REASON
 );
 
+export const isRootOnlyDegradedScanResult = (result) => (
+  result?.partial === true
+  && (
+    result?.partialReason === SCAN_COLLAPSED_PARTIAL_REASON
+    || result?.partialReason === ROOT_DISCOVERY_FAILED_PARTIAL_REASON
+  )
+);
+
 export const shouldPreserveExistingMapForCollapsedScan = ({ result, nextRoot, existingRoot }) => (
-  isCollapsedScanResult(result)
+  isRootOnlyDegradedScanResult(result)
   && countScanResultNodes(existingRoot) > 1
+  && countScanResultNodes(nextRoot) <= 1
+);
+
+export const shouldRejectFreshRootOnlyScan = ({ result, nextRoot, existingRoot }) => (
+  isRootOnlyDegradedScanResult(result)
+  && countScanResultNodes(existingRoot) <= 1
   && countScanResultNodes(nextRoot) <= 1
 );
 
 export const getCollapsedScanMessage = (hostname = '') => {
   const suffix = hostname ? ` for ${hostname}` : '';
   return `Scan could not confirm more than the homepage${suffix}. Keeping your current map.`;
+};
+
+export const getRootOnlyScanFailureMessage = (hostname = '') => {
+  const suffix = hostname ? ` for ${hostname}` : '';
+  return `Scan could not confirm enough pages${suffix}. No map was created.`;
 };

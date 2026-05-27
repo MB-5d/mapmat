@@ -131,7 +131,9 @@ import {
 } from './utils/appRoutes';
 import {
   getCollapsedScanMessage,
+  getRootOnlyScanFailureMessage,
   shouldPreserveExistingMapForCollapsedScan,
+  shouldRejectFreshRootOnlyScan,
 } from './utils/scanCompletion';
 import {
   clearAnalyticsUser,
@@ -9979,6 +9981,28 @@ export default function App({ currentRoute, navigateToRoute }) {
           preserved_existing_map: 'true',
         });
         showToast(getCollapsedScanMessage(hostname), 'warning');
+        resetScanUi();
+        return;
+      }
+
+      if (!shouldMergeScanResult && shouldRejectFreshRootOnlyScan({
+        result: data,
+        nextRoot: merged.root,
+        existingRoot: root,
+      })) {
+        streamHandled = true;
+        setScanMeta({
+          brokenLinks: data.brokenLinks || [],
+          partial: true,
+          partialReason: data.partialReason || null,
+          scanDiagnostics: data.scanDiagnostics || null,
+        });
+        trackEvent('scan_failed', {
+          phase: 'quality_gate',
+          hostname,
+          partial_reason: data.partialReason || '',
+        });
+        showScanError(getRootOnlyScanFailureMessage(hostname));
         resetScanUi();
         return;
       }

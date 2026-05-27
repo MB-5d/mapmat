@@ -110,6 +110,13 @@ function createFixtureServer(mode) {
     }
     if (url.pathname === '/robots-only/from-robots') return send(200, '<title>From Robots</title>');
 
+    if (url.pathname === '/broken-robots-sitemap') {
+      return send(200, '<title>Broken Robots Sitemap</title>');
+    }
+    if (mode === 'broken-robots-sitemap' && url.pathname === '/robots.txt') {
+      return send(200, `User-agent: *\nAllow: /\nSitemap: http://127.0.0.1:${server.address().port}/missing-sitemap.xml\n`, 'text/plain');
+    }
+
     if (url.pathname === '/rendered') {
       return send(200, [
         '<title>Rendered</title>',
@@ -187,10 +194,20 @@ async function runCheck() {
     assert(renderedResult.scanDiagnostics?.renderedLinksQueued > 0, 'rendered diagnostics should count queued links');
   });
 
+  await withFixture('broken-robots-sitemap', async (base) => {
+    const brokenResult = await scan(`${base}/broken-robots-sitemap`);
+    assert.strictEqual(countTree(brokenResult.root), 1, 'broken discovery fixture should remain one node');
+    assert.strictEqual(brokenResult.partialReason, 'root_discovery_failed', 'broken robots sitemap should be marked degraded');
+    assert(brokenResult.scanDiagnostics?.sitemapFetchFailures > 0, 'sitemap failure should be counted');
+    assert(brokenResult.scanDiagnostics?.discoveryErrors?.length > 0, 'discovery errors should be reported');
+    assert.strictEqual(brokenResult.scanDiagnostics?.renderedDiscoveryTried, true, 'rendered fallback should still be attempted');
+  });
+
   await withFixture('one-page', async (base) => {
     const onePageResult = await scan(`${base}/one-page`);
     assert.strictEqual(countTree(onePageResult.root), 1, 'true one-page scan should stay one node');
     assert.notStrictEqual(onePageResult.partialReason, 'scan_collapsed', 'true one-page scan should not be marked collapsed');
+    assert.notStrictEqual(onePageResult.partialReason, 'root_discovery_failed', 'true one-page scan should not be marked discovery failed');
   });
   console.log('scan collapse fixture ok');
 }
