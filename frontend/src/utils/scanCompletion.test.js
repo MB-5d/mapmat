@@ -3,6 +3,7 @@ import {
   getCollapsedScanMessage,
   getRootOnlyScanFailureMessage,
   isCollapsedScanResult,
+  isRootOnlyDegradedScanResult,
   shouldPreserveExistingMapForCollapsedScan,
   shouldRejectFreshRootOnlyScan,
 } from './scanCompletion';
@@ -14,6 +15,12 @@ test('detects scan-collapsed partial results', () => {
   expect(isCollapsedScanResult({ partial: true, partialReason: 'scan_collapsed' })).toBe(true);
   expect(isCollapsedScanResult({ partial: true, partialReason: 'stopped_by_user' })).toBe(false);
   expect(isCollapsedScanResult({ partial: false })).toBe(false);
+});
+
+test('detects root-only degraded scan results', () => {
+  expect(isRootOnlyDegradedScanResult({ partial: true, partialReason: 'scan_collapsed' })).toBe(true);
+  expect(isRootOnlyDegradedScanResult({ partial: true, partialReason: 'root_discovery_failed' })).toBe(true);
+  expect(isRootOnlyDegradedScanResult({ partial: true, partialReason: 'stopped_by_user' })).toBe(false);
 });
 
 test('preserves an existing multi-node map when the next result collapsed to one node', () => {
@@ -52,6 +59,14 @@ test('allows true one-node scans when there is no existing multi-node map to pro
     nextRoot: rootOnly,
     existingRoot: rootOnly,
   })).toBe(false);
+});
+
+test('rejects fresh degraded root-only scans', () => {
+  expect(shouldRejectFreshRootOnlyScan({
+    result: { partial: true, partialReason: 'root_discovery_failed' },
+    nextRoot: rootOnly,
+    existingRoot: rootOnly,
+  })).toBe(true);
 });
 
 test('uses a warning message that names the affected hostname', () => {

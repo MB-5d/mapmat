@@ -4,6 +4,16 @@ const jwt = require('jsonwebtoken');
 const authStore = require('../stores/authStore');
 const adminAuditStore = require('../stores/adminAuditStore');
 const feedbackStore = require('../stores/feedbackStore');
+const imageAssetStore = require('../stores/imageAssetStore');
+const mapStore = require('../stores/mapStore');
+const {
+  SCREENSHOT_PUBLIC_BASE,
+  extractScreenshotStorageKey,
+  getScreenshotStorageProvider,
+  isR2Configured,
+  isR2Selected,
+  statScreenshotObject,
+} = require('../utils/screenshotStorage');
 
 const router = express.Router();
 
@@ -151,11 +161,11 @@ function buildAdminSessionUser(user) {
   };
 }
 
-function createAdminSessionToken({ userId, email, name, adminRole }) {
+function createAdminSessionToken({ userId, id, email, name, adminRole }) {
   return jwt.sign(
     {
       type: 'admin_session',
-      userId,
+      userId: userId || id,
       email,
       name,
       adminRole,
@@ -375,6 +385,111 @@ function buildCsv(columns, rows) {
   return [header, ...body].join('\n');
 }
 
+function hasEnvValue(...keys) {
+  return keys.some((key) => String(process.env[key] || '').trim().length > 0);
+}
+
+function getStorageDiagnosticsSummary() {
+  return {
+    provider: getScreenshotStorageProvider(),
+    publicBase: SCREENSHOT_PUBLIC_BASE,
+    r2: {
+      selected: isR2Selected(),
+      configured: isR2Configured(),
+      env: {
+        provider: String(process.env.SCREENSHOT_STORAGE_PROVIDER || 'local').trim().toLowerCase() || 'local',
+        bucketPresent: hasEnvValue('R2_BUCKET', 'SCREENSHOT_R2_BUCKET'),
+        accountIdPresent: hasEnvValue('R2_ACCOUNT_ID', 'CLOUDFLARE_ACCOUNT_ID'),
+        accessKeyIdPresent: hasEnvValue('R2_ACCESS_KEY_ID'),
+        secretAccessKeyPresent: hasEnvValue('R2_SECRET_ACCESS_KEY'),
+        endpointPresent: hasEnvValue('R2_ENDPOINT', 'R2_ACCOUNT_ID', 'CLOUDFLARE_ACCOUNT_ID'),
+      },
+    },
+  };
+}
+
+function incrementCount(counts, key) {
+  const normalized = String(key || 'unknown').trim() || 'unknown';
+  counts[normalized] = (counts[normalized] || 0) + 1;
+}
+
+function summarizeImageAssetRows(rows) {
+  const summary = {
+    total: rows.length,
+    byStatus: {},
+    byProvider: {},
+    byField: {},
+    saved: 0,
+    missing: 0,
+    stale: 0,
+    totalSizeBytes: 0,
+  };
+
+  rows.forEach((row) => {
+    const status = String(row.status || 'unknown').trim() || 'unknown';
+    incrementCount(summary.byStatus, status);
+    incrementCount(summary.byProvider, row.provider || 'unknown');
+    incrementCount(summary.byField, row.asset_field || 'unknown');
+    if (status === 'saved') summary.saved += 1;
+    if (status === 'missing') summary.missing += 1;
+    if (status === 'stale') summary.stale += 1;
+    summary.totalSizeBytes += Number(row.size_bytes || 0) || 0;
+  });
+
+  return summary;
+}
+
+async function serializeImageAssetRow(row, { checkObject }) {
+  const storageKey = String(row.storage_key || '').trim() || extractScreenshotStorageKey(row.url);
+  let object = {
+    checked: false,
+    exists: null,
+    sizeBytes: null,
+    contentType: null,
+    error: null,
+  };
+
+  if (checkObject) {
+    if (!storageKey) {
+      object = {
+        checked: true,
+        exists: false,
+        sizeBytes: null,
+        contentType: null,
+        error: 'missing_storage_key',
+      };
+    } else {
+      const stats = await statScreenshotObject(storageKey);
+      object = {
+        checked: true,
+        exists: !!stats && Number(stats.size || 0) > 0,
+        sizeBytes: stats?.size || null,
+        contentType: stats?.contentType || null,
+        error: stats ? null : 'not_found',
+      };
+    }
+  }
+
+  return {
+    nodeId: row.node_id,
+    assetField: row.asset_field,
+    assetType: row.asset_type,
+    status: row.status,
+    provider: row.provider || null,
+    storageKey: storageKey || null,
+    url: row.url || null,
+    manifestSizeBytes: row.size_bytes === null || row.size_bytes === undefined
+      ? null
+      : Number(row.size_bytes),
+    contentType: row.content_type || null,
+    capturedAt: row.captured_at || null,
+    verifiedAt: row.verified_at || null,
+    updatedAt: row.updated_at || null,
+    error: row.error || null,
+    object,
+  };
+}
+
 router.use(ensureAdminConsoleEnabled);
 router.use(async (_req, _res, next) => {
   try {
@@ -516,6 +631,66 @@ router.delete('/session', authenticateAdminSession, async (req, res) => {
 
 router.use(authenticateAdminSession);
 router.use(requireAdminSession);
+
+router.get('/image-assets', async (req, res) => {
+  try {
+    const mapId = String(req.query?.mapId || '').trim();
+    const parsedPagination = parsePagination(req.query);
+    const limit = Math.min(parsedPagination.limit ?? 100, 250);
+    const checkObjects = parseEnvBool(req.query?.checkObjects, true);
+    const response = {
+      storage: getStorageDiagnosticsSummary(),
+      query: {
+        mapId: mapId || null,
+        limit,
+        checkObjects,
+      },
+      map: null,
+      assets: null,
+      rows: [],
+    };
+
+    if (!mapId) {
+      return res.json(response);
+    }
+
+    const map = await mapStore.getMapByIdAsync(mapId);
+    if (!map) {
+      return res.status(404).json({ error: 'Map not found.' });
+    }
+
+    const rows = await imageAssetStore.listImageAssetsByMapAsync(mapId);
+    const limitedRows = rows.slice(0, limit);
+    const serializedRows = [];
+    for (const row of limitedRows) {
+      serializedRows.push(await serializeImageAssetRow(row, { checkObject: checkObjects }));
+    }
+
+    return res.json({
+      ...response,
+      map: {
+        id: map.id,
+        name: map.name || 'Untitled Map',
+        ownerUserId: map.user_id || null,
+        projectId: map.project_id || null,
+        updatedAt: map.updated_at || null,
+      },
+      assets: {
+        ...summarizeImageAssetRows(rows),
+        returned: serializedRows.length,
+        omitted: Math.max(0, rows.length - serializedRows.length),
+        checkedObjects: checkObjects ? serializedRows.length : 0,
+        missingObjects: checkObjects
+          ? serializedRows.filter((row) => row.object?.checked && row.object.exists === false).length
+          : 0,
+      },
+      rows: serializedRows,
+    });
+  } catch (error) {
+    console.error('Admin image asset diagnostics error:', error);
+    return res.status(500).json({ error: 'Failed to load image asset diagnostics.' });
+  }
+});
 
 router.get('/feedback', async (req, res) => {
   try {

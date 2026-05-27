@@ -100,6 +100,9 @@ function createFixtureServer(mode) {
     if (mode === 'robots' && url.pathname === '/robots.txt') {
       return send(200, `User-agent: *\nAllow: /\nSitemap: http://127.0.0.1:${server.address().port}/custom-sitemap.xml\n`, 'text/plain');
     }
+    if (mode === 'broken-robots-sitemap' && url.pathname === '/robots.txt') {
+      return send(200, `User-agent: *\nAllow: /\nSitemap: http://127.0.0.1:${server.address().port}/missing-sitemap.xml\n`, 'text/plain');
+    }
     if (mode === 'robots' && url.pathname === '/custom-sitemap.xml') {
       return send(200, [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -185,6 +188,15 @@ async function runCheck() {
     const robotsResult = await scan(`${base}/robots-only`);
     assert(countTree(robotsResult.root) > 1, 'robots sitemap scan should include robots sitemap URLs');
     assert(robotsResult.scanDiagnostics?.robotsSitemapUrlsFound > 0, 'robots diagnostics should count sitemap directives');
+  });
+
+  await withFixture('broken-robots-sitemap', async (base) => {
+    const brokenResult = await scan(`${base}/broken-robots-sitemap`);
+    assert.strictEqual(countTree(brokenResult.root), 1, 'broken sitemap should not invent child nodes');
+    assert.strictEqual(brokenResult.partialReason, 'root_discovery_failed', 'broken declared sitemap should degrade the scan');
+    assert(brokenResult.scanDiagnostics?.sitemapFetchFailures > 0, 'broken sitemap should be counted');
+    assert(brokenResult.scanDiagnostics?.discoveryErrors?.length > 0, 'broken sitemap should expose diagnostics');
+    assert.strictEqual(brokenResult.scanDiagnostics?.renderedDiscoveryTried, true, 'broken sitemap should trigger rendered fallback');
   });
 
   await withFixture('rendered', async (base) => {

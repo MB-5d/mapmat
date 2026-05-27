@@ -343,6 +343,18 @@ export async function adminReactivateUser(userId) {
   });
 }
 
+export async function getAdminImageAssetsDiagnostics({
+  mapId = '',
+  limit = 100,
+  checkObjects = true,
+} = {}) {
+  const params = new URLSearchParams();
+  if (mapId) params.set('mapId', mapId);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  params.set('checkObjects', checkObjects ? 'true' : 'false');
+  return fetchAdminApi(`/api/admin/image-assets?${params.toString()}`);
+}
+
 export async function getAdminFeedback({
   query = '',
   limit = 100,

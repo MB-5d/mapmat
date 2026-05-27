@@ -3,11 +3,13 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  HardDrive,
   KeyRound,
   Loader2,
   LogOut,
   MessageSquare,
   PanelRightOpen,
+  RefreshCw,
   Search,
   Shield,
   ShieldAlert,
@@ -26,6 +28,7 @@ import {
   adminResetUserPassword,
   createAdminSession,
   destroyAdminSession,
+  getAdminImageAssetsDiagnostics,
   getAdminSession,
   getAdminUser,
   getAdminUsers,
@@ -74,9 +77,247 @@ function formatAdminRole(value) {
   return 'Admin';
 }
 
+function formatNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number.toLocaleString() : '0';
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function SortIcon({ active, direction }) {
   if (!active) return <ChevronsUpDown size={14} />;
   return direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
+}
+
+function StorageDiagnosticsPanel({ onSessionExpired }) {
+  const [mapId, setMapId] = useState('');
+  const [diagnostics, setDiagnostics] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const loadDiagnostics = useCallback(async (nextMapId = '') => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getAdminImageAssetsDiagnostics({
+        mapId: nextMapId.trim(),
+        limit: 100,
+        checkObjects: true,
+      });
+      setDiagnostics(data);
+    } catch (err) {
+      if (err?.status === 401) {
+        onSessionExpired();
+        return;
+      }
+      setError(err.message || 'Failed to load image storage diagnostics.');
+    } finally {
+      setLoading(false);
+    }
+  }, [onSessionExpired]);
+
+  useEffect(() => {
+    loadDiagnostics('');
+  }, [loadDiagnostics]);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    loadDiagnostics(mapId);
+  };
+
+  const storage = diagnostics?.storage || {};
+  const r2 = storage.r2 || {};
+  const assets = diagnostics?.assets || {};
+  const rows = Array.isArray(diagnostics?.rows) ? diagnostics.rows : [];
+  const env = r2.env || {};
+
+  return (
+    <section className="admin-console-panel admin-storage-panel">
+      <div className="admin-storage-header">
+        <div>
+          <h2>Image Storage</h2>
+          <p>Check screenshot storage mode and saved image records for a map.</p>
+        </div>
+        <button
+          type="button"
+          className="admin-console-secondary-btn"
+          onClick={() => loadDiagnostics(mapId)}
+          disabled={loading}
+        >
+          {loading ? <Loader2 size={16} className="admin-console-spinner" /> : <RefreshCw size={16} />}
+          Refresh
+        </button>
+      </div>
+
+      {error ? <div className="admin-console-error">{error}</div> : null}
+
+      <div className="admin-storage-grid">
+        <div className="admin-storage-card">
+          <span className="admin-storage-label">Provider</span>
+          <strong>{storage.provider || 'unknown'}</strong>
+          <span className={`admin-console-status-pill is-${r2.selected ? 'active' : 'disabled'}`}>
+            {r2.selected ? 'R2 selected' : 'Local fallback'}
+          </span>
+        </div>
+        <div className="admin-storage-card">
+          <span className="admin-storage-label">R2 config</span>
+          <strong>{r2.configured ? 'Configured' : 'Missing setup'}</strong>
+          <span className={`admin-console-status-pill is-${r2.configured ? 'active' : 'disabled'}`}>
+            {r2.configured ? 'Ready' : 'Needs env vars'}
+          </span>
+        </div>
+        <div className="admin-storage-card">
+          <span className="admin-storage-label">R2 env present</span>
+          <strong>
+            {[
+              env.bucketPresent,
+              env.accountIdPresent,
+              env.accessKeyIdPresent,
+              env.secretAccessKeyPresent,
+            ].filter(Boolean).length}
+            /4
+          </strong>
+          <span>{env.provider || 'local'}</span>
+        </div>
+      </div>
+
+      <form className="admin-storage-form" onSubmit={handleSubmit}>
+        <label>
+          <span>Map ID</span>
+          <input
+            type="text"
+            value={mapId}
+            onChange={(event) => setMapId(event.target.value)}
+            placeholder="Paste a saved map ID"
+            disabled={loading}
+          />
+        </label>
+        <button
+          type="submit"
+          className="admin-console-primary-btn"
+          disabled={loading || !mapId.trim()}
+        >
+          {loading ? <Loader2 size={16} className="admin-console-spinner" /> : <HardDrive size={16} />}
+          Check map
+        </button>
+      </form>
+
+      {diagnostics?.map ? (
+        <>
+          <div className="admin-storage-map-summary">
+            <div>
+              <span className="admin-storage-label">Map</span>
+              <strong>{diagnostics.map.name}</strong>
+              <small>{diagnostics.map.id}</small>
+            </div>
+            <div>
+              <span className="admin-storage-label">Assets</span>
+              <strong>{formatNumber(assets.total)}</strong>
+              <small>{formatBytes(assets.totalSizeBytes)} manifest size</small>
+            </div>
+            <div>
+              <span className="admin-storage-label">Objects missing</span>
+              <strong>{formatNumber(assets.missingObjects)}</strong>
+              <small>{formatNumber(assets.checkedObjects)} checked</small>
+            </div>
+          </div>
+
+          <div className="admin-storage-counts">
+            <span>Saved: {formatNumber(assets.saved)}</span>
+            <span>Missing: {formatNumber(assets.missing)}</span>
+            <span>Stale: {formatNumber(assets.stale)}</span>
+            <span>Returned: {formatNumber(assets.returned)}</span>
+            <span>Omitted: {formatNumber(assets.omitted)}</span>
+          </div>
+
+          <div className="admin-console-table-frame admin-storage-table-frame">
+            {rows.length === 0 ? (
+              <div className="admin-console-empty admin-console-table-state">
+                <div className="admin-console-empty-icon">
+                  <ShieldAlert size={18} />
+                </div>
+                <div className="admin-console-empty-copy">
+                  <div className="admin-console-empty-title">No image assets</div>
+                  <div className="admin-console-empty-subtitle">
+                    This map has no stored image asset rows.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="admin-console-table-scroll">
+                <table className="admin-console-table admin-storage-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Node</th>
+                      <th scope="col">Field</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Provider</th>
+                      <th scope="col">Object</th>
+                      <th scope="col">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={`${row.nodeId}:${row.assetField}`}>
+                        <td>
+                          <span className="admin-console-cell-secondary">{row.nodeId}</span>
+                        </td>
+                        <td>
+                          <span className="admin-console-cell-primary">{row.assetField}</span>
+                          <span className="admin-console-cell-secondary">{row.storageKey || 'No key'}</span>
+                        </td>
+                        <td>
+                          <span className={`admin-console-status-pill is-${row.status === 'saved' ? 'active' : 'disabled'}`}>
+                            {row.status || 'unknown'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="admin-console-cell-secondary">{row.provider || 'unknown'}</span>
+                        </td>
+                        <td>
+                          <span className={`admin-console-status-pill is-${row.object?.exists ? 'active' : 'disabled'}`}>
+                            {row.object?.checked
+                              ? (row.object.exists ? 'Found' : 'Missing')
+                              : 'Not checked'}
+                          </span>
+                          <span className="admin-console-cell-secondary">
+                            {row.object?.sizeBytes ? formatBytes(row.object.sizeBytes) : row.object?.error || ''}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="admin-console-cell-secondary">
+                            {formatTableTimestamp(row.updatedAt || row.verifiedAt)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="admin-console-empty admin-storage-empty">
+          <div className="admin-console-empty-icon">
+            <HardDrive size={18} />
+          </div>
+          <div className="admin-console-empty-copy">
+            <div className="admin-console-empty-title">Enter a map ID</div>
+            <div className="admin-console-empty-subtitle">
+              Storage mode is shown above. Map asset checks appear here.
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function AdminUserDrawer({
@@ -607,6 +848,13 @@ function AdminConsole({ route, navigateToRoute }) {
     }
   }
 
+  function handleShowStorage() {
+    setActivePanel('storage');
+    if (route?.section === 'user') {
+      navigateToRoute(createAdminHomeRoute(), { replace: true });
+    }
+  }
+
   if (!ENABLE_ADMIN_CONSOLE) {
     return (
       <div className="admin-console-page">
@@ -718,6 +966,16 @@ function AdminConsole({ route, navigateToRoute }) {
               >
                 <MessageSquare size={16} />
                 Feedback
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activePanel === 'storage'}
+                className={`admin-console-surface-tab ${activePanel === 'storage' ? 'is-active' : ''}`}
+                onClick={handleShowStorage}
+              >
+                <HardDrive size={16} />
+                Storage
               </button>
             </div>
           </div>
@@ -901,8 +1159,10 @@ function AdminConsole({ route, navigateToRoute }) {
               ) : null}
             </div>
           </section>
-        ) : (
+        ) : activePanel === 'feedback' ? (
           <FeedbackConsole onSessionExpired={handleSessionExpired} />
+        ) : (
+          <StorageDiagnosticsPanel onSessionExpired={handleSessionExpired} />
         )}
       </div>
 

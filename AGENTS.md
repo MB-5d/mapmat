@@ -17,3 +17,20 @@
 - If another chat appears to be editing the same files or feature area, pause and ask the user before resolving the conflict.
 - Prefer narrow, task-specific edits so parallel work can proceed safely.
 - If a merge, rebase, commit, or push could affect another chat's progress, ask the user first.
+
+## MapMat Publish Workflow
+- For `push to staging` tasks, inspect scope first with `git status --short --branch`, `git rev-list --left-right --count HEAD...origin/staging`, and `git log --oneline origin/staging..HEAD`.
+- Treat `push everything to staging` as publish-all-pending-work. Treat a terse follow-up `push to staging` after a validated fix as ship-the-scoped-fix only.
+- If the main checkout is dirty and only a scoped subset should ship, use a clean worktree based on `origin/staging` instead of forcing a mixed-worktree push.
+- Before committing, use `git diff --name-only` for scope checks and `git diff --cached --check` before the final push.
+- Final publish check: confirm divergence is resolved and re-run `git status --short --branch`.
+
+## Validation Commands
+- Backend syntax and boundary checks: `npm run check:backend`
+- Frontend production build: `npm run check:frontend-build`
+- Staging runtime verification: `npm run verify:runtime:staging`
+- Staging realtime verification: `npm run verify:realtime:staging:preflight`
+
+## Automation Worktrees
+- In Codex automation worktrees, `git status --short --branch` may show `## HEAD (no branch)`; treat that detached state as normal unless another signal shows a real git problem.
+- For evidence-first bug scans, start with `git rev-list --count --since='<last-run-timestamp>' HEAD` and fall back to `git rev-list --count --since='24 hours ago' HEAD`. If both are `0`, stop rather than inventing a bug from thin evidence.

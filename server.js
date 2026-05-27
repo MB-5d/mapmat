@@ -4471,7 +4471,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     return true;
   };
 
-  if (shouldTryRenderedDiscovery()) {
+  const runRenderedDiscoveryFallback = async () => {
     scanDiagnostics.renderedDiscoveryTried = true;
     const rendered = await extractRenderedLinks(seed, authContext);
     scanDiagnostics.renderedLinksFound = rendered.links.length;
@@ -4511,6 +4511,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (!stopRequested && queueIndex < queue.length) {
       await runCrawlWorkers();
     }
+  };
+
+  if (shouldTryRenderedDiscovery()) {
+    await runRenderedDiscoveryFallback();
   }
 
   if (scanOptions.brokenLinks && brokenLinkCandidates.length && !stopRequested) {
@@ -4785,6 +4789,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     parent.children.push(child);
   };
 
+  const attachVisibleNodeToTree = (node) => {
+    if (!node || node.url === rootUrl) return false;
+    const parentUrl = node.parentUrl;
+    if (parentUrl && nodes.has(parentUrl) && visiblePrimaryUrls.has(parentUrl)) {
+      pushUniqueChild(nodes.get(parentUrl), node);
+    } else {
+      pushUniqueChild(nodes.get(rootUrl), node);
+    }
+    return true;
+  };
+
   for (const node of nodes.values()) {
     if (node.url === rootUrl) continue;
     const nodeHost = new URL(node.url).hostname;
@@ -4801,12 +4816,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     if (visiblePrimaryUrls.has(node.url)) {
-      const parentUrl = node.parentUrl;
-      if (parentUrl && nodes.has(parentUrl) && visiblePrimaryUrls.has(parentUrl)) {
-        pushUniqueChild(nodes.get(parentUrl), node);
-      } else {
-        pushUniqueChild(nodes.get(rootUrl), node);
-      }
+      attachVisibleNodeToTree(node);
       continue;
     }
 
@@ -5043,7 +5053,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       renderedLinksQueued: scanDiagnostics.renderedLinksQueued,
     });
   }
-
   const hasDiscoveryFailureSignal = (
     scanDiagnostics.sitemapFetchFailures > 0
     && (scanDiagnostics.robotsSitemapUrlsFound > 0 || scanDiagnostics.sitemapUrlsQueued > 0)
