@@ -75,7 +75,7 @@ describe('tree branch moves', () => {
     })).toBe('Cannot drop a branch into itself.');
   });
 
-  test('marks every URL node whose page position changed', () => {
+  test('applies moved marker changes to the branch root only', () => {
     const { root, orphans } = buildMap();
     const result = applyBranchMoveToMap({
       root,
@@ -83,23 +83,14 @@ describe('tree branch moves', () => {
       nodeId: 'branch',
       targetParentId: 'target',
       insertIndex: 0,
-      markMovedPositionChanges: true,
-      movedAt: 'now',
+      rootChanges: {
+        annotations: { status: 'moved', tags: [], note: '', meta: { updatedAt: 'now' } },
+      },
     });
 
-    const target = result.root.children[0];
     const movedBranch = result.root.children[0].children[0];
-    const movedLeaf = movedBranch.children[0];
-    expect(target.annotations.status).toBe('moved');
-    expect(target.annotations.meta.movedFromPosition).toBe('2');
     expect(movedBranch.annotations.status).toBe('moved');
-    expect(movedBranch.annotations.meta.movedFromPosition).toBe('1');
-    expect(movedLeaf.annotations.status).toBe('moved');
-    expect(movedLeaf.annotations.meta.movedFromPosition).toBe('1.1');
-    expect(result.positionChanges.get('target')).toEqual({
-      fromPosition: '2',
-      toPosition: '1',
-    });
+    expect(movedBranch.children[0].annotations).toBeUndefined();
   });
 
   test('moves a branch to orphan root without losing descendants', () => {

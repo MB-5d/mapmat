@@ -457,8 +457,6 @@ function applyNodeMove(document, operation) {
     targetParentId: operation.payload.targetParentId,
     insertIndex: operation.payload.insertIndex,
     rootChanges: operation.payload.rootChanges,
-    markMovedPositionChanges: operation.payload.markMovedPositionChanges,
-    movedAt: operation.payload.movedAt,
   });
 
   if (!result.ok) {

@@ -86,8 +86,7 @@ describe('NodeCard', () => {
       );
     });
 
-    expect(container.querySelector('button[aria-label="Node Details"]')).not.toBeNull();
-    expect(container.querySelector('button[title="Node Details"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Edit"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Delete"]')).toBeNull();
   });
 

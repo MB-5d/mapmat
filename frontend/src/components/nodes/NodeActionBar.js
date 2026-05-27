@@ -1,9 +1,10 @@
 import React from 'react';
-import { Copy, ExternalLink, Info, MessageSquare, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, MessageSquare, Trash2 } from 'lucide-react';
 
 import classNames from '../../utils/classNames';
 import Icon from '../ui/Icon';
 import IconButton from '../ui/IconButton';
+import { EditIcon } from '../ui/icons';
 
 const NodeActionBar = ({
   node,
@@ -42,9 +43,9 @@ const NodeActionBar = ({
             type="link"
             buttonStyle="mono"
             size="md"
-            icon={<Info />}
-            label="Node Details"
-            title="Node Details"
+            icon={<EditIcon />}
+            label="Edit"
+            title="Edit"
             onClick={() => onEdit?.(node)}
           />
         ) : null}

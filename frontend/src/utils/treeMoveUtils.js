@@ -16,8 +16,6 @@ const normalizeIndex = (value, fallback = 0) => {
 
 const hasAssignedUrl = (node) => typeof node?.url === 'string' && node.url.trim() !== '';
 
-const getAnnotationStatus = (node) => node?.annotations?.status || 'none';
-
 const collectNodeIds = (node, out = new Set()) => {
   if (!node?.id) return out;
   out.add(node.id);
@@ -227,107 +225,6 @@ const applyRootChanges = (node, changes) => {
   });
 };
 
-const buildNodePositionMap = (root, orphans = []) => {
-  const positions = new Map();
-  const visit = (node, number) => {
-    if (!node?.id) return;
-    positions.set(node.id, String(number));
-    (node.children || []).forEach((child, index) => {
-      visit(child, `${number}.${index + 1}`);
-    });
-  };
-
-  if (root) {
-    positions.set(root.id, '0');
-    (root.children || []).forEach((child, index) => {
-      visit(child, `${index + 1}`);
-    });
-  }
-  const orphanList = Array.isArray(orphans) ? orphans : [];
-  orphanList.filter((orphan) => !orphan?.subdomainRoot).forEach((orphan, index) => {
-    visit(orphan, `0.${index + 1}`);
-  });
-  orphanList.filter((orphan) => !!orphan?.subdomainRoot).forEach((orphan, index) => {
-    visit(orphan, `s${index + 1}`);
-  });
-
-  return positions;
-};
-
-const getChangedNodePositions = (beforePositions, afterPositions) => {
-  const changes = new Map();
-  if (!beforePositions || !afterPositions) return changes;
-  beforePositions.forEach((fromPosition, nodeId) => {
-    const toPosition = afterPositions.get(nodeId);
-    if (toPosition && fromPosition !== toPosition) {
-      changes.set(nodeId, { fromPosition, toPosition });
-    }
-  });
-  return changes;
-};
-
-const buildMovedAnnotations = (existing = null, fromPosition, movedAt) => {
-  const now = movedAt || new Date().toISOString();
-  const existingMeta = existing?.meta && typeof existing.meta === 'object' && !Array.isArray(existing.meta)
-    ? existing.meta
-    : {};
-  return {
-    status: 'moved',
-    tags: Array.isArray(existing?.tags) ? cloneValue(existing.tags) : [],
-    note: typeof existing?.note === 'string' ? existing.note : '',
-    meta: {
-      ...cloneValue(existingMeta),
-      createdAt: existingMeta.createdAt || now,
-      updatedAt: now,
-      movedFromPosition: String(fromPosition || ''),
-    },
-  };
-};
-
-const applyMovedPositionChanges = (root, orphans, positionChanges, { movedAt = null } = {}) => {
-  if (!positionChanges?.size) return;
-  const visit = (node) => {
-    if (!node?.id) return;
-    const change = positionChanges.get(node.id);
-    const status = getAnnotationStatus(node);
-    if (
-      change
-      && hasAssignedUrl(node)
-      && status !== 'deleted'
-      && status !== 'to_delete'
-    ) {
-      node.annotations = buildMovedAnnotations(node.annotations, change.fromPosition, movedAt);
-    }
-    (node.children || []).forEach(visit);
-  };
-
-  visit(root);
-  (Array.isArray(orphans) ? orphans : []).forEach(visit);
-};
-
-const finalizeBranchMove = ({
-  root,
-  orphans,
-  movedNode,
-  previousPositions,
-  markMovedPositionChanges,
-  movedAt,
-}) => {
-  let positionChanges = new Map();
-  if (markMovedPositionChanges) {
-    positionChanges = getChangedNodePositions(previousPositions, buildNodePositionMap(root, orphans));
-    applyMovedPositionChanges(root, orphans, positionChanges, { movedAt });
-  }
-
-  return {
-    ok: true,
-    root,
-    orphans,
-    movedNode,
-    positionChanges,
-  };
-};
-
 const applyBranchMoveToMap = ({
   root,
   orphans = [],
@@ -335,8 +232,6 @@ const applyBranchMoveToMap = ({
   targetParentId,
   insertIndex = 0,
   rootChanges = null,
-  markMovedPositionChanges = false,
-  movedAt = null,
   orphanContainerId = DEFAULT_ORPHAN_CONTAINER_ID,
   subdomainContainerId = DEFAULT_SUBDOMAIN_CONTAINER_ID,
 }) => {
@@ -352,7 +247,6 @@ const applyBranchMoveToMap = ({
     return { ok: false, error: blockReason, root, orphans };
   }
 
-  const previousPositions = markMovedPositionChanges ? buildNodePositionMap(root, orphans) : null;
   const forestIndex = buildMoveForestIndex(root, orphans);
   const sourceMeta = forestIndex.nodes.get(nodeId);
   const targetMeta = forestIndex.nodes.get(targetParentId);
@@ -401,14 +295,7 @@ const applyBranchMoveToMap = ({
     clearTreeFlags(removedNode);
     applyRootFlags(removedNode, isSubdomain ? 'subdomain' : 'orphan');
     nextOrphans.splice(fullIndex, 0, removedNode);
-    return finalizeBranchMove({
-      root: nextRoot,
-      orphans: nextOrphans,
-      movedNode: removedNode,
-      previousPositions,
-      markMovedPositionChanges,
-      movedAt,
-    });
+    return { ok: true, root: nextRoot, orphans: nextOrphans, movedNode: removedNode };
   }
 
   const targetTree = getTreeRootById(targetMeta.treeRootId, nextRoot, nextOrphans);
@@ -428,27 +315,18 @@ const applyBranchMoveToMap = ({
   newParent.children = Array.isArray(newParent.children) ? newParent.children : [];
   newParent.children.splice(adjustedIndex, 0, removedNode);
 
-  return finalizeBranchMove({
-    root: nextRoot,
-    orphans: nextOrphans,
-    movedNode: removedNode,
-    previousPositions,
-    markMovedPositionChanges,
-    movedAt,
-  });
+  return { ok: true, root: nextRoot, orphans: nextOrphans, movedNode: removedNode };
 };
 
 module.exports = {
   DEFAULT_ORPHAN_CONTAINER_ID,
   DEFAULT_SUBDOMAIN_CONTAINER_ID,
   applyBranchMoveToMap,
-  buildNodePositionMap,
   buildMoveForestIndex,
   branchHasAssignedUrl,
   collectNodeIds,
   findNodeById,
   getBranchMoveBlockReason,
-  getChangedNodePositions,
   hasAssignedUrl,
   isDescendantOf,
 };
