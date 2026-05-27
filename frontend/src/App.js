@@ -9805,6 +9805,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             preserveName,
             authCount: precheck.authCount || 0,
             sampleUrls: precheck.sampleUrls || [],
+            interactiveLoginSupported: precheck.interactiveLoginSupported === true,
             loading: false,
             error: '',
           });
@@ -15897,8 +15898,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                 variant="primary"
                 onClick={startTargetAuthLogin}
                 loading={scanAuthPrompt.loading}
+                disabled={!scanAuthPrompt.interactiveLoginSupported || scanAuthPrompt.loading}
               >
-                Log in to this site
+                {scanAuthPrompt.interactiveLoginSupported ? 'Log in to this site' : 'Login not available yet'}
               </Button>
             </>
           )}
@@ -15918,6 +15920,10 @@ export default function App({ currentRoute, navigateToRoute }) {
             {scanAuthPrompt.error ? (
               <StatusAlert tone="warning" title="Login connection unavailable">
                 {scanAuthPrompt.error}
+              </StatusAlert>
+            ) : !scanAuthPrompt.interactiveLoginSupported ? (
+              <StatusAlert tone="warning" title="Login scanning is not available yet">
+                Continue without login for now. Protected pages will stay labeled as requiring login.
               </StatusAlert>
             ) : null}
           </div>

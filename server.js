@@ -2624,6 +2624,7 @@ const SCAN_AUTH_PRECHECK_MAX_DEPTH = Math.max(
   1,
   Math.min(4, Number(process.env.SCAN_AUTH_PRECHECK_MAX_DEPTH || 2))
 );
+const SCAN_AUTH_INTERACTIVE_SUPPORTED = false;
 const scanAuthSessions = new Map();
 
 function getScanAuthOwnerKey(req) {
@@ -5900,6 +5901,7 @@ app.post('/scan-auth/precheck', authMiddleware, scanLimiter, requireApiKey, asyn
       authRequired: authNodes.length > 0,
       authCount: authNodes.length,
       sampleUrls: authNodes.slice(0, 5).map((node) => node.url).filter(Boolean),
+      interactiveLoginSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
       scanDiagnostics: result.scanDiagnostics || null,
     });
   } catch (error) {
@@ -5923,7 +5925,7 @@ app.post('/scan-auth/sessions', authMiddleware, requireApiKey, async (req, res) 
       status: session.status,
       expiresAt: new Date(session.expiresAt).toISOString(),
       origin: session.origin,
-      interactiveSupported: false,
+      interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
       loginUrl: safeUrl,
       message: session.status === 'ready'
         ? 'Authenticated scan session ready'
