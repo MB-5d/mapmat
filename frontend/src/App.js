@@ -13075,8 +13075,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     const status = incoming?.status ?? existing?.status ?? 'none';
     const tags = Array.isArray(incoming?.tags) ? incoming.tags : (existing?.tags || []);
     const note = typeof incoming?.note === 'string' ? incoming.note : (existing?.note || '');
+    const existingMeta = existing?.meta && typeof existing.meta === 'object' && !Array.isArray(existing.meta)
+      ? existing.meta
+      : {};
+    const incomingMeta = incoming?.meta && typeof incoming.meta === 'object' && !Array.isArray(incoming.meta)
+      ? incoming.meta
+      : {};
     const meta = {
-      createdAt: existing?.meta?.createdAt || incoming?.meta?.createdAt || now,
+      ...existingMeta,
+      ...incomingMeta,
+      createdAt: existingMeta.createdAt || incomingMeta.createdAt || now,
       updatedAt: now,
     };
     return { status, tags, note, meta };
@@ -13679,6 +13687,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           targetParentId: newParentId,
           insertIndex,
           rootChanges,
+          markMovedPositionChanges: shouldAutoMarkMoved,
         },
       });
       if (!result.ok) {
@@ -13694,6 +13703,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       targetParentId: newParentId,
       insertIndex,
       rootChanges,
+      markMovedPositionChanges: shouldAutoMarkMoved,
       orphanContainerId: ORPHAN_CONTAINER_ID,
       subdomainContainerId: SUBDOMAIN_CONTAINER_ID,
     });
