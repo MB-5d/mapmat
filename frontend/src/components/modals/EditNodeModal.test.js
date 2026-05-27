@@ -338,6 +338,36 @@ describe('EditNodeModal', () => {
     expect(container.textContent).not.toContain('Show on map');
   });
 
+  test('shows the previous position for moved pages', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Moved page',
+            url: 'https://example.com/page',
+            pageType: 'Page',
+            annotations: {
+              status: 'moved',
+              tags: [],
+              note: '',
+              meta: { movedFromPosition: '1.2' },
+            },
+          }}
+          allNodes={[]}
+          rootTree={{ id: 'root', children: [] }}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          mode="edit"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Move Details');
+    expect(container.textContent).toContain('Moved from position');
+    expect(container.textContent).toContain('1.2');
+  });
+
   test('only allows one Home page type', () => {
     act(() => {
       root.render(

@@ -1,7 +1,7 @@
 const adapter = require('../stores/dbAdapter');
 const mapStore = require('../stores/mapStore');
 const coeditingStore = require('../stores/coeditingStore');
-const { applyBranchMoveToMap } = require('../frontend/src/utils/treeMoveUtils');
+const { applyBranchMoveToMap } = require('./treeMoveUtils');
 
 const LIVE_OP_REPLAY_LIMIT_DEFAULT = 200;
 const LIVE_OP_REPLAY_LIMIT_MAX = 500;
@@ -457,6 +457,8 @@ function applyNodeMove(document, operation) {
     targetParentId: operation.payload.targetParentId,
     insertIndex: operation.payload.insertIndex,
     rootChanges: operation.payload.rootChanges,
+    markMovedPositionChanges: operation.payload.markMovedPositionChanges,
+    movedAt: operation.payload.movedAt,
   });
 
   if (!result.ok) {

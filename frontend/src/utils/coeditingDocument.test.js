@@ -16,7 +16,7 @@ describe('coediting document node.move', () => {
             url: 'https://example.com/branch',
             children: [{ id: 'leaf', title: 'Leaf', url: 'https://example.com/leaf', children: [] }],
           },
-          { id: 'target', title: 'Target', children: [] },
+          { id: 'target', title: 'Target', url: 'https://example.com/target', children: [] },
         ],
       },
       orphans: [],
@@ -32,6 +32,8 @@ describe('coediting document node.move', () => {
         rootChanges: {
           annotations: { status: 'moved', tags: [], note: '', meta: { updatedAt: 'now' } },
         },
+        markMovedPositionChanges: true,
+        movedAt: 'now',
       },
     });
 
@@ -39,8 +41,12 @@ describe('coediting document node.move', () => {
     expect(next.root.children[0].id).toBe('target');
     expect(movedBranch.id).toBe('branch');
     expect(movedBranch.children[0].id).toBe('leaf');
+    expect(next.root.children[0].annotations.status).toBe('moved');
+    expect(next.root.children[0].annotations.meta.movedFromPosition).toBe('2');
     expect(movedBranch.annotations.status).toBe('moved');
-    expect(movedBranch.children[0].annotations).toBeUndefined();
+    expect(movedBranch.annotations.meta.movedFromPosition).toBe('1');
+    expect(movedBranch.children[0].annotations.status).toBe('moved');
+    expect(movedBranch.children[0].annotations.meta.movedFromPosition).toBe('1.1');
     expect(next.connections[0].targetNodeId).toBe('leaf');
   });
 });

@@ -127,6 +127,9 @@ const EditNodeModal = ({
     node?.isInactive ? ['Scan label', 'Inactive'] : null,
     node?.blockedReason ? ['Reason', node.blockedReason.replace(/_/g, ' ')] : null,
   ].filter(Boolean);
+  const movedFromPosition = annotationStatus === 'moved'
+    ? String(node?.annotations?.meta?.movedFromPosition || '').trim()
+    : '';
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -192,6 +195,7 @@ const EditNodeModal = ({
           status: annotationStatus || 'none',
           tags,
           note: trimmedNote,
+          meta: node?.annotations?.meta || {},
         },
       });
       onClose();
@@ -325,6 +329,16 @@ const EditNodeModal = ({
                 <strong>{value}</strong>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {movedFromPosition ? (
+          <div className="edit-node-duplicate-section">
+            <div className="edit-node-section-title">Move Details</div>
+            <div className="edit-node-duplicate-row">
+              <span>Moved from position</span>
+              <strong>{movedFromPosition}</strong>
+            </div>
           </div>
         ) : null}
 

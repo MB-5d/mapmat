@@ -438,7 +438,7 @@ const applyBranchMoveToMap = ({
   });
 };
 
-export {
+module.exports = {
   DEFAULT_ORPHAN_CONTAINER_ID,
   DEFAULT_SUBDOMAIN_CONTAINER_ID,
   applyBranchMoveToMap,

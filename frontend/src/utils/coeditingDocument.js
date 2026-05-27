@@ -1,6 +1,4 @@
-const treeMoveUtils = require('./treeMoveUtils');
-
-const { applyBranchMoveToMap } = treeMoveUtils;
+import { applyBranchMoveToMap } from './treeMoveUtils';
 
 class CoeditingDocumentError extends Error {
   constructor(code, message, details = null) {
@@ -295,6 +293,8 @@ function applyNodeMove(document, operation) {
     targetParentId: operation.payload.targetParentId,
     insertIndex: operation.payload.insertIndex,
     rootChanges: operation.payload.rootChanges,
+    markMovedPositionChanges: operation.payload.markMovedPositionChanges,
+    movedAt: operation.payload.movedAt,
   });
 
   if (!result.ok) {
