@@ -731,6 +731,27 @@ export async function getScanAuthSession(sessionId) {
   return fetchApi(`/scan-auth/sessions/${sessionId}`);
 }
 
+export function getScanAuthScreenshotUrl(sessionId, nonce = Date.now()) {
+  return `${API_BASE}/scan-auth/sessions/${sessionId}/screenshot?t=${encodeURIComponent(nonce)}`;
+}
+
+export async function getScanAuthScreenshot(sessionId, nonce = Date.now()) {
+  return fetchBlob(`/scan-auth/sessions/${sessionId}/screenshot?t=${encodeURIComponent(nonce)}`);
+}
+
+export async function sendScanAuthAction(sessionId, payload) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}/action`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function completeScanAuthSession(sessionId) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}/complete`, {
+    method: 'POST',
+  });
+}
+
 export async function deleteScanAuthSession(sessionId) {
   return fetchApi(`/scan-auth/sessions/${sessionId}`, {
     method: 'DELETE',

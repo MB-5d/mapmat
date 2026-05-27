@@ -32,6 +32,15 @@ async function fetchJson(url, options = {}) {
   return data;
 }
 
+async function fetchRaw(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`${url} failed ${response.status}: ${text}`);
+  }
+  return response;
+}
+
 function html({ title, body, status = 200 }) {
   return {
     status,
@@ -47,6 +56,17 @@ function hasSessionCookie(req) {
 function createFixtureServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://fixture.local');
+    if (url.pathname === '/login' && req.method === 'POST') {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(302, {
+          location: '/private-a',
+          'set-cookie': 'fixture_session=ok; Path=/; SameSite=Lax',
+        });
+        res.end();
+      });
+      return;
+    }
     let response;
     if (url.pathname === '/') {
       response = html({
@@ -70,6 +90,17 @@ function createFixtureServer() {
           title: 'Login Required',
           body: '<h1>Sign in</h1><p>Authentication required.</p>',
         });
+    } else if (url.pathname === '/login') {
+      response = html({
+        title: 'Fixture Login',
+        body: [
+          '<h1>Fixture Login</h1>',
+          '<form method="post" action="/login">',
+          '<input name="password" autofocus placeholder="Password">',
+          '<button type="submit">Sign in</button>',
+          '</form>',
+        ].join(''),
+      });
     } else {
       response = html({ status: 404, title: 'Not Found', body: '<h1>Not found</h1>' });
     }
@@ -156,6 +187,39 @@ async function main() {
     });
     assert.strictEqual(precheck.authRequired, true, 'precheck should find login-gated pages');
     assert.strictEqual(precheck.authCount, 2, 'precheck should find both protected pages');
+    assert.strictEqual(precheck.interactiveLoginSupported, true, 'precheck should expose interactive login support');
+
+    const interactive = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
+      method: 'POST',
+      body: JSON.stringify({ url: `${fixtureBase}/login` }),
+    });
+    assert.strictEqual(interactive.status, 'interactive', 'login flow should create an interactive browser session');
+
+    const loginScreen = await fetchRaw(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/screenshot`);
+    assert.ok(
+      String(loginScreen.headers.get('content-type') || '').includes('image/jpeg'),
+      'interactive login screen should return a browser screenshot'
+    );
+
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/action`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'type', text: 'ok' }),
+    });
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/action`, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'press', key: 'Enter' }),
+    });
+    await sleep(1000);
+    const completedInteractive = await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}/complete`, {
+      method: 'POST',
+    });
+    assert.strictEqual(completedInteractive.ready, true, 'interactive login should capture a ready storage state');
+
+    const interactiveScreenshot = await fetchJson(
+      `${API_BASE}/screenshot?url=${encodeURIComponent(`${fixtureBase}/private-b`)}&type=thumb&authSessionId=${interactive.sessionId}`
+    );
+    assert.ok(interactiveScreenshot.thumbnailUrl, 'interactive auth session should capture protected pages');
+    await fetchJson(`${API_BASE}/scan-auth/sessions/${interactive.sessionId}`, { method: 'DELETE' });
 
     const session = await fetchJson(`${API_BASE}/scan-auth/sessions`, {
       method: 'POST',

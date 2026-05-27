@@ -2624,7 +2624,8 @@ const SCAN_AUTH_PRECHECK_MAX_DEPTH = Math.max(
   1,
   Math.min(4, Number(process.env.SCAN_AUTH_PRECHECK_MAX_DEPTH || 2))
 );
-const SCAN_AUTH_INTERACTIVE_SUPPORTED = false;
+const SCAN_AUTH_INTERACTIVE_SUPPORTED = true;
+const SCAN_AUTH_VIEWPORT = { width: 1365, height: 900 };
 const scanAuthSessions = new Map();
 
 function getScanAuthOwnerKey(req) {
@@ -2656,15 +2657,29 @@ function createScanAuthSession({ safeUrl, req, storageState = null }) {
     expiresAt: now + SCAN_AUTH_SESSION_TTL_MS,
     storageState: normalizedStorageState,
     status: normalizedStorageState ? 'ready' : 'pending',
+    pageUrl: safeUrl,
   };
   scanAuthSessions.set(id, session);
   return session;
+}
+
+function closeScanAuthSession(session) {
+  if (!session) return;
+  const context = session.browserContext;
+  session.page = null;
+  session.browserContext = null;
+  if (context) {
+    context.close().catch((error) => {
+      console.warn('Scan auth browser cleanup failed:', error.message);
+    });
+  }
 }
 
 function cleanupExpiredScanAuthSessions() {
   const now = Date.now();
   scanAuthSessions.forEach((session, id) => {
     if (!session || session.expiresAt <= now) {
+      closeScanAuthSession(session);
       scanAuthSessions.delete(id);
     }
   });
@@ -2709,12 +2724,39 @@ async function createAuthenticatedBrowserContext(storageState, viewport = { widt
   return browserInstance.newContext({
     ...(storageState ? { storageState } : {}),
     viewport,
-    userAgent: 'Mozilla/5.0 (compatible; VellicBot/1.0)',
+    userAgent: SCREENSHOT_USER_AGENTS[0],
     extraHTTPHeaders: {
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'Accept-Language': 'en-US,en;q=0.5',
     },
   });
+}
+
+async function startInteractiveScanAuthSession(session) {
+  if (!session || session.status === 'ready') return session;
+  const context = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT);
+  context.on('page', (newPage) => {
+    session.page = newPage;
+    newPage.bringToFront().catch(() => {});
+    session.pageUrl = newPage.url() || session.pageUrl;
+  });
+  const page = await context.newPage();
+  session.browserContext = context;
+  session.page = page;
+  session.status = 'interactive';
+  try {
+    await page.goto(session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+  } catch (error) {
+    session.lastError = error.message || 'Target-site login page did not finish loading';
+  }
+  session.pageUrl = page.url();
+  return session;
+}
+
+function getInteractiveScanAuthPage(req, sessionId) {
+  const session = getScanAuthSessionForRequest(req, sessionId);
+  if (!session || !session.page || session.status !== 'interactive') return null;
+  return { session, page: session.page };
 }
 
 const DEFAULT_MAX_DEPTH = SCAN_LIMITS.maxDepthDefault;
@@ -5683,6 +5725,8 @@ async function processJob(job) {
     await markJobFailed(jobId, error);
   } finally {
     if (payload.options?.authSessionId) {
+      const session = scanAuthSessions.get(payload.options.authSessionId);
+      closeScanAuthSession(session);
       scanAuthSessions.delete(payload.options.authSessionId);
     }
     activeJobIds.delete(jobId);
@@ -5920,16 +5964,19 @@ app.post('/scan-auth/sessions', authMiddleware, requireApiKey, async (req, res) 
   try {
     const safeUrl = await assertSafeUrl(url);
     const session = createScanAuthSession({ safeUrl, req, storageState });
+    if (!storageState && SCAN_AUTH_INTERACTIVE_SUPPORTED) {
+      await startInteractiveScanAuthSession(session);
+    }
     return res.json({
       sessionId: session.id,
       status: session.status,
       expiresAt: new Date(session.expiresAt).toISOString(),
       origin: session.origin,
       interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
-      loginUrl: safeUrl,
+      loginUrl: session.pageUrl || safeUrl,
       message: session.status === 'ready'
         ? 'Authenticated scan session ready'
-        : 'Interactive target-site login requires a remote browser capture layer in this deployment',
+        : 'Log in inside the Vellic browser, then continue the scan',
     });
   } catch (error) {
     const message = error.message || 'Failed to create authenticated scan session';
@@ -5948,14 +5995,75 @@ app.get('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) => 
     status: session.status,
     expiresAt: new Date(session.expiresAt).toISOString(),
     origin: session.origin,
+    pageUrl: session.pageUrl || session.seedUrl,
+    interactiveSupported: SCAN_AUTH_INTERACTIVE_SUPPORTED,
     ready: session.status === 'ready' && !!session.storageState,
   });
 });
 
 app.delete('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
-  if (session) scanAuthSessions.delete(session.id);
+  if (session) {
+    closeScanAuthSession(session);
+    scanAuthSessions.delete(session.id);
+  }
   return res.json({ success: true });
+});
+
+app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireApiKey, async (req, res) => {
+  const target = getInteractiveScanAuthPage(req, req.params.id);
+  if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
+  try {
+    target.session.pageUrl = target.page.url();
+    const image = await target.page.screenshot({ type: 'jpeg', quality: 80, fullPage: false });
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Type', 'image/jpeg');
+    return res.send(image);
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Failed to capture login screen' });
+  }
+});
+
+app.post('/scan-auth/sessions/:id/action', authMiddleware, requireApiKey, async (req, res) => {
+  const target = getInteractiveScanAuthPage(req, req.params.id);
+  if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
+  const { action, x, y, text, key } = req.body || {};
+  try {
+    if (action === 'click') {
+      await target.page.mouse.click(Number(x), Number(y));
+    } else if (action === 'type') {
+      await target.page.keyboard.type(String(text || ''), { delay: 10 });
+    } else if (action === 'press') {
+      await target.page.keyboard.press(String(key || 'Enter'));
+    } else {
+      return res.status(400).json({ error: 'Unsupported login action' });
+    }
+    target.session.pageUrl = target.page.url();
+    return res.json({ success: true, pageUrl: target.session.pageUrl });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Failed to control login browser' });
+  }
+});
+
+app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireApiKey, async (req, res) => {
+  const session = getScanAuthSessionForRequest(req, req.params.id);
+  if (!session || !session.browserContext) {
+    return res.status(404).json({ error: 'Interactive login session not found' });
+  }
+  try {
+    session.storageState = normalizePlaywrightStorageState(await session.browserContext.storageState());
+    session.status = 'ready';
+    session.pageUrl = session.page?.url?.() || session.pageUrl || session.seedUrl;
+    closeScanAuthSession(session);
+    return res.json({
+      sessionId: session.id,
+      status: session.status,
+      ready: true,
+      pageUrl: session.pageUrl,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Failed to finish target-site login' });
+  }
 });
 
 app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {

@@ -2328,6 +2328,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [authContextMessage, setAuthContextMessage] = useState('');
   const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
   const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
+  const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -2343,6 +2344,45 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   // Generic prompt modal
   const [promptModal, setPromptModal] = useState(null);
+
+  useEffect(() => {
+    const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
+    if (!sessionId) return undefined;
+    let active = true;
+    let lastObjectUrl = '';
+    const loadScreenshot = async () => {
+      try {
+        const blob = await api.getScanAuthScreenshot(sessionId, Date.now());
+        if (!active) return;
+        const objectUrl = URL.createObjectURL(blob);
+        if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
+        lastObjectUrl = objectUrl;
+        setScanAuthPrompt((current) => {
+          if (!current?.authBrowser || current.authBrowser.sessionId !== sessionId) return current;
+          return {
+            ...current,
+            authBrowser: {
+              ...current.authBrowser,
+              screenshotUrl: objectUrl,
+            },
+          };
+        });
+      } catch (err) {
+        if (!active) return;
+        setScanAuthPrompt((current) => current ? {
+          ...current,
+          error: err?.message || 'Failed to load the login browser.',
+        } : current);
+      }
+    };
+    loadScreenshot();
+    const interval = window.setInterval(loadScreenshot, 1500);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
+    };
+  }, [scanAuthPrompt?.authBrowser?.sessionId]);
   // Shape: { title, message, onConfirm, onCancel, placeholder, defaultValue }
 
   const [isPanning, setIsPanning] = useState(false); // Track canvas panning state
@@ -10188,8 +10228,17 @@ export default function App({ currentRoute, navigateToRoute }) {
   const continueScanWithoutTargetAuth = () => {
     const prompt = scanAuthPrompt;
     if (!prompt?.url) return;
+    if (prompt.authBrowser?.sessionId) {
+      api.deleteScanAuthSession(prompt.authBrowser.sessionId).catch(() => {});
+    }
     setScanAuthPrompt(null);
     scan(prompt.url, prompt.preserveName, { skipAuthPrecheck: true });
+  };
+
+  const closeScanAuthPrompt = () => {
+    const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
+    if (sessionId) api.deleteScanAuthSession(sessionId).catch(() => {});
+    setScanAuthPrompt(null);
   };
 
   const startTargetAuthLogin = async () => {
@@ -10206,6 +10255,20 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
         return;
       }
+      if (session?.status === 'interactive' && session?.sessionId) {
+        setScanAuthPrompt((current) => current ? {
+          ...current,
+          loading: false,
+          error: '',
+          authBrowser: {
+            sessionId: session.sessionId,
+            pageUrl: session.loginUrl || prompt.url,
+            text: '',
+            screenshotUrl: '',
+          },
+        } : current);
+        return;
+      }
       setScanAuthPrompt((current) => current ? {
         ...current,
         loading: false,
@@ -10216,6 +10279,74 @@ export default function App({ currentRoute, navigateToRoute }) {
         ...current,
         loading: false,
         error: err?.message || 'Failed to start target-site login.',
+      } : current);
+    }
+  };
+
+  const sendTargetAuthBrowserAction = async (payload) => {
+    const sessionId = scanAuthPrompt?.authBrowser?.sessionId;
+    if (!sessionId) return;
+    try {
+      const result = await api.sendScanAuthAction(sessionId, payload);
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        authBrowser: {
+          ...current.authBrowser,
+          pageUrl: result?.pageUrl || current.authBrowser?.pageUrl,
+        },
+      } : current);
+    } catch (err) {
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        error: err?.message || 'Failed to control the login browser.',
+      } : current);
+    }
+  };
+
+  const clickTargetAuthBrowser = (event) => {
+    const image = scanAuthBrowserImageRef.current;
+    if (!image) return;
+    const rect = image.getBoundingClientRect();
+    const scaleX = 1365 / rect.width;
+    const scaleY = 900 / rect.height;
+    sendTargetAuthBrowserAction({
+      action: 'click',
+      x: Math.round((event.clientX - rect.left) * scaleX),
+      y: Math.round((event.clientY - rect.top) * scaleY),
+    });
+  };
+
+  const typeIntoTargetAuthBrowser = async () => {
+    const text = scanAuthPrompt?.authBrowser?.text || '';
+    if (!text) return;
+    setScanAuthPrompt((current) => current ? {
+      ...current,
+      authBrowser: {
+        ...current.authBrowser,
+        text: '',
+      },
+    } : current);
+    await sendTargetAuthBrowserAction({ action: 'type', text });
+  };
+
+  const finishTargetAuthLogin = async () => {
+    const prompt = scanAuthPrompt;
+    const sessionId = prompt?.authBrowser?.sessionId;
+    if (!prompt?.url || !sessionId || prompt.loading) return;
+    setScanAuthPrompt((current) => current ? { ...current, loading: true, error: '' } : current);
+    try {
+      const session = await api.completeScanAuthSession(sessionId);
+      if (!session?.ready) throw new Error('Login session was not ready');
+      setScanAuthPrompt(null);
+      scan(prompt.url, prompt.preserveName, {
+        skipAuthPrecheck: true,
+        authSessionId: sessionId,
+      });
+    } catch (err) {
+      setScanAuthPrompt((current) => current ? {
+        ...current,
+        loading: false,
+        error: err?.message || 'Failed to finish target-site login.',
       } : current);
     }
   };
@@ -15882,7 +16013,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       {scanAuthPrompt && (
         <Modal
           show
-          onClose={() => setScanAuthPrompt(null)}
+          onClose={closeScanAuthPrompt}
           title="This scan may need login"
           className="scan-auth-modal"
           footer={(
@@ -15894,14 +16025,24 @@ export default function App({ currentRoute, navigateToRoute }) {
               >
                 Continue without login
               </Button>
-              <Button
-                variant="primary"
-                onClick={startTargetAuthLogin}
-                loading={scanAuthPrompt.loading}
-                disabled={!scanAuthPrompt.interactiveLoginSupported || scanAuthPrompt.loading}
-              >
-                {scanAuthPrompt.interactiveLoginSupported ? 'Log in to this site' : 'Login not available yet'}
-              </Button>
+              {scanAuthPrompt.authBrowser?.sessionId ? (
+                <Button
+                  variant="primary"
+                  onClick={finishTargetAuthLogin}
+                  loading={scanAuthPrompt.loading}
+                >
+                  Use this login
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  onClick={startTargetAuthLogin}
+                  loading={scanAuthPrompt.loading}
+                  disabled={!scanAuthPrompt.interactiveLoginSupported || scanAuthPrompt.loading}
+                >
+                  {scanAuthPrompt.interactiveLoginSupported ? 'Log in to this site' : 'Login not available yet'}
+                </Button>
+              )}
             </>
           )}
         >
@@ -15916,6 +16057,53 @@ export default function App({ currentRoute, navigateToRoute }) {
                   <li key={sampleUrl}>{sampleUrl}</li>
                 ))}
               </ul>
+            ) : null}
+            {scanAuthPrompt.authBrowser?.sessionId ? (
+              <div className="scan-auth-browser">
+                <div className="scan-auth-browser-bar">
+                  <span>{scanAuthPrompt.authBrowser.pageUrl || scanAuthPrompt.url}</span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => sendTargetAuthBrowserAction({ action: 'press', key: 'Enter' })}
+                  >
+                    Enter
+                  </Button>
+                </div>
+                <button
+                  type="button"
+                  className="scan-auth-browser-frame"
+                  onClick={clickTargetAuthBrowser}
+                  aria-label="Target-site login browser"
+                >
+                  <img
+                    ref={scanAuthBrowserImageRef}
+                    src={scanAuthPrompt.authBrowser.screenshotUrl || ''}
+                    alt="Target-site login screen"
+                    draggable="false"
+                  />
+                </button>
+                <div className="scan-auth-browser-controls">
+                  <input
+                    type="text"
+                    value={scanAuthPrompt.authBrowser.text || ''}
+                    placeholder="Type selected field text here"
+                    onChange={(event) => setScanAuthPrompt((current) => current ? {
+                      ...current,
+                      authBrowser: {
+                        ...current.authBrowser,
+                        text: event.target.value,
+                      },
+                    } : current)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') typeIntoTargetAuthBrowser();
+                    }}
+                  />
+                  <Button variant="secondary" size="sm" onClick={typeIntoTargetAuthBrowser}>
+                    Type
+                  </Button>
+                </div>
+              </div>
             ) : null}
             {scanAuthPrompt.error ? (
               <StatusAlert tone="warning" title="Login connection unavailable">
