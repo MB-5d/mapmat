@@ -5964,8 +5964,11 @@ app.post('/scan-auth/sessions', authMiddleware, requireApiKey, async (req, res) 
   try {
     const safeUrl = await assertSafeUrl(url);
     const session = createScanAuthSession({ safeUrl, req, storageState });
-    if (!storageState && SCAN_AUTH_INTERACTIVE_SUPPORTED) {
+    if (session.status !== 'ready' && SCAN_AUTH_INTERACTIVE_SUPPORTED) {
       await startInteractiveScanAuthSession(session);
+    }
+    if (SCAN_AUTH_INTERACTIVE_SUPPORTED && session.status !== 'ready' && session.status !== 'interactive') {
+      throw new Error('Target-site login browser did not start');
     }
     return res.json({
       sessionId: session.id,

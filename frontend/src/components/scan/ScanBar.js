@@ -6,7 +6,6 @@ import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import { MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import TextInput from '../ui/TextInput';
-import { APP_ONLY_MODE } from '../../utils/constants';
 import Icon from '../ui/Icon';
 
 const ScanBar = ({
@@ -125,7 +124,7 @@ const ScanBar = ({
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.authenticatedPages}
                   onChange={() => onOptionChange('authenticatedPages')}
-                  disabled={optionsDisabled || APP_ONLY_MODE}
+                  disabled={optionsDisabled}
                   label="Authenticated Pages"
                 />
               </div>

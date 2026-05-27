@@ -10255,7 +10255,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
         return;
       }
-      if (session?.status === 'interactive' && session?.sessionId) {
+      if ((session?.status === 'interactive' || session?.interactiveSupported) && session?.sessionId) {
         setScanAuthPrompt((current) => current ? {
           ...current,
           loading: false,
