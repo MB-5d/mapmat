@@ -16016,6 +16016,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           onClose={closeScanAuthPrompt}
           title="This scan may need login"
           className="scan-auth-modal"
+          scrollable
           footer={(
             <>
               <Button

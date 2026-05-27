@@ -2753,9 +2753,23 @@ async function startInteractiveScanAuthSession(session) {
   return session;
 }
 
-function getInteractiveScanAuthPage(req, sessionId) {
+async function getInteractiveScanAuthPage(req, sessionId) {
   const session = getScanAuthSessionForRequest(req, sessionId);
-  if (!session || !session.page || session.status !== 'interactive') return null;
+  if (!session || session.status !== 'interactive') return null;
+  if (!session.browserContext || !session.page || session.page.isClosed()) {
+    try {
+      if (!session.browserContext) {
+        session.browserContext = await createAuthenticatedBrowserContext(session.storageState, SCAN_AUTH_VIEWPORT);
+      }
+      const page = await session.browserContext.newPage();
+      session.page = page;
+      await page.goto(session.pageUrl || session.seedUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      session.pageUrl = page.url();
+    } catch (error) {
+      session.lastError = error.message || 'Target-site login browser closed';
+      return null;
+    }
+  }
   return { session, page: session.page };
 }
 
@@ -6014,7 +6028,7 @@ app.delete('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) 
 });
 
 app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireApiKey, async (req, res) => {
-  const target = getInteractiveScanAuthPage(req, req.params.id);
+  let target = await getInteractiveScanAuthPage(req, req.params.id);
   if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
   try {
     target.session.pageUrl = target.page.url();
@@ -6023,12 +6037,25 @@ app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireApiKey, asy
     res.setHeader('Content-Type', 'image/jpeg');
     return res.send(image);
   } catch (error) {
+    target.session.page = null;
+    target = await getInteractiveScanAuthPage(req, req.params.id);
+    if (target) {
+      try {
+        target.session.pageUrl = target.page.url();
+        const image = await target.page.screenshot({ type: 'jpeg', quality: 80, fullPage: false });
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Content-Type', 'image/jpeg');
+        return res.send(image);
+      } catch {
+        // Fall through to the original error so the user sees the useful failure.
+      }
+    }
     return res.status(500).json({ error: error.message || 'Failed to capture login screen' });
   }
 });
 
 app.post('/scan-auth/sessions/:id/action', authMiddleware, requireApiKey, async (req, res) => {
-  const target = getInteractiveScanAuthPage(req, req.params.id);
+  const target = await getInteractiveScanAuthPage(req, req.params.id);
   if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
   const { action, x, y, text, key } = req.body || {};
   try {

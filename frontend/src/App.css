@@ -9999,6 +9999,15 @@ body {
 
 .scan-auth-modal {
   max-width: 860px;
+  max-height: min(760px, calc(100vh - 40px));
+}
+
+.scan-auth-modal .modal-body {
+  padding: 22px 28px;
+}
+
+.scan-auth-modal .modal-footer {
+  padding: 16px 28px;
 }
 
 .scan-auth-modal-body {
@@ -10051,7 +10060,8 @@ body {
 .scan-auth-browser-frame {
   display: block;
   width: 100%;
-  aspect-ratio: 91 / 60;
+  aspect-ratio: 16 / 9;
+  max-height: 48vh;
   padding: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
