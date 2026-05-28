@@ -6,6 +6,7 @@ import { __testing } from './App';
 const appCss = fs.readFileSync(path.join(__dirname, 'App.css'), 'utf8');
 const generatedCss = fs.readFileSync(path.join(__dirname, 'design-system.generated.css'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, 'App.js'), 'utf8');
+const minimapCss = fs.readFileSync(path.join(__dirname, 'components/minimap/minimapNavigator.css'), 'utf8');
 
 describe('UI design-system contract', () => {
   test('home title, canvas elevation, connection stroke, and disabled state use shared tokens', () => {
@@ -297,6 +298,15 @@ describe('map image asset persistence', () => {
   test('large map viewfinder uses scene bounds', () => {
     expect(appJs).toContain('setLargeMapSceneBounds(scene?.bounds || null);');
     expect(appJs).toContain('bounds: useLargeMapSurface ? largeMapSceneBounds : worldBounds');
+    expect(appJs).toContain('normalizeCanvasWorldBounds(useLargeMapSurface ? largeMapSceneBounds : worldBounds)');
+    expect(minimapCss).toMatch(/\.minimap-navigator \{[\s\S]*z-index: 1500;/);
+    expect(minimapCss).toMatch(/\.minimap-navigator-preview \{[\s\S]*border: 1px solid var\(--minimap-preview-border\);/);
+    expect(__testing.normalizeCanvasWorldBounds({ w: 4000, h: 2000 })).toEqual({
+      minX: 0,
+      minY: 0,
+      maxX: 4000,
+      maxY: 2000,
+    });
   });
 
   test('page details modal spacing uses design-system spacing tokens', () => {

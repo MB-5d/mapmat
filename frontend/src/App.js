@@ -87,6 +87,7 @@ import {
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
 import { getCenteredNodeTransform as getCenteredCanvasNodeTransform } from './utils/canvasView';
+import { normalizeWorldBounds as normalizeCanvasWorldBounds } from './utils/canvasBounds';
 import {
   getViewportSelectionRectStyle,
   nodeIntersectsSelectionRect,
@@ -2082,6 +2083,7 @@ export const __testing = {
   mergeLargeMapNodeSnapshot,
   getLargeMapStackSelectionIdsFromNode,
   getLargeMapEditParentId,
+  normalizeCanvasWorldBounds,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -4328,8 +4330,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [mapLayout, showThumbnails, visibleCanvasNodeData]);
 
   const clampPan = useCallback((newPan, scaleArg = scaleRef.current) => {
-    if (!canvasRef.current || !worldBounds) return newPan;
-    const bounds = worldBounds;
+    const panBounds = normalizeCanvasWorldBounds(useLargeMapSurface ? largeMapSceneBounds : worldBounds)
+      || normalizeCanvasWorldBounds(worldBounds);
+    if (!canvasRef.current || !panBounds) return newPan;
+    const bounds = panBounds;
 
     const viewportWidth = canvasRef.current.clientWidth;
     const viewportHeight = canvasRef.current.clientHeight;
@@ -4350,7 +4354,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const clampedY = clampCanvasPanAxis(newPan.y, minPanY, maxPanY);
 
     return { x: clampedX, y: clampedY };
-  }, [worldBounds]);
+  }, [largeMapSceneBounds, useLargeMapSurface, worldBounds]);
 
   const applyCanvasTransformDom = useCallback((nextScale, nextPan) => {
     const content = contentRef.current;

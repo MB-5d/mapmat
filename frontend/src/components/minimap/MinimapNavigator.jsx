@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
 import { getDepthColor } from '../../utils/constants';
+import { normalizeWorldBounds } from '../../utils/canvasBounds';
 import './minimapNavigator.css';
 
 const DEFAULT_MINIMAP_WIDTH = 320;
@@ -58,28 +59,7 @@ const getBoundsFromLayout = (layout) => {
   return { minX, minY, maxX, maxY };
 };
 
-export const normalizeWorldBounds = (bounds) => {
-  if (!bounds || typeof bounds !== 'object') return null;
-  const minX = Number(bounds.minX);
-  const minY = Number(bounds.minY);
-  const maxX = Number(bounds.maxX);
-  const maxY = Number(bounds.maxY);
-  if ([minX, minY, maxX, maxY].every(Number.isFinite)) {
-    return { minX, minY, maxX, maxY };
-  }
-
-  const x = Number.isFinite(Number(bounds.x)) ? Number(bounds.x) : 0;
-  const y = Number.isFinite(Number(bounds.y)) ? Number(bounds.y) : 0;
-  const w = Number(bounds.w ?? bounds.width);
-  const h = Number(bounds.h ?? bounds.height);
-  if (![w, h].every(Number.isFinite)) return null;
-  return {
-    minX: x,
-    minY: y,
-    maxX: x + Math.max(1, w),
-    maxY: y + Math.max(1, h),
-  };
-};
+export { normalizeWorldBounds };
 
 const MinimapNavigator = ({
   layout,
@@ -271,32 +251,32 @@ const MinimapNavigator = ({
 
     dragRef.current = {
       mode: 'viewport',
-      lastX: point.x,
-      lastY: point.y,
+      startX: point.x,
+      startY: point.y,
+      startWorldX: viewWorld.x,
+      startWorldY: viewWorld.y,
     };
     previewRef.current.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event) => {
-    if (!dragRef.current) return;
+    if (dragRef.current?.mode !== 'viewport') return;
     event.preventDefault();
     const point = getLocalPoint(event);
-    const deltaX = point.x - dragRef.current.lastX;
-    const deltaY = point.y - dragRef.current.lastY;
-    dragRef.current.lastX = point.x;
-    dragRef.current.lastY = point.y;
+    const deltaX = point.x - dragRef.current.startX;
+    const deltaY = point.y - dragRef.current.startY;
 
     const deltaWorldX = deltaX / miniScale;
     const deltaWorldY = deltaY / miniScale;
 
-    const worldLeft = viewWorld.x + deltaWorldX;
-    const worldTop = viewWorld.y + deltaWorldY;
+    const worldLeft = dragRef.current.startWorldX + deltaWorldX;
+    const worldTop = dragRef.current.startWorldY + deltaWorldY;
 
     onPanTo?.(worldLeft, worldTop);
   };
 
   const handlePointerUp = (event) => {
-    if (!dragRef.current) return;
+    if (dragRef.current?.mode !== 'viewport') return;
     event.preventDefault();
     dragRef.current = null;
     try {
