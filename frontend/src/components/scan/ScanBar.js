@@ -6,6 +6,7 @@ import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import { MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import TextInput from '../ui/TextInput';
+import { AUTHENTICATED_SCAN_ENABLED } from '../../utils/constants';
 import Icon from '../ui/Icon';
 
 const ScanBar = ({
@@ -120,13 +121,15 @@ const ScanBar = ({
                   disabled={optionsDisabled}
                   label="Duplicates"
                 />
-                <CheckboxField
-                  className="layers-panel-item scan-options-checkbox"
-                  checked={options.authenticatedPages}
-                  onChange={() => onOptionChange('authenticatedPages')}
-                  disabled={optionsDisabled}
-                  label="Authenticated Pages"
-                />
+                {AUTHENTICATED_SCAN_ENABLED ? (
+                  <CheckboxField
+                    className="layers-panel-item scan-options-checkbox"
+                    checked={options.authenticatedPages}
+                    onChange={() => onOptionChange('authenticatedPages')}
+                    disabled={optionsDisabled}
+                    label="Authenticated Pages"
+                  />
+                ) : null}
               </div>
               <div className="scan-options-group">
                 <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>

@@ -2624,7 +2624,9 @@ const SCAN_AUTH_PRECHECK_MAX_DEPTH = Math.max(
   1,
   Math.min(4, Number(process.env.SCAN_AUTH_PRECHECK_MAX_DEPTH || 2))
 );
-const SCAN_AUTH_INTERACTIVE_SUPPORTED = true;
+// Temporarily paused while primary scan stability work continues. See docs/authenticated-scan-paused.md.
+const SCAN_AUTH_FEATURE_ENABLED = parseEnvBool(process.env.SCAN_AUTH_FEATURE_ENABLED, false);
+const SCAN_AUTH_INTERACTIVE_SUPPORTED = SCAN_AUTH_FEATURE_ENABLED;
 const SCAN_AUTH_VIEWPORT = { width: 1365, height: 900 };
 const scanAuthSessions = new Map();
 
@@ -5996,6 +5998,16 @@ app.get('/health/coediting', async (_req, res) => {
 app.post('/scan-auth/precheck', authMiddleware, scanLimiter, requireApiKey, async (req, res) => {
   const { url, options } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
+  if (!SCAN_AUTH_FEATURE_ENABLED) {
+    return res.json({
+      authRequired: false,
+      authCount: 0,
+      sampleUrls: [],
+      interactiveLoginSupported: false,
+      featureDisabled: true,
+      scanDiagnostics: null,
+    });
+  }
 
   try {
     const safeUrl = await assertSafeUrl(url);
@@ -6069,6 +6081,12 @@ app.post('/scan-auth/precheck', authMiddleware, scanLimiter, requireApiKey, asyn
 app.post('/scan-auth/sessions', authMiddleware, requireApiKey, async (req, res) => {
   const { url, storageState } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
+  if (!SCAN_AUTH_FEATURE_ENABLED) {
+    return res.status(503).json({
+      error: 'Authenticated scanning is temporarily disabled',
+      code: 'scan_auth_disabled',
+    });
+  }
 
   try {
     const safeUrl = await assertSafeUrl(url);

@@ -167,6 +167,7 @@ async function main() {
         HOST: '127.0.0.1',
         PORT: String(BACKEND_PORT),
         RUN_MODE: 'web',
+        SCAN_AUTH_FEATURE_ENABLED: 'true',
         ALLOW_PRIVATE_NETWORKS: 'true',
         SCREENSHOT_STORAGE_PROVIDER: 'local',
       },

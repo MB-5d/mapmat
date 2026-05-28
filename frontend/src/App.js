@@ -79,6 +79,7 @@ import {
   ANNOTATION_STATUS_OPTIONS,
   LAYOUT,
   TESTER_NOT_READY_MESSAGE,
+  AUTHENTICATED_SCAN_ENABLED,
 } from './utils/constants';
 import {
   findMapNameConflict,
@@ -9837,7 +9838,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const shouldMergeScanResult = isUnsavedScannedMap
       && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig);
 
-    if (!authFlow.skipAuthPrecheck) {
+    if (AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
       try {
         const precheck = await api.precheckScanAuth({
           url,
@@ -9872,12 +9873,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     setScanProgress({ scanned: 0, queued: 0 });
     startScanTimers();
     trackEvent('scan_started', {
-      authenticated_pages: scanOptions.authenticatedPages ? 'true' : 'false',
+      authenticated_pages: AUTHENTICATED_SCAN_ENABLED && scanOptions.authenticatedPages ? 'true' : 'false',
     });
 
     const scanConfig = {
       ...scanOptions,
-      ...(authFlow.authSessionId ? { authenticatedPages: true } : {}),
+      authenticatedPages: AUTHENTICATED_SCAN_ENABLED
+        ? Boolean(scanOptions.authenticatedPages || authFlow.authSessionId)
+        : false,
     };
     let jobId;
     let jobAccessToken = null;
