@@ -22,17 +22,23 @@ const LayersPanel = ({
   viewDropdownRef,
   embedded = false,
 }) => {
-  const showScanLayers = scanLayerAvailability
-    && Object.values(scanLayerAvailability).some(Boolean);
   const showTypeLayers = false;
   const showConnectionLayers = connectionAvailability
     && Object.values(connectionAvailability).some(Boolean);
-  const hasPlacementLayers = !!scanLayerAvailability;
-  const hasStatusLayers = !!scanLayerAvailability?.statusBroken
-    || !!scanLayerAvailability?.statusError
-    || !!scanLayerAvailability?.statusInactive
-    || !!scanLayerAvailability?.statusAuth
-    || !!scanLayerAvailability?.statusDuplicate;
+  const placementLayers = [
+    { key: 'placementPrimary', label: 'Primary' },
+    { key: 'placementSubdomain', label: 'Subdomain' },
+    { key: 'placementOrphan', label: 'Orphan' },
+  ].filter((option) => !!scanLayerAvailability?.[option.key]);
+  const statusLayers = [
+    { key: 'statusBroken', label: 'Broken Link' },
+    { key: 'statusError', label: 'Error' },
+    { key: 'statusInactive', label: 'Inactive' },
+    { key: 'statusAuth', label: 'Auth Required' },
+    { key: 'statusDuplicate', label: 'Duplicates' },
+  ].filter((option) => !!scanLayerAvailability?.[option.key]);
+  const hasPlacementLayers = placementLayers.length > 0;
+  const hasStatusLayers = statusLayers.length > 0;
 
   const LayerToggle = ({ label, active, onToggle, disabled = false }) => (
     <MenuItem
@@ -53,136 +59,95 @@ const LayersPanel = ({
 
   const panelList = (
     <div className="layers-panel-list">
-          {showScanLayers && (
-            <>
-              {hasPlacementLayers && (
-                <>
-                  <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
-                  <LayerToggle
-                    label="Primary"
-                    active={scanLayerVisibility.placementPrimary}
-                    onToggle={() => onToggleScanLayer('placementPrimary')}
-                    disabled={!scanLayerAvailability?.placementPrimary}
-                  />
-                  <LayerToggle
-                    label="Subdomain"
-                    active={scanLayerVisibility.placementSubdomain}
-                    onToggle={() => onToggleScanLayer('placementSubdomain')}
-                    disabled={!scanLayerAvailability?.placementSubdomain}
-                  />
-                  <LayerToggle
-                    label="Orphan"
-                    active={scanLayerVisibility.placementOrphan}
-                    onToggle={() => onToggleScanLayer('placementOrphan')}
-                    disabled={!scanLayerAvailability?.placementOrphan}
-                  />
-                </>
-              )}
+      {hasPlacementLayers && (
+        <>
+          <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
+          {placementLayers.map((option) => (
+            <LayerToggle
+              key={option.key}
+              label={option.label}
+              active={scanLayerVisibility?.[option.key]}
+              onToggle={() => onToggleScanLayer(option.key)}
+            />
+          ))}
+        </>
+      )}
 
-              {showTypeLayers && (
-                <>
-                  <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
-                  {scanLayerAvailability?.typePages && (
-                    <LayerToggle
-                      label="Pages"
-                      active={scanLayerVisibility.typePages}
-                      onToggle={() => onToggleScanLayer('typePages')}
-                    />
-                  )}
-                  {scanLayerAvailability?.typeFiles && (
-                    <LayerToggle
-                      label="Files"
-                      active={scanLayerVisibility.typeFiles}
-                      onToggle={() => onToggleScanLayer('typeFiles')}
-                    />
-                  )}
-                </>
-              )}
-
-              {hasStatusLayers && (
-                <>
-                  <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
-                  {scanLayerAvailability?.statusBroken && (
-                    <LayerToggle
-                      label="Broken Link"
-                      active={scanLayerVisibility.statusBroken}
-                      onToggle={() => onToggleScanLayer('statusBroken')}
-                    />
-                  )}
-                  {scanLayerAvailability?.statusError && (
-                    <LayerToggle
-                      label="Error"
-                      active={scanLayerVisibility.statusError}
-                      onToggle={() => onToggleScanLayer('statusError')}
-                    />
-                  )}
-                  {scanLayerAvailability?.statusInactive && (
-                    <LayerToggle
-                      label="Inactive"
-                      active={scanLayerVisibility.statusInactive}
-                      onToggle={() => onToggleScanLayer('statusInactive')}
-                    />
-                  )}
-                  {scanLayerAvailability?.statusAuth && (
-                    <LayerToggle
-                      label="Auth Required"
-                      active={scanLayerVisibility.statusAuth}
-                      onToggle={() => onToggleScanLayer('statusAuth')}
-                    />
-                  )}
-                  {scanLayerAvailability?.statusDuplicate && (
-                    <LayerToggle
-                      label="Duplicates"
-                      active={scanLayerVisibility.statusDuplicate}
-                      onToggle={() => onToggleScanLayer('statusDuplicate')}
-                    />
-                  )}
-                </>
-              )}
-
-              {showConnectionLayers && (
-                <>
-                  <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
-                  {connectionAvailability?.userFlows && (
-                    <LayerToggle
-                      label="User Flows"
-                      active={layers.userFlows}
-                      onToggle={() => onToggleUserFlows(connectionTool)}
-                    />
-                  )}
-                  {connectionAvailability?.crossLinks && (
-                    <LayerToggle
-                      label="Cross-links"
-                      active={layers.crossLinks}
-                      onToggle={() => onToggleCrossLinks(connectionTool)}
-                    />
-                  )}
-                  {connectionAvailability?.brokenLinks && (
-                    <LayerToggle
-                      label="Broken Links"
-                      active={layers.brokenLinks}
-                      onToggle={onToggleBrokenLinks}
-                    />
-                  )}
-                </>
-              )}
-            </>
+      {showTypeLayers && (
+        <>
+          <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
+          {scanLayerAvailability?.typePages && (
+            <LayerToggle
+              label="Pages"
+              active={scanLayerVisibility.typePages}
+              onToggle={() => onToggleScanLayer('typePages')}
+            />
           )}
-
-          {showChangeSection && (
-            <>
-              <MenuSectionHeader className="layers-panel-section">Markers</MenuSectionHeader>
-              {changeStatusOptions.map((option) => (
-                <LayerToggle
-                  key={option.value}
-                  label={option.label}
-                  active={changeFilters.statuses?.[option.value]}
-                  onToggle={() => onToggleChangeStatus?.(option.value)}
-                />
-              ))}
-            </>
+          {scanLayerAvailability?.typeFiles && (
+            <LayerToggle
+              label="Files"
+              active={scanLayerVisibility.typeFiles}
+              onToggle={() => onToggleScanLayer('typeFiles')}
+            />
           )}
-        </div>
+        </>
+      )}
+
+      {hasStatusLayers && (
+        <>
+          <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
+          {statusLayers.map((option) => (
+            <LayerToggle
+              key={option.key}
+              label={option.label}
+              active={scanLayerVisibility?.[option.key]}
+              onToggle={() => onToggleScanLayer(option.key)}
+            />
+          ))}
+        </>
+      )}
+
+      {showConnectionLayers && (
+        <>
+          <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
+          {connectionAvailability?.userFlows && (
+            <LayerToggle
+              label="User Flows"
+              active={layers.userFlows}
+              onToggle={() => onToggleUserFlows(connectionTool)}
+            />
+          )}
+          {connectionAvailability?.crossLinks && (
+            <LayerToggle
+              label="Cross-links"
+              active={layers.crossLinks}
+              onToggle={() => onToggleCrossLinks(connectionTool)}
+            />
+          )}
+          {connectionAvailability?.brokenLinks && (
+            <LayerToggle
+              label="Broken Links"
+              active={layers.brokenLinks}
+              onToggle={onToggleBrokenLinks}
+            />
+          )}
+        </>
+      )}
+
+      {showChangeSection && (
+        <>
+          <MenuSectionHeader className="layers-panel-section">Markers</MenuSectionHeader>
+          {changeStatusOptions.map((option) => (
+            <LayerToggle
+              key={option.value}
+              label={option.label}
+              active={changeFilters.statuses?.[option.value]}
+              onToggle={() => onToggleChangeStatus?.(option.value)}
+            />
+          ))}
+        </>
+      )}
+    </div>
   );
 
   if (embedded) {

@@ -32,7 +32,7 @@ const ColorKey = ({
     )}
     {(embedded || showColorKey) && (
       <div className="color-key-list">
-        <div className="color-key-section">Pages</div>
+        <div className="color-key-section">Levels</div>
         {Array.from({ length: Math.max(maxDepth + 1, colors.length) }).map((_, idx) => {
           const color = getDepthColor(colors, idx);
           if (idx > maxDepth) return null;

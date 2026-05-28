@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { getDepthColor } from '../../utils/constants';
+import { isNodeGhostedByLayers } from '../../utils/mapDisplaySummary';
 import { DraggableNodeCard } from '../nodes/NodeCard';
 
 const SCENE_FETCH_IDLE_MS = 80;
@@ -69,6 +70,8 @@ const MapSurfaceV2 = ({
   onAddNote,
   onViewNotes,
   activeId,
+  layerVisibility,
+  changeFilters,
   showPageNumbers,
   thumbnailRequestIds,
   thumbnailSessionId,
@@ -149,6 +152,7 @@ const MapSurfaceV2 = ({
       thumbnails: showThumbnails && !safeMode ? '1' : '0',
       overscan: getSceneOverscan(view.scale),
       expandedStacks: expandedStackIds.join(','),
+      summary: sceneRef.current?.displaySummary ? '0' : '1',
     };
   }, [canvasSize?.height, canvasSize?.width, expandedStackIds, orientation, safeMode, showThumbnails]);
 
@@ -164,6 +168,7 @@ const MapSurfaceV2 = ({
       Math.round(params.zoom * 100) / 100,
       params.orientation,
       params.thumbnails,
+      params.summary,
       params.expandedStacks,
       params.overscan,
       sceneRefreshKey,
@@ -246,6 +251,7 @@ const MapSurfaceV2 = ({
   const renderThumbnails = showThumbnails && !safeMode;
   const currentView = getCurrentView();
   const connectorTransform = `translate(${currentView.pan.x} ${currentView.pan.y}) scale(${currentView.scale})`;
+  const statusFilters = changeFilters?.statuses || {};
 
   return (
     <div className="large-map-surface-v2" data-large-map-surface="1" ref={surfaceRef}>
@@ -273,6 +279,17 @@ const MapSurfaceV2 = ({
         {sceneNodes.map((nodeData) => {
           const node = nodeData.node;
           const isRoot = scene?.homeNode?.id === node.id;
+          const annotations = node?.annotations || {};
+          const status = annotations.status || 'none';
+          const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
+          const hasAnnotation = status !== 'none'
+            || note.length > 0
+            || (Array.isArray(annotations.tags) && annotations.tags.length > 0);
+          const isDeleted = status === 'deleted';
+          const markerFilteredOut = status !== 'none' && statusFilters[status] === false;
+          const isGhosted = isNodeGhostedByLayers(node, nodeData, layerVisibility)
+            || markerFilteredOut
+            || (isDeleted && hasAnnotation);
           const isSelected = selectedNodeIds?.has(node.id);
           const isBranchDragging = activeBranchNodeIds?.has(node.id);
           const stackInfo = node.stackInfo;
@@ -302,9 +319,10 @@ const MapSurfaceV2 = ({
               onAddNote={onAddNote}
               onViewNotes={onViewNotes}
               activeId={isBranchDragging ? node.id : activeId}
+              isGhosted={isGhosted}
               badges={[]}
               showPageNumbers={showPageNumbers}
-              showAnnotations
+              showAnnotations={!markerFilteredOut}
               thumbnailRequestIds={thumbnailRequestIds}
               thumbnailSessionId={thumbnailSessionId}
               thumbnailReloadKey={thumbnailReloadMap?.[node.id] || 0}

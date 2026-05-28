@@ -56,7 +56,7 @@ const {
   sortImageDownloadEntries,
   urlsMatch,
 } = require('../utils/imageDownloadPackage');
-const { buildMapScene, countMapNodes } = require('../utils/mapScene');
+const { buildMapScene, buildMapDisplaySummary, countMapNodes } = require('../utils/mapScene');
 
 const router = express.Router();
 const NODE_ASSET_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
@@ -480,6 +480,7 @@ function summarizeMapRow(row) {
       url: root.url || row.url || '',
     } : null,
     nodeCount: countMapNodes(root, orphans),
+    displaySummary: buildMapDisplaySummary(root, orphans),
     hasThumbnails: hasThumbnailAsset(root, orphans),
     colors,
     connectionColors,
@@ -1943,6 +1944,7 @@ router.get('/maps/:id/scene', requireAuth, async (req, res) => {
       },
       expandedStacks: req.query?.expandedStacks,
       targetNodeId: req.query?.targetNodeId,
+      includeDisplaySummary: parseBooleanLike(req.query?.summary, false),
     });
 
     res.json({

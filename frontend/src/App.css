@@ -7461,6 +7461,14 @@ body {
 
 /* Edit Node Modal */
 .edit-node-modal {
+  overflow: hidden;
+}
+
+.edit-node-modal .modal-header,
+.edit-node-modal .modal-footer {
+  position: relative;
+  z-index: 1;
+  background: var(--modal-bg);
 }
 
 .edit-node-form {
@@ -7476,19 +7484,26 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-none);
+  scroll-padding-block: var(--unit-20) var(--unit-24);
+  overscroll-behavior: contain;
+}
+
+.edit-node-form .field {
+  gap: var(--unit-12);
+  min-width: 0;
 }
 
 .edit-node-modal__footer-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-sm);
+  gap: var(--unit-12);
   margin-left: auto;
 }
 
 .edit-node-seo-section {
   display: flex;
   flex-direction: column;
-  gap: var(--unit-12);
+  gap: var(--unit-20);
   padding-top: var(--unit-12);
   border-top: var(--border-width-subtle) solid var(--color-border-subtle, #e2e8f0);
 }
@@ -7516,7 +7531,7 @@ body {
 .edit-node-duplicate-row {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--unit-12);
   min-width: 0;
   color: var(--color-text-secondary);
   font-size: var(--type-body-xs-size);
@@ -7581,7 +7596,11 @@ body {
 .edit-node-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--unit-12);
+  gap: var(--unit-20);
+}
+
+.edit-node-form-grid > .field {
+  min-width: 0;
 }
 
 @media (max-width: 640px) {

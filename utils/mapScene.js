@@ -106,6 +106,144 @@ function countMapNodes(root, orphans = []) {
   return count;
 }
 
+const DEFAULT_SCAN_LAYER_AVAILABILITY = Object.freeze({
+  placementPrimary: false,
+  placementSubdomain: false,
+  placementOrphan: false,
+  typePages: false,
+  typeFiles: false,
+  statusBroken: false,
+  statusError: false,
+  statusInactive: false,
+  statusAuth: false,
+  statusDuplicate: false,
+});
+
+function normalizeDisplaySummary(summary = {}) {
+  const availability = {};
+  Object.keys(DEFAULT_SCAN_LAYER_AVAILABILITY).forEach((key) => {
+    availability[key] = Boolean(summary?.scanLayerAvailability?.[key]);
+  });
+  return {
+    maxDepth: Math.max(0, Number(summary?.maxDepth || 0)),
+    scanLayerAvailability: availability,
+    markerStatusValues: Array.from(new Set(
+      (Array.isArray(summary?.markerStatusValues) ? summary.markerStatusValues : [])
+        .map((value) => String(value || '').trim())
+        .filter((value) => value && value !== 'none')
+    )),
+  };
+}
+
+function isTopLevelOrphanRootMeta(meta) {
+  if (!meta || meta.depth !== 0) return false;
+  if (meta.treeType === 'orphan' && meta.parentId === null) return true;
+  return Boolean(meta.orphanType && meta.orphanType !== 'subdomain');
+}
+
+function getNodePlacementForSummary(meta) {
+  if (!meta) return 'primary';
+  if (meta.isSubdomainTree || meta.orphanType === 'subdomain' || meta.orphanStyle === 'subdomain') {
+    return 'subdomain';
+  }
+  if (meta.treeType === 'subdomain') return 'subdomain';
+  if (meta.isOrphan || meta.treeType === 'orphan' || (meta.orphanType && meta.orphanType !== 'subdomain')) {
+    return 'orphan';
+  }
+  return 'primary';
+}
+
+function getStatusFlagsForSummary(node, meta) {
+  const isOrphanRoot = isTopLevelOrphanRootMeta(meta);
+  return {
+    broken: !isOrphanRoot && (node?.isBroken || meta?.orphanType === 'broken'),
+    error: Boolean(node?.isError),
+    inactive: Boolean(
+      node?.scanStatus !== 'scan_limited'
+      && !node?.isError
+      && !node?.authRequired
+      && (node?.isInactive || meta?.orphanType === 'inactive')
+    ),
+    auth: Boolean(node?.authRequired),
+    duplicate: Boolean(node?.isDuplicate),
+  };
+}
+
+function buildSummaryFromRecords(records = []) {
+  let maxDepth = 0;
+  const markerStatusValues = new Set();
+  const scanLayerAvailability = { ...DEFAULT_SCAN_LAYER_AVAILABILITY };
+
+  records.forEach(({ node, meta }) => {
+    if (!node || !meta) return;
+    maxDepth = Math.max(maxDepth, Number(meta.depth || 0));
+    const placement = getNodePlacementForSummary(meta);
+    const status = getStatusFlagsForSummary(node, meta);
+    const annotationStatus = String(node?.annotations?.status || 'none').trim();
+
+    if (placement === 'primary') scanLayerAvailability.placementPrimary = true;
+    if (placement === 'subdomain') scanLayerAvailability.placementSubdomain = true;
+    if (placement === 'orphan') scanLayerAvailability.placementOrphan = true;
+    if (status.broken) scanLayerAvailability.statusBroken = true;
+    if (status.error) scanLayerAvailability.statusError = true;
+    if (status.inactive) scanLayerAvailability.statusInactive = true;
+    if (status.auth) scanLayerAvailability.statusAuth = true;
+    if (status.duplicate) scanLayerAvailability.statusDuplicate = true;
+    if (annotationStatus && annotationStatus !== 'none') markerStatusValues.add(annotationStatus);
+  });
+
+  return normalizeDisplaySummary({
+    maxDepth,
+    scanLayerAvailability,
+    markerStatusValues: Array.from(markerStatusValues),
+  });
+}
+
+function collectDisplaySummaryRecords(root, orphans = []) {
+  const records = [];
+  const visit = (node, meta) => {
+    if (!node || typeof node !== 'object') return;
+    records.push({ node, meta });
+    getChildren(node).forEach((child) => {
+      visit(child, {
+        ...meta,
+        parentId: node.id || null,
+        depth: meta.depth + 1,
+      });
+    });
+  };
+
+  if (root) {
+    visit(root, {
+      treeType: 'root',
+      parentId: null,
+      depth: 0,
+      isOrphan: false,
+      orphanType: null,
+      isSubdomainTree: false,
+    });
+  }
+
+  (Array.isArray(orphans) ? orphans : []).filter(Boolean).forEach((orphan) => {
+    const isSubdomainTree = Boolean(orphan.subdomainRoot || orphan.orphanType === 'subdomain');
+    visit(orphan, {
+      treeType: isSubdomainTree ? 'subdomain' : 'orphan',
+      parentId: null,
+      depth: 0,
+      isOrphan: true,
+      orphanType: orphan.orphanType || (isSubdomainTree ? 'subdomain' : 'orphan'),
+      orphanStyle: isSubdomainTree ? 'subdomain' : 'root',
+      isSubdomainTree,
+    });
+  });
+
+  return records;
+}
+
+function buildMapDisplaySummary(root, orphans = []) {
+  return buildSummaryFromRecords(collectDisplaySummaryRecords(root, orphans));
+}
+
 function shouldStackChildren(children, depth) {
   if (!children || children.length < STACK_THRESHOLD) return false;
   return depth >= 1;
@@ -796,6 +934,8 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     thumbnailCaptureFailed: !!node.thumbnailCaptureFailed,
     thumbnailCaptureError: node.thumbnailCaptureError || '',
     isOrphan: !!layoutNode.isOrphan,
+    isSubdomainTree: !!layoutNode.isSubdomainTree,
+    orphanStyle: layoutNode.orphanStyle || null,
     orphanType: layoutNode.orphanType || node.orphanType || null,
     stackInfo,
   };
@@ -809,6 +949,7 @@ function buildMapScene({
   showThumbnails = true,
   expandedStacks = {},
   targetNodeId = '',
+  includeDisplaySummary = false,
 } = {}) {
   const normalizedViewport = normalizeViewport(viewport);
   const requestedThumbnailLod = showThumbnails ? getThumbnailLod(normalizedViewport.zoom) : 'none';
@@ -823,6 +964,7 @@ function buildMapScene({
     showThumbnails,
     expandedStacks: sceneExpandedStacks,
   });
+  const displaySummary = includeDisplaySummary ? buildMapDisplaySummary(root, orphans) : null;
   const homeLayoutNode = layout.nodes.find((node) => !node.isOrphan && node.depth === 0)
     || layout.nodes[0]
     || null;
@@ -858,6 +1000,7 @@ function buildMapScene({
     visibleConnectorCount: connectors.length,
     thumbnailLod,
     viewport: normalizedViewport,
+    ...(displaySummary ? { displaySummary } : {}),
     homeNode: homeLayoutNode ? sanitizeSceneNode(homeLayoutNode, { thumbnailLod: 'none' }) : null,
     targetNode,
     expandedStackIds: Object.keys(sceneExpandedStacks).filter((id) => sceneExpandedStacks[id]),
@@ -870,6 +1013,7 @@ function buildMapScene({
 module.exports = {
   DEFAULT_LAYOUT,
   buildMapScene,
+  buildMapDisplaySummary,
   computeSceneLayout,
   countMapNodes,
   collectNodeAndDescendantIds,

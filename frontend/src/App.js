@@ -93,8 +93,15 @@ import {
   nodeIntersectsSelectionRect,
 } from './utils/canvasSelection';
 import {
+  DEFAULT_SCAN_LAYER_AVAILABILITY,
+  DEFAULT_SCAN_LAYER_VISIBILITY,
+  buildMapDisplaySummary,
+  isNodeGhostedByLayers,
+  isTopLevelOrphanRoot,
+  normalizeMapDisplaySummary,
+} from './utils/mapDisplaySummary';
+import {
   buildExpandedStackMap,
-  getMaxDepth,
   countNodes,
   findNodeById,
   findParent,
@@ -1291,7 +1298,7 @@ const SitemapTree = ({
           || (Array.isArray(annotations.tags) && annotations.tags.length > 0);
         const isDeleted = status === 'deleted';
         const markerFilteredOut = status !== 'none' && statusFilters[status] === false;
-        const isGhosted = isNodeGhosted(nodeData.node, nodeData, layerVisibility)
+        const isGhosted = isNodeGhostedByLayers(nodeData.node, nodeData, layerVisibility)
           || markerFilteredOut
           || (isDeleted && hasAnnotation);
         const stackInfo = nodeData.stackInfo;
@@ -1671,54 +1678,6 @@ const buildRootUrlSet = (rootNode) => {
   };
   walk(rootNode);
   return set;
-};
-
-const isTopLevelOrphanRoot = (nodeMeta) => {
-  if (!nodeMeta) return false;
-  if (nodeMeta.depth !== 0) return false;
-  return Boolean(nodeMeta.orphanType && nodeMeta.orphanType !== 'subdomain');
-};
-
-const getNodePlacement = (nodeMeta) => {
-  if (!nodeMeta) return 'primary';
-  if (nodeMeta.isSubdomainTree || nodeMeta.orphanType === 'subdomain') return 'subdomain';
-  if (nodeMeta.orphanType && nodeMeta.orphanType !== 'subdomain') return 'orphan';
-  return 'primary';
-};
-
-const getNodeType = (node, nodeMeta) => {
-  if (!isRenderableTextUrl(node?.url) && (node?.isFile || nodeMeta?.orphanType === 'file')) return 'file';
-  return 'page';
-};
-
-const getNodeStatusFlags = (node, nodeMeta) => {
-  const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
-  return {
-    broken: !isOrphanRoot && (node?.isBroken || nodeMeta?.orphanType === 'broken'),
-    error: Boolean(node?.isError),
-    inactive: Boolean(!node?.isError && !node?.authRequired && (node?.isInactive || nodeMeta?.orphanType === 'inactive')),
-    auth: Boolean(node?.authRequired),
-    duplicate: Boolean(node?.isDuplicate),
-  };
-};
-
-const isNodeGhosted = (node, nodeMeta, visibility) => {
-  if (!visibility) return false;
-  const placement = getNodePlacement(nodeMeta);
-  const type = getNodeType(node, nodeMeta);
-  const status = getNodeStatusFlags(node, nodeMeta);
-
-  if (placement === 'primary' && !visibility.placementPrimary) return true;
-  if (placement === 'subdomain' && !visibility.placementSubdomain) return true;
-  if (placement === 'orphan' && !visibility.placementOrphan) return true;
-  if (type === 'page' && !visibility.typePages) return true;
-  if (type === 'file' && !visibility.typeFiles) return true;
-  if (status.broken && !visibility.statusBroken) return true;
-  if (status.error && !visibility.statusError) return true;
-  if (status.inactive && !visibility.statusInactive) return true;
-  if (status.auth && !visibility.statusAuth) return true;
-  if (status.duplicate && !visibility.statusDuplicate) return true;
-  return false;
 };
 
 const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
@@ -2110,30 +2069,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [mapInsights, setMapInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsError, setInsightsError] = useState('');
-  const [scanLayerAvailability, setScanLayerAvailability] = useState({
-    placementPrimary: false,
-    placementSubdomain: false,
-    placementOrphan: false,
-    typePages: false,
-    typeFiles: false,
-    statusBroken: false,
-    statusError: false,
-    statusInactive: false,
-    statusAuth: false,
-    statusDuplicate: false,
-  });
-  const [scanLayerVisibility, setScanLayerVisibility] = useState({
-    placementPrimary: true,
-    placementSubdomain: true,
-    placementOrphan: true,
-    typePages: true,
-    typeFiles: true,
-    statusBroken: true,
-    statusError: true,
-    statusInactive: true,
-    statusAuth: true,
-    statusDuplicate: true,
-  });
+  const [scanLayerAvailability, setScanLayerAvailability] = useState({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
+  const [scanLayerVisibility, setScanLayerVisibility] = useState({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
   const [mapName, setMapName] = useState('');
   const [isEditingMapName, setIsEditingMapName] = useState(false);
   const [root, setRoot] = useState(null);
@@ -2273,6 +2210,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [largeMapNodeCacheVersion, setLargeMapNodeCacheVersion] = useState(0);
   const [largeMapSceneRefreshKey, setLargeMapSceneRefreshKey] = useState(0);
   const [largeMapSceneBounds, setLargeMapSceneBounds] = useState(null);
+  const [largeMapDisplaySummary, setLargeMapDisplaySummary] = useState(null);
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
@@ -2775,25 +2713,27 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [root, orphans, invalidFullScreenshotAssetIds]);
 
-  const maxDepth = useMemo(() => {
-    const orphanDepth = (orphans || []).reduce((max, orphan) => {
-      return Math.max(max, getMaxDepth(orphan));
-    }, 0);
-    return Math.max(getMaxDepth(root), orphanDepth);
-  }, [root, orphans]);
+  const fullMapDisplaySummary = useMemo(() => {
+    if (currentMap?.largeMapShell) {
+      return normalizeMapDisplaySummary(largeMapDisplaySummary || currentMap?.displaySummary);
+    }
+    return buildMapDisplaySummary(root, orphans);
+  }, [currentMap?.displaySummary, currentMap?.largeMapShell, largeMapDisplaySummary, root, orphans]);
+  const maxDepth = fullMapDisplaySummary.maxDepth;
   const totalNodes = useMemo(() => countNodes(root), [root]);
+  const effectiveScanLayerAvailability = fullMapDisplaySummary.scanLayerAvailability || scanLayerAvailability;
   const layerVisibility = useMemo(() => ({
-    placementPrimary: scanLayerAvailability.placementPrimary ? scanLayerVisibility.placementPrimary : true,
-    placementSubdomain: scanLayerAvailability.placementSubdomain ? scanLayerVisibility.placementSubdomain : true,
-    placementOrphan: scanLayerAvailability.placementOrphan ? scanLayerVisibility.placementOrphan : true,
-    typePages: scanLayerAvailability.typePages ? scanLayerVisibility.typePages : true,
-    typeFiles: scanLayerAvailability.typeFiles ? scanLayerVisibility.typeFiles : true,
-    statusBroken: scanLayerAvailability.statusBroken ? scanLayerVisibility.statusBroken : true,
-    statusError: scanLayerAvailability.statusError ? scanLayerVisibility.statusError : true,
-    statusInactive: scanLayerAvailability.statusInactive ? scanLayerVisibility.statusInactive : true,
-    statusAuth: scanLayerAvailability.statusAuth ? scanLayerVisibility.statusAuth : true,
-    statusDuplicate: scanLayerAvailability.statusDuplicate ? scanLayerVisibility.statusDuplicate : true,
-  }), [scanLayerAvailability, scanLayerVisibility]);
+    placementPrimary: effectiveScanLayerAvailability.placementPrimary ? scanLayerVisibility.placementPrimary : true,
+    placementSubdomain: effectiveScanLayerAvailability.placementSubdomain ? scanLayerVisibility.placementSubdomain : true,
+    placementOrphan: effectiveScanLayerAvailability.placementOrphan ? scanLayerVisibility.placementOrphan : true,
+    typePages: effectiveScanLayerAvailability.typePages ? scanLayerVisibility.typePages : true,
+    typeFiles: effectiveScanLayerAvailability.typeFiles ? scanLayerVisibility.typeFiles : true,
+    statusBroken: effectiveScanLayerAvailability.statusBroken ? scanLayerVisibility.statusBroken : true,
+    statusError: effectiveScanLayerAvailability.statusError ? scanLayerVisibility.statusError : true,
+    statusInactive: effectiveScanLayerAvailability.statusInactive ? scanLayerVisibility.statusInactive : true,
+    statusAuth: effectiveScanLayerAvailability.statusAuth ? scanLayerVisibility.statusAuth : true,
+    statusDuplicate: effectiveScanLayerAvailability.statusDuplicate ? scanLayerVisibility.statusDuplicate : true,
+  }), [effectiveScanLayerAvailability, scanLayerVisibility]);
 
   const badgeVisibility = useMemo(() => ({
     subdomains: false,
@@ -2920,38 +2860,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (!root) return;
-    const nodesForCounts = collectAllNodesWithOrphans(root, orphans);
-    const forestIndexForCounts = buildForestIndex(root, orphans);
-    const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
-    const hasInactive = nodesForCounts.some((node) => (
-      node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
-    ));
-    const hasAuth = nodesForCounts.some((node) => !!node.authRequired);
-    const hasErrors = nodesForCounts.some((node) => !!node.isError);
-    const hasBroken = nodesForCounts.some((node) => {
-      const meta = forestIndexForCounts.nodes.get(node.id);
-      if (isTopLevelOrphanRootMeta(meta)) return false;
-      return !!node.isBroken || node.orphanType === 'broken';
-    });
-    const hasDuplicates = nodesForCounts.some((node) => !!node.isDuplicate);
-    const hasSubdomains = (orphans || []).some((orphan) => !!orphan.subdomainRoot);
-    const hasOrphans = (orphans || []).some((orphan) => !orphan.subdomainRoot);
-
     setScanLayerAvailability((prev) => ({
       ...prev,
-      placementPrimary: !!root,
-      placementSubdomain: hasSubdomains,
-      placementOrphan: hasOrphans,
-      // Type layers hidden for now (until scan can classify templates)
-      typePages: false,
-      typeFiles: false,
-      statusBroken: hasBroken,
-      statusError: hasErrors,
-      statusInactive: hasInactive,
-      statusAuth: hasAuth,
-      statusDuplicate: hasDuplicates,
+      ...fullMapDisplaySummary.scanLayerAvailability,
     }));
-  }, [root, orphans]);
+  }, [fullMapDisplaySummary, root]);
 
   const reportEntries = useMemo(() => {
     if (!root) return [];
@@ -3807,18 +3720,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [commentEntries, unreadMentionCommentIds]);
 
   const markerStatusUsage = useMemo(() => {
-    const usedStatuses = new Set();
-    const nodes = collectAllNodesWithOrphans(root, orphans);
-    nodes.forEach((node) => {
-      const annotations = node?.annotations;
-      if (!annotations) return;
-      const status = annotations.status || 'none';
-      if (status !== 'none') {
-        usedStatuses.add(status);
-      }
-    });
+    const usedStatuses = new Set(fullMapDisplaySummary.markerStatusValues || []);
     return { usedStatuses, hasAnyMarker: usedStatuses.size > 0 };
-  }, [root, orphans]);
+  }, [fullMapDisplaySummary.markerStatusValues]);
 
   const shouldAutoMarkMoved = useMemo(() => {
     if (!root || isImportedMap) return false;
@@ -4028,30 +3932,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const resetScanLayers = useCallback(() => {
     setScanMeta({ brokenLinks: [] });
-    setScanLayerAvailability({
-      placementPrimary: false,
-      placementSubdomain: false,
-      placementOrphan: false,
-      typePages: false,
-      typeFiles: false,
-      statusBroken: false,
-      statusError: false,
-      statusInactive: false,
-      statusAuth: false,
-      statusDuplicate: false,
-    });
-    setScanLayerVisibility({
-      placementPrimary: true,
-      placementSubdomain: true,
-      placementOrphan: true,
-      typePages: true,
-      typeFiles: true,
-      statusBroken: true,
-      statusError: true,
-      statusInactive: true,
-      statusAuth: true,
-      statusDuplicate: true,
-    });
+    setScanLayerAvailability({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
+    setScanLayerVisibility({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
   }, []);
 
   const clearCanvas = async () => {
@@ -4436,6 +4318,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleLargeMapSceneLoaded = useCallback((scene) => {
     if (!useLargeMapSurface) return;
     setLargeMapSceneBounds(scene?.bounds || null);
+    if (scene?.displaySummary) {
+      setLargeMapDisplaySummary(normalizeMapDisplaySummary(scene.displaySummary));
+    }
     const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
     const sceneNodeCount = Number(scene?.nodeCount || 0);
     const hasSceneThumbnails = rawNodes.some((node) => node?.hasThumbnail || node?.thumbnailUrl);
@@ -9110,6 +8995,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     resetAutosaveTracking();
     setMapPermissions(null);
     resetScanLayers();
+    setLargeMapDisplaySummary(null);
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     largeMapHomeNodeRef.current = null;
@@ -9163,6 +9049,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
     setMapPermissions(null);
     resetScanLayers();
+    setLargeMapDisplaySummary(null);
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
@@ -9228,6 +9115,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
     setMapPermissions(null);
     resetScanLayers();
+    setLargeMapDisplaySummary(normalizeMapDisplaySummary(map?.displaySummary));
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
@@ -14306,7 +14194,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanOptionsRef={scanOptionsRef}
         onToggleScanOptions={() => setShowScanOptions(v => !v)}
         onScanOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
-        scanLayerAvailability={scanLayerAvailability}
+        scanLayerAvailability={effectiveScanLayerAvailability}
         scanLayerVisibility={scanLayerVisibility}
         onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
         onScan={scan}
@@ -14476,7 +14364,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     optionsRef={scanOptionsRef}
                     onToggleOptions={() => setShowScanOptions(v => !v)}
                     onOptionChange={(key) => setScanOptions(prev => ({ ...prev, [key]: !prev[key] }))}
-                    scanLayerAvailability={scanLayerAvailability}
+                    scanLayerAvailability={effectiveScanLayerAvailability}
                     scanLayerVisibility={scanLayerVisibility}
                     onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
                     onScan={scan}
@@ -14701,6 +14589,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onAddNote={(node) => openCommentPopover(node)}
                     onViewNotes={(node) => openCommentPopover(node)}
                     activeId={activeId}
+                    layerVisibility={layerVisibility}
+                    changeFilters={changeFilters}
                     showPageNumbers={layers.pageNumbers}
                     thumbnailRequestIds={thumbnailScopeIds}
                     thumbnailSessionId={thumbnailSessionId}
@@ -15427,7 +15317,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                     onToggleBrokenLinks={() => setLayers((currentLayers) => ({ ...currentLayers, brokenLinks: !currentLayers.brokenLinks }))}
                     connectionAvailability={connectionAvailability}
-                    scanLayerAvailability={scanLayerAvailability}
+                    scanLayerAvailability={effectiveScanLayerAvailability}
                     scanLayerVisibility={scanLayerVisibility}
                     onToggleScanLayer={(layerKey) => {
                       setScanLayerVisibility((prev) => ({
