@@ -2269,12 +2269,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   const largeMapThumbnailInfoToastKeyRef = useRef('');
   const [largeMapNodeCacheVersion, setLargeMapNodeCacheVersion] = useState(0);
   const [largeMapSceneRefreshKey, setLargeMapSceneRefreshKey] = useState(0);
+  const [largeMapSceneBounds, setLargeMapSceneBounds] = useState(null);
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
     largeMapNodeCacheRef.current = new Map();
     largeMapVisibleNodesRef.current = [];
     largeMapThumbnailInfoToastKeyRef.current = '';
+    setLargeMapSceneBounds(null);
     setLargeMapNodeCacheVersion((version) => version + 1);
   }, [currentMap?.id]);
 
@@ -4428,6 +4430,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleLargeMapSceneLoaded = useCallback((scene) => {
     if (!useLargeMapSurface) return;
+    setLargeMapSceneBounds(scene?.bounds || null);
     const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
     const sceneNodeCount = Number(scene?.nodeCount || 0);
     const hasSceneThumbnails = rawNodes.some((node) => node?.hasThumbnail || node?.thumbnailUrl);
@@ -15622,7 +15625,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               minimapProps={{
                 isOpen: showMinimap,
                 layout: mapLayout,
-                bounds: worldBounds,
+                bounds: useLargeMapSurface ? largeMapSceneBounds : worldBounds,
                 canvasSize,
                 pan,
                 scale,

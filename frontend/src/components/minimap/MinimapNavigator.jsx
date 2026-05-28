@@ -9,7 +9,6 @@ const DEFAULT_MINIMAP_HEIGHT = 110;
 const MINIMAP_PADDING = 0;
 const GUTTER_WIDTH = 12;
 const ZOOM_THUMB_WIDTH = 28;
-const ZOOM_TRACK_HEIGHT = 6;
 const VIEWPORT_MIN_SIZE = 8;
 
 const clampValue = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -59,6 +58,29 @@ const getBoundsFromLayout = (layout) => {
   return { minX, minY, maxX, maxY };
 };
 
+export const normalizeWorldBounds = (bounds) => {
+  if (!bounds || typeof bounds !== 'object') return null;
+  const minX = Number(bounds.minX);
+  const minY = Number(bounds.minY);
+  const maxX = Number(bounds.maxX);
+  const maxY = Number(bounds.maxY);
+  if ([minX, minY, maxX, maxY].every(Number.isFinite)) {
+    return { minX, minY, maxX, maxY };
+  }
+
+  const x = Number.isFinite(Number(bounds.x)) ? Number(bounds.x) : 0;
+  const y = Number.isFinite(Number(bounds.y)) ? Number(bounds.y) : 0;
+  const w = Number(bounds.w ?? bounds.width);
+  const h = Number(bounds.h ?? bounds.height);
+  if (![w, h].every(Number.isFinite)) return null;
+  return {
+    minX: x,
+    minY: y,
+    maxX: x + Math.max(1, w),
+    maxY: y + Math.max(1, h),
+  };
+};
+
 const MinimapNavigator = ({
   layout,
   bounds,
@@ -97,7 +119,7 @@ const MinimapNavigator = ({
   const minimapWidth = measuredSize.width > 0 ? measuredSize.width : DEFAULT_MINIMAP_WIDTH;
   const minimapHeight = measuredSize.height > 0 ? measuredSize.height : DEFAULT_MINIMAP_HEIGHT;
 
-  const worldBounds = bounds || getBoundsFromLayout(layout);
+  const worldBounds = normalizeWorldBounds(bounds) || getBoundsFromLayout(layout);
   if (!worldBounds) return null;
 
   const boundsW = Math.max(1, worldBounds.maxX - worldBounds.minX);
@@ -124,8 +146,8 @@ const MinimapNavigator = ({
 
   const viewWorld = (canvasSize?.width && canvasSize?.height)
     ? {
-        x: 0 / safeScale - safePan.x,
-        y: 0 / safeScale - safePan.y,
+        x: (0 - safePan.x) / safeScale,
+        y: (0 - safePan.y) / safeScale,
         w: canvasSize.width / safeScale,
         h: canvasSize.height / safeScale,
       }
@@ -208,8 +230,6 @@ const MinimapNavigator = ({
         return { id: `${connector.type}-${idx}`, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
       })
     : [];
-
-  const clampOutputs = viewport;
 
   const getLocalPoint = (event) => {
     const rect = previewRef.current?.getBoundingClientRect();

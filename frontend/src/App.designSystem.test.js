@@ -287,10 +287,23 @@ describe('map image asset persistence', () => {
   });
 
   test('large maps keep area selection enabled', () => {
-    expect(appJs).toContain('largeMapVisibleNodesRef.current = Array.isArray(scene?.nodes) ? scene.nodes : [];');
+    expect(appJs).toContain('const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];');
+    expect(appJs).toContain('largeMapVisibleNodesRef.current = rawNodes.map((node) => (');
     expect(appJs).toContain('largeMapVisibleNodesRef.current.forEach((node) => {');
     expect(appJs).toContain('getViewportSelectionRectStyle(selectionBox');
     expect(appJs).not.toContain('{!useLargeMapSurface && selectionBox && (');
+  });
+
+  test('large map viewfinder uses scene bounds', () => {
+    expect(appJs).toContain('setLargeMapSceneBounds(scene?.bounds || null);');
+    expect(appJs).toContain('bounds: useLargeMapSurface ? largeMapSceneBounds : worldBounds');
+  });
+
+  test('page details modal spacing uses design-system spacing tokens', () => {
+    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-20\);[\s\S]*padding-bottom: var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.edit-node-duplicate-section \{[\s\S]*gap: var\(--unit-12\);[\s\S]*padding: var\(--unit-12\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*gap: var\(--unit-12\);/);
+    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*gap: var\(--unit-12\);/);
   });
 
   test('autosave snapshots only track canvas content changes', () => {

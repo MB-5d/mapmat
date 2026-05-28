@@ -40,8 +40,8 @@ const ZoomControls = ({
       <IconButton
         size="sm"
         onClick={onToggleMinimap}
-        title="Toggle Viewfinder"
-        aria-label="Toggle Viewfinder"
+        title="Viewfinder"
+        aria-label="Viewfinder"
         aria-pressed={showMinimap}
       >
         <PanelBottom size={18} />

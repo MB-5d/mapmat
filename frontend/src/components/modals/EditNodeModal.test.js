@@ -200,6 +200,32 @@ describe('EditNodeModal', () => {
     expect(container.textContent).toContain('Missing meta description');
   });
 
+  test('uses Page Details title and does not repeat HTTP status label', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Missing page',
+            url: 'https://example.com/missing',
+            pageType: 'Page',
+            httpStatus: 404,
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          mode="edit"
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Page Details');
+    expect(container.textContent).toContain('Scan Status');
+    expect(container.textContent).toContain('HTTP 404 / Not Found');
+    expect(container.textContent).not.toMatch(/HTTP status/i);
+  });
+
   test('uploads inline thumbnail data before saving', async () => {
     const onSave = jest.fn();
     const onClose = jest.fn();

@@ -120,7 +120,7 @@ const EditNodeModal = ({
   const statusCode = getNodeStatusCode(node);
   const httpErrorLabel = getNodeHttpErrorLabel(node);
   const scanStatusRows = [
-    statusCode !== null ? ['HTTP status', httpErrorLabel || `HTTP ${statusCode}`] : null,
+    statusCode !== null ? ['', httpErrorLabel || `HTTP ${statusCode}`] : null,
     node?.isViewableError ? ['Error type', 'Viewable HTTP error'] : null,
     isVirtualMissingNode(node) ? ['Scan label', 'Missing virtual page'] : null,
     node?.authRequired ? ['Scan label', 'Auth required'] : null,
@@ -230,7 +230,7 @@ const EditNodeModal = ({
 
   const modalTitle = isHomePageCreation
     ? 'Add Home Page'
-    : mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
+    : mode === 'edit' ? 'Page Details' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
   const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
 
   const getExcludeIds = () => {
@@ -324,8 +324,8 @@ const EditNodeModal = ({
           <div className="edit-node-duplicate-section">
             <div className="edit-node-section-title">Scan Status</div>
             {scanStatusRows.map(([label, value], index) => (
-              <div className="edit-node-duplicate-row" key={`${label}-${index}`}>
-                <span>{label}</span>
+              <div className="edit-node-duplicate-row" key={`${label || 'status'}-${index}`}>
+                {label ? <span>{label}</span> : null}
                 <strong>{value}</strong>
               </div>
             ))}
