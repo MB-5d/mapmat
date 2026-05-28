@@ -7481,7 +7481,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-none);
-  padding-bottom: var(--unit-24);
+  padding-bottom: var(--space-none);
   scroll-padding-block: var(--unit-20) var(--unit-24);
   overscroll-behavior: contain;
 }
@@ -7489,6 +7489,10 @@ body {
 .edit-node-form .field {
   gap: var(--unit-12);
   min-width: 0;
+}
+
+.edit-node-form > .field:last-child {
+  margin-bottom: var(--unit-24);
 }
 
 .edit-node-modal__footer-actions {

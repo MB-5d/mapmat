@@ -314,8 +314,9 @@ describe('map image asset persistence', () => {
     expect(formBlock).not.toContain('flex: 1;');
     expect(formBlock).not.toContain('min-height: 0;');
     expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-20\);/);
-    expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding-bottom: var\(--unit-24\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding-bottom: var\(--space-none\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
     expect(appCss).toMatch(/\.edit-node-form \.field \{[\s\S]*gap: var\(--unit-12\);/);
+    expect(appCss).toMatch(/\.edit-node-form > \.field:last-child \{[\s\S]*margin-bottom: var\(--unit-24\);/);
     expect(appCss).toMatch(/\.edit-node-modal__footer-actions \{[\s\S]*gap: var\(--unit-12\);/);
     expect(appCss).toMatch(/\.edit-node-duplicate-section \{[\s\S]*gap: var\(--unit-12\);[\s\S]*padding: var\(--unit-12\);/);
     expect(appCss).toMatch(/\.edit-node-duplicate-row \{[\s\S]*gap: var\(--unit-12\);/);
