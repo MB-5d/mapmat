@@ -310,14 +310,14 @@ describe('map image asset persistence', () => {
   });
 
   test('page details modal spacing uses design-system spacing tokens', () => {
-    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-20\);[\s\S]*padding-bottom: var\(--unit-24\);/);
-    expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-20\);/);
+    expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding-bottom: var\(--unit-24\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
     expect(appCss).toMatch(/\.edit-node-form \.field \{[\s\S]*gap: var\(--unit-12\);/);
     expect(appCss).toMatch(/\.edit-node-modal__footer-actions \{[\s\S]*gap: var\(--unit-12\);/);
     expect(appCss).toMatch(/\.edit-node-duplicate-section \{[\s\S]*gap: var\(--unit-12\);[\s\S]*padding: var\(--unit-12\);/);
     expect(appCss).toMatch(/\.edit-node-duplicate-row \{[\s\S]*gap: var\(--unit-12\);/);
-    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*gap: var\(--unit-20\);/);
-    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*gap: var\(--unit-20\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*gap: var\(--unit-12\);/);
+    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*column-gap: var\(--unit-20\);[\s\S]*row-gap: var\(--unit-12\);/);
   });
 
   test('autosave snapshots only track canvas content changes', () => {

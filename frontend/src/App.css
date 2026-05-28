@@ -7477,13 +7477,13 @@ body {
   gap: var(--unit-20);
   flex: 1;
   min-height: 0;
-  padding-bottom: var(--unit-24);
 }
 
 .edit-node-form-content {
   display: flex;
   flex-direction: column;
   gap: var(--space-none);
+  padding-bottom: var(--unit-24);
   scroll-padding-block: var(--unit-20) var(--unit-24);
   overscroll-behavior: contain;
 }
@@ -7503,7 +7503,7 @@ body {
 .edit-node-seo-section {
   display: flex;
   flex-direction: column;
-  gap: var(--unit-20);
+  gap: var(--unit-12);
   padding-top: var(--unit-12);
   border-top: var(--border-width-subtle) solid var(--color-border-subtle, #e2e8f0);
 }
@@ -7596,7 +7596,8 @@ body {
 .edit-node-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--unit-20);
+  column-gap: var(--unit-20);
+  row-gap: var(--unit-12);
 }
 
 .edit-node-form-grid > .field {
