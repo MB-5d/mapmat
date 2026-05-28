@@ -310,6 +310,9 @@ describe('map image asset persistence', () => {
   });
 
   test('page details modal spacing uses design-system spacing tokens', () => {
+    const formBlock = appCss.match(/\.edit-node-form \{([\s\S]*?)\}/)?.[1] || '';
+    expect(formBlock).not.toContain('flex: 1;');
+    expect(formBlock).not.toContain('min-height: 0;');
     expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-20\);/);
     expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding-bottom: var\(--unit-24\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
     expect(appCss).toMatch(/\.edit-node-form \.field \{[\s\S]*gap: var\(--unit-12\);/);
