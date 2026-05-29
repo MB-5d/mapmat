@@ -64,6 +64,7 @@ export { normalizeWorldBounds };
 
 const MinimapNavigator = ({
   layout,
+  overview,
   bounds,
   canvasSize,
   pan,
@@ -80,7 +81,10 @@ const MinimapNavigator = ({
   const previewRef = useRef(null);
   const trackRef = useRef(null);
   const dragRef = useRef(null);
+  const pendingPanRef = useRef(null);
+  const panFrameRef = useRef(null);
   const [measuredSize, setMeasuredSize] = useState({ width: 0, height: 0 });
+  const [dragViewWorld, setDragViewWorld] = useState(null);
 
   useEffect(() => {
     if (!previewRef.current) return;
@@ -97,10 +101,16 @@ const MinimapNavigator = ({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => () => {
+    if (panFrameRef.current && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(panFrameRef.current);
+    }
+  }, []);
+
   const minimapWidth = measuredSize.width > 0 ? measuredSize.width : DEFAULT_MINIMAP_WIDTH;
   const minimapHeight = measuredSize.height > 0 ? measuredSize.height : DEFAULT_MINIMAP_HEIGHT;
 
-  const worldBounds = normalizeWorldBounds(bounds) || getBoundsFromLayout(layout);
+  const worldBounds = normalizeWorldBounds(bounds) || normalizeWorldBounds(overview?.bounds) || getBoundsFromLayout(layout);
   if (!worldBounds) return null;
 
   const boundsW = Math.max(1, worldBounds.maxX - worldBounds.minX);
@@ -125,7 +135,7 @@ const MinimapNavigator = ({
     y: Number.isFinite(pan?.y) ? pan.y : 0,
   };
 
-  const viewWorld = (canvasSize?.width && canvasSize?.height)
+  const baseViewWorld = (canvasSize?.width && canvasSize?.height)
     ? {
         x: (0 - safePan.x) / safeScale,
         y: (0 - safePan.y) / safeScale,
@@ -138,6 +148,7 @@ const MinimapNavigator = ({
         w: Math.max(1, worldBounds.maxX - worldBounds.minX),
         h: Math.max(1, worldBounds.maxY - worldBounds.minY),
       };
+  const viewWorld = dragViewWorld || baseViewWorld;
 
   const miniScale = Math.max(0.0001, visibleInner.h / boundsH);
   const contentW = boundsW * miniScale;
@@ -194,7 +205,14 @@ const MinimapNavigator = ({
     h: clampedH,
   };
 
-  const nodes = layout
+  const nodes = Array.isArray(overview?.nodes)
+    ? overview.nodes.map((node) => {
+        const origin = worldToMini(node.x, node.y);
+        const w = Math.max(2, node.w * miniScale);
+        const h = Math.max(2, node.h * miniScale);
+        return { id: node.id, x: origin.x, y: origin.y, w, h, depth: node.depth ?? 0 };
+      })
+    : layout
     ? Array.from(layout.nodes.values()).map((node) => {
         const origin = worldToMini(node.x, node.y);
         const w = Math.max(2, node.w * miniScale);
@@ -204,7 +222,13 @@ const MinimapNavigator = ({
       })
     : [];
 
-  const connectors = layout?.connectors
+  const connectors = Array.isArray(overview?.connectors)
+    ? overview.connectors.map((connector, idx) => {
+        const p1 = worldToMini(connector.x1, connector.y1);
+        const p2 = worldToMini(connector.x2, connector.y2);
+        return { id: connector.id || `${connector.type || 'connector'}-${idx}`, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+      })
+    : layout?.connectors
     ? layout.connectors.map((connector, idx) => {
         const p1 = worldToMini(connector.x1, connector.y1);
         const p2 = worldToMini(connector.x2, connector.y2);
@@ -232,6 +256,33 @@ const MinimapNavigator = ({
     onZoomTo?.(nextScale);
   };
 
+  const flushPendingPan = () => {
+    const pending = pendingPanRef.current;
+    pendingPanRef.current = null;
+    panFrameRef.current = null;
+    if (!pending) return;
+    setDragViewWorld(pending.viewWorld);
+    onPanTo?.(pending.worldLeft, pending.worldTop);
+  };
+
+  const schedulePanTo = (worldLeft, worldTop) => {
+    pendingPanRef.current = {
+      worldLeft,
+      worldTop,
+      viewWorld: {
+        ...baseViewWorld,
+        x: worldLeft,
+        y: worldTop,
+      },
+    };
+    if (panFrameRef.current) return;
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      panFrameRef.current = window.requestAnimationFrame(flushPendingPan);
+      return;
+    }
+    flushPendingPan();
+  };
+
   const handlePointerDown = (event) => {
     if (!previewRef.current) return;
     event.preventDefault();
@@ -257,6 +308,7 @@ const MinimapNavigator = ({
       startWorldX: viewWorld.x,
       startWorldY: viewWorld.y,
     };
+    setDragViewWorld(viewWorld);
     previewRef.current.setPointerCapture(event.pointerId);
   };
 
@@ -273,13 +325,15 @@ const MinimapNavigator = ({
     const worldLeft = dragRef.current.startWorldX + deltaWorldX;
     const worldTop = dragRef.current.startWorldY + deltaWorldY;
 
-    onPanTo?.(worldLeft, worldTop);
+    schedulePanTo(worldLeft, worldTop);
   };
 
   const handlePointerUp = (event) => {
     if (dragRef.current?.mode !== 'viewport') return;
     event.preventDefault();
+    flushPendingPan();
     dragRef.current = null;
+    setDragViewWorld(null);
     try {
       previewRef.current?.releasePointerCapture(event.pointerId);
     } catch {}

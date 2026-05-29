@@ -21,6 +21,8 @@ describe('MinimapNavigator', () => {
   let originalResizeObserver;
   let originalSetPointerCapture;
   let originalReleasePointerCapture;
+  let originalRequestAnimationFrame;
+  let originalCancelAnimationFrame;
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -33,8 +35,15 @@ describe('MinimapNavigator', () => {
     };
     originalSetPointerCapture = Element.prototype.setPointerCapture;
     originalReleasePointerCapture = Element.prototype.releasePointerCapture;
+    originalRequestAnimationFrame = window.requestAnimationFrame;
+    originalCancelAnimationFrame = window.cancelAnimationFrame;
     Element.prototype.setPointerCapture = jest.fn();
     Element.prototype.releasePointerCapture = jest.fn();
+    window.requestAnimationFrame = (callback) => {
+      callback(Date.now());
+      return 1;
+    };
+    window.cancelAnimationFrame = jest.fn();
   });
 
   afterEach(() => {
@@ -52,6 +61,8 @@ describe('MinimapNavigator', () => {
     } else {
       delete Element.prototype.releasePointerCapture;
     }
+    window.requestAnimationFrame = originalRequestAnimationFrame;
+    window.cancelAnimationFrame = originalCancelAnimationFrame;
     container.remove();
     container = null;
     root = null;
@@ -86,6 +97,34 @@ describe('MinimapNavigator', () => {
     expect(Number(viewport.getAttribute('y'))).toBeCloseTo(27.5);
     expect(Number(viewport.getAttribute('width'))).toBeCloseTo(110);
     expect(Number(viewport.getAttribute('height'))).toBeCloseTo(55);
+  });
+
+  test('renders large-map overview nodes when full layout is unavailable', () => {
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          overview={{
+            bounds: { w: 4000, h: 2000 },
+            nodes: [
+              { id: 'overview-home', x: 0, y: 0, w: 288, h: 200, depth: 0 },
+              { id: 'overview-child', x: 1000, y: 500, w: 288, h: 200, depth: 1 },
+            ],
+            connectors: [
+              { id: 'overview-link', x1: 144, y1: 200, x2: 1144, y2: 500 },
+            ],
+          }}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          colors={{}}
+        />
+      );
+    });
+
+    expect(container.querySelectorAll('.minimap-navigator-node')).toHaveLength(2);
+    expect(container.querySelectorAll('.minimap-navigator-connector')).toHaveLength(1);
   });
 
   test('uses shared icon button states for minimap zoom controls', () => {
@@ -169,6 +208,12 @@ describe('MinimapNavigator', () => {
 
   test('drags the red viewport box by the total pointer distance', () => {
     const onPanTo = jest.fn();
+    const animationFrames = [];
+    window.requestAnimationFrame = jest.fn((callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+
     act(() => {
       root.render(
         <MinimapNavigator
@@ -201,10 +246,11 @@ describe('MinimapNavigator', () => {
       dispatchPointer(preview, 'pointerdown', { clientX: 160, clientY: 55 });
       dispatchPointer(preview, 'pointermove', { clientX: 180, clientY: 65 });
       dispatchPointer(preview, 'pointermove', { clientX: 200, clientY: 75 });
+      animationFrames.forEach((callback) => callback(Date.now()));
     });
 
-    expect(onPanTo).toHaveBeenCalledTimes(2);
-    const [worldLeft, worldTop] = onPanTo.mock.calls[1];
+    expect(onPanTo).toHaveBeenCalledTimes(1);
+    const [worldLeft, worldTop] = onPanTo.mock.calls[0];
     expect(worldLeft).toBeCloseTo(1727.27);
     expect(worldTop).toBeCloseTo(863.64);
   });

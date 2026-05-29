@@ -27,9 +27,17 @@
 
 ## Validation Commands
 - Backend syntax and boundary checks: `npm run check:backend`
+- Backend checks against the Postgres runtime path: `npm run check:backend:postgres`
 - Frontend production build: `npm run check:frontend-build`
 - Staging runtime verification: `npm run verify:runtime:staging`
+- Production runtime verification: `npm run verify:runtime:production`
+- Full runtime verification across staging and production: `npm run verify:runtime:all`
 - Staging realtime verification: `npm run verify:realtime:staging:preflight`
+
+## Realtime Rollout Checks
+- Before scope or broad-rollout changes, compare staging vs production policy with `npm run verify:realtime:rollout-state`.
+- For staged canary rollout checks, run `npm run verify:realtime:staging:canary` and `npm run verify:realtime:staging:canary:window`.
+- Only when a broad rollout is explicitly intended, run `npm run verify:realtime:staging:broad` and `npm run verify:realtime:staging:broad:window`.
 
 ## Automation Worktrees
 - In Codex automation worktrees, `git status --short --branch` may show `## HEAD (no branch)`; treat that detached state as normal unless another signal shows a real git problem.

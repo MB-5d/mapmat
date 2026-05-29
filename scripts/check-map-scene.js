@@ -118,6 +118,19 @@ assert(largeScene.visibleNodeCount < largeScene.nodeCount);
 assert(largeScene.homeNode, 'large scenes should include home node even when viewport is sparse');
 assert.strictEqual(largeScene.homeNode.id, 'large-root');
 assert(largeScene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
+assert.strictEqual(largeScene.minimap, undefined);
+
+const largeSceneWithMinimap = buildMapScene({
+  root: largeRoot,
+  viewport: { x: 0, y: 0, w: 1440, h: 900, zoom: 0.75 },
+  showThumbnails: true,
+  includeDisplaySummary: true,
+});
+assert(largeSceneWithMinimap.minimap, 'summary scene should include minimap overview');
+assert(largeSceneWithMinimap.minimap.nodes.length > largeSceneWithMinimap.visibleNodeCount);
+assert(largeSceneWithMinimap.minimap.nodes.length <= 2500);
+assert(largeSceneWithMinimap.minimap.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'url')));
+assert(largeSceneWithMinimap.minimap.connectors.length <= 2500);
 
 const largeLayout = computeSceneLayout(largeRoot, [], { showThumbnails: false });
 const largeNodes = new Map(largeLayout.nodes.map((node) => [node.id, node]));

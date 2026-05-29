@@ -10,9 +10,9 @@ describe('ScanBar', () => {
   const defaultOptions = {
     subdomains: false,
     orphanPages: false,
-    inactivePages: false,
-    errorPages: false,
-    duplicates: false,
+    inactivePages: true,
+    errorPages: true,
+    duplicates: true,
     authenticatedPages: false,
     files: false,
     brokenLinks: false,
@@ -110,6 +110,17 @@ describe('ScanBar', () => {
     expect(clearButton.className).toContain('ui-icon-btn');
     expect(clearButton.className).toContain('ui-icon-btn--type-ghost');
     expect(clearButton.className).toContain('ui-icon-btn--style-mono');
+  });
+
+  test('shows standard status options enabled by default', () => {
+    renderScanBar({ showOptions: true });
+
+    ['Inactive pages', 'Error pages', 'Duplicates'].forEach((label) => {
+      const item = Array.from(container.querySelectorAll('.scan-options-checkbox')).find((entry) =>
+        entry.textContent.includes(label)
+      );
+      expect(item?.querySelector('input')?.checked).toBe(true);
+    });
   });
 
   test('disables the scan action when the URL is invalid', () => {

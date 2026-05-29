@@ -2051,13 +2051,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [thumbnailScopeIds, setThumbnailScopeIds] = useState(null);
   const [scanOptions, setScanOptions] = useState({
-    inactivePages: false,
+    inactivePages: true,
     subdomains: false,
     authenticatedPages: false,
     orphanPages: false,
-    errorPages: false,
+    errorPages: true,
     brokenLinks: false,
-    duplicates: false,
+    duplicates: true,
     files: false,
     crosslinks: false,
   });
@@ -2211,6 +2211,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [largeMapSceneRefreshKey, setLargeMapSceneRefreshKey] = useState(0);
   const [largeMapSceneBounds, setLargeMapSceneBounds] = useState(null);
   const [largeMapDisplaySummary, setLargeMapDisplaySummary] = useState(null);
+  const [largeMapMinimapOverview, setLargeMapMinimapOverview] = useState(null);
   const handledAuthRedirectKeyRef = useRef('');
 
   useEffect(() => {
@@ -2218,6 +2219,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     largeMapVisibleNodesRef.current = [];
     largeMapThumbnailInfoToastKeyRef.current = '';
     setLargeMapSceneBounds(null);
+    setLargeMapMinimapOverview(null);
     setLargeMapNodeCacheVersion((version) => version + 1);
   }, [currentMap?.id]);
 
@@ -4321,6 +4323,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     setLargeMapSceneBounds(scene?.bounds || null);
     if (scene?.displaySummary) {
       setLargeMapDisplaySummary(normalizeMapDisplaySummary(scene.displaySummary));
+    }
+    if (scene?.minimap) {
+      setLargeMapMinimapOverview(scene.minimap);
     }
     const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
     const sceneNodeCount = Number(scene?.nodeCount || 0);
@@ -15525,7 +15530,8 @@ export default function App({ currentRoute, navigateToRoute }) {
               }}
               minimapProps={{
                 isOpen: showMinimap,
-                layout: mapLayout,
+                layout: useLargeMapSurface ? null : mapLayout,
+                overview: useLargeMapSurface ? largeMapMinimapOverview : null,
                 bounds: useLargeMapSurface ? largeMapSceneBounds : worldBounds,
                 canvasSize,
                 pan,

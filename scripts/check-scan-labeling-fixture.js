@@ -32,17 +32,18 @@ async function fetchJson(url, options = {}) {
   return data;
 }
 
-function html({ title, body, status = 200 }) {
+function html({ title, body, status = 200, head = '' }) {
   return {
     status,
     headers: { 'content-type': 'text/html; charset=utf-8' },
-    body: `<!doctype html><html><head><title>${title}</title><meta name="description" content="${title} description"></head><body>${body}</body></html>`,
+    body: `<!doctype html><html><head><title>${title}</title><meta name="description" content="${title} description">${head}</head><body>${body}</body></html>`,
   };
 }
 
 function createFixtureServer() {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://fixture.local');
+    const origin = `http://${req.headers.host}`;
     let response;
     if (url.pathname === '/') {
       response = html({
@@ -51,6 +52,8 @@ function createFixtureServer() {
           '<h1>Fixture Home</h1>',
           '<a href="/server-error">Server error</a>',
           '<a href="/gone">Gone page</a>',
+          '<a href="/duplicate-a">Duplicate A</a>',
+          '<a href="/duplicate-b">Duplicate B</a>',
           '<a href="/docs/deep/page">Deep page</a>',
           '<a href="/assets/logo.svg">Logo</a>',
           '<a href="https://external.example/out">External page</a>',
@@ -68,6 +71,18 @@ function createFixtureServer() {
         status: 404,
         title: 'Page not found',
         body: '<h1>Not found</h1>',
+      });
+    } else if (url.pathname === '/duplicate-a') {
+      response = html({
+        title: 'Canonical Fixture',
+        head: `<link rel="canonical" href="${origin}/duplicate-a">`,
+        body: '<h1>Canonical Fixture</h1>',
+      });
+    } else if (url.pathname === '/duplicate-b') {
+      response = html({
+        title: 'Canonical Fixture Copy',
+        head: `<link rel="canonical" href="${origin}/duplicate-a">`,
+        body: '<h1>Canonical Fixture Copy</h1>',
       });
     } else if (url.pathname === '/docs/deep/page') {
       response = html({
@@ -154,8 +169,37 @@ async function runScan(fixtureBase, files = true) {
   });
 }
 
-function assertLabeling(result, fixtureBase) {
-  const nodes = flattenTree(result.root);
+async function runDefaultScan(fixtureBase) {
+  return fetchJson(`${API_BASE}/scan`, {
+    method: 'POST',
+    body: JSON.stringify({
+      url: `${fixtureBase}/`,
+      maxPages: 80,
+      options: {},
+    }),
+  });
+}
+
+async function runStatusOptionsOffScan(fixtureBase) {
+  return fetchJson(`${API_BASE}/scan`, {
+    method: 'POST',
+    body: JSON.stringify({
+      url: `${fixtureBase}/`,
+      maxPages: 80,
+      options: {
+        errorPages: false,
+        inactivePages: false,
+        duplicates: false,
+      },
+    }),
+  });
+}
+
+function assertLabeling(result, fixtureBase, { expectFiles = true } = {}) {
+  const nodes = [
+    ...flattenTree(result.root),
+    ...(result.orphans || []).flatMap((node) => flattenTree(node)),
+  ];
   const byUrl = new Map(nodes.map((node) => [node.url, node]));
 
   const viewableError = byUrl.get(`${fixtureBase}/server-error`);
@@ -175,14 +219,23 @@ function assertLabeling(result, fixtureBase) {
   assert.strictEqual(Boolean(notFound.isMissing), false);
   assert.strictEqual(Boolean(notFound.isVirtualMissing), false);
 
+  const duplicate = byUrl.get(`${fixtureBase}/duplicate-b`);
+  assert.ok(duplicate, 'duplicate page should be included');
+  assert.strictEqual(duplicate.isDuplicate, true);
+  assert.strictEqual(duplicate.duplicateOf, `${fixtureBase}/duplicate-a`);
+
   const virtualParent = byUrl.get(`${fixtureBase}/docs`);
   assert.ok(virtualParent, 'inferred parent should be present');
   assert.strictEqual(virtualParent.isMissing, true);
   assert.strictEqual(virtualParent.isVirtualMissing, true);
 
   const file = (result.files || []).find((entry) => entry.url === `${fixtureBase}/assets/logo.svg`);
-  assert.ok(file, 'same-host file should be included when Files is on');
-  assert.strictEqual(file.fileType, 'Image');
+  if (expectFiles) {
+    assert.ok(file, 'same-host file should be included when Files is on');
+    assert.strictEqual(file.fileType, 'Image');
+  } else {
+    assert.ok(!file, 'files should stay hidden when Files is off');
+  }
 
   const urls = allArtifactUrls(result);
   assert.ok(!urls.some((url) => url.includes('external.example')), 'external page should be excluded');
@@ -220,6 +273,21 @@ async function main() {
     fixture = await createFixtureServer();
     const fixtureBase = getServerUrl(fixture);
     await waitForHealth();
+
+    const defaultResult = await runDefaultScan(fixtureBase);
+    assertLabeling(defaultResult, fixtureBase, { expectFiles: false });
+    assert.strictEqual((defaultResult.files || []).length, 0, 'files should stay opt-in by default');
+
+    const statusOptionsOffResult = await runStatusOptionsOffScan(fixtureBase);
+    const statusOptionsOffNodes = flattenTree(statusOptionsOffResult.root);
+    assert.ok(
+      !statusOptionsOffNodes.some((node) => node.url === `${fixtureBase}/server-error`),
+      'error pages should still be removable when Error pages is off'
+    );
+    assert.ok(
+      !statusOptionsOffNodes.some((node) => node.isDuplicate),
+      'duplicates should still be removable when Duplicates is off'
+    );
 
     const resultWithFiles = await runScan(fixtureBase, true);
     assertLabeling(resultWithFiles, fixtureBase);

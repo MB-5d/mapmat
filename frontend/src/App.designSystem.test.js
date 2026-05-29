@@ -309,6 +309,8 @@ describe('map image asset persistence', () => {
 
   test('large map viewfinder uses scene bounds', () => {
     expect(appJs).toContain('setLargeMapSceneBounds(scene?.bounds || null);');
+    expect(appJs).toContain('setLargeMapMinimapOverview(scene.minimap);');
+    expect(appJs).toContain('overview: useLargeMapSurface ? largeMapMinimapOverview : null');
     expect(appJs).toContain('bounds: useLargeMapSurface ? largeMapSceneBounds : worldBounds');
     expect(appJs).toContain('normalizeCanvasWorldBounds(useLargeMapSurface ? largeMapSceneBounds : worldBounds)');
     expect(minimapCss).toMatch(/\.minimap-navigator \{[\s\S]*z-index: 1500;/);

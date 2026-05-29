@@ -15,6 +15,8 @@ const DEFAULT_LAYOUT = Object.freeze({
 
 const STACK_THRESHOLD = 5;
 const DEFAULT_OVERSCAN_PX = 1200;
+const MINIMAP_OVERVIEW_NODE_LIMIT = 2500;
+const MINIMAP_OVERVIEW_CONNECTOR_LIMIT = 2500;
 const DEFAULT_VIEWPORT = Object.freeze({
   x: -DEFAULT_OVERSCAN_PX,
   y: -DEFAULT_OVERSCAN_PX,
@@ -875,6 +877,42 @@ function createLayoutResult(nodes, connectors) {
   };
 }
 
+function sampleArray(items, limit) {
+  const source = Array.isArray(items) ? items : [];
+  if (source.length <= limit) return source;
+  const stride = Math.ceil(source.length / limit);
+  return source.filter((_, index) => index === 0 || index % stride === 0).slice(0, limit);
+}
+
+function buildMinimapOverview(layout) {
+  if (!layout) return null;
+  const sampledNodes = sampleArray(layout.nodes, MINIMAP_OVERVIEW_NODE_LIMIT);
+  const sampledConnectors = sampleArray(layout.connectors, MINIMAP_OVERVIEW_CONNECTOR_LIMIT);
+
+  return {
+    bounds: layout.bounds,
+    nodeCount: layout.nodes.length,
+    connectorCount: layout.connectors.length,
+    sampled: sampledNodes.length < layout.nodes.length || sampledConnectors.length < layout.connectors.length,
+    nodes: sampledNodes.map((node) => ({
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      w: node.w,
+      h: node.h,
+      depth: node.depth,
+    })),
+    connectors: sampledConnectors.map((connector, index) => ({
+      id: connector.id || `${connector.type || 'connector'}-${index}`,
+      x1: connector.x1,
+      y1: connector.y1,
+      x2: connector.x2,
+      y2: connector.y2,
+      type: connector.type || 'connector',
+    })),
+  };
+}
+
 function computeSceneLayout(root, orphans = [], {
   orientation = 'vertical',
   showThumbnails = true,
@@ -1016,7 +1054,10 @@ function buildMapScene({
     visibleConnectorCount: connectors.length,
     thumbnailLod,
     viewport: normalizedViewport,
-    ...(displaySummary ? { displaySummary } : {}),
+    ...(displaySummary ? {
+      displaySummary,
+      minimap: buildMinimapOverview(layout),
+    } : {}),
     homeNode: homeLayoutNode ? sanitizeSceneNode(homeLayoutNode, { thumbnailLod: 'none' }) : null,
     targetNode,
     expandedStackIds: Object.keys(sceneExpandedStacks).filter((id) => sceneExpandedStacks[id]),
@@ -1030,6 +1071,7 @@ module.exports = {
   DEFAULT_LAYOUT,
   buildMapScene,
   buildMapDisplaySummary,
+  buildMinimapOverview,
   computeSceneLayout,
   countMapNodes,
   collectNodeAndDescendantIds,

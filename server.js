@@ -3891,13 +3891,13 @@ function countScanTreeNodes(node) {
 function normalizeScanOptions(options = {}) {
   return {
     thumbnails: Boolean(options.thumbnails),
-    inactivePages: Boolean(options.inactivePages),
+    inactivePages: options.inactivePages !== false,
     subdomains: Boolean(options.subdomains),
     authenticatedPages: Boolean(options.authenticatedPages),
     orphanPages: Boolean(options.orphanPages),
-    errorPages: Boolean(options.errorPages),
+    errorPages: options.errorPages !== false,
     brokenLinks: Boolean(options.brokenLinks),
-    duplicates: Boolean(options.duplicates),
+    duplicates: options.duplicates !== false,
     files: Boolean(options.files),
     crosslinks: Boolean(options.crosslinks),
   };
@@ -4285,6 +4285,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanDiagnostics.fetchedPageCount += 1;
     } catch (e) {
       scanDiagnostics.failedFetches += 1;
+      if (source === 'common_path') return;
       // Still store node with fallback title so tree doesn't break
       if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
       if (scanOptions.inactivePages) inactivePages.push({ url, status: 0, reason: 'fetch_failed' });
@@ -4321,6 +4322,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanDiagnostics.rootClassification = classification.scanStatus;
     }
     if (status >= 400) {
+      if (source === 'common_path') return;
       const shouldKeep = (scanOptions.errorPages && (classification.isErrorStatus || classification.isBlockedStatus))
         || (scanOptions.authenticatedPages && classification.isAuthStatus)
         || (scanOptions.inactivePages && classification.isInactiveStatus);
@@ -4813,7 +4815,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
 
     if (node.isDuplicate) {
-      if (scanOptions.orphanPages) orphanCandidates.push(node);
+      if (scanOptions.duplicates || scanOptions.orphanPages) orphanCandidates.push(node);
       continue;
     }
 
@@ -5135,7 +5137,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   const result = {
     root,
-    orphans: (scanOptions.orphanPages || includePartialOrphans) ? prunedOrphanNodes : [],
+    orphans: (scanOptions.orphanPages || scanOptions.duplicates || includePartialOrphans) ? prunedOrphanNodes : [],
     subdomains: scanOptions.subdomains ? subdomainNodes : [],
     errors: scanOptions.errorPages ? errors : [],
     inactivePages: scanOptions.inactivePages ? inactivePages : [],
