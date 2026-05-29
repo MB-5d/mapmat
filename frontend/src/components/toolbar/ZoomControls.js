@@ -57,6 +57,7 @@ const ZoomControls = ({
         size="sm"
         variant="ghost"
         buttonStyle="mono"
+        className="zoom-reset-button"
         onClick={onResetView}
         title="Reset View (100%)"
         aria-label="Reset View"

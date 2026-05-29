@@ -399,6 +399,7 @@ body {
 .ui-icon-btn--sm {
   width: 16px;
   height: 16px;
+  border-radius: var(--ui-icon-button-radius-sm);
 }
 
 .ui-icon-btn--md {
@@ -577,15 +578,15 @@ body {
 }
 
 .ui-icon-btn.ui-icon-btn--active {
-  background: var(--ui-color-accent-soft);
-  border-color: var(--ui-color-accent-soft-border);
-  color: var(--ui-color-primary);
+  background: var(--ui-icon-button-active-bg);
+  border-color: var(--ui-icon-button-active-bg);
+  color: var(--ui-icon-button-active-fg);
 }
 
 .ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {
-  background: var(--ui-color-accent-soft);
-  border-color: var(--ui-color-accent-soft-border);
-  color: var(--ui-color-primary);
+  background: var(--ui-icon-button-active-bg-hover);
+  border-color: var(--ui-icon-button-active-bg-hover);
+  color: var(--ui-icon-button-active-fg);
 }
 
 .ui-icon-btn:disabled {
@@ -4627,6 +4628,10 @@ body {
   height: 20px;
   background: var(--ui-color-border);
   margin: 0 4px;
+}
+
+.zoom-reset-button {
+  margin-left: var(--space-xs);
 }
 
 /* Canvas Toolbar */

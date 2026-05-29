@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedOn": "2026-05-09",
+    "generatedOn": "2026-05-29",
     "sources": [
       "frontend/src/components/ui",
       "frontend/src/components/ui/icons.js",
@@ -169,9 +169,14 @@
       "states": [
         "rest",
         "hover",
+        "active",
         "focus-visible",
         "disabled",
         "loading"
+      ],
+      "notes": [
+        "Small icon buttons use radius/xs (4px).",
+        "Active icon buttons use primary fill with inverse icon color."
       ]
     },
     {

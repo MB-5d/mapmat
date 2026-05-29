@@ -87,6 +87,12 @@ describe('UI design-system contract', () => {
   test('icon button active state has enough specificity for styled icon buttons', () => {
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active {');
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {');
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-icon-button-active-bg\);[\s\S]*color: var\(--ui-icon-button-active-fg\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn--sm \{[\s\S]*border-radius: var\(--ui-icon-button-radius-sm\);[\s\S]*\}/);
+    expect(generatedCss).toContain('--ui-icon-button-radius-sm: var(--radius-xs);');
+    expect(generatedCss).toContain('--ui-icon-button-active-bg: var(--ui-color-primary);');
+    expect(generatedCss).toContain('--ui-icon-button-active-bg-hover: var(--ui-color-primary-hover);');
+    expect(generatedCss).toContain('--ui-icon-button-active-fg: var(--ui-icon-inverse);');
     expect(appCss).not.toContain('\n.ui-icon-btn--active {');
   });
 });

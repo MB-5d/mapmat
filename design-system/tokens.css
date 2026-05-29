@@ -101,6 +101,10 @@
   --ui-icon-size-lg: 20px;
   --icon-size-xl: 24px;
   --ui-icon-size-xl: 24px;
+  --ui-icon-button-radius-sm: var(--radius-xs);
+  --ui-icon-button-active-bg: var(--ui-color-primary);
+  --ui-icon-button-active-bg-hover: var(--ui-color-primary-hover);
+  --ui-icon-button-active-fg: var(--ui-icon-inverse);
   --unit-0: 0px;
   --unit-1: 1px;
   --unit-2: 2px;

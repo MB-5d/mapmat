@@ -128,6 +128,19 @@ const radius = {
   full: '999px',
 };
 
+const componentTokens = {
+  iconButton: {
+    radius: {
+      sm: 'var(--radius-xs)',
+    },
+    color: {
+      activeBg: 'var(--ui-color-primary)',
+      activeBgHover: 'var(--ui-color-primary-hover)',
+      activeFg: 'var(--ui-icon-inverse)',
+    },
+  },
+};
+
 const icon = {
   size: {
     xs: 12,
@@ -1194,7 +1207,11 @@ const components = [
       htmlType: 'native button type override',
       loading: 'boolean',
     },
-    states: ['rest', 'hover', 'focus-visible', 'disabled', 'loading'],
+    states: ['rest', 'hover', 'active', 'focus-visible', 'disabled', 'loading'],
+    notes: [
+      'Small icon buttons use radius/xs (4px).',
+      'Active icon buttons use primary fill with inverse icon color.',
+    ],
   },
   {
     name: 'StatusAlert',
@@ -1558,6 +1575,7 @@ module.exports = {
   primitiveColors,
   spacing,
   icon,
+  componentTokens,
   unitScale,
   border,
   radius,

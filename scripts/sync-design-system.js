@@ -7,6 +7,7 @@ const {
   primitiveColors,
   spacing,
   icon,
+  componentTokens,
   unitScale,
   border,
   radius,
@@ -141,6 +142,10 @@ function primitiveCssEntries() {
     entries[`icon-size-${name}`] = `${value}px`;
     entries[`ui-icon-size-${name}`] = `${value}px`;
   }
+  entries['ui-icon-button-radius-sm'] = componentTokens.iconButton.radius.sm;
+  entries['ui-icon-button-active-bg'] = componentTokens.iconButton.color.activeBg;
+  entries['ui-icon-button-active-bg-hover'] = componentTokens.iconButton.color.activeBgHover;
+  entries['ui-icon-button-active-fg'] = componentTokens.iconButton.color.activeFg;
   for (const [name, value] of Object.entries(unitScale)) {
     entries[`unit-${name}`] = `${value}px`;
   }
@@ -256,6 +261,7 @@ function buildTokensJson() {
       app: appSemantics,
       color: semanticColors,
       type: typeSemantic,
+      component: componentTokens,
       landing,
     },
     runtime: {
