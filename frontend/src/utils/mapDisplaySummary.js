@@ -1,4 +1,5 @@
 import { isRenderableTextUrl } from './url';
+import { isVirtualMissingNode } from './scanStatus';
 
 export const DEFAULT_SCAN_LAYER_AVAILABILITY = Object.freeze({
   placementPrimary: false,
@@ -6,6 +7,7 @@ export const DEFAULT_SCAN_LAYER_AVAILABILITY = Object.freeze({
   placementOrphan: false,
   typePages: false,
   typeFiles: false,
+  statusMissing: false,
   statusBroken: false,
   statusError: false,
   statusInactive: false,
@@ -19,6 +21,7 @@ export const DEFAULT_SCAN_LAYER_VISIBILITY = Object.freeze({
   placementOrphan: true,
   typePages: true,
   typeFiles: true,
+  statusMissing: true,
   statusBroken: true,
   statusError: true,
   statusInactive: true,
@@ -70,6 +73,7 @@ export const getNodeType = (node, nodeMeta) => {
 export const getNodeStatusFlags = (node, nodeMeta) => {
   const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
   return {
+    missing: isVirtualMissingNode(node),
     broken: !isOrphanRoot && (node?.isBroken || nodeMeta?.orphanType === 'broken'),
     error: Boolean(node?.isError),
     inactive: Boolean(
@@ -94,6 +98,7 @@ export const isNodeGhostedByLayers = (node, nodeMeta, visibility) => {
   if (placement === 'orphan' && !visibility.placementOrphan) return true;
   if (type === 'page' && !visibility.typePages) return true;
   if (type === 'file' && !visibility.typeFiles) return true;
+  if (status.missing && !visibility.statusMissing) return true;
   if (status.broken && !visibility.statusBroken) return true;
   if (status.error && !visibility.statusError) return true;
   if (status.inactive && !visibility.statusInactive) return true;
@@ -158,6 +163,7 @@ export const buildMapDisplaySummary = (rootNode, orphanNodes = []) => {
     if (placement === 'primary') scanLayerAvailability.placementPrimary = true;
     if (placement === 'subdomain') scanLayerAvailability.placementSubdomain = true;
     if (placement === 'orphan') scanLayerAvailability.placementOrphan = true;
+    if (status.missing) scanLayerAvailability.statusMissing = true;
     if (status.broken) scanLayerAvailability.statusBroken = true;
     if (status.error) scanLayerAvailability.statusError = true;
     if (status.inactive) scanLayerAvailability.statusInactive = true;

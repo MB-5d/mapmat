@@ -18,7 +18,9 @@ const ZoomControls = ({
   return (
     <div className="zoom-controls">
       <IconButton
-        size="sm"
+        size="md"
+        variant="ghost"
+        buttonStyle="mono"
         onClick={onZoomOut}
         title="Zoom Out"
         aria-label="Zoom Out"
@@ -28,7 +30,9 @@ const ZoomControls = ({
       </IconButton>
       <span className="zoom-level">{Math.round(safeScale * 100)}%</span>
       <IconButton
-        size="sm"
+        size="md"
+        variant="ghost"
+        buttonStyle="mono"
         onClick={onZoomIn}
         title="Zoom In"
         aria-label="Zoom In"
@@ -38,16 +42,21 @@ const ZoomControls = ({
       </IconButton>
       <div className="zoom-divider" />
       <IconButton
-        size="sm"
+        size="md"
+        variant="ghost"
+        buttonStyle="mono"
         onClick={onToggleMinimap}
         title="Viewfinder"
         aria-label="Viewfinder"
         aria-pressed={showMinimap}
+        active={showMinimap}
       >
         <PanelBottom size={18} />
       </IconButton>
       <IconButton
-        size="sm"
+        size="md"
+        variant="ghost"
+        buttonStyle="mono"
         onClick={onResetView}
         title="Reset View (100%)"
         aria-label="Reset View"

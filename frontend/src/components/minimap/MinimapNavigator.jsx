@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
 import { getDepthColor } from '../../utils/constants';
 import { normalizeWorldBounds } from '../../utils/canvasBounds';
 import './minimapNavigator.css';
@@ -290,6 +291,8 @@ const MinimapNavigator = ({
     1
   );
   const thumbLeft = `calc(${(zoomRatio * 100).toFixed(4)}% - ${ZOOM_THUMB_WIDTH / 2}px)`;
+  const canZoomOut = safeScale > minScale + 0.001;
+  const canZoomIn = safeScale < maxScale - 0.001;
 
   const showDebug =
     typeof window !== 'undefined' && window.location.search.includes('minimapDebug');
@@ -388,8 +391,10 @@ const MinimapNavigator = ({
         <div className="minimap-navigator-fade minimap-navigator-fade-right" />
       </div>
       <div className="minimap-navigator-zoom-row">
-        <button
-          type="button"
+        <IconButton
+          size="md"
+          variant="ghost"
+          buttonStyle="mono"
           className="minimap-navigator-zoom-btn"
           onClick={(event) => {
             event.preventDefault();
@@ -400,10 +405,10 @@ const MinimapNavigator = ({
             event.preventDefault();
             event.stopPropagation();
           }}
-          aria-label="Zoom out"
-        >
-          <Minus size={14} />
-        </button>
+          disabled={!canZoomOut}
+          label="Zoom out"
+          icon={<Minus />}
+        />
         <div
           ref={trackRef}
           className="minimap-navigator-track"
@@ -436,8 +441,10 @@ const MinimapNavigator = ({
             }}
           />
         </div>
-        <button
-          type="button"
+        <IconButton
+          size="md"
+          variant="ghost"
+          buttonStyle="mono"
           className="minimap-navigator-zoom-btn"
           onClick={(event) => {
             event.preventDefault();
@@ -448,10 +455,10 @@ const MinimapNavigator = ({
             event.preventDefault();
             event.stopPropagation();
           }}
-          aria-label="Zoom in"
-        >
-          <Plus size={14} />
-        </button>
+          disabled={!canZoomIn}
+          label="Zoom in"
+          icon={<Plus />}
+        />
       </div>
       {showDebug && (
         <div className="minimap-navigator-debug" aria-hidden="true">

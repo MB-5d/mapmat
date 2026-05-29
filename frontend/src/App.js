@@ -2728,6 +2728,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     placementOrphan: effectiveScanLayerAvailability.placementOrphan ? scanLayerVisibility.placementOrphan : true,
     typePages: effectiveScanLayerAvailability.typePages ? scanLayerVisibility.typePages : true,
     typeFiles: effectiveScanLayerAvailability.typeFiles ? scanLayerVisibility.typeFiles : true,
+    statusMissing: effectiveScanLayerAvailability.statusMissing ? scanLayerVisibility.statusMissing : true,
     statusBroken: effectiveScanLayerAvailability.statusBroken ? scanLayerVisibility.statusBroken : true,
     statusError: effectiveScanLayerAvailability.statusError ? scanLayerVisibility.statusError : true,
     statusInactive: effectiveScanLayerAvailability.statusInactive ? scanLayerVisibility.statusInactive : true,
@@ -9911,6 +9912,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
       const hasSubdomains = (merged.orphans || []).some((orphan) => !!orphan.subdomainRoot);
       const hasOrphans = (merged.orphans || []).some((orphan) => !orphan.subdomainRoot);
+      const hasMissing = nodesForCounts.some((node) => isVirtualMissingNode(node));
       const hasBroken = nodesForCounts.some((node) => {
         const meta = forestIndexForCounts.nodes.get(node.id);
         if (isTopLevelOrphanRootMeta(meta)) return false;
@@ -9970,6 +9972,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         placementOrphan: hasOrphans,
         typePages: false,
         typeFiles: false,
+        statusMissing: hasMissing,
         statusBroken: hasBroken,
         statusError: hasErrors,
         statusInactive: hasInactive,
@@ -9982,6 +9985,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         placementOrphan: hasOrphans,
         typePages: false,
         typeFiles: false,
+        statusMissing: hasMissing,
         statusBroken: hasBroken,
         statusError: hasErrors,
         statusInactive: hasInactive,

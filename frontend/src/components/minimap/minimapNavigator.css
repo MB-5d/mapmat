@@ -124,21 +124,12 @@
   background: rgba(22, 14, 30, 0.8);
 }
 
-.minimap-navigator-zoom-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: #64748b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+.minimap-navigator-zoom-btn.ui-icon-btn {
+  color: var(--ui-button-mono-quiet);
 }
 
-.minimap-navigator-zoom-btn:hover {
-  color: #1e293b;
+.minimap-navigator-zoom-btn.ui-icon-btn:hover:not(:disabled) {
+  color: var(--ui-button-mono-quiet-hover);
 }
 
 .minimap-navigator-track {
@@ -174,15 +165,6 @@
 
 [data-theme="dark"] .minimap-navigator-connector {
   stroke: rgba(148, 163, 184, 0.4);
-}
-
-[data-theme="dark"] .minimap-navigator-zoom-btn {
-  color: #9f8fb8;
-  background: transparent;
-}
-
-[data-theme="dark"] .minimap-navigator-zoom-btn:hover {
-  color: #e2e0e8;
 }
 
 .minimap-navigator[data-edge-left="true"] .minimap-navigator-gutter-left,

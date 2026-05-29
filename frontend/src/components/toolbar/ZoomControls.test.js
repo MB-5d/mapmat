@@ -41,4 +41,31 @@ describe('ZoomControls', () => {
     expect(container.querySelector('button[title="Viewfinder"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Toggle Viewfinder');
   });
+
+  test('uses shared icon button sizing and active state for the viewfinder', () => {
+    act(() => {
+      root.render(
+        <ZoomControls
+          scale={1}
+          onZoomOut={jest.fn()}
+          onZoomIn={jest.fn()}
+          onResetView={jest.fn()}
+          onToggleMinimap={jest.fn()}
+          showMinimap
+        />
+      );
+    });
+
+    const buttons = Array.from(container.querySelectorAll('button'));
+    expect(buttons).toHaveLength(4);
+    buttons.forEach((button) => {
+      expect(button.className).toContain('ui-icon-btn--md');
+      expect(button.className).toContain('ui-icon-btn--type-ghost');
+      expect(button.className).toContain('ui-icon-btn--style-mono');
+    });
+
+    const viewfinderButton = container.querySelector('button[aria-label="Viewfinder"]');
+    expect(viewfinderButton.getAttribute('aria-pressed')).toBe('true');
+    expect(viewfinderButton.className).toContain('ui-icon-btn--active');
+  });
 });

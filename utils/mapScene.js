@@ -112,6 +112,7 @@ const DEFAULT_SCAN_LAYER_AVAILABILITY = Object.freeze({
   placementOrphan: false,
   typePages: false,
   typeFiles: false,
+  statusMissing: false,
   statusBroken: false,
   statusError: false,
   statusInactive: false,
@@ -153,9 +154,19 @@ function getNodePlacementForSummary(meta) {
   return 'primary';
 }
 
+function isVirtualMissingForSummary(node) {
+  return Boolean(node?.isVirtualMissing || (
+    node?.isMissing
+    && !node?.httpStatus
+    && !node?.statusCode
+    && !node?.errorStatus
+  ));
+}
+
 function getStatusFlagsForSummary(node, meta) {
   const isOrphanRoot = isTopLevelOrphanRootMeta(meta);
   return {
+    missing: isVirtualMissingForSummary(node),
     broken: !isOrphanRoot && (node?.isBroken || meta?.orphanType === 'broken'),
     error: Boolean(node?.isError),
     inactive: Boolean(
@@ -184,6 +195,7 @@ function buildSummaryFromRecords(records = []) {
     if (placement === 'primary') scanLayerAvailability.placementPrimary = true;
     if (placement === 'subdomain') scanLayerAvailability.placementSubdomain = true;
     if (placement === 'orphan') scanLayerAvailability.placementOrphan = true;
+    if (status.missing) scanLayerAvailability.statusMissing = true;
     if (status.broken) scanLayerAvailability.statusBroken = true;
     if (status.error) scanLayerAvailability.statusError = true;
     if (status.inactive) scanLayerAvailability.statusInactive = true;
@@ -921,11 +933,15 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     annotations,
     comments: Array.isArray(node.comments) ? node.comments.slice(0, 20) : [],
     authRequired: !!node.authRequired,
+    isMissing: !!node.isMissing,
+    isVirtualMissing: !!node.isVirtualMissing,
     isBroken: !!node.isBroken,
     isInactive: !!node.isInactive,
     isFile: !!node.isFile,
     isError: !!node.isError,
     isViewableError: !!node.isViewableError,
+    isDuplicate: !!node.isDuplicate,
+    duplicateOf: node.duplicateOf || '',
     pageType: node.pageType || node.type || '',
     type: node.type || node.pageType || '',
     httpStatus: node.httpStatus ?? node.statusCode ?? null,

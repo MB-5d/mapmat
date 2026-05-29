@@ -54,18 +54,30 @@ describe('LayersPanel', () => {
     jest.clearAllMocks();
   });
 
-  test('hides unavailable placement options and shows available status options', () => {
+  test('hides unavailable placement options and shows every available status option', () => {
+    const onToggleScanLayer = jest.fn();
     renderPanel(root, {
       scanLayerAvailability: {
         placementPrimary: true,
         placementSubdomain: false,
         placementOrphan: false,
+        statusMissing: true,
+        statusDuplicate: true,
         statusBroken: true,
+        statusError: true,
+        statusInactive: true,
+        statusAuth: true,
       },
       scanLayerVisibility: {
         placementPrimary: true,
+        statusMissing: true,
+        statusDuplicate: true,
         statusBroken: true,
+        statusError: true,
+        statusInactive: true,
+        statusAuth: true,
       },
+      onToggleScanLayer,
     });
 
     expect(container.textContent).toContain('Placement');
@@ -73,7 +85,24 @@ describe('LayersPanel', () => {
     expect(container.textContent).not.toContain('Subdomain');
     expect(container.textContent).not.toContain('Orphan');
     expect(container.textContent).toContain('Status');
+    expect(container.textContent).toContain('Missing');
+    expect(container.textContent).toContain('Duplicate');
     expect(container.textContent).toContain('Broken Link');
+    expect(container.textContent).toContain('Error');
+    expect(container.textContent).toContain('Inactive');
+    expect(container.textContent).toContain('Auth Required');
+
+    act(() => {
+      getButton(container, 'Missing').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      getButton(container, 'Duplicate').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      getButton(container, 'Error').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      getButton(container, 'Inactive').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onToggleScanLayer).toHaveBeenCalledWith('statusMissing');
+    expect(onToggleScanLayer).toHaveBeenCalledWith('statusDuplicate');
+    expect(onToggleScanLayer).toHaveBeenCalledWith('statusError');
+    expect(onToggleScanLayer).toHaveBeenCalledWith('statusInactive');
   });
 
   test('keeps available subdomain and orphan options functional', () => {

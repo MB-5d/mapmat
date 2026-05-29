@@ -88,6 +88,63 @@ describe('MinimapNavigator', () => {
     expect(Number(viewport.getAttribute('height'))).toBeCloseTo(55);
   });
 
+  test('uses shared icon button states for minimap zoom controls', () => {
+    const onZoomIn = jest.fn();
+    const onZoomOut = jest.fn();
+
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          minScale={0.1}
+          maxScale={2}
+          colors={{}}
+          onZoomIn={onZoomIn}
+          onZoomOut={onZoomOut}
+        />
+      );
+    });
+
+    const zoomOutButton = container.querySelector('button[aria-label="Zoom out"]');
+    const zoomInButton = container.querySelector('button[aria-label="Zoom in"]');
+    expect(zoomOutButton.className).toContain('ui-icon-btn');
+    expect(zoomOutButton.className).toContain('ui-icon-btn--style-mono');
+    expect(zoomInButton.className).toContain('ui-icon-btn');
+    expect(zoomInButton.className).toContain('ui-icon-btn--style-mono');
+
+    act(() => {
+      zoomOutButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      zoomInButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(onZoomOut).toHaveBeenCalledTimes(1);
+    expect(onZoomIn).toHaveBeenCalledTimes(1);
+  });
+
+  test('disables minimap zoom controls at zoom bounds', () => {
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.1}
+          minScale={0.1}
+          maxScale={2}
+          colors={{}}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Zoom out"]').disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="Zoom in"]').disabled).toBe(false);
+  });
+
   test('drags the red viewport box by the total pointer distance', () => {
     const onPanTo = jest.fn();
     act(() => {

@@ -13,6 +13,18 @@ const root = {
       annotations: { status: 'moved' },
       children: [
         {
+          id: 'primary-1-missing',
+          title: 'Missing',
+          isMissing: true,
+          isVirtualMissing: true,
+          scanStatus: 'missing',
+        },
+        {
+          id: 'primary-1-inactive',
+          title: 'Inactive',
+          isInactive: true,
+        },
+        {
           id: 'primary-1-1',
           title: 'Deep',
           isError: true,
@@ -54,8 +66,10 @@ assert.strictEqual(summary.maxDepth, 3);
 assert.strictEqual(summary.scanLayerAvailability.placementPrimary, true);
 assert.strictEqual(summary.scanLayerAvailability.placementSubdomain, true);
 assert.strictEqual(summary.scanLayerAvailability.placementOrphan, true);
+assert.strictEqual(summary.scanLayerAvailability.statusMissing, true);
 assert.strictEqual(summary.scanLayerAvailability.statusBroken, true);
 assert.strictEqual(summary.scanLayerAvailability.statusError, true);
+assert.strictEqual(summary.scanLayerAvailability.statusInactive, true);
 assert.strictEqual(summary.scanLayerAvailability.statusAuth, true);
 assert.strictEqual(summary.scanLayerAvailability.statusDuplicate, true);
 assert.deepStrictEqual(

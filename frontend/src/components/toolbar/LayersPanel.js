@@ -31,11 +31,12 @@ const LayersPanel = ({
     { key: 'placementOrphan', label: 'Orphan' },
   ].filter((option) => !!scanLayerAvailability?.[option.key]);
   const statusLayers = [
+    { key: 'statusMissing', label: 'Missing' },
+    { key: 'statusDuplicate', label: 'Duplicate' },
     { key: 'statusBroken', label: 'Broken Link' },
     { key: 'statusError', label: 'Error' },
     { key: 'statusInactive', label: 'Inactive' },
     { key: 'statusAuth', label: 'Auth Required' },
-    { key: 'statusDuplicate', label: 'Duplicates' },
   ].filter((option) => !!scanLayerAvailability?.[option.key]);
   const hasPlacementLayers = placementLayers.length > 0;
   const hasStatusLayers = statusLayers.length > 0;
