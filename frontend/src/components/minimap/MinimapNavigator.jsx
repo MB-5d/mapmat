@@ -9,7 +9,7 @@ import './minimapNavigator.css';
 const DEFAULT_MINIMAP_WIDTH = 320;
 const DEFAULT_MINIMAP_HEIGHT = 110;
 const MINIMAP_PADDING = 0;
-const GUTTER_WIDTH = 12;
+const GUTTER_WIDTH = 0;
 const ZOOM_THUMB_WIDTH = 28;
 const VIEWPORT_MIN_SIZE = 8;
 
@@ -392,7 +392,7 @@ const MinimapNavigator = ({
       </div>
       <div className="minimap-navigator-zoom-row">
         <IconButton
-          size="md"
+          size="sm"
           variant="ghost"
           buttonStyle="mono"
           className="minimap-navigator-zoom-btn"
@@ -442,7 +442,7 @@ const MinimapNavigator = ({
           />
         </div>
         <IconButton
-          size="md"
+          size="sm"
           variant="ghost"
           buttonStyle="mono"
           className="minimap-navigator-zoom-btn"

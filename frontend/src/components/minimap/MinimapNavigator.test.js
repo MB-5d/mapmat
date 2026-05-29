@@ -112,8 +112,10 @@ describe('MinimapNavigator', () => {
     const zoomOutButton = container.querySelector('button[aria-label="Zoom out"]');
     const zoomInButton = container.querySelector('button[aria-label="Zoom in"]');
     expect(zoomOutButton.className).toContain('ui-icon-btn');
+    expect(zoomOutButton.className).toContain('ui-icon-btn--sm');
     expect(zoomOutButton.className).toContain('ui-icon-btn--style-mono');
     expect(zoomInButton.className).toContain('ui-icon-btn');
+    expect(zoomInButton.className).toContain('ui-icon-btn--sm');
     expect(zoomInButton.className).toContain('ui-icon-btn--style-mono');
 
     act(() => {
@@ -123,6 +125,26 @@ describe('MinimapNavigator', () => {
 
     expect(onZoomOut).toHaveBeenCalledTimes(1);
     expect(onZoomIn).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses the full preview width for the viewfinder canvas', () => {
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 12000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          colors={{}}
+        />
+      );
+    });
+
+    const clipRect = container.querySelector('clipPath rect');
+    expect(clipRect).not.toBeNull();
+    expect(Number(clipRect.getAttribute('x'))).toBe(0);
+    expect(Number(clipRect.getAttribute('width'))).toBe(320);
   });
 
   test('disables minimap zoom controls at zoom bounds', () => {

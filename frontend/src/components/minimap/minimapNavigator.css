@@ -80,13 +80,13 @@
 
 .minimap-navigator-gutter-left {
   left: 0;
-  width: 12px;
+  width: 0;
   background: var(--minimap-gutter);
 }
 
 .minimap-navigator-gutter-right {
   right: 0;
-  width: 12px;
+  width: 0;
   background: var(--minimap-gutter);
 }
 
@@ -182,6 +182,10 @@
 }
 
 .minimap-navigator-fade {
+  display: none;
+}
+
+.minimap-navigator-gutter {
   display: none;
 }
 

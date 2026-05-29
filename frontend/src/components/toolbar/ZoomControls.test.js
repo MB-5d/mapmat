@@ -42,7 +42,7 @@ describe('ZoomControls', () => {
     expect(container.textContent).not.toContain('Toggle Viewfinder');
   });
 
-  test('uses shared icon button sizing and active state for the viewfinder', () => {
+  test('uses shared icon button styles and active state without increasing size', () => {
     act(() => {
       root.render(
         <ZoomControls
@@ -59,7 +59,7 @@ describe('ZoomControls', () => {
     const buttons = Array.from(container.querySelectorAll('button'));
     expect(buttons).toHaveLength(4);
     buttons.forEach((button) => {
-      expect(button.className).toContain('ui-icon-btn--md');
+      expect(button.className).toContain('ui-icon-btn--sm');
       expect(button.className).toContain('ui-icon-btn--type-ghost');
       expect(button.className).toContain('ui-icon-btn--style-mono');
     });

@@ -83,6 +83,12 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(/\.canvas\.panning,\n\.canvas\.panning \* \{[\s\S]*user-select: none !important;/);
     expect(appCss).toMatch(/\.canvas\.panning \.canvas-map-name-input \{[\s\S]*user-select: text !important;/);
   });
+
+  test('icon button active state has enough specificity for styled icon buttons', () => {
+    expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active {');
+    expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {');
+    expect(appCss).not.toContain('\n.ui-icon-btn--active {');
+  });
 });
 
 describe('scan config and differential rescan behavior', () => {

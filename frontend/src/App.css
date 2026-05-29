@@ -576,13 +576,13 @@ body {
   color: var(--ui-button-danger-quiet-hover);
 }
 
-.ui-icon-btn--active {
+.ui-icon-btn.ui-icon-btn--active {
   background: var(--ui-color-accent-soft);
   border-color: var(--ui-color-accent-soft-border);
   color: var(--ui-color-primary);
 }
 
-.ui-icon-btn--active:hover:not(:disabled) {
+.ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {
   background: var(--ui-color-accent-soft);
   border-color: var(--ui-color-accent-soft-border);
   color: var(--ui-color-primary);
