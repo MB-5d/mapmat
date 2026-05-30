@@ -1699,6 +1699,48 @@ body {
   overflow: hidden;
 }
 
+.device-support-blocker {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--ui-color-surface-muted);
+  color: var(--ui-color-text);
+}
+
+.device-support-blocker__panel {
+  width: min(480px, 100%);
+  padding: 28px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-color-surface);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+}
+
+.device-support-blocker__eyebrow {
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ui-color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.device-support-blocker h1 {
+  margin: 0 0 10px;
+  font-size: 24px;
+  line-height: 1.2;
+  color: var(--ui-color-text);
+}
+
+.device-support-blocker p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ui-color-muted);
+}
+
 .topbar {
   height: 60px;
   display: flex;
