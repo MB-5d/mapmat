@@ -47,6 +47,7 @@ const normalLayout = computeSceneLayout(root, [], { showThumbnails: true });
 const normalNodes = new Map(normalLayout.nodes.map((node) => [node.id, node]));
 assert.strictEqual(normalNodes.get('root').x, 0);
 assert.strictEqual(normalNodes.get('child-0').number, '1');
+assert.strictEqual(normalNodes.get('child-0').parentId, 'root');
 assert.strictEqual(normalNodes.get('child-0').x, 0);
 assert.strictEqual(normalNodes.get('child-0').y, DEFAULT_LAYOUT.NODE_H_THUMB + DEFAULT_LAYOUT.BUS_Y_GAP);
 assert.strictEqual(normalNodes.get('child-1').x, DEFAULT_LAYOUT.NODE_W + DEFAULT_LAYOUT.GAP_L1_X);
@@ -67,8 +68,10 @@ const branchLayout = computeSceneLayout(branchRoot, [], { showThumbnails: false 
 const branchNodes = new Map(branchLayout.nodes.map((node) => [node.id, node]));
 assert.strictEqual(branchNodes.get('branch-root').x, 0);
 assert.strictEqual(branchNodes.get('branch-a').x, 0);
+assert.strictEqual(branchNodes.get('branch-a').parentId, 'branch-root');
 assert.strictEqual(branchNodes.get('branch-a').y, DEFAULT_LAYOUT.NODE_H_COLLAPSED + DEFAULT_LAYOUT.BUS_Y_GAP);
 assert.strictEqual(branchNodes.get('branch-a-1').x, DEFAULT_LAYOUT.INDENT_X);
+assert.strictEqual(branchNodes.get('branch-a-1').parentId, 'branch-a');
 assert.strictEqual(
   branchNodes.get('branch-a-1').y,
   DEFAULT_LAYOUT.NODE_H_COLLAPSED + DEFAULT_LAYOUT.BUS_Y_GAP
@@ -136,11 +139,14 @@ const largeLayout = computeSceneLayout(largeRoot, [], { showThumbnails: false })
 const largeNodes = new Map(largeLayout.nodes.map((node) => [node.id, node]));
 assert.strictEqual(largeNodes.get('large-root').x, 0);
 assert.strictEqual(largeNodes.get('large-parent-0').number, '1');
+assert.strictEqual(largeNodes.get('large-parent-0').parentId, 'large-root');
 assert.strictEqual(largeNodes.get('large-parent-0').x, 0);
 assert.strictEqual(largeNodes.get('large-child-0-0').x, DEFAULT_LAYOUT.INDENT_X);
+assert.strictEqual(largeNodes.get('large-child-0-0').parentId, 'large-parent-0');
 assert.strictEqual(largeNodes.get('large-child-0-0').stackInfo.collapsed, true);
 const stackedSceneChild = largeScene.nodes.find((node) => node.id === 'large-child-0-0');
 assert(stackedSceneChild?.stackInfo?.collapsed, 'scene nodes should preserve collapsed stack metadata');
+assert.strictEqual(stackedSceneChild.parentId, 'large-parent-0');
 assert(stackedSceneChild.stackInfo.selectionIds.includes('large-child-0-49'));
 
 const crowdedRoot = {

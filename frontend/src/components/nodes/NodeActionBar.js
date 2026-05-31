@@ -34,7 +34,12 @@ const NodeActionBar = ({
   if (!hasActions) return null;
 
   return (
-    <div className={classNames('node-action-bar', className)}>
+    <div
+      className={classNames('node-action-bar', className)}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
       <div className="node-action-bar__left">
         {showOwnerEditorActions ? (
           <IconButton

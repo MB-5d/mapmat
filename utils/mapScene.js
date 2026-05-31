@@ -455,7 +455,7 @@ function computeHorizontalLayout(root, orphans, showThumbnails, expandedStacks =
         depth + 1,
         childNumber,
         context,
-        stackInfo ? { stackInfo } : {},
+        stackInfo ? { parentId: node.id, stackInfo } : { parentId: node.id },
         childNumberFor
       );
 
@@ -630,6 +630,7 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
       const selectionIds = children.reduce((ids, child) => collectNodeAndDescendantIds(child, ids), []);
       setNode(stackChild, childX, cursorY, parentDepth + 1, childNumber, {
         ...context,
+        parentId: parentNode.id,
         stackInfo: {
           parentId: parentNode.id,
           totalCount: children.length,
@@ -676,7 +677,7 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
         cursorY,
         parentDepth + 1,
         childNumber,
-        stackInfo ? { ...context, stackInfo } : { ...context }
+        stackInfo ? { ...context, parentId: parentNode.id, stackInfo } : { ...context, parentId: parentNode.id }
       );
 
       childIdsInOrder.push(String(child.id || ''));
@@ -727,7 +728,7 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
 
     getChildren(rootNode).forEach((child, index) => {
       const childNumber = `${rootNumber}.${index + 1}`;
-      setNode(child, level1X, level1Y, 1, childNumber, context);
+      setNode(child, level1X, level1Y, 1, childNumber, { ...context, parentId: rootNode.id });
       level1Positions.push({
         centerX: level1X + NODE_W / 2,
         id: child.id,
@@ -793,7 +794,7 @@ function computeVerticalLayout(root, orphans, showThumbnails, expandedStacks = {
 
   getChildren(root).forEach((child, index) => {
     const childNumber = `${index + 1}`;
-    setNode(child, level1X, level1Y, 1, childNumber);
+    setNode(child, level1X, level1Y, 1, childNumber, { parentId: root.id });
     level1Positions.push({
       centerX: level1X + NODE_W / 2,
       id: child.id,
@@ -961,6 +962,7 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     url: node.url || '',
     number: layoutNode.number,
     depth: layoutNode.depth,
+    parentId: layoutNode.parentId || '',
     x: layoutNode.x,
     y: layoutNode.y,
     w: layoutNode.w,

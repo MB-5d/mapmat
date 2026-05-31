@@ -62,4 +62,24 @@ describe('large map viewport behavior', () => {
     expect(__testing.getLargeMapStackSelectionIdsFromNode(node)).toEqual(['child-1', 'child-2']);
     expect(__testing.getLargeMapStackSelectionIdsFromNode({ id: 'solo' })).toEqual(['solo']);
   });
+
+  test('created-node reveal keeps the canvas still when the node is already visible', () => {
+    expect(__testing.getPanToRevealLayoutNode({
+      nodeData: { x: 100, y: 100, w: 288, h: 200 },
+      viewportWidth: 1000,
+      viewportHeight: 700,
+      scale: 1,
+      pan: { x: 0, y: 0 },
+    })).toBeNull();
+  });
+
+  test('created-node reveal nudges only enough to show an offscreen duplicate', () => {
+    expect(__testing.getPanToRevealLayoutNode({
+      nodeData: { x: 820, y: 560, w: 288, h: 200 },
+      viewportWidth: 1000,
+      viewportHeight: 700,
+      scale: 1,
+      pan: { x: 0, y: 0 },
+    })).toEqual({ x: -132, y: -84 });
+  });
 });

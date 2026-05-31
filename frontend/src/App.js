@@ -214,6 +214,65 @@ const getExpandedStackIds = (expandedStacks = {}) => (
     .sort()
 );
 
+const DUPLICATE_REVEAL_MARGIN_PX = 24;
+const getPanToRevealLayoutNode = ({
+  nodeData,
+  viewportWidth,
+  viewportHeight,
+  scale,
+  pan,
+  marginPx = DUPLICATE_REVEAL_MARGIN_PX,
+} = {}) => {
+  const safeScale = Number(scale);
+  const width = Number(viewportWidth);
+  const height = Number(viewportHeight);
+  if (!nodeData || !Number.isFinite(safeScale) || safeScale <= 0 || width <= 0 || height <= 0) {
+    return null;
+  }
+
+  const currentPan = {
+    x: Number(pan?.x || 0),
+    y: Number(pan?.y || 0),
+  };
+  const safeMargin = Math.max(0, Math.min(Number(marginPx) || 0, Math.min(width, height) / 3));
+  const minX = safeMargin;
+  const minY = safeMargin;
+  const maxX = Math.max(minX, width - safeMargin);
+  const maxY = Math.max(minY, height - safeMargin);
+  let nextX = currentPan.x;
+  let nextY = currentPan.y;
+
+  const nodeLeft = Number(nodeData.x || 0) * safeScale + currentPan.x;
+  const nodeTop = Number(nodeData.y || 0) * safeScale + currentPan.y;
+  const nodeRight = (Number(nodeData.x || 0) + Number(nodeData.w || 0)) * safeScale + currentPan.x;
+  const nodeBottom = (Number(nodeData.y || 0) + Number(nodeData.h || 0)) * safeScale + currentPan.y;
+  const nodeWidth = nodeRight - nodeLeft;
+  const nodeHeight = nodeBottom - nodeTop;
+
+  if (nodeWidth > maxX - minX) {
+    if (nodeLeft > minX) nextX += minX - nodeLeft;
+    else if (nodeRight < maxX) nextX += maxX - nodeRight;
+  } else if (nodeLeft < minX) {
+    nextX += minX - nodeLeft;
+  } else if (nodeRight > maxX) {
+    nextX -= nodeRight - maxX;
+  }
+
+  if (nodeHeight > maxY - minY) {
+    if (nodeTop > minY) nextY += minY - nodeTop;
+    else if (nodeBottom < maxY) nextY += maxY - nodeBottom;
+  } else if (nodeTop < minY) {
+    nextY += minY - nodeTop;
+  } else if (nodeBottom > maxY) {
+    nextY -= nodeBottom - maxY;
+  }
+
+  if (Math.abs(nextX - currentPan.x) < 0.5 && Math.abs(nextY - currentPan.y) < 0.5) {
+    return null;
+  }
+  return { x: nextX, y: nextY };
+};
+
 const clampCanvasPanAxis = (value, min, max) => {
   if (min <= max) return Math.max(min, Math.min(max, value));
   return Math.max(max, Math.min(min, value));
@@ -2042,6 +2101,7 @@ export const __testing = {
   mergeLargeMapNodeSnapshot,
   getLargeMapStackSelectionIdsFromNode,
   getLargeMapEditParentId,
+  getPanToRevealLayoutNode,
   normalizeCanvasWorldBounds,
 };
 
@@ -2425,6 +2485,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const selectionStartNodeRef = useRef(null);
   const selectionStartedOnNodeRef = useRef(false);
   const suppressNodeClickRef = useRef(false);
+  const duplicateSourceNodeIdRef = useRef(null);
+  const pendingCreatedNodeViewRef = useRef(null);
   const viewDropdownRef = useRef(null);
   const colorKeyRef = useRef(null);
   const orientationMenuRef = useRef(null);
@@ -3466,6 +3528,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (!mapLayout?.nodes?.size) return;
+    if (pendingCreatedNodeViewRef.current?.nodeId) return;
     scheduleResetViewRef.current?.();
   }, [mapLayout?.orientation, mapLayout?.nodes?.size]);
 
@@ -4302,6 +4365,63 @@ export default function App({ currentRoute, navigateToRoute }) {
     scheduleTransformStateCommit();
     return { scale: nextScale, pan: clampedPan };
   }, [applyCanvasTransformDom, clampPan, scheduleTransformStateCommit]);
+
+  const getLayoutNodeScreenCenterSnapshot = useCallback((nodeId) => {
+    if (!nodeId) return null;
+    const nodeData = layoutRef.current?.nodes?.get(nodeId);
+    if (!nodeData) return null;
+    const currentScale = scaleRef.current || 1;
+    const currentPan = panRef.current || { x: 0, y: 0 };
+    return {
+      nodeId,
+      x: (nodeData.x + nodeData.w / 2) * currentScale + currentPan.x,
+      y: (nodeData.y + nodeData.h / 2) * currentScale + currentPan.y,
+    };
+  }, []);
+
+  const queueCreatedNodeViewReveal = useCallback((nodeId, sourceNodeId = null) => {
+    if (!nodeId) return;
+    pendingCreatedNodeViewRef.current = {
+      nodeId,
+      sourceCenter: getLayoutNodeScreenCenterSnapshot(sourceNodeId),
+    };
+  }, [getLayoutNodeScreenCenterSnapshot]);
+
+  useEffect(() => {
+    const pending = pendingCreatedNodeViewRef.current;
+    if (!pending?.nodeId || !mapLayout?.nodes?.size || !canvasRef.current) return;
+
+    const nodeData = mapLayout.nodes.get(pending.nodeId);
+    if (!nodeData) {
+      pendingCreatedNodeViewRef.current = null;
+      return;
+    }
+    pendingCreatedNodeViewRef.current = null;
+
+    const currentScale = scaleRef.current || 1;
+    let nextPan = { ...(panRef.current || { x: 0, y: 0 }) };
+    const sourceCenter = pending.sourceCenter;
+    const sourceNodeData = sourceCenter?.nodeId ? mapLayout.nodes.get(sourceCenter.nodeId) : null;
+    if (sourceCenter && sourceNodeData) {
+      nextPan = {
+        x: sourceCenter.x - (sourceNodeData.x + sourceNodeData.w / 2) * currentScale,
+        y: sourceCenter.y - (sourceNodeData.y + sourceNodeData.h / 2) * currentScale,
+      };
+    }
+
+    const revealPan = getPanToRevealLayoutNode({
+      nodeData,
+      viewportWidth: canvasRef.current.clientWidth,
+      viewportHeight: canvasRef.current.clientHeight,
+      scale: currentScale,
+      pan: nextPan,
+    });
+    if (revealPan) nextPan = revealPan;
+
+    const currentPan = panRef.current || { x: 0, y: 0 };
+    if (Math.abs(nextPan.x - currentPan.x) < 0.5 && Math.abs(nextPan.y - currentPan.y) < 0.5) return;
+    applyTransform({ scale: currentScale, x: nextPan.x, y: nextPan.y });
+  }, [applyTransform, mapLayout]);
 
   const getLargeMapViewState = useCallback(() => ({
     pan: panRef.current,
@@ -12901,6 +13021,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const openEditModal = async (node) => {
+    duplicateSourceNodeIdRef.current = null;
     if (useLargeMapSurface && currentMap?.id && node?.id) {
       const cachedNode = largeMapNodeCacheRef.current.get(String(node.id));
       const fallbackNode = mergeLargeMapNodeSnapshot(cachedNode, node, {
@@ -12950,6 +13071,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const duplicateNode = (node) => {
+    duplicateSourceNodeIdRef.current = node?.id || null;
     const orphanRoot = findOrphanTreeRoot(node.id);
     if (orphanRoot) {
       const orphanParent = findParent(orphanRoot, node.id);
@@ -12970,7 +13092,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       ...node,
       id: undefined, // Will get a new ID
       title: `${node.title} (Copy)`,
-      parentId: parent?.id || '',
+      parentId: node.parentId || parent?.id || ORPHAN_PARENT_ID,
     });
     setEditModalMode('duplicate');
   };
@@ -13206,7 +13328,13 @@ export default function App({ currentRoute, navigateToRoute }) {
             }
           }
 
-          submitLiveNodeChange({
+          const duplicateSourceNodeId = editModalMode === 'duplicate'
+            ? duplicateSourceNodeIdRef.current
+            : null;
+          if (editModalMode === 'duplicate') {
+            queueCreatedNodeViewReveal(nextNode.id, duplicateSourceNodeId);
+          }
+          const submitted = submitLiveNodeChange({
             type: 'node.add',
             payload: {
               nodeId: nextNode.id,
@@ -13215,6 +13343,12 @@ export default function App({ currentRoute, navigateToRoute }) {
               node: nextNode,
             },
           }, editModalMode === 'duplicate' ? 'Copy queued' : 'Page queued');
+          if (editModalMode === 'duplicate') {
+            duplicateSourceNodeIdRef.current = null;
+            if (!submitted && pendingCreatedNodeViewRef.current?.nodeId === nextNode.id) {
+              pendingCreatedNodeViewRef.current = null;
+            }
+          }
           return;
         }
       }
@@ -13399,6 +13533,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
 
       saveStateForUndo();
+      queueCreatedNodeViewReveal(newNode.id, duplicateSourceNodeIdRef.current);
+      duplicateSourceNodeIdRef.current = null;
 
       const newParentInOrphans = findNodeInOrphans(newParentId);
 
