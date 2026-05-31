@@ -1,0 +1,752 @@
+{
+  "meta": {
+    "generatedOn": "2026-05-29",
+    "sources": [
+      "frontend/src/components/ui",
+      "frontend/src/components/ui/icons.js",
+      "frontend/src/components/drawers/AccountDrawer.js",
+      "frontend/src/components/nodes/NodeCard.js",
+      "frontend/src/components/toolbar/Topbar.js",
+      "frontend/src/App.js"
+    ],
+    "notes": [
+      "Only code-backed shared components and shared surfaces are exported here.",
+      "Browser/CSS interaction states are included only when the live app defines them today.",
+      "Button and IconButton keep legacy variant compatibility in code, but type + style + size is the canonical model.",
+      "Selected/on states are reserved for selected controls and menu rows, not standard buttons.",
+      "Edit actions use the shared EditIcon alias, which is Lucide Pencil. Do not use Edit2, PencilLine, or Pen variants for edit affordances."
+    ]
+  },
+  "components": [
+    {
+      "name": "VellicLogo",
+      "kind": "brand",
+      "source": "frontend/src/components/brand/VellicLogo.js",
+      "props": {
+        "title": "string",
+        "decorative": "boolean",
+        "className": "string"
+      },
+      "states": [
+        "full lockup",
+        "icon-only mark"
+      ],
+      "notes": [
+        "Topbar and welcome modal use the full Figma lockup from Vellic UI Kit.",
+        "Favicon uses frontend/public/favicon.svg and favicon.ico from the Figma transparent mark."
+      ]
+    },
+    {
+      "name": "Avatar",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Avatar.js",
+      "props": {
+        "src": "string",
+        "label": "string",
+        "icon": "node",
+        "size": [
+          "xs",
+          "sm",
+          "md",
+          "lg",
+          "xl"
+        ],
+        "shape": [
+          "circle",
+          "rounded"
+        ],
+        "tone": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ],
+        "bordered": "boolean"
+      },
+      "states": [
+        "image",
+        "fallback label",
+        "fallback icon"
+      ]
+    },
+    {
+      "name": "Icon",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Icon.js",
+      "props": {
+        "icon": "node",
+        "size": [
+          "xs",
+          "sm",
+          "md",
+          "lg",
+          "xl"
+        ],
+        "tone": [
+          "inherit",
+          "default",
+          "muted",
+          "brand",
+          "danger",
+          "inverse"
+        ]
+      },
+      "states": [
+        "rest"
+      ],
+      "notes": [
+        "Edit actions use frontend/src/components/ui/icons.js EditIcon, backed by Lucide Pencil.",
+        "Do not use Edit2, PencilLine, or Pen variants for edit affordances."
+      ]
+    },
+    {
+      "name": "Button",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Button.js",
+      "props": {
+        "type": [
+          "primary",
+          "secondary",
+          "ghost",
+          "link"
+        ],
+        "style": [
+          "brand",
+          "mono",
+          "danger"
+        ],
+        "variant": "legacy alias: primary | secondary | danger | ghost",
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "label": "string",
+        "startIcon": "node",
+        "endIcon": "node",
+        "iconOnly": "boolean",
+        "htmlType": "native button type override",
+        "loading": "boolean",
+        "disabled": "native button prop"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "focus-visible",
+        "disabled",
+        "loading"
+      ]
+    },
+    {
+      "name": "IconButton",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/IconButton.js",
+      "props": {
+        "type": [
+          "primary",
+          "secondary",
+          "ghost",
+          "link"
+        ],
+        "style": [
+          "brand",
+          "mono",
+          "danger"
+        ],
+        "variant": "legacy alias: default | primary | danger | ghost",
+        "size": [
+          "sm",
+          "md",
+          "lg",
+          "xl",
+          "xxl"
+        ],
+        "icon": "node",
+        "label": "string",
+        "htmlType": "native button type override",
+        "loading": "boolean"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "active",
+        "focus-visible",
+        "disabled",
+        "loading"
+      ],
+      "notes": [
+        "Small icon buttons use radius/xs (4px).",
+        "Active icon buttons use primary fill with inverse icon color."
+      ]
+    },
+    {
+      "name": "StatusAlert",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/StatusAlert.js",
+      "props": {
+        "tone": [
+          "info",
+          "success",
+          "warning",
+          "danger"
+        ],
+        "icon": "node | false",
+        "iconSize": "number",
+        "title": "string",
+        "children": "node",
+        "actions": "node",
+        "role": "status | alert"
+      },
+      "states": [
+        "info",
+        "success",
+        "warning",
+        "danger",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Composes the shared Icon primitive and status semantic color tokens."
+      ]
+    },
+    {
+      "name": "Toast",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/ui/Toast.js",
+      "props": {
+        "type": [
+          "info",
+          "success",
+          "warning",
+          "error",
+          "loading"
+        ],
+        "title": "string",
+        "message": "string",
+        "children": "node",
+        "onDismiss": "function",
+        "action": "node"
+      },
+      "states": [
+        "info",
+        "success",
+        "warning",
+        "error",
+        "loading"
+      ],
+      "notes": [
+        "Composes StatusAlert and IconButton for the dismiss action."
+      ]
+    },
+    {
+      "name": "MenuItem",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Menu.js",
+      "props": {
+        "icon": "node",
+        "label": "string",
+        "description": "string",
+        "badge": "node",
+        "endSlot": "node",
+        "selected": "boolean",
+        "danger": "boolean",
+        "disabled": "boolean"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focus-visible",
+        "disabled"
+      ]
+    },
+    {
+      "name": "MenuSectionHeader",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Menu.js",
+      "props": {
+        "children": "string"
+      },
+      "states": [
+        "rest",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "TextInput",
+      "kind": "form",
+      "source": "frontend/src/components/ui/TextInput.js",
+      "props": {
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "inputStyle": [
+          "brand",
+          "mono"
+        ],
+        "invalid": "boolean",
+        "label": "string",
+        "labelHidden": "boolean",
+        "hint": "string",
+        "error": "string",
+        "leftIcon": "node",
+        "rightIcon": "node",
+        "placeholder": "string",
+        "framed": "boolean"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "focus",
+        "invalid",
+        "disabled via native input props"
+      ]
+    },
+    {
+      "name": "SelectInput",
+      "kind": "form",
+      "source": "frontend/src/components/ui/SelectInput.js",
+      "props": {
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "inputStyle": [
+          "brand",
+          "mono"
+        ],
+        "invalid": "boolean",
+        "label": "string",
+        "labelHidden": "boolean",
+        "hint": "string",
+        "error": "string",
+        "leftIcon": "node",
+        "placeholder": "native select placeholder option"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "focus",
+        "invalid",
+        "disabled via native select props"
+      ],
+      "notes": [
+        "Native select implementation does not expose a shared expanded menu state."
+      ]
+    },
+    {
+      "name": "TextareaInput",
+      "kind": "form",
+      "source": "frontend/src/components/ui/TextareaInput.js",
+      "props": {
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "invalid": "boolean"
+      },
+      "states": [
+        "rest",
+        "focus",
+        "invalid",
+        "disabled via native textarea props"
+      ]
+    },
+    {
+      "name": "Field",
+      "kind": "form-shell",
+      "source": "frontend/src/components/ui/Field.js",
+      "props": {
+        "label": "string",
+        "labelHidden": "boolean",
+        "htmlFor": "string",
+        "required": "boolean",
+        "hint": "string",
+        "error": "string"
+      },
+      "subparts": [
+        "FieldLabel",
+        "FieldHint",
+        "FieldError"
+      ]
+    },
+    {
+      "name": "CheckboxField",
+      "kind": "selection",
+      "source": "frontend/src/components/ui/CheckboxField.js",
+      "props": {
+        "label": "string",
+        "description": "string",
+        "disabled": "boolean",
+        "indeterminate": "boolean"
+      },
+      "states": [
+        "unchecked",
+        "checked",
+        "indeterminate",
+        "focus-visible",
+        "disabled"
+      ]
+    },
+    {
+      "name": "ToggleSwitch",
+      "kind": "selection",
+      "source": "frontend/src/components/ui/ToggleSwitch.js",
+      "props": {
+        "label": "string",
+        "description": "string",
+        "disabled": "boolean"
+      },
+      "states": [
+        "off",
+        "on",
+        "focus-visible",
+        "disabled"
+      ]
+    },
+    {
+      "name": "RadioCardGroup",
+      "kind": "selection",
+      "source": "frontend/src/components/ui/RadioCardGroup.js",
+      "props": {
+        "options": "array of { value, label, description?, icon?, disabled? }",
+        "value": "selected option value",
+        "name": "string"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focus-visible",
+        "disabled"
+      ]
+    },
+    {
+      "name": "SegmentedControl",
+      "kind": "choice",
+      "source": "frontend/src/components/ui/SegmentedControl.js",
+      "props": {
+        "variant": [
+          "pill",
+          "tabs",
+          "grid"
+        ],
+        "size": [
+          "sm",
+          "md"
+        ],
+        "fullWidth": "boolean",
+        "options": "array of { value, label, icon?, disabled? }",
+        "optionRole": [
+          "tab"
+        ]
+      },
+      "states": [
+        "rest",
+        "hover",
+        "active",
+        "focus-visible",
+        "disabled"
+      ]
+    },
+    {
+      "name": "OptionCard",
+      "kind": "choice",
+      "source": "frontend/src/components/ui/OptionCard.js",
+      "props": {
+        "title": "string",
+        "description": "string",
+        "icon": "node",
+        "badge": "node",
+        "disabled": "native button prop"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "focus-visible",
+        "disabled"
+      ]
+    },
+    {
+      "name": "Modal",
+      "kind": "shell",
+      "source": "frontend/src/components/ui/Modal.js",
+      "props": {
+        "size": [
+          "sm",
+          "md",
+          "lg"
+        ],
+        "subtitle": "string",
+        "scrollable": "boolean",
+        "hideCloseButton": "boolean",
+        "footer": "node"
+      },
+      "states": [
+        "open",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "AccountDrawer",
+      "kind": "shell",
+      "source": "frontend/src/components/drawers/AccountDrawer.js",
+      "props": {
+        "title": "string",
+        "subtitle": "string",
+        "icon": "node",
+        "actions": "node",
+        "bodyRef": "ref",
+        "onBodyScroll": "function"
+      },
+      "states": [
+        "open",
+        "closing",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "ScanBar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/scan/ScanBar.js",
+      "props": {
+        "canEdit": "boolean",
+        "urlInput": "string",
+        "showOptions": "boolean",
+        "showClearUrl": "boolean",
+        "scanDisabled": "boolean",
+        "sharedTitle": "string"
+      },
+      "states": [
+        "rest",
+        "focus",
+        "options open",
+        "scan disabled",
+        "read-only title"
+      ],
+      "notes": [
+        "Scan options uses section headers and shared SelectInput for scan depth."
+      ]
+    },
+    {
+      "name": "Topbar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/toolbar/Topbar.js",
+      "props": {
+        "title": "string",
+        "urlInput": "string",
+        "authenticated": "boolean",
+        "collaborators": "array"
+      },
+      "states": [
+        "default",
+        "signed out",
+        "account menu open",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "CanvasToolbar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/toolbar/CanvasToolbar.js",
+      "props": {
+        "canEdit": "boolean",
+        "activeTool": "select | comments",
+        "connectionTool": "userflow | crosslink | null",
+        "showImageMenu": "boolean",
+        "showLayersMenu": "boolean",
+        "showLegendMenu": "boolean",
+        "showVersionHistory": "boolean",
+        "hasMap": "boolean"
+      },
+      "states": [
+        "rest",
+        "active tool",
+        "menu open",
+        "disabled action",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Toolbar actions are composed from the shared IconButton primitive."
+      ]
+    },
+    {
+      "name": "AccountMenu",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/toolbar/Topbar.js",
+      "props": {
+        "pendingInviteCount": "number",
+        "pendingAccessRequestCount": "number",
+        "isOpen": "boolean"
+      },
+      "states": [
+        "closed",
+        "open",
+        "section headers",
+        "item hover",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "Badge",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Badge.js",
+      "props": {
+        "type": [
+          "fill",
+          "hollow"
+        ],
+        "style": [
+          "brand",
+          "mono",
+          "info",
+          "error",
+          "warning",
+          "success",
+          "neutral"
+        ],
+        "size": [
+          "sm",
+          "md"
+        ],
+        "label": "string",
+        "startIcon": "icon",
+        "endIcon": "icon"
+      },
+      "states": [
+        "fill",
+        "hollow",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Informational only. Replaces inline badge/label variants."
+      ]
+    },
+    {
+      "name": "Tag",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/ui/Tag.js",
+      "props": {
+        "type": [
+          "fill",
+          "hollow"
+        ],
+        "style": [
+          "brand",
+          "mono"
+        ],
+        "size": [
+          "sm",
+          "md"
+        ],
+        "state": [
+          "rest",
+          "hover",
+          "focus"
+        ],
+        "label": "string",
+        "startIcon": "icon",
+        "endIcon": "icon"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "focus",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Functional larger chip with 6px radius. Uses label typography and button color behavior."
+      ]
+    },
+    {
+      "name": "NodeMenu",
+      "kind": "shared-surface",
+      "source": "frontend/src/App.js",
+      "props": {
+        "nodeId": "string",
+        "activeStatus": "annotation state"
+      },
+      "states": [
+        "open",
+        "active row",
+        "clear action hover",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "NodeCard",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeCard.js",
+      "props": {
+        "showThumbnails": "boolean",
+        "showCommentBadges": "boolean",
+        "showPageNumbers": "boolean",
+        "showAnnotations": "boolean",
+        "isGhosted": "boolean",
+        "isSelected": "boolean",
+        "stackInfo": "object"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "with thumbnail",
+        "selected",
+        "ghosted",
+        "deleted",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "NodeActionBar",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeActionBar.js",
+      "props": {
+        "canEdit": "boolean",
+        "isRoot": "boolean",
+        "showCommentAction": "boolean",
+        "showExternalLinkAction": "boolean",
+        "commentActionLabel": "string"
+      },
+      "states": [
+        "owner / editor",
+        "commenter",
+        "viewer",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "NodeBadge",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/NodeBadge.js",
+      "props": {
+        "label": "string"
+      },
+      "states": [
+        "rest",
+        "theme via semantic token modes"
+      ]
+    },
+    {
+      "name": "CommentBadge",
+      "kind": "shared-surface",
+      "source": "frontend/src/components/nodes/CommentBadge.js",
+      "props": {
+        "count": "number"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "icon only",
+        "theme via semantic token modes"
+      ]
+    }
+  ],
+  "omittedDueToAmbiguity": [
+    "Admin console pills, tabs, and table presentation remain page-specific.",
+    "Canvas connector layout logic and minimap internals are still product-level systems rather than shared primitives.",
+    "Landing-only section compositions remain part of the marketing track rather than the shared app component library."
+  ]
+}

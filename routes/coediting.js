@@ -4,6 +4,11 @@ const mapStore = require('../stores/mapStore');
 const collaborationStore = require('../stores/collaborationStore');
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
+  ensureCollaborationActivitySchemaAsync,
+  recordMapActivityBestEffortAsync,
+  buildCoeditingOperationActivity,
+} = require('../utils/collaborationActivity');
+const {
   normalizeOperationEnvelope,
   CoeditingContractError,
 } = require('../utils/coeditingContract');
@@ -133,7 +138,10 @@ router.use(requireAuth);
 router.use(async (req, res, next) => {
   if (!COLLABORATION_BACKEND_ENABLED) return next();
   try {
-    await collaborationStore.ensureCollaborationSchemaAsync();
+    await Promise.all([
+      collaborationStore.ensureCollaborationSchemaAsync(),
+      ensureCollaborationActivitySchemaAsync(),
+    ]);
     return next();
   } catch (error) {
     console.error('Coediting schema init error:', error);
@@ -266,6 +274,16 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
     const startedAt = Date.now();
     const committed = await applyOperationAsync({ mapId, operation });
     await recordCommitLatencyAsync(Date.now() - startedAt);
+
+    if (!committed.duplicate) {
+      const activity = buildCoeditingOperationActivity({
+        operation: committed.operation,
+        actorRole: context.role,
+      });
+      if (activity) {
+        await recordMapActivityBestEffortAsync(activity, { label: 'coediting op ingest' });
+      }
+    }
 
     await broadcastRoomEventAsync(mapId, {
       type: MESSAGE_TYPES.OPERATION_COMMITTED,

@@ -1,5 +1,8 @@
 import React from 'react';
-import { ChevronDown, ChevronUp, Edit2, Palette } from 'lucide-react';
+import { ChevronDown, ChevronUp, Palette } from 'lucide-react';
+
+import { DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
+import { EditIcon } from '../ui/icons';
 
 const ColorKey = ({
   showColorKey,
@@ -13,22 +16,25 @@ const ColorKey = ({
   editingConnectionKey,
   onEditConnectionColor,
   connectionLegend,
+  embedded = false,
 }) => (
-  <div className="color-key">
-    <div className="color-key-header" onClick={onToggle}>
-      <div className="color-key-title">
-        <Palette size={16} />
-        <span>Legend</span>
+  <div className={`color-key${embedded ? ' color-key-embedded' : ''}`}>
+    {!embedded && (
+      <div className="color-key-header" onClick={onToggle}>
+        <div className="color-key-title">
+          <Palette size={16} />
+          <span>Legend</span>
+        </div>
+        <button className="key-toggle">
+          {showColorKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
       </div>
-      <button className="key-toggle">
-        {showColorKey ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-      </button>
-    </div>
-    {showColorKey && (
+    )}
+    {(embedded || showColorKey) && (
       <div className="color-key-list">
-        <div className="color-key-section">Pages</div>
+        <div className="color-key-section">Levels</div>
         {Array.from({ length: Math.max(maxDepth + 1, colors.length) }).map((_, idx) => {
-          const color = colors[idx] || colors[colors.length - 1];
+          const color = getDepthColor(colors, idx);
           if (idx > maxDepth) return null;
           return (
             <div
@@ -47,7 +53,7 @@ const ColorKey = ({
             >
             <div className={`color-swatch ${editingDepth === idx ? 'editing' : ''}`} style={{ backgroundColor: color }} />
             <span>Level {idx}</span>
-            {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+            {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
           </div>
           );
         })}
@@ -70,10 +76,10 @@ const ColorKey = ({
               >
                 <span
                   className="legend-line legend-line-solid"
-                  style={{ '--legend-color': connectionColors?.userFlows || '#14b8a6' }}
+                  style={{ '--legend-color': connectionColors?.userFlows || DEFAULT_CONNECTION_COLORS.userFlows }}
                 />
                 <span>User Flows</span>
-                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+                {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
               </div>
             )}
             {connectionLegend?.hasCrossLinks && (
@@ -92,10 +98,10 @@ const ColorKey = ({
               >
                 <span
                   className="legend-line legend-line-crosslinks"
-                  style={{ '--legend-color': connectionColors?.crossLinks || '#f97316' }}
+                  style={{ '--legend-color': connectionColors?.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks }}
                 />
                 <span>Crosslinks</span>
-                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+                {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
               </div>
             )}
             {connectionLegend?.hasBrokenLinks && (
@@ -114,10 +120,10 @@ const ColorKey = ({
               >
                 <span
                   className="legend-line legend-line-broken"
-                  style={{ '--legend-color': connectionColors?.brokenLinks || '#fca5a5' }}
+                  style={{ '--legend-color': connectionColors?.brokenLinks || DEFAULT_CONNECTION_COLORS.brokenLinks }}
                 />
                 <span>Broken Links</span>
-                {canEdit ? <Edit2 size={12} className="color-edit-icon" /> : null}
+                {canEdit ? <EditIcon size={12} className="color-edit-icon" /> : null}
               </div>
             )}
           </>

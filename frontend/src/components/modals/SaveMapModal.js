@@ -1,5 +1,23 @@
 import React, { useState } from 'react';
-import { Edit2, Eye, FolderPlus, MessageSquare, X } from 'lucide-react';
+import { FolderPlus } from 'lucide-react';
+
+import Button from '../ui/Button';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
+import TextareaInput from '../ui/TextareaInput';
+import { findMapNameConflict, getMapNameConflictMessage } from '../../utils/mapNameConflicts';
+
+const waitForUiResponse = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const isVirtualProject = (project) => (
+  !!project?.isVirtual
+  || project?.id === 'uncategorized'
+  || project?.name === 'Uncategorized'
+  || project?.id === 'shared-with-me'
+  || project?.name === 'Shared With Me'
+);
 
 const SaveMapForm = ({
   projects,
@@ -8,13 +26,12 @@ const SaveMapForm = ({
   defaultProjectId,
   defaultName,
   defaultNotes,
-  accessLevels,
-  sharePermission,
-  onChangePermission,
   onSave,
   onCreateProject,
   onCancel,
   submitLabel,
+  submitLoadingLabel,
+  saving = false,
 }) => {
   // Get default name from root domain (e.g., "example" from "https://www.example.com")
   const getDefaultName = () => {
@@ -33,55 +50,84 @@ const SaveMapForm = ({
   };
 
   const [mapName, setMapName] = useState(getDefaultName());
-  const [selectedProject, setSelectedProject] = useState(defaultProjectId || '');
+  const [selectedProject, setSelectedProject] = useState(isVirtualProject({ id: defaultProjectId }) ? '' : (defaultProjectId || ''));
   const [showNewProject, setShowNewProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [notes, setNotes] = useState(defaultNotes || currentMap?.notes || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [nameError, setNameError] = useState('');
+  const selectableProjects = (projects || []).filter((project) => !isVirtualProject(project));
 
-  const handleSave = () => {
-    if (!mapName.trim()) return;
-    onSave(selectedProject || null, mapName, notes);
+  const handleSave = async () => {
+    if (!mapName.trim() || isSubmitting || saving) return;
+    const conflict = findMapNameConflict(projects, {
+      projectId: selectedProject || null,
+      name: mapName,
+      excludeMapId: currentMap?.id || null,
+    });
+    if (conflict) {
+      setNameError(getMapNameConflictMessage(mapName));
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await waitForUiResponse();
+      await Promise.resolve(onSave(selectedProject || null, mapName, notes));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
-    onCreateProject(newProjectName);
+    const project = await onCreateProject(newProjectName);
+    if (project?.id) {
+      setSelectedProject(project.id);
+    }
     setShowNewProject(false);
     setNewProjectName('');
   };
 
   return (
     <div className="save-map-form">
-      <div className="form-group">
-        <label>Map Name</label>
-        <input
+      <Field label="Map Name" required error={nameError}>
+        <TextInput
           type="text"
           value={mapName}
-          onChange={(e) => setMapName(e.target.value)}
+          onChange={(e) => {
+            setMapName(e.target.value);
+            setNameError('');
+          }}
           placeholder="Enter map name..."
           autoFocus
+          invalid={Boolean(nameError)}
         />
-      </div>
-      <div className="form-group">
-        <label>Save to Project (optional)</label>
-        <select
+      </Field>
+      <Field label="Save to Project (optional)">
+        <SelectInput
           value={selectedProject}
           onChange={(e) => setSelectedProject(e.target.value)}
         >
           <option value="">No project (Uncategorized)</option>
-          {projects.map(p => (
+          {selectableProjects.map(p => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </select>
-      </div>
+        </SelectInput>
+      </Field>
       {!showNewProject ? (
-        <button className="new-project-link" onClick={() => setShowNewProject(true)}>
-          <FolderPlus size={14} />
+        <Button
+          type="link"
+          buttonStyle="brand"
+          size="sm"
+          className="new-project-link"
+          startIcon={<FolderPlus />}
+          onClick={() => setShowNewProject(true)}
+        >
           Create new project
-        </button>
+        </Button>
       ) : (
         <div className="new-project-inline">
-          <input
+          <TextInput
             type="text"
             value={newProjectName}
             onChange={(e) => setNewProjectName(e.target.value)}
@@ -91,72 +137,25 @@ const SaveMapForm = ({
               if (e.key === 'Escape') setShowNewProject(false);
             }}
           />
-          <button onClick={handleCreateProject}>Create</button>
-          <button className="cancel" onClick={() => setShowNewProject(false)}>Cancel</button>
+          <Button size="sm" onClick={handleCreateProject}>Create</Button>
+          <Button size="sm" variant="secondary" onClick={() => setShowNewProject(false)}>Cancel</Button>
         </div>
       )}
-      <div className="form-group">
-        <label>Notes (optional)</label>
-        <textarea
+      <Field label="Notes (optional)">
+        <TextareaInput
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Add notes about this map..."
           rows={3}
         />
-      </div>
-      {accessLevels && (
-        <div className="share-section save-map-share">
-          <div className="share-section-title">Sharing permissions</div>
-          <div className="share-permission-options">
-            <label className={`share-permission-option ${sharePermission === accessLevels.VIEW ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="sharePermission"
-                checked={sharePermission === accessLevels.VIEW}
-                onChange={() => onChangePermission(accessLevels.VIEW)}
-              />
-              <Eye size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">View only</span>
-                <span className="share-permission-desc">Can view the sitemap</span>
-              </div>
-            </label>
-            <label className={`share-permission-option ${sharePermission === accessLevels.COMMENT ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="sharePermission"
-                checked={sharePermission === accessLevels.COMMENT}
-                onChange={() => onChangePermission(accessLevels.COMMENT)}
-              />
-              <MessageSquare size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">Can comment</span>
-                <span className="share-permission-desc">View and add comments</span>
-              </div>
-            </label>
-            <label className={`share-permission-option ${sharePermission === accessLevels.EDIT ? 'selected' : ''}`}>
-              <input
-                type="radio"
-                name="sharePermission"
-                checked={sharePermission === accessLevels.EDIT}
-                onChange={() => onChangePermission(accessLevels.EDIT)}
-              />
-              <Edit2 size={16} />
-              <div className="share-permission-text">
-                <span className="share-permission-label">Can edit</span>
-                <span className="share-permission-desc">Full editing access</span>
-              </div>
-            </label>
-          </div>
-        </div>
-      )}
+      </Field>
       <div className="modal-footer">
-        <button className="modal-btn secondary" onClick={onCancel}>
+        <Button variant="secondary" onClick={onCancel} disabled={isSubmitting || saving}>
           Cancel
-        </button>
-        <button className="modal-btn primary" onClick={handleSave} disabled={!mapName.trim()}>
-          {submitLabel}
-        </button>
+        </Button>
+        <Button variant="primary" onClick={handleSave} disabled={!mapName.trim() || isSubmitting || saving} loading={isSubmitting || saving}>
+          {(isSubmitting || saving) ? (submitLoadingLabel || 'Saving') : submitLabel}
+        </Button>
       </div>
     </div>
   );
@@ -173,57 +172,41 @@ const SaveMapModal = ({
   defaultProjectId,
   defaultName,
   defaultNotes,
-  accessLevels,
-  sharePermission,
-  onChangePermission,
   onSave,
   onCreateProject,
   title = 'Save Map',
   submitLabel = 'Save Map',
+  submitLoadingLabel = 'Saving',
+  saving = false,
 }) => {
   if (!show) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md save-map-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="modal-body">
-          {!isLoggedIn ? (
-            <div className="login-prompt">
-              <p>Please sign in to save your maps</p>
-              <button
-                className="modal-btn primary"
-                onClick={onRequireLogin}
-              >
+    <Modal show={show} onClose={onClose} title={title} className="save-map-modal">
+      {!isLoggedIn ? (
+        <div className="login-prompt">
+          <p>Please sign in to save your maps</p>
+          <Button variant="primary" onClick={onRequireLogin}>
                 Sign In
-              </button>
-            </div>
-          ) : (
-            <SaveMapForm
-              projects={projects}
-              currentMap={currentMap}
-              rootUrl={rootUrl}
-              defaultProjectId={defaultProjectId}
-              defaultName={defaultName}
-              defaultNotes={defaultNotes}
-              accessLevels={accessLevels}
-              sharePermission={sharePermission}
-              onChangePermission={onChangePermission}
-              onSave={onSave}
-              onCreateProject={onCreateProject}
-              onCancel={onClose}
-              submitLabel={submitLabel}
-            />
-          )}
+          </Button>
         </div>
-      </div>
-    </div>
+      ) : (
+        <SaveMapForm
+          projects={projects}
+          currentMap={currentMap}
+          rootUrl={rootUrl}
+          defaultProjectId={defaultProjectId}
+          defaultName={defaultName}
+          defaultNotes={defaultNotes}
+          onSave={onSave}
+          onCreateProject={onCreateProject}
+          onCancel={onClose}
+          submitLabel={submitLabel}
+          submitLoadingLabel={submitLoadingLabel}
+          saving={saving}
+        />
+      )}
+    </Modal>
   );
 };
 

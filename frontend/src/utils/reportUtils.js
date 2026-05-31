@@ -1,30 +1,36 @@
+import { getSeoValue } from './seoMetadata';
+import { getDepthColor } from './constants';
+import { isRenderableTextUrl } from './url';
+import { getNodeHttpErrorLabel, getNodeStatusCode, isVirtualMissingNode } from './scanStatus';
+
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
   if (!node) return [];
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
-  if (!node.isMissing
+  const isRenderableText = isRenderableTextUrl(node.url);
+  if (!isVirtualMissingNode(node)
     && !node.isDuplicate
     && !node.isBroken
     && !node.isInactive
     && !node.isError
-    && !node.isFile
+    && (!node.isFile || isRenderableText)
     && !node.authRequired
     && orphanType !== 'broken'
     && orphanType !== 'inactive'
-    && orphanType !== 'file'
+    && (orphanType !== 'file' || isRenderableText)
     && orphanType !== 'orphan'
     && !isSubdomain) {
     types.add('standard');
   }
-  if (node.isMissing) types.add('missing');
+  if (isVirtualMissingNode(node)) types.add('missing');
   if (node.isDuplicate) types.add('duplicates');
   if (node.isBroken || orphanType === 'broken') types.add('brokenLinks');
-  if (node.isInactive || orphanType === 'inactive') types.add('inactivePages');
+  if (node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (node.isInactive || orphanType === 'inactive')) types.add('inactivePages');
   if (node.isError) types.add('errorPages');
   if (orphanType === 'orphan') types.add('orphanPages');
   if (isSubdomain) types.add('subdomains');
-  if (node.isFile || orphanType === 'file') types.add('files');
+  if (!isRenderableText && (node.isFile || orphanType === 'file')) types.add('files');
   if (node.authRequired) types.add('authenticatedPages');
   return Array.from(types);
 };
@@ -33,10 +39,12 @@ export const getReportPageType = (node, overrides = {}) => {
   if (!node) return 'Standard';
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
+  const isRenderableText = isRenderableTextUrl(node.url);
+  if (node.pageType === 'Home') return 'Home';
   if (isSubdomain) return 'Subdomain';
-  if (orphanType === 'file' || node.isFile) return 'File';
+  if (!isRenderableText && (orphanType === 'file' || node.isFile)) return 'File';
   if (orphanType === 'orphan') return 'Orphan';
-  if (node.isMissing) return 'Missing';
+  if (isVirtualMissingNode(node)) return 'Missing';
   if (node.isDuplicate) return 'Duplicate';
   return 'Standard';
 };
@@ -49,7 +57,7 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
     const orphanType = context.orphanType || node.orphanType || null;
     const number = reportNumberMap.get(node.id) || '';
     const depth = reportLayout?.nodes.get(node.id)?.depth ?? 0;
-    const levelColor = colors[Math.min(depth, colors.length - 1)] || colors[0];
+    const levelColor = getDepthColor(colors, depth);
     const titleValue = node.title || node.url || '';
     const showFullTitle = titleValue.length > 24;
     entries.push({
@@ -61,9 +69,25 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
       duplicateOf: node.duplicateOf || '',
       parentUrl: node.parentUrl || '',
       referrerUrl: node.referrerUrl || '',
+      description: getSeoValue(node, 'description'),
+      metaKeywords: getSeoValue(node, 'keywords'),
+      canonicalUrl: getSeoValue(node, 'canonicalUrl'),
+      h1: getSeoValue(node, 'h1'),
+      h2: getSeoValue(node, 'h2'),
+      robots: getSeoValue(node, 'robots'),
+      language: getSeoValue(node, 'language'),
+      openGraph: node.seoMetadata?.openGraph || {},
+      twitter: node.seoMetadata?.twitter || {},
       pageType: getReportPageType(node, { isSubdomain, orphanType }),
       levelColor,
       thumbnailUrl: node.thumbnailUrl || '',
+      statusCode: getNodeStatusCode(node),
+      httpErrorType: node.httpErrorType || '',
+      httpErrorLabel: getNodeHttpErrorLabel(node),
+      isViewableError: Boolean(node.isViewableError),
+      isVirtualMissing: isVirtualMissingNode(node),
+      blockedReason: node.blockedReason || '',
+      scanStatus: node.scanStatus || '',
       showFullTitle,
     });
     node.children?.forEach((child) => visit(child, { isSubdomain, orphanType }));

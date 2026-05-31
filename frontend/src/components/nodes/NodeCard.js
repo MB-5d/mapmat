@@ -1,20 +1,32 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Copy,
-  Edit2,
-  ExternalLink,
+  FileText,
   ImageOff,
   Loader2,
+  Lock,
   Maximize2,
-  MessageSquare,
-  Trash2,
 } from 'lucide-react';
+import CommentBadge from './CommentBadge';
+import NodeActionBar from './NodeActionBar';
+import NodeBadge from './NodeBadge';
+import Badge from '../ui/Badge';
 
-import { getHostname } from '../../utils/url';
-import { ANNOTATION_STATUS_LABELS } from '../../utils/constants';
+import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
+import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
+import { getNodeHttpErrorLabel } from '../../utils/scanStatus';
+
+const NODE_STATUS_BADGE_STYLE = {
+  new: 'info',
+  to_move: 'warning',
+  moved: 'info',
+  to_delete: 'error',
+  deleted: 'error',
+  note: 'neutral',
+};
 
 const NodeCard = ({
   node,
@@ -24,6 +36,10 @@ const NodeCard = ({
   showCommentBadges,
   canEdit,
   canComment,
+  showCommentAction = false,
+  commentActionLabel = 'Comments',
+  showExternalLinkAction = true,
+  showDeleteAction = true,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -40,7 +56,6 @@ const NodeCard = ({
   badges = [],
   showPageNumbers = true,
   showAnnotations = true,
-  onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
   thumbnailReloadKey = 0,
@@ -54,15 +69,17 @@ const NodeCard = ({
 }) => {
   const [thumbError, setThumbError] = useState(false);
   const [thumbLoading, setThumbLoading] = useState(true);
-  const [thumbKey, setThumbKey] = useState(0);
+  const [shouldLoadThumb, setShouldLoadThumb] = useState(false);
+  const cardRef = useRef(null);
   const thumbImgRef = useRef(null);
 
-  const isScreenshotThumb = node.thumbnailUrl?.includes('/screenshots/');
   const thumb = node.thumbnailUrl
-    ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbKey}`
+    ? (thumbnailReloadKey
+      ? `${node.thumbnailUrl}${node.thumbnailUrl.includes('?') ? '&' : '?'}_=${thumbnailReloadKey}`
+      : node.thumbnailUrl)
     : null;
   const hasThumb = Boolean(thumb);
-  const canRequestThumbnail = !thumbnailRequestIds || thumbnailRequestIds.has(node.id);
+  const canRequestThumbnail = !!(thumbnailRequestIds && thumbnailRequestIds.has(node.id));
   const annotations = node?.annotations || {};
   const status = annotations.status || 'none';
   const note = typeof annotations.note === 'string' ? annotations.note.trim() : '';
@@ -78,26 +95,114 @@ const NodeCard = ({
   const badgeTitle = badgeTitleParts.join('\n');
   const isDeleted = showAnnotations && status === 'deleted';
   const shouldGhost = isGhosted || isDeleted;
+  const showActionBar = canEdit || showCommentAction || (showExternalLinkAction && !!node.url);
+  const actionBarPermission = canEdit
+    ? 'Owner / Editor'
+    : showCommentAction
+      ? 'Commenter'
+      : 'Viewer';
+
+  const getPreviewIssue = () => {
+    const orphanType = String(node?.orphanType || '').toLowerCase();
+    const pageType = String(node?.pageType || node?.type || '').toLowerCase();
+    const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
+    const extension = getUrlExtension(node?.url).toUpperCase();
+    const isRenderableText = isRenderableTextUrl(node?.url);
+    const isFile = !isRenderableText && (
+      node?.isFile
+      || orphanType === 'file'
+      || pageType === 'file'
+      || ['PDF', 'DOC', 'DOCX', 'XLS', 'XLSX', 'PPT', 'PPTX', 'ZIP'].includes(extension)
+    );
+    if (isFile) {
+      return {
+        icon: FileText,
+        label: extension ? `${extension} file` : 'File link',
+        text: 'No page preview',
+        variant: 'file',
+      };
+    }
+    if (node?.authRequired) {
+      return {
+        icon: Lock,
+        label: 'Requires login',
+        text: 'Preview unavailable',
+        variant: 'blocked',
+      };
+    }
+    const statusCode = Number(node?.httpStatus ?? node?.statusCode);
+    const isViewableError = Boolean(node?.isViewableError && Number.isFinite(statusCode) && statusCode >= 400);
+    if (isViewableError) return null;
+    if (
+      node?.isBroken
+      || orphanType === 'broken'
+      || scanStatus === 'error'
+      || scanStatus === 'failed'
+      || (Number.isFinite(statusCode) && statusCode >= 400)
+    ) {
+      return {
+        icon: AlertTriangle,
+        label: getNodeHttpErrorLabel(node) || 'Error page',
+        text: 'Preview unavailable',
+        variant: 'error',
+      };
+    }
+    if (node?.isInactive || orphanType === 'inactive' || scanStatus === 'inactive' || statusCode === 0) {
+      return {
+        icon: AlertTriangle,
+        label: 'Inactive page',
+        text: 'Preview unavailable',
+        variant: 'inactive',
+      };
+    }
+    if (node?.thumbnailCaptureFailed) {
+      return {
+        icon: AlertTriangle,
+        label: node.thumbnailCaptureError || 'Capture failed',
+        text: 'Preview unavailable',
+        variant: 'error',
+      };
+    }
+    return null;
+  };
+  const previewIssue = getPreviewIssue();
+  const PlaceholderIcon = previewIssue?.icon || ImageOff;
 
   // Reset thumbnail state when showThumbnails is toggled on
   useEffect(() => {
     if (showThumbnails) {
+      const hasExistingThumbnail = !!node.thumbnailUrl;
       setThumbError(false);
-      setThumbLoading(canRequestThumbnail && !node.thumbnailUrl);
-      if (canRequestThumbnail) {
-        setThumbKey(k => k + 1); // Force new image request
-      }
+      setThumbLoading(canRequestThumbnail && !hasExistingThumbnail);
+      setShouldLoadThumb(hasExistingThumbnail);
     }
   }, [showThumbnails, node.thumbnailUrl, node.url, canRequestThumbnail, thumbnailSessionId]);
 
   useEffect(() => {
+    if (!showThumbnails || !thumb) return undefined;
+    const element = cardRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setShouldLoadThumb(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setShouldLoadThumb(true);
+        observer.disconnect();
+      }
+    }, { root: null, rootMargin: '900px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [showThumbnails, thumb]);
+
+  useEffect(() => {
     if (!showThumbnails) return;
-    if (!canRequestThumbnail) return;
     if (!thumbnailReloadKey) return;
+    if (!thumb) return;
     setThumbError(false);
-    setThumbLoading(true);
-    setThumbKey(k => k + 1);
-  }, [thumbnailReloadKey, showThumbnails, canRequestThumbnail]);
+    setThumbLoading(canRequestThumbnail);
+    setShouldLoadThumb(true);
+  }, [thumbnailReloadKey, showThumbnails, canRequestThumbnail, thumb]);
 
   useEffect(() => {
     if (!thumbnailCaptureStopped) return;
@@ -118,31 +223,13 @@ const NodeCard = ({
       if (thumbLoading) {
         setThumbError(true);
         setThumbLoading(false);
-        onThumbnailError?.(node.id, node.url);
+        if (thumb) {
+          onThumbnailError?.(node.id, node.url);
+        }
       }
     }, 120000);
     return () => clearTimeout(timeout);
-  }, [showThumbnails, thumbLoading, thumbKey, thumb, canRequestThumbnail, node.id, node.url, onThumbnailError]);
-
-  useEffect(() => {
-    if (!showThumbnails || !onRequestThumbnail) return;
-    if (!canRequestThumbnail) return;
-    if (node.thumbnailUrl && isScreenshotThumb) return;
-    if (thumbError) return;
-    let isActive = true;
-    setThumbLoading(!node.thumbnailUrl);
-    setThumbError(false);
-    onRequestThumbnail(node).then((success) => {
-      if (!isActive) return;
-      if (success === false && !node.thumbnailUrl) {
-        setThumbError(true);
-        setThumbLoading(false);
-      }
-    });
-    return () => {
-      isActive = false;
-    };
-  }, [showThumbnails, node.thumbnailUrl, node.url, onRequestThumbnail, isScreenshotThumb, thumbError, canRequestThumbnail]);
+  }, [showThumbnails, thumbLoading, thumb, canRequestThumbnail, node.id, node.url, onThumbnailError]);
 
   useEffect(() => {
     if (!thumb || !thumbImgRef.current) return;
@@ -154,12 +241,15 @@ const NodeCard = ({
   }, [thumb, node.id, onThumbnailLoad]);
 
   const handleViewFull = () => {
-    // Use uploaded thumbnail if available, otherwise use URL for mshots
-    onViewImage(node.thumbnailUrl || node.url, !!node.thumbnailUrl, node.id);
+    const fallbackAssetUrl = !node.url ? (node.thumbnailFullUrl || node.thumbnailUrl) : '';
+    const directAssetUrl = node.fullScreenshotUrl || fallbackAssetUrl;
+    const hasDirectImage = !!directAssetUrl;
+    const source = directAssetUrl || node.url;
+    if (!source) return;
+    onViewImage(source, hasDirectImage, node.id, node.fullScreenshotUrl || node.url ? 'full' : 'thumb');
     if (!node.thumbnailUrl && thumbError) {
       setThumbError(false);
       setThumbLoading(true);
-      setThumbKey(k => k + 1);
     }
   };
 
@@ -175,9 +265,13 @@ const NodeCard = ({
   if (shouldGhost) classNames.push('ghosted');
   if (isDeleted) classNames.push('deleted');
   if (isSelected) classNames.push('selected');
+  if (showActionBar) classNames.push('has-action-bar');
+  if (showCommentBadges && node.comments?.length > 0) classNames.push('has-comment-badge');
 
   // Anchor color based on connection tool type
-  const anchorColor = connectionTool === 'userflow' ? '#14b8a6' : '#f97316';
+  const anchorColor = connectionTool === 'userflow'
+    ? DEFAULT_CONNECTION_COLORS.userFlows
+    : DEFAULT_CONNECTION_COLORS.crossLinks;
   const showStackToggle = stackInfo?.collapsed || stackInfo?.showCollapse;
   const stackToggleLabel = stackInfo?.collapsed
     ? `+${Math.max(0, (stackInfo.totalCount || 0) - 1)} more`
@@ -185,9 +279,12 @@ const NodeCard = ({
 
   return (
     <div
+      ref={cardRef}
       className={classNames.join(' ')}
       data-node-card="1"
       data-node-id={node.id}
+      data-feedback-id={`node-card-${node.id}`}
+      data-feedback-label={node.title || 'Node card'}
       style={{ cursor: isRoot ? 'default' : (connectionTool ? 'default' : 'grab') }}
       {...(isRoot ? {} : dragHandleProps)}
     >
@@ -229,14 +326,10 @@ const NodeCard = ({
 
       {/* Comment badge - show if node has comments and comments mode is active */}
       {showCommentBadges && node.comments?.length > 0 && (
-        <button
-          className="comment-badge"
+        <CommentBadge
+          count={node.comments.length}
           onClick={(e) => { e.stopPropagation(); onViewNotes?.(node); }}
-          title="View notes"
-        >
-          <MessageSquare size={12} />
-          {node.comments.length > 1 && <span>{node.comments.length}</span>}
-        </button>
+        />
       )}
 
       {showThumbnails && (
@@ -246,13 +339,17 @@ const NodeCard = ({
               <Loader2 size={24} className="thumb-spinner" />
             </div>
           )}
-          {hasThumb && !thumbError ? (
+          {hasThumb && shouldLoadThumb && !thumbError ? (
             <>
               <img
                 className="thumb-img"
                 src={thumb}
                 alt={node.title}
-                loading="lazy"
+                loading={canRequestThumbnail ? 'eager' : 'lazy'}
+                decoding="async"
+                fetchpriority="low"
+                width="288"
+                height="152"
                 ref={thumbImgRef}
                 onLoad={() => {
                   setThumbError(false);
@@ -277,11 +374,14 @@ const NodeCard = ({
               )}
             </>
           ) : (
-            <div className="thumb-placeholder">
-              <ImageOff size={32} strokeWidth={1.5} />
+            <div className={`thumb-placeholder ${previewIssue ? `thumb-placeholder-${previewIssue.variant}` : ''}`}>
+              <PlaceholderIcon size={32} strokeWidth={1.5} />
               <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
+              {previewIssue?.label && (
+                <span className="thumb-placeholder-label">{previewIssue.label}</span>
+              )}
               <span className="thumb-placeholder-text">
-                {thumbLoading ? 'Generating preview' : 'Preview unavailable'}
+                {thumbLoading ? 'Generating preview' : (previewIssue?.text || 'Preview unavailable')}
               </span>
             </div>
           )}
@@ -294,56 +394,41 @@ const NodeCard = ({
             {node.title}
           </div>
           {showBadge && (
-            <div
-              className={`node-status-badge ${hasStatus ? `status-${status}` : 'status-note'}`}
+            <Badge
+              className={`node-status-badge status-${hasStatus ? status : 'note'}`}
+              type="hollow"
+              badgeStyle={NODE_STATUS_BADGE_STYLE[hasStatus ? status : 'note'] || 'neutral'}
+              size="sm"
               title={badgeTitle}
               aria-hidden="true"
             >
               <span className="node-status-text">{badgeLabel}</span>
-              {note && <span className="node-status-note-dot" />}
-            </div>
+              {note ? <span className="node-status-note-dot" /> : null}
+            </Badge>
           )}
         </div>
 
         {showPageNumbers && <span className="page-number">{number}</span>}
       </div>
 
-      <div className="card-actions">
-        <div className="card-actions-left">
-          {canEdit && (
-            <button className="btn-icon-flat" title="Edit" onClick={() => onEdit(node)}>
-              <Edit2 size={18} />
-            </button>
-          )}
-          {canEdit && !isRoot && (
-            <button className="btn-icon-flat danger" title="Delete" onClick={() => onDelete(node.id)}>
-              <Trash2 size={18} />
-            </button>
-          )}
-          {canEdit && (
-            <button className="btn-icon-flat" title="Duplicate" onClick={() => onDuplicate(node)}>
-              <Copy size={18} />
-            </button>
-          )}
-          {canComment && (
-            <button className="btn-icon-flat" title="Add Note" onClick={() => onAddNote?.(node)}>
-              <MessageSquare size={18} />
-            </button>
-          )}
+      {showActionBar && (
+        <div className="card-actions">
+          <NodeActionBar
+            node={node}
+            permission={actionBarPermission}
+            canEdit={canEdit}
+            isRoot={isRoot}
+            showCommentAction={showCommentAction}
+            commentActionLabel={commentActionLabel}
+            showExternalLinkAction={showExternalLinkAction}
+            showDeleteAction={showDeleteAction}
+            onDelete={onDelete}
+            onEdit={onEdit}
+            onDuplicate={onDuplicate}
+            onAddNote={onAddNote}
+          />
         </div>
-        {node.url && (
-          <a
-            href={node.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-icon-flat external-link-btn"
-            title="Open in new tab"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink size={18} />
-          </a>
-        )}
-      </div>
+      )}
 
       {showStackToggle && (
         <button
@@ -352,6 +437,7 @@ const NodeCard = ({
             event.stopPropagation();
             onToggleStack?.();
           }}
+          onPointerDown={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
           type="button"
           title={stackInfo?.collapsed ? 'Expand stack' : 'Collapse stack'}
@@ -364,9 +450,7 @@ const NodeCard = ({
       {badges.length > 0 && (
         <div className="node-badges" aria-hidden="true">
           {badges.map((badge) => (
-            <span key={badge} className="node-badge">
-              {badge}
-            </span>
+            <NodeBadge key={badge} label={badge} />
           ))}
         </div>
       )}
@@ -383,6 +467,10 @@ const DraggableNodeCard = ({
   showCommentBadges,
   canEdit,
   canComment,
+  showCommentAction,
+  commentActionLabel,
+  showExternalLinkAction,
+  showDeleteAction,
   connectionTool,
   snapTarget,
   onAnchorMouseDown,
@@ -396,7 +484,6 @@ const DraggableNodeCard = ({
   activeId,
   badges,
   showPageNumbers,
-  onRequestThumbnail,
   thumbnailRequestIds,
   thumbnailSessionId,
   thumbnailReloadKey,
@@ -425,6 +512,10 @@ const DraggableNodeCard = ({
         showCommentBadges={showCommentBadges}
         canEdit={canEdit}
         canComment={canComment}
+        showCommentAction={showCommentAction}
+        commentActionLabel={commentActionLabel}
+        showExternalLinkAction={showExternalLinkAction}
+        showDeleteAction={showDeleteAction}
         connectionTool={connectionTool}
         snapTarget={snapTarget}
         onAnchorMouseDown={onAnchorMouseDown}
@@ -440,7 +531,6 @@ const DraggableNodeCard = ({
         badges={badges}
         showPageNumbers={showPageNumbers}
         showAnnotations={showAnnotations}
-        onRequestThumbnail={onRequestThumbnail}
         thumbnailRequestIds={thumbnailRequestIds}
         thumbnailSessionId={thumbnailSessionId}
         thumbnailReloadKey={thumbnailReloadKey}
@@ -468,7 +558,7 @@ const DragOverlayTree = ({
   showPageNumbers = true,
   showAnnotations = true,
 }) => {
-  const childColor = colors[Math.min(depth + 1, colors.length - 1)];
+  const childColor = getDepthColor(colors, depth + 1);
   const INDENT = 40;
   const GAP = 60;
 

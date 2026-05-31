@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
+import { getDepthColor } from '../../utils/constants';
+import { normalizeWorldBounds } from '../../utils/canvasBounds';
 import './minimapNavigator.css';
 
 const DEFAULT_MINIMAP_WIDTH = 320;
 const DEFAULT_MINIMAP_HEIGHT = 110;
 const MINIMAP_PADDING = 0;
-const GUTTER_WIDTH = 12;
+const GUTTER_WIDTH = 0;
 const ZOOM_THUMB_WIDTH = 28;
-const ZOOM_TRACK_HEIGHT = 6;
 const VIEWPORT_MIN_SIZE = 8;
 
 const clampValue = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -58,8 +60,11 @@ const getBoundsFromLayout = (layout) => {
   return { minX, minY, maxX, maxY };
 };
 
+export { normalizeWorldBounds };
+
 const MinimapNavigator = ({
   layout,
+  overview,
   bounds,
   canvasSize,
   pan,
@@ -76,7 +81,10 @@ const MinimapNavigator = ({
   const previewRef = useRef(null);
   const trackRef = useRef(null);
   const dragRef = useRef(null);
+  const pendingPanRef = useRef(null);
+  const panFrameRef = useRef(null);
   const [measuredSize, setMeasuredSize] = useState({ width: 0, height: 0 });
+  const [dragViewWorld, setDragViewWorld] = useState(null);
 
   useEffect(() => {
     if (!previewRef.current) return;
@@ -93,10 +101,16 @@ const MinimapNavigator = ({
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => () => {
+    if (panFrameRef.current && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(panFrameRef.current);
+    }
+  }, []);
+
   const minimapWidth = measuredSize.width > 0 ? measuredSize.width : DEFAULT_MINIMAP_WIDTH;
   const minimapHeight = measuredSize.height > 0 ? measuredSize.height : DEFAULT_MINIMAP_HEIGHT;
 
-  const worldBounds = bounds || getBoundsFromLayout(layout);
+  const worldBounds = normalizeWorldBounds(bounds) || normalizeWorldBounds(overview?.bounds) || getBoundsFromLayout(layout);
   if (!worldBounds) return null;
 
   const boundsW = Math.max(1, worldBounds.maxX - worldBounds.minX);
@@ -121,10 +135,10 @@ const MinimapNavigator = ({
     y: Number.isFinite(pan?.y) ? pan.y : 0,
   };
 
-  const viewWorld = (canvasSize?.width && canvasSize?.height)
+  const baseViewWorld = (canvasSize?.width && canvasSize?.height)
     ? {
-        x: 0 / safeScale - safePan.x,
-        y: 0 / safeScale - safePan.y,
+        x: (0 - safePan.x) / safeScale,
+        y: (0 - safePan.y) / safeScale,
         w: canvasSize.width / safeScale,
         h: canvasSize.height / safeScale,
       }
@@ -134,6 +148,7 @@ const MinimapNavigator = ({
         w: Math.max(1, worldBounds.maxX - worldBounds.minX),
         h: Math.max(1, worldBounds.maxY - worldBounds.minY),
       };
+  const viewWorld = dragViewWorld || baseViewWorld;
 
   const miniScale = Math.max(0.0001, visibleInner.h / boundsH);
   const contentW = boundsW * miniScale;
@@ -190,7 +205,14 @@ const MinimapNavigator = ({
     h: clampedH,
   };
 
-  const nodes = layout
+  const nodes = Array.isArray(overview?.nodes)
+    ? overview.nodes.map((node) => {
+        const origin = worldToMini(node.x, node.y);
+        const w = Math.max(2, node.w * miniScale);
+        const h = Math.max(2, node.h * miniScale);
+        return { id: node.id, x: origin.x, y: origin.y, w, h, depth: node.depth ?? 0 };
+      })
+    : layout
     ? Array.from(layout.nodes.values()).map((node) => {
         const origin = worldToMini(node.x, node.y);
         const w = Math.max(2, node.w * miniScale);
@@ -200,15 +222,19 @@ const MinimapNavigator = ({
       })
     : [];
 
-  const connectors = layout?.connectors
+  const connectors = Array.isArray(overview?.connectors)
+    ? overview.connectors.map((connector, idx) => {
+        const p1 = worldToMini(connector.x1, connector.y1);
+        const p2 = worldToMini(connector.x2, connector.y2);
+        return { id: connector.id || `${connector.type || 'connector'}-${idx}`, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+      })
+    : layout?.connectors
     ? layout.connectors.map((connector, idx) => {
         const p1 = worldToMini(connector.x1, connector.y1);
         const p2 = worldToMini(connector.x2, connector.y2);
         return { id: `${connector.type}-${idx}`, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
       })
     : [];
-
-  const clampOutputs = viewport;
 
   const getLocalPoint = (event) => {
     const rect = previewRef.current?.getBoundingClientRect();
@@ -228,6 +254,33 @@ const MinimapNavigator = ({
     const zoomRange = Math.max(0.001, maxScale - minScale);
     const nextScale = minScale + ratio * zoomRange;
     onZoomTo?.(nextScale);
+  };
+
+  const flushPendingPan = () => {
+    const pending = pendingPanRef.current;
+    pendingPanRef.current = null;
+    panFrameRef.current = null;
+    if (!pending) return;
+    setDragViewWorld(pending.viewWorld);
+    onPanTo?.(pending.worldLeft, pending.worldTop);
+  };
+
+  const schedulePanTo = (worldLeft, worldTop) => {
+    pendingPanRef.current = {
+      worldLeft,
+      worldTop,
+      viewWorld: {
+        ...baseViewWorld,
+        x: worldLeft,
+        y: worldTop,
+      },
+    };
+    if (panFrameRef.current) return;
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      panFrameRef.current = window.requestAnimationFrame(flushPendingPan);
+      return;
+    }
+    flushPendingPan();
   };
 
   const handlePointerDown = (event) => {
@@ -250,34 +303,37 @@ const MinimapNavigator = ({
 
     dragRef.current = {
       mode: 'viewport',
-      lastX: point.x,
-      lastY: point.y,
+      startX: point.x,
+      startY: point.y,
+      startWorldX: viewWorld.x,
+      startWorldY: viewWorld.y,
     };
+    setDragViewWorld(viewWorld);
     previewRef.current.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event) => {
-    if (!dragRef.current) return;
+    if (dragRef.current?.mode !== 'viewport') return;
     event.preventDefault();
     const point = getLocalPoint(event);
-    const deltaX = point.x - dragRef.current.lastX;
-    const deltaY = point.y - dragRef.current.lastY;
-    dragRef.current.lastX = point.x;
-    dragRef.current.lastY = point.y;
+    const deltaX = point.x - dragRef.current.startX;
+    const deltaY = point.y - dragRef.current.startY;
 
     const deltaWorldX = deltaX / miniScale;
     const deltaWorldY = deltaY / miniScale;
 
-    const worldLeft = viewWorld.x + deltaWorldX;
-    const worldTop = viewWorld.y + deltaWorldY;
+    const worldLeft = dragRef.current.startWorldX + deltaWorldX;
+    const worldTop = dragRef.current.startWorldY + deltaWorldY;
 
-    onPanTo?.(worldLeft, worldTop);
+    schedulePanTo(worldLeft, worldTop);
   };
 
   const handlePointerUp = (event) => {
-    if (!dragRef.current) return;
+    if (dragRef.current?.mode !== 'viewport') return;
     event.preventDefault();
+    flushPendingPan();
     dragRef.current = null;
+    setDragViewWorld(null);
     try {
       previewRef.current?.releasePointerCapture(event.pointerId);
     } catch {}
@@ -289,6 +345,8 @@ const MinimapNavigator = ({
     1
   );
   const thumbLeft = `calc(${(zoomRatio * 100).toFixed(4)}% - ${ZOOM_THUMB_WIDTH / 2}px)`;
+  const canZoomOut = safeScale > minScale + 0.001;
+  const canZoomIn = safeScale < maxScale - 0.001;
 
   const showDebug =
     typeof window !== 'undefined' && window.location.search.includes('minimapDebug');
@@ -349,8 +407,7 @@ const MinimapNavigator = ({
               />
             ))}
             {nodes.map((node) => {
-              const depthColor = colors?.[Math.min(node.depth, Math.max(0, (colors?.length || 1) - 1))];
-              const baseColor = depthColor || '#94a3b8';
+              const baseColor = getDepthColor(colors, node.depth);
               const tintColor = mixWithWhite(baseColor, 0.6);
               const centerX = node.x + node.w / 2;
               const centerY = node.y + node.h / 2;
@@ -388,8 +445,10 @@ const MinimapNavigator = ({
         <div className="minimap-navigator-fade minimap-navigator-fade-right" />
       </div>
       <div className="minimap-navigator-zoom-row">
-        <button
-          type="button"
+        <IconButton
+          size="sm"
+          variant="ghost"
+          buttonStyle="mono"
           className="minimap-navigator-zoom-btn"
           onClick={(event) => {
             event.preventDefault();
@@ -400,10 +459,10 @@ const MinimapNavigator = ({
             event.preventDefault();
             event.stopPropagation();
           }}
-          aria-label="Zoom out"
-        >
-          <Minus size={14} />
-        </button>
+          disabled={!canZoomOut}
+          label="Zoom out"
+          icon={<Minus />}
+        />
         <div
           ref={trackRef}
           className="minimap-navigator-track"
@@ -436,8 +495,10 @@ const MinimapNavigator = ({
             }}
           />
         </div>
-        <button
-          type="button"
+        <IconButton
+          size="sm"
+          variant="ghost"
+          buttonStyle="mono"
           className="minimap-navigator-zoom-btn"
           onClick={(event) => {
             event.preventDefault();
@@ -448,10 +509,10 @@ const MinimapNavigator = ({
             event.preventDefault();
             event.stopPropagation();
           }}
-          aria-label="Zoom in"
-        >
-          <Plus size={14} />
-        </button>
+          disabled={!canZoomIn}
+          label="Zoom in"
+          icon={<Plus />}
+        />
       </div>
       {showDebug && (
         <div className="minimap-navigator-debug" aria-hidden="true">

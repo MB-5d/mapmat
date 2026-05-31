@@ -1,5 +1,5 @@
 /**
- * Database setup for Map Mat
+ * Database setup for Vellic
  * Uses SQLite for simplicity - can migrate to PostgreSQL later
  */
 
@@ -21,9 +21,15 @@ if (providerFallback) {
 
 const DEFAULT_DATA_DIR = path.join(__dirname, 'data');
 const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH;
-const defaultDbPath = railwayVolumeDir
+const defaultVellicDbPath = railwayVolumeDir
+  ? path.join(railwayVolumeDir, 'vellic.db')
+  : path.join(DEFAULT_DATA_DIR, 'vellic.db');
+const legacyMapMatDbPath = railwayVolumeDir
   ? path.join(railwayVolumeDir, 'mapmat.db')
   : path.join(DEFAULT_DATA_DIR, 'mapmat.db');
+const defaultDbPath = fs.existsSync(defaultVellicDbPath) || !fs.existsSync(legacyMapMatDbPath)
+  ? defaultVellicDbPath
+  : legacyMapMatDbPath;
 const DB_PATH = process.env.DB_PATH || defaultDbPath;
 const DB_DIR = path.dirname(DB_PATH);
 
@@ -52,6 +58,10 @@ db.exec(`
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     name TEXT,
+    avatar_path TEXT,
+    account_status TEXT NOT NULL DEFAULT 'active',
+    disabled_at DATETIME,
+    disabled_reason TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -77,6 +87,8 @@ db.exec(`
     root_data TEXT NOT NULL,
     colors TEXT,
     connection_colors TEXT,
+    insights_data TEXT,
+    insights_generated_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -96,9 +108,13 @@ db.exec(`
     connections_data TEXT,
     colors TEXT,
     connection_colors TEXT,
+    is_bookmarked INTEGER NOT NULL DEFAULT 0,
+    bookmarked_by_user_id TEXT,
+    bookmarked_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (map_id) REFERENCES maps(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (bookmarked_by_user_id) REFERENCES users(id) ON DELETE SET NULL
   );
 
   -- Scan history table
@@ -112,6 +128,8 @@ db.exec(`
     root_data TEXT NOT NULL,
     colors TEXT,
     connection_colors TEXT,
+    insights_data TEXT,
+    insights_generated_at DATETIME,
     scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
@@ -177,8 +195,22 @@ db.exec(`
     error TEXT
   );
 
+  -- Admin audit logs
+  CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id TEXT PRIMARY KEY,
+    actor_label TEXT NOT NULL,
+    actor_ip TEXT,
+    action TEXT NOT NULL,
+    target_user_id TEXT,
+    metadata TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
+
   -- Create indexes for faster queries
   CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
+  CREATE INDEX IF NOT EXISTS idx_users_created ON users(created_at);
+  CREATE INDEX IF NOT EXISTS idx_users_name ON users(name);
   CREATE INDEX IF NOT EXISTS idx_maps_user ON maps(user_id);
   CREATE INDEX IF NOT EXISTS idx_maps_project ON maps(project_id);
   CREATE INDEX IF NOT EXISTS idx_map_versions_map ON map_versions(map_id);
@@ -188,19 +220,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_usage_events_type_time ON usage_events(event_type, created_at);
   CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events(user_id);
   CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_target_created ON admin_audit_logs(target_user_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created ON admin_audit_logs(created_at);
   CREATE INDEX IF NOT EXISTS idx_pages_parent ON pages(parent_url);
   CREATE INDEX IF NOT EXISTS idx_pages_placement ON pages(placement);
 `);
 
 // Backfill new columns without full migrations
+ensureColumn('users', 'avatar_path', 'TEXT');
+ensureColumn('users', 'account_status', "TEXT NOT NULL DEFAULT 'active'");
+ensureColumn('users', 'disabled_at', 'DATETIME');
+ensureColumn('users', 'disabled_reason', 'TEXT');
+db.exec("CREATE INDEX IF NOT EXISTS idx_users_status ON users(account_status)");
 ensureColumn('maps', 'orphans_data', 'TEXT');
 ensureColumn('maps', 'connections_data', 'TEXT');
 ensureColumn('maps', 'connection_colors', 'TEXT');
 ensureColumn('maps', 'notes', 'TEXT');
+ensureColumn('maps', 'insights_data', 'TEXT');
+ensureColumn('maps', 'insights_generated_at', 'DATETIME');
 ensureColumn('map_versions', 'orphans_data', 'TEXT');
 ensureColumn('map_versions', 'connections_data', 'TEXT');
 ensureColumn('map_versions', 'connection_colors', 'TEXT');
 ensureColumn('map_versions', 'notes', 'TEXT');
+ensureColumn('map_versions', 'is_bookmarked', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('map_versions', 'bookmarked_by_user_id', 'TEXT');
+ensureColumn('map_versions', 'bookmarked_at', 'DATETIME');
 ensureColumn('shares', 'orphans_data', 'TEXT');
 ensureColumn('shares', 'connections_data', 'TEXT');
 ensureColumn('shares', 'connection_colors', 'TEXT');
@@ -210,12 +254,15 @@ ensureColumn('scan_history', 'connection_colors', 'TEXT');
 ensureColumn('scan_history', 'scan_options', 'TEXT');
 ensureColumn('scan_history', 'scan_depth', 'INTEGER');
 ensureColumn('scan_history', 'map_id', 'TEXT');
+ensureColumn('scan_history', 'insights_data', 'TEXT');
+ensureColumn('scan_history', 'insights_generated_at', 'DATETIME');
 ensureColumn('usage_events', 'meta', 'TEXT');
 ensureColumn('pages', 'placement', "TEXT NOT NULL DEFAULT 'Primary'");
 ensureColumn('pages', 'status', "TEXT NOT NULL DEFAULT 'Active'");
 ensureColumn('pages', 'severity', "TEXT NOT NULL DEFAULT 'Healthy'");
 ensureColumn('pages', 'parent_url', 'TEXT');
 ensureColumn('pages', 'discovery_source', "TEXT NOT NULL DEFAULT 'crawl'");
+db.exec("UPDATE users SET account_status = 'active' WHERE account_status IS NULL OR TRIM(account_status) = ''");
 ensureColumn('pages', 'links_in', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('pages', 'depth', 'INTEGER');
 

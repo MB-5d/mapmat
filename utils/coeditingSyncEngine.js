@@ -1,6 +1,7 @@
 const adapter = require('../stores/dbAdapter');
 const mapStore = require('../stores/mapStore');
 const coeditingStore = require('../stores/coeditingStore');
+const { applyBranchMoveToMap } = require('./treeMoveUtils');
 
 const LIVE_OP_REPLAY_LIMIT_DEFAULT = 200;
 const LIVE_OP_REPLAY_LIMIT_MAX = 500;
@@ -41,6 +42,38 @@ function normalizeNullableString(value) {
   return normalized || null;
 }
 
+function normalizeTimestampMarker(value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? null : value.toISOString();
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Date.parse(trimmed);
+    return Number.isNaN(parsed) ? trimmed : new Date(parsed).toISOString();
+  }
+
+  if (typeof value?.toISOString === 'function') {
+    try {
+      const iso = value.toISOString();
+      return normalizeNullableString(iso);
+    } catch {
+      // Fall through to string normalization.
+    }
+  }
+
+  return normalizeNullableString(value);
+}
+
 function cloneDocument(document) {
   return structuredClone(document);
 }
@@ -56,7 +89,7 @@ function parseMapRowToDocument(mapRow) {
     connections: normalizeConnections(parseJsonSafe(mapRow.connections_data, [])),
     colors: parseJsonSafe(mapRow.colors, null),
     connectionColors: parseJsonSafe(mapRow.connection_colors, null),
-    mapUpdatedAt: mapRow.updated_at || null,
+    mapUpdatedAt: normalizeTimestampMarker(mapRow.updated_at),
     lastOpId: null,
     lastActorId: null,
   };
@@ -73,7 +106,7 @@ function parseSnapshotRowToDocument(snapshotRow) {
     connections: normalizeConnections(parseJsonSafe(snapshotRow.connections_data, [])),
     colors: parseJsonSafe(snapshotRow.colors, null),
     connectionColors: parseJsonSafe(snapshotRow.connection_colors, null),
-    mapUpdatedAt: snapshotRow.map_updated_at || null,
+    mapUpdatedAt: normalizeTimestampMarker(snapshotRow.map_updated_at),
     lastOpId: snapshotRow.last_op_id || null,
     lastActorId: snapshotRow.last_actor_id || null,
   };
@@ -118,10 +151,22 @@ function serializeDocument(document) {
     connectionColors: document.connectionColors === null || document.connectionColors === undefined
       ? null
       : JSON.stringify(document.connectionColors),
-    mapUpdatedAt: document.mapUpdatedAt || null,
+    mapUpdatedAt: normalizeTimestampMarker(document.mapUpdatedAt),
     lastOpId: document.lastOpId || null,
     lastActorId: document.lastActorId || null,
   };
+}
+
+function documentsMatchForSnapshot(leftDocument, rightDocument) {
+  const left = serializeDocument(leftDocument);
+  const right = serializeDocument(rightDocument);
+  return left.name === right.name
+    && left.notes === right.notes
+    && left.rootData === right.rootData
+    && left.orphansData === right.orphansData
+    && left.connectionsData === right.connectionsData
+    && left.colors === right.colors
+    && left.connectionColors === right.connectionColors;
 }
 
 function summarizeDocument(document) {
@@ -130,7 +175,7 @@ function summarizeDocument(document) {
     version: Number(document.version || 0),
     name: document.name,
     notes: document.notes,
-    mapUpdatedAt: document.mapUpdatedAt || null,
+    mapUpdatedAt: normalizeTimestampMarker(document.mapUpdatedAt),
     lastOpId: document.lastOpId || null,
     lastActorId: document.lastActorId || null,
   };
@@ -404,6 +449,34 @@ function applyNodeDelete(document, operation) {
   removeConnectionsForNodeIds(document, collectNodeIds(removedNode));
 }
 
+function applyNodeMove(document, operation) {
+  const result = applyBranchMoveToMap({
+    root: document.root,
+    orphans: document.orphans,
+    nodeId: operation.payload.nodeId,
+    targetParentId: operation.payload.targetParentId,
+    insertIndex: operation.payload.insertIndex,
+    rootChanges: operation.payload.rootChanges,
+    markMovedPositionChanges: operation.payload.markMovedPositionChanges,
+    movedAt: operation.payload.movedAt,
+  });
+
+  if (!result.ok) {
+    throw new CoeditingSyncError(
+      'COEDITING_INVALID_NODE_MOVE',
+      result.error || 'Node move is invalid',
+      /not found/i.test(result.error || '') ? 404 : 400,
+      {
+        nodeId: operation.payload.nodeId,
+        targetParentId: operation.payload.targetParentId,
+      }
+    );
+  }
+
+  document.root = result.root;
+  document.orphans = result.orphans;
+}
+
 function ensureLinkIndex(document, linkId) {
   const index = normalizeConnections(document.connections).findIndex((connection) => connection.id === linkId);
   if (index === -1) {
@@ -581,6 +654,9 @@ function applyOperationToDocument(document, operation) {
     case 'node.delete':
       applyNodeDelete(nextDocument, operation);
       break;
+    case 'node.move':
+      applyNodeMove(nextDocument, operation);
+      break;
     case 'link.add':
       applyLinkAdd(nextDocument, operation);
       break;
@@ -633,8 +709,19 @@ async function createSnapshotFromMapRowAsync(mapRow) {
   return parseSnapshotRowToDocument(snapshotRow);
 }
 
-async function refreshSnapshotFromMapRowAsync(mapRow) {
-  const document = parseMapRowToDocument(mapRow);
+async function refreshSnapshotFromMapRowAsync(mapRow, { previousDocument = null } = {}) {
+  const savedDocument = parseMapRowToDocument(mapRow);
+  const latestOpVersion = await coeditingStore.getMaxLiveOpVersionByMapIdAsync(savedDocument.mapId);
+  const previousVersion = Number(previousDocument?.version || 0);
+  const nextVersion = previousDocument
+    ? Math.max(previousVersion, latestOpVersion) + 1
+    : savedDocument.version;
+  const document = {
+    ...savedDocument,
+    version: nextVersion,
+    lastOpId: null,
+    lastActorId: previousDocument?.lastActorId || null,
+  };
   const stored = serializeDocument(document);
   const snapshotRow = await coeditingStore.updateLiveSnapshotAsync({
     mapId: document.mapId,
@@ -669,31 +756,24 @@ async function ensureLiveDocumentCurrentAsync(mapId) {
   const snapshotRow = await coeditingStore.getLiveSnapshotByMapIdAsync(mapId);
   if (!snapshotRow) {
     const createdDocument = await createSnapshotFromMapRowAsync(mapRow);
-    return { mapRow, document: createdDocument };
+    return { mapRow, document: createdDocument, refreshedFromSavedMap: false };
   }
 
   const document = parseSnapshotRowToDocument(snapshotRow);
+  const savedDocument = parseMapRowToDocument(mapRow);
 
-  if (document.mapUpdatedAt && mapRow.updated_at && document.mapUpdatedAt !== mapRow.updated_at) {
-    if (document.version === 0 && !document.lastOpId) {
-      const refreshedDocument = await refreshSnapshotFromMapRowAsync(mapRow);
-      return { mapRow, document: refreshedDocument };
-    }
+  const liveMapUpdatedAt = normalizeTimestampMarker(document.mapUpdatedAt);
+  const savedMapUpdatedAt = normalizeTimestampMarker(mapRow.updated_at);
+  const contentMatchesSavedMap = documentsMatchForSnapshot(document, savedDocument);
 
-    throw new CoeditingSyncError(
-      'COEDITING_MAP_DRIFT',
-      'Live snapshot is stale relative to the saved map',
-      409,
-      {
-        mapId,
-        liveMapUpdatedAt: document.mapUpdatedAt,
-        savedMapUpdatedAt: mapRow.updated_at,
-        version: document.version,
-      }
-    );
+  if (!contentMatchesSavedMap || (liveMapUpdatedAt && savedMapUpdatedAt && liveMapUpdatedAt !== savedMapUpdatedAt)) {
+    const refreshedDocument = await refreshSnapshotFromMapRowAsync(mapRow, {
+      previousDocument: document,
+    });
+    return { mapRow, document: refreshedDocument, refreshedFromSavedMap: true };
   }
 
-  return { mapRow, document };
+  return { mapRow, document, refreshedFromSavedMap: false };
 }
 
 function buildCommittedOperation(operation, version, committedAt) {
@@ -804,7 +884,7 @@ const applyOperationTransactionAsync = adapter.transactionAsync(async ({ mapId, 
     );
   }
 
-  storedNextDocument.mapUpdatedAt = updatedMapRow.updated_at || null;
+  storedNextDocument.mapUpdatedAt = normalizeTimestampMarker(updatedMapRow.updated_at);
 
   await coeditingStore.updateLiveSnapshotAsync({
     mapId,
@@ -850,7 +930,13 @@ async function listCommittedOperationsAsync({
     LIVE_OP_REPLAY_LIMIT_MAX
   );
 
-  const { document } = await ensureLiveDocumentCurrentAsync(mapId);
+  const { document, refreshedFromSavedMap } = await ensureLiveDocumentCurrentAsync(mapId);
+  if (refreshedFromSavedMap && normalizedAfterVersion < document.version) {
+    return {
+      currentVersion: document.version,
+      operations: [],
+    };
+  }
   const rows = await coeditingStore.listLiveOpsByMapIdAfterVersionAsync(
     mapId,
     normalizedAfterVersion,

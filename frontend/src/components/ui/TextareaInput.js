@@ -3,10 +3,15 @@ import React from 'react';
 import classNames from '../../utils/classNames';
 
 const TextareaInput = React.forwardRef(
-  ({ size = 'md', className, ...props }, ref) => (
+  ({ size = 'md', invalid = false, className, ...props }, ref) => (
     <textarea
       ref={ref}
-      className={classNames('ui-textarea', `ui-textarea--${size}`, className)}
+      className={classNames(
+        'ui-textarea',
+        `ui-textarea--${size}`,
+        invalid && 'ui-textarea--invalid',
+        className
+      )}
       {...props}
     />
   )

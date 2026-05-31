@@ -1,5 +1,9 @@
 import React from 'react';
-import { FileText, LayoutTemplate, Upload, X } from 'lucide-react';
+import { FileText, LayoutTemplate, Upload } from 'lucide-react';
+
+import Badge from '../ui/Badge';
+import Modal from '../ui/Modal';
+import OptionCard from '../ui/OptionCard';
 
 const CreateMapModal = ({
   show,
@@ -10,56 +14,46 @@ const CreateMapModal = ({
   if (!show) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-md modal-scrollable create-map-modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Create New Map</h2>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
-        <div className="modal-body">
-          <div className="create-map-options">
-            <button
-              className="create-map-option"
-              onClick={() => {
-                onClose();
-                onStartFromScratch();
-              }}
-            >
-              <FileText size={24} />
-              <div className="create-map-option-text">
-                <span className="create-map-option-title">Start from Scratch</span>
-                <span className="create-map-option-desc">Begin with a blank canvas</span>
-              </div>
-            </button>
+    <Modal
+      show={show}
+      onClose={onClose}
+      title="Create New Map"
+      scrollable
+      className="create-map-modal"
+    >
+      <div className="create-map-options">
+        <OptionCard
+          className="create-map-option"
+          icon={<FileText size={24} />}
+          title="Start from Scratch"
+          description="Begin with a blank canvas"
+          onClick={() => {
+            onClose();
+            onStartFromScratch();
+          }}
+        />
 
-            <button className="create-map-option disabled" disabled>
-              <LayoutTemplate size={24} />
-              <div className="create-map-option-text">
-                <span className="create-map-option-title">Start from Template</span>
-                <span className="create-map-option-desc">Product, Ecommerce, Blog...</span>
-              </div>
-              <span className="coming-soon-badge">Coming Soon</span>
-            </button>
+        <OptionCard
+          className="create-map-option disabled"
+          icon={<LayoutTemplate size={24} />}
+          title="Start from Template"
+          description="Product, Ecommerce, Blog..."
+          badge={<Badge className="coming-soon-badge" label="Coming Soon" />}
+          disabled
+        />
 
-            <button
-              className="create-map-option"
-              onClick={() => {
-                onClose();
-                onImportFromFile();
-              }}
-            >
-              <Upload size={24} />
-              <div className="create-map-option-text">
-                <span className="create-map-option-title">Import from File</span>
-                <span className="create-map-option-desc">XML sitemap, CSV, JSON</span>
-              </div>
-            </button>
-          </div>
-        </div>
+        <OptionCard
+          className="create-map-option"
+          icon={<Upload size={24} />}
+          title="Import from File"
+          description="XML sitemap, CSV, JSON"
+          onClick={() => {
+            onClose();
+            onImportFromFile();
+          }}
+        />
       </div>
-    </div>
+    </Modal>
   );
 };
 

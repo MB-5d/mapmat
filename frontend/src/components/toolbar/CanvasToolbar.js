@@ -1,5 +1,7 @@
 import React from 'react';
 import {
+  ArrowDownFromLine,
+  ArrowRightFromLine,
   Bookmark,
   CopyPlus,
   Download,
@@ -9,9 +11,13 @@ import {
   Image,
   Eye,
   EyeOff,
+  Layers,
   Link2,
+  Loader2,
   MessageSquare,
   MousePointer2,
+  Palette,
+  Ratio,
   RefreshCcw,
   Redo2,
   Share2,
@@ -19,9 +25,52 @@ import {
   Workflow,
 } from 'lucide-react';
 
+import IconButton from '../ui/IconButton';
+import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
+
+const ToolButton = ({
+  active = false,
+  className = '',
+  disabled = false,
+  children,
+  icon,
+  label,
+  title,
+  ...props
+}) => {
+  const iconContent = children ? (
+    <span className="canvas-tool-btn__content">
+      {icon}
+      {children}
+    </span>
+  ) : icon;
+
+  return (
+    <IconButton
+      className={`canvas-tool-btn ${active ? 'active' : ''} ${disabled ? 'disabled' : ''} ${className}`.trim()}
+      type="ghost"
+      buttonStyle="mono"
+      size="md"
+      active={active}
+      disabled={disabled}
+      icon={iconContent}
+      label={label || title}
+      title={title || label}
+      {...props}
+    />
+  );
+};
+
+const containMenuScroll = (event) => {
+  event.stopPropagation();
+};
+
+const IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE = 'Save this map before capturing screenshots.';
+
 const CanvasToolbar = ({
   canEdit,
-  canComment,
+  canViewComments,
+  canViewVersionHistory,
   activeTool,
   connectionTool,
   onSelectTool,
@@ -30,236 +79,402 @@ const CanvasToolbar = ({
   onToggleCrosslink,
   showCommentsPanel,
   onToggleCommentsPanel,
-  hasAnyComments,
+  hasUnreadCommentMentions,
   showReportDrawer,
   onToggleReportDrawer,
+  showLayersMenu,
+  onToggleLayersMenu,
+  layersMenuRef,
+  layersPanel,
+  showLegendMenu,
+  onToggleLegendMenu,
+  legendMenuRef,
+  legendPanel,
+  mapOrientation = 'vertical',
+  showOrientationMenu,
+  onToggleOrientationMenu,
+  orientationMenuRef,
+  onMapOrientationChange,
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
+  onUpdateCapturedThumbnails,
+  onGetFullScreenshotsAll,
+  onGetFullScreenshotsSelected,
+  onUpdateCapturedFullScreenshots,
+  onDownloadImagesAll,
+  onDownloadImagesSelected,
   onToggleThumbnails,
   showThumbnails,
   hasAnyThumbnails,
-  allThumbnailsCaptured,
+  hasDownloadableThumbnails,
+  hasDownloadableSelectedThumbnails,
+  hasFullScreenshotAssets,
+  hasSelectedFullScreenshotAssets,
+  hasDownloadableImages,
+  hasDownloadableSelectedImages,
+  thumbnailsAllLabel = 'Get Thumbnails (All)',
+  thumbnailsSelectedLabel = 'Get Thumbnails (Selected)',
+  fullScreenshotsAllLabel = 'Get Full page (All)',
+  fullScreenshotsSelectedLabel = 'Get Full page (Selected)',
+  captureIssues = [],
+  onOpenImageReport,
   showImageMenu,
   imageMenuRef,
   hasSelection,
   canUndo,
   canRedo,
+  undoRedoDisabledReason = '',
   onUndo,
   onRedo,
   onClearCanvas,
   onSaveMap,
+  isSavingMap = false,
   onDuplicateMap,
   onShowVersionHistory,
   onExport,
   onShare,
+  canOpenShare = false,
   hasMap,
   hasSavedMap,
   showVersionHistory,
-}) => (
-  <div className="canvas-toolbar">
-    <button
-      className={`canvas-tool-btn ${activeTool === 'select' && !connectionTool ? 'active' : ''}`}
+  shareDisabledReason = '',
+  onBlockedShareAttempt,
+}) => {
+  const undoBlockedByLive = !canUndo && !!undoRedoDisabledReason;
+  const redoBlockedByLive = !canRedo && !!undoRedoDisabledReason;
+  const shareUnavailable = !hasSavedMap;
+  const isHorizontalOrientation = mapOrientation === 'horizontal';
+  const orientationLabel = `Orientation: ${isHorizontalOrientation ? 'Horizontal' : 'Vertical'}`;
+  const imageCaptureRequiresSave = hasMap && !hasSavedMap;
+  const imageCaptureDisabled = !hasMap || imageCaptureRequiresSave;
+  const imageCaptureDisabledReason = imageCaptureRequiresSave ? IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE : undefined;
+  const selectionRequiredReason = imageCaptureDisabledReason || (!hasSelection ? 'Select pages first' : undefined);
+
+  return (
+  <div className="canvas-toolbar" data-feedback-id="canvas-toolbar" data-feedback-label="Canvas toolbar">
+    <ToolButton
+      active={activeTool === 'select' && !connectionTool}
       onClick={onSelectTool}
+      icon={<MousePointer2 />}
+      label="Select"
       title="Select (V)"
-    >
-      <MousePointer2 size={20} />
-    </button>
+    />
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${connectionTool === 'userflow' ? 'active' : ''}`}
+      <ToolButton
+        active={connectionTool === 'userflow'}
         onClick={onToggleUserFlow}
+        icon={<Workflow />}
+        label="User Flow"
         title="User Flow (F)"
-      >
-        <Workflow size={20} />
-      </button>
+      />
     )}
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${connectionTool === 'crosslink' ? 'active' : ''}`}
+      <ToolButton
+        active={connectionTool === 'crosslink'}
         onClick={onToggleCrosslink}
+        icon={<Link2 />}
+        label="Crosslink"
         title="Crosslink (L)"
-      >
-        <Link2 size={20} />
-      </button>
+      />
     )}
 
     <div className="canvas-toolbar-divider" />
 
     <div className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
-      <button
-        className={`canvas-tool-btn ${showImageMenu ? 'active' : ''}`}
+      <ToolButton
+        active={showImageMenu}
         onClick={onToggleImageMenu}
+        icon={<Image />}
+        label="Images"
         title="Images"
         disabled={!hasMap}
-      >
-        <Image size={20} />
-      </button>
+      />
       {showImageMenu && (
-        <div className="canvas-tool-menu" role="menu">
+        <MenuPanel
+          className="canvas-tool-menu canvas-tool-menu-images"
+          role="menu"
+          onWheel={containMenuScroll}
+          onWheelCapture={containMenuScroll}
+          onTouchMove={containMenuScroll}
+          onTouchMoveCapture={containMenuScroll}
+        >
           {hasAnyThumbnails && (
             <>
-              <button
+              <MenuItem
                 className="canvas-tool-menu-toggle"
+                label="View screenshots"
+                endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
                 onClick={onToggleThumbnails}
-                type="button"
-              >
-                <span>View thumbnails</span>
-                <span className="canvas-tool-menu-toggle-icon">
-                  {showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
-                </span>
-              </button>
-              <div className="canvas-tool-menu-divider" />
+              />
+              <MenuDivider className="canvas-tool-menu-divider" />
             </>
           )}
+          {imageCaptureRequiresSave && (
+            <div className="canvas-tool-menu-hint" role="note">
+              {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
+            </div>
+          )}
           <div className="canvas-tool-menu-section">
-            <div className="canvas-tool-menu-label">Thumbnails</div>
-            <button
+            <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails (visible area)</MenuSectionHeader>
+            <MenuItem
               className="canvas-tool-menu-item"
+              label={thumbnailsAllLabel}
               onClick={onGetThumbnailsAll}
-              disabled={!hasMap || allThumbnailsCaptured}
-            >
-              Get thumbnails (All)
-            </button>
-            <button
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
+            />
+            <MenuItem
               className="canvas-tool-menu-item"
+              label={thumbnailsSelectedLabel}
               onClick={onGetThumbnailsSelected}
-              disabled={!hasSelection || !hasMap}
-            >
-              Get thumbnails (Selected)
-            </button>
+              disabled={imageCaptureDisabled || !hasSelection}
+              title={selectionRequiredReason}
+            />
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Update Captured Thumbnails"
+              onClick={onUpdateCapturedThumbnails}
+              disabled={imageCaptureDisabled || !hasDownloadableThumbnails}
+              title={imageCaptureDisabledReason}
+            />
           </div>
-          <div className="canvas-tool-menu-divider" />
+          <MenuDivider className="canvas-tool-menu-divider" />
           <div className="canvas-tool-menu-section">
-            <div className="canvas-tool-menu-label">Full screenshots</div>
-            <button className="canvas-tool-menu-item disabled" disabled>
-              Get full screenshots (All)
-            </button>
-            <button className="canvas-tool-menu-item disabled" disabled>
-              Get full screenshots (Selected)
-            </button>
-            <div className="canvas-tool-menu-hint">Coming soon</div>
+            <MenuSectionHeader className="canvas-tool-menu-label">Full page</MenuSectionHeader>
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label={fullScreenshotsAllLabel}
+              onClick={onGetFullScreenshotsAll}
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
+            />
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label={fullScreenshotsSelectedLabel}
+              onClick={onGetFullScreenshotsSelected}
+              disabled={imageCaptureDisabled || !hasSelection}
+              title={selectionRequiredReason}
+            />
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Update Captured Full page"
+              onClick={onUpdateCapturedFullScreenshots}
+              disabled={imageCaptureDisabled || !hasFullScreenshotAssets}
+              title={imageCaptureDisabledReason}
+            />
           </div>
-        </div>
+          <MenuDivider className="canvas-tool-menu-divider" />
+          <MenuItem
+            className="canvas-tool-menu-item canvas-tool-menu-report-item"
+            label="Image report"
+            badge={captureIssues.length > 0 ? `${captureIssues.length}` : null}
+            onClick={onOpenImageReport}
+          />
+          <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-download-divider" />
+          <div className="canvas-tool-menu-section canvas-tool-menu-download-section">
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Download All"
+              onClick={onDownloadImagesAll}
+              disabled={!hasSavedMap || !hasMap || !hasDownloadableImages}
+            />
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Download Selected"
+              onClick={onDownloadImagesSelected}
+              disabled={!hasSavedMap || !hasSelection || !hasDownloadableSelectedImages}
+              title={!hasSavedMap ? imageCaptureDisabledReason : (!hasSelection ? 'Select pages first' : undefined)}
+            />
+          </div>
+        </MenuPanel>
       )}
     </div>
 
-    <button
-      className={`canvas-tool-btn ${showCommentsPanel ? 'active' : ''} ${!canComment ? 'disabled' : ''}`}
+    <ToolButton
+      active={showCommentsPanel}
       onClick={onToggleCommentsPanel}
+      icon={<MessageSquare />}
+      label="Comments"
       title="Comments (C)"
-      disabled={!canComment}
+      disabled={!canViewComments}
     >
-      <MessageSquare size={20} />
-      {hasAnyComments && canComment && <span className="notification-dot" />}
-    </button>
-    <button
-      className={`canvas-tool-btn ${showReportDrawer ? 'active' : ''}`}
+      {hasUnreadCommentMentions && canViewComments && <span className="notification-dot" />}
+    </ToolButton>
+    <ToolButton
+      active={showReportDrawer}
       onClick={onToggleReportDrawer}
+      icon={<GanttChartSquare />}
+      label="Report"
       title="Report (R)"
-    >
-      <GanttChartSquare size={20} />
-    </button>
+    />
+    <div className="canvas-toolbar-divider" />
+    <div className="canvas-tool-menu-wrapper" ref={layersMenuRef}>
+      <ToolButton
+        active={showLayersMenu}
+        onClick={onToggleLayersMenu}
+        icon={<Layers />}
+        label="Layers"
+        title="Layers"
+        disabled={!hasMap}
+      />
+      {showLayersMenu && (
+        <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+          {layersPanel}
+        </MenuPanel>
+      )}
+    </div>
+    <div className="canvas-tool-menu-wrapper" ref={legendMenuRef}>
+      <ToolButton
+        active={showLegendMenu}
+        onClick={onToggleLegendMenu}
+        icon={<Palette />}
+        label="Legend"
+        title="Legend"
+        disabled={!hasMap}
+      />
+      {showLegendMenu && (
+        <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+          {legendPanel}
+        </MenuPanel>
+      )}
+    </div>
+    <div className="canvas-tool-menu-wrapper" ref={orientationMenuRef}>
+      <ToolButton
+        active={showOrientationMenu}
+        onClick={onToggleOrientationMenu}
+        icon={<Ratio />}
+        label="Orientation"
+        title={orientationLabel}
+        disabled={!hasMap}
+        aria-expanded={showOrientationMenu}
+        aria-haspopup="menu"
+      />
+      {showOrientationMenu && (
+        <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
+          <MenuSectionHeader className="canvas-tool-menu-label">Orientation</MenuSectionHeader>
+          <MenuItem
+            className="canvas-tool-menu-item"
+            icon={<ArrowDownFromLine size={16} />}
+            label="Vertical"
+            selected={!isHorizontalOrientation}
+            role="menuitemradio"
+            aria-checked={!isHorizontalOrientation}
+            onClick={() => onMapOrientationChange?.('vertical')}
+          />
+          <MenuItem
+            className="canvas-tool-menu-item"
+            icon={<ArrowRightFromLine size={16} />}
+            label="Horizontal"
+            selected={isHorizontalOrientation}
+            role="menuitemradio"
+            aria-checked={isHorizontalOrientation}
+            onClick={() => onMapOrientationChange?.('horizontal')}
+          />
+        </MenuPanel>
+      )}
+    </div>
 
     {canEdit && <div className="canvas-toolbar-divider" />}
 
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${!canUndo ? 'disabled' : ''}`}
-        onClick={onUndo}
-        disabled={!canUndo}
-        title="Undo (⌘Z)"
-      >
-        <Undo2 size={20} />
-      </button>
+      <ToolButton
+        className={!canUndo ? 'disabled' : ''}
+        onClick={canUndo || undoBlockedByLive ? onUndo : undefined}
+        disabled={!canUndo && !undoBlockedByLive}
+        aria-disabled={!canUndo}
+        icon={<Undo2 />}
+        label="Undo"
+        title={!canUndo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Undo (⌘Z)'}
+      />
     )}
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${!canRedo ? 'disabled' : ''}`}
-        onClick={onRedo}
-        disabled={!canRedo}
-        title="Redo (⇧⌘Z)"
-      >
-        <Redo2 size={20} />
-      </button>
+      <ToolButton
+        className={!canRedo ? 'disabled' : ''}
+        onClick={canRedo || redoBlockedByLive ? onRedo : undefined}
+        disabled={!canRedo && !redoBlockedByLive}
+        aria-disabled={!canRedo}
+        icon={<Redo2 />}
+        label="Redo"
+        title={!canRedo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Redo (⇧⌘Z)'}
+      />
     )}
     {canEdit && (
-      <button
-        className={`canvas-tool-btn ${!hasMap ? 'disabled' : ''}`}
+      <ToolButton
         onClick={onClearCanvas}
         disabled={!hasMap}
+        icon={<RefreshCcw />}
+        label="Clear Canvas"
         title="Clear Canvas"
-      >
-        <RefreshCcw size={20} />
-      </button>
+      />
     )}
 
     {canEdit && <div className="canvas-toolbar-divider" />}
 
     {canEdit && (
-      <button
-        className="canvas-tool-btn"
+      <ToolButton
         title="Add Page"
         onClick={onAddPage}
-      >
-        <FilePlus size={20} />
-      </button>
+        icon={<FilePlus />}
+        label="Add Page"
+      />
     )}
 
     {canEdit && !hasSavedMap && (
-      <button
-        className="canvas-tool-btn"
+      <ToolButton
+        className={isSavingMap ? 'is-saving' : ''}
         onClick={onSaveMap}
-        disabled={!hasMap}
-        title="Save Map"
+        disabled={!hasMap || isSavingMap}
+        icon={isSavingMap ? <Loader2 className="spin" /> : <Bookmark />}
+        label={isSavingMap ? 'Saving' : 'Save Map'}
+        title={isSavingMap ? 'Saving' : 'Save Map'}
       >
-        <Bookmark size={20} />
-      </button>
+        {isSavingMap ? 'Saving' : null}
+      </ToolButton>
     )}
 
     {canEdit && hasSavedMap && (
-      <button
-        className="canvas-tool-btn"
+      <ToolButton
         onClick={onDuplicateMap}
         disabled={!hasMap}
+        icon={<CopyPlus />}
+        label="Duplicate Map"
         title="Duplicate Map"
-      >
-        <CopyPlus size={20} />
-      </button>
+      />
     )}
 
     <div className="canvas-toolbar-divider" />
 
-    {canEdit && hasMap && (
-      <button
-        className={`canvas-tool-btn ${showVersionHistory ? 'active' : ''}`}
+    {canViewVersionHistory && hasMap && (
+      <ToolButton
+        active={showVersionHistory}
         onClick={onShowVersionHistory}
-        title={hasSavedMap ? 'Version History (H)' : 'Version History (draft, save map to persist)'}
-      >
-        <History size={20} />
-      </button>
+        icon={<History />}
+        label="Version History"
+        title={hasSavedMap ? 'Version History (H)' : 'Version History'}
+      />
     )}
 
-    <button
-      className="canvas-tool-btn"
+    <ToolButton
       onClick={onExport}
       disabled={!hasMap}
+      icon={<Download />}
+      label="Download"
       title="Download"
-    >
-      <Download size={20} />
-    </button>
+    />
 
-    {canEdit && (
-      <button
-        className="canvas-tool-btn"
-        onClick={onShare}
-        disabled={!hasMap}
-        title="Share"
-      >
-        <Share2 size={20} />
-      </button>
+    {canOpenShare && (
+      <ToolButton
+        className={shareUnavailable ? 'disabled' : ''}
+        onClick={shareUnavailable ? onBlockedShareAttempt : onShare}
+        icon={<Share2 />}
+        label="Share"
+        title={shareUnavailable ? shareDisabledReason : 'Share'}
+        aria-disabled={shareUnavailable}
+      />
     )}
   </div>
-);
+  );
+};
 
 export default CanvasToolbar;

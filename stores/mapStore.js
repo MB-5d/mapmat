@@ -1,4 +1,53 @@
 const adapter = require('./dbAdapter');
+let ensureMapInsightsSchemaPromise = null;
+let ensureMapVersionBookmarkSchemaPromise = null;
+
+async function ensureColumnAsync(table, column, type) {
+  let rows = [];
+  if (adapter.runtime?.activeProvider === 'postgres') {
+    rows = await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ?
+    `, [table]);
+  } else {
+    rows = await adapter.queryAllAsync(`PRAGMA table_info(${table})`);
+  }
+
+  const columns = rows.map((row) => row.column_name || row.name).filter(Boolean);
+  if (!columns.includes(column)) {
+    await adapter.executeAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
+async function ensureMapInsightsSchemaAsync() {
+  if (ensureMapInsightsSchemaPromise) return ensureMapInsightsSchemaPromise;
+  ensureMapInsightsSchemaPromise = (async () => {
+    await ensureColumnAsync('maps', 'insights_data', 'TEXT');
+    await ensureColumnAsync('maps', 'insights_generated_at', 'TIMESTAMP');
+  })();
+  try {
+    await ensureMapInsightsSchemaPromise;
+  } catch (error) {
+    ensureMapInsightsSchemaPromise = null;
+    throw error;
+  }
+}
+
+async function ensureMapVersionBookmarkSchemaAsync() {
+  if (ensureMapVersionBookmarkSchemaPromise) return ensureMapVersionBookmarkSchemaPromise;
+  ensureMapVersionBookmarkSchemaPromise = (async () => {
+    await ensureColumnAsync('map_versions', 'is_bookmarked', 'INTEGER DEFAULT 0');
+    await ensureColumnAsync('map_versions', 'bookmarked_by_user_id', 'TEXT');
+    await ensureColumnAsync('map_versions', 'bookmarked_at', 'TIMESTAMP');
+  })();
+  try {
+    await ensureMapVersionBookmarkSchemaPromise;
+  } catch (error) {
+    ensureMapVersionBookmarkSchemaPromise = null;
+    throw error;
+  }
+}
 
 function listMapsByUserAsync({ userId, projectId, limit, offset }) {
   let query = `
@@ -8,6 +57,29 @@ function listMapsByUserAsync({ userId, projectId, limit, offset }) {
     WHERE m.user_id = ?
   `;
   const params = [userId];
+
+  if (projectId) {
+    query += ' AND m.project_id = ?';
+    params.push(projectId);
+  }
+
+  query += ' ORDER BY m.updated_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  return adapter.queryAllAsync(query, params);
+}
+
+function listMapsAccessibleToUserAsync({ userId, projectId, limit, offset }) {
+  let query = `
+    SELECT DISTINCT m.*, p.name as project_name, mm.role as membership_role
+    FROM maps m
+    LEFT JOIN projects p ON m.project_id = p.id
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE (m.user_id = ? OR mm.id IS NOT NULL)
+  `;
+  const params = [userId, userId];
 
   if (projectId) {
     query += ' AND m.project_id = ?';
@@ -30,6 +102,57 @@ async function countMapsByUserAsync({ userId, projectId }) {
   return (await adapter.queryOneAsync('SELECT COUNT(*) as count FROM maps WHERE user_id = ?', [userId]))?.count || 0;
 }
 
+async function countMapsAccessibleToUserAsync({ userId, projectId }) {
+  let query = `
+    SELECT COUNT(DISTINCT m.id) as count
+    FROM maps m
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE (m.user_id = ? OR mm.id IS NOT NULL)
+  `;
+  const params = [userId, userId];
+
+  if (projectId) {
+    query += ' AND m.project_id = ?';
+    params.push(projectId);
+  }
+
+  return (await adapter.queryOneAsync(query, params))?.count || 0;
+}
+
+function normalizeMapNameForCompare(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+async function getMapNameConflictAsync({ ownerId, projectId, name, excludeMapId = null }) {
+  const normalizedName = String(name || '').trim();
+  if (!ownerId || !normalizedName) return Promise.resolve(null);
+
+  const params = [ownerId];
+  let query = `
+    SELECT id, name, project_id
+    FROM maps
+    WHERE user_id = ?
+  `;
+
+  if (projectId) {
+    query += ' AND project_id = ?';
+    params.push(projectId);
+  } else {
+    query += ' AND project_id IS NULL';
+  }
+
+  if (excludeMapId) {
+    query += ' AND id != ?';
+    params.push(excludeMapId);
+  }
+
+  const rows = await adapter.queryAllAsync(query, params);
+  const targetName = normalizeMapNameForCompare(normalizedName);
+  return rows.find((row) => normalizeMapNameForCompare(row.name) === targetName) || null;
+}
+
 function getMapWithProjectForUserAsync(mapId, userId) {
   return adapter.queryOneAsync(`
     SELECT m.*, p.name as project_name
@@ -39,8 +162,33 @@ function getMapWithProjectForUserAsync(mapId, userId) {
   `, [mapId, userId]);
 }
 
+function getMapWithProjectAccessibleToUserAsync(mapId, userId) {
+  return adapter.queryOneAsync(`
+    SELECT DISTINCT m.*, p.name as project_name, mm.role as membership_role
+    FROM maps m
+    LEFT JOIN projects p ON m.project_id = p.id
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE m.id = ?
+      AND (m.user_id = ? OR mm.id IS NOT NULL)
+  `, [userId, mapId, userId]);
+}
+
 function getMapForUserAsync(mapId, userId) {
   return adapter.queryOneAsync('SELECT * FROM maps WHERE id = ? AND user_id = ?', [mapId, userId]);
+}
+
+function getMapAccessibleToUserAsync(mapId, userId) {
+  return adapter.queryOneAsync(`
+    SELECT DISTINCT m.*, mm.role as membership_role
+    FROM maps m
+    LEFT JOIN map_memberships mm
+      ON mm.map_id = m.id
+      AND mm.user_id = ?
+    WHERE m.id = ?
+      AND (m.user_id = ? OR mm.id IS NOT NULL)
+  `, [userId, mapId, userId]);
 }
 
 function getMapByIdAsync(mapId) {
@@ -118,7 +266,6 @@ async function updateMapByIdAsync(mapId, patch) {
     updates.push('project_id = ?');
     params.push(patch.projectId);
   }
-
   if (updates.length === 0) return false;
 
   updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -131,13 +278,72 @@ function deleteMapByIdAsync(mapId) {
   return adapter.executeAsync('DELETE FROM maps WHERE id = ?', [mapId]);
 }
 
-function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
+function updateMapInsightsAsync(mapId, insightsData, generatedAt) {
+  return adapter.executeAsync(`
+    UPDATE maps
+    SET insights_data = ?, insights_generated_at = ?
+    WHERE id = ?
+  `, [insightsData, generatedAt, mapId]);
+}
+
+async function listPersistedScreenshotFilenamesAsync() {
+  const rows = await adapter.queryAllAsync(`
+    SELECT root_data, orphans_data FROM maps
+    UNION ALL
+    SELECT root_data, orphans_data FROM map_versions
+  `);
+  const pattern = /\/screenshots\/([a-f0-9_]+\.(?:png|jpe?g|webp))/gi;
+  const filenames = new Set();
+
+  (rows || []).forEach((row) => {
+    [row?.root_data, row?.orphans_data].forEach((value) => {
+      const raw = String(value || '');
+      if (!raw) return;
+      let match = null;
+      pattern.lastIndex = 0;
+      while ((match = pattern.exec(raw)) !== null) {
+        if (match[1]) filenames.add(match[1]);
+      }
+    });
+  });
+
+  return Array.from(filenames);
+}
+
+async function listMapVersionsForUserMapAsync(mapId, userId, limit = 25) {
+  await ensureMapVersionBookmarkSchemaAsync();
   return adapter.queryAllAsync(`
-    SELECT * FROM map_versions
-    WHERE map_id = ? AND user_id = ?
-    ORDER BY created_at DESC
+    SELECT
+      map_versions.*,
+      creator.name AS created_by_name,
+      creator.email AS created_by_email,
+      bookmarker.name AS bookmarked_by_name,
+      bookmarker.email AS bookmarked_by_email
+    FROM map_versions
+    LEFT JOIN users AS creator ON creator.id = map_versions.user_id
+    LEFT JOIN users AS bookmarker ON bookmarker.id = map_versions.bookmarked_by_user_id
+    WHERE map_versions.map_id = ? AND map_versions.user_id = ?
+    ORDER BY map_versions.created_at DESC
     LIMIT ?
   `, [mapId, userId, limit]);
+}
+
+async function listMapVersionsByMapAsync(mapId, limit = 25) {
+  await ensureMapVersionBookmarkSchemaAsync();
+  return adapter.queryAllAsync(`
+    SELECT
+      map_versions.*,
+      creator.name AS created_by_name,
+      creator.email AS created_by_email,
+      bookmarker.name AS bookmarked_by_name,
+      bookmarker.email AS bookmarked_by_email
+    FROM map_versions
+    LEFT JOIN users AS creator ON creator.id = map_versions.user_id
+    LEFT JOIN users AS bookmarker ON bookmarker.id = map_versions.bookmarked_by_user_id
+    WHERE map_versions.map_id = ?
+    ORDER BY map_versions.created_at DESC
+    LIMIT ?
+  `, [mapId, limit]);
 }
 
 async function getNextMapVersionNumberAsync(mapId, userId) {
@@ -146,6 +352,15 @@ async function getNextMapVersionNumberAsync(mapId, userId) {
     FROM map_versions
     WHERE map_id = ? AND user_id = ?
   `, [mapId, userId]);
+  return Number(row?.maxVersion || 0) + 1;
+}
+
+async function getNextMapVersionNumberByMapAsync(mapId) {
+  const row = await adapter.queryOneAsync(`
+    SELECT MAX(version_number) as "maxVersion"
+    FROM map_versions
+    WHERE map_id = ?
+  `, [mapId]);
   return Number(row?.maxVersion || 0) + 1;
 }
 
@@ -182,6 +397,32 @@ function createMapVersionAsync({
   ]);
 }
 
+async function updateMapVersionBookmarkAsync({
+  mapId,
+  versionId,
+  name,
+  notes,
+  bookmarkedByUserId,
+}) {
+  await ensureMapVersionBookmarkSchemaAsync();
+  return adapter.executeAsync(`
+    UPDATE map_versions
+    SET
+      name = ?,
+      notes = ?,
+      is_bookmarked = 1,
+      bookmarked_by_user_id = ?,
+      bookmarked_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND map_id = ?
+  `, [
+    name,
+    notes || null,
+    bookmarkedByUserId,
+    versionId,
+    mapId,
+  ]);
+}
+
 function listMapVersionIdsForUserMapAsync(mapId, userId) {
   return adapter.queryAllAsync(`
     SELECT id FROM map_versions
@@ -190,29 +431,62 @@ function listMapVersionIdsForUserMapAsync(mapId, userId) {
   `, [mapId, userId]);
 }
 
+function listMapVersionIdsByMapAsync(mapId) {
+  return adapter.queryAllAsync(`
+    SELECT id FROM map_versions
+    WHERE map_id = ?
+    ORDER BY created_at DESC
+  `, [mapId]);
+}
+
 async function deleteMapVersionsByIdsAsync(ids) {
   if (!ids || ids.length === 0) return 0;
   const placeholders = adapter.placeholders(ids.length);
   return (await adapter.executeAsync(`DELETE FROM map_versions WHERE id IN (${placeholders})`, ids)).changes || 0;
 }
 
-function getMapVersionByIdAsync(versionId) {
-  return adapter.queryOneAsync('SELECT * FROM map_versions WHERE id = ?', [versionId]);
+async function getMapVersionByIdAsync(versionId) {
+  await ensureMapVersionBookmarkSchemaAsync();
+  return adapter.queryOneAsync(`
+    SELECT
+      map_versions.*,
+      creator.name AS created_by_name,
+      creator.email AS created_by_email,
+      bookmarker.name AS bookmarked_by_name,
+      bookmarker.email AS bookmarked_by_email
+    FROM map_versions
+    LEFT JOIN users AS creator ON creator.id = map_versions.user_id
+    LEFT JOIN users AS bookmarker ON bookmarker.id = map_versions.bookmarked_by_user_id
+    WHERE map_versions.id = ?
+  `, [versionId]);
 }
 
 module.exports = {
+  ensureMapInsightsSchemaAsync,
+  ensureMapVersionBookmarkSchemaAsync,
   listMapsByUserAsync,
+  listMapsAccessibleToUserAsync,
   countMapsByUserAsync,
+  countMapsAccessibleToUserAsync,
+  getMapNameConflictAsync,
   getMapWithProjectForUserAsync,
+  getMapWithProjectAccessibleToUserAsync,
   getMapForUserAsync,
+  getMapAccessibleToUserAsync,
   getMapByIdAsync,
   createMapAsync,
   updateMapByIdAsync,
   deleteMapByIdAsync,
+  updateMapInsightsAsync,
+  listPersistedScreenshotFilenamesAsync,
   listMapVersionsForUserMapAsync,
+  listMapVersionsByMapAsync,
   getNextMapVersionNumberAsync,
+  getNextMapVersionNumberByMapAsync,
   createMapVersionAsync,
+  updateMapVersionBookmarkAsync,
   listMapVersionIdsForUserMapAsync,
+  listMapVersionIdsByMapAsync,
   deleteMapVersionsByIdsAsync,
   getMapVersionByIdAsync,
 };

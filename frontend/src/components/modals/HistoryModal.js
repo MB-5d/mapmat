@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckSquare, Globe, Square, Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
+import Button from '../ui/Button';
+import SelectInput from '../ui/SelectInput';
 
 const HistoryModal = ({
   show,
@@ -59,19 +61,19 @@ const HistoryModal = ({
                     <span>Select all</span>
                   </label>
                   {selectedHistoryItems.size > 0 && (
-                    <button className="history-action-btn danger" onClick={onDeleteSelected}>
+                    <Button variant="danger" size="sm" onClick={onDeleteSelected}>
                       <Trash2 size={16} />
                       Delete Selected ({selectedHistoryItems.size})
-                    </button>
+                    </Button>
                   )}
                 </div>
                 <div className="history-actions-right">
                   <div className="history-sort">
                     <span>Sort</span>
-                    <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+                    <SelectInput size="sm" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
                       <option value="newest">Newest</option>
                       <option value="oldest">Oldest</option>
-                    </select>
+                    </SelectInput>
                   </div>
                 </div>
               </div>

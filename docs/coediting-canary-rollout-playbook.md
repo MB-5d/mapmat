@@ -7,7 +7,7 @@ This is the operator playbook for staging and production co-editing canary rollo
 - GitHub -> latest branch checks are green:
   - `Backend Syntax`
   - `Frontend Build`
-- Railway -> service `mapmat-staging` or `mapmat-production` -> `Variables` includes:
+- Railway -> service `vellic-staging` or `vellic-production` -> `Variables` includes:
   - `ADMIN_API_KEY`
   - `COEDITING_EXPERIMENT_ENABLED=true`
   - `COEDITING_SYNC_ENGINE_ENABLED=true`
@@ -61,8 +61,8 @@ If broader rollout is explicitly approved later, set both `COEDITING_ROLLOUT_ALL
 Before changing rollout scope or broad-rollout flags, compare staging and production policy state:
 
 ```bash
-export COEDITING_STAGING_ADMIN_KEY="<mapmat-staging ADMIN_API_KEY>"
-export COEDITING_PRODUCTION_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
+export COEDITING_STAGING_ADMIN_KEY="<vellic-staging ADMIN_API_KEY>"
+export COEDITING_PRODUCTION_ADMIN_KEY="<vellic-production ADMIN_API_KEY>"
 npm run verify:realtime:rollout-state
 ```
 
@@ -85,12 +85,12 @@ npm run verify:realtime:staging:preflight
 
 ## Staging Canary
 
-1. Railway -> project `mapmat-staging` -> service `mapmat-staging` -> `Variables`.
+1. Railway -> project `vellic-staging` -> service `vellic-staging` -> `Variables`.
 2. Confirm the scoped rollout variables point to a small internal user or map set.
 3. Export the admin key from Railway `Variables`:
 
 ```bash
-export COEDITING_ADMIN_KEY="<mapmat-staging ADMIN_API_KEY>"
+export COEDITING_ADMIN_KEY="<vellic-staging ADMIN_API_KEY>"
 ```
 
 4. Preflight the exact scoped target before editing Railway `Variables`:
@@ -124,12 +124,12 @@ Only move to production canary if all three commands pass.
 
 ## Production Canary
 
-1. Railway -> project `mapmat-production` -> service `mapmat-production` -> `Variables`.
+1. Railway -> project `vellic-production` -> service `vellic-production` -> `Variables`.
 2. Start with one internal user or one internal map in the rollout scope.
 3. Export the production admin key:
 
 ```bash
-export COEDITING_ADMIN_KEY="<mapmat-production ADMIN_API_KEY>"
+export COEDITING_ADMIN_KEY="<vellic-production ADMIN_API_KEY>"
 ```
 
 4. Preflight the exact scoped target before editing Railway `Variables`:

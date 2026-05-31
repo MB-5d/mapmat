@@ -1,8 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, User } from 'lucide-react';
+import Cropper from 'react-easy-crop';
+import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
+import Avatar from '../ui/Avatar';
+import Button from '../ui/Button';
+import { EditIcon } from '../ui/icons';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import TextInput from '../ui/TextInput';
+import { createCroppedAvatarDataUrl } from '../../utils/avatarCrop';
+import { resolveApiAssetUrl } from '../../utils/assets';
+
+const AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 
 const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast }) => {
   const [name, setName] = useState('');
@@ -12,10 +23,16 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [avatarCropSrc, setAvatarCropSrc] = useState('');
+  const [avatarCrop, setAvatarCrop] = useState({ x: 0, y: 0 });
+  const [avatarZoom, setAvatarZoom] = useState(1);
+  const [avatarCropPixels, setAvatarCropPixels] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const wasOpenRef = useRef(false);
+  const avatarInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
@@ -28,9 +45,23 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       setError('');
       setSuccess('');
       setLoading(false);
+      setAvatarLoading(false);
+      setAvatarCropSrc('');
+      setAvatarCrop({ x: 0, y: 0 });
+      setAvatarZoom(1);
+      setAvatarCropPixels(null);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, user]);
+
+  const avatarUrl = resolveApiAssetUrl(user?.avatarUrl);
+  const avatarInitial = String(user?.name || user?.email || 'A').trim().charAt(0).toUpperCase();
+  const hasPassword = !!user?.hasPassword;
+  const avatarSource = user?.avatarSource || (user?.avatarUrl ? 'custom' : null);
+  const hasCustomAvatar = user?.hasCustomAvatar !== undefined
+    ? Boolean(user.hasCustomAvatar)
+    : avatarSource === 'custom';
+  const hasDisplayAvatar = !!avatarUrl;
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -57,12 +88,14 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           setLoading(false);
           return;
         }
-        if (!currentPassword) {
+        if (hasPassword && !currentPassword) {
           setError('Current password is required to change password');
           setLoading(false);
           return;
         }
-        updateData.currentPassword = currentPassword;
+        if (currentPassword) {
+          updateData.currentPassword = currentPassword;
+        }
         updateData.newPassword = newPassword;
       }
 
@@ -85,8 +118,89 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     }
   };
 
+  const resetAvatarCrop = () => {
+    setAvatarCrop({ x: 0, y: 0 });
+    setAvatarZoom(1);
+    setAvatarCropPixels(null);
+  };
+
+  const openAvatarCrop = (src) => {
+    resetAvatarCrop();
+    setAvatarCropSrc(src);
+  };
+
+  const handleAvatarEditClick = () => {
+    if (hasCustomAvatar && avatarUrl) {
+      openAvatarCrop(avatarUrl);
+      return;
+    }
+    avatarInputRef.current?.click();
+  };
+
+  const handleAvatarFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type?.startsWith('image/')) {
+      setError('Upload a PNG, JPG, or WebP image.');
+      return;
+    }
+    if (file.size > AVATAR_SOURCE_MAX_BYTES) {
+      setError('Choose an avatar image under 8 MB.');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+
+    try {
+      const imageDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Failed to read image file'));
+        reader.readAsDataURL(file);
+      });
+      openAvatarCrop(imageDataUrl);
+    } catch (err) {
+      setError(err.message || 'Failed to read avatar image');
+    }
+  };
+
+  const handleSaveAvatarCrop = async () => {
+    setError('');
+    setSuccess('');
+    setAvatarLoading(true);
+
+    try {
+      const imageDataUrl = await createCroppedAvatarDataUrl(avatarCropSrc, avatarCropPixels);
+      const { user: updatedUser } = await api.uploadMyAvatar({ imageDataUrl });
+      onUpdate?.(updatedUser);
+      setSuccess('Avatar updated');
+      setAvatarCropSrc('');
+    } catch (err) {
+      setError(err.message || 'Failed to upload avatar');
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setError('');
+    setSuccess('');
+    setAvatarLoading(true);
+    try {
+      const { user: updatedUser } = await api.removeMyAvatar();
+      onUpdate?.(updatedUser);
+      setSuccess('Avatar removed');
+    } catch (err) {
+      setError(err.message || 'Failed to remove avatar');
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
-    if (!deletePassword) {
+    if (hasPassword && !deletePassword) {
       setError('Password is required to delete account');
       return;
     }
@@ -118,9 +232,26 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
       className="profile-drawer"
     >
       <div className="account-hero">
-        <div className="account-hero-avatar">
-          <User size={20} />
-        </div>
+        <button
+          type="button"
+          className="account-hero-avatar-edit"
+          onClick={handleAvatarEditClick}
+          disabled={!user || avatarLoading}
+          aria-label={hasCustomAvatar ? 'Edit avatar' : (hasDisplayAvatar ? 'Change avatar' : 'Upload avatar')}
+        >
+          <Avatar
+            className="account-hero-avatar account-hero-avatar-image"
+            src={avatarUrl}
+            label={avatarInitial}
+            icon={<User size={20} />}
+            size="lg"
+            shape="circle"
+            aria-hidden="true"
+          />
+          <span className="account-hero-avatar-edit-icon" aria-hidden="true">
+            <EditIcon size={13} />
+          </span>
+        </button>
         <div className="account-hero-details">
           <div className="account-hero-name">{user?.name || 'Your account'}</div>
           <div className="account-hero-email">{user?.email || ''}</div>
@@ -134,42 +265,71 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           {success && <div className="auth-success">{success}</div>}
 
           <div className="form-section">
-            <h4>Profile</h4>
-            <div className="form-group">
-              <label>Name</label>
+            <div className="profile-avatar-controls">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={!user || avatarLoading}
+                loading={avatarLoading}
+              >
+                {!avatarLoading ? <ImagePlus size={16} /> : null}
+                {hasDisplayAvatar ? 'Change Avatar' : 'Upload Avatar'}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleRemoveAvatar}
+                disabled={!user || avatarLoading || !hasCustomAvatar}
+                loading={avatarLoading}
+              >
+                {!avatarLoading ? <Trash2 size={16} /> : null}
+                Remove Avatar
+              </Button>
               <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="hidden-file-input"
+                onChange={handleAvatarFile}
+              />
+            </div>
+            <Field label="Username">
+              <TextInput
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
+                placeholder="Your username"
                 disabled={!user || loading}
               />
-            </div>
-            <div className="form-group">
-              <label>Email</label>
-              <input
+            </Field>
+            <Field label="Email">
+              <TextInput
                 type="email"
                 value={user?.email || ''}
                 disabled
               />
-            </div>
+            </Field>
           </div>
 
           <div className="form-section">
-            <h4>Change Password</h4>
-            <div className="form-group">
-              <label>Current Password</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="Enter current password"
-                disabled={!user || loading}
-              />
-            </div>
-            <div className="form-group">
-              <label>New Password</label>
-              <input
+            <h4>{hasPassword ? 'Change Password' : 'Set Password'}</h4>
+            {!hasPassword ? (
+              <p className="field-hint">You signed in without a password. Set one here if you want email/password login too.</p>
+            ) : null}
+            {hasPassword ? (
+              <Field label="Current Password">
+                <TextInput
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  disabled={!user || loading}
+                />
+              </Field>
+            ) : null}
+            <Field label="New Password">
+              <TextInput
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
@@ -177,39 +337,38 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
                 minLength={6}
                 disabled={!user || loading}
               />
-            </div>
-            <div className="form-group">
-              <label>Confirm New Password</label>
-              <input
+            </Field>
+            <Field label="Confirm New Password">
+              <TextInput
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
                 disabled={!user || loading}
               />
-            </div>
+            </Field>
           </div>
 
-          <button
+          <Button
             type="submit"
-            className="modal-btn primary"
+            variant="primary"
             disabled={loading || !user}
+            loading={loading}
           >
-            {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
             Save Changes
-          </button>
+          </Button>
 
           <div className="form-section danger-zone">
             <h4>Delete account</h4>
             <p>Deleting your account will permanently remove all your projects, maps, and data.</p>
-            <button
+            <Button
               type="button"
-              className="modal-btn danger"
+              variant="danger"
               onClick={() => setShowDeleteConfirm(true)}
               disabled={loading || !user}
             >
               Delete Account
-            </button>
+            </Button>
           </div>
         </form>
       ) : (
@@ -224,30 +383,33 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
             </div>
           </div>
           {error && <div className="auth-error">{error}</div>}
-          <div className="form-group">
-            <label>Enter your password to confirm</label>
-            <input
-              type="password"
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              placeholder="Your password"
-              autoFocus
-              disabled={loading}
-            />
-          </div>
+          {hasPassword ? (
+            <Field label="Enter your password to confirm">
+              <TextInput
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Your password"
+                autoFocus
+                disabled={loading}
+              />
+            </Field>
+          ) : (
+            <div className="field-hint">This account does not have a password yet. You can delete it from your current signed-in session.</div>
+          )}
           <div className="account-danger-actions">
-            <button
+            <Button
               type="button"
-              className="modal-btn danger"
+              variant="danger"
               onClick={handleDeleteAccount}
-              disabled={loading || !deletePassword}
+              disabled={loading || (hasPassword && !deletePassword)}
+              loading={loading}
             >
-              {loading ? <Loader2 size={18} className="btn-spinner" /> : null}
               Yes, Delete My Account
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="modal-btn secondary"
+              variant="secondary"
               onClick={() => {
                 setShowDeleteConfirm(false);
                 setDeletePassword('');
@@ -256,10 +418,67 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
               disabled={loading}
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
+      <Modal
+        show={!!avatarCropSrc}
+        onClose={() => !avatarLoading && setAvatarCropSrc('')}
+        title={hasCustomAvatar ? 'Crop Avatar' : 'Upload Avatar'}
+        subtitle="Position your image inside the circle."
+        size="sm"
+        className="avatar-crop-modal"
+        bodyClassName="avatar-crop-modal-body"
+        footer={(
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setAvatarCropSrc('')}
+              disabled={avatarLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleSaveAvatarCrop}
+              disabled={!avatarCropPixels || avatarLoading}
+              loading={avatarLoading}
+            >
+              Save Avatar
+            </Button>
+          </>
+        )}
+      >
+        <div className="avatar-crop-stage">
+          <Cropper
+            image={avatarCropSrc}
+            crop={avatarCrop}
+            zoom={avatarZoom}
+            aspect={1}
+            cropShape="round"
+            showGrid={false}
+            objectFit="cover"
+            onCropChange={setAvatarCrop}
+            onZoomChange={setAvatarZoom}
+            onCropComplete={(_, croppedAreaPixels) => setAvatarCropPixels(croppedAreaPixels)}
+          />
+        </div>
+        <Field label="Zoom">
+          <input
+            type="range"
+            min="1"
+            max="3"
+            step="0.01"
+            value={avatarZoom}
+            onChange={(event) => setAvatarZoom(Number(event.target.value))}
+            className="avatar-crop-zoom"
+            disabled={avatarLoading}
+          />
+        </Field>
+      </Modal>
     </AccountDrawer>
   );
 };

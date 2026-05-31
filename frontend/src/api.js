@@ -1,10 +1,12 @@
 /**
- * API service for Map Mat frontend
+ * API service for Vellic frontend
  */
 
 import { API_BASE } from './utils/constants';
 
-const AUTH_TOKEN_KEY = 'mapmat_auth_token';
+const AUTH_TOKEN_KEY = 'vellic_auth_token';
+const LEGACY_AUTH_TOKEN_KEY = 'mapmat_auth_token';
+const COEDITING_AUTH_PROTOCOL = 'vellic-auth';
 
 function canUseStorage() {
   return typeof window !== 'undefined' && !!window.localStorage;
@@ -13,7 +15,14 @@ function canUseStorage() {
 function getStoredAuthToken() {
   if (!canUseStorage()) return null;
   try {
-    return window.localStorage.getItem(AUTH_TOKEN_KEY);
+    const token = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) return token;
+    const legacyToken = window.localStorage.getItem(LEGACY_AUTH_TOKEN_KEY);
+    if (legacyToken) {
+      window.localStorage.setItem(AUTH_TOKEN_KEY, legacyToken);
+      window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+    }
+    return legacyToken;
   } catch {
     return null;
   }
@@ -23,6 +32,7 @@ function setStoredAuthToken(token) {
   if (!canUseStorage()) return;
   try {
     if (token) window.localStorage.setItem(AUTH_TOKEN_KEY, token);
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   } catch {
     // Ignore storage errors in private mode/blocked storage scenarios.
   }
@@ -32,14 +42,15 @@ function clearStoredAuthToken() {
   if (!canUseStorage()) return;
   try {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
   } catch {
     // Ignore storage errors.
   }
 }
 
 // Fetch wrapper with credentials and error handling
-async function fetchApi(endpoint, options = {}) {
-  const authToken = getStoredAuthToken();
+async function fetchJson(endpoint, options = {}, { includeUserToken = true } = {}) {
+  const authToken = includeUserToken ? getStoredAuthToken() : null;
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -73,6 +84,84 @@ async function fetchApi(endpoint, options = {}) {
   return data;
 }
 
+async function fetchApi(endpoint, options = {}) {
+  return fetchJson(endpoint, options, { includeUserToken: true });
+}
+
+async function fetchAdminApi(endpoint, options = {}) {
+  return fetchJson(endpoint, options, { includeUserToken: false });
+}
+
+async function fetchBlob(endpoint, { includeUserToken = true } = {}) {
+  const { blob } = await fetchBlobResponse(endpoint, {}, { includeUserToken });
+  return blob;
+}
+
+async function fetchBlobResponse(endpoint, options = {}, { includeUserToken = true } = {}) {
+  const authToken = includeUserToken ? getStoredAuthToken() : null;
+  const headers = {
+    ...(options.headers || {}),
+  };
+
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  if (options.body && !headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    credentials: 'include',
+    headers,
+  });
+
+  if (!response.ok) {
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    const error = new Error(payload?.error || 'Request failed');
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return {
+    blob: await response.blob(),
+    filename: getDownloadFilename(response.headers.get('content-disposition')),
+  };
+}
+
+function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function getDownloadFilename(contentDisposition) {
+  const header = String(contentDisposition || '');
+  const utf8Match = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+  const quotedMatch = header.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) return quotedMatch[1].replace(/\\"/g, '"');
+  const plainMatch = header.match(/filename=([^;]+)/i);
+  return plainMatch?.[1]?.trim() || '';
+}
+
 function buildWebSocketUrl(endpoint) {
   const baseUrl = new URL(API_BASE);
   const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -84,21 +173,76 @@ function buildWebSocketUrl(endpoint) {
 // ============================================
 
 export async function signup(email, password, name) {
-  const result = await fetchApi('/auth/signup', {
+  return fetchApi('/auth/signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, name }),
+  });
+}
+
+export async function login(identifier, password) {
+  const result = await fetchApi('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: identifier, password }),
   });
   if (result?.token) setStoredAuthToken(result.token);
   return result;
 }
 
-export async function login(email, password) {
-  const result = await fetchApi('/auth/login', {
+export async function verifyEmail(email, code) {
+  const result = await fetchApi('/auth/verify-email', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, code }),
   });
   if (result?.token) setStoredAuthToken(result.token);
   return result;
+}
+
+export async function resendVerification(email) {
+  return fetchApi('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function forgotPassword(email) {
+  return fetchApi('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resetPassword(email, code, newPassword) {
+  const result = await fetchApi('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, code, newPassword }),
+  });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
+}
+
+export async function getAuthConfig() {
+  return fetchJson('/auth/config', {}, { includeUserToken: false });
+}
+
+export async function loginWithGoogleCredential(credential) {
+  const result = await fetchJson('/auth/google/credential', {
+    method: 'POST',
+    body: JSON.stringify({ credential }),
+  }, { includeUserToken: false });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
+}
+
+export function getGoogleAuthStartUrl(nextPath = null, { popup = false } = {}) {
+  const params = new URLSearchParams();
+  if (nextPath) {
+    params.set('next', nextPath);
+  }
+  if (popup) {
+    params.set('popup', '1');
+  }
+  const search = params.toString();
+  return `${API_BASE}/auth/google/start${search ? `?${search}` : ''}`;
 }
 
 export async function logout() {
@@ -120,13 +264,173 @@ export async function updateProfile(data) {
   });
 }
 
-export async function deleteAccount(password) {
+export async function uploadMyAvatar({ imageDataUrl }) {
+  return fetchApi('/auth/me/avatar', {
+    method: 'POST',
+    body: JSON.stringify({ imageDataUrl }),
+  });
+}
+
+export async function removeMyAvatar() {
+  return fetchApi('/auth/me/avatar', {
+    method: 'DELETE',
+  });
+}
+
+export async function deleteAccount(password = '') {
   const result = await fetchApi('/auth/me', {
     method: 'DELETE',
     body: JSON.stringify({ password }),
   });
   clearStoredAuthToken();
   return result;
+}
+
+export async function getAdminSession() {
+  return fetchAdminApi('/api/admin/session');
+}
+
+export async function createAdminSession({ email, password }) {
+  return fetchAdminApi('/api/admin/session', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function destroyAdminSession() {
+  return fetchAdminApi('/api/admin/session', {
+    method: 'DELETE',
+  });
+}
+
+export async function getAdminUsers({
+  query = '',
+  limit,
+  offset,
+  sortBy = 'updatedAt',
+  sortDirection = 'desc',
+} = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  if (offset !== undefined && offset !== null) params.set('offset', String(offset));
+  params.set('sortBy', sortBy);
+  params.set('sortDirection', sortDirection);
+  return fetchAdminApi(`/api/admin/users?${params.toString()}`);
+}
+
+export async function getAdminUser(userId) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}`);
+}
+
+export async function adminResetUserPassword(userId, { newPassword }) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ newPassword }),
+  });
+}
+
+export async function adminDisableUser(userId, { reason } = {}) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/disable`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function adminReactivateUser(userId) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/reactivate`, {
+    method: 'POST',
+  });
+}
+
+export async function getAdminImageAssetsDiagnostics({
+  mapId = '',
+  limit = 100,
+  checkObjects = true,
+} = {}) {
+  const params = new URLSearchParams();
+  if (mapId) params.set('mapId', mapId);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  params.set('checkObjects', checkObjects ? 'true' : 'false');
+  return fetchAdminApi(`/api/admin/image-assets?${params.toString()}`);
+}
+
+export async function getAdminFeedback({
+  query = '',
+  limit = 100,
+  offset = 0,
+  status = '',
+  intent = '',
+  scope = '',
+  componentKey = '',
+  unassigned = false,
+} = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  if (offset !== undefined && offset !== null) params.set('offset', String(offset));
+  if (status) params.set('status', status);
+  if (intent) params.set('intent', intent);
+  if (scope) params.set('scope', scope);
+  if (componentKey) params.set('componentKey', componentKey);
+  if (unassigned) params.set('unassigned', 'true');
+  return fetchAdminApi(`/api/admin/feedback?${params.toString()}`);
+}
+
+export async function updateAdminFeedback(feedbackId, payload = {}) {
+  return fetchAdminApi(`/api/admin/feedback/${encodeURIComponent(feedbackId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getAdminFeedbackThemes({
+  query = '',
+  limit = 100,
+  offset = 0,
+  status = '',
+  priorityBucket = '',
+  severity = '',
+} = {}) {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (limit !== undefined && limit !== null) params.set('limit', String(limit));
+  if (offset !== undefined && offset !== null) params.set('offset', String(offset));
+  if (status) params.set('status', status);
+  if (priorityBucket) params.set('priorityBucket', priorityBucket);
+  if (severity) params.set('severity', severity);
+  return fetchAdminApi(`/api/admin/feedback/themes?${params.toString()}`);
+}
+
+export async function createAdminFeedbackTheme(payload = {}) {
+  return fetchAdminApi('/api/admin/feedback/themes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminFeedbackTheme(themeId, payload = {}) {
+  return fetchAdminApi(`/api/admin/feedback/themes/${encodeURIComponent(themeId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function downloadAdminFeedbackExport() {
+  const blob = await fetchBlob('/api/admin/feedback/export.csv', { includeUserToken: false });
+  triggerBlobDownload(blob, 'vellic-feedback-items.csv');
+}
+
+export async function downloadAdminFeedbackThemeExport() {
+  const blob = await fetchBlob('/api/admin/feedback/themes/export.csv', { includeUserToken: false });
+  triggerBlobDownload(blob, 'vellic-feedback-themes.csv');
+}
+
+export async function submitFeedback(payload = {}) {
+  return fetchApi('/api/feedback', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 // ============================================
@@ -185,6 +489,23 @@ export async function getMap(id) {
   return fetchApi(`/api/maps/${id}`);
 }
 
+export async function getMapSummary(id) {
+  return fetchApi(`/api/maps/${id}/summary`);
+}
+
+export async function getMapScene(id, params = {}, options = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    query.set(key, String(value));
+  });
+  return fetchApi(`/api/maps/${id}/scene${query.toString() ? `?${query.toString()}` : ''}`, options);
+}
+
+export async function getMapNode(mapId, nodeId) {
+  return fetchApi(`/api/maps/${mapId}/nodes/${encodeURIComponent(nodeId)}`);
+}
+
 export async function saveMap(data) {
   return fetchApi('/api/maps', {
     method: 'POST',
@@ -205,6 +526,46 @@ export async function updateMap(id, data, { expectedUpdatedAt } = {}) {
   });
 }
 
+export async function updateMapNodeAssets(id, updates) {
+  return fetchApi(`/api/maps/${id}/node-assets`, {
+    method: 'PATCH',
+    body: JSON.stringify({ updates }),
+  });
+}
+
+export async function uploadMapNodeAsset(id, payload) {
+  return fetchApi(`/api/maps/${id}/node-assets/upload`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function downloadMapImages(id, payload = {}) {
+  const { blob, filename } = await fetchBlobResponse(`/api/maps/${id}/images/download`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  const fallback = getMapImageDownloadFallbackFilename(blob, payload?.scope);
+  triggerBlobDownload(blob, filename || fallback);
+  return { filename: filename || fallback };
+}
+
+function getMapImageDownloadFallbackFilename(blob, scope) {
+  const type = String(blob?.type || '').toLowerCase();
+  if (type.startsWith('image/')) {
+    const extension = getImageExtensionFromContentType(type);
+    return scope === 'selected' ? `vellic-selected-image.${extension}` : `vellic-image.${extension}`;
+  }
+  return scope === 'selected' ? 'vellic-selected-images.zip' : 'vellic-images.zip';
+}
+
+function getImageExtensionFromContentType(contentType) {
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg';
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  return 'jpg';
+}
+
 export async function deleteMap(id) {
   return fetchApi(`/api/maps/${id}`, { method: 'DELETE' });
 }
@@ -218,6 +579,48 @@ export async function createMapVersion(mapId, payload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function updateMapVersion(mapId, versionId, payload) {
+  return fetchApi(`/api/maps/${mapId}/versions/${versionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getMapComments(mapId) {
+  return fetchApi(`/api/maps/${mapId}/comments`);
+}
+
+export async function createMapComment(mapId, { nodeId, parentCommentId = null, text } = {}) {
+  return fetchApi(`/api/maps/${mapId}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({
+      node_id: nodeId,
+      parent_comment_id: parentCommentId,
+      text,
+    }),
+  });
+}
+
+export async function updateMapComment(mapId, commentId, payload = {}) {
+  return fetchApi(`/api/maps/${mapId}/comments/${commentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteMapComment(mapId, commentId) {
+  return fetchApi(`/api/maps/${mapId}/comments/${commentId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getMapActivity(mapId, { limit = 25, offset = 0 } = {}) {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (offset !== undefined) params.set('offset', String(offset));
+  return fetchApi(`/api/maps/${mapId}/activity?${params.toString()}`);
 }
 
 export async function getCoeditingLiveDocument(mapId) {
@@ -244,7 +647,7 @@ export function openCoeditingSocket(mapId) {
   if (!token) {
     return new WebSocket(url);
   }
-  return new WebSocket(url, ['mapmat-auth', token]);
+  return new WebSocket(url, [COEDITING_AUTH_PROTOCOL, token]);
 }
 
 // ============================================
@@ -281,6 +684,21 @@ export async function updateHistory(id, data) {
   });
 }
 
+export async function getHistoryInsights(id) {
+  return fetchApi(`/api/history/${id}/insights`);
+}
+
+export async function getMapInsights(id) {
+  return fetchApi(`/api/maps/${id}/insights`);
+}
+
+export async function analyzeInsights(data) {
+  return fetchApi('/api/insights/analyze', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function deleteHistory(ids) {
   return fetchApi('/api/history', {
     method: 'DELETE',
@@ -292,6 +710,14 @@ export async function deleteHistory(ids) {
 // BACKGROUND JOBS
 // ============================================
 
+function buildScanJobPath(id, { includeResult = true, accessToken = null, suffix = '' } = {}) {
+  const params = new URLSearchParams();
+  if (!includeResult) params.set('include_result', 'false');
+  if (accessToken) params.set('access_token', accessToken);
+  const query = params.toString();
+  return `/scan-jobs/${id}${suffix}${query ? `?${query}` : ''}`;
+}
+
 export async function createScanJob(payload) {
   return fetchApi('/scan-jobs', {
     method: 'POST',
@@ -299,29 +725,135 @@ export async function createScanJob(payload) {
   });
 }
 
-export async function getScanJob(id, { includeResult = true } = {}) {
-  const query = includeResult ? '' : '?include_result=false';
-  return fetchApi(`/scan-jobs/${id}${query}`);
-}
-
-export async function cancelScanJob(id) {
-  return fetchApi(`/scan-jobs/${id}/cancel`, { method: 'POST' });
-}
-
-export async function createScreenshotJob(payload) {
-  return fetchApi('/screenshot-jobs', {
+export async function precheckScanAuth(payload) {
+  return fetchApi('/scan-auth/precheck', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function getScreenshotJob(id, { includeResult = true } = {}) {
+export async function createScanAuthSession(payload) {
+  return fetchApi('/scan-auth/sessions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getScanAuthSession(sessionId) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}`);
+}
+
+export function getScanAuthScreenshotUrl(sessionId, nonce = Date.now()) {
+  return `${API_BASE}/scan-auth/sessions/${sessionId}/screenshot?t=${encodeURIComponent(nonce)}`;
+}
+
+export async function getScanAuthScreenshot(sessionId, nonce = Date.now()) {
+  return fetchBlob(`/scan-auth/sessions/${sessionId}/screenshot?t=${encodeURIComponent(nonce)}`);
+}
+
+export async function sendScanAuthAction(sessionId, payload) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}/action`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function completeScanAuthSession(sessionId) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}/complete`, {
+    method: 'POST',
+  });
+}
+
+export async function deleteScanAuthSession(sessionId) {
+  return fetchApi(`/scan-auth/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getScanJob(id, { includeResult = true, accessToken = null } = {}) {
+  return fetchApi(buildScanJobPath(id, { includeResult, accessToken }));
+}
+
+export function getScanJobStreamUrl(id, { accessToken = null } = {}) {
+  return `${API_BASE}${buildScanJobPath(id, { accessToken, suffix: '/stream' })}`;
+}
+
+export async function cancelScanJob(id, { accessToken = null } = {}) {
+  const body = accessToken ? JSON.stringify({ access_token: accessToken }) : undefined;
+  return fetchApi(buildScanJobPath(id, { suffix: '/cancel' }), {
+    method: 'POST',
+    ...(body ? { body } : {}),
+  });
+}
+
+export async function stopScanJob(id, { accessToken = null } = {}) {
+  const body = accessToken ? JSON.stringify({ access_token: accessToken }) : undefined;
+  return fetchApi(buildScanJobPath(id, { suffix: '/stop' }), {
+    method: 'POST',
+    ...(body ? { body } : {}),
+  });
+}
+
+export async function createScreenshotJob(payload, options = {}) {
+  return fetchApi('/screenshot-jobs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    ...options,
+  });
+}
+
+export async function captureScreenshot({ url, type = 'full' }, options = {}) {
+  const params = new URLSearchParams({ url, type });
+  return fetchApi(`/screenshot?${params.toString()}`, options);
+}
+
+export async function validateScreenshotAssets(urls = [], options = {}) {
+  return fetchApi('/screenshot-assets/validate', {
+    method: 'POST',
+    body: JSON.stringify({ urls }),
+    ...options,
+  });
+}
+
+export async function getScreenshotJob(id, { includeResult = true, ...options } = {}) {
   const query = includeResult ? '' : '?include_result=false';
-  return fetchApi(`/screenshot-jobs/${id}${query}`);
+  return fetchApi(`/screenshot-jobs/${id}${query}`, options);
 }
 
 export async function cancelScreenshotJob(id) {
   return fetchApi(`/screenshot-jobs/${id}/cancel`, { method: 'POST' });
+}
+
+export async function createMapImageCaptureJob(mapId, payload, options = {}) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    ...options,
+  });
+}
+
+export async function getMapImageCaptureJob(mapId, jobId, { includeResult = true, assetUpdateCursor = 0, ...options } = {}) {
+  const params = new URLSearchParams();
+  if (!includeResult) params.set('include_result', 'false');
+  if (assetUpdateCursor > 0) params.set('asset_update_cursor', String(assetUpdateCursor));
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}${query}`, options);
+}
+
+export async function getActiveMapImageCaptureJob(mapId, options = {}) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/active`, options);
+}
+
+export async function cancelMapImageCaptureJob(mapId, jobId) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}/cancel`, { method: 'POST' });
+}
+
+export async function pauseMapImageCaptureJob(mapId, jobId) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}/pause`, { method: 'POST' });
+}
+
+export async function resumeMapImageCaptureJob(mapId, jobId) {
+  return fetchApi(`/api/maps/${mapId}/image-capture-jobs/${jobId}/resume`, { method: 'POST' });
 }
 
 // ============================================
@@ -330,6 +862,13 @@ export async function cancelScreenshotJob(id) {
 
 export async function getMapCollaboration(mapId) {
   return fetchApi(`/api/maps/${mapId}/collaboration`);
+}
+
+export async function updateMapCollaborationSettings(mapId, payload = {}) {
+  return fetchApi(`/api/maps/${mapId}/collaboration/settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function createMapInvite(mapId, { email, role, expiresInDays } = {}) {
@@ -345,6 +884,26 @@ export async function createMapInvite(mapId, { email, role, expiresInDays } = {}
 
 export async function acceptMapInvite(token) {
   return fetchApi(`/api/collaboration/invites/${token}/accept`, {
+    method: 'POST',
+  });
+}
+
+export async function getPendingMapInvites() {
+  return fetchApi('/api/collaboration/invites');
+}
+
+export async function getPendingAccessRequests() {
+  return fetchApi('/api/collaboration/access-requests');
+}
+
+export async function acceptMapInviteById(inviteId) {
+  return fetchApi(`/api/collaboration/invites/id/${inviteId}/accept`, {
+    method: 'POST',
+  });
+}
+
+export async function declineMapInviteById(inviteId) {
+  return fetchApi(`/api/collaboration/invites/id/${inviteId}/decline`, {
     method: 'POST',
   });
 }
@@ -365,6 +924,23 @@ export async function updateMapMemberRole(mapId, userId, role) {
 export async function removeMapMember(mapId, userId) {
   return fetchApi(`/api/maps/${mapId}/members/${userId}`, {
     method: 'DELETE',
+  });
+}
+
+export async function reviewMapAccessRequest(mapId, requestId, { status, role } = {}) {
+  return fetchApi(`/api/maps/${mapId}/access-requests/${requestId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, role }),
+  });
+}
+
+export async function createMapAccessRequest(mapId, { requestedRole = 'viewer', message } = {}) {
+  return fetchApi(`/api/maps/${mapId}/access-requests`, {
+    method: 'POST',
+    body: JSON.stringify({
+      requested_role: requestedRole,
+      message,
+    }),
   });
 }
 

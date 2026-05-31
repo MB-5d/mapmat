@@ -1,0 +1,257 @@
+import React from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+
+import MinimapNavigator, { normalizeWorldBounds } from './MinimapNavigator';
+
+const dispatchPointer = (target, type, { clientX, clientY, pointerId = 1 }) => {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY,
+  });
+  Object.defineProperty(event, 'pointerId', { value: pointerId });
+  target.dispatchEvent(event);
+};
+
+describe('MinimapNavigator', () => {
+  let container;
+  let root;
+  let originalResizeObserver;
+  let originalSetPointerCapture;
+  let originalReleasePointerCapture;
+  let originalRequestAnimationFrame;
+  let originalCancelAnimationFrame;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    originalResizeObserver = window.ResizeObserver;
+    window.ResizeObserver = class {
+      observe() {}
+      disconnect() {}
+    };
+    originalSetPointerCapture = Element.prototype.setPointerCapture;
+    originalReleasePointerCapture = Element.prototype.releasePointerCapture;
+    originalRequestAnimationFrame = window.requestAnimationFrame;
+    originalCancelAnimationFrame = window.cancelAnimationFrame;
+    Element.prototype.setPointerCapture = jest.fn();
+    Element.prototype.releasePointerCapture = jest.fn();
+    window.requestAnimationFrame = (callback) => {
+      callback(Date.now());
+      return 1;
+    };
+    window.cancelAnimationFrame = jest.fn();
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    window.ResizeObserver = originalResizeObserver;
+    if (originalSetPointerCapture) {
+      Element.prototype.setPointerCapture = originalSetPointerCapture;
+    } else {
+      delete Element.prototype.setPointerCapture;
+    }
+    if (originalReleasePointerCapture) {
+      Element.prototype.releasePointerCapture = originalReleasePointerCapture;
+    } else {
+      delete Element.prototype.releasePointerCapture;
+    }
+    window.requestAnimationFrame = originalRequestAnimationFrame;
+    window.cancelAnimationFrame = originalCancelAnimationFrame;
+    container.remove();
+    container = null;
+    root = null;
+  });
+
+  test('normalizes large-map scene bounds', () => {
+    expect(normalizeWorldBounds({ w: 4000, h: 2000 })).toEqual({
+      minX: 0,
+      minY: 0,
+      maxX: 4000,
+      maxY: 2000,
+    });
+  });
+
+  test('renders a finite viewfinder viewport from large-map bounds while zoomed', () => {
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          colors={{}}
+        />
+      );
+    });
+
+    const viewport = container.querySelector('.minimap-navigator-viewport');
+    expect(viewport).not.toBeNull();
+    expect(Number(viewport.getAttribute('x'))).toBeCloseTo(105);
+    expect(Number(viewport.getAttribute('y'))).toBeCloseTo(27.5);
+    expect(Number(viewport.getAttribute('width'))).toBeCloseTo(110);
+    expect(Number(viewport.getAttribute('height'))).toBeCloseTo(55);
+  });
+
+  test('renders large-map overview nodes when full layout is unavailable', () => {
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          overview={{
+            bounds: { w: 4000, h: 2000 },
+            nodes: [
+              { id: 'overview-home', x: 0, y: 0, w: 288, h: 200, depth: 0 },
+              { id: 'overview-child', x: 1000, y: 500, w: 288, h: 200, depth: 1 },
+            ],
+            connectors: [
+              { id: 'overview-link', x1: 144, y1: 200, x2: 1144, y2: 500 },
+            ],
+          }}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          colors={{}}
+        />
+      );
+    });
+
+    expect(container.querySelectorAll('.minimap-navigator-node')).toHaveLength(2);
+    expect(container.querySelectorAll('.minimap-navigator-connector')).toHaveLength(1);
+  });
+
+  test('uses shared icon button states for minimap zoom controls', () => {
+    const onZoomIn = jest.fn();
+    const onZoomOut = jest.fn();
+
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          minScale={0.1}
+          maxScale={2}
+          colors={{}}
+          onZoomIn={onZoomIn}
+          onZoomOut={onZoomOut}
+        />
+      );
+    });
+
+    const zoomOutButton = container.querySelector('button[aria-label="Zoom out"]');
+    const zoomInButton = container.querySelector('button[aria-label="Zoom in"]');
+    expect(zoomOutButton.className).toContain('ui-icon-btn');
+    expect(zoomOutButton.className).toContain('ui-icon-btn--sm');
+    expect(zoomOutButton.className).toContain('ui-icon-btn--style-mono');
+    expect(zoomInButton.className).toContain('ui-icon-btn');
+    expect(zoomInButton.className).toContain('ui-icon-btn--sm');
+    expect(zoomInButton.className).toContain('ui-icon-btn--style-mono');
+
+    act(() => {
+      zoomOutButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      zoomInButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(onZoomOut).toHaveBeenCalledTimes(1);
+    expect(onZoomIn).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses the full preview width for the viewfinder canvas', () => {
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 12000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          colors={{}}
+        />
+      );
+    });
+
+    const clipRect = container.querySelector('clipPath rect');
+    expect(clipRect).not.toBeNull();
+    expect(Number(clipRect.getAttribute('x'))).toBe(0);
+    expect(Number(clipRect.getAttribute('width'))).toBe(320);
+  });
+
+  test('disables minimap zoom controls at zoom bounds', () => {
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.1}
+          minScale={0.1}
+          maxScale={2}
+          colors={{}}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Zoom out"]').disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="Zoom in"]').disabled).toBe(false);
+  });
+
+  test('drags the red viewport box by the total pointer distance', () => {
+    const onPanTo = jest.fn();
+    const animationFrames = [];
+    window.requestAnimationFrame = jest.fn((callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+
+    act(() => {
+      root.render(
+        <MinimapNavigator
+          layout={null}
+          bounds={{ w: 4000, h: 2000 }}
+          canvasSize={{ width: 1000, height: 500 }}
+          pan={{ x: -500, y: -250 }}
+          scale={0.5}
+          colors={{}}
+          onPanTo={onPanTo}
+        />
+      );
+    });
+
+    const preview = container.querySelector('.minimap-navigator-preview');
+    expect(preview).not.toBeNull();
+    preview.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 320,
+      height: 110,
+      right: 320,
+      bottom: 110,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    act(() => {
+      dispatchPointer(preview, 'pointerdown', { clientX: 160, clientY: 55 });
+      dispatchPointer(preview, 'pointermove', { clientX: 180, clientY: 65 });
+      dispatchPointer(preview, 'pointermove', { clientX: 200, clientY: 75 });
+      animationFrames.forEach((callback) => callback(Date.now()));
+    });
+
+    expect(onPanTo).toHaveBeenCalledTimes(1);
+    const [worldLeft, worldTop] = onPanTo.mock.calls[0];
+    expect(worldLeft).toBeCloseTo(1727.27);
+    expect(worldTop).toBeCloseTo(863.64);
+  });
+});

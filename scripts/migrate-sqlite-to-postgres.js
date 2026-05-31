@@ -10,7 +10,7 @@
  *   DATABASE_URL=postgres://...
  *
  * Optional:
- *   SQLITE_DB_PATH=/absolute/or/relative/path/to/mapmat.db
+ *   SQLITE_DB_PATH=/absolute/or/relative/path/to/vellic.db
  *   MIGRATION_TRUNCATE=true   // clear target tables before import
  */
 
@@ -32,9 +32,12 @@ const resolveSqlitePath = () => {
   if (process.env.DB_PATH) return path.resolve(process.env.DB_PATH);
 
   const railwayVolumeDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.RAILWAY_VOLUME_PATH;
-  if (railwayVolumeDir) return path.join(railwayVolumeDir, 'mapmat.db');
+  const dataDir = railwayVolumeDir || path.join(__dirname, '..', 'data');
+  const vellicPath = path.join(dataDir, 'vellic.db');
+  const legacyPath = path.join(dataDir, 'mapmat.db');
+  if (fs.existsSync(vellicPath) || !fs.existsSync(legacyPath)) return vellicPath;
 
-  return path.join(__dirname, '..', 'data', 'mapmat.db');
+  return legacyPath;
 };
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -67,7 +70,8 @@ const TABLES = [
     conflictKey: 'id',
     columns: [
       'id', 'user_id', 'project_id', 'name', 'notes', 'url', 'root_data', 'orphans_data',
-      'connections_data', 'colors', 'connection_colors', 'created_at', 'updated_at',
+      'connections_data', 'colors', 'connection_colors', 'insights_data', 'insights_generated_at',
+      'created_at', 'updated_at',
     ],
   },
   {
@@ -75,7 +79,8 @@ const TABLES = [
     conflictKey: 'id',
     columns: [
       'id', 'map_id', 'user_id', 'version_number', 'name', 'notes', 'root_data', 'orphans_data',
-      'connections_data', 'colors', 'connection_colors', 'created_at',
+      'connections_data', 'colors', 'connection_colors', 'is_bookmarked', 'bookmarked_by_user_id',
+      'bookmarked_at', 'created_at',
     ],
   },
   {
@@ -84,7 +89,7 @@ const TABLES = [
     columns: [
       'id', 'user_id', 'map_id', 'url', 'hostname', 'title', 'page_count', 'root_data',
       'orphans_data', 'connections_data', 'colors', 'connection_colors', 'scan_options',
-      'scan_depth', 'scanned_at',
+      'scan_depth', 'insights_data', 'insights_generated_at', 'scanned_at',
     ],
   },
   {
@@ -148,6 +153,8 @@ CREATE TABLE IF NOT EXISTS maps (
   connections_data TEXT,
   colors TEXT,
   connection_colors TEXT,
+  insights_data TEXT,
+  insights_generated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
@@ -164,6 +171,9 @@ CREATE TABLE IF NOT EXISTS map_versions (
   connections_data TEXT,
   colors TEXT,
   connection_colors TEXT,
+  is_bookmarked INTEGER DEFAULT 0,
+  bookmarked_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  bookmarked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -182,6 +192,8 @@ CREATE TABLE IF NOT EXISTS scan_history (
   connection_colors TEXT,
   scan_options TEXT,
   scan_depth INTEGER,
+  insights_data TEXT,
+  insights_generated_at TIMESTAMPTZ,
   scanned_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

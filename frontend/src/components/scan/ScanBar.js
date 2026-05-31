@@ -1,6 +1,14 @@
 import React from 'react';
 import { RotateCcw, Scan, SlidersHorizontal } from 'lucide-react';
 
+import Button from '../ui/Button';
+import CheckboxField from '../ui/CheckboxField';
+import IconButton from '../ui/IconButton';
+import { MenuPanel, MenuSectionHeader } from '../ui/Menu';
+import TextInput from '../ui/TextInput';
+import { AUTHENTICATED_SCAN_ENABLED } from '../../utils/constants';
+import Icon from '../ui/Icon';
+
 const ScanBar = ({
   canEdit,
   urlInput,
@@ -14,9 +22,8 @@ const ScanBar = ({
   scanLayerAvailability,
   scanLayerVisibility,
   onToggleScanLayer,
-  scanDepth,
-  onScanDepthChange,
   onScan,
+  scanLabel = 'Scan',
   scanDisabled,
   scanTitle,
   sharedTitle,
@@ -34,8 +41,10 @@ const ScanBar = ({
 
   return (
     <>
-      <Scan size={18} className="search-icon" />
-      <input
+      <Icon icon={<Scan />} size="md" className="scan-bar__icon" />
+      <TextInput
+        className="scan-bar__input"
+        framed={false}
         value={urlInput}
         onChange={onUrlInputChange}
         onKeyDown={onUrlKeyDown}
@@ -45,147 +54,125 @@ const ScanBar = ({
         spellCheck={false}
       />
       {showClearUrl && (
-        <button
+        <IconButton
           className="scan-clear-btn"
+          size="sm"
+          variant="ghost"
+          icon={<RotateCcw size={16} />}
+          label="Clear URL"
           type="button"
           onClick={onClearUrl}
           title="Clear URL"
-        >
-          <RotateCcw size={16} />
-        </button>
+        />
       )}
 
       <div className="scan-options" ref={optionsRef}>
-        <button
+        <Button
           className="scan-options-btn"
+          size="sm"
+          variant="secondary"
+          startIcon={<SlidersHorizontal size={16} />}
           onClick={onToggleOptions}
           title="Scan options"
           type="button"
         >
-          <SlidersHorizontal size={16} />
           Options
-        </button>
+        </Button>
         {showOptions && (
-          <div className="layers-panel">
+          <MenuPanel className="layers-panel">
             <div className="layers-panel-list">
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <span>Scan depth level</span>
-                <select
-                  className="layers-panel-select-input"
-                  value={scanDepth}
-                  onChange={(e) => onScanDepthChange(e.target.value)}
-                  disabled={optionsDisabled}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {[...Array(8).keys()].map(i => (
-                    <option key={i} value={i}>{i}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="layers-panel-section">Placement</div>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.subdomains}
                   onChange={() => onOptionChange('subdomains')}
                   disabled={optionsDisabled}
+                  label="Subdomains"
                 />
-                <span>Subdomains</span>
-              </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.orphanPages}
                   onChange={() => onOptionChange('orphanPages')}
                   disabled={optionsDisabled}
+                  label="Orphan Pages"
                 />
-                <span>Orphan Pages</span>
-              </label>
-
-              <div className="layers-panel-section">Status</div>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+              </div>
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.inactivePages}
                   onChange={() => onOptionChange('inactivePages')}
                   disabled={optionsDisabled}
+                  label="Inactive pages"
                 />
-                <span>Inactive pages</span>
-              </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.errorPages}
                   onChange={() => onOptionChange('errorPages')}
                   disabled={optionsDisabled}
+                  label="Error pages"
                 />
-                <span>Error pages</span>
-              </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.duplicates}
                   onChange={() => onOptionChange('duplicates')}
                   disabled={optionsDisabled}
+                  label="Duplicates"
                 />
-                <span>Duplicates</span>
-              </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={options.authenticatedPages}
-                  onChange={() => onOptionChange('authenticatedPages')}
-                  disabled={optionsDisabled}
-                />
-                <span>Authenticated Pages</span>
-              </label>
-
-              <div className="layers-panel-section">Type</div>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+                {AUTHENTICATED_SCAN_ENABLED ? (
+                  <CheckboxField
+                    className="layers-panel-item scan-options-checkbox"
+                    checked={options.authenticatedPages}
+                    onChange={() => onOptionChange('authenticatedPages')}
+                    disabled={optionsDisabled}
+                    label="Authenticated Pages"
+                  />
+                ) : null}
+              </div>
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.files}
                   onChange={() => onOptionChange('files')}
                   disabled={optionsDisabled}
+                  label="Files / Downloads"
                 />
-                <span>Files / Downloads</span>
-              </label>
-
-              <div className="layers-panel-section">Connections</div>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+              </div>
+              <div className="scan-options-group">
+                <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.brokenLinks}
                   onChange={() => onOptionChange('brokenLinks')}
                   disabled={optionsDisabled}
+                  label="Broken links"
                 />
-                <span>Broken links</span>
-              </label>
-              <label className={`layers-panel-item${optionsDisabled ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
+                <CheckboxField
+                  className="layers-panel-item scan-options-checkbox"
                   checked={options.crosslinks}
                   onChange={() => onOptionChange('crosslinks')}
                   disabled={optionsDisabled}
+                  label="Crosslinks"
                 />
-                <span>Crosslinks</span>
-              </label>
-              <div className="layers-panel-hint">
-                Limited by scan depth and max pages.
               </div>
             </div>
-          </div>
+          </MenuPanel>
         )}
       </div>
 
-      <button
+      <Button
         className="scan-btn"
         onClick={onScan}
         disabled={scanDisabled}
         title={scanTitle}
+        variant="primary"
+        size="sm"
       >
-        Scan
-      </button>
+        {scanLabel}
+      </Button>
     </>
   );
 };

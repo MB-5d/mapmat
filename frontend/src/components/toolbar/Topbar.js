@@ -4,23 +4,26 @@ import {
   History,
   LogIn,
   LogOut,
-  Plus,
+  Mail,
   Settings2,
-  Upload,
+  ShieldCheck,
   UserCircle,
   User,
 } from 'lucide-react';
 
 import ScanBar from '../scan/ScanBar';
+import VellicLogo from '../brand/VellicLogo';
+import Avatar from '../ui/Avatar';
+import Button from '../ui/Button';
+import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
 import { useAuth } from '../../contexts/AuthContext';
-import mapmatLogo from '../../assets/MM-Logo.svg';
+import { APP_BRAND_NAME } from '../../utils/constants';
 
 const Topbar = ({
   canEdit,
   urlInput,
   onUrlInputChange,
   onUrlKeyDown,
-  hasMap,
   scanOptions,
   showScanOptions,
   scanOptionsRef,
@@ -29,25 +32,21 @@ const Topbar = ({
   scanLayerAvailability,
   scanLayerVisibility,
   onToggleScanLayer,
-  scanDepth,
-  onScanDepthChange,
   onScan,
+  scanLabel,
   scanDisabled,
   scanTitle,
   optionsDisabled,
   onClearUrl,
   showClearUrl,
-  mapName,
-  isEditingMapName,
-  onMapNameChange,
-  onMapNameBlur,
-  onMapNameKeyDown,
-  onMapNameClick,
   sharedTitle,
-  onCreateMap,
-  onImportFile,
+  showScanBar = true,
   onShowProjects,
   onShowHistory,
+  onShowInvites,
+  onShowAccessRequests,
+  pendingInviteCount = 0,
+  pendingAccessRequestCount = 0,
 }) => {
   const { isLoggedIn, currentUser, onShowProfile, onShowSettings, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
@@ -56,8 +55,7 @@ const Topbar = ({
   useEffect(() => {
     if (!showAccountMenu) return;
     const handleClickOutside = (event) => {
-      if (!accountMenuRef.current) return;
-      if (!accountMenuRef.current.contains(event.target)) {
+      if (accountMenuRef.current && !accountMenuRef.current.contains(event.target)) {
         setShowAccountMenu(false);
       }
     };
@@ -67,171 +65,168 @@ const Topbar = ({
 
   const handleAccountToggle = () => setShowAccountMenu((prev) => !prev);
   const closeMenu = () => setShowAccountMenu(false);
+  const accountTriggerIcon = (
+    <Avatar
+      className="user-btn-avatar"
+      src={currentUser?.avatarUrl}
+      label={String(currentUser?.name || 'A').trim().charAt(0).toUpperCase()}
+      icon={<User size={18} />}
+      size="xs"
+      aria-hidden="true"
+    />
+  );
 
   return (
-    <div className="topbar">
+    <div className="topbar" data-feedback-id="topbar" data-feedback-label="Top navigation">
       <div className="topbar-left">
         <div className="brand">
-          <img className="brand-logo" src={mapmatLogo} alt="Map Mat" />
+          <VellicLogo className="brand-logo" title={APP_BRAND_NAME} />
         </div>
       </div>
 
-    <div className="topbar-center">
-      <div className="search-container">
-        <ScanBar
-          canEdit={canEdit}
-          urlInput={urlInput}
-          onUrlInputChange={onUrlInputChange}
-          onUrlKeyDown={onUrlKeyDown}
-          options={scanOptions}
-          showOptions={showScanOptions}
-          optionsRef={scanOptionsRef}
-          onToggleOptions={onToggleScanOptions}
-          onOptionChange={onScanOptionChange}
-          scanLayerAvailability={scanLayerAvailability}
-          scanLayerVisibility={scanLayerVisibility}
-          onToggleScanLayer={onToggleScanLayer}
-          scanDepth={scanDepth}
-          onScanDepthChange={onScanDepthChange}
-          onScan={onScan}
-          scanDisabled={scanDisabled}
-          scanTitle={scanTitle}
-          optionsDisabled={optionsDisabled}
-          onClearUrl={onClearUrl}
-          showClearUrl={showClearUrl}
-          sharedTitle={sharedTitle}
-        />
-      </div>
-
-      {hasMap && (
-        <div className="map-name-container">
-          {isEditingMapName ? (
-            <input
-              className="map-name-input"
-              value={mapName}
-              onChange={onMapNameChange}
-              onBlur={onMapNameBlur}
-              onKeyDown={onMapNameKeyDown}
-              autoFocus
-              spellCheck={false}
+      <div className="topbar-center">
+        {showScanBar ? (
+          <div className="search-container scan-bar-shell">
+            <ScanBar
+              canEdit={canEdit}
+              urlInput={urlInput}
+              onUrlInputChange={onUrlInputChange}
+              onUrlKeyDown={onUrlKeyDown}
+              options={scanOptions}
+              showOptions={showScanOptions}
+              optionsRef={scanOptionsRef}
+              onToggleOptions={onToggleScanOptions}
+              onOptionChange={onScanOptionChange}
+              scanLayerAvailability={scanLayerAvailability}
+              scanLayerVisibility={scanLayerVisibility}
+              onToggleScanLayer={onToggleScanLayer}
+              onScan={onScan}
+              scanLabel={scanLabel}
+              scanDisabled={scanDisabled}
+              scanTitle={scanTitle}
+              optionsDisabled={optionsDisabled}
+              onClearUrl={onClearUrl}
+              showClearUrl={showClearUrl}
+              sharedTitle={sharedTitle}
             />
-          ) : (
-            <span
-              className="map-name-display"
-              onClick={onMapNameClick}
-              title={canEdit ? "Click to rename" : mapName}
-            >
-              {mapName || 'Untitled Map'}
-            </span>
-          )}
-        </div>
-      )}
-    </div>
+          </div>
+        ) : (
+          <div className="topbar-center-spacer" aria-hidden="true" />
+        )}
+      </div>
 
       <div className="topbar-right">
-      {(isLoggedIn ? canEdit : true) && (
-        <button
-          className="icon-btn"
-          title="Create New Map"
-          onClick={onCreateMap}
-        >
-          <Plus size={22} />
-        </button>
-      )}
-
-      {(isLoggedIn ? canEdit : true) && (
-        <button
-          className="icon-btn"
-          title="Import File"
-          onClick={onImportFile}
-        >
-          <Upload size={22} />
-        </button>
-      )}
-
-      <div className="divider" />
-
-      {isLoggedIn ? (
-        <div className="account-menu-wrapper" ref={accountMenuRef}>
-          <button
-            className="user-btn"
-            onClick={handleAccountToggle}
-            title="Account Menu"
-            aria-expanded={showAccountMenu}
-            aria-haspopup="menu"
-          >
-            <User size={18} />
-            <span>{currentUser?.name}</span>
-          </button>
-          {showAccountMenu && (
-            <div className="account-menu" role="menu">
-              <button
-                className="account-menu-item"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  onShowProjects();
-                }}
-              >
-                <Folder size={16} />
-                <span>Projects</span>
-              </button>
-              <button
-                className="account-menu-item"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  onShowHistory();
-                }}
-              >
-                <History size={16} />
-                <span>History</span>
-              </button>
-              <div className="account-menu-divider" />
-              <button
-                className="account-menu-item"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  onShowProfile();
-                }}
-              >
-                <UserCircle size={16} />
-                <span>Profile</span>
-              </button>
-              <button
-                className="account-menu-item"
-                role="menuitem"
-                type="button"
-                onClick={() => {
-                  closeMenu();
-                  onShowSettings();
-                }}
-              >
-                <Settings2 size={16} />
-                <span>Settings</span>
-              </button>
-              <div className="account-menu-divider" />
-              <button
-                className="account-menu-item account-menu-logout"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  onLogout();
-                }}
-              >
-                <LogOut size={16} />
-                <span>Log out</span>
-              </button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <button className="topbar-login-btn" title="Log In" onClick={onLogin}>
-          <LogIn size={18} />
-          <span>Log In</span>
-        </button>
-      )}
+        {isLoggedIn ? (
+          <div className="account-menu-wrapper" ref={accountMenuRef}>
+            <Button
+              className="topbar-account-trigger"
+              type="ghost"
+              buttonStyle="mono"
+              size="sm"
+              onClick={handleAccountToggle}
+              title="Account Menu"
+              aria-expanded={showAccountMenu}
+              aria-haspopup="menu"
+              startIcon={accountTriggerIcon}
+              label={currentUser?.name || 'Account'}
+            />
+            {showAccountMenu && (
+              <MenuPanel className="account-menu" role="menu">
+                <div className="ui-menu-section" role="group" aria-label="Collaboration">
+                  <MenuSectionHeader>Collaboration</MenuSectionHeader>
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<Mail size={16} />}
+                    label="Invites"
+                    badge={pendingInviteCount > 0 ? (
+                      <span className="account-menu-item-badge">{pendingInviteCount > 9 ? '9+' : pendingInviteCount}</span>
+                    ) : null}
+                    onClick={() => {
+                      closeMenu();
+                      onShowInvites?.();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<ShieldCheck size={16} />}
+                    label="Requests"
+                    badge={pendingAccessRequestCount > 0 ? (
+                      <span className="account-menu-item-badge">{pendingAccessRequestCount > 9 ? '9+' : pendingAccessRequestCount}</span>
+                    ) : null}
+                    onClick={() => {
+                      closeMenu();
+                      onShowAccessRequests?.();
+                    }}
+                  />
+                </div>
+                <MenuDivider className="account-menu-divider" />
+                <div className="ui-menu-section" role="group" aria-label="Workspace">
+                  <MenuSectionHeader>Workspace</MenuSectionHeader>
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<Folder size={16} />}
+                    label="Projects"
+                    onClick={() => {
+                      closeMenu();
+                      onShowProjects();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<History size={16} />}
+                    label="History"
+                    onClick={() => {
+                      closeMenu();
+                      onShowHistory();
+                    }}
+                  />
+                </div>
+                <MenuDivider className="account-menu-divider" />
+                <div className="ui-menu-section" role="group" aria-label="Account">
+                  <MenuSectionHeader>Account</MenuSectionHeader>
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<UserCircle size={16} />}
+                    label="Profile"
+                    onClick={() => {
+                      closeMenu();
+                      onShowProfile();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<Settings2 size={16} />}
+                    label="Settings"
+                    onClick={() => {
+                      closeMenu();
+                      onShowSettings();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item account-menu-logout"
+                    role="menuitem"
+                    icon={<LogOut size={16} />}
+                    label="Log out"
+                    onClick={() => {
+                      closeMenu();
+                      onLogout();
+                    }}
+                  />
+                </div>
+              </MenuPanel>
+            )}
+          </div>
+        ) : (
+          <Button className="topbar-login-btn" title="Log In" onClick={onLogin} startIcon={<LogIn size={18} />}>
+            Log In
+          </Button>
+        )}
       </div>
     </div>
   );

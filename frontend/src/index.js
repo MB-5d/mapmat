@@ -1,15 +1,18 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App';
+import RootApp from './RootApp';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ConsentProvider } from './contexts/ConsentContext';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <ConsentProvider>
+        <RootApp />
+      </ConsentProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -2,8 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { X } from 'lucide-react';
 
+import { DEFAULT_COLORS } from '../../utils/constants';
+import IconButton from '../ui/IconButton';
+
+const DEFAULT_COLOR = DEFAULT_COLORS[0];
+
 const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
-  const [currentColor, setCurrentColor] = useState(color || '#6366f1');
+  const [currentColor, setCurrentColor] = useState(color || DEFAULT_COLOR);
   
   // Parse hex to RGB
   const hexToRgb = (hex) => {
@@ -16,12 +21,13 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
   };
 
   const [rgb, setRgb] = useState(hexToRgb(color));
-  const [hexInput, setHexInput] = useState(color || '#6366f1');
+  const [hexInput, setHexInput] = useState(color || DEFAULT_COLOR);
 
   useEffect(() => {
-    setCurrentColor(color);
-    setRgb(hexToRgb(color));
-    setHexInput(color);
+    const nextColor = color || DEFAULT_COLOR;
+    setCurrentColor(nextColor);
+    setRgb(hexToRgb(nextColor));
+    setHexInput(nextColor);
   }, [color]);
 
   const normalizeHex = (value) => {
@@ -93,9 +99,14 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
         style={modalStyle}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <button className="modal-close" onClick={onClose}>
-          <X size={24} />
-        </button>
+        <IconButton
+          className="modal-close"
+          variant="ghost"
+          size="lg"
+          icon={<X />}
+          label="Close color picker"
+          onClick={onClose}
+        />
         
         <div className="color-picker-content">
           <div className="color-picker-gradient">
@@ -122,7 +133,7 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
                   setHexInput(currentColor);
                 }
               }}
-              placeholder="#6366f1"
+              placeholder={DEFAULT_COLOR}
               spellCheck={false}
             />
           </div>

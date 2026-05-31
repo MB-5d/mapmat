@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 
 import IconButton from '../ui/IconButton';
+import CheckboxField from '../ui/CheckboxField';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
@@ -72,10 +73,15 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
   });
 
   return (
-    <div className="comments-panel">
+    <div
+      className="comments-panel"
+      data-feedback-id="comments-panel"
+      data-feedback-label="Comments panel"
+      onWheel={(e) => e.stopPropagation()}
+    >
       <div className="comments-panel-header">
         <h3>All Comments</h3>
-        <IconButton className="comments-panel-close" onClick={onClose} aria-label="Close comments panel">
+        <IconButton className="comments-panel-close" size="lg" variant="ghost" onClick={onClose} aria-label="Close comments panel">
           <X size={18} />
         </IconButton>
       </div>
@@ -99,14 +105,12 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
             <option value="mention">By Mention</option>
           </SelectInput>
         </div>
-        <label className="comments-filter-toggle">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={(e) => setShowCompleted(e.target.checked)}
-          />
-          <span>Show completed</span>
-        </label>
+        <CheckboxField
+          className="comments-filter-toggle"
+          checked={showCompleted}
+          onChange={(e) => setShowCompleted(e.target.checked)}
+          label="Show completed"
+        />
       </div>
 
       <div className="comments-panel-body">

@@ -1,6 +1,36 @@
+import runtimePalettes from './runtimePalettes.json';
+
 export const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
 
-export const DEFAULT_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+function parseEnvBool(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+export const APP_ONLY_MODE = parseEnvBool(process.env.REACT_APP_APP_ONLY_MODE, false);
+export const SHOW_DEMO_AUTH = parseEnvBool(process.env.REACT_APP_ENABLE_DEMO_AUTH, !APP_ONLY_MODE);
+export const GOOGLE_AUTH_ENABLED = parseEnvBool(process.env.REACT_APP_GOOGLE_AUTH_ENABLED, false);
+// Temporarily paused while primary scan stability work continues. See docs/authenticated-scan-paused.md.
+export const AUTHENTICATED_SCAN_ENABLED = parseEnvBool(process.env.REACT_APP_AUTHENTICATED_SCAN_ENABLED, false);
+export const APP_BRAND_NAME = 'Vellic';
+export const ENABLE_ADMIN_CONSOLE = parseEnvBool(process.env.REACT_APP_ENABLE_ADMIN_CONSOLE, false);
+export const ENABLE_ANALYTICS = parseEnvBool(process.env.REACT_APP_ENABLE_ANALYTICS, false);
+export const CLARITY_PROJECT_ID = String(process.env.REACT_APP_CLARITY_PROJECT_ID || '').trim();
+export const GA_MEASUREMENT_ID = String(process.env.REACT_APP_GA_MEASUREMENT_ID || '').trim();
+export const SENTRY_DSN = String(process.env.REACT_APP_SENTRY_DSN || '').trim();
+export const TESTER_NOT_READY_MESSAGE = 'Not ready for testing yet';
+
+export const DEFAULT_COLORS = runtimePalettes.pageDepthPalette;
+export const DEFAULT_CONNECTION_COLORS = runtimePalettes.connectionPalette;
+
+export const getDepthColor = (colors, depth = 0) => {
+  const index = Math.max(0, Number(depth) || 0);
+  if (Array.isArray(colors) && colors[index]) return colors[index];
+  return DEFAULT_COLORS[index] || DEFAULT_COLORS[index % DEFAULT_COLORS.length] || '#94a3b8';
+};
 
 // Permission levels for sharing
 export const ACCESS_LEVELS = {

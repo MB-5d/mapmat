@@ -2,6 +2,9 @@ import React from 'react';
 import { Sun, Moon, Monitor } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
+import Button from '../ui/Button';
+import SegmentedControl from '../ui/SegmentedControl';
+import ToggleSwitch from '../ui/ToggleSwitch';
 
 const SettingsDrawer = ({
   isOpen,
@@ -10,12 +13,17 @@ const SettingsDrawer = ({
   onThemeChange,
   showPageNumbers,
   onTogglePageNumbers,
+  consent,
+  onOpenPrivacySettings,
 }) => {
   const themeOptions = [
     { value: 'auto', label: 'Auto', icon: <Monitor size={14} /> },
     { value: 'light', label: 'Light', icon: <Sun size={14} /> },
     { value: 'dark', label: 'Dark', icon: <Moon size={14} /> },
   ];
+  const optionalConsentLabel = consent?.analytics || consent?.experienceResearch
+    ? 'Some optional research tools are allowed.'
+    : 'Optional research tools are off.';
 
   return (
     <AccountDrawer
@@ -27,37 +35,39 @@ const SettingsDrawer = ({
     >
       <section className="drawer-card">
         <div className="drawer-card-title">Appearance</div>
-        <div className="settings-segment">
-          {themeOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`settings-segment-option ${theme === option.value ? 'active' : ''}`}
-              onClick={() => onThemeChange?.(option.value)}
-              aria-pressed={theme === option.value}
-            >
-              {option.icon}
-              {option.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          className="settings-segment"
+          variant="grid"
+          fullWidth
+          ariaLabel="Theme"
+          value={theme}
+          onChange={onThemeChange}
+          options={themeOptions}
+        />
         <div className="drawer-helper">Auto follows your system preference.</div>
       </section>
 
       <section className="drawer-card">
         <div className="drawer-card-title">Canvas</div>
-        <label className="settings-toggle-row">
-          <span className="settings-toggle-text">
-            <span className="settings-toggle-title">Show page numbers</span>
-            <span className="settings-toggle-subtitle">Keep numbering visible in every view.</span>
-          </span>
-          <input
-            type="checkbox"
-            className="settings-switch"
-            checked={showPageNumbers}
-            onChange={() => onTogglePageNumbers?.()}
-          />
-        </label>
+        <ToggleSwitch
+          className="settings-toggle-row"
+          checked={showPageNumbers}
+          onChange={() => onTogglePageNumbers?.()}
+          label="Show page numbers"
+          description="Keep numbering visible in every view."
+        />
+      </section>
+
+      <section className="drawer-card">
+        <div className="drawer-card-title">Cookie Consent</div>
+        <div className="drawer-helper">
+          {optionalConsentLabel}
+        </div>
+        <div className="drawer-card-actions">
+          <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={onOpenPrivacySettings}>
+            Cookie Consent Settings
+          </Button>
+        </div>
       </section>
     </AccountDrawer>
   );

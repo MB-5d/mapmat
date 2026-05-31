@@ -1,0 +1,339 @@
+const fs = require('fs');
+const path = require('path');
+
+const {
+  COLOR_STEPS,
+  colorAliases,
+  primitiveColors,
+  spacing,
+  icon,
+  componentTokens,
+  unitScale,
+  border,
+  radius,
+  elevation,
+  typePrimitives,
+  typeSemantic,
+  typography,
+  appSemantics,
+  semanticColorNames,
+  semanticColorBindings,
+  semanticColorVariables,
+  semanticColors,
+  runtimeColorNames,
+  runtimeColorBindings,
+  runtimeColorVariables,
+  runtimeColors,
+  runtimeColorTokens,
+  landing,
+  layout,
+  runtimePalettes,
+  figmaCollections,
+  components,
+  omittedDueToAmbiguity,
+} = require('./design-system-source');
+
+const rootDir = path.resolve(__dirname, '..');
+const frontendCssPath = path.join(rootDir, 'frontend', 'src', 'design-system.generated.css');
+const tokensCssPath = path.join(rootDir, 'design-system', 'tokens.css');
+const tokensJsonPath = path.join(rootDir, 'design-system', 'tokens.json');
+const componentsJsonPath = path.join(rootDir, 'design-system', 'components.json');
+
+function resolveCanonicalFamily(family) {
+  return colorAliases.family?.[family] || family;
+}
+
+function resolveTokenKey(family, token) {
+  return colorAliases.token?.[family]?.[token] || token;
+}
+
+function resolveScaleValue(family, token) {
+  const canonicalFamily = resolveCanonicalFamily(family);
+  const scale = primitiveColors[canonicalFamily];
+  if (!scale) return undefined;
+  return scale[resolveTokenKey(canonicalFamily, token)];
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function indent(lines, spaces = 2) {
+  const prefix = ' '.repeat(spaces);
+  return lines.map((line) => (line ? `${prefix}${line}` : line)).join('\n');
+}
+
+function cssVarBlock(selector, entries) {
+  const lines = Object.entries(entries).map(([name, value]) => `--${name}: ${value};`);
+  return `${selector} {\n${indent(lines)}\n}`;
+}
+
+function typographyCssEntries() {
+  const entries = {
+    'font-sans': "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif",
+  };
+
+  for (const [name, value] of Object.entries(typePrimitives.family)) {
+    entries[`type-family-${name}`] = value === 'Sora'
+      ? "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif"
+      : value;
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.size)) {
+    entries[`type-size-${name}`] = `${value}px`;
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.lineHeight)) {
+    entries[`type-line-height-${name}`] = typeof value === 'number' ? `${value}px` : value;
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.weight)) {
+    entries[`type-weight-${name}`] = String(value);
+  }
+
+  for (const [name, value] of Object.entries(typePrimitives.tracking)) {
+    entries[`type-tracking-${name}`] = value;
+  }
+
+  for (const [groupName, groupValues] of Object.entries(typography)) {
+    for (const [sizeName, token] of Object.entries(groupValues)) {
+      const prefix = `type-${groupName}-${sizeName}`;
+      entries[`${prefix}-size`] = token.cssSize;
+      entries[`${prefix}-line-height`] = token.lineHeight;
+      entries[`${prefix}-weight`] = String(token.weight);
+      entries[`${prefix}-letter-spacing`] = token.letterSpacing;
+    }
+  }
+
+  return entries;
+}
+
+function primitiveCssEntries() {
+  const entries = {};
+  for (const [family, scale] of Object.entries(primitiveColors)) {
+    for (const [token, value] of Object.entries(scale)) {
+      entries[`color-${family}-${token}`] = value;
+    }
+    for (const step of COLOR_STEPS) {
+      const value = resolveScaleValue(family, step);
+      if (value !== undefined) {
+        entries[`color-${family}-${step}`] = value;
+      }
+    }
+  }
+  for (const legacyFamily of Object.keys(colorAliases.family || {})) {
+    const canonicalFamily = resolveCanonicalFamily(legacyFamily);
+    const scale = primitiveColors[canonicalFamily];
+    if (!scale) continue;
+    for (const [token, value] of Object.entries(scale)) {
+      entries[`color-${legacyFamily}-${token}`] = value;
+    }
+    for (const step of COLOR_STEPS) {
+      const value = resolveScaleValue(legacyFamily, step);
+      if (value !== undefined) {
+        entries[`color-${legacyFamily}-${step}`] = value;
+      }
+    }
+  }
+  for (const [name, value] of Object.entries(spacing)) {
+    entries[`space-${name}`] = value;
+  }
+  for (const [name, value] of Object.entries(icon.size)) {
+    entries[`icon-size-${name}`] = `${value}px`;
+    entries[`ui-icon-size-${name}`] = `${value}px`;
+  }
+  entries['ui-icon-button-radius-sm'] = componentTokens.iconButton.radius.sm;
+  entries['ui-icon-button-active-bg'] = componentTokens.iconButton.color.activeBg;
+  entries['ui-icon-button-active-bg-hover'] = componentTokens.iconButton.color.activeBgHover;
+  entries['ui-icon-button-active-fg'] = componentTokens.iconButton.color.activeFg;
+  for (const [name, value] of Object.entries(unitScale)) {
+    entries[`unit-${name}`] = `${value}px`;
+  }
+  for (const [name, value] of Object.entries(border.width)) {
+    entries[`border-width-${name}`] = value;
+  }
+  for (const [name, value] of Object.entries(radius)) {
+    entries[`radius-${name}`] = value;
+    if (['sm', 'md', 'lg', 'xl'].includes(name)) {
+      entries[`ui-radius-${name}`] = value;
+    }
+  }
+  for (const [name, value] of Object.entries(elevation)) {
+    entries[`shadow-${name}`] = value;
+  }
+  entries['node-w'] = `${layout.NODE_W}px`;
+  entries['node-h-collapsed'] = `${layout.NODE_H_COLLAPSED}px`;
+  entries['node-h-thumb'] = `${layout.NODE_H_THUMB}px`;
+  entries['ui-connection-map-stroke-width'] = `${layout.CONNECTION_MAP_STROKE}px`;
+  entries['gap-l1-x'] = `${layout.GAP_L1_X}px`;
+  entries['gap-stack-y'] = `${layout.GAP_STACK_Y}px`;
+  entries['indent-x'] = `${layout.INDENT_X}px`;
+  entries['bus-y-gap'] = `${layout.BUS_Y_GAP}px`;
+  entries['orphan-group-gap'] = `${layout.ORPHAN_GROUP_GAP}px`;
+  entries['stroke-pad-x'] = `${layout.STROKE_PAD_X}px`;
+  entries['root-y'] = `${layout.ROOT_Y}px`;
+  entries['color-bg-primary'] = 'var(--ui-color-surface)';
+  entries['color-bg-hover'] = 'var(--ui-color-surface-muted)';
+  entries['color-bg'] = 'var(--color-bg-primary)';
+  entries['color-bg-secondary'] = 'var(--color-bg-hover)';
+  entries['color-border'] = 'var(--ui-color-border)';
+  entries['color-text-primary'] = 'var(--ui-color-text)';
+  entries['color-text-secondary'] = 'var(--ui-color-muted)';
+  entries['color-text-muted'] = 'var(--color-text-secondary)';
+  entries['color-primary'] = 'var(--ui-color-primary)';
+  entries['color-primary-hover'] = 'var(--ui-color-primary-hover)';
+  entries['modal-width-sm'] = '400px';
+  entries['modal-width-md'] = '480px';
+  entries['modal-width-lg'] = '520px';
+  entries['modal-padding'] = 'var(--space-xl)';
+  entries['modal-header-padding'] = 'var(--space-xl)';
+  entries['modal-footer-padding'] = 'var(--space-xl)';
+  entries['modal-gap'] = 'var(--space-lg)';
+  entries['modal-title-size'] = 'var(--type-title-lg-size)';
+  entries['modal-title-weight'] = 'var(--type-title-lg-weight)';
+  entries['modal-subtitle-size'] = 'var(--type-body-sm-size)';
+  entries['modal-card-radius'] = 'var(--radius-lg)';
+  entries['modal-card-padding'] = 'var(--space-lg)';
+  return entries;
+}
+
+function runtimeCssEntries() {
+  return Object.fromEntries(
+    Object.entries(runtimeColorTokens).map(([name, value]) => [name, value])
+  );
+}
+
+function buildGeneratedCss() {
+  const comment = [
+    '/*',
+    ' * Generated by scripts/sync-design-system.js',
+    ' * Do not edit this file directly.',
+    ' */',
+  ].join('\n');
+
+  const blocks = [
+    comment,
+    cssVarBlock(':root', {
+      ...primitiveCssEntries(),
+      ...typographyCssEntries(),
+      ...runtimeCssEntries(),
+      ...appSemantics.light,
+      ...landing,
+    }),
+    cssVarBlock('[data-theme="dark"]', appSemantics.dark),
+  ];
+
+  return `${blocks.join('\n\n')}\n`;
+}
+
+function buildTokensJson() {
+  return {
+    meta: {
+      generatedOn: todayIso(),
+      sources: [
+        'scripts/design-system-source.js',
+        'frontend/src/design-system.generated.css',
+        'frontend/src/App.css',
+        'frontend/src/LandingPage.css',
+        'frontend/src/utils/constants.js',
+      ],
+      notes: [
+        'This file is generated from the shared design-system source used to emit live CSS variables.',
+        'Semantic app tokens are the source of truth for light and dark mode; Figma should mirror these values instead of redefining them.',
+        'Primitive color scales use canonical names in source; compatibility aliases remain emitted in CSS for the live app.',
+        'Runtime reference colors for page depth and connection lines are exported separately from semantic UI colors.',
+        'Figma collection metadata, primitive alias bindings, and semantic naming maps are exported here so the library structure can be regenerated from code without changing live app consumers.',
+      ],
+    },
+    primitives: {
+      colorScales: primitiveColors,
+      colorAliases,
+      spacing,
+      icon,
+      unitScale,
+      border,
+      typePrimitives,
+      radius,
+      elevation,
+      typography,
+    },
+    semantics: {
+      app: appSemantics,
+      color: semanticColors,
+      type: typeSemantic,
+      component: componentTokens,
+      landing,
+    },
+    runtime: {
+      layout,
+      palette: runtimePalettes,
+      colors: runtimeColors,
+      colorBindings: runtimeColorBindings,
+    },
+    figma: {
+      collections: figmaCollections,
+      variables: {
+        colorPrimitives: primitiveColors,
+        colorSemantic: semanticColors,
+        colorSemanticBindings: semanticColorBindings,
+        colorSemanticFlat: semanticColorVariables,
+        colorSemanticNames: semanticColorNames,
+        runtimeMap: runtimeColors,
+        runtimeMapBindings: runtimeColorBindings,
+        runtimeMapFlat: runtimeColorVariables,
+        runtimeMapNames: runtimeColorNames,
+        typePrimitives,
+        typeSemantic,
+      },
+    },
+  };
+}
+
+function buildComponentsJson() {
+  return {
+    meta: {
+      generatedOn: todayIso(),
+      sources: [
+        'frontend/src/components/ui',
+        'frontend/src/components/ui/icons.js',
+        'frontend/src/components/drawers/AccountDrawer.js',
+        'frontend/src/components/nodes/NodeCard.js',
+        'frontend/src/components/toolbar/Topbar.js',
+        'frontend/src/App.js',
+      ],
+      notes: [
+        'Only code-backed shared components and shared surfaces are exported here.',
+        'Browser/CSS interaction states are included only when the live app defines them today.',
+        'Button and IconButton keep legacy variant compatibility in code, but type + style + size is the canonical model.',
+        'Selected/on states are reserved for selected controls and menu rows, not standard buttons.',
+        'Edit actions use the shared EditIcon alias, which is Lucide Pencil. Do not use Edit2, PencilLine, or Pen variants for edit affordances.',
+      ],
+    },
+    components,
+    omittedDueToAmbiguity,
+  };
+}
+
+function writeFile(filePath, contents) {
+  fs.writeFileSync(filePath, contents);
+}
+
+writeFile(frontendCssPath, buildGeneratedCss());
+writeFile(tokensCssPath, buildGeneratedCss());
+writeFile(tokensJsonPath, JSON.stringify(buildTokensJson(), null, 2) + '\n');
+writeFile(componentsJsonPath, JSON.stringify(buildComponentsJson(), null, 2) + '\n');
+
+process.stdout.write(
+  JSON.stringify(
+    {
+      generated: [
+        path.relative(rootDir, frontendCssPath),
+        path.relative(rootDir, tokensCssPath),
+        path.relative(rootDir, tokensJsonPath),
+        path.relative(rootDir, componentsJsonPath),
+      ],
+    },
+    null,
+    2
+  ) + '\n'
+);

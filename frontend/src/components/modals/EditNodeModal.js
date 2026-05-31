@@ -1,11 +1,23 @@
 import React, { useRef, useState } from 'react';
 import { Upload, X } from 'lucide-react';
 
+import Button from '../ui/Button';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import SelectInput from '../ui/SelectInput';
+import TextInput from '../ui/TextInput';
+import TextareaInput from '../ui/TextareaInput';
 import { ANNOTATION_STATUS_OPTIONS } from '../../utils/constants';
+import { getSeoMetadata, normalizeMetaTagsForInput, normalizeText } from '../../utils/seoMetadata';
+import { getNodeHttpErrorLabel, getNodeStatusCode, isVirtualMissingNode } from '../../utils/scanStatus';
+import { isDataImageUrl } from '../../utils/canvasPerformance';
 
-// Page types for dropdown
+const PAGE_TYPE_HOME = 'Home';
+const PAGE_TYPE_PAGE = 'Page';
+
 const PAGE_TYPES = [
-  'Page',
+  PAGE_TYPE_HOME,
+  PAGE_TYPE_PAGE,
   'Blog Post',
   'Product',
   'Category',
@@ -17,11 +29,10 @@ const PAGE_TYPES = [
   'Portfolio',
 ];
 
-// Helper to get all descendant IDs of a node
 const getDescendantIds = (node, ids = new Set()) => {
   if (!node) return ids;
   if (node.children) {
-    node.children.forEach(child => {
+    node.children.forEach((child) => {
       ids.add(child.id);
       getDescendantIds(child, ids);
     });
@@ -29,60 +40,170 @@ const getDescendantIds = (node, ids = new Set()) => {
   return ids;
 };
 
+const compactObject = (value) => Object.fromEntries(
+  Object.entries(value).filter(([, entryValue]) => {
+    if (entryValue === undefined || entryValue === null) return false;
+    if (typeof entryValue === 'string') return entryValue.trim() !== '';
+    if (typeof entryValue === 'object') return Object.keys(entryValue).length > 0;
+    return true;
+  })
+);
+
 const EditNodeModal = ({
   node,
   allNodes,
   rootTree,
   onClose,
   onSave,
+  onUploadNodeImageAsset,
+  onDelete,
+  onLocateUrl,
+  canLocateUrl,
   mode = 'edit',
+  allowDelete = true,
   customPageTypes = [],
   onAddCustomType,
   specialParentOptions = [],
+  isHomePageCreation = false,
+  insightSummary = null,
 }) => {
+  const rawPageType = node?.pageType || PAGE_TYPE_PAGE;
+  const initialPageType = isHomePageCreation
+    ? PAGE_TYPE_HOME
+    : (
+      mode !== 'edit' && rawPageType === PAGE_TYPE_HOME
+        ? PAGE_TYPE_PAGE
+        : rawPageType
+    );
   const [title, setTitle] = useState(node?.title || '');
   const [url, setUrl] = useState(node?.url || '');
-  const [pageType, setPageType] = useState(node?.pageType || 'Page');
+  const [pageType, setPageType] = useState(initialPageType);
   const [newTypeName, setNewTypeName] = useState('');
   const [showNewTypeInput, setShowNewTypeInput] = useState(false);
-
-  // Combined list of all page types
   const allPageTypes = [...PAGE_TYPES, ...customPageTypes];
   const [parentId, setParentId] = useState(
     node?.parentId ?? specialParentOptions[0]?.value ?? ''
   );
   const [thumbnailUrl, setThumbnailUrl] = useState(node?.thumbnailUrl || '');
-  const [description, setDescription] = useState(node?.description || '');
-  const [metaTags, setMetaTags] = useState(node?.metaTags || '');
+  const [submitError, setSubmitError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const initialSeoMetadata = getSeoMetadata(node);
+  const [description, setDescription] = useState(node?.description || initialSeoMetadata.description || '');
+  const [metaTags, setMetaTags] = useState(normalizeMetaTagsForInput(node?.metaTags, initialSeoMetadata));
+  const [canonicalUrl, setCanonicalUrl] = useState(node?.canonicalUrl || initialSeoMetadata.canonicalUrl || '');
+  const [robots, setRobots] = useState(initialSeoMetadata.robots || '');
+  const [h1, setH1] = useState(initialSeoMetadata.h1 || '');
+  const [h2, setH2] = useState(initialSeoMetadata.h2 || '');
+  const [language, setLanguage] = useState(initialSeoMetadata.language || '');
+  const [openGraphTitle, setOpenGraphTitle] = useState(initialSeoMetadata.openGraph?.title || '');
+  const [openGraphDescription, setOpenGraphDescription] = useState(initialSeoMetadata.openGraph?.description || '');
+  const [openGraphImage, setOpenGraphImage] = useState(initialSeoMetadata.openGraph?.image || '');
+  const [openGraphUrl, setOpenGraphUrl] = useState(initialSeoMetadata.openGraph?.url || '');
+  const [openGraphType, setOpenGraphType] = useState(initialSeoMetadata.openGraph?.type || '');
+  const [twitterCard, setTwitterCard] = useState(initialSeoMetadata.twitter?.card || '');
+  const [twitterTitle, setTwitterTitle] = useState(initialSeoMetadata.twitter?.title || '');
+  const [twitterDescription, setTwitterDescription] = useState(initialSeoMetadata.twitter?.description || '');
+  const [twitterImage, setTwitterImage] = useState(initialSeoMetadata.twitter?.image || '');
   const [annotationStatus, setAnnotationStatus] = useState(node?.annotations?.status || 'none');
   const [annotationTags, setAnnotationTags] = useState((node?.annotations?.tags || []).join(', '));
   const [annotationNote, setAnnotationNote] = useState(node?.annotations?.note || '');
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
+  const canDelete = allowDelete && mode === 'edit' && !isHomePageCreation && typeof onDelete === 'function' && node?.id;
+  const duplicateSourceUrl = node?.isDuplicate && node?.duplicateOf ? node.duplicateOf : '';
+  const duplicateSourceLabel = duplicateSourceUrl
+    ? duplicateSourceUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')
+    : '';
+  const canShowDuplicateSourceOnMap = duplicateSourceUrl
+    && typeof onLocateUrl === 'function'
+    && (typeof canLocateUrl !== 'function' || canLocateUrl(duplicateSourceUrl));
+  const statusCode = getNodeStatusCode(node);
+  const httpErrorLabel = getNodeHttpErrorLabel(node);
+  const scanStatusRows = [
+    statusCode !== null ? ['', httpErrorLabel || `HTTP ${statusCode}`] : null,
+    node?.isViewableError ? ['Error type', 'Viewable HTTP error'] : null,
+    isVirtualMissingNode(node) ? ['Scan label', 'Missing virtual page'] : null,
+    node?.authRequired ? ['Scan label', 'Auth required'] : null,
+    node?.isInactive ? ['Scan label', 'Inactive'] : null,
+    node?.blockedReason ? ['Reason', node.blockedReason.replace(/_/g, ' ')] : null,
+  ].filter(Boolean);
+  const movedFromPosition = annotationStatus === 'moved'
+    ? String(node?.annotations?.meta?.movedFromPosition || '').trim()
+    : '';
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (isSubmitting) return;
+    setSubmitError('');
     const trimmedNote = annotationNote.trim();
     const tags = annotationTags
       .split(',')
-      .map(tag => tag.trim())
+      .map((tag) => tag.trim())
       .filter(Boolean);
-    onSave({
-      ...node,
-      title,
-      url,
-      pageType,
-      parentId,
-      thumbnailUrl,
-      description,
-      metaTags,
-      annotations: {
-        status: annotationStatus || 'none',
-        tags,
-        note: trimmedNote,
-      },
+    const nextSeoMetadata = compactObject({
+      ...initialSeoMetadata,
+      description: normalizeText(description),
+      keywords: normalizeText(metaTags),
+      robots: normalizeText(robots),
+      canonicalUrl: normalizeText(canonicalUrl),
+      h1: normalizeText(h1),
+      h2: normalizeText(h2),
+      language: normalizeText(language),
+      openGraph: compactObject({
+        ...(initialSeoMetadata.openGraph || {}),
+        title: normalizeText(openGraphTitle),
+        description: normalizeText(openGraphDescription),
+        image: normalizeText(openGraphImage),
+        url: normalizeText(openGraphUrl),
+        type: normalizeText(openGraphType),
+      }),
+      twitter: compactObject({
+        ...(initialSeoMetadata.twitter || {}),
+        card: normalizeText(twitterCard),
+        title: normalizeText(twitterTitle),
+        description: normalizeText(twitterDescription),
+        image: normalizeText(twitterImage),
+      }),
     });
-    onClose();
+
+    let savedThumbnailUrl = thumbnailUrl;
+    try {
+      setIsSubmitting(true);
+      if (isDataImageUrl(thumbnailUrl)) {
+        if (typeof onUploadNodeImageAsset !== 'function') {
+          throw new Error('Save this map before uploading image files.');
+        }
+        const result = await onUploadNodeImageAsset({
+          nodeId: node?.id || '',
+          imageDataUrl: thumbnailUrl,
+        });
+        savedThumbnailUrl = result?.assetUrl || result?.thumbnailUrl || '';
+      }
+
+      onSave({
+        ...node,
+        title,
+        url,
+        pageType,
+        parentId,
+        thumbnailUrl: savedThumbnailUrl,
+        description,
+        metaTags,
+        canonicalUrl,
+        seoMetadata: nextSeoMetadata,
+        annotations: {
+          status: annotationStatus || 'none',
+          tags,
+          note: trimmedNote,
+          meta: node?.annotations?.meta || {},
+        },
+      });
+      onClose();
+    } catch (error) {
+      setSubmitError(error?.message || 'Failed to save page');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAddNewType = () => {
@@ -95,29 +216,26 @@ const EditNodeModal = ({
     setShowNewTypeInput(false);
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
+  const handleFileUpload = (event) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      setThumbnailUrl(event.target.result);
+    reader.onload = (loadEvent) => {
+      setSubmitError('');
+      setThumbnailUrl(loadEvent.target.result);
     };
     reader.readAsDataURL(file);
   };
 
-  const modalTitle = mode === 'edit' ? 'Edit Page' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
-
-  // Form validation - check if required fields are filled
-  // For edit/duplicate: parentId can be empty (orphan pages are valid)
-  // For add: parentId is optional (user can create orphans)
+  const modalTitle = isHomePageCreation
+    ? 'Add Home Page'
+    : mode === 'edit' ? 'Page Details' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
   const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
 
-  // Filter out current node and its descendants from parent options
-  // (can't be parent of itself or create circular reference)
   const getExcludeIds = () => {
     if (!node?.id || !rootTree) return new Set();
-    // Find the full node in tree to get its descendants
+
     const findNode = (tree, id) => {
       if (!tree) return null;
       if (tree.id === id) return tree;
@@ -127,14 +245,17 @@ const EditNodeModal = ({
       }
       return null;
     };
+
     const fullNode = findNode(rootTree, node.id);
     const descendants = fullNode ? getDescendantIds(fullNode) : new Set();
-    descendants.add(node.id); // Also exclude self
+    descendants.add(node.id);
     return descendants;
   };
 
   const excludeIds = getExcludeIds();
-  const parentOptions = allNodes.filter(n => !excludeIds.has(n.id));
+  const parentOptions = allNodes.filter((candidate) => !excludeIds.has(candidate.id));
+  const homeTypeOwner = allNodes.find((candidate) => candidate.pageType === PAGE_TYPE_HOME);
+  const canUseHomeType = !homeTypeOwner || homeTypeOwner.id === node?.id;
   const hasSubdomainOption = specialParentOptions.some((option) => option.type === 'subdomain');
   const disableSubdomainOption = hasSubdomainOption && trimmedUrl.length > 0;
   const getSpecialOptionLabel = (option) => {
@@ -145,250 +266,466 @@ const EditNodeModal = ({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card modal-lg modal-scrollable edit-node-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{modalTitle}</h3>
-          <button className="modal-close" onClick={onClose}>
-            <X size={24} />
-          </button>
-        </div>
+    <Modal
+      show={!!node}
+      onClose={onClose}
+      title={modalTitle}
+      size="lg"
+      scrollable
+      className="edit-node-modal"
+      bodyClassName="edit-node-form-content"
+      footer={(
+        <>
+          {canDelete ? (
+            <Button type="button" variant="danger" onClick={() => onDelete(node.id)} disabled={isSubmitting}>
+              Delete
+            </Button>
+          ) : null}
+          <div className="edit-node-modal__footer-actions">
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="edit-node-form"
+              variant="primary"
+              disabled={!isFormValid || isSubmitting}
+            >
+              {isSubmitting
+                ? 'Saving...'
+                : isHomePageCreation ? 'Add Home Page' : mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
+            </Button>
+          </div>
+        </>
+      )}
+    >
+      <form onSubmit={handleSubmit} className="edit-node-form" id="edit-node-form">
+        {submitError ? <div className="form-error">{submitError}</div> : null}
+        <Field label="Page Title" required>
+          <TextInput
+            type="text"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Enter page title"
+            required
+          />
+        </Field>
 
-        <form onSubmit={handleSubmit} className="edit-node-form">
-          <div className="modal-body edit-node-form-content">
-            <div className="form-group">
-              <label>Page Title<span className="required-asterisk">*</span></label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Enter page title"
-                required
-              />
+        <Field label="URL">
+          <TextInput
+            type="url"
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="https://example.com/page"
+          />
+        </Field>
+
+        {scanStatusRows.length ? (
+          <div className="edit-node-duplicate-section">
+            <div className="edit-node-section-title">Scan Status</div>
+            {scanStatusRows.map(([label, value], index) => (
+              <div className="edit-node-duplicate-row" key={`${label || 'status'}-${index}`}>
+                {label ? <span>{label}</span> : null}
+                <strong>{value}</strong>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {movedFromPosition ? (
+          <div className="edit-node-duplicate-section">
+            <div className="edit-node-section-title">Move Details</div>
+            <div className="edit-node-duplicate-row">
+              <span>Moved from position</span>
+              <strong>{movedFromPosition}</strong>
             </div>
+          </div>
+        ) : null}
 
-            <div className="form-group">
-              <label>URL</label>
-              <input
-                type="url"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com/page"
-              />
+        {duplicateSourceUrl ? (
+          <div className="edit-node-duplicate-section">
+            <div className="edit-node-section-title">Duplicate Page</div>
+            <div className="edit-node-duplicate-row">
+              <span>Duplicate of</span>
+              <strong title={duplicateSourceUrl}>{duplicateSourceLabel}</strong>
             </div>
+            <div className="edit-node-duplicate-actions">
+              {canShowDuplicateSourceOnMap ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    onClose();
+                    onLocateUrl(duplicateSourceUrl);
+                  }}
+                >
+                  Show on map
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => window.open(duplicateSourceUrl, '_blank', 'noopener')}
+              >
+                Open page
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
-            <div className="form-group">
-              <label>Page Type<span className="required-asterisk">*</span></label>
-              <select
+        <Field label="Page Type" required>
+          {isHomePageCreation ? (
+            <TextInput type="text" value={PAGE_TYPE_HOME} disabled readOnly />
+          ) : (
+            <>
+              <SelectInput
                 value={pageType}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === '__addnew__') {
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (nextValue === '__addnew__') {
                     setShowNewTypeInput(true);
                   } else {
-                    setPageType(val);
+                    setPageType(nextValue);
                     setShowNewTypeInput(false);
                   }
                 }}
                 required
               >
-                {allPageTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-                <option value="__addnew__">➕ Add New Type...</option>
-              </select>
-              {showNewTypeInput && (
-                <input
+                {allPageTypes.map((type) => {
+                  const disabled = type === PAGE_TYPE_HOME && !canUseHomeType;
+                  return (
+                    <option key={type} value={type} disabled={disabled}>
+                      {disabled ? `${type} (already used)` : type}
+                    </option>
+                  );
+                })}
+                <option value="__addnew__">Add New Type...</option>
+              </SelectInput>
+              {showNewTypeInput ? (
+                <TextInput
                   type="text"
                   className="new-type-input"
                   value={newTypeName}
-                  onChange={(e) => setNewTypeName(e.target.value)}
+                  onChange={(event) => setNewTypeName(event.target.value)}
                   onBlur={handleAddNewType}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
                       handleAddNewType();
                     }
                   }}
                   placeholder="Enter new type name"
                   autoFocus
                 />
-              )}
-            </div>
+              ) : null}
+            </>
+          )}
+        </Field>
 
-            <div className="form-group">
-              <label>Parent Page</label>
-              <select
-                value={parentId}
-                onChange={(e) => setParentId(e.target.value)}
-              >
-                {specialParentOptions.map((option) => {
-                  const isSubdomain = option.type === 'subdomain';
-                  const isDisabled = option.disabled || (isSubdomain && disableSubdomainOption);
-                  return (
-                    <option key={option.value} value={option.value} disabled={isDisabled}>
-                      {getSpecialOptionLabel(option)}
-                    </option>
-                  );
-                })}
-                {parentOptions.map(n => {
-                  const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(n.depth);
-                  const displayTitle = n.title || n.url || 'Untitled';
-                  return (
-                    <option key={n.id} value={n.id}>
-                      {indent}{n.pageNumber} - {displayTitle}
-                    </option>
-                  );
-                })}
-              </select>
-              {disableSubdomainOption && (
-                <div className="form-helper">
-                  Subdomain parent requires the URL to be blank.
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Thumbnail / Image</label>
-              {thumbnailUrl ? (
-                <div className="thumbnail-preview">
-                  <img src={thumbnailUrl} alt="Thumbnail preview" />
-                  <button
-                    type="button"
-                    className="btn-remove-thumb"
-                    onClick={() => setThumbnailUrl('')}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  className="image-upload-zone"
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.add('drag-over');
-                  }}
-                  onDragLeave={(e) => {
-                    e.currentTarget.classList.remove('drag-over');
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.remove('drag-over');
-                    const file = e.dataTransfer.files[0];
-                    if (file && file.type.startsWith('image/')) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => setThumbnailUrl(event.target.result);
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                >
-                  <Upload size={24} className="upload-icon" />
-                  <span className="upload-text">Drag image here or</span>
-                  <button
-                    type="button"
-                    className="btn-browse"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Browse files
-                  </button>
-                  <span className="upload-text-small">or enter URL</span>
-                  <input
-                    type="text"
-                    className="url-input-small"
-                    placeholder="https://example.com/image.jpg"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const urlValue = e.target.value.trim();
-                        if (urlValue) setThumbnailUrl(urlValue);
-                      }
-                    }}
-                    onBlur={(e) => {
-                      const urlValue = e.target.value.trim();
-                      if (urlValue) setThumbnailUrl(urlValue);
-                    }}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.gif,.webp"
-                    onChange={handleFileUpload}
-                    style={{ display: 'none' }}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Page description (meta description)"
-                rows={3}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Meta Tags</label>
-              <textarea
-                value={metaTags}
-                onChange={(e) => setMetaTags(e.target.value)}
-                placeholder="Comma-separated tags: seo, marketing, landing"
-                rows={2}
-              />
-            </div>
-
-            <div className="form-group">
-              <label>Marker</label>
-              <select
-                value={annotationStatus}
-                onChange={(e) => setAnnotationStatus(e.target.value)}
-              >
-                <option value="none">None</option>
-                {ANNOTATION_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Tags</label>
-              <input
-                type="text"
-                value={annotationTags}
-                onChange={(e) => setAnnotationTags(e.target.value)}
-                placeholder="Comma-separated tags"
-              />
-              <div className="form-helper">Optional labels for filtering and collaboration.</div>
-            </div>
-
-            <div className="form-group">
-              <label>Note</label>
-              <textarea
-                value={annotationNote}
-                onChange={(e) => setAnnotationNote(e.target.value)}
-                placeholder="Short note shown on the node"
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <div className="modal-footer">
-            <button type="button" className="modal-btn secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className={`modal-btn primary ${!isFormValid ? 'disabled' : ''}`}
-              disabled={!isFormValid}
+        {!isHomePageCreation ? (
+          <Field
+            label="Parent Page"
+            hint={disableSubdomainOption ? 'Subdomain parent requires the URL to be blank.' : ''}
+          >
+            <SelectInput
+              value={parentId}
+              onChange={(event) => setParentId(event.target.value)}
             >
-              {mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
-            </button>
+              {specialParentOptions.map((option) => {
+                const isSubdomain = option.type === 'subdomain';
+                const isDisabled = option.disabled || (isSubdomain && disableSubdomainOption);
+                return (
+                  <option key={option.value} value={option.value} disabled={isDisabled}>
+                    {getSpecialOptionLabel(option)}
+                  </option>
+                );
+              })}
+              {parentOptions.map((candidate) => {
+                const indent = '\u00A0\u00A0\u00A0\u00A0'.repeat(candidate.depth);
+                const displayTitle = candidate.title || candidate.url || 'Untitled';
+                return (
+                  <option key={candidate.id} value={candidate.id}>
+                    {indent}{candidate.pageNumber} - {displayTitle}
+                  </option>
+                );
+              })}
+            </SelectInput>
+          </Field>
+        ) : null}
+
+        <Field label="Thumbnail / Image">
+          {thumbnailUrl ? (
+            <div className="thumbnail-preview">
+              <img src={thumbnailUrl} alt="Thumbnail preview" />
+              <button
+                type="button"
+                className="btn-remove-thumb"
+                onClick={() => setThumbnailUrl('')}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div
+              className="image-upload-zone"
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.currentTarget.classList.add('drag-over');
+              }}
+              onDragLeave={(event) => {
+                event.currentTarget.classList.remove('drag-over');
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.currentTarget.classList.remove('drag-over');
+                const file = event.dataTransfer.files[0];
+                if (file && file.type.startsWith('image/')) {
+                  const reader = new FileReader();
+                  reader.onload = (loadEvent) => {
+                    setSubmitError('');
+                    setThumbnailUrl(loadEvent.target.result);
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }}
+            >
+              <Upload size={24} className="upload-icon" />
+              <span className="upload-text">Drag image here or</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="btn-browse"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Browse files
+              </Button>
+              <span className="upload-text-small">or enter URL</span>
+              <TextInput
+                type="text"
+                className="url-input-small"
+                placeholder="https://example.com/image.jpg"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    const urlValue = event.target.value.trim();
+                    if (urlValue) setThumbnailUrl(urlValue);
+                  }
+                }}
+                onBlur={(event) => {
+                  const urlValue = event.target.value.trim();
+                  if (urlValue) setThumbnailUrl(urlValue);
+                }}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.gif,.webp"
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
+              />
+            </div>
+          )}
+        </Field>
+
+        {insightSummary && (
+          <div className="edit-node-insights-section">
+            <div className="edit-node-section-title">Page Insights</div>
+            <div className="edit-node-insights-summary">
+              <span className="edit-node-insights-score">{insightSummary.score}/100</span>
+              <span>{insightSummary.findingCount} finding{insightSummary.findingCount === 1 ? '' : 's'}</span>
+            </div>
+            {(insightSummary.topFindings || []).length > 0 && (
+              <div className="edit-node-insights-list">
+                {insightSummary.topFindings.slice(0, 3).map((finding) => (
+                  <div key={finding.id} className="edit-node-insight-item">
+                    <strong>{finding.title}</strong>
+                    <span>{finding.recommendation}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+
+        <Field label="Description">
+          <TextareaInput
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Page description (meta description)"
+            rows={3}
+          />
+        </Field>
+
+        <Field label="Meta Tags">
+          <TextareaInput
+            value={metaTags}
+            onChange={(event) => setMetaTags(event.target.value)}
+            placeholder="Meta keywords"
+            rows={2}
+          />
+        </Field>
+
+        <div className="edit-node-seo-section">
+          <div className="edit-node-section-title">SEO Metadata</div>
+          <Field label="Canonical URL">
+            <TextInput
+              type="url"
+              value={canonicalUrl}
+              onChange={(event) => setCanonicalUrl(event.target.value)}
+              placeholder="https://example.com/page"
+            />
+          </Field>
+          <div className="edit-node-form-grid">
+            <Field label="Meta Robots">
+              <TextInput
+                type="text"
+                value={robots}
+                onChange={(event) => setRobots(event.target.value)}
+                placeholder="index, follow"
+              />
+            </Field>
+            <Field label="HTML Language">
+              <TextInput
+                type="text"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+                placeholder="en"
+              />
+            </Field>
+          </div>
+          <Field label="H1">
+            <TextInput
+              type="text"
+              value={h1}
+              onChange={(event) => setH1(event.target.value)}
+              placeholder="Primary heading"
+            />
+          </Field>
+          <Field label="H2">
+            <TextInput
+              type="text"
+              value={h2}
+              onChange={(event) => setH2(event.target.value)}
+              placeholder="Secondary heading"
+            />
+          </Field>
+          <div className="edit-node-form-grid">
+            <Field label="Open Graph Title">
+              <TextInput
+                type="text"
+                value={openGraphTitle}
+                onChange={(event) => setOpenGraphTitle(event.target.value)}
+                placeholder="Social title"
+              />
+            </Field>
+            <Field label="Open Graph Type">
+              <TextInput
+                type="text"
+                value={openGraphType}
+                onChange={(event) => setOpenGraphType(event.target.value)}
+                placeholder="website"
+              />
+            </Field>
+          </div>
+          <Field label="Open Graph Description">
+            <TextareaInput
+              value={openGraphDescription}
+              onChange={(event) => setOpenGraphDescription(event.target.value)}
+              placeholder="Social description"
+              rows={2}
+            />
+          </Field>
+          <div className="edit-node-form-grid">
+            <Field label="Open Graph Image">
+              <TextInput
+                type="url"
+                value={openGraphImage}
+                onChange={(event) => setOpenGraphImage(event.target.value)}
+                placeholder="https://example.com/image.jpg"
+              />
+            </Field>
+            <Field label="Open Graph URL">
+              <TextInput
+                type="url"
+                value={openGraphUrl}
+                onChange={(event) => setOpenGraphUrl(event.target.value)}
+                placeholder="https://example.com/page"
+              />
+            </Field>
+          </div>
+          <div className="edit-node-form-grid">
+            <Field label="Twitter Card">
+              <TextInput
+                type="text"
+                value={twitterCard}
+                onChange={(event) => setTwitterCard(event.target.value)}
+                placeholder="summary_large_image"
+              />
+            </Field>
+            <Field label="Twitter Title">
+              <TextInput
+                type="text"
+                value={twitterTitle}
+                onChange={(event) => setTwitterTitle(event.target.value)}
+                placeholder="Twitter title"
+              />
+            </Field>
+          </div>
+          <Field label="Twitter Description">
+            <TextareaInput
+              value={twitterDescription}
+              onChange={(event) => setTwitterDescription(event.target.value)}
+              placeholder="Twitter description"
+              rows={2}
+            />
+          </Field>
+          <Field label="Twitter Image">
+            <TextInput
+              type="url"
+              value={twitterImage}
+              onChange={(event) => setTwitterImage(event.target.value)}
+              placeholder="https://example.com/image.jpg"
+            />
+          </Field>
+        </div>
+
+        <Field label="Marker">
+          <SelectInput
+            value={annotationStatus}
+            onChange={(event) => setAnnotationStatus(event.target.value)}
+          >
+            <option value="none">None</option>
+            {ANNOTATION_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </SelectInput>
+        </Field>
+
+        <Field
+          label="Tags"
+          hint="Optional labels for filtering and collaboration."
+        >
+          <TextInput
+            type="text"
+            value={annotationTags}
+            onChange={(event) => setAnnotationTags(event.target.value)}
+            placeholder="Comma-separated tags"
+          />
+        </Field>
+
+        <Field label="Note">
+          <TextareaInput
+            value={annotationNote}
+            onChange={(event) => setAnnotationNote(event.target.value)}
+            placeholder="Short note shown on the node"
+            rows={2}
+          />
+        </Field>
+      </form>
+    </Modal>
   );
 };
 
