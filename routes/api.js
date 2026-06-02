@@ -31,6 +31,7 @@ const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservabi
 const { buildHealthSnapshot: getEmailHealthSnapshot } = require('../utils/emailProvider');
 const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
 const { analyzeMapInsights } = require('../utils/mapInsights');
+const { recordUsageEvent } = require('../utils/usageMetering');
 const {
   extractScreenshotStorageKey,
   getContentTypeForKey,
@@ -60,6 +61,15 @@ const { buildMapScene, buildMapDisplaySummary, countMapNodes } = require('../uti
 
 const router = express.Router();
 const NODE_ASSET_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
+const CLIENT_USAGE_EVENT_TYPES = new Set([
+  'export_ai_site_brief',
+  'export_csv',
+  'export_json',
+  'export_pdf',
+  'export_png',
+  'export_site_index',
+  'export_report_pdf',
+]);
 
 function parseNodeAssetDataImage(imageDataUrl) {
   const match = String(imageDataUrl || '').match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
@@ -1615,6 +1625,23 @@ router.post('/feedback', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/usage-events - record client-side exports that do not hit backend download routes
+router.post('/usage-events', requireAuth, async (req, res) => {
+  try {
+    const eventType = String(req.body?.eventType || '').trim();
+    if (!CLIENT_USAGE_EVENT_TYPES.has(eventType)) {
+      return res.status(400).json({ error: 'Unsupported usage event type.' });
+    }
+    const quantityRaw = Number.parseInt(req.body?.quantity, 10);
+    const quantity = Number.isFinite(quantityRaw) ? Math.min(Math.max(quantityRaw, 1), 10000) : 1;
+    recordUsageEvent(req, eventType, quantity, req.body?.meta || null);
+    return res.status(202).json({ ok: true });
+  } catch (error) {
+    console.error('Record client usage event error:', error);
+    return res.status(500).json({ error: 'Failed to record usage event.' });
+  }
+});
+
 // ============================================
 // ADMIN / USAGE
 // ============================================
@@ -1777,6 +1804,9 @@ router.post('/projects', requireAuth, async (req, res) => {
       name: name.trim(),
     });
     const project = await projectStore.getProjectByIdAsync(projectId);
+    recordUsageEvent(req, 'project_created', 1, {
+      projectId,
+    });
 
     res.json({ project: { ...project, map_count: 0 } });
   } catch (error) {
@@ -2108,6 +2138,13 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
     if (files.length === 1) {
       const file = files[0];
       const filename = file.path.split('/').pop() || `${packageName}.jpg`;
+      recordUsageEvent(req, 'download_images', 1, {
+        mapId: id,
+        scope,
+        packageType: 'single',
+        fileCount: files.length,
+        bytes: file.buffer.length,
+      });
       res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
       res.setHeader('Content-Disposition', buildContentDisposition(filename));
       res.setHeader('Content-Length', file.buffer.length);
@@ -2127,6 +2164,13 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
       })),
     ]);
     const zipBuffer = createZipBuffer(zipEntries);
+    recordUsageEvent(req, 'download_images', 1, {
+      mapId: id,
+      scope,
+      packageType: 'zip',
+      fileCount: files.length,
+      bytes: zipBuffer.length,
+    });
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', buildContentDisposition(`${packageName}.zip`));
     res.setHeader('Content-Length', zipBuffer.length);
@@ -2232,6 +2276,7 @@ router.post('/maps', requireAuth, async (req, res) => {
 
     const mapId = uuidv4();
     const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
+    const pageCount = countMapNodes(sanitizedTree.root, sanitizedTree.orphans);
 
     await mapStore.createMapAsync({
       id: mapId,
@@ -2253,6 +2298,11 @@ router.post('/maps', requireAuth, async (req, res) => {
     const savedInitialVersion = initialVersion
       ? await mapStore.getMapVersionByIdAsync(initialVersion.id)
       : null;
+    recordUsageEvent(req, 'map_created', 1, {
+      mapId,
+      projectId: normalizedProjectId || null,
+      pageCount,
+    });
 
     res.json({
       map: {
@@ -2377,6 +2427,10 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
 
     const sanitizedTree = sanitizeMapTreeForStorage({ root: treeRoot, orphans: treeOrphans });
+    const updatedPageCount = countMapNodes(
+      sanitizedTree.root || safeParse(map.root_data, 'root_data', null),
+      orphans !== undefined ? sanitizedTree.orphans : safeParse(map.orphans_data, 'orphans_data', [])
+    );
     if (root !== undefined) {
       patch.rootData = JSON.stringify(sanitizedTree.root);
     }
@@ -2421,6 +2475,12 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
     }
 
     const updated = await mapStore.getMapByIdAsync(id);
+    recordUsageEvent(req, 'map_updated', 1, {
+      mapId: id,
+      projectId: patch.projectId ?? map.project_id ?? null,
+      pageCount: updatedPageCount,
+      staleImageNodeCount: staleImageNodeIds.length,
+    });
 
     res.json({
       map: {
@@ -2873,6 +2933,13 @@ router.post('/maps/:id/comments', requireAuth, async (req, res) => {
       },
     }, { label: 'map comment create' });
 
+    recordUsageEvent(req, 'comment_created', 1, {
+      mapId: id,
+      nodeId,
+      isReply: Boolean(parentCommentId),
+      commentId: createdComment.id,
+    });
+
     res.status(201).json({ comment: serializeMapComment(createdComment) });
   } catch (error) {
     console.error('Create map comment error:', error);
@@ -3285,6 +3352,13 @@ router.post('/shares', requireAuth, async (req, res) => {
       expiresAt,
     });
 
+    recordUsageEvent(req, 'share_created', 1, {
+      mapId: map_id || null,
+      shareId,
+      pages: countMapNodes(sanitizedTree.root, sanitizedTree.orphans),
+      expiresAt,
+    });
+
     res.json({
       share: {
         id: shareId,
@@ -3334,6 +3408,10 @@ router.get('/shares/:id', async (req, res) => {
 
     // Increment view count
     await shareStore.incrementShareViewCountAsync(id);
+    recordUsageEvent(req, 'share_viewed', 1, {
+      mapId: share.map_id || null,
+      shareId: id,
+    });
 
     res.json({
       share: {

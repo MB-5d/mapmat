@@ -11,6 +11,14 @@ jest.mock('./LandingPage', () => function MockLandingPage() {
   return <div>Marketing surface</div>;
 });
 
+jest.mock('./marketing/MarketingSite', () => function MockMarketingSite() {
+  return <div>Marketing preview surface</div>;
+});
+
+jest.mock('./marketing/MarketingPreviewV2', () => function MockMarketingPreviewV2() {
+  return <div>Marketing preview v2 surface</div>;
+});
+
 jest.mock('./components/admin/AdminConsole', () => function MockAdminConsole() {
   return <div>Admin surface</div>;
 });
@@ -95,6 +103,38 @@ describe('RootApp device support gate', () => {
     renderRoot();
 
     expect(container.textContent).toContain('Marketing surface');
+    expect(container.textContent).not.toContain('Use desktop or tablet landscape');
+  });
+
+  test('keeps the marketing preview available on phone-sized screens', () => {
+    window.history.pushState({}, '', '/marketing-preview/features');
+    setViewport({
+      width: 390,
+      height: 844,
+      userAgent: IPHONE_UA,
+      maxTouchPoints: 5,
+      coarsePointer: true,
+    });
+
+    renderRoot();
+
+    expect(container.textContent).toContain('Marketing preview surface');
+    expect(container.textContent).not.toContain('Use desktop or tablet landscape');
+  });
+
+  test('keeps the marketing preview v2 available on phone-sized screens', () => {
+    window.history.pushState({}, '', '/marketing-preview-v2/features');
+    setViewport({
+      width: 390,
+      height: 844,
+      userAgent: IPHONE_UA,
+      maxTouchPoints: 5,
+      coarsePointer: true,
+    });
+
+    renderRoot();
+
+    expect(container.textContent).toContain('Marketing preview v2 surface');
     expect(container.textContent).not.toContain('Use desktop or tablet landscape');
   });
 

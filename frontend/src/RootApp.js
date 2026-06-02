@@ -5,6 +5,8 @@ import AdminConsole from './components/admin/AdminConsole';
 import ConsentDrawer from './components/consent/ConsentDrawer';
 import ConsentSettingsModal from './components/consent/ConsentSettingsModal';
 import LandingPage from './LandingPage';
+import MarketingPreviewV2 from './marketing/MarketingPreviewV2';
+import MarketingSite from './marketing/MarketingSite';
 import { initAnalytics, trackPageView } from './utils/analytics';
 import { useConsent } from './contexts/ConsentContext';
 import {
@@ -75,7 +77,7 @@ function RootApp() {
   }, [navigateToRoute, route.accessLevel, route.legacyShareQuery, route.orientation, route.shareId]);
 
   useEffect(() => {
-    if (!APP_ONLY_MODE || route.surface !== ROUTE_SURFACES.WEBSITE) return;
+    if (!APP_ONLY_MODE || ![ROUTE_SURFACES.WEBSITE, ROUTE_SURFACES.MARKETING].includes(route.surface)) return;
     navigateToRoute(createAppHomeRoute(), { replace: true });
   }, [navigateToRoute, route.surface]);
 
@@ -103,6 +105,24 @@ function RootApp() {
     return (
       <>
         <LandingPage onLaunchApp={() => navigateToRoute(createAppHomeRoute())} />
+        {consentUi}
+      </>
+    );
+  }
+
+  if (route.surface === ROUTE_SURFACES.MARKETING) {
+    if (APP_ONLY_MODE) return null;
+    if (route.marketingPreviewVersion === 'v2') {
+      return (
+        <>
+          <MarketingPreviewV2 route={route} navigateToRoute={navigateToRoute} />
+          {consentUi}
+        </>
+      );
+    }
+    return (
+      <>
+        <MarketingSite route={route} navigateToRoute={navigateToRoute} />
         {consentUi}
       </>
     );

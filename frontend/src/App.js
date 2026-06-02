@@ -86,6 +86,7 @@ import {
   getMapNameConflictMessage,
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import { getValidScanPrefillOptions, getValidScanPrefillUrl } from './utils/scanPrefill';
 import { getCenteredNodeTransform as getCenteredCanvasNodeTransform } from './utils/canvasView';
 import { normalizeWorldBounds as normalizeCanvasWorldBounds } from './utils/canvasBounds';
 import {
@@ -2230,6 +2231,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     const access = currentRoute?.surface === ROUTE_SURFACES.SHARE ? currentRoute?.accessLevel : null;
     return Object.values(ACCESS_LEVELS).includes(access) ? access : null;
   });
+  useEffect(() => {
+    const prefillUrl = getValidScanPrefillUrl(currentRoute);
+    if (!prefillUrl) return;
+    const prefillOptions = getValidScanPrefillOptions(currentRoute);
+    const prefillKey = `${currentRoute?.pathname || ''}|${prefillUrl}|${JSON.stringify(prefillOptions)}`;
+    if (scanPrefillAppliedRef.current === prefillKey) return;
+    scanPrefillAppliedRef.current = prefillKey;
+    setUrlInput((current) => current.trim() ? current : prefillUrl);
+    if (Object.keys(prefillOptions).length) {
+      setScanOptions((current) => ({ ...current, ...prefillOptions }));
+    }
+  }, [currentRoute]);
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
   const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
@@ -2513,6 +2526,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const thumbnailStopRequestedRef = useRef(false);
   const screenshotStopRequestedRef = useRef(false);
   const thumbnailSessionRef = useRef(0);
+  const scanPrefillAppliedRef = useRef('');
   const thumbnailElapsedStartRef = useRef(0);
   const thumbnailElapsedTimerRef = useRef(null);
   const thumbnailAutosaveTimerRef = useRef(null);
@@ -11102,9 +11116,31 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [root, zoomAtClientPoint, getZoomBounds]);
 
+  const getUsagePageCount = useCallback(() => {
+    if (!root) return 0;
+    return countNodes(root) + (Array.isArray(orphans)
+      ? orphans.reduce((total, orphan) => total + countNodes(orphan), 0)
+      : 0);
+  }, [orphans, root]);
+
+  const recordExportUsage = useCallback((eventType, meta = {}) => {
+    api.recordClientUsage(eventType, {
+      mapId: currentMap?.id || null,
+      pageCount: getUsagePageCount(),
+      ...meta,
+    }).catch((error) => {
+      console.warn('Export usage record error:', error?.message || error);
+    });
+  }, [currentMap?.id, getUsagePageCount]);
+
   const exportJson = () => {
     if (!root) return;
-    downloadText('sitemap.json', JSON.stringify({ root, colors, connectionColors }, null, 2));
+    const content = JSON.stringify({ root, colors, connectionColors }, null, 2);
+    downloadText('sitemap.json', content);
+    recordExportUsage('export_json', {
+      format: 'json',
+      bytes: new Blob([content]).size,
+    });
     showToast('Downloaded JSON');
   };
 
@@ -11148,6 +11184,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     ]);
 
     downloadBlob(`${baseFilename}.zip`, zipBlob);
+    recordExportUsage('export_ai_site_brief', {
+      format: 'zip',
+      bytes: zipBlob.size,
+      rows: rows.length,
+      packageFiles: 4,
+    });
     showToast('Downloaded AI Site Brief package');
   };
 
@@ -11211,7 +11253,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       ].join(','))
     ];
 
-    downloadText('sitemap.csv', csvRows.join('\n'));
+    const content = csvRows.join('\n');
+    downloadText('sitemap.csv', content);
+    recordExportUsage('export_csv', {
+      format: 'csv',
+      bytes: new Blob([content]).size,
+      rows: rows.length,
+    });
     showToast('Downloaded CSV');
   };
 
@@ -11346,6 +11394,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       const hostname = getHostname(root.url) || 'download';
       pdf.save(`sitemap-${hostname}.pdf`);
+      recordExportUsage('export_pdf', {
+        format: 'pdf',
+        width: imgWidth,
+        height: imgHeight,
+      });
       showToast('PDF downloaded successfully', 'success');
     } catch (e) {
       console.error('PDF export error:', e);
@@ -11439,6 +11492,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
 
       pdf.save('scan-report.pdf');
+      recordExportUsage('export_report_pdf', {
+        format: 'pdf',
+        rows: reportRows.length,
+        reportPages: reportStats.total,
+      });
       showToast('Report downloaded', 'success');
     } catch (error) {
       console.error('Report download error:', error);
@@ -11531,6 +11589,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     document.body.removeChild(link);
     // Delay URL revocation to allow download to start
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    recordExportUsage('export_site_index', {
+      format: 'doc',
+      bytes: blob.size,
+      rows: rows.length,
+    });
     showToast('Site Index downloaded', 'success');
   };
 
@@ -11707,6 +11770,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       link.href = dataUrl;
       link.click();
 
+      recordExportUsage('export_png', {
+        format: 'png',
+        width: exportWidth,
+        height: exportHeight,
+        bytes: dataUrl.length,
+      });
       showToast('PNG downloaded successfully', 'success');
     } catch (e) {
       console.error('PNG export error:', e);

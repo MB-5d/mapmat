@@ -21,6 +21,7 @@ const {
   queueMembershipRoleChangedEmailAsync,
   queueMembershipRemovedEmailAsync,
 } = require('../utils/emailDelivery');
+const { recordUsageEvent } = require('../utils/usageMetering');
 
 const router = express.Router();
 
@@ -760,6 +761,12 @@ router.post('/maps/:id/access-requests', async (req, res) => {
       'access request create'
     );
 
+    recordUsageEvent(req, 'access_request_created', 1, {
+      mapId: id,
+      requestId: request.id,
+      requestedRole,
+    });
+
     res.status(201).json({
       accessRequest: serializeAccessRequest(request),
       emailDeliveries: emailDeliveries.map(serializeQueuedDeliverySummary).filter(Boolean),
@@ -867,6 +874,14 @@ router.patch('/maps/:id/access-requests/:requestId', async (req, res) => {
       }),
       'access request review'
     );
+
+    recordUsageEvent(req, 'access_request_decided', 1, {
+      mapId: id,
+      requestId,
+      status: decisionStatus,
+      role: decisionRole,
+      membershipId: membership?.id || null,
+    });
 
     res.json({
       accessRequest: serializeAccessRequest(decidedRequest),
@@ -1074,6 +1089,13 @@ router.post('/maps/:id/invites', async (req, res) => {
       console.error('Queue invite email error:', emailError);
     }
 
+    recordUsageEvent(req, 'invite_created', 1, {
+      mapId: id,
+      inviteId: invite.id,
+      role: inviteRole,
+      emailQueued: Boolean(emailDelivery),
+    });
+
     res.json({
       invite: serializeInvite(invite, { includeToken: true }),
       emailDelivery,
@@ -1131,6 +1153,12 @@ router.post('/collaboration/invites/id/:inviteId/accept', async (req, res) => {
     const { inviteId } = req.params;
     const invite = await collaborationStore.getInviteByIdAsync(inviteId);
     const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
+    recordUsageEvent(req, 'invite_accepted', 1, {
+      mapId: acceptedInvite.map_id,
+      inviteId: acceptedInvite.id,
+      membershipId: membership?.id || null,
+      role: membership?.role || acceptedInvite.role || null,
+    });
 
     res.json({
       success: true,
@@ -1178,6 +1206,12 @@ router.post('/collaboration/invites/:token/accept', async (req, res) => {
     if (!invite) return res.status(404).json({ error: 'Invite not found' });
 
     const { invite: acceptedInvite, membership } = await acceptInviteForUserAsync(invite, req.user);
+    recordUsageEvent(req, 'invite_accepted', 1, {
+      mapId: acceptedInvite.map_id,
+      inviteId: acceptedInvite.id,
+      membershipId: membership?.id || null,
+      role: membership?.role || acceptedInvite.role || null,
+    });
 
     res.json({
       success: true,
@@ -1232,6 +1266,11 @@ router.delete('/maps/:id/invites/:inviteId', async (req, res) => {
           role: invite.role,
         },
       }, { label: 'invite revoke' });
+      recordUsageEvent(req, 'invite_revoked', 1, {
+        mapId: id,
+        inviteId: invite.id,
+        role: invite.role,
+      });
     }
     res.json({ success: true });
   } catch (error) {
@@ -1321,6 +1360,16 @@ router.patch('/maps/:id/members/:userId', async (req, res) => {
       )
       : [];
 
+    if (!existingMembership || existingMembership.role !== normalizedRole) {
+      recordUsageEvent(req, existingMembership ? 'membership_updated' : 'membership_added', 1, {
+        mapId: id,
+        membershipId: membership.id,
+        userId,
+        previousRole: existingMembership?.role || null,
+        role: normalizedRole,
+      });
+    }
+
     res.json({
       membership: serializeMembership(membership),
       emailDeliveries: membershipEmailDeliveries.map(serializeQueuedDeliverySummary).filter(Boolean),
@@ -1390,6 +1439,13 @@ router.delete('/maps/:id/members/:userId', async (req, res) => {
       }),
       'membership delete'
     );
+
+    recordUsageEvent(req, 'membership_removed', 1, {
+      mapId: id,
+      membershipId: membership.id,
+      userId,
+      previousRole: membership.role,
+    });
 
     res.json({
       success: true,

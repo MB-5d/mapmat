@@ -1,5 +1,18 @@
+import {
+  buildMarketingPath,
+  getMarketingPageById,
+  getMarketingPageByPathname,
+} from '../marketing/marketingConfig';
+import {
+  MARKETING_PREVIEW_V2_VERSION,
+  buildMarketingPreviewV2Path,
+  getMarketingPreviewV2SectionById,
+  getMarketingPreviewV2SectionByPathname,
+} from '../marketing/marketingPreviewV2Config';
+
 export const ROUTE_SURFACES = Object.freeze({
   WEBSITE: 'website',
+  MARKETING: 'marketing',
   APP: 'app',
   SHARE: 'share',
   ADMIN: 'admin',
@@ -47,6 +60,8 @@ export function parseCurrentRoute(locationLike = window.location) {
   const legacyShareId = searchParams.get('share');
   const legacyAccess = searchParams.get('access');
   const orientation = parseMapOrientation(searchParams);
+  const marketingPreviewV2Section = getMarketingPreviewV2SectionByPathname(pathname);
+  const marketingPage = getMarketingPageByPathname(pathname);
 
   if (legacyShareId) {
     return {
@@ -156,6 +171,29 @@ export function parseCurrentRoute(locationLike = window.location) {
     };
   }
 
+  if (marketingPreviewV2Section) {
+    return {
+      surface: ROUTE_SURFACES.MARKETING,
+      marketingPreviewVersion: MARKETING_PREVIEW_V2_VERSION,
+      pathname,
+      search,
+      searchParams,
+      marketingPageId: marketingPreviewV2Section.id,
+      section: marketingPreviewV2Section.id,
+    };
+  }
+
+  if (marketingPage) {
+    return {
+      surface: ROUTE_SURFACES.MARKETING,
+      pathname,
+      search,
+      searchParams,
+      marketingPageId: marketingPage.id,
+      section: marketingPage.id,
+    };
+  }
+
   return {
     surface: ROUTE_SURFACES.WEBSITE,
     pathname,
@@ -169,6 +207,13 @@ export function buildRouteUrl(route) {
 
   if (!route || route.surface === ROUTE_SURFACES.WEBSITE) {
     return '/';
+  }
+
+  if (route.surface === ROUTE_SURFACES.MARKETING) {
+    if (route.marketingPreviewVersion === MARKETING_PREVIEW_V2_VERSION) {
+      return buildMarketingPreviewV2Path(route.marketingPageId || route.section || 'home', route.search || '');
+    }
+    return buildMarketingPath(route.marketingPageId || route.section || 'overview', route.search || '');
   }
 
   if (route.surface === ROUTE_SURFACES.SHARE) {
@@ -208,6 +253,27 @@ export function buildRouteUrl(route) {
 
 export function createAppHomeRoute() {
   return { surface: ROUTE_SURFACES.APP, section: 'home', mapId: null };
+}
+
+export function createMarketingRoute(marketingPageId = 'overview', search = '') {
+  const page = getMarketingPageById(marketingPageId);
+  return {
+    surface: ROUTE_SURFACES.MARKETING,
+    section: page.id,
+    marketingPageId: page.id,
+    search,
+  };
+}
+
+export function createMarketingPreviewV2Route(marketingSectionId = 'home', search = '') {
+  const section = getMarketingPreviewV2SectionById(marketingSectionId);
+  return {
+    surface: ROUTE_SURFACES.MARKETING,
+    marketingPreviewVersion: MARKETING_PREVIEW_V2_VERSION,
+    section: section.id,
+    marketingPageId: section.id,
+    search,
+  };
 }
 
 export function createAdminHomeRoute() {

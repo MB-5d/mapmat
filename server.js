@@ -6527,7 +6527,7 @@ app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res
 
 function registerImageCaptureRoutes(targetApp) {
   // Bulk image capture job for thumbnails and full screenshots.
-  targetApp.post('/api/maps/:id/image-capture-jobs', authMiddleware, requireAuth, async (req, res) => {
+  targetApp.post('/api/maps/:id/image-capture-jobs', authMiddleware, requireAuth, enforceUsageLimit('screenshot_job'), async (req, res) => {
     const { id } = req.params;
     const captureType = normalizeScreenshotType(req.body?.captureType || req.body?.type);
     if (!captureType) {
@@ -6706,7 +6706,7 @@ function registerImageCaptureRoutes(targetApp) {
 
 // Screenshot endpoint - captures full-page screenshot
 // Note: Playwright requires browser binaries which may not be available on all hosts
-app.get('/screenshot', authMiddleware, requireApiKey, async (req, res) => {
+app.get('/screenshot', authMiddleware, requireApiKey, enforceUsageLimit('screenshot'), async (req, res) => {
   const { url, authSessionId } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
   const screenshotType = normalizeScreenshotType(req.query?.type);
@@ -6793,7 +6793,7 @@ app.post('/screenshot-assets/validate', authMiddleware, requireApiKey, async (re
 });
 
 // Background screenshot jobs
-app.post('/screenshot-jobs', authMiddleware, requireApiKey, async (req, res) => {
+app.post('/screenshot-jobs', authMiddleware, requireApiKey, enforceUsageLimit('screenshot_job'), async (req, res) => {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
   const screenshotType = normalizeScreenshotType(req.body?.type);

@@ -1,6 +1,8 @@
 import runtimePalettes from './runtimePalettes.json';
 
 export const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
+export const APP_ORIGIN = String(process.env.REACT_APP_APP_ORIGIN || 'https://app.vellic.io').replace(/\/+$/, '');
+export const MARKETING_ORIGIN = String(process.env.REACT_APP_MARKETING_ORIGIN || 'https://vellic.io').replace(/\/+$/, '');
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;

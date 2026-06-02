@@ -355,6 +355,18 @@ export async function getAdminImageAssetsDiagnostics({
   return fetchAdminApi(`/api/admin/image-assets?${params.toString()}`);
 }
 
+export async function getAdminUsageCosts({
+  days = 30,
+  userId = '',
+  mapId = '',
+} = {}) {
+  const params = new URLSearchParams();
+  if (days !== undefined && days !== null) params.set('days', String(days));
+  if (userId) params.set('userId', userId);
+  if (mapId) params.set('mapId', mapId);
+  return fetchAdminApi(`/api/admin/usage-costs?${params.toString()}`);
+}
+
 export async function getAdminFeedback({
   query = '',
   limit = 100,
@@ -430,6 +442,13 @@ export async function submitFeedback(payload = {}) {
   return fetchApi('/api/feedback', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function recordClientUsage(eventType, meta = {}, quantity = 1) {
+  return fetchApi('/api/usage-events', {
+    method: 'POST',
+    body: JSON.stringify({ eventType, quantity, meta }),
   });
 }
 

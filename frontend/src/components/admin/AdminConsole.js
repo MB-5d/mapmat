@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  DollarSign,
   HardDrive,
   KeyRound,
   Loader2,
@@ -22,6 +23,7 @@ import './AdminConsole.css';
 import AccountDrawer from '../drawers/AccountDrawer';
 import Avatar from '../ui/Avatar';
 import FeedbackConsole from './FeedbackConsole';
+import UsageCostConsole from './UsageCostConsole';
 import {
   adminDisableUser,
   adminReactivateUser,
@@ -848,6 +850,13 @@ function AdminConsole({ route, navigateToRoute }) {
     }
   }
 
+  function handleShowUsage() {
+    setActivePanel('usage');
+    if (route?.section === 'user') {
+      navigateToRoute(createAdminHomeRoute(), { replace: true });
+    }
+  }
+
   function handleShowStorage() {
     setActivePanel('storage');
     if (route?.section === 'user') {
@@ -966,6 +975,16 @@ function AdminConsole({ route, navigateToRoute }) {
               >
                 <MessageSquare size={16} />
                 Feedback
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activePanel === 'usage'}
+                className={`admin-console-surface-tab ${activePanel === 'usage' ? 'is-active' : ''}`}
+                onClick={handleShowUsage}
+              >
+                <DollarSign size={16} />
+                Usage & Costs
               </button>
               <button
                 type="button"
@@ -1161,6 +1180,8 @@ function AdminConsole({ route, navigateToRoute }) {
           </section>
         ) : activePanel === 'feedback' ? (
           <FeedbackConsole onSessionExpired={handleSessionExpired} />
+        ) : activePanel === 'usage' ? (
+          <UsageCostConsole onSessionExpired={handleSessionExpired} />
         ) : (
           <StorageDiagnosticsPanel onSessionExpired={handleSessionExpired} />
         )}

@@ -3,9 +3,11 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const authStore = require('../stores/authStore');
 const adminAuditStore = require('../stores/adminAuditStore');
+const adminUsageStore = require('../stores/adminUsageStore');
 const feedbackStore = require('../stores/feedbackStore');
 const imageAssetStore = require('../stores/imageAssetStore');
 const mapStore = require('../stores/mapStore');
+const { estimateUsageCosts } = require('../utils/usageCostModel');
 const {
   SCREENSHOT_PUBLIC_BASE,
   extractScreenshotStorageKey,
@@ -689,6 +691,54 @@ router.get('/image-assets', async (req, res) => {
   } catch (error) {
     console.error('Admin image asset diagnostics error:', error);
     return res.status(500).json({ error: 'Failed to load image asset diagnostics.' });
+  }
+});
+
+router.get('/usage-costs', async (req, res) => {
+  try {
+    const daysRaw = Number.parseInt(req.query?.days, 10);
+    const days = Number.isFinite(daysRaw) ? Math.min(Math.max(daysRaw, 1), 365) : 30;
+    const userId = String(req.query?.userId || '').trim();
+    const mapId = String(req.query?.mapId || '').trim();
+    const summary = await adminUsageStore.buildAdminUsageSummaryAsync({
+      days,
+      since: req.query?.since,
+      until: req.query?.until,
+      userId,
+      mapId,
+    });
+    const costs = estimateUsageCosts({
+      days: summary.range.days,
+      eventBreakdown: summary.events.byType.reduce((acc, row) => {
+        acc[row.eventType] = row;
+        return acc;
+      }, {}),
+      summary: summary.summary,
+    });
+
+    return res.json({
+      generatedAt: new Date().toISOString(),
+      ...summary,
+      costs: {
+        currency: costs.config.currency || 'USD',
+        totalUsd: costs.totalUsd,
+        fixedUsd: costs.fixedUsd,
+        variableUsd: costs.variableUsd,
+        categories: costs.categories,
+      },
+      assumptions: {
+        updatedAt: costs.config.updatedAt || null,
+        configPath: costs.config.configPath || null,
+        configError: costs.config.configError || null,
+        fixedMonthlyUsd: costs.config.fixedMonthlyUsd || {},
+        ratesUsd: costs.config.ratesUsd || {},
+        notes: Array.isArray(costs.config.notes) ? costs.config.notes : [],
+        sources: Array.isArray(costs.config.sources) ? costs.config.sources : [],
+      },
+    });
+  } catch (error) {
+    console.error('Admin usage cost summary error:', error);
+    return res.status(500).json({ error: 'Failed to load usage cost summary.' });
   }
 });
 
