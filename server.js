@@ -754,18 +754,20 @@ const checkUsageLimit = async (req, eventType) => {
   return { allowed: true, limit, used };
 };
 
-const enforceUsageLimit = (eventType) => async (req, res, next) => {
-  const check = await checkUsageLimit(req, eventType);
-  if (!check.allowed) {
-    return res.status(429).json({
-      error: 'Usage limit exceeded',
-      eventType,
-      limit: check.limit,
-      used: check.used,
-    });
-  }
-  return next();
-};
+function enforceUsageLimit(eventType) {
+  return async (req, res, next) => {
+    const check = await checkUsageLimit(req, eventType);
+    if (!check.allowed) {
+      return res.status(429).json({
+        error: 'Usage limit exceeded',
+        eventType,
+        limit: check.limit,
+        used: check.used,
+      });
+    }
+    return next();
+  };
+}
 
 const scanLimiter = createRateLimiter({ windowMs: SCAN_RATE_WINDOW_MS, max: SCAN_RATE_LIMIT, name: 'scan' });
 const processScreenshotQueue = () => {
