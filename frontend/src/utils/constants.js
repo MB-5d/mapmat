@@ -1,6 +1,14 @@
 import runtimePalettes from './runtimePalettes.json';
 
-export const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
+const normalizeOrigin = (value) => String(value || '').replace(/\/+$/, '');
+const CONFIGURED_API_BASE = normalizeOrigin(process.env.REACT_APP_API_BASE || 'http://localhost:4002');
+const STAGING_API_FALLBACK = 'https://mapmat-staging.up.railway.app';
+const isStagingFrontend = typeof window !== 'undefined'
+  && window.location?.hostname === 'staging.vellic.io';
+
+export const API_BASE = isStagingFrontend && CONFIGURED_API_BASE === 'https://api-staging.vellic.io'
+  ? STAGING_API_FALLBACK
+  : CONFIGURED_API_BASE;
 export const APP_ORIGIN = String(process.env.REACT_APP_APP_ORIGIN || 'https://app.vellic.io').replace(/\/+$/, '');
 export const MARKETING_ORIGIN = String(process.env.REACT_APP_MARKETING_ORIGIN || 'https://vellic.io').replace(/\/+$/, '');
 
