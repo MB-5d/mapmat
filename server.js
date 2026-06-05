@@ -3890,6 +3890,20 @@ function countScanTreeNodes(node) {
   return 1 + (node.children || []).reduce((sum, child) => sum + countScanTreeNodes(child), 0);
 }
 
+function isUnavailableRootOnlyScan(root, treeNodeCount) {
+  if (!root || treeNodeCount > 1) return false;
+  const scanStatus = String(root.scanStatus || '').trim();
+  const httpStatus = Number(root.httpStatus || root.statusCode || root.errorStatus || 0);
+  return Boolean(
+    root.authRequired
+    || root.isError
+    || root.isInactive
+    || root.blockedReason
+    || ['auth', 'scan_limited', 'error', 'inactive'].includes(scanStatus)
+    || httpStatus >= 400
+  );
+}
+
 function normalizeScanOptions(options = {}) {
   return {
     thumbnails: Boolean(options.thumbnails),
@@ -5082,6 +5096,19 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       collapseReason: scanDiagnostics.collapseReason,
       treeNodeCount: scanDiagnostics.treeNodeCount,
       pageMapCount: scanDiagnostics.pageMapCount,
+    });
+  }
+  if (!partialReason && isUnavailableRootOnlyScan(root, scanDiagnostics.treeNodeCount)) {
+    partialReason = 'root_discovery_failed';
+    scanDiagnostics.collapseReason = root?.blockedReason
+      || root?.scanStatus
+      || (root?.httpStatus ? `http_${root.httpStatus}` : 'root_unavailable');
+    console.warn('[scan] Root unavailable with one-node result:', {
+      seed,
+      collapseReason: scanDiagnostics.collapseReason,
+      treeNodeCount: scanDiagnostics.treeNodeCount,
+      rootStatus: scanDiagnostics.rootStatus,
+      rootClassification: scanDiagnostics.rootClassification,
     });
   }
 

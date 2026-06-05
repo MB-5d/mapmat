@@ -138,6 +138,9 @@ function createFixtureServer(mode) {
     if (url.pathname === '/one-page') {
       return send(200, '<title>One Page</title>');
     }
+    if (url.pathname === '/access-denied') {
+      return send(403, '<title>Access Denied</title><h1>Access Denied</h1>');
+    }
 
     return send(404, '<title>Not Found</title>');
   });
@@ -220,6 +223,16 @@ async function runCheck() {
     assert.strictEqual(countTree(onePageResult.root), 1, 'true one-page scan should stay one node');
     assert.notStrictEqual(onePageResult.partialReason, 'scan_collapsed', 'true one-page scan should not be marked collapsed');
     assert.notStrictEqual(onePageResult.partialReason, 'root_discovery_failed', 'true one-page scan should not be marked discovery failed');
+  });
+
+  await withFixture('access-denied', async (base) => {
+    const deniedResult = await scan(`${base}/access-denied`);
+    assert.strictEqual(countTree(deniedResult.root), 1, 'blocked root should not invent child nodes');
+    assert.strictEqual(deniedResult.partialReason, 'root_discovery_failed', 'blocked root-only scan should be marked degraded');
+    assert(
+      ['auth_required', 'crawler_limited', 'scan_limited'].includes(deniedResult.scanDiagnostics?.collapseReason),
+      'blocked root should expose the access reason'
+    );
   });
   console.log('scan collapse fixture ok');
 }
