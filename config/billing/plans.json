@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "fallbackPlan": "free",
+  "trialDefaults": {
+    "fallbackPlan": "free",
+    "basePlan": "solo",
+    "personalDays": 7,
+    "teamDays": 7,
+    "teamSeatCap": 4,
+    "screenshotCredits": 15,
+    "organizedScreenshotExports": 15,
+    "teamRoles": ["owner", "editor", "commenter", "viewer"]
+  },
+  "retentionDefaults": {
+    "archiveDownloadWindowDays": 30,
+    "largeAssetRetentionDays": 30,
+    "lightweightDataRetentionMonths": 12
+  },
+  "meters": {
+    "crawl_pages": "Crawl pages",
+    "screenshot_credits": "Screenshot credits",
+    "organized_exports": "Organized screenshot exports"
+  },
+  "screenshotCreditCosts": {
+    "desktop_viewport": 1,
+    "mobile_viewport": 1,
+    "desktop_mobile_viewport_pair": 2,
+    "desktop_full_page": 3,
+    "mobile_full_page": 2,
+    "desktop_mobile_full_page_pair": 5
+  },
+  "stripe": {
+    "portalConfigurationEnv": "STRIPE_BILLING_PORTAL_CONFIGURATION_ID",
+    "plans": {
+      "solo": {
+        "priceEnv": "STRIPE_PRICE_SOLO_MONTHLY",
+        "interval": "month"
+      },
+      "pro": {
+        "priceEnv": "STRIPE_PRICE_PRO_MONTHLY",
+        "interval": "month"
+      },
+      "studio": {
+        "priceEnv": "STRIPE_PRICE_STUDIO_MONTHLY",
+        "interval": "month"
+      },
+      "agency": {
+        "priceEnv": "STRIPE_PRICE_AGENCY_MONTHLY",
+        "interval": "month"
+      }
+    },
+    "addOns": {
+      "crawl_pages_1000": {
+        "name": "1,000 crawl pages",
+        "priceEnv": "STRIPE_PRICE_CRAWL_PAGES_1000",
+        "mode": "payment",
+        "meter": "crawl_pages",
+        "quantity": 1000,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_credits_25": {
+        "name": "25 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_CREDITS_25",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 25,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_credits_50": {
+        "name": "50 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_CREDITS_50",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 50,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_credits_100": {
+        "name": "100 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_CREDITS_100",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 100,
+        "resetBehavior": "rollover"
+      },
+      "organized_exports_10": {
+        "name": "10 organized exports",
+        "priceEnv": "STRIPE_PRICE_ORGANIZED_EXPORTS_10",
+        "mode": "payment",
+        "meter": "organized_exports",
+        "quantity": 10,
+        "resetBehavior": "rollover"
+      },
+      "seat_1": {
+        "name": "1 extra seat",
+        "priceEnv": "STRIPE_PRICE_EXTRA_SEAT_1",
+        "mode": "payment",
+        "meter": "seats",
+        "quantity": 1,
+        "resetBehavior": "rollover"
+      }
+    }
+  },
+  "plans": {
+    "free": {
+      "key": "free",
+      "name": "Free",
+      "paid": false,
+      "limits": {
+        "activeProjects": 1,
+        "crawlPages": 100,
+        "scanPagesPerRun": 25,
+        "screenshotCredits": 0,
+        "organizedScreenshotExports": 0,
+        "seats": 1
+      },
+      "features": {
+        "limitedExports": true,
+        "standardExports": false,
+        "advancedExports": false,
+        "clientShareLinks": false,
+        "brandedReports": false,
+        "scheduledRescans": false,
+        "priorityQueue": false,
+        "clientWorkspaces": false
+      }
+    },
+    "solo": {
+      "key": "solo",
+      "name": "Solo",
+      "paid": true,
+      "limits": {
+        "activeProjects": 5,
+        "crawlPages": 1000,
+        "screenshotCredits": 100,
+        "organizedScreenshotExports": 2,
+        "seats": 1
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": false,
+        "clientShareLinks": false,
+        "brandedReports": false,
+        "scheduledRescans": false,
+        "priorityQueue": false,
+        "clientWorkspaces": false
+      }
+    },
+    "pro": {
+      "key": "pro",
+      "name": "Pro",
+      "paid": true,
+      "limits": {
+        "activeProjects": 20,
+        "crawlPages": 10000,
+        "screenshotCredits": 750,
+        "organizedScreenshotExports": 20,
+        "seats": 1
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": true,
+        "brandedReports": false,
+        "scheduledRescans": false,
+        "priorityQueue": false,
+        "clientWorkspaces": false
+      }
+    },
+    "studio": {
+      "key": "studio",
+      "name": "Studio",
+      "paid": true,
+      "limits": {
+        "activeProjects": 50,
+        "crawlPages": 50000,
+        "screenshotCredits": 3000,
+        "organizedScreenshotExports": null,
+        "seats": 5
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": true,
+        "brandedReports": true,
+        "scheduledRescans": true,
+        "priorityQueue": false,
+        "clientWorkspaces": false
+      }
+    },
+    "agency": {
+      "key": "agency",
+      "name": "Agency",
+      "paid": true,
+      "limits": {
+        "activeProjects": null,
+        "crawlPages": 200000,
+        "screenshotCredits": 10000,
+        "organizedScreenshotExports": null,
+        "seats": 15
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": true,
+        "brandedReports": true,
+        "scheduledRescans": true,
+        "priorityQueue": true,
+        "clientWorkspaces": true
+      }
+    }
+  }
+}

@@ -7,7 +7,7 @@ import Field, { FieldHint } from '../ui/Field';
 import Modal from '../ui/Modal';
 import SegmentedControl from '../ui/SegmentedControl';
 import TextInput from '../ui/TextInput';
-import { GOOGLE_AUTH_ENABLED, SHOW_DEMO_AUTH } from '../../utils/constants';
+import { GOOGLE_AUTH_ENABLED } from '../../utils/constants';
 import { trackEvent } from '../../utils/analytics';
 
 const AUTH_VIEWS = Object.freeze({
@@ -60,11 +60,11 @@ const loadGoogleIdentityScript = () => {
 const AuthModal = ({
   onClose,
   onSuccess,
-  onDemo,
   showToast,
   contextMessage = '',
+  initialView = AUTH_VIEWS.LOGIN,
 }) => {
-  const [view, setView] = useState(AUTH_VIEWS.LOGIN);
+  const [view, setView] = useState(initialView);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -121,21 +121,6 @@ const AuthModal = ({
     setPassword('');
     setCode('');
     setShowPassword(false);
-  };
-
-  const handleDemoLogin = () => {
-    const demoUser = {
-      id: 'demo',
-      name: 'Demo User',
-      email: 'demo@vellic.dev',
-      authMode: 'demo',
-      authProvider: 'demo',
-      emailVerified: true,
-      hasPassword: false,
-    };
-    onDemo?.(demoUser);
-    onClose?.();
-    showToast?.('Demo access enabled', 'success');
   };
 
   const handleGoogleCredential = useCallback(async (response = {}) => {
@@ -512,22 +497,6 @@ const AuthModal = ({
           {googleLoading ? (
             <div className="auth-google-loading" role="status">Signing in with Google...</div>
           ) : null}
-        </div>
-      ) : null}
-
-      {SHOW_DEMO_AUTH ? (
-        <div className="auth-demo">
-          <div className="auth-demo-label">Quick access</div>
-          <Button
-            type="button"
-            variant="secondary"
-            className="auth-demo-btn"
-            onClick={handleDemoLogin}
-            disabled={loading || googleLoading}
-          >
-            Continue as demo
-          </Button>
-          <div className="auth-demo-hint">Bypasses login during build/test.</div>
         </div>
       ) : null}
 

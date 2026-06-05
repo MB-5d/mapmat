@@ -2,6 +2,24 @@ const adapter = require('./dbAdapter');
 
 let ensureImageAssetSchemaPromise = null;
 
+async function ensureColumnAsync(table, column, type) {
+  let rows = [];
+  if (adapter.runtime?.activeProvider === 'postgres') {
+    rows = await adapter.queryAllAsync(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = ?
+    `, [table]);
+  } else {
+    rows = await adapter.queryAllAsync(`PRAGMA table_info(${table})`);
+  }
+
+  const columns = rows.map((row) => row.column_name || row.name).filter(Boolean);
+  if (!columns.includes(column)) {
+    await adapter.executeAsync(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
 async function ensureImageAssetSchemaAsync() {
   if (ensureImageAssetSchemaPromise) return ensureImageAssetSchemaPromise;
   ensureImageAssetSchemaPromise = (async () => {
@@ -32,6 +50,8 @@ async function ensureImageAssetSchemaAsync() {
       CREATE INDEX IF NOT EXISTS idx_map_image_assets_map
       ON map_image_assets (map_id, status)
     `);
+    await ensureColumnAsync('map_image_assets', 'retention_expires_at', 'TIMESTAMP');
+    await ensureColumnAsync('map_image_assets', 'purge_after', 'TIMESTAMP');
   })();
   try {
     await ensureImageAssetSchemaPromise;

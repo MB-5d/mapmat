@@ -63,6 +63,138 @@ describe('large map viewport behavior', () => {
     expect(__testing.getLargeMapStackSelectionIdsFromNode({ id: 'solo' })).toEqual(['solo']);
   });
 
+  test('capped scans add locked root and subdomain preview nodes', () => {
+    const root = {
+      id: 'root',
+      url: 'https://example.com/',
+      title: 'Example',
+      children: [
+        { id: 'child-1', url: 'https://example.com/a', title: 'A', children: [] },
+        { id: 'child-2', url: 'https://example.com/b', title: 'B', children: [] },
+      ],
+    };
+
+    const result = __testing.addScanLimitGhosts(root, [], {
+      capped: true,
+      limitReached: true,
+      requestedPages: 5000,
+      allowedPages: 25,
+      visiblePageLimit: 25,
+      visiblePageCount: 3,
+      lockedPageEstimate: 157,
+    });
+
+    const lockedRootChildren = result.root.children.filter((node) => node.isEntitlementLocked);
+    const lockedSubdomains = result.orphans.filter((node) => node.isEntitlementLocked && node.subdomainRoot);
+
+    expect(lockedRootChildren).toHaveLength(7);
+    expect(lockedSubdomains).toHaveLength(7);
+    expect(lockedRootChildren[0]).toMatchObject({
+      title: 'Upgrade to see full map',
+      parentUrl: 'https://example.com/',
+      scanStatus: 'scan_limited',
+    });
+  });
+
+  test('capped scans do not add locked previews when the site finishes under the limit', () => {
+    const root = {
+      id: 'root',
+      url: 'https://small.example/',
+      title: 'Small',
+      children: [],
+    };
+
+    const result = __testing.addScanLimitGhosts(root, [], {
+      capped: true,
+      limitReached: false,
+      requestedPages: 5000,
+      allowedPages: 25,
+      visiblePageLimit: 25,
+      visiblePageCount: 1,
+      lockedPageEstimate: 0,
+    });
+
+    expect(result.root.children).toHaveLength(0);
+    expect(result.orphans).toHaveLength(0);
+  });
+
+  test('scan limit prompt uses paid account allowance copy', () => {
+    expect(__testing.getScanLimitPromptSubtitle({
+      mode: 'account',
+      planName: 'Solo',
+      requestedPages: 5000,
+      allowedPages: 739,
+      remaining: 739,
+      capReason: 'monthly_remaining',
+    })).toContain('739 pages');
+    expect(__testing.getScanLimitPromptSubtitle({
+      mode: 'account',
+      planName: 'Solo',
+      requestedPages: 5000,
+      allowedPages: 739,
+      remaining: 739,
+      capReason: 'monthly_remaining',
+    })).not.toContain('first 25 pages');
+  });
+
+  test('capped scans can be rerun after the current account has a higher allowance', () => {
+    const scanMeta = {
+      entitlement: {
+        capped: true,
+        limitReached: true,
+        visiblePageLimit: 25,
+        allowedPages: 25,
+      },
+    };
+    const soloEntitlements = {
+      meters: {
+        crawlPages: {
+          remaining: 1000,
+        },
+      },
+      limits: {
+        scanPagesPerRun: {
+          limit: 1000,
+        },
+      },
+    };
+
+    expect(__testing.canRescanEntitlementLimitedMap({
+      scanMeta,
+      entitlements: soloEntitlements,
+      isLoggedIn: true,
+    })).toBe(true);
+  });
+
+  test('capped scans do not become rerunnable when the current allowance is unchanged', () => {
+    const scanMeta = {
+      entitlement: {
+        capped: true,
+        limitReached: true,
+        visiblePageLimit: 25,
+        allowedPages: 25,
+      },
+    };
+    const freeEntitlements = {
+      meters: {
+        crawlPages: {
+          remaining: 100,
+        },
+      },
+      limits: {
+        scanPagesPerRun: {
+          limit: 25,
+        },
+      },
+    };
+
+    expect(__testing.canRescanEntitlementLimitedMap({
+      scanMeta,
+      entitlements: freeEntitlements,
+      isLoggedIn: true,
+    })).toBe(false);
+  });
+
   test('created-node reveal keeps the canvas still when the node is already visible', () => {
     expect(__testing.getPanToRevealLayoutNode({
       nodeData: { x: 100, y: 100, w: 288, h: 200 },

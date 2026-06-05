@@ -94,8 +94,9 @@ const NodeCard = ({
   if (tags.length > 0) badgeTitleParts.push(`Tags: ${tags.join(', ')}`);
   const badgeTitle = badgeTitleParts.join('\n');
   const isDeleted = showAnnotations && status === 'deleted';
+  const isEntitlementLocked = Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
   const shouldGhost = isGhosted || isDeleted;
-  const showActionBar = canEdit || showCommentAction || (showExternalLinkAction && !!node.url);
+  const showActionBar = !isEntitlementLocked && (canEdit || showCommentAction || (showExternalLinkAction && !!node.url));
   const actionBarPermission = canEdit
     ? 'Owner / Editor'
     : showCommentAction
@@ -108,6 +109,14 @@ const NodeCard = ({
     const scanStatus = String(node?.scanStatus || node?.status || '').toLowerCase();
     const extension = getUrlExtension(node?.url).toUpperCase();
     const isRenderableText = isRenderableTextUrl(node?.url);
+    if (isEntitlementLocked) {
+      return {
+        icon: Lock,
+        label: 'Upgrade',
+        text: 'Upgrade to see full map',
+        variant: 'blocked',
+      };
+    }
     const isFile = !isRenderableText && (
       node?.isFile
       || orphanType === 'file'
@@ -265,6 +274,7 @@ const NodeCard = ({
   if (shouldGhost) classNames.push('ghosted');
   if (isDeleted) classNames.push('deleted');
   if (isSelected) classNames.push('selected');
+  if (isEntitlementLocked) classNames.push('entitlement-locked');
   if (showActionBar) classNames.push('has-action-bar');
   if (showCommentBadges && node.comments?.length > 0) classNames.push('has-comment-badge');
 
@@ -285,7 +295,8 @@ const NodeCard = ({
       data-node-id={node.id}
       data-feedback-id={`node-card-${node.id}`}
       data-feedback-label={node.title || 'Node card'}
-      style={{ cursor: isRoot ? 'default' : (connectionTool ? 'default' : 'grab') }}
+      title={isEntitlementLocked ? 'Upgrade to see full map' : undefined}
+      style={{ cursor: isEntitlementLocked ? 'pointer' : (isRoot ? 'default' : (connectionTool ? 'default' : 'grab')) }}
       {...(isRoot ? {} : dragHandleProps)}
     >
       {/* Connection anchor points - show when connection tool is active */}
@@ -375,14 +386,24 @@ const NodeCard = ({
             </>
           ) : (
             <div className={`thumb-placeholder ${previewIssue ? `thumb-placeholder-${previewIssue.variant}` : ''}`}>
-              <PlaceholderIcon size={32} strokeWidth={1.5} />
-              <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
-              {previewIssue?.label && (
-                <span className="thumb-placeholder-label">{previewIssue.label}</span>
+              {isEntitlementLocked ? (
+                <div className="entitlement-ghost-thumb" aria-hidden="true">
+                  <span className="entitlement-ghost-box" />
+                  <span className="entitlement-ghost-line entitlement-ghost-line-wide" />
+                  <span className="entitlement-ghost-line entitlement-ghost-line-mid" />
+                </div>
+              ) : (
+                <>
+                  <PlaceholderIcon size={32} strokeWidth={1.5} />
+                  <span className="thumb-placeholder-domain">{getHostname(node.url)}</span>
+                  {previewIssue?.label && (
+                    <span className="thumb-placeholder-label">{previewIssue.label}</span>
+                  )}
+                  <span className="thumb-placeholder-text">
+                    {thumbLoading ? 'Generating preview' : (previewIssue?.text || 'Preview unavailable')}
+                  </span>
+                </>
               )}
-              <span className="thumb-placeholder-text">
-                {thumbLoading ? 'Generating preview' : (previewIssue?.text || 'Preview unavailable')}
-              </span>
             </div>
           )}
         </div>
@@ -391,7 +412,15 @@ const NodeCard = ({
       <div className="card-content">
         <div className="card-content-top">
           <div className="card-title" title={node.title}>
-            {node.title}
+            {isEntitlementLocked ? (
+              <>
+                <span className="entitlement-ghost-lines" aria-hidden="true">
+                  <span className="entitlement-ghost-line entitlement-ghost-line-wide" />
+                  <span className="entitlement-ghost-line entitlement-ghost-line-short" />
+                </span>
+                <span className="node-card-screen-reader">Upgrade to see full map</span>
+              </>
+            ) : node.title}
           </div>
           {showBadge && (
             <Badge
@@ -408,7 +437,9 @@ const NodeCard = ({
           )}
         </div>
 
-        {showPageNumbers && <span className="page-number">{number}</span>}
+        {showPageNumbers && (isEntitlementLocked
+          ? <span className="page-number entitlement-ghost-number" aria-hidden="true" />
+          : <span className="page-number">{number}</span>)}
       </div>
 
       {showActionBar && (
@@ -499,7 +530,7 @@ const DraggableNodeCard = ({
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: node.id,
     data: { node, number, color },
-    disabled: node.id === 'root' || !canEdit || connectionTool, // Disable dragging when connection tool active
+    disabled: node.id === 'root' || node.isEntitlementLocked || node.entitlementLocked || !canEdit || connectionTool, // Disable dragging when connection tool active
   });
 
   return (

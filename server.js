@@ -101,7 +101,16 @@ const collaborationRouter = require('./routes/collaboration');
 const realtimeRouter = require('./routes/realtime');
 const coeditingRouter = require('./routes/coediting');
 const emailWebhookRouter = require('./routes/emailWebhooks');
+const billingRouter = require('./routes/billing');
+const stripeWebhookRouter = require('./routes/stripeWebhooks');
 const { attachCoeditingTransport } = require('./utils/coeditingTransport');
+const {
+  ACTIONS: ENTITLEMENT_ACTIONS,
+  METERS: ENTITLEMENT_METERS,
+  requireAccountActionAsync,
+  recordMeterDebitAsync,
+  getScreenshotCreditCost,
+} = require('./utils/entitlements');
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBLIC_DOMAIN;
@@ -176,6 +185,7 @@ app.use(cors({
 
 app.use(cookieParser());
 app.use('/api/email/webhooks', emailWebhookRouter);
+app.use('/api/billing/webhooks/stripe', stripeWebhookRouter);
 app.use(express.json({ limit: REQUEST_JSON_LIMIT }));
 app.use((err, req, res, next) => {
   if (err?.type === 'entity.too.large') {
@@ -216,6 +226,7 @@ app.use(FEEDBACK_PUBLIC_BASE, express.static(FEEDBACK_STORAGE_DIR));
 // Mount routes
 app.use('/auth', authRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/billing', billingRouter);
 app.use('/api', apiRouter);
 registerImageCaptureRoutes(app);
 app.use('/api', collaborationRouter);
@@ -242,6 +253,7 @@ const SCAN_LIMITS = {
   maxDepthDefault: Number(process.env.SCAN_MAX_DEPTH_DEFAULT ?? 6),
   maxDepthHard: Number(process.env.SCAN_MAX_DEPTH_HARD ?? 25),
   maxPagesDefault: Math.max(1, Number(process.env.SCAN_JOB_MAX_PAGES_DEFAULT ?? 5000)),
+  guestPages: Math.max(1, Number(process.env.GUEST_SCAN_PAGE_LIMIT ?? 25)),
 };
 const toPositiveInt = (value, fallback) => {
   const parsed = Number(value);
@@ -754,20 +766,18 @@ const checkUsageLimit = async (req, eventType) => {
   return { allowed: true, limit, used };
 };
 
-function enforceUsageLimit(eventType) {
-  return async (req, res, next) => {
-    const check = await checkUsageLimit(req, eventType);
-    if (!check.allowed) {
-      return res.status(429).json({
-        error: 'Usage limit exceeded',
-        eventType,
-        limit: check.limit,
-        used: check.used,
-      });
-    }
-    return next();
-  };
-}
+const enforceUsageLimit = (eventType) => async (req, res, next) => {
+  const check = await checkUsageLimit(req, eventType);
+  if (!check.allowed) {
+    return res.status(429).json({
+      error: 'Usage limit exceeded',
+      eventType,
+      limit: check.limit,
+      used: check.used,
+    });
+  }
+  return next();
+};
 
 const scanLimiter = createRateLimiter({ windowMs: SCAN_RATE_WINDOW_MS, max: SCAN_RATE_LIMIT, name: 'scan' });
 const processScreenshotQueue = () => {
@@ -1414,6 +1424,124 @@ const updateJobProgress = async (id, progress) => {
 const markJobComplete = async (id, result) => {
   await jobStore.markJobCompleteAsync(id, JOB_STATUS.complete, JSON.stringify(result || {}));
 };
+
+function countScanResultPages(result) {
+  const seen = new Set();
+  const stack = [];
+  if (result?.root) stack.push(result.root);
+  if (Array.isArray(result?.orphans)) stack.push(...result.orphans);
+  let count = 0;
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || typeof node !== 'object') continue;
+    const key = String(node.id || node.url || `${count}:${stack.length}`);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    count += 1;
+    if (Array.isArray(node.children)) stack.push(...node.children);
+  }
+  return count;
+}
+
+async function debitScanPagesForJobAsync({ jobId, jobUserId, result }) {
+  const pageCount = countScanResultPages(result);
+  if (!jobUserId || pageCount <= 0) return;
+  await recordMeterDebitAsync({
+    user: { id: jobUserId },
+    meter: ENTITLEMENT_METERS.crawlPages,
+    quantity: pageCount,
+    idempotencyKey: `scan-job:${jobId}:crawl-pages`,
+    metadata: { jobId, pageCount },
+  });
+}
+
+function applyScanEntitlementMetadata(result, entitlement = null) {
+  if (!result || !entitlement) return result;
+  const capped = Boolean(entitlement.capped);
+  const requestedPages = Math.max(0, Number(entitlement.requestedPages || 0) || 0);
+  const allowedPages = Math.max(0, Number(entitlement.allowedPages || 0) || 0);
+  const visiblePageCount = countScanResultPages(result);
+  if (!capped) {
+    result.entitlement = {
+      capped: false,
+      mode: entitlement.mode || 'account',
+      requestedPages: requestedPages || null,
+      allowedPages: allowedPages || null,
+      visiblePageCount,
+    };
+    return result;
+  }
+
+  const queueRemaining = Math.max(0, Number(result.scanDiagnostics?.queueRemaining || 0) || 0);
+  const visitedCount = Math.max(0, Number(result.scanDiagnostics?.visitedCount || 0) || 0);
+  const queuedCount = Math.max(0, Number(result.scanDiagnostics?.queuedCount || 0) || 0);
+  const unvisitedQueued = Math.max(0, queuedCount - visitedCount);
+  const lockedPageEstimate = Math.max(queueRemaining, unvisitedQueued);
+  const limitReached = lockedPageEstimate > 0;
+  if (!limitReached) {
+    result.entitlement = {
+      capped: true,
+      limitReached: false,
+      mode: entitlement.mode || 'account',
+      requestedPages: requestedPages || null,
+      allowedPages: allowedPages || null,
+      visiblePageLimit: allowedPages || null,
+      visiblePageCount,
+      lockedPageEstimate: 0,
+    };
+    return result;
+  }
+  result.partial = true;
+  result.partialReason = result.partialReason || 'entitlement_cap';
+  result.entitlement = {
+    capped: true,
+    limitReached: true,
+    mode: entitlement.mode || 'account',
+    requestedPages: requestedPages || null,
+    allowedPages: allowedPages || null,
+    visiblePageLimit: allowedPages || null,
+    visiblePageCount,
+    lockedPageEstimate,
+  };
+  if (result.scanDiagnostics) {
+    result.scanDiagnostics.entitlementCapped = true;
+    result.scanDiagnostics.entitlementVisiblePageCount = visiblePageCount;
+    result.scanDiagnostics.entitlementLockedPageEstimate = lockedPageEstimate;
+  }
+  return result;
+}
+
+async function debitScreenshotCreditsForJobAsync({ jobId, jobUserId, type, result }) {
+  if (!jobUserId || result?.cached) return;
+  const credits = getScreenshotCreditCost({ type });
+  await recordMeterDebitAsync({
+    user: { id: jobUserId },
+    meter: ENTITLEMENT_METERS.screenshotCredits,
+    quantity: credits,
+    idempotencyKey: `screenshot-job:${jobId}:${type || 'full'}`,
+    metadata: { jobId, type, credits },
+  });
+}
+
+async function debitImageCaptureCreditsForJobAsync({ jobId, jobUserId, result }) {
+  if (!jobUserId || !result || result.status === 'stopped') return;
+  const captured = Math.max(0, Number(result.captured || 0) || 0);
+  if (captured <= 0) return;
+  const credits = captured * getScreenshotCreditCost({ type: result.captureType || 'thumb' });
+  await recordMeterDebitAsync({
+    user: { id: jobUserId },
+    meter: ENTITLEMENT_METERS.screenshotCredits,
+    quantity: credits,
+    idempotencyKey: `image-capture-job:${jobId}:${result.captureType || 'thumb'}`,
+    metadata: {
+      jobId,
+      mapId: result.mapId || null,
+      captureType: result.captureType || null,
+      captured,
+      credits,
+    },
+  });
+}
 
 const normalizeJobErrorMessage = (error) => {
   const message = error?.message || String(error || 'Job failed');
@@ -3890,20 +4018,6 @@ function countScanTreeNodes(node) {
   return 1 + (node.children || []).reduce((sum, child) => sum + countScanTreeNodes(child), 0);
 }
 
-function isUnavailableRootOnlyScan(root, treeNodeCount) {
-  if (!root || treeNodeCount > 1) return false;
-  const scanStatus = String(root.scanStatus || '').trim();
-  const httpStatus = Number(root.httpStatus || root.statusCode || root.errorStatus || 0);
-  return Boolean(
-    root.authRequired
-    || root.isError
-    || root.isInactive
-    || root.blockedReason
-    || ['auth', 'scan_limited', 'error', 'inactive'].includes(scanStatus)
-    || httpStatus >= 400
-  );
-}
-
 function normalizeScanOptions(options = {}) {
   return {
     thumbnails: Boolean(options.thumbnails),
@@ -3921,6 +4035,7 @@ function normalizeScanOptions(options = {}) {
 
 async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress = null, readJobStatus = null) {
   const scanOptions = normalizeScanOptions(options);
+  const entitlementCappedScan = Boolean(options.entitlementCappedScan || options._entitlementCappedScan);
   const scanScope = createScanScope(startUrl, scanOptions.subdomains);
   const seed = scanScope.seed;
   const pageLimit = normalizeMaxPagesLimit(maxPages);
@@ -3958,6 +4073,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     discoveryErrors: [],
     commonPathQueued: 0,
     commonPathActive: 0,
+    commonPathSkippedForEntitlementCap: false,
     renderedDiscoveryTried: false,
     renderedLinksFound: 0,
     renderedLinksQueued: 0,
@@ -4079,12 +4195,16 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     '/sitemap', '/site-map',
   ];
 
-  // Add common pages to queue
-  for (const path of commonPaths) {
-    const commonUrl = normalizeUrl(`${origin}${path}`);
-    if (commonUrl && isWithinScanDepth(commonUrl)) {
-      recordDiscovery(commonUrl, 'common_path');
-      enqueue(commonUrl, 1, 'common_path');
+  // Capped scans should spend their limited crawl budget on links discovered from the site first.
+  if (entitlementCappedScan) {
+    scanDiagnostics.commonPathSkippedForEntitlementCap = true;
+  } else {
+    for (const path of commonPaths) {
+      const commonUrl = normalizeUrl(`${origin}${path}`);
+      if (commonUrl && isWithinScanDepth(commonUrl)) {
+        recordDiscovery(commonUrl, 'common_path');
+        enqueue(commonUrl, 1, 'common_path');
+      }
     }
   }
 
@@ -5098,19 +5218,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       pageMapCount: scanDiagnostics.pageMapCount,
     });
   }
-  if (!partialReason && isUnavailableRootOnlyScan(root, scanDiagnostics.treeNodeCount)) {
-    partialReason = 'root_discovery_failed';
-    scanDiagnostics.collapseReason = root?.blockedReason
-      || root?.scanStatus
-      || (root?.httpStatus ? `http_${root.httpStatus}` : 'root_unavailable');
-    console.warn('[scan] Root unavailable with one-node result:', {
-      seed,
-      collapseReason: scanDiagnostics.collapseReason,
-      treeNodeCount: scanDiagnostics.treeNodeCount,
-      rootStatus: scanDiagnostics.rootStatus,
-      rootClassification: scanDiagnostics.rootClassification,
-    });
-  }
 
   if (scanOptions.duplicates) {
     const canonicalToRootUrl = new Map();
@@ -5821,6 +5928,7 @@ async function processJob(job) {
         {
           ...(payload.options || {}),
           ...(authSessionStorageState ? { authSessionStorageState } : {}),
+          _entitlementCappedScan: Boolean(payload.entitlement?.capped),
         },
         progressCb,
         readJobStatus
@@ -5828,6 +5936,12 @@ async function processJob(job) {
 
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
 
+      applyScanEntitlementMetadata(result, payload.entitlement || null);
+      await debitScanPagesForJobAsync({
+        jobId,
+        jobUserId: job.user_id,
+        result,
+      });
       await markJobComplete(jobId, result);
       return;
     }
@@ -5835,6 +5949,12 @@ async function processJob(job) {
     if (jobType === JOB_TYPES.screenshot) {
       const result = await captureScreenshot(payload.url, payload.type || 'full');
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+      await debitScreenshotCreditsForJobAsync({
+        jobId,
+        jobUserId: job.user_id,
+        type: payload.type || 'full',
+        result,
+      });
       await markJobComplete(jobId, result);
       return;
     }
@@ -5842,6 +5962,11 @@ async function processJob(job) {
     if (jobType === JOB_TYPES.imageCapture) {
       const result = await runImageCaptureJob(jobId, payload);
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
+      await debitImageCaptureCreditsForJobAsync({
+        jobId,
+        jobUserId: job.user_id,
+        result,
+      });
       await markJobComplete(jobId, result);
       return;
     }
@@ -6026,7 +6151,7 @@ app.get('/health/coediting', async (_req, res) => {
   }
 });
 
-app.post('/scan-auth/precheck', authMiddleware, scanLimiter, requireApiKey, async (req, res) => {
+app.post('/scan-auth/precheck', authMiddleware, requireAuth, scanLimiter, requireApiKey, async (req, res) => {
   const { url, options } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
   if (!SCAN_AUTH_FEATURE_ENABLED) {
@@ -6109,7 +6234,7 @@ app.post('/scan-auth/precheck', authMiddleware, scanLimiter, requireApiKey, asyn
   }
 });
 
-app.post('/scan-auth/sessions', authMiddleware, requireApiKey, async (req, res) => {
+app.post('/scan-auth/sessions', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const { url, storageState } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
   if (!SCAN_AUTH_FEATURE_ENABLED) {
@@ -6148,7 +6273,7 @@ app.post('/scan-auth/sessions', authMiddleware, requireApiKey, async (req, res) 
   }
 });
 
-app.get('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) => {
+app.get('/scan-auth/sessions/:id', authMiddleware, requireAuth, requireApiKey, (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
   if (!session) return res.status(404).json({ error: 'Authenticated scan session not found' });
   return res.json({
@@ -6162,7 +6287,7 @@ app.get('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) => 
   });
 });
 
-app.delete('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) => {
+app.delete('/scan-auth/sessions/:id', authMiddleware, requireAuth, requireApiKey, (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
   if (session) {
     closeScanAuthSession(session);
@@ -6171,7 +6296,7 @@ app.delete('/scan-auth/sessions/:id', authMiddleware, requireApiKey, (req, res) 
   return res.json({ success: true });
 });
 
-app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireApiKey, async (req, res) => {
+app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   let target = await getInteractiveScanAuthPage(req, req.params.id);
   if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
   try {
@@ -6198,7 +6323,7 @@ app.get('/scan-auth/sessions/:id/screenshot', authMiddleware, requireApiKey, asy
   }
 });
 
-app.post('/scan-auth/sessions/:id/action', authMiddleware, requireApiKey, async (req, res) => {
+app.post('/scan-auth/sessions/:id/action', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const target = await getInteractiveScanAuthPage(req, req.params.id);
   if (!target) return res.status(404).json({ error: 'Interactive login session not found' });
   const { action, x, y, text, key } = req.body || {};
@@ -6219,7 +6344,7 @@ app.post('/scan-auth/sessions/:id/action', authMiddleware, requireApiKey, async 
   }
 });
 
-app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireApiKey, async (req, res) => {
+app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const session = getScanAuthSessionForRequest(req, req.params.id);
   if (!session || !session.browserContext) {
     return res.status(404).json({ error: 'Interactive login session not found' });
@@ -6240,7 +6365,7 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireApiKey, asyn
   }
 });
 
-app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
+app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
   const { url, maxPages, maxDepth, options, authSessionId } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
 
@@ -6249,25 +6374,54 @@ app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit(
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
     const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || options?.authSessionId, safeUrl);
+    const scanEntitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.scanStart, {
+      requestedPages: maxPagesSafe,
+    });
+    if (!scanEntitlement) return;
+    const entitledMaxPages = scanEntitlement.allowedQuantity || maxPagesSafe;
 
     recordUsage(req, 'scan', 1, {
       host: new URL(safeUrl).hostname,
-      maxPages: maxPagesSafe,
+      maxPages: entitledMaxPages,
       maxDepth: maxDepthSafe,
+      entitlementCapped: Boolean(scanEntitlement.capped),
     });
 
     const result = await crawlSite(
       safeUrl,
-      maxPagesSafe,
+      entitledMaxPages,
       maxDepthSafe,
       {
         ...(options || {}),
         ...(authSessionStorageState ? { authSessionStorageState } : {}),
+        _entitlementCappedScan: Boolean(scanEntitlement.capped),
       }
     );
+    await recordMeterDebitAsync({
+      user: req.user,
+      accountSummary: scanEntitlement.summary,
+      meter: ENTITLEMENT_METERS.crawlPages,
+      quantity: countScanResultPages(result),
+      idempotencyKey: req.get('Idempotency-Key') || `scan:${crypto.randomUUID()}`,
+      metadata: {
+        host: new URL(safeUrl).hostname,
+        requestedPages: maxPagesSafe,
+        allowedPages: entitledMaxPages,
+        capped: Boolean(scanEntitlement.capped),
+      },
+    });
+    applyScanEntitlementMetadata(result, {
+      mode: 'account',
+      requestedPages: maxPagesSafe,
+      allowedPages: entitledMaxPages,
+      capped: Boolean(scanEntitlement.capped),
+    });
     res.json(result);
   } catch (e) {
     const message = e.message || 'Scan failed';
+    if (e.code === 'ENTITLEMENT_REQUIRED') {
+      return res.status(e.status || 402).json({ error: message, code: e.code });
+    }
     const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
       ? 400
       : 500;
@@ -6276,7 +6430,7 @@ app.post('/scan', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit(
 });
 
 // SSE endpoint for scan with progress updates
-app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsageLimit('scan_stream'), async (req, res) => {
+app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey, enforceUsageLimit('scan_stream'), async (req, res) => {
   const { url, maxPages, maxDepth, options, authSessionId } = req.query;
   if (!url) {
     return res.status(400).json({ error: 'Missing url parameter' });
@@ -6288,6 +6442,21 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
   } catch (e) {
     return res.status(400).json({ error: e.message || 'Invalid url' });
   }
+
+  let parsedOptions = {};
+  try {
+    parsedOptions = options ? JSON.parse(options) : {};
+  } catch {
+    parsedOptions = {};
+  }
+
+  const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
+  const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
+  const scanEntitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.scanStart, {
+    requestedPages: maxPagesSafe,
+  });
+  if (!scanEntitlement) return;
+  const entitledMaxPages = scanEntitlement.allowedQuantity || maxPagesSafe;
 
   // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -6325,34 +6494,46 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
   }, 15000);
 
   try {
-    let parsedOptions = {};
-    try {
-      parsedOptions = options ? JSON.parse(options) : {};
-    } catch {
-      parsedOptions = {};
-    }
-
-    const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
-    const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
     const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || parsedOptions?.authSessionId, safeUrl);
 
     recordUsage(req, 'scan_stream', 1, {
       host: new URL(safeUrl).hostname,
-      maxPages: maxPagesSafe,
+      maxPages: entitledMaxPages,
       maxDepth: maxDepthSafe,
+      entitlementCapped: Boolean(scanEntitlement.capped),
     });
 
     const result = await crawlSite(
       safeUrl,
-      maxPagesSafe,
+      entitledMaxPages,
       maxDepthSafe,
       {
         ...parsedOptions,
         ...(authSessionStorageState ? { authSessionStorageState } : {}),
+        _entitlementCappedScan: Boolean(scanEntitlement.capped),
       },
       (progress) => sendEvent('progress', progress),
       () => aborted
     );
+    await recordMeterDebitAsync({
+      user: req.user,
+      accountSummary: scanEntitlement.summary,
+      meter: ENTITLEMENT_METERS.crawlPages,
+      quantity: countScanResultPages(result),
+      idempotencyKey: req.get('Idempotency-Key') || `scan-stream:${crypto.randomUUID()}`,
+      metadata: {
+        host: new URL(safeUrl).hostname,
+        requestedPages: maxPagesSafe,
+        allowedPages: entitledMaxPages,
+        capped: Boolean(scanEntitlement.capped),
+      },
+    });
+    applyScanEntitlementMetadata(result, {
+      mode: 'account',
+      requestedPages: maxPagesSafe,
+      allowedPages: entitledMaxPages,
+      capped: Boolean(scanEntitlement.capped),
+    });
 
     try {
       const payload = JSON.stringify(result);
@@ -6365,7 +6546,7 @@ app.get('/scan-stream', authMiddleware, scanLimiter, requireApiKey, enforceUsage
     res.end();
   } catch (e) {
     console.error('Scan failed:', e);
-    sendEvent('error', { error: e.message || 'Scan failed' });
+    sendEvent('error', { error: e.message || 'Scan failed', code: e.code || undefined });
     res.end();
   } finally {
     clearInterval(heartbeat);
@@ -6385,13 +6566,35 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
     if ((authSessionId || options?.authSessionId) && (!readyAuthSession || readyAuthSession.status !== 'ready')) {
       return res.status(400).json({ error: 'Authenticated scan session is missing or expired' });
     }
+    let scanEntitlement = null;
+    let entitledMaxPages = Math.min(maxPagesSafe, SCAN_LIMITS.guestPages);
+    let entitlementPayload = {
+      mode: 'guest',
+      requestedPages: maxPagesSafe,
+      allowedPages: entitledMaxPages,
+      capped: entitledMaxPages < maxPagesSafe,
+    };
+    if (req.user) {
+      scanEntitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.scanStart, {
+        requestedPages: maxPagesSafe,
+      });
+      if (!scanEntitlement) return;
+      entitledMaxPages = scanEntitlement.allowedQuantity || maxPagesSafe;
+      entitlementPayload = {
+        mode: 'account',
+        accountId: scanEntitlement.summary.account.id,
+        requestedPages: maxPagesSafe,
+        allowedPages: entitledMaxPages,
+        capped: Boolean(scanEntitlement.capped),
+      };
+    }
     const jobAccessToken = crypto.randomBytes(24).toString('hex');
 
     const jobId = await createJob({
       type: JOB_TYPES.scan,
       payload: {
         url: safeUrl,
-        maxPages: maxPagesSafe,
+        maxPages: entitledMaxPages,
         maxDepth: maxDepthSafe,
         options: {
           ...(options || {}),
@@ -6399,19 +6602,34 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
         },
         authSessionOwnerKey: readyAuthSession?.ownerKey || null,
         accessToken: jobAccessToken,
+        entitlement: entitlementPayload,
       },
       req,
     });
 
     recordUsage(req, 'scan_job', 1, {
       host: new URL(safeUrl).hostname,
-      maxPages: maxPagesSafe,
+      maxPages: entitledMaxPages,
       maxDepth: maxDepthSafe,
+      entitlementCapped: Boolean(entitlementPayload.capped),
+      entitlementMode: entitlementPayload.mode,
     });
 
-    res.json({ jobId, jobAccessToken });
+    res.json({
+      jobId,
+      jobAccessToken,
+      entitlement: {
+        mode: entitlementPayload.mode,
+        capped: Boolean(entitlementPayload.capped),
+        requestedPages: maxPagesSafe,
+        allowedPages: entitledMaxPages,
+      },
+    });
   } catch (e) {
     const message = e.message || 'Failed to create scan job';
+    if (e.code === 'ENTITLEMENT_REQUIRED') {
+      return res.status(e.status || 402).json({ error: message, code: e.code });
+    }
     const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
       ? 400
       : 500;
@@ -6453,6 +6671,16 @@ app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) 
   }
   if (!isJobVisibleToRequest(row, req)) {
     return res.status(403).json({ error: 'This scan is no longer available in this browser session' });
+  }
+  const progress = parseJsonSafe(row.progress) || {};
+  const scanned = Math.max(0, Number(progress.scanned || 0) || 0);
+  if (scanned <= 0) {
+    await markJobCanceled(id);
+    return res.json({
+      success: true,
+      canceled: true,
+      reason: 'no_results_ready',
+    });
   }
   await markJobStopping(id);
   res.json({ success: true });
@@ -6556,7 +6784,7 @@ app.post('/api/maps/:id/discovery', authMiddleware, requireAuth, async (req, res
 
 function registerImageCaptureRoutes(targetApp) {
   // Bulk image capture job for thumbnails and full screenshots.
-  targetApp.post('/api/maps/:id/image-capture-jobs', authMiddleware, requireAuth, enforceUsageLimit('screenshot_job'), async (req, res) => {
+  targetApp.post('/api/maps/:id/image-capture-jobs', authMiddleware, requireAuth, (req, res, next) => enforceUsageLimit('screenshot_job')(req, res, next), async (req, res) => {
     const { id } = req.params;
     const captureType = normalizeScreenshotType(req.body?.captureType || req.body?.type);
     if (!captureType) {
@@ -6581,6 +6809,7 @@ function registerImageCaptureRoutes(targetApp) {
     try {
       const map = await getImageCaptureMapForRequest(req, id);
       if (!map) return res.status(404).json({ error: 'Map not found' });
+      const force = targetMode === IMAGE_CAPTURE_TARGET_MODES.captured || scope === 'selected' || Boolean(req.body?.force);
 
       const existingJob = await findActiveImageCaptureJob(id, captureType, {
         scope,
@@ -6606,13 +6835,48 @@ function registerImageCaptureRoutes(targetApp) {
         });
       }
 
+      let estimatedCredits = 0;
+      try {
+        const root = parseJsonSafe(map.root_data);
+        const orphans = parseJsonSafe(map.orphans_data) || [];
+        const savedManifestRows = await imageAssetStore.listSavedImageAssetsByMapAsync(id);
+        const manifestRows = await verifySavedImageCaptureManifestRows({
+          mapId: id,
+          manifestRows: savedManifestRows,
+        });
+        const targetPlan = await buildImageCaptureTargets({
+          root,
+          orphans,
+          captureType,
+          scope,
+          nodeIds,
+          force,
+          targetMode,
+          manifestRows,
+        });
+        estimatedCredits = targetPlan.captureRecords.length * getScreenshotCreditCost({ type: captureType });
+      } catch (estimateError) {
+        console.error('Image capture credit estimate error:', estimateError);
+        estimatedCredits = getScreenshotCreditCost({ type: captureType });
+      }
+      if (estimatedCredits > 0) {
+        const screenshotEntitlement = await requireAccountActionAsync(
+          req,
+          res,
+          ENTITLEMENT_ACTIONS.screenshotCapture,
+          { credits: estimatedCredits }
+        );
+        if (!screenshotEntitlement) return;
+      }
+
       const jobPayload = {
         mapId: id,
         captureType,
         scope,
         nodeIds,
         targetMode,
-        force: targetMode === IMAGE_CAPTURE_TARGET_MODES.captured || scope === 'selected' || Boolean(req.body?.force),
+        force,
+        estimatedCredits,
       };
       // Claim image-capture jobs here so older generic workers cannot take this newer job type.
       const claimInCurrentProcess = RUN_WEB && JOB_WORKER_TYPES.includes(JOB_TYPES.imageCapture);
@@ -6632,6 +6896,7 @@ function registerImageCaptureRoutes(targetApp) {
         scope,
         targetMode,
         selected: nodeIds.length,
+        estimatedCredits,
       });
 
       return res.json({
@@ -6639,6 +6904,7 @@ function registerImageCaptureRoutes(targetApp) {
         jobId,
         jobType: JOB_TYPES.imageCapture,
         mapId: id,
+        estimatedCredits,
       });
     } catch (error) {
       console.error('Create image capture job error:', error);
@@ -6735,7 +7001,7 @@ function registerImageCaptureRoutes(targetApp) {
 
 // Screenshot endpoint - captures full-page screenshot
 // Note: Playwright requires browser binaries which may not be available on all hosts
-app.get('/screenshot', authMiddleware, requireApiKey, enforceUsageLimit('screenshot'), async (req, res) => {
+app.get('/screenshot', authMiddleware, requireAuth, requireApiKey, enforceUsageLimit('screenshot'), async (req, res) => {
   const { url, authSessionId } = req.query;
   if (!url) return res.status(400).json({ error: 'Missing url parameter' });
   const screenshotType = normalizeScreenshotType(req.query?.type);
@@ -6748,6 +7014,14 @@ app.get('/screenshot', authMiddleware, requireApiKey, enforceUsageLimit('screens
   } catch (e) {
     return res.status(400).json({ error: e.message || 'Invalid url' });
   }
+  const screenshotCredits = getScreenshotCreditCost({ type: screenshotType });
+  const screenshotEntitlement = await requireAccountActionAsync(
+    req,
+    res,
+    ENTITLEMENT_ACTIONS.screenshotCapture,
+    { credits: screenshotCredits }
+  );
+  if (!screenshotEntitlement) return;
 
   // Check if we're in production without Playwright support
   if (process.env.DISABLE_SCREENSHOTS === 'true') {
@@ -6767,13 +7041,27 @@ app.get('/screenshot', authMiddleware, requireApiKey, enforceUsageLimit('screens
   });
 
   try {
-    recordUsage(req, 'screenshot', 1, { host: new URL(safeUrl).hostname, type: screenshotType });
     const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId, safeUrl);
     const result = await captureScreenshot(safeUrl, screenshotType, {
       signal: abortController.signal,
       ...(authSessionStorageState ? { storageState: authSessionStorageState } : {}),
     });
     if (clientGone) return;
+    if (!result.cached) {
+      await recordMeterDebitAsync({
+        user: req.user,
+        accountSummary: screenshotEntitlement.summary,
+        meter: ENTITLEMENT_METERS.screenshotCredits,
+        quantity: screenshotCredits,
+        idempotencyKey: req.get('Idempotency-Key') || `screenshot:${crypto.randomUUID()}`,
+        metadata: {
+          host: new URL(safeUrl).hostname,
+          type: screenshotType,
+          credits: screenshotCredits,
+        },
+      });
+    }
+    recordUsage(req, 'screenshot', 1, { host: new URL(safeUrl).hostname, type: screenshotType });
     res.json(result);
   } catch (e) {
     if (clientGone) return;
@@ -6788,6 +7076,9 @@ app.get('/screenshot', authMiddleware, requireApiKey, enforceUsageLimit('screens
     if (e.message?.includes('Screenshot queue full')) {
       return res.status(429).json({ error: 'Screenshot queue full' });
     }
+    if (e.code === 'ENTITLEMENT_REQUIRED') {
+      return res.status(e.status || 402).json({ error: e.message || 'Plan limit reached', code: e.code });
+    }
     const shortError = e.message?.includes('Executable')
       ? 'Screenshots not available in this environment'
       : 'Screenshot failed';
@@ -6795,7 +7086,7 @@ app.get('/screenshot', authMiddleware, requireApiKey, enforceUsageLimit('screens
   }
 });
 
-app.post('/screenshot-assets/validate', authMiddleware, requireApiKey, async (req, res) => {
+app.post('/screenshot-assets/validate', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const urls = Array.isArray(req.body?.urls) ? req.body.urls : [];
   const limitedUrls = urls.slice(0, 1500);
   const results = {};
@@ -6822,7 +7113,7 @@ app.post('/screenshot-assets/validate', authMiddleware, requireApiKey, async (re
 });
 
 // Background screenshot jobs
-app.post('/screenshot-jobs', authMiddleware, requireApiKey, enforceUsageLimit('screenshot_job'), async (req, res) => {
+app.post('/screenshot-jobs', authMiddleware, requireAuth, requireApiKey, enforceUsageLimit('screenshot_job'), async (req, res) => {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
   const screenshotType = normalizeScreenshotType(req.body?.type);
@@ -6834,17 +7125,36 @@ app.post('/screenshot-jobs', authMiddleware, requireApiKey, enforceUsageLimit('s
     const safeUrl = await assertSafeUrl(url);
     await enforceScreenshotJobQueueLimits(req, safeUrl);
     const host = new URL(safeUrl).hostname;
+    const screenshotCredits = getScreenshotCreditCost({ type: screenshotType });
+    const screenshotEntitlement = await requireAccountActionAsync(
+      req,
+      res,
+      ENTITLEMENT_ACTIONS.screenshotCapture,
+      { credits: screenshotCredits }
+    );
+    if (!screenshotEntitlement) return;
     const jobId = await createJob({
       type: JOB_TYPES.screenshot,
-      payload: { url: safeUrl, type: screenshotType, host },
+      payload: {
+        url: safeUrl,
+        type: screenshotType,
+        host,
+        entitlement: {
+          accountId: screenshotEntitlement.summary.account.id,
+          estimatedCredits: screenshotCredits,
+        },
+      },
       req,
     });
 
     recordUsage(req, 'screenshot_job', 1, { host, type: screenshotType });
 
-    res.json({ jobId });
+    res.json({ jobId, estimatedCredits: screenshotCredits });
   } catch (e) {
     const message = e.message || 'Failed to create screenshot job';
+    if (e.code === 'ENTITLEMENT_REQUIRED') {
+      return res.status(e.status || 402).json({ error: message, code: e.code });
+    }
     const status = e.status || (message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
       ? 400
       : 500);
@@ -6852,7 +7162,7 @@ app.post('/screenshot-jobs', authMiddleware, requireApiKey, enforceUsageLimit('s
   }
 });
 
-app.get('/screenshot-jobs/:id', authMiddleware, requireApiKey, async (req, res) => {
+app.get('/screenshot-jobs/:id', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
   const row = await getJobRow(id);
@@ -6862,7 +7172,7 @@ app.get('/screenshot-jobs/:id', authMiddleware, requireApiKey, async (req, res) 
   res.json({ job: serializeJobRow(row, includeResult) });
 });
 
-app.post('/screenshot-jobs/:id/cancel', authMiddleware, requireApiKey, async (req, res) => {
+app.post('/screenshot-jobs/:id/cancel', authMiddleware, requireAuth, requireApiKey, async (req, res) => {
   const { id } = req.params;
   const row = await getJobRow(id);
   if (!row || row.type !== JOB_TYPES.screenshot || !isJobVisibleToRequest(row, req)) {
@@ -6872,7 +7182,7 @@ app.post('/screenshot-jobs/:id/cancel', authMiddleware, requireApiKey, async (re
   res.json({ success: true });
 });
 
-app.get('/screenshot-jobs/:id/stream', authMiddleware, requireApiKey, (req, res) => {
+app.get('/screenshot-jobs/:id/stream', authMiddleware, requireAuth, requireApiKey, (req, res) => {
   const { id } = req.params;
   const includeResult = req.query.include_result !== 'false';
 

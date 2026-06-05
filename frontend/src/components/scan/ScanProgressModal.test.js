@@ -102,7 +102,7 @@ describe('ScanProgressModal', () => {
     expect(baseProps.onStopScan).toHaveBeenCalledTimes(1);
   });
 
-  test('shows the stopping state and disables scan actions', () => {
+  test('shows the stopping state and keeps cancel available', () => {
     act(() => {
       root.render(<ScanProgressModal {...baseProps} isStoppingScan />);
     });
@@ -110,7 +110,8 @@ describe('ScanProgressModal', () => {
     expect(container.textContent).toContain('Stopping scan and preparing current results...');
     const buttons = Array.from(container.querySelectorAll('button'));
     expect(buttons).toHaveLength(2);
-    expect(buttons.every((button) => button.disabled)).toBe(true);
+    expect(buttons[0].disabled).toBe(false);
+    expect(buttons[1].disabled).toBe(true);
     expect(buttons[1].textContent).toBe('Stopping...');
   });
 

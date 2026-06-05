@@ -25,9 +25,12 @@ import Avatar from '../ui/Avatar';
 import FeedbackConsole from './FeedbackConsole';
 import UsageCostConsole from './UsageCostConsole';
 import {
+  adminApplyUserBillingScenario,
   adminDisableUser,
+  adminCreateUserEntitlementGrant,
   adminReactivateUser,
   adminResetUserPassword,
+  adminStartUserTrial,
   createAdminSession,
   destroyAdminSession,
   getAdminImageAssetsDiagnostics,
@@ -46,6 +49,50 @@ const SORTABLE_COLUMNS = Object.freeze([
   { key: 'email', label: 'Email' },
   { key: 'accountStatus', label: 'Status' },
   { key: 'updatedAt', label: 'Updated' },
+]);
+
+const GRANT_SOURCE_OPTIONS = Object.freeze([
+  { value: 'manual', label: 'Manual' },
+  { value: 'support_exception', label: 'Support exception' },
+  { value: 'promo', label: 'Promotion' },
+  { value: 'addon', label: 'Add-on pack' },
+]);
+
+const GRANT_METER_OPTIONS = Object.freeze([
+  { value: 'crawl_pages', label: 'Crawl pages' },
+  { value: 'screenshot_credits', label: 'Screenshot credits' },
+  { value: 'organized_exports', label: 'Organized exports' },
+  { value: 'active_projects', label: 'Active projects' },
+  { value: 'seats', label: 'Seats' },
+]);
+
+const GRANT_FEATURE_OPTIONS = Object.freeze([
+  { value: 'clientShareLinks', label: 'Client share links' },
+  { value: 'scheduledRescans', label: 'Scheduled rescans' },
+  { value: 'brandedReports', label: 'Branded reports' },
+  { value: 'advancedExports', label: 'Advanced exports' },
+  { value: 'priorityQueue', label: 'Priority queue' },
+  { value: 'clientWorkspaces', label: 'Client workspaces' },
+]);
+
+const DEFAULT_GRANT_FORM = Object.freeze({
+  source: 'manual',
+  grantType: 'meter',
+  meter: 'crawl_pages',
+  featureKey: 'clientShareLinks',
+  quantity: '100',
+  durationDays: '30',
+  note: '',
+});
+
+const BILLING_TEST_SCENARIO_OPTIONS = Object.freeze([
+  { value: 'active_free', label: 'Active Free', description: 'Free plan with a fresh usage period.' },
+  { value: 'active_solo', label: 'Active Solo', description: 'Paid Solo plan with no trial.' },
+  { value: 'team_trial', label: 'Team Trial', description: '7-day no-card team trial with four seats.' },
+  { value: 'trial_ended', label: 'Trial Ended', description: 'Expired trial state for upgrade prompts.' },
+  { value: 'archived', label: 'Archived', description: 'Cancelled account after access window starts.' },
+  { value: 'scan_limit_prompt', label: 'Scan Limit Prompt', description: 'Solo plan nearly out of crawl pages.' },
+  { value: 'usage_exhausted', label: 'Usage Exhausted', description: 'Free plan with crawl and screenshot usage spent.' },
 ]);
 
 function getDefaultSortDirection(sortBy) {
@@ -82,6 +129,15 @@ function formatAdminRole(value) {
 function formatNumber(value) {
   const number = Number(value || 0);
   return Number.isFinite(number) ? number.toLocaleString() : '0';
+}
+
+function formatLimit(value) {
+  return value === null || value === undefined ? 'Unlimited' : formatNumber(value);
+}
+
+function formatUsageMeter(meter) {
+  if (!meter) return 'Not available';
+  return `${formatNumber(meter.used)} / ${formatLimit(meter.included)}`;
 }
 
 function formatBytes(value) {
@@ -332,13 +388,29 @@ function AdminUserDrawer({
   actionMessage,
   newPassword,
   disableReason,
+  trialKind,
+  billingScenario,
+  grantForm,
   onNewPasswordChange,
   onDisableReasonChange,
+  onTrialKindChange,
+  onBillingScenarioChange,
+  onGrantFormChange,
+  onStartTrial,
+  onApplyBillingScenario,
+  onCreateGrant,
   onPasswordReset,
   onDisableUser,
   onReactivateUser,
   onClose,
 }) {
+  const billing = user?.billing || null;
+  const entitlements = billing?.entitlements || null;
+  const grants = Array.isArray(billing?.grants) ? billing.grants : [];
+  const meters = entitlements?.meters || {};
+  const limits = entitlements?.limits || {};
+  const trial = entitlements?.trial || {};
+
   return (
     <AccountDrawer
       isOpen={isOpen}
@@ -416,6 +488,208 @@ function AdminUserDrawer({
                 {user.disabledReason || 'None recorded'}
               </span>
             </div>
+          </section>
+
+          <section className="drawer-card admin-billing-card">
+            <div className="drawer-card-title">Billing and entitlements</div>
+            {entitlements ? (
+              <>
+                <div className="admin-billing-summary-grid">
+                  <div>
+                    <span className="drawer-card-meta">Plan</span>
+                    <strong>{entitlements.plan?.name || 'Free'}</strong>
+                  </div>
+                  <div>
+                    <span className="drawer-card-meta">Account</span>
+                    <strong>{entitlements.account?.state || 'active'}</strong>
+                  </div>
+                  <div>
+                    <span className="drawer-card-meta">Trial</span>
+                    <strong>{trial.active ? `${trial.kind || 'personal'} trial` : 'None'}</strong>
+                    {trial.endsAt ? <small>{formatDateTime(trial.endsAt)}</small> : null}
+                  </div>
+                </div>
+
+                <div className="admin-billing-usage-grid">
+                  <div>
+                    <span>Crawl pages</span>
+                    <strong>{formatUsageMeter(meters.crawlPages)}</strong>
+                  </div>
+                  <div>
+                    <span>Screenshot credits</span>
+                    <strong>{formatUsageMeter(meters.screenshotCredits)}</strong>
+                  </div>
+                  <div>
+                    <span>Organized exports</span>
+                    <strong>{formatUsageMeter(meters.organizedExports)}</strong>
+                  </div>
+                  <div>
+                    <span>Projects</span>
+                    <strong>{formatNumber(limits.activeProjects?.used)} / {formatLimit(limits.activeProjects?.limit)}</strong>
+                  </div>
+                  <div>
+                    <span>Seats</span>
+                    <strong>{formatNumber(limits.seats?.used)} / {formatLimit(limits.seats?.limit)}</strong>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p>Billing details are not available for this account.</p>
+            )}
+          </section>
+
+          <div className="admin-console-action-card">
+            <div className="admin-console-action-header">
+              <DollarSign size={16} />
+              <h3>Start no-card trial</h3>
+            </div>
+            <p>Trials last 7 days. Team trials allow the owner plus one editor, one commenter, and one viewer.</p>
+            <select
+              value={trialKind}
+              onChange={(event) => onTrialKindChange(event.target.value)}
+              disabled={actionLoading}
+            >
+              <option value="personal">Personal trial</option>
+              <option value="team">Team trial</option>
+            </select>
+            <button
+              type="button"
+              className="admin-console-primary-btn"
+              disabled={actionLoading}
+              onClick={onStartTrial}
+            >
+              {actionLoading ? <Loader2 size={16} className="admin-console-spinner" /> : <DollarSign size={16} />}
+              Start trial
+            </button>
+          </div>
+
+          <div className="admin-console-action-card">
+            <div className="admin-console-action-header">
+              <ShieldAlert size={16} />
+              <h3>Testing shortcuts</h3>
+            </div>
+            <p>Apply a local billing state so trial, archive, and limit UI can be tested before Stripe.</p>
+            <select
+              value={billingScenario}
+              onChange={(event) => onBillingScenarioChange(event.target.value)}
+              disabled={actionLoading}
+            >
+              {BILLING_TEST_SCENARIO_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <small className="admin-console-action-note">
+              {BILLING_TEST_SCENARIO_OPTIONS.find((option) => option.value === billingScenario)?.description}
+            </small>
+            <button
+              type="button"
+              className="admin-console-secondary-btn"
+              disabled={actionLoading}
+              onClick={onApplyBillingScenario}
+            >
+              {actionLoading ? <Loader2 size={16} className="admin-console-spinner" /> : <ShieldAlert size={16} />}
+              Apply scenario
+            </button>
+          </div>
+
+          <form className="admin-console-action-card" onSubmit={onCreateGrant}>
+            <div className="admin-console-action-header">
+              <Shield size={16} />
+              <h3>Create entitlement grant</h3>
+            </div>
+            <p>Add a temporary exception, promo, or future paid add-on without changing the base plan.</p>
+            <select
+              value={grantForm.source}
+              onChange={(event) => onGrantFormChange({ source: event.target.value })}
+              disabled={actionLoading}
+            >
+              {GRANT_SOURCE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <select
+              value={grantForm.grantType}
+              onChange={(event) => onGrantFormChange({ grantType: event.target.value })}
+              disabled={actionLoading}
+            >
+              <option value="meter">Usage or limit</option>
+              <option value="feature">Feature access</option>
+            </select>
+            {grantForm.grantType === 'feature' ? (
+              <select
+                value={grantForm.featureKey}
+                onChange={(event) => onGrantFormChange({ featureKey: event.target.value })}
+                disabled={actionLoading}
+              >
+                {GRANT_FEATURE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <select
+                  value={grantForm.meter}
+                  onChange={(event) => onGrantFormChange({ meter: event.target.value })}
+                  disabled={actionLoading}
+                >
+                  {GRANT_METER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="1"
+                  value={grantForm.quantity}
+                  onChange={(event) => onGrantFormChange({ quantity: event.target.value })}
+                  placeholder="Quantity"
+                  disabled={actionLoading}
+                />
+              </>
+            )}
+            <input
+              type="number"
+              min="1"
+              max="365"
+              value={grantForm.durationDays}
+              onChange={(event) => onGrantFormChange({ durationDays: event.target.value })}
+              placeholder="Duration days"
+              disabled={actionLoading}
+            />
+            <textarea
+              value={grantForm.note}
+              onChange={(event) => onGrantFormChange({ note: event.target.value })}
+              placeholder="Internal note"
+              rows={2}
+              disabled={actionLoading}
+            />
+            <button
+              type="submit"
+              className="admin-console-primary-btn"
+              disabled={actionLoading || (grantForm.grantType === 'meter' && Number(grantForm.quantity || 0) <= 0)}
+            >
+              {actionLoading ? <Loader2 size={16} className="admin-console-spinner" /> : <Shield size={16} />}
+              Create grant
+            </button>
+          </form>
+
+          <section className="drawer-card admin-billing-card">
+            <div className="drawer-card-title">Recent grants</div>
+            {grants.length === 0 ? (
+              <p>No grants yet.</p>
+            ) : (
+              <div className="admin-grant-list">
+                {grants.map((grant) => (
+                  <div className="admin-grant-row" key={grant.id}>
+                    <strong>{grant.featureKey || grant.meter || 'Grant'}</strong>
+                    <span>
+                      {grant.source}
+                      {grant.quantity ? ` · ${formatNumber(grant.remainingQuantity ?? grant.quantity)} remaining` : ''}
+                    </span>
+                    <small>{grant.endsAt ? `Ends ${formatDateTime(grant.endsAt)}` : 'No expiry'}</small>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {actionError ? <div className="admin-console-error">{actionError}</div> : null}
@@ -520,6 +794,9 @@ function AdminConsole({ route, navigateToRoute }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
+  const [trialKind, setTrialKind] = useState('personal');
+  const [billingScenario, setBillingScenario] = useState('active_free');
+  const [grantForm, setGrantForm] = useState({ ...DEFAULT_GRANT_FORM });
 
   const activeUserId = activePanel === 'users' && route?.section === 'user' ? route.userId : null;
   const activeSearchQuery = deferredSearchInput.trim();
@@ -538,6 +815,9 @@ function AdminConsole({ route, navigateToRoute }) {
     setActionMessage('');
     setNewPassword('');
     setDisableReason('');
+    setTrialKind('personal');
+    setBillingScenario('active_free');
+    setGrantForm({ ...DEFAULT_GRANT_FORM });
     navigateToRoute(createAdminHomeRoute(), { replace: true });
   }, [navigateToRoute]);
 
@@ -641,6 +921,9 @@ function AdminConsole({ route, navigateToRoute }) {
       setActionMessage('');
       setNewPassword('');
       setDisableReason('');
+      setTrialKind('personal');
+      setBillingScenario('active_free');
+      setGrantForm({ ...DEFAULT_GRANT_FORM });
       return undefined;
     }
 
@@ -653,6 +936,9 @@ function AdminConsole({ route, navigateToRoute }) {
       setActionMessage('');
       setNewPassword('');
       setDisableReason('');
+      setTrialKind('personal');
+      setBillingScenario('active_free');
+      setGrantForm({ ...DEFAULT_GRANT_FORM });
 
       try {
         const data = await getAdminUser(activeUserId);
@@ -723,6 +1009,7 @@ function AdminConsole({ route, navigateToRoute }) {
     setActionMessage('');
     setActionError('');
     setLoginPassword('');
+    setBillingScenario('active_free');
     navigateToRoute(createAdminHomeRoute(), { replace: true });
   }
 
@@ -798,6 +1085,95 @@ function AdminConsole({ route, navigateToRoute }) {
     }
   }
 
+  function handleGrantFormChange(patch) {
+    setGrantForm((current) => ({
+      ...current,
+      ...patch,
+    }));
+  }
+
+  async function handleStartTrial() {
+    if (!selectedUser?.id) return;
+
+    setActionLoading(true);
+    setActionError('');
+    setActionMessage('');
+
+    try {
+      const data = await adminStartUserTrial(selectedUser.id, { kind: trialKind });
+      setSelectedUser(data?.user || null);
+      setActionMessage(`Started ${trialKind} trial for ${selectedUser.email}.`);
+      setUsersReloadKey((current) => current + 1);
+    } catch (error) {
+      if (error?.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      setActionError(error.message || 'Failed to start trial.');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleApplyBillingScenario() {
+    if (!selectedUser?.id) return;
+
+    setActionLoading(true);
+    setActionError('');
+    setActionMessage('');
+
+    try {
+      const data = await adminApplyUserBillingScenario(selectedUser.id, { scenario: billingScenario });
+      setSelectedUser(data?.user || null);
+      const option = BILLING_TEST_SCENARIO_OPTIONS.find((entry) => entry.value === billingScenario);
+      setActionMessage(`Applied ${option?.label || billingScenario} to ${selectedUser.email}.`);
+      setUsersReloadKey((current) => current + 1);
+    } catch (error) {
+      if (error?.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      setActionError(error.message || 'Failed to apply billing scenario.');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleCreateGrant(event) {
+    event.preventDefault();
+    if (!selectedUser?.id) return;
+
+    setActionLoading(true);
+    setActionError('');
+    setActionMessage('');
+
+    try {
+      const payload = {
+        source: grantForm.source,
+        durationDays: grantForm.durationDays ? Number(grantForm.durationDays) : null,
+        note: grantForm.note,
+      };
+      if (grantForm.grantType === 'feature') {
+        payload.featureKey = grantForm.featureKey;
+      } else {
+        payload.meter = grantForm.meter;
+        payload.quantity = Number(grantForm.quantity || 0);
+      }
+      const data = await adminCreateUserEntitlementGrant(selectedUser.id, payload);
+      setSelectedUser(data?.user || null);
+      setGrantForm({ ...DEFAULT_GRANT_FORM });
+      setActionMessage(`Created entitlement grant for ${selectedUser.email}.`);
+    } catch (error) {
+      if (error?.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      setActionError(error.message || 'Failed to create grant.');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   function handleSearchChange(event) {
     setSearchInput(event.target.value);
   }
@@ -836,6 +1212,9 @@ function AdminConsole({ route, navigateToRoute }) {
     setActionMessage('');
     setNewPassword('');
     setDisableReason('');
+    setTrialKind('personal');
+    setBillingScenario('active_free');
+    setGrantForm({ ...DEFAULT_GRANT_FORM });
     navigateToRoute(createAdminHomeRoute());
   }
 
@@ -1198,8 +1577,17 @@ function AdminConsole({ route, navigateToRoute }) {
           actionMessage={actionMessage}
           newPassword={newPassword}
           disableReason={disableReason}
+          trialKind={trialKind}
+          billingScenario={billingScenario}
+          grantForm={grantForm}
           onNewPasswordChange={setNewPassword}
           onDisableReasonChange={setDisableReason}
+          onTrialKindChange={setTrialKind}
+          onBillingScenarioChange={setBillingScenario}
+          onGrantFormChange={handleGrantFormChange}
+          onStartTrial={handleStartTrial}
+          onApplyBillingScenario={handleApplyBillingScenario}
+          onCreateGrant={handleCreateGrant}
           onPasswordReset={handlePasswordReset}
           onDisableUser={handleDisableUser}
           onReactivateUser={handleReactivateUser}

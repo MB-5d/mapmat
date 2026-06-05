@@ -4,10 +4,16 @@ const jwt = require('jsonwebtoken');
 const authStore = require('../stores/authStore');
 const adminAuditStore = require('../stores/adminAuditStore');
 const adminUsageStore = require('../stores/adminUsageStore');
+const billingStore = require('../stores/billingStore');
 const feedbackStore = require('../stores/feedbackStore');
 const imageAssetStore = require('../stores/imageAssetStore');
 const mapStore = require('../stores/mapStore');
 const { estimateUsageCosts } = require('../utils/usageCostModel');
+const {
+  METERS: ENTITLEMENT_METERS,
+  getBillingPlanConfig,
+  resolveAccountEntitlementsAsync,
+} = require('../utils/entitlements');
 const {
   SCREENSHOT_PUBLIC_BASE,
   extractScreenshotStorageKey,
@@ -21,6 +27,7 @@ const router = express.Router();
 
 const isProd = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_PUBLIC_DOMAIN;
 const ADMIN_CONSOLE_ENABLED = parseEnvBool(process.env.ADMIN_CONSOLE_ENABLED, false);
+const ADMIN_BILLING_SCENARIOS_ENABLED = parseEnvBool(process.env.ADMIN_BILLING_SCENARIOS_ENABLED, !isProd);
 const ADMIN_SESSION_COOKIE = 'admin_session';
 const ADMIN_SESSION_TTL_MS = Math.max(
   5 * 60 * 1000,
@@ -147,6 +154,7 @@ function ensureAdminConsoleEnabled(req, res, next) {
 async function ensureAdminSupportSchemaAsync() {
   await authStore.ensureAuthSchemaAsync();
   await adminAuditStore.ensureAdminAuditSchemaAsync();
+  await billingStore.ensureBillingSchemaAsync();
   await feedbackStore.ensureFeedbackSchemaAsync();
 }
 
@@ -279,6 +287,238 @@ function serializeUserDetail(user) {
     disabledAt: user.disabled_at || null,
     disabledReason: user.disabled_reason || null,
   };
+}
+
+const ADMIN_GRANT_SOURCES = new Set(['manual', 'support_exception', 'promo', 'addon']);
+const ADMIN_GRANT_METERS = new Set(Object.values(ENTITLEMENT_METERS));
+const ADMIN_GRANT_FEATURES = new Set([
+  'standardExports',
+  'advancedExports',
+  'clientShareLinks',
+  'brandedReports',
+  'scheduledRescans',
+  'priorityQueue',
+  'clientWorkspaces',
+]);
+const ADMIN_BILLING_TEST_SCENARIOS = new Set([
+  'active_free',
+  'active_solo',
+  'team_trial',
+  'trial_ended',
+  'archived',
+  'scan_limit_prompt',
+  'usage_exhausted',
+]);
+
+function toSqlTimestamp(value = new Date()) {
+  return new Date(value).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+function getFreshBillingPeriod(now = new Date()) {
+  const end = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  return {
+    start: toSqlTimestamp(now),
+    end: toSqlTimestamp(end),
+  };
+}
+
+function getArchiveRetentionDates(now = new Date()) {
+  const downloadEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const lightweightEnd = new Date(now);
+  lightweightEnd.setUTCMonth(lightweightEnd.getUTCMonth() + 12);
+  return {
+    archiveStartedAt: now,
+    downloadAccessEndsAt: downloadEnd,
+    assetRetentionEndsAt: downloadEnd,
+    lightweightRetentionEndsAt: lightweightEnd,
+  };
+}
+
+function getPlanLimitForMeter(plan, meter) {
+  if (meter === ENTITLEMENT_METERS.crawlPages) return plan?.limits?.crawlPages;
+  if (meter === ENTITLEMENT_METERS.screenshotCredits) return plan?.limits?.screenshotCredits;
+  if (meter === ENTITLEMENT_METERS.organizedExports) return plan?.limits?.organizedScreenshotExports;
+  return 0;
+}
+
+function serializeGrant(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    source: row.source,
+    externalRef: row.external_ref || null,
+    meter: row.meter || null,
+    featureKey: row.feature_key || null,
+    quantity: row.quantity === null || row.quantity === undefined ? null : Number(row.quantity),
+    remainingQuantity: row.remaining_quantity === null || row.remaining_quantity === undefined
+      ? null
+      : Number(row.remaining_quantity),
+    resetBehavior: row.reset_behavior || 'rollover',
+    startsAt: row.starts_at || null,
+    endsAt: row.ends_at || null,
+    metadata: parseJsonObject(row.metadata),
+    createdByUserId: row.created_by_user_id || null,
+    createdAt: row.created_at || null,
+  };
+}
+
+async function serializeUserBilling(user) {
+  const entitlements = await resolveAccountEntitlementsAsync(user);
+  const grants = entitlements?.account?.id
+    ? await billingStore.listEntitlementGrantsForAccountAsync({
+      accountId: entitlements.account.id,
+      limit: 25,
+      offset: 0,
+    })
+    : [];
+  return {
+    entitlements,
+    grants: grants.map((grant) => serializeGrant(grant)),
+  };
+}
+
+async function serializeUserDetailWithBilling(user) {
+  return {
+    ...serializeUserDetail(user),
+    billing: await serializeUserBilling(user),
+  };
+}
+
+function getTrialDays(kind) {
+  const config = getBillingPlanConfig();
+  const defaults = config.trialDefaults || {};
+  return kind === 'team'
+    ? Number(defaults.teamDays || 7)
+    : Number(defaults.personalDays || 7);
+}
+
+function getGrantEndsAt(durationDays) {
+  const days = Number(durationDays || 0);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  const end = new Date(Date.now() + Math.min(days, 365) * 24 * 60 * 60 * 1000);
+  return end.toISOString();
+}
+
+function getPlanByKey(config, planKey) {
+  return config.plans?.[planKey] || config.plans?.[config.fallbackPlan || 'free'] || config.plans?.free || null;
+}
+
+async function seedBillingScenarioUsageAsync({ accountId, userId, plan, scenario, period }) {
+  const seedMeter = async (meter, quantity) => {
+    const safeQuantity = Math.max(0, Math.floor(Number(quantity || 0)));
+    if (safeQuantity <= 0) return;
+    await billingStore.insertLedgerEntryAsync({
+      accountId,
+      userId,
+      meter,
+      entryType: 'debit',
+      quantity: safeQuantity,
+      source: 'included',
+      idempotencyKey: `admin-billing-scenario:${scenario}:${accountId}:${meter}:${Date.now()}`,
+      metadata: {
+        scenario,
+        createdBy: 'admin_console',
+      },
+      periodStart: period.start,
+      periodEnd: period.end,
+    });
+  };
+
+  if (scenario === 'scan_limit_prompt') {
+    const crawlLimit = getPlanLimitForMeter(plan, ENTITLEMENT_METERS.crawlPages);
+    if (crawlLimit !== null && crawlLimit !== undefined) {
+      await seedMeter(ENTITLEMENT_METERS.crawlPages, Math.max(0, Number(crawlLimit) - 5));
+    }
+    return;
+  }
+
+  if (scenario !== 'usage_exhausted') return;
+
+  for (const meter of [
+    ENTITLEMENT_METERS.crawlPages,
+    ENTITLEMENT_METERS.screenshotCredits,
+    ENTITLEMENT_METERS.organizedExports,
+  ]) {
+    const limit = getPlanLimitForMeter(plan, meter);
+    if (limit !== null && limit !== undefined) {
+      await seedMeter(meter, limit);
+    }
+  }
+}
+
+async function applyAdminBillingTestScenarioAsync({ user, scenario }) {
+  const config = getBillingPlanConfig();
+  const account = await billingStore.getOrCreateBillingAccountForUserAsync(user);
+  const now = new Date();
+  const period = getFreshBillingPeriod(now);
+  const trialStartedAt = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
+  const trialEndedAt = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const trialEndsAt = new Date(now.getTime() + getTrialDays('team') * 24 * 60 * 60 * 1000);
+  const archiveDates = getArchiveRetentionDates(now);
+  const baseUpdate = {
+    accountId: account.id,
+    planKey: 'free',
+    accountState: 'active',
+    trialState: 'none',
+    trialKind: null,
+    trialStartedAt: null,
+    trialEndsAt: null,
+    currentPeriodStartedAt: period.start,
+    currentPeriodEndsAt: period.end,
+    cancelAtPeriodEnd: false,
+    cancelledAt: null,
+    archiveStartedAt: null,
+    downloadAccessEndsAt: null,
+    assetRetentionEndsAt: null,
+    lightweightRetentionEndsAt: null,
+  };
+
+  let planKey = 'free';
+  let update = baseUpdate;
+
+  if (scenario === 'active_solo' || scenario === 'scan_limit_prompt') {
+    planKey = 'solo';
+    update = { ...baseUpdate, planKey };
+  } else if (scenario === 'team_trial') {
+    update = {
+      ...baseUpdate,
+      trialState: 'active',
+      trialKind: 'team',
+      trialStartedAt: now,
+      trialEndsAt,
+    };
+  } else if (scenario === 'trial_ended') {
+    update = {
+      ...baseUpdate,
+      trialState: 'active',
+      trialKind: 'team',
+      trialStartedAt,
+      trialEndsAt: trialEndedAt,
+    };
+  } else if (scenario === 'archived') {
+    update = {
+      ...baseUpdate,
+      accountState: 'archived',
+      cancelAtPeriodEnd: true,
+      cancelledAt: trialEndedAt,
+      ...archiveDates,
+    };
+  } else if (scenario === 'usage_exhausted') {
+    planKey = 'free';
+    update = { ...baseUpdate, planKey };
+  }
+
+  const updatedAccount = await billingStore.updateBillingAccountForAdminAsync(update);
+  const plan = getPlanByKey(config, planKey);
+  await seedBillingScenarioUsageAsync({
+    accountId: updatedAccount.id,
+    userId: user.id,
+    plan,
+    scenario,
+    period,
+  });
+  return updatedAccount;
 }
 
 function parseJsonObject(raw) {
@@ -1081,10 +1321,164 @@ router.get('/users/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    return res.json({ user: serializeUserDetail(user) });
+    return res.json({ user: await serializeUserDetailWithBilling(user) });
   } catch (error) {
     console.error('Admin get user error:', error);
     return res.status(500).json({ error: 'Failed to load user.' });
+  }
+});
+
+router.post('/users/:id/billing/trial', async (req, res) => {
+  try {
+    const user = await authStore.getAdminUserByIdAsync(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const kind = String(req.body?.kind || 'personal').trim().toLowerCase() === 'team'
+      ? 'team'
+      : 'personal';
+    const account = await billingStore.getOrCreateBillingAccountForUserAsync(user);
+    const days = getTrialDays(kind);
+    await billingStore.startTrialAsync({
+      accountId: account.id,
+      kind,
+      days,
+    });
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.actorLabel,
+      actorIp: getClientIp(req),
+      action: 'billing_trial_started',
+      targetUserId: user.id,
+      metadata: {
+        targetEmail: user.email,
+        kind,
+        days,
+      },
+    });
+
+    const updatedUser = await authStore.getAdminUserByIdAsync(user.id);
+    return res.json({
+      success: true,
+      user: await serializeUserDetailWithBilling(updatedUser),
+    });
+  } catch (error) {
+    console.error('Admin start billing trial error:', error);
+    return res.status(500).json({ error: 'Failed to start trial.' });
+  }
+});
+
+router.post('/users/:id/billing/test-scenario', async (req, res) => {
+  try {
+    if (!ADMIN_BILLING_SCENARIOS_ENABLED) {
+      return res.status(403).json({ error: 'Billing test scenarios are not enabled in this environment.' });
+    }
+
+    const user = await authStore.getAdminUserByIdAsync(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const scenario = String(req.body?.scenario || '').trim().toLowerCase();
+    if (!ADMIN_BILLING_TEST_SCENARIOS.has(scenario)) {
+      return res.status(400).json({ error: 'Invalid billing test scenario.' });
+    }
+
+    await applyAdminBillingTestScenarioAsync({ user, scenario });
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.actorLabel,
+      actorIp: getClientIp(req),
+      action: 'billing_test_scenario_applied',
+      targetUserId: user.id,
+      metadata: {
+        targetEmail: user.email,
+        scenario,
+      },
+    });
+
+    const updatedUser = await authStore.getAdminUserByIdAsync(user.id);
+    return res.json({
+      success: true,
+      scenario,
+      user: await serializeUserDetailWithBilling(updatedUser),
+    });
+  } catch (error) {
+    console.error('Admin apply billing test scenario error:', error);
+    return res.status(500).json({ error: 'Failed to apply billing test scenario.' });
+  }
+});
+
+router.post('/users/:id/billing/grants', async (req, res) => {
+  try {
+    const user = await authStore.getAdminUserByIdAsync(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const source = String(req.body?.source || 'manual').trim().toLowerCase();
+    if (!ADMIN_GRANT_SOURCES.has(source)) {
+      return res.status(400).json({ error: 'Invalid grant source.' });
+    }
+
+    const meter = String(req.body?.meter || '').trim();
+    const featureKey = String(req.body?.featureKey || '').trim();
+    if (!meter && !featureKey) {
+      return res.status(400).json({ error: 'Choose a meter or feature to grant.' });
+    }
+    if (meter && !ADMIN_GRANT_METERS.has(meter)) {
+      return res.status(400).json({ error: 'Invalid grant meter.' });
+    }
+    if (featureKey && !ADMIN_GRANT_FEATURES.has(featureKey)) {
+      return res.status(400).json({ error: 'Invalid feature grant.' });
+    }
+
+    const quantity = meter ? Math.max(0, Math.floor(Number(req.body?.quantity || 0))) : null;
+    if (meter && quantity <= 0) {
+      return res.status(400).json({ error: 'Meter grants require a positive quantity.' });
+    }
+
+    const account = await billingStore.getOrCreateBillingAccountForUserAsync(user);
+    const grant = await billingStore.createEntitlementGrantAsync({
+      accountId: account.id,
+      source,
+      meter: meter || null,
+      featureKey: featureKey || null,
+      quantity,
+      resetBehavior: source === 'addon' ? 'rollover' : 'temporary',
+      startsAt: new Date().toISOString(),
+      endsAt: getGrantEndsAt(req.body?.durationDays),
+      metadata: {
+        note: String(req.body?.note || '').trim() || null,
+      },
+      createdByUserId: req.adminSession.id,
+    });
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.actorLabel,
+      actorIp: getClientIp(req),
+      action: 'billing_entitlement_grant_created',
+      targetUserId: user.id,
+      metadata: {
+        targetEmail: user.email,
+        grantId: grant.id,
+        source,
+        meter: meter || null,
+        featureKey: featureKey || null,
+        quantity,
+      },
+    });
+
+    const updatedUser = await authStore.getAdminUserByIdAsync(user.id);
+    return res.status(201).json({
+      success: true,
+      grant: serializeGrant(grant),
+      user: await serializeUserDetailWithBilling(updatedUser),
+    });
+  } catch (error) {
+    console.error('Admin create entitlement grant error:', error);
+    return res.status(500).json({ error: 'Failed to create entitlement grant.' });
   }
 });
 
@@ -1116,7 +1510,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
 
     return res.json({
       success: true,
-      user: serializeUserDetail(updatedUser),
+      user: await serializeUserDetailWithBilling(updatedUser),
     });
   } catch (error) {
     console.error('Admin reset password error:', error);
@@ -1148,7 +1542,7 @@ router.post('/users/:id/disable', async (req, res) => {
 
     return res.json({
       success: true,
-      user: serializeUserDetail(updatedUser),
+      user: await serializeUserDetailWithBilling(updatedUser),
     });
   } catch (error) {
     console.error('Admin disable user error:', error);
@@ -1178,7 +1572,7 @@ router.post('/users/:id/reactivate', async (req, res) => {
 
     return res.json({
       success: true,
-      user: serializeUserDetail(updatedUser),
+      user: await serializeUserDetailWithBilling(updatedUser),
     });
   } catch (error) {
     console.error('Admin reactivate user error:', error);

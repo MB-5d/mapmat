@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { authMiddleware, requireAuth } = require('./auth');
 const mapStore = require('../stores/mapStore');
 const authStore = require('../stores/authStore');
+const billingStore = require('../stores/billingStore');
 const collaborationStore = require('../stores/collaborationStore');
 const collaborationActivityStore = require('../stores/collaborationActivityStore');
 const permissionPolicy = require('../policies/permissionPolicy');
@@ -22,6 +23,11 @@ const {
   queueMembershipRemovedEmailAsync,
 } = require('../utils/emailDelivery');
 const { recordUsageEvent } = require('../utils/usageMetering');
+const {
+  ACTIONS: ENTITLEMENT_ACTIONS,
+  checkAccountActionAsync,
+  sendEntitlementError,
+} = require('../utils/entitlements');
 
 const router = express.Router();
 
@@ -493,6 +499,16 @@ async function acceptInviteForUserAsync(invite, user) {
     role: invite.role,
     invitedByUserId: invite.inviter_user_id,
   });
+
+  const ownerUser = await authStore.getPublicUserByIdAsync(map.user_id);
+  const ownerAccount = await billingStore.getOrCreateBillingAccountForUserAsync(ownerUser);
+  if (ownerAccount?.id) {
+    await billingStore.markMembershipAcceptedAsync({
+      accountId: ownerAccount.id,
+      userId: user.id,
+      email: invite.invitee_email,
+    });
+  }
 
   const [acceptedInvite, membership] = await Promise.all([
     collaborationStore.markInviteAcceptedAsync({
@@ -1030,12 +1046,48 @@ router.post('/maps/:id/invites', async (req, res) => {
       const isExpired = existingPendingInvite.expires_at
         && new Date(existingPendingInvite.expires_at) < new Date();
       if (!isExpired) {
+        const ownerUser = map.user_id === req.user.id
+          ? req.user
+          : await authStore.getPublicUserByIdAsync(map.user_id);
+        const ownerAccount = await billingStore.getOrCreateBillingAccountForUserAsync(ownerUser);
+        await billingStore.upsertInvitedMembershipAsync({
+          accountId: ownerAccount?.id,
+          userId: inviteeUserId || null,
+          email: inviteeEmail,
+          role: inviteRole,
+        });
         return res.json({
           invite: serializeInvite(existingPendingInvite, { includeToken: true }),
           reused: true,
         });
       }
       await collaborationStore.markInviteExpiredAsync(existingPendingInvite.id);
+    }
+
+    const ownerUser = map.user_id === req.user.id
+      ? req.user
+      : await authStore.getPublicUserByIdAsync(map.user_id);
+    const seatEntitlement = await checkAccountActionAsync(ownerUser, ENTITLEMENT_ACTIONS.seatInvite);
+    if (!seatEntitlement.allowed) {
+      return sendEntitlementError(res, seatEntitlement);
+    }
+    if (seatEntitlement.summary?.trial?.active && seatEntitlement.summary.trial.kind === 'team') {
+      const trialInviteRoles = new Set([
+        permissionPolicy.ROLES.EDITOR,
+        permissionPolicy.ROLES.COMMENTER,
+        permissionPolicy.ROLES.VIEWER,
+      ]);
+      if (!trialInviteRoles.has(inviteRole)) {
+        return res.status(400).json({ error: 'Team trials support one editor, one commenter, and one viewer.' });
+      }
+      const roleCounts = await billingStore.countSeatRolesForAccountAsync(seatEntitlement.summary.account.id);
+      if (Number(roleCounts[inviteRole] || 0) >= 1) {
+        return res.status(402).json({
+          error: `Team trials include one ${inviteRole}. Upgrade to add more seats for this role.`,
+          code: 'TRIAL_ROLE_LIMIT',
+          role: inviteRole,
+        });
+      }
     }
 
     const token = crypto.randomBytes(24).toString('hex');
@@ -1047,6 +1099,12 @@ router.post('/maps/:id/invites', async (req, res) => {
       role: inviteRole,
       token,
       expiresAt: parseInviteExpiration(expires_in_days),
+    });
+    await billingStore.upsertInvitedMembershipAsync({
+      accountId: seatEntitlement.summary.account.id,
+      userId: inviteeUserId || null,
+      email: inviteeEmail,
+      role: inviteRole,
     });
 
     const actorRole = await resolveActorRoleAsync({

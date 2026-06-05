@@ -257,6 +257,24 @@ export async function getMe() {
   return fetchApi('/auth/me');
 }
 
+export async function getBillingConfig() {
+  return fetchApi('/api/billing/config');
+}
+
+export async function createBillingCheckoutSession(payload = {}) {
+  return fetchApi('/api/billing/checkout/sessions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createBillingPortalSession(payload = {}) {
+  return fetchApi('/api/billing/portal/sessions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function updateProfile(data) {
   return fetchApi('/auth/me', {
     method: 'PUT',
@@ -340,6 +358,27 @@ export async function adminDisableUser(userId, { reason } = {}) {
 export async function adminReactivateUser(userId) {
   return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/reactivate`, {
     method: 'POST',
+  });
+}
+
+export async function adminStartUserTrial(userId, { kind = 'personal' } = {}) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/billing/trial`, {
+    method: 'POST',
+    body: JSON.stringify({ kind }),
+  });
+}
+
+export async function adminApplyUserBillingScenario(userId, { scenario }) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/billing/test-scenario`, {
+    method: 'POST',
+    body: JSON.stringify({ scenario }),
+  });
+}
+
+export async function adminCreateUserEntitlementGrant(userId, payload = {}) {
+  return fetchAdminApi(`/api/admin/users/${encodeURIComponent(userId)}/billing/grants`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

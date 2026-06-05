@@ -15,7 +15,36 @@ import { resolveApiAssetUrl } from '../../utils/assets';
 
 const AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 
-const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast }) => {
+function formatUsageValue(value) {
+  if (value === null || value === undefined) return 'Unlimited';
+  return Number(value || 0).toLocaleString();
+}
+
+function getUsagePercent(meter) {
+  if (!meter || meter.unlimited) return 0;
+  const limit = Number(meter.included ?? meter.limit ?? 0);
+  if (!limit) return 0;
+  return Math.min(100, Math.max(0, Math.round((Number(meter.used || 0) / limit) * 100)));
+}
+
+function isTrialEnded(entitlements) {
+  const trial = entitlements?.trial;
+  if (!trial || trial.active || trial.state !== 'active' || !trial.endsAt) return false;
+  const endsAt = new Date(trial.endsAt);
+  return Number.isFinite(endsAt.getTime()) && endsAt.getTime() <= Date.now();
+}
+
+function formatUsageSummary(item) {
+  if (!item) return '';
+  if (item.unlimited) return `${formatUsageValue(item.used)} used`;
+  const included = item.included ?? item.limit;
+  const extra = Number(item.grantRemaining ?? item.grantExtra ?? 0);
+  const remaining = item.remaining ?? Math.max(0, Number(included || 0) + extra - Number(item.used || 0));
+  const suffix = extra > 0 ? ` + ${formatUsageValue(extra)} extra` : '';
+  return `${formatUsageValue(remaining)} left / ${formatUsageValue(included)} included${suffix}`;
+}
+
+const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, onOpenPlans, showToast }) => {
   const [name, setName] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -62,6 +91,18 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     ? Boolean(user.hasCustomAvatar)
     : avatarSource === 'custom';
   const hasDisplayAvatar = !!avatarUrl;
+  const entitlements = user?.entitlements || null;
+  const planName = entitlements?.plan?.name || 'Free';
+  const accountState = entitlements?.account?.state || 'active';
+  const isArchived = entitlements?.archived;
+  const trialEnded = isTrialEnded(entitlements);
+  const usageRows = [
+    { label: 'Crawl pages', item: entitlements?.meters?.crawlPages },
+    { label: 'Screenshot credits', item: entitlements?.meters?.screenshotCredits },
+    { label: 'Organized exports', item: entitlements?.meters?.organizedExports },
+    { label: 'Active projects', item: entitlements?.limits?.activeProjects },
+    { label: 'Seats', item: entitlements?.limits?.seats },
+  ].filter((row) => row.item);
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -71,12 +112,6 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     setLoading(true);
 
     try {
-      if (user?.authMode === 'demo') {
-        setError('Demo profile is read-only.');
-        setLoading(false);
-        return;
-      }
-
       const updateData = {};
       const trimmedName = name.trim();
       if (trimmedName && trimmedName !== user.name) {
@@ -208,11 +243,6 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
     setError('');
 
     try {
-      if (user?.authMode === 'demo') {
-        setError('Demo account cannot be deleted.');
-        setLoading(false);
-        return;
-      }
       await api.deleteAccount(deletePassword);
       showToast?.('Account deleted', 'success');
       onLogout?.();
@@ -256,13 +286,73 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, showToast })
           <div className="account-hero-name">{user?.name || 'Your account'}</div>
           <div className="account-hero-email">{user?.email || ''}</div>
         </div>
-        <div className="account-hero-badge">Active</div>
+        <div className="account-hero-badge">{isArchived ? 'Archived' : planName}</div>
       </div>
 
       {!showDeleteConfirm ? (
         <form onSubmit={handleUpdateProfile} className="profile-form">
           {error && <div className="auth-error">{error}</div>}
           {success && <div className="auth-success">{success}</div>}
+
+          {entitlements ? (
+            <div className="form-section account-plan-section">
+              <div className="account-plan-header">
+                <div>
+                  <h4>Plan</h4>
+                  <p>{planName} · {accountState}</p>
+                </div>
+                {isArchived ? (
+                  <span className="account-plan-pill account-plan-pill--warning">Archived</span>
+                ) : entitlements.trial?.active ? (
+                  <span className="account-plan-pill">Trial</span>
+                ) : trialEnded ? (
+                  <span className="account-plan-pill account-plan-pill--warning">Trial ended</span>
+                ) : null}
+              </div>
+              <div className="account-plan-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={onOpenPlans}
+                  disabled={!user}
+                >
+                  Plan options
+                </Button>
+              </div>
+              {isArchived ? (
+                <div className="account-plan-notice">
+                  This account is archived. Existing work can be viewed, but new scans, screenshots, exports, invites, and shares are locked.
+                </div>
+              ) : trialEnded ? (
+                <div className="account-plan-notice">
+                  Your trial has ended. The account is now limited to Free plan allowances unless upgraded.
+                </div>
+              ) : entitlements.trial?.active && entitlements.trial?.organizedDownloadsAllowed === false ? (
+                <div className="account-plan-notice">
+                  Screenshot capture is included during this trial. Organized screenshot downloads require a paid plan.
+                </div>
+              ) : null}
+              <div className="account-usage-list">
+                {usageRows.map(({ label, item }) => (
+                  <div className="account-usage-row" key={item.meter || label}>
+                    <div className="account-usage-copy">
+                      <span>{label}</span>
+                      <span>{formatUsageSummary(item)}</span>
+                    </div>
+                    {!item.unlimited ? (
+                      <div className="account-usage-track" aria-hidden="true">
+                        <div
+                          className="account-usage-fill"
+                          style={{ width: `${getUsagePercent(item)}%` }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="form-section">
             <div className="profile-avatar-controls">

@@ -1,14 +1,6 @@
 import runtimePalettes from './runtimePalettes.json';
 
-const normalizeOrigin = (value) => String(value || '').replace(/\/+$/, '');
-const CONFIGURED_API_BASE = normalizeOrigin(process.env.REACT_APP_API_BASE || 'http://localhost:4002');
-const STAGING_API_FALLBACK = 'https://mapmat-staging.up.railway.app';
-const isStagingFrontend = typeof window !== 'undefined'
-  && window.location?.hostname === 'staging.vellic.io';
-
-export const API_BASE = isStagingFrontend && CONFIGURED_API_BASE === 'https://api-staging.vellic.io'
-  ? STAGING_API_FALLBACK
-  : CONFIGURED_API_BASE;
+export const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
 export const APP_ORIGIN = String(process.env.REACT_APP_APP_ORIGIN || 'https://app.vellic.io').replace(/\/+$/, '');
 export const MARKETING_ORIGIN = String(process.env.REACT_APP_MARKETING_ORIGIN || 'https://vellic.io').replace(/\/+$/, '');
 
@@ -21,7 +13,6 @@ function parseEnvBool(value, fallback = false) {
 }
 
 export const APP_ONLY_MODE = parseEnvBool(process.env.REACT_APP_APP_ONLY_MODE, false);
-export const SHOW_DEMO_AUTH = parseEnvBool(process.env.REACT_APP_ENABLE_DEMO_AUTH, !APP_ONLY_MODE);
 export const GOOGLE_AUTH_ENABLED = parseEnvBool(process.env.REACT_APP_GOOGLE_AUTH_ENABLED, false);
 // Temporarily paused while primary scan stability work continues. See docs/authenticated-scan-paused.md.
 export const AUTHENTICATED_SCAN_ENABLED = parseEnvBool(process.env.REACT_APP_AUTHENTICATED_SCAN_ENABLED, false);

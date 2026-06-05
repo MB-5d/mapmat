@@ -101,6 +101,7 @@
 .admin-console-auth-form input,
 .admin-console-search-input input,
 .admin-console-action-card input,
+.admin-console-action-card select,
 .admin-console-action-card textarea {
   width: 100%;
   box-sizing: border-box;
@@ -124,6 +125,7 @@
 .admin-console-auth-form input:focus,
 .admin-console-search-input input:focus,
 .admin-console-action-card input:focus,
+.admin-console-action-card select:focus,
 .admin-console-action-card textarea:focus {
   border-color: var(--color-primary);
   box-shadow: var(--ui-focus-ring);
@@ -161,6 +163,12 @@
   color: var(--color-text-secondary);
   font-size: 13px;
   line-height: 1.45;
+}
+
+.admin-console-action-note {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .admin-console-primary-btn,
@@ -585,6 +593,69 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+}
+
+.admin-billing-card p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-billing-summary-grid,
+.admin-billing-usage-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-billing-summary-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-billing-summary-grid > div,
+.admin-billing-usage-grid > div,
+.admin-grant-row {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-bg-primary);
+}
+
+.admin-billing-summary-grid strong,
+.admin-billing-usage-grid strong,
+.admin-grant-row strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.admin-billing-summary-grid small,
+.admin-grant-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.admin-billing-usage-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.admin-billing-usage-grid span,
+.admin-grant-row span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.admin-grant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .admin-console-error,

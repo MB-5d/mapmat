@@ -33,6 +33,12 @@ const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
 const { analyzeMapInsights } = require('../utils/mapInsights');
 const { recordUsageEvent } = require('../utils/usageMetering');
 const {
+  ACTIONS: ENTITLEMENT_ACTIONS,
+  METERS: ENTITLEMENT_METERS,
+  requireAccountActionAsync,
+  recordMeterDebitAsync,
+} = require('../utils/entitlements');
+const {
   extractScreenshotStorageKey,
   getContentTypeForKey,
   getScreenshotStorageProvider,
@@ -1796,11 +1802,15 @@ router.post('/projects', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Project name is required' });
     }
 
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.projectCreate);
+    if (!entitlement) return;
+
     const projectId = uuidv4();
 
     await projectStore.createProjectAsync({
       id: projectId,
       userId: req.user.id,
+      accountId: entitlement.summary.account.id,
       name: name.trim(),
     });
     const project = await projectStore.getProjectByIdAsync(projectId);
@@ -2135,9 +2145,33 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
     }
 
     const packageName = buildImageDownloadPackageName(map.name || repaired.parsed.root?.title || 'Map');
+    const exportEntitlement = await requireAccountActionAsync(
+      req,
+      res,
+      ENTITLEMENT_ACTIONS.organizedExportCreate
+    );
+    if (!exportEntitlement) return;
+    const exportIdempotencyKey = req.get('Idempotency-Key')
+      || req.body?.idempotencyKey
+      || `organized-export:${id}:${Date.now()}`;
+
     if (files.length === 1) {
       const file = files[0];
       const filename = file.path.split('/').pop() || `${packageName}.jpg`;
+      await recordMeterDebitAsync({
+        user: req.user,
+        accountSummary: exportEntitlement.summary,
+        meter: ENTITLEMENT_METERS.organizedExports,
+        quantity: 1,
+        idempotencyKey: exportIdempotencyKey,
+        metadata: {
+          mapId: id,
+          scope,
+          packageType: 'single',
+          fileCount: files.length,
+          bytes: file.buffer.length,
+        },
+      });
       recordUsageEvent(req, 'download_images', 1, {
         mapId: id,
         scope,
@@ -2164,6 +2198,20 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
       })),
     ]);
     const zipBuffer = createZipBuffer(zipEntries);
+    await recordMeterDebitAsync({
+      user: req.user,
+      accountSummary: exportEntitlement.summary,
+      meter: ENTITLEMENT_METERS.organizedExports,
+      quantity: 1,
+      idempotencyKey: exportIdempotencyKey,
+      metadata: {
+        mapId: id,
+        scope,
+        packageType: 'zip',
+        fileCount: files.length,
+        bytes: zipBuffer.length,
+      },
+    });
     recordUsageEvent(req, 'download_images', 1, {
       mapId: id,
       scope,
@@ -2177,6 +2225,9 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
     return res.send(zipBuffer);
   } catch (error) {
     console.error('Download map images error:', error);
+    if (error?.code === 'ENTITLEMENT_REQUIRED') {
+      return res.status(error.status || 402).json({ error: error.message || 'Plan limit reached', code: error.code });
+    }
     return res.status(500).json({ error: 'Failed to download map images' });
   }
 });
@@ -2254,6 +2305,9 @@ router.post('/maps', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite);
+    if (!entitlement) return;
+
     // If project_id provided, verify ownership
     if (normalizedProjectId) {
       const project = await projectStore.getProjectForUserAsync(normalizedProjectId, req.user.id);
@@ -2281,6 +2335,7 @@ router.post('/maps', requireAuth, async (req, res) => {
     await mapStore.createMapAsync({
       id: mapId,
       userId: req.user.id,
+      accountId: entitlement.summary.account.id,
       projectId: normalizedProjectId,
       name: trimmedName,
       notes: notes ? notes.trim() : null,
@@ -2338,6 +2393,9 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       expected_updated_at,
     } = req.body;
     const normalizedProjectId = normalizeProjectSelectionValue(project_id);
+
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite);
+    if (!entitlement) return;
 
     const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
     const map = collaborationEnabled
@@ -2501,6 +2559,9 @@ router.post('/maps/:id/node-assets/upload', requireAuth, async (req, res) => {
     const nodeId = String(req.body?.nodeId || '').trim();
     const parsedImage = parseNodeAssetDataImage(req.body?.imageDataUrl);
 
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite);
+    if (!entitlement) return;
+
     const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
     const map = collaborationEnabled
       ? await mapStore.getMapAccessibleToUserAsync(id, req.user.id)
@@ -2556,6 +2617,9 @@ router.patch('/maps/:id/node-assets', requireAuth, async (req, res) => {
     if (!updatesById || updatesById.size === 0) {
       return res.status(400).json({ error: 'No node asset updates provided' });
     }
+
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite);
+    if (!entitlement) return;
 
     const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
     const map = collaborationEnabled
@@ -3317,6 +3381,9 @@ router.post('/shares', requireAuth, async (req, res) => {
     if (!root) {
       return res.status(400).json({ error: 'Map data is required' });
     }
+
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.shareCreate);
+    if (!entitlement) return;
 
     // If map_id provided, verify ownership
     if (map_id) {

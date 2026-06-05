@@ -1,6 +1,7 @@
 const adapter = require('./dbAdapter');
 let ensureMapInsightsSchemaPromise = null;
 let ensureMapVersionBookmarkSchemaPromise = null;
+let ensureMapBillingSchemaPromise = null;
 
 async function ensureColumnAsync(table, column, type) {
   let rows = [];
@@ -48,6 +49,22 @@ async function ensureMapVersionBookmarkSchemaAsync() {
     throw error;
   }
 }
+
+async function ensureMapBillingSchemaAsync() {
+  if (ensureMapBillingSchemaPromise) return ensureMapBillingSchemaPromise;
+  ensureMapBillingSchemaPromise = (async () => {
+    await ensureColumnAsync('maps', 'account_id', 'TEXT');
+    await ensureColumnAsync('maps', 'status', "TEXT NOT NULL DEFAULT 'active'");
+    await ensureColumnAsync('maps', 'archived_at', 'TIMESTAMP');
+  })();
+  try {
+    await ensureMapBillingSchemaPromise;
+  } catch (error) {
+    ensureMapBillingSchemaPromise = null;
+    throw error;
+  }
+}
+
 
 function listMapsByUserAsync({ userId, projectId, limit, offset }) {
   let query = `
@@ -195,9 +212,10 @@ function getMapByIdAsync(mapId) {
   return adapter.queryOneAsync('SELECT * FROM maps WHERE id = ?', [mapId]);
 }
 
-function createMapAsync({
+async function createMapAsync({
   id,
   userId,
+  accountId = null,
   projectId,
   name,
   notes,
@@ -208,12 +226,14 @@ function createMapAsync({
   colors,
   connectionColors,
 }) {
+  await ensureMapBillingSchemaAsync();
   return adapter.executeAsync(`
-    INSERT INTO maps (id, user_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO maps (id, user_id, account_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     id,
     userId,
+    accountId,
     projectId || null,
     name,
     notes,
@@ -464,6 +484,7 @@ async function getMapVersionByIdAsync(versionId) {
 module.exports = {
   ensureMapInsightsSchemaAsync,
   ensureMapVersionBookmarkSchemaAsync,
+  ensureMapBillingSchemaAsync,
   listMapsByUserAsync,
   listMapsAccessibleToUserAsync,
   countMapsByUserAsync,

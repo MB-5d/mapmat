@@ -26,6 +26,8 @@ const toSceneNodeData = (node) => ({
   node,
 });
 
+const isEntitlementLockedNode = (node) => Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
+
 const mergeSceneNodeSnapshot = (sceneNode, snapshot) => {
   if (!snapshot) return sceneNode;
   return {
@@ -320,7 +322,7 @@ const MapSurfaceV2 = ({
               onViewNotes={onViewNotes}
               activeId={isBranchDragging ? node.id : activeId}
               isGhosted={isGhosted}
-              badges={[]}
+              badges={isEntitlementLockedNode(node) ? ['Upgrade'] : []}
               showPageNumbers={showPageNumbers}
               showAnnotations={!markerFilteredOut}
               thumbnailRequestIds={thumbnailRequestIds}

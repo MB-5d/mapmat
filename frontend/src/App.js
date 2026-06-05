@@ -177,9 +177,227 @@ import {
   getBranchMoveBlockReason,
 } from './utils/treeMoveUtils';
 
+const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
 const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
 const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
+const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
+const GUEST_SCAN_PAGE_LIMIT = 25;
+const PLAN_OPTION_CARDS = [
+  { key: 'solo', name: 'Solo', scan: '1,000 pages/mo', screenshots: '100 screenshots/mo', note: 'For one person' },
+  { key: 'pro', name: 'Pro', scan: '10,000 pages/mo', screenshots: '750 screenshots/mo', note: 'For client-ready work' },
+  { key: 'studio', name: 'Studio', scan: '50,000 pages/mo', screenshots: '3,000 screenshots/mo', note: 'For small teams' },
+  { key: 'agency', name: 'Agency', scan: '200,000 pages/mo', screenshots: '10,000 screenshots/mo', note: 'For larger teams' },
+];
+const SCREENSHOT_CREDIT_PACKS = [
+  { key: 'screenshot_credits_25', label: '25 credits', price: '$5' },
+  { key: 'screenshot_credits_50', label: '50 credits', price: '$8' },
+  { key: 'screenshot_credits_100', label: '100 credits', price: '$15' },
+];
+
+function formatEntitlementCount(value) {
+  if (value === null || value === undefined) return 'Unlimited';
+  return Number(value || 0).toLocaleString();
+}
+
+function isEntitlementLockedNode(node) {
+  return Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
+}
+
+function cloneScanNode(node) {
+  if (!node) return node;
+  return {
+    ...node,
+    children: Array.isArray(node.children) ? node.children.map(cloneScanNode) : [],
+  };
+}
+
+function createEntitlementGhostNode({ id, url, title, parentUrl = '', subdomainRoot = false }) {
+  return {
+    id,
+    url,
+    title,
+    pageType: 'Locked',
+    description: 'Upgrade to see full map',
+    parentUrl,
+    thumbnailUrl: undefined,
+    metadataAvailable: false,
+    scanStatus: 'scan_limited',
+    isEntitlementLocked: true,
+    entitlementLocked: true,
+    subdomainRoot,
+    orphanType: subdomainRoot ? 'subdomain' : null,
+    children: [],
+  };
+}
+
+function getScanLimitGhostCounts(entitlement = null, visibleNodeCount = 0) {
+  const estimate = Math.max(0, Number(entitlement?.lockedPageEstimate || 0) || 0);
+  const allowedPages = Math.max(0, Number(entitlement?.allowedPages || entitlement?.visiblePageLimit || 0) || 0);
+  const visibleCount = Math.max(0, Number(visibleNodeCount || entitlement?.visiblePageCount || 0) || 0);
+  const visibleGap = allowedPages > 0 ? Math.max(0, allowedPages - visibleCount) : 0;
+  const lockedEstimate = Math.max(estimate, visibleGap);
+  const basis = lockedEstimate > 0 ? lockedEstimate : 4;
+  return {
+    lockedEstimate,
+    rootGhostCount: Math.min(7, Math.max(3, basis)),
+    subdomainGhostCount: Math.min(7, Math.max(3, Math.ceil(basis / 2))),
+  };
+}
+
+function getScanLimitPromptSubtitle(prompt = null) {
+  if (!prompt) return '';
+  const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
+  const planName = prompt.planName || 'Free';
+  if (prompt.mode === 'guest') {
+    return `Only the first ${allowed} pages will be fully visible for logged-out and Free tier users.`;
+  }
+  if (prompt.capReason === 'monthly_remaining') {
+    return `This scan is larger than the crawl pages available in the current billing period. It will stop at ${allowed} pages.`;
+  }
+  if (prompt.capReason === 'per_scan_limit' && String(planName).toLowerCase() === 'free') {
+    return `Only the first ${allowed} pages will be fully visible for Free tier users.`;
+  }
+  if (prompt.capReason === 'per_scan_limit') {
+    return `This scan is larger than the per-scan page limit for ${planName}. It will stop at ${allowed} pages.`;
+  }
+  return `This scan will stop at ${allowed} pages based on the current plan.`;
+}
+
+function getScanLimitPromptActionCopy(prompt = null) {
+  const allowed = formatEntitlementCount(prompt?.allowedPages || prompt?.remaining || 0);
+  return `The scan will continue and stop at ${allowed} pages. Locked pages will appear as grey upgrade previews.`;
+}
+
+function shouldShowScanLimitPreview(entitlement = null) {
+  return Boolean(entitlement?.capped && entitlement.limitReached !== false);
+}
+
+function getVisibleScanAllowanceForEntitlements({
+  entitlements = null,
+  isLoggedIn = false,
+  requestedPages = DEFAULT_SCAN_REQUESTED_PAGES,
+} = {}) {
+  if (!isLoggedIn) {
+    return {
+      blocked: false,
+      allowedPages: Math.min(requestedPages, GUEST_SCAN_PAGE_LIMIT),
+    };
+  }
+  if (entitlements?.archived) {
+    return {
+      blocked: true,
+      allowedPages: 0,
+    };
+  }
+
+  const meter = entitlements?.meters?.crawlPages;
+  if (!meter || meter.unlimited) {
+    return {
+      blocked: false,
+      allowedPages: requestedPages,
+    };
+  }
+
+  const remaining = Math.max(0, Math.floor(Number(meter.remaining || 0)));
+  if (remaining <= 0) {
+    return {
+      blocked: true,
+      allowedPages: 0,
+    };
+  }
+
+  const perScanLimit = entitlements?.limits?.scanPagesPerRun;
+  const perScanAllowed = perScanLimit?.unlimited
+    ? requestedPages
+    : Math.max(1, Math.floor(Number(perScanLimit?.limit || requestedPages)));
+
+  return {
+    blocked: false,
+    allowedPages: Math.min(requestedPages, remaining, perScanAllowed),
+  };
+}
+
+function getVisibleScanLimitFromEntitlement(entitlement = null) {
+  return Math.max(0, Math.floor(Number(
+    entitlement?.visiblePageLimit
+      || entitlement?.allowedPages
+      || entitlement?.visiblePageCount
+      || 0,
+  )) || 0);
+}
+
+function canRescanEntitlementLimitedMap({
+  scanMeta = null,
+  entitlements = null,
+  isLoggedIn = false,
+  requestedPages = DEFAULT_SCAN_REQUESTED_PAGES,
+} = {}) {
+  const entitlement = scanMeta?.entitlement || scanMeta;
+  if (!shouldShowScanLimitPreview(entitlement)) return false;
+
+  const currentLimit = getVisibleScanLimitFromEntitlement(entitlement);
+  const nextAllowance = getVisibleScanAllowanceForEntitlements({
+    entitlements,
+    isLoggedIn,
+    requestedPages,
+  });
+
+  return !nextAllowance.blocked && nextAllowance.allowedPages > currentLimit;
+}
+
+function addScanLimitGhosts(rootNode, orphanNodes = [], entitlement = null) {
+  if (!rootNode || !shouldShowScanLimitPreview(entitlement)) return { root: rootNode, orphans: orphanNodes };
+  const visibleNodes = collectAllNodesWithOrphans(rootNode, orphanNodes);
+  if (visibleNodes.some(isEntitlementLockedNode)) {
+    return { root: rootNode, orphans: orphanNodes };
+  }
+
+  const root = cloneScanNode(rootNode);
+  const orphans = (orphanNodes || []).map(cloneScanNode);
+  let origin = 'https://locked.vellic.local';
+  let hostname = 'locked.vellic.local';
+  try {
+    const parsed = new URL(root.url || '');
+    origin = parsed.origin;
+    hostname = parsed.hostname.replace(/^www\./i, '');
+  } catch {
+    // Use fallback preview URLs for imported or malformed roots.
+  }
+
+  const { rootGhostCount, subdomainGhostCount } = getScanLimitGhostCounts(entitlement, visibleNodes.length);
+
+  root.children = [
+    ...(root.children || []),
+    ...Array.from({ length: rootGhostCount }, (_, index) => createEntitlementGhostNode({
+      id: `entitlement-ghost-root-${index + 1}`,
+      url: `${origin}/locked-preview-${index + 1}`,
+      title: 'Upgrade to see full map',
+      parentUrl: root.url || '',
+    })),
+  ];
+
+  const ghostSubdomains = Array.from({ length: subdomainGhostCount }, (_, index) => createEntitlementGhostNode({
+    id: `entitlement-ghost-subdomain-${index + 1}`,
+    url: `https://preview-${index + 1}.${hostname}/`,
+    title: 'Upgrade to see subdomains',
+    subdomainRoot: true,
+  }));
+
+  return { root, orphans: [...orphans, ...ghostSubdomains] };
+}
+
+function getEntitlementErrorCode(error) {
+  return error?.code || error?.payload?.code || null;
+}
+
+function isEntitlementError(error) {
+  const code = getEntitlementErrorCode(error);
+  return code === 'ENTITLEMENT_REQUIRED'
+    || code === 'ACCOUNT_ARCHIVED'
+    || error?.status === 402
+    || error?.status === 403;
+}
 
 function getImageCaptureJobErrorMessage(error, fallback = 'Image capture failed') {
   const message = String(error?.message || error?.error || '').trim();
@@ -1281,6 +1499,10 @@ const SitemapTree = ({
 
   const getBadgesForNode = (node, nodeMeta) => {
     const badges = [];
+    if (isEntitlementLockedNode(node)) {
+      badges.push('Upgrade');
+      return badges;
+    }
     if (node.isDuplicate) badges.push('Duplicate');
     if (isVirtualMissingNode(node)) badges.push('Missing');
     const orphanType = nodeMeta?.orphanType || node.orphanType;
@@ -1422,7 +1644,13 @@ const SitemapTree = ({
               left: nodeData.x,
               top: nodeData.y,
             }}
-            onDoubleClick={() => onNodeDoubleClick?.(nodeData.node.id)}
+            onDoubleClick={() => {
+              if (isEntitlementLockedNode(nodeData.node)) {
+                onNodeClick?.(nodeData.node);
+                return;
+              }
+              onNodeDoubleClick?.(nodeData.node.id);
+            }}
             onClick={(e) => onNodeClick?.(nodeData.node, e)}
             onContextMenu={(e) => onNodeContextMenu?.(nodeData.node.id, e)}
           >
@@ -2092,6 +2320,12 @@ const mergeRescanResults = ({
 export const __testing = {
   normalizeScanConfig,
   scanConfigsHaveOptionChanges,
+  addScanLimitGhosts,
+  getScanLimitGhostCounts,
+  getScanLimitPromptSubtitle,
+  shouldShowScanLimitPreview,
+  canRescanEntitlementLimitedMap,
+  getVisibleScanAllowanceForEntitlements,
   mergeRescanResults,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
@@ -2345,8 +2579,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [selectedHistoryItems, setSelectedHistoryItems] = useState(new Set());
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authContextMessage, setAuthContextMessage] = useState('');
+  const [authInitialView, setAuthInitialView] = useState('login');
   const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
   const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
+  const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
+  const [scanLimitPrompt, setScanLimitPrompt] = useState(null);
+  const [entitlementLockModal, setEntitlementLockModal] = useState(null);
+  const [plansModal, setPlansModal] = useState(null);
+  const [billingActionKey, setBillingActionKey] = useState('');
   const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
@@ -2483,6 +2723,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanJobIdRef = useRef(null);
   const scanJobAccessTokenRef = useRef(null);
   const eventSourceRef = useRef(null);
+  const pendingAuthScanRef = useRef(null);
+  const scanRef = useRef(null);
+  const scanLimitPromptResolveRef = useRef(null);
   const scanTimerRef = useRef(null);
   const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
@@ -2715,6 +2958,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   }), [urlInput, scanOptions]);
   const hasTopbarRescanChanges = isUnsavedScannedMap
     && scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig);
+  const hasEntitlementRescanUpgrade = isUnsavedScannedMap
+    && canRescanEntitlementLimitedMap({
+      scanMeta,
+      entitlements: currentUser?.entitlements,
+      isLoggedIn,
+      requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
+    });
+  const canTopbarRescan = hasTopbarRescanChanges || hasEntitlementRescanUpgrade;
   useEffect(() => {
     if (!hasMap) {
       setSelectedNodeIds(new Set());
@@ -2966,11 +3217,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   );
 
   const reportStats = useMemo(() => {
-    const stats = { total: reportEntries.length };
+    const realEntries = reportEntries.filter((entry) => !entry.isEntitlementLocked);
+    const stats = { total: realEntries.length };
     REPORT_TYPE_OPTIONS.forEach((option) => {
       stats[option.key] = 0;
     });
-    reportEntries.forEach((entry) => {
+    realEntries.forEach((entry) => {
       entry.types.forEach((type) => {
         stats[type] = (stats[type] || 0) + 1;
       });
@@ -3382,6 +3634,164 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     setToast(null);
   };
+
+  const refreshCurrentUser = useCallback(async () => {
+    if (!isLoggedIn) return null;
+    try {
+      const { user } = await api.getMe();
+      if (user) {
+        setCurrentUser(user);
+      }
+      return user || null;
+    } catch (error) {
+      console.warn('Failed to refresh account entitlements', error);
+      return null;
+    }
+  }, [isLoggedIn]);
+
+  const syncEntitlementsFromError = useCallback((error) => {
+    const entitlements = error?.payload?.entitlements;
+    if (!entitlements) return;
+    setCurrentUser((current) => current ? ({
+      ...current,
+      account: entitlements.account || current.account || null,
+      entitlements,
+    }) : current);
+  }, []);
+
+  const openPlansModal = useCallback((context = 'upgrade') => {
+    setPlansModal({ context });
+  }, []);
+
+  const showEntitlementLock = useCallback(({
+    title = 'Plan limit reached',
+    message = 'Your current account does not allow this action.',
+    actionLabel = 'View plan options',
+  } = {}) => {
+    setEntitlementLockModal({ title, message, actionLabel });
+  }, []);
+
+  const handleEntitlementError = useCallback((error, fallbackMessage = 'Your current account does not allow this action.') => {
+    if (!isEntitlementError(error)) return false;
+    syncEntitlementsFromError(error);
+    const code = getEntitlementErrorCode(error);
+    const entitlements = error?.payload?.entitlements || currentUser?.entitlements || null;
+    if (code === 'ACCOUNT_ARCHIVED' || entitlements?.archived) {
+      showEntitlementLock({
+        title: 'Account archived',
+        message: 'This account is archived. Existing work can still be viewed, but new scans, screenshots, exports, invites, and shares are locked.',
+      });
+      return true;
+    }
+    showEntitlementLock({
+      title: 'Plan limit reached',
+      message: error?.message || error?.payload?.error || fallbackMessage,
+    });
+    return true;
+  }, [currentUser?.entitlements, showEntitlementLock, syncEntitlementsFromError]);
+
+  const guardAccountCanCreateWork = useCallback((label = 'This action') => {
+    const entitlements = currentUser?.entitlements || null;
+    if (!entitlements?.archived) return true;
+    showEntitlementLock({
+      title: 'Account archived',
+      message: `${label} is locked while this account is archived. Existing work can still be viewed from the account.`,
+    });
+    return false;
+  }, [currentUser?.entitlements, showEntitlementLock]);
+
+  const getScanEntitlementPreview = useCallback((requestedPages = DEFAULT_SCAN_REQUESTED_PAGES) => {
+    const entitlements = currentUser?.entitlements || null;
+    if (!isLoggedIn) {
+      return {
+        mode: 'guest',
+        planName: 'Guest',
+        requestedPages,
+        allowedPages: Math.min(requestedPages, GUEST_SCAN_PAGE_LIMIT),
+        remaining: GUEST_SCAN_PAGE_LIMIT,
+        capped: requestedPages > GUEST_SCAN_PAGE_LIMIT,
+        capReason: 'guest_limit',
+      };
+    }
+    if (entitlements?.archived) {
+      return {
+        blocked: true,
+        title: 'Account archived',
+        message: 'New scans are locked while this account is archived.',
+      };
+    }
+    const meter = entitlements?.meters?.crawlPages;
+    if (!meter || meter.unlimited) {
+      return { requestedPages, allowedPages: requestedPages, capped: false };
+    }
+    const remaining = Math.max(0, Math.floor(Number(meter.remaining || 0)));
+    if (remaining <= 0) {
+      return {
+        blocked: true,
+        title: 'No crawl pages remaining',
+        message: 'This account has no crawl pages left for the current billing period.',
+        requestedPages,
+        remaining,
+      };
+    }
+    const perScanLimit = entitlements?.limits?.scanPagesPerRun;
+    const perScanAllowed = perScanLimit?.unlimited
+      ? requestedPages
+      : Math.max(1, Math.floor(Number(perScanLimit?.limit || requestedPages)));
+    const allowedPages = Math.min(requestedPages, remaining, perScanAllowed);
+    let capReason = null;
+    if (allowedPages < requestedPages) {
+      capReason = remaining <= perScanAllowed ? 'monthly_remaining' : 'per_scan_limit';
+    }
+    return {
+      mode: 'account',
+      planName: entitlements?.plan?.name || 'Free',
+      requestedPages,
+      allowedPages,
+      remaining,
+      capped: allowedPages < requestedPages,
+      capReason,
+      meter,
+    };
+  }, [currentUser?.entitlements, isLoggedIn]);
+
+  const resolveScanLimitPrompt = useCallback((choice) => {
+    const resolver = scanLimitPromptResolveRef.current;
+    scanLimitPromptResolveRef.current = null;
+    setScanLimitPrompt(null);
+    if (resolver) resolver(choice);
+  }, []);
+
+  const showScanLimitChoice = useCallback((preview) => new Promise((resolve) => {
+    scanLimitPromptResolveRef.current = resolve;
+    setScanLimitPrompt(preview);
+  }), []);
+
+  const getScreenshotCreditCostForType = useCallback((captureType) => {
+    const costs = currentUser?.entitlements?.screenshotCreditCosts || {};
+    if (captureType === 'full') {
+      return Math.max(1, Number(costs.desktop_full_page || 3));
+    }
+    return Math.max(1, Number(costs.desktop_viewport || 1));
+  }, [currentUser?.entitlements]);
+
+  const getScreenshotCreditPreview = useCallback(({ captureType = 'thumb', count = 1 } = {}) => {
+    const entitlements = currentUser?.entitlements || null;
+    const meter = entitlements?.meters?.screenshotCredits || null;
+    const unitCost = getScreenshotCreditCostForType(captureType);
+    const quantity = Math.max(0, Math.floor(Number(count || 0)));
+    const credits = unitCost * quantity;
+    const remaining = meter?.unlimited ? null : Math.max(0, Number(meter?.remaining || 0));
+    return {
+      unitCost,
+      quantity,
+      credits,
+      remaining,
+      unlimited: Boolean(meter?.unlimited),
+      insufficient: !!meter && !meter.unlimited && remaining < credits,
+    };
+  }, [currentUser?.entitlements, getScreenshotCreditCostForType]);
+
 
   const versionsForDrawer = currentMap?.id ? mapVersions : (root ? draftVersions : []);
   const latestVersionForDrawer = currentMap?.id
@@ -4010,6 +4420,37 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, []);
 
+  const confirmScreenshotCreditUsage = useCallback(async ({
+    mode = 'thumbnail',
+    captureType = 'thumb',
+    count = 1,
+    scope = 'all',
+  } = {}) => {
+    if (!guardAccountCanCreateWork(mode === 'screenshot' ? 'Full screenshot capture' : 'Screenshot capture')) {
+      return false;
+    }
+    const preview = getScreenshotCreditPreview({ captureType, count });
+    if (preview.quantity <= 0 || preview.credits <= 0) return true;
+    const label = mode === 'screenshot' ? 'full screenshot' : 'thumbnail';
+    if (preview.insufficient) {
+      showEntitlementLock({
+        title: 'Not enough screenshot credits',
+        message: `This capture can use up to ${formatEntitlementCount(preview.credits)} credit${preview.credits === 1 ? '' : 's'}, but this account has ${formatEntitlementCount(preview.remaining)} remaining.`,
+      });
+      return false;
+    }
+    const stageTotal = getImageCaptureStageTotalForCount(mode, preview.quantity);
+    const stageCopy = getImageCaptureScaleTierForCount(mode, preview.quantity) === IMAGE_CAPTURE_SCALE_TIERS.large
+      ? ` It will run in ${stageTotal} automatic stages.`
+      : '';
+    return showConfirm({
+      title: 'Use screenshot credits?',
+      message: `This will capture ${formatEntitlementCount(preview.quantity)} ${label}${preview.quantity === 1 ? '' : 's'} from ${scope === 'selected' ? 'selected pages' : 'this map'} and can use up to ${formatEntitlementCount(preview.credits)} credit${preview.credits === 1 ? '' : 's'}.${stageCopy} Successful new captures are charged; failed or skipped captures are not.`,
+      confirmText: 'Start capture',
+      cancelText: 'Cancel',
+    });
+  }, [getScreenshotCreditPreview, guardAccountCanCreateWork, showConfirm, showEntitlementLock]);
+
   const resetScanLayers = useCallback(() => {
     setScanMeta({ brokenLinks: [] });
     setScanLayerAvailability({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
@@ -4080,6 +4521,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       openAuthModal();
       return;
     }
+    if (!guardAccountCanCreateWork('Map creation')) return;
 
     const hasUnsavedMap = hasMap && !currentMap?.id;
     if (hasUnsavedMap) {
@@ -5281,6 +5723,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [canViewCollaborationPanelValue, currentMap?.id, isLoggedIn, showShareModal]);
 
   const sendCollaborationInvite = useCallback(async () => {
+    if (!guardAccountCanCreateWork('Inviting collaborators')) return;
     if (!canSendCollaborationInvitesResolvedValue) {
       showToast('You do not have permission to send invites on this map.', 'warning');
       return;
@@ -5317,6 +5760,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('Invite created', 'success');
       await loadCollaborationData();
     } catch (error) {
+      if (handleEntitlementError(error, 'This account has reached its seat limit.')) {
+        setCollaborationError(error.message || 'Plan limit reached.');
+        return;
+      }
       setCollaborationError(error.message || 'Failed to create invite.');
       showToast(error.message || 'Failed to create invite.', 'error');
     } finally {
@@ -5328,6 +5775,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     collaborationInviteRole,
     collaborationInviteRoleOptionsValue,
     currentMap?.id,
+    guardAccountCanCreateWork,
+    handleEntitlementError,
     loadCollaborationData,
     showToast,
   ]);
@@ -5807,11 +6256,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   const closeAuthModal = useCallback(() => {
     setShowAuthModal(false);
     setAuthContextMessage('');
+    setAuthInitialView('login');
     setPendingAuthPostSuccessAction(null);
+    pendingAuthScanRef.current = null;
   }, []);
 
-  const openAuthModal = useCallback(({ contextMessage = '', postSuccessAction = null } = {}) => {
+  const openAuthModal = useCallback(({ contextMessage = '', postSuccessAction = null, initialView = 'login' } = {}) => {
     setAuthContextMessage(contextMessage);
+    setAuthInitialView(initialView);
     setPendingAuthPostSuccessAction(postSuccessAction);
     setShowAuthModal(true);
   }, []);
@@ -5831,18 +6283,108 @@ export default function App({ currentRoute, navigateToRoute }) {
     openAuthModal();
   }, [openAuthModal]);
 
+  const getBillingReturnPath = useCallback(() => {
+    if (typeof window === 'undefined') return '/app';
+    return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  }, []);
+
+  const redirectToBillingUrl = useCallback((url) => {
+    if (!url) throw new Error('Billing did not return a checkout link.');
+    window.location.assign(url);
+  }, []);
+
+  const handleBillingPortal = useCallback(async (context = 'portal') => {
+    if (!isLoggedIn) {
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE });
+      return;
+    }
+    const actionKey = `portal:${context}`;
+    setBillingActionKey(actionKey);
+    try {
+      const session = await api.createBillingPortalSession({
+        returnPath: getBillingReturnPath(),
+      });
+      redirectToBillingUrl(session.url);
+    } catch (error) {
+      showToast(error.message || 'Billing portal is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [getBillingReturnPath, isLoggedIn, openAuthModal, redirectToBillingUrl, showToast]);
+
+  const handlePlanCheckout = useCallback(async (planKey) => {
+    if (!isLoggedIn) {
+      setPlansModal(null);
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    const actionKey = `plan:${planKey}`;
+    setBillingActionKey(actionKey);
+    try {
+      const session = await api.createBillingCheckoutSession({
+        type: 'plan',
+        planKey,
+        returnPath: getBillingReturnPath(),
+      });
+      redirectToBillingUrl(session.url);
+    } catch (error) {
+      if (error?.code === 'BILLING_PORTAL_REQUIRED') {
+        await handleBillingPortal('plan-change');
+        return;
+      }
+      showToast(error.message || 'Checkout is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [
+    getBillingReturnPath,
+    handleBillingPortal,
+    isLoggedIn,
+    openAuthModal,
+    redirectToBillingUrl,
+    showToast,
+  ]);
+
+  const handleAddOnCheckout = useCallback(async (addonKey) => {
+    if (!isLoggedIn) {
+      setPlansModal(null);
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    const actionKey = `addon:${addonKey}`;
+    setBillingActionKey(actionKey);
+    try {
+      const session = await api.createBillingCheckoutSession({
+        type: 'addon',
+        addonKey,
+        quantity: 1,
+        returnPath: getBillingReturnPath(),
+      });
+      redirectToBillingUrl(session.url);
+    } catch (error) {
+      showToast(error.message || 'Credit pack checkout is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [getBillingReturnPath, isLoggedIn, openAuthModal, redirectToBillingUrl, showToast]);
+
   const handleAuthSuccess = async (user) => {
     setCurrentUser(user);
     setIsLoggedIn(true);
     setAccessLevel(ACCESS_LEVELS.EDIT);
     identifyAnalyticsUser(user);
-    const loginMethod = user?.authMode === 'demo'
-      ? 'demo'
-      : (user?.authProvider === 'google' || user?.authMode === 'google' ? 'google' : 'password');
+    const loginMethod = user?.authProvider === 'google' || user?.authMode === 'google' ? 'google' : 'password';
     trackEvent('login', {
       method: loginMethod,
       app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
     });
+
+    const pendingScan = pendingAuthPostSuccessAction === 'start-scan'
+      ? pendingAuthScanRef.current
+      : null;
+    if (pendingScan) {
+      pendingAuthScanRef.current = null;
+    }
 
     // Load user's projects, maps, and history
     try {
@@ -5857,27 +6399,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (pendingAuthPostSuccessAction === 'open-projects') {
       openProjectsPanel();
     }
-  };
-
-  const handleDemoAccess = useCallback((user) => {
-    setCurrentUser(user);
-    setIsLoggedIn(true);
-    setAccessLevel(ACCESS_LEVELS.EDIT);
-    identifyAnalyticsUser(user);
-    trackEvent('login', {
-      method: 'demo',
-      app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
-    });
-    setProjects([]);
-    setScanHistory([]);
-    setPendingMapInvites([]);
-    setPendingMapInvitesError('');
-    setPendingAccessRequests([]);
-    setPendingAccessRequestsError('');
-    if (pendingAuthPostSuccessAction === 'open-projects') {
-      openProjectsPanel();
+    if (pendingScan) {
+      window.setTimeout(() => {
+        scanRef.current?.(
+          pendingScan.url,
+          pendingScan.preserveName,
+          pendingScan.authFlow || {}
+        );
+      }, 0);
     }
-  }, [openProjectsPanel, pendingAuthPostSuccessAction]);
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -7421,6 +7952,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       } else {
         imageCaptureJobRef.current = null;
         setActiveImageCaptureJob(null);
+        if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+          setThumbnailStats((prev) => ({ ...prev, stopped: true }));
+          return true;
+        }
         showToast(
           getImageCaptureJobErrorMessage(error, 'Failed to start image capture job'),
           isActiveJobConflict ? 'warning' : 'error',
@@ -7526,6 +8061,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             skipped,
             pipeline: 'job',
           });
+          await refreshCurrentUser();
           return true;
         }
         await sleep(1000);
@@ -7544,27 +8080,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     applyImageCaptureJobUpdates,
     clearCaptureIssues,
     currentMap?.id,
+    handleEntitlementError,
     reconcileSavedImageCaptureAssets,
+    refreshCurrentUser,
     refreshTimelineAfterImageCapture,
     requestLargeMapSceneRefresh,
     selectedNodeIds,
     showToast,
   ]);
-
-  const confirmScaleAwareImageCapture = useCallback(async ({ mode, count }) => {
-    const total = Math.max(0, Number(count) || 0);
-    if (getImageCaptureScaleTierForCount(mode, total) !== IMAGE_CAPTURE_SCALE_TIERS.large) {
-      return true;
-    }
-    const label = mode === 'screenshot' ? 'full screenshots' : 'thumbnails';
-    const stageTotal = getImageCaptureStageTotalForCount(mode, total);
-    return showConfirm({
-      title: 'Start large image capture?',
-      message: `This will capture ${total} ${label} in ${stageTotal} automatic stages. You can pause, resume, or stop it.`,
-      confirmText: 'Start capture',
-      cancelText: 'Cancel',
-    });
-  }, [showConfirm]);
 
   const handleThumbnailCapture = async (scope, targetMode = 'remaining') => {
     if (warnCoeditingReadOnly('Thumbnail capture')) {
@@ -7597,7 +8120,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('No captured thumbnails to update', 'info');
       return;
     }
-    if (!(await confirmScaleAwareImageCapture({ mode: 'thumbnail', count: candidates.length }))) return;
+    if (!(await confirmScreenshotCreditUsage({
+      mode: 'thumbnail',
+      captureType: 'thumb',
+      count: candidates.length,
+      scope,
+    }))) return;
     const handledByJob = await runMapImageCaptureJob({
       scope,
       captureType: 'thumb',
@@ -7730,6 +8258,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           if (thumbnailStopRequestedRef.current || thumbnailSessionRef.current !== runSessionId) {
             return false;
           }
+          if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+            terminalFailure = true;
+            thumbnailStopRequestedRef.current = true;
+            break;
+          }
           if (isScreenshotAuthError(lastErrorMessage)) {
             terminalFailure = true;
             updateNodeScreenshotAssets(node.id, {
@@ -7825,6 +8358,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         count: thumbnailLoadedRef.current.size,
         failed: failedCount,
       });
+      await refreshCurrentUser();
     } catch (error) {
       console.error('Thumbnail capture batch error:', error);
       showToast(error.message || 'Failed to capture thumbnails', 'error');
@@ -8006,6 +8540,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [orphans, reportNumberMap, root, selectedNodeIds]);
 
   const downloadImageAssets = async (scope) => {
+    if (!guardAccountCanCreateWork('Screenshot downloads')) return;
     if (!currentMap?.id) {
       showToast('Save this map before downloading images', 'warning');
       return;
@@ -8018,6 +8553,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     ];
     if (allTargets.length === 0) {
       showToast('No saved images to download', 'info');
+      return;
+    }
+
+    const trial = currentUser?.entitlements?.trial || null;
+    if (trial?.active && trial.organizedDownloadsAllowed === false) {
+      setShowImageMenu(false);
+      setScreenshotDownloadUpsell({ scope, count: allTargets.length });
       return;
     }
 
@@ -8036,8 +8578,14 @@ export default function App({ currentRoute, navigateToRoute }) {
         scope,
         count: allTargets.length,
       });
+      refreshCurrentUser();
     } catch (error) {
       console.error('Image asset download error:', error);
+      if (isEntitlementError(error)) {
+        syncEntitlementsFromError(error);
+        setScreenshotDownloadUpsell({ scope, count: allTargets.length });
+        return;
+      }
       showToast(error.message || 'Failed to download images', 'error');
     }
   };
@@ -8054,6 +8602,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     const captureMode = normalizedCaptureType === 'thumb' ? 'thumbnail' : 'screenshot';
     if (!guardImageCaptureAvailable(captureMode)) return;
     if (!guardImageCapturePersistenceReady()) return;
+    if (!(await confirmScreenshotCreditUsage({
+      mode: captureMode,
+      captureType: normalizedCaptureType,
+      count: 1,
+      scope: 'selected',
+    }))) return;
 
     setImageLoading(true);
     setFullImageUrl(null);
@@ -8130,8 +8684,13 @@ export default function App({ currentRoute, navigateToRoute }) {
           : data.url
       );
       setToast(null);
+      refreshCurrentUser();
     } catch (e) {
       console.error('Screenshot error:', e);
+      if (handleEntitlementError(e, 'Your plan does not have enough screenshot credits for this capture.')) {
+        setImageLoading(false);
+        return;
+      }
       if (screenshotStopRequestedRef.current || e?.message === 'Screenshot capture stopped') {
         showToast('Screenshot capture stopped', 'warning');
         setImageLoading(false);
@@ -8184,18 +8743,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
-    const scaleTier = getImageCaptureScaleTierForCount('screenshot', targets.length);
-    if (scaleTier === IMAGE_CAPTURE_SCALE_TIERS.large) {
-      if (!(await confirmScaleAwareImageCapture({ mode: 'screenshot', count: targets.length }))) return;
-    } else if (targets.length > 10) {
-      const confirmed = await showConfirm({
-        title: 'Capture full screenshots?',
-        message: `This will generate ${targets.length} full-page screenshot${targets.length === 1 ? '' : 's'} and attach them to the selected pages.`,
-        confirmText: 'Capture',
-        cancelText: 'Cancel',
-      });
-      if (!confirmed) return;
-    }
+    if (!(await confirmScreenshotCreditUsage({
+      mode: 'screenshot',
+      captureType: 'full',
+      count: targets.length,
+      scope,
+    }))) return;
 
     const handledByJob = await runMapImageCaptureJob({
       scope,
@@ -8321,6 +8874,11 @@ export default function App({ currentRoute, navigateToRoute }) {
             ) {
               return false;
             }
+            if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+              terminalFailure = true;
+              screenshotStopRequestedRef.current = true;
+              break;
+            }
             if (isScreenshotAuthError(lastErrorMessage)) {
               terminalFailure = true;
               updateNodeScreenshotAssets(node.id, {
@@ -8413,8 +8971,12 @@ export default function App({ currentRoute, navigateToRoute }) {
         count: successCount,
         failed: failedCount,
       });
+      await refreshCurrentUser();
     } catch (error) {
       console.error('Full screenshot batch error:', error);
+      if (handleEntitlementError(error, 'Your plan does not have enough screenshot credits for this capture.')) {
+        return;
+      }
       if (isScreenshotAuthError(error?.message)) {
         showToast(error.message, 'info');
         return;
@@ -8426,6 +8988,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   // Project folder functions
   const createProject = useCallback(async (name) => {
     if (!name?.trim()) return;
+    if (!guardAccountCanCreateWork('Project creation')) return null;
     try {
       const { project } = await api.createProject(name.trim());
       await loadAuthenticatedWorkspace();
@@ -8440,10 +9003,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`Project "${name}" created`, 'success');
       return project;
     } catch (e) {
+      if (handleEntitlementError(e, 'Your plan has reached its active project limit.')) {
+        return null;
+      }
       showToast(e.message || 'Failed to create project', 'error');
       return null;
     }
-  }, [loadAuthenticatedWorkspace, root, showToast]);
+  }, [guardAccountCanCreateWork, handleEntitlementError, loadAuthenticatedWorkspace, root, showToast]);
 
   const renameProject = async (projectId, newName) => {
     if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
@@ -9803,7 +10369,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const requestCancelScan = () => {
-    if (isStoppingScan) return;
     setShowStopConfirm(false);
     setShowCancelConfirm(true);
   };
@@ -9840,8 +10405,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowCancelConfirm(false);
 
     try {
-      await api.stopScanJob(jobId, { accessToken });
+      const response = await api.stopScanJob(jobId, { accessToken });
       if (scanJobIdRef.current !== jobId) return;
+      if (response?.canceled) {
+        resetScanUi();
+        showToast('Scan stopped before results were ready', 'warning');
+        return;
+      }
       showToast('Stopping scan and preparing current results...', 'info');
     } catch (err) {
       if (scanJobIdRef.current !== jobId) return;
@@ -9867,10 +10437,60 @@ export default function App({ currentRoute, navigateToRoute }) {
       url,
       options: scanOptions,
     });
+    const shouldReplaceEntitlementLimitedMap = isUnsavedScannedMap
+      && canRescanEntitlementLimitedMap({
+        scanMeta,
+        entitlements: currentUser?.entitlements,
+        isLoggedIn,
+        requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
+      });
     const shouldMergeScanResult = isUnsavedScannedMap
-      && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig);
+      && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig)
+      && !shouldReplaceEntitlementLimitedMap;
+    const requestedPages = DEFAULT_SCAN_REQUESTED_PAGES;
+    const scanEntitlementPreview = getScanEntitlementPreview(requestedPages);
+    if (scanEntitlementPreview.blocked) {
+      showEntitlementLock({
+        title: scanEntitlementPreview.title || 'Scan locked',
+        message: scanEntitlementPreview.message || 'Your current plan does not allow a new scan.',
+      });
+      return;
+    }
+    const maxPagesForRequest = requestedPages;
+    if (scanEntitlementPreview.capped) {
+      if (!authFlow.skipScanLimitPrompt) {
+        const choice = await showScanLimitChoice(scanEntitlementPreview);
+        if (choice === 'sign-up' || choice === 'sign-in') {
+          setUrlInput(url);
+          pendingAuthScanRef.current = {
+            url,
+            preserveName,
+            authFlow: {
+              ...authFlow,
+              skipScanLimitPrompt: true,
+            },
+          };
+          openAuthModal({
+            contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
+            postSuccessAction: 'start-scan',
+            initialView: choice === 'sign-up' ? 'signup' : 'login',
+          });
+          return;
+        }
+        if (choice === 'view-plan' || choice === 'buy-pack') {
+          openPlansModal(choice);
+          return;
+        }
+        if (choice === 'reduce-scope') {
+          setShowScanOptions(true);
+          showToast('Adjust scan options, then run the scan again.', 'info');
+          return;
+        }
+        if (choice !== 'continue') return;
+      }
+    }
 
-    if (AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
+    if (isLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
       try {
         const precheck = await api.precheckScanAuth({
           url,
@@ -9919,6 +10539,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     try {
       const jobResponse = await api.createScanJob({
         url,
+        maxPages: maxPagesForRequest,
         options: scanConfig,
         ...(authFlow.authSessionId ? { authSessionId: authFlow.authSessionId } : {}),
       });
@@ -9929,6 +10550,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     } catch (err) {
       console.error('Scan job creation failed:', err);
+      if (handleEntitlementError(err, 'Your plan has no crawl pages remaining for this billing period.')) {
+        return;
+      }
       trackEvent('scan_failed', {
         phase: 'job_create',
         message: err?.message || 'Failed to start scan',
@@ -10009,6 +10633,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           partial: true,
           partialReason: data.partialReason || null,
           scanDiagnostics: data.scanDiagnostics || null,
+          entitlement: data.entitlement || null,
         });
         trackEvent('scan_completed', {
           hostname,
@@ -10018,6 +10643,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           preserved_existing_map: 'true',
         });
         showToast(getCollapsedScanMessage(hostname), 'warning');
+        refreshCurrentUser();
         resetScanUi();
         return;
       }
@@ -10033,6 +10659,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           partial: true,
           partialReason: data.partialReason || null,
           scanDiagnostics: data.scanDiagnostics || null,
+          entitlement: data.entitlement || null,
         });
         trackEvent('scan_failed', {
           phase: 'quality_gate',
@@ -10044,23 +10671,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         return;
       }
 
-      const nodesForCounts = collectAllNodesWithOrphans(merged.root, merged.orphans);
-      const forestIndexForCounts = buildForestIndex(merged.root, merged.orphans);
       const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
-      const authCount = nodesForCounts.filter((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired).length;
-      const duplicateCount = nodesForCounts.filter((node) => node.isDuplicate).length;
-      const hasSubdomains = (merged.orphans || []).some((orphan) => !!orphan.subdomainRoot);
-      const hasOrphans = (merged.orphans || []).some((orphan) => !orphan.subdomainRoot);
-      const hasMissing = nodesForCounts.some((node) => isVirtualMissingNode(node));
-      const hasBroken = nodesForCounts.some((node) => {
-        const meta = forestIndexForCounts.nodes.get(node.id);
-        if (isTopLevelOrphanRootMeta(meta)) return false;
-        return !!node.isBroken || node.orphanType === 'broken';
-      });
-      const hasInactive = nodesForCounts.some((node) => (
-        node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
-      ));
-      const hasErrors = nodesForCounts.some((node) => !!node.isError);
       const seenCrosslinks = new Set();
       const scannedCrosslinks = (data.crosslinks || [])
         .map((link, index) => {
@@ -10090,11 +10701,29 @@ export default function App({ currentRoute, navigateToRoute }) {
           manualConnections,
         });
       }
+      const realPageCount = countNodes(merged.root);
+      const displayMerged = addScanLimitGhosts(merged.root, merged.orphans, data.entitlement || null);
+      const displayNodesForCounts = collectAllNodesWithOrphans(displayMerged.root, displayMerged.orphans);
+      const displayForestIndexForCounts = buildForestIndex(displayMerged.root, displayMerged.orphans);
+      const displayHasSubdomains = (displayMerged.orphans || []).some((orphan) => !!orphan.subdomainRoot);
+      const displayHasOrphans = (displayMerged.orphans || []).some((orphan) => !orphan.subdomainRoot);
+      const displayHasMissing = displayNodesForCounts.some((node) => isVirtualMissingNode(node));
+      const displayHasBroken = displayNodesForCounts.some((node) => {
+        const meta = displayForestIndexForCounts.nodes.get(node.id);
+        if (isTopLevelOrphanRootMeta(meta)) return false;
+        return !!node.isBroken || node.orphanType === 'broken';
+      });
+      const displayHasInactive = displayNodesForCounts.some((node) => (
+        node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
+      ));
+      const displayHasErrors = displayNodesForCounts.some((node) => !!node.isError);
+      const displayAuthCount = displayNodesForCounts.filter((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired).length;
+      const displayDuplicateCount = displayNodesForCounts.filter((node) => node.isDuplicate).length;
       const nextConnections = shouldMergeScanResult
         ? [...manualConnections, ...scannedCrosslinks]
         : scannedCrosslinks;
-      setRoot(merged.root);
-      setOrphans(merged.orphans);
+      setRoot(displayMerged.root);
+      setOrphans(displayMerged.orphans);
       setShowThumbnails(false);
       setThumbnailScopeIds(null);
       resetThumbnailQueue(0);
@@ -10104,38 +10733,39 @@ export default function App({ currentRoute, navigateToRoute }) {
         partial: isPartialResult,
         partialReason: data.partialReason || null,
         scanDiagnostics: data.scanDiagnostics || null,
+        entitlement: data.entitlement || null,
       });
       setScanLayerAvailability({
         placementPrimary: true,
-        placementSubdomain: hasSubdomains,
-        placementOrphan: hasOrphans,
+        placementSubdomain: displayHasSubdomains,
+        placementOrphan: displayHasOrphans,
         typePages: false,
         typeFiles: false,
-        statusMissing: hasMissing,
-        statusBroken: hasBroken,
-        statusError: hasErrors,
-        statusInactive: hasInactive,
-        statusAuth: authCount > 0,
-        statusDuplicate: duplicateCount > 0,
+        statusMissing: displayHasMissing,
+        statusBroken: displayHasBroken,
+        statusError: displayHasErrors,
+        statusInactive: displayHasInactive,
+        statusAuth: displayAuthCount > 0,
+        statusDuplicate: displayDuplicateCount > 0,
       });
       setScanLayerVisibility({
         placementPrimary: true,
-        placementSubdomain: hasSubdomains,
-        placementOrphan: hasOrphans,
+        placementSubdomain: displayHasSubdomains,
+        placementOrphan: displayHasOrphans,
         typePages: false,
         typeFiles: false,
-        statusMissing: hasMissing,
-        statusBroken: hasBroken,
-        statusError: hasErrors,
-        statusInactive: hasInactive,
-        statusAuth: authCount > 0,
-        statusDuplicate: duplicateCount > 0,
+        statusMissing: displayHasMissing,
+        statusBroken: displayHasBroken,
+        statusError: displayHasErrors,
+        statusInactive: displayHasInactive,
+        statusAuth: displayAuthCount > 0,
+        statusDuplicate: displayDuplicateCount > 0,
       });
       setCurrentMap(null);
       navigateToRoute(createAppHomeRoute());
       setDraftVersionFromSnapshot({
-        root: merged.root,
-        orphans: merged.orphans,
+        root: displayMerged.root,
+        orphans: displayMerged.orphans,
         connections: nextConnections,
         colors: shouldMergeScanResult ? colors : DEFAULT_COLORS,
         connectionColors: shouldMergeScanResult ? connectionColors : DEFAULT_CONNECTION_COLORS,
@@ -10155,9 +10785,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           setMapName('Untitled Map');
         }
       }
-      const pageCount = countNodes(merged.root);
-      addToHistory(url, merged.root, pageCount, scanConfig, {
-        orphans: merged.orphans,
+      const pageCount = realPageCount;
+      addToHistory(url, displayMerged.root, pageCount, scanConfig, {
+        orphans: displayMerged.orphans,
         connections: nextConnections,
       });
       trackEvent('scan_completed', {
@@ -10168,6 +10798,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       if (isStoppedPartial) {
         showToast(`Scan stopped. Showing current results${hostname ? ` for ${hostname}` : ''}`, 'warning');
+      } else if (data.partialReason === 'entitlement_cap') {
+        showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
       } else if (data.partialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
       } else if (isPartialResult) {
@@ -10175,6 +10807,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       } else {
         showToast(`Scan complete${hostname ? `: ${hostname}` : ''}`, 'success');
       }
+      refreshCurrentUser();
       setTimeout(resetView, 100);
 
       streamHandled = true;
@@ -10288,6 +10921,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showScanError('Lost connection while receiving scan progress');
     };
   };
+  scanRef.current = scan;
 
   const continueScanWithoutTargetAuth = () => {
     const prompt = scanAuthPrompt;
@@ -11135,6 +11769,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const exportJson = () => {
     if (!root) return;
+    if (!guardAccountCanCreateWork('Exporting')) return;
     const content = JSON.stringify({ root, colors, connectionColors }, null, 2);
     downloadText('sitemap.json', content);
     recordExportUsage('export_json', {
@@ -11146,6 +11781,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const exportAiSiteBrief = () => {
     if (!root) return;
+    if (!guardAccountCanCreateWork('Exporting')) return;
 
     const hostname = getHostname(root.url) || 'site';
     const generatedAt = new Date().toISOString();
@@ -11195,6 +11831,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const exportCsv = () => {
     if (!root) return;
+    if (!guardAccountCanCreateWork('Exporting')) return;
 
     // Flatten tree to array with all node data
     const rows = [];
@@ -11265,6 +11902,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const exportPdf = async () => {
     if (!hasMap || !contentRef.current || !canvasRef.current) return;
+    if (!guardAccountCanCreateWork('Exporting')) return;
 
     // Save current transform state
     const savedScale = scaleRef.current;
@@ -11417,6 +12055,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('No report data available', 'warning');
       return;
     }
+    if (!guardAccountCanCreateWork('Exporting')) return;
 
     showToast('Generating report...', 'info', true);
 
@@ -11506,6 +12145,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const exportSiteIndex = () => {
     if (!root) return;
+    if (!guardAccountCanCreateWork('Exporting')) return;
 
     const hostname = getHostname(root.url) || 'sitemap';
 
@@ -11598,6 +12238,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const copyShareLink = async (permission = sharePermission) => {
+    if (!guardAccountCanCreateWork('Share link creation')) return;
     if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canManageShares()) {
       showToast('You do not have permission to create share links for this map.', 'warning');
       return;
@@ -11629,27 +12270,20 @@ export default function App({ currentRoute, navigateToRoute }) {
                         permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
       showToast(`Link copied (${permLabel})`, 'success');
     } catch (e) {
-      // If not logged in, fall back to localStorage
-      if (e.message?.includes('Authentication')) {
-        const shareId = `share_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const shareData = { root, orphans, connections, colors, connectionColors, createdAt: Date.now() };
-        localStorage.setItem(shareId, JSON.stringify(shareData));
-        const shareUrl = new URL(
-          buildRouteUrl(createShareRoute(shareId, permission, mapOrientation)),
-          window.location.origin
-        );
-        await navigator.clipboard.writeText(shareUrl.toString());
-        setLinkCopied(true);
-        setTimeout(() => setLinkCopied(false), 2000);
-        setHasCreatedShareLink(true);
-        setCurrentShareAccess(permission);
-
-        const permLabel = permission === ACCESS_LEVELS.VIEW ? 'view-only' :
-                          permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
-        showToast(`Link copied (${permLabel}, temporary)`, 'success');
-      } else {
-        showToast(e.message || 'Failed to create share link', 'error');
+      if (
+        e.code === 'AUTH_REQUIRED'
+        || e.payload?.code === 'AUTH_REQUIRED'
+        || e.message?.includes('Authentication')
+      ) {
+        openAuthModal({
+          contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
+        });
+        return;
       }
+      if (handleEntitlementError(e, 'Client share links are not available on this plan.')) {
+        return;
+      }
+      showToast(e.message || 'Failed to create share link', 'error');
     }
   };
 
@@ -11671,6 +12305,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const exportPng = async () => {
     if (!hasMap || !contentRef.current || !canvasRef.current) return;
+    if (!guardAccountCanCreateWork('Exporting')) return;
 
     // Save current transform state
     const savedScale = scaleRef.current;
@@ -12212,6 +12847,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       suppressNodeClickRef.current = false;
       return;
     }
+    if (isEntitlementLockedNode(node)) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      openPlansModal('locked-node');
+      return;
+    }
     const shiftActive = event?.shiftKey || isShiftPressed;
     if (activeTool === 'comments' && !shiftActive) {
       openCommentPopover(node);
@@ -12274,6 +12915,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleLargeMapNodeDoubleClick = (nodeData) => {
     if (!nodeData || !canvasRef.current) return;
+    if (isEntitlementLockedNode(nodeData.node || nodeData)) {
+      openPlansModal('locked-node');
+      return;
+    }
     const canvas = canvasRef.current;
     const nextScale = scaleRef.current < 0.95 ? 1 : Math.min(1.6, scaleRef.current * 1.2);
     const nextPan = {
@@ -12285,6 +12930,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleLargeMapNodeExpand = async (sceneNode) => {
     if (!sceneNode?.id || !currentMap?.id) return;
+    if (isEntitlementLockedNode(sceneNode.node || sceneNode)) {
+      openPlansModal('locked-node');
+      return;
+    }
     try {
       const response = await api.getMapNode(currentMap.id, sceneNode.id);
       const node = response?.node || sceneNode;
@@ -14392,6 +15041,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canvasGridMetrics = getCanvasGridMetrics(canvasRenderScale);
   const canvasGridSize = canvasGridMetrics.size;
   const canvasGridDotRadius = canvasGridMetrics.dotRadius;
+  const scanLockedByArchive = Boolean(currentUser?.entitlements?.archived);
+  const archiveScanTitle = 'New scans are locked while this account is archived';
 
   return (
     <AuthProvider value={authValue}>
@@ -14412,9 +15063,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanLayerVisibility={scanLayerVisibility}
         onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
         onScan={scan}
-        scanLabel={hasTopbarRescanChanges ? 'Update' : 'Scan'}
-        scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !hasTopbarRescanChanges)}
-        scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasTopbarRescanChanges ? "Update scan with changed options" : "Change scan options to update"}
+        scanLabel={canTopbarRescan ? 'Update' : 'Scan'}
+        scanDisabled={loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !canTopbarRescan)}
+        scanTitle={scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasEntitlementRescanUpgrade ? "Rescan with current plan limits" : hasTopbarRescanChanges ? "Update scan with changed options" : "Change scan options to update"}
         optionsDisabled={isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
         showClearUrl={!!urlInput.trim()}
@@ -14583,8 +15234,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
                     onScan={scan}
                     scanLabel="Scan"
-                    scanDisabled={loading || isImportedMap || !sanitizeUrl(urlInput)}
-                    scanTitle={isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
+                    scanDisabled={loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput)}
+                    scanTitle={scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
                     optionsDisabled={isImportedMap}
                     onClearUrl={() => setUrlInput('')}
                     showClearUrl={!!urlInput.trim()}
@@ -15764,6 +16415,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               onRunInsights={runMapInsights}
               onLocateNode={locateReportNodeOnMap}
               onLocateUrl={locateReportUrlOnMap}
+              onUpgrade={() => openPlansModal('report')}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
               scanMeta={scanMeta}
@@ -16158,6 +16810,164 @@ export default function App({ currentRoute, navigateToRoute }) {
         onDismissScanError={dismissScanError}
       />
 
+      {scanLimitPrompt && (
+        <Modal
+          show
+          onClose={() => resolveScanLimitPrompt('cancel')}
+          title={scanLimitPrompt.mode === 'guest' ? 'Limited guest scan' : 'Scan limit reached'}
+          subtitle={getScanLimitPromptSubtitle(scanLimitPrompt)}
+          className="scan-limit-modal"
+          footer={(
+            <>
+              {scanLimitPrompt.mode === 'guest' ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    onClick={() => resolveScanLimitPrompt('sign-up')}
+                  >
+                    Sign up
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => resolveScanLimitPrompt('sign-in')}
+                  >
+                    Sign in
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() => resolveScanLimitPrompt('view-plan')}
+                >
+                  Upgrade plan
+                </Button>
+              )}
+              <Button
+                variant="primary"
+                onClick={() => resolveScanLimitPrompt('continue')}
+              >
+                OK
+              </Button>
+            </>
+          )}
+        >
+          <div className="scan-limit-modal-body">
+            <div className="scan-limit-summary">
+              <div className="scan-limit-summary-item">
+                <span>Requested</span>
+                <strong>{formatEntitlementCount(scanLimitPrompt.requestedPages)}</strong>
+              </div>
+              <div className="scan-limit-summary-item">
+                <span>Available</span>
+                <strong>{formatEntitlementCount(scanLimitPrompt.allowedPages || scanLimitPrompt.remaining)}</strong>
+              </div>
+              <div className="scan-limit-summary-item">
+                <span>Plan</span>
+                <strong>{scanLimitPrompt.planName || currentUser?.entitlements?.plan?.name || 'Free'}</strong>
+              </div>
+            </div>
+            <div className="scan-limit-actions">
+              <div className="scan-limit-action-copy">
+                <span>Limited map preview</span>
+                <p>{getScanLimitPromptActionCopy(scanLimitPrompt)}</p>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {entitlementLockModal && (
+        <Modal
+          show
+          onClose={() => setEntitlementLockModal(null)}
+          title={entitlementLockModal.title}
+          className="entitlement-lock-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setEntitlementLockModal(null)}
+              >
+                Not now
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setEntitlementLockModal(null);
+                  openPlansModal('entitlement-lock');
+                }}
+              >
+                {entitlementLockModal.actionLabel || 'View plan options'}
+              </Button>
+            </>
+          )}
+        >
+          <div className="entitlement-modal-body">
+            <p>{entitlementLockModal.message}</p>
+          </div>
+        </Modal>
+      )}
+
+      {plansModal && (
+        <Modal
+          show
+          onClose={() => setPlansModal(null)}
+          title="Plan options"
+          subtitle="Choose a plan or add credits."
+          className="plans-modal"
+          footer={(
+            <>
+              <Button variant="secondary" onClick={() => setPlansModal(null)}>
+                Close
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => handleBillingPortal(plansModal.context || 'plans-modal')}
+                loading={billingActionKey.startsWith('portal:')}
+                disabled={!!billingActionKey}
+              >
+                Manage billing
+              </Button>
+            </>
+          )}
+        >
+          <div className="plans-modal-body">
+            <div className="plans-modal-grid" aria-label="Plan options">
+              {PLAN_OPTION_CARDS.map((plan) => (
+                <button
+                  type="button"
+                  className="plans-modal-card"
+                  key={plan.key}
+                  disabled={!!billingActionKey}
+                  onClick={() => handlePlanCheckout(plan.key)}
+                >
+                  <strong>{plan.name}</strong>
+                  <span>{plan.scan}</span>
+                  <span>{plan.screenshots}</span>
+                  <small>{billingActionKey === `plan:${plan.key}` ? 'Opening checkout...' : plan.note}</small>
+                </button>
+              ))}
+            </div>
+            <div className="plans-modal-packs">
+              <span>Screenshot credit packs</span>
+              <div>
+                {SCREENSHOT_CREDIT_PACKS.map((pack) => (
+                  <button
+                    type="button"
+                    key={pack.key}
+                    disabled={!!billingActionKey}
+                    onClick={() => handleAddOnCheckout(pack.key)}
+                  >
+                    <strong>{pack.label}</strong>
+                    <small>{billingActionKey === `addon:${pack.key}` ? 'Opening checkout...' : pack.price}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {scanAuthPrompt && (
         <Modal
           show
@@ -16295,10 +17105,74 @@ export default function App({ currentRoute, navigateToRoute }) {
         <AuthModal
           onClose={closeAuthModal}
           onSuccess={handleAuthSuccess}
-          onDemo={handleDemoAccess}
           contextMessage={authContextMessage}
+          initialView={authInitialView}
           showToast={showToast}
         />
+      )}
+
+      {screenshotDownloadUpsell && (
+        <Modal
+          show
+          onClose={() => setScreenshotDownloadUpsell(null)}
+          title="Screenshot downloads locked"
+          subtitle="Free accounts need a plan or screenshot credits before downloading screenshots."
+          className="screenshot-download-upsell-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setScreenshotDownloadUpsell(null)}
+              >
+                Not now
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setScreenshotDownloadUpsell(null);
+                  openPlansModal('screenshot-download');
+                }}
+              >
+                View plan options
+              </Button>
+            </>
+          )}
+        >
+          <div className="screenshot-download-preview-modal">
+            <p>
+              This export would package {screenshotDownloadUpsell.count || 0} saved image{screenshotDownloadUpsell.count === 1 ? '' : 's'}
+              {' '}from {screenshotDownloadUpsell.scope === 'selected' ? 'selected pages' : 'the full map'} into organized folders.
+            </p>
+            <div className="screenshot-download-preview-grid" aria-label="Organized screenshot export preview">
+              <div className="screenshot-download-preview-card">
+                <div className="screenshot-download-preview-window">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <strong>Desktop captures</strong>
+                <small>Grouped by page path</small>
+              </div>
+              <div className="screenshot-download-preview-card">
+                <div className="screenshot-download-preview-window screenshot-download-preview-window--mobile">
+                  <span />
+                  <span />
+                </div>
+                <strong>Mobile captures</strong>
+                <small>Matched with desktop files</small>
+              </div>
+              <div className="screenshot-download-preview-card">
+                <div className="screenshot-download-preview-folder">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <strong>ZIP package</strong>
+                <small>Ready for clients or review</small>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       <ProfileDrawer
@@ -16307,6 +17181,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onClose={() => setShowProfileDrawer(false)}
         onUpdate={(updatedUser) => setCurrentUser(updatedUser)}
         onLogout={handleLogout}
+        onOpenPlans={() => openPlansModal('profile')}
         showToast={showToast}
       />
 

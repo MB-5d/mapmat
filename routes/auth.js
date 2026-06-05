@@ -11,6 +11,7 @@ const authChallengeStore = require('../stores/authChallengeStore');
 const { queueTemplatedEmailAsync } = require('../utils/emailDelivery');
 const { EMAIL_TEMPLATE_KEYS, getDefaultAppBaseUrl } = require('../utils/emailTemplates');
 const { saveAvatarFromDataUrl, removeAvatarFile } = require('../utils/avatarStorage');
+const { resolveAccountEntitlementsAsync } = require('../utils/entitlements');
 
 const router = express.Router();
 
@@ -79,6 +80,8 @@ const AUTH_CHALLENGE_PURPOSES = Object.freeze({
   PASSWORD_RESET: 'password_reset',
 });
 const AUTH_CODE_LENGTH = 6;
+const TEST_AUTH_FIXED_CODE = String(process.env.TEST_AUTH_FIXED_CODE || '123456').replace(/\D+/g, '').slice(0, AUTH_CODE_LENGTH);
+const TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX = String(process.env.TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX || '@test.vellic.local').trim().toLowerCase();
 const AUTH_CHALLENGE_MAX_ATTEMPTS = Math.max(
   3,
   Number(process.env.AUTH_CHALLENGE_MAX_ATTEMPTS ?? 5)
@@ -141,7 +144,7 @@ function isUserEmailVerified(user) {
   return !!user.email_verified_at || !Boolean(Number(user.email_verification_required || 0));
 }
 
-function buildClientUser(user) {
+function buildClientUser(user, entitlements = null) {
   if (!user) return null;
 
   const customAvatarUrl = user.avatar_path || null;
@@ -154,7 +157,7 @@ function buildClientUser(user) {
   const emailVerified = isUserEmailVerified(user);
   const authProvider = normalizeAuthProviderForClient(user.auth_provider);
 
-  return {
+  const clientUser = {
     id: user.id,
     email: user.email,
     name: user.name,
@@ -168,6 +171,24 @@ function buildClientUser(user) {
     authMode: authProvider,
     hasPassword,
   };
+
+  if (entitlements) {
+    clientUser.account = entitlements.account || null;
+    clientUser.entitlements = entitlements;
+  }
+
+  return clientUser;
+}
+
+async function buildClientUserWithEntitlementsAsync(user) {
+  if (!user) return null;
+  try {
+    const entitlements = await resolveAccountEntitlementsAsync(user);
+    return buildClientUser(user, entitlements);
+  } catch (error) {
+    console.error('Resolve auth entitlements error:', error);
+    return buildClientUser(user);
+  }
 }
 
 function isAccountDisabled(user) {
@@ -387,6 +408,21 @@ function generateNumericCode(length = AUTH_CODE_LENGTH) {
     digits.push(String(crypto.randomInt(0, 10)));
   }
   return digits.join('');
+}
+
+function canUseFixedTestAuthCode(email) {
+  const normalizedEmail = normalizeEmail(email);
+  return Boolean(
+    TEST_AUTH_ENABLED
+    && TEST_AUTH_FIXED_CODE
+    && TEST_AUTH_FIXED_CODE.length === AUTH_CODE_LENGTH
+    && TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX
+    && normalizedEmail.endsWith(TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX)
+  );
+}
+
+function getAuthCodeForEmail(email) {
+  return canUseFixedTestAuthCode(email) ? TEST_AUTH_FIXED_CODE : generateNumericCode();
 }
 
 function getExpiryTimestamp(minutes) {
@@ -715,7 +751,7 @@ async function findOrCreateGoogleUserAsync({
 }
 
 async function queueEmailVerificationCodeAsync(user) {
-  const code = generateNumericCode();
+  const code = getAuthCodeForEmail(user.email);
   const expiresAt = getExpiryTimestamp(AUTH_EMAIL_VERIFICATION_TTL_MINUTES);
 
   await authChallengeStore.invalidateActiveAuthChallengesAsync({
@@ -755,7 +791,7 @@ async function queueEmailVerificationCodeAsync(user) {
 }
 
 async function queuePasswordResetCodeAsync(user) {
-  const code = generateNumericCode();
+  const code = getAuthCodeForEmail(user.email);
   const expiresAt = getExpiryTimestamp(AUTH_PASSWORD_RESET_TTL_MINUTES);
 
   await authChallengeStore.invalidateActiveAuthChallengesAsync({
@@ -831,7 +867,8 @@ async function validateChallengeAsync({ email, purpose, code, userId = null }) {
     };
   }
 
-  if (!compareSecret(code, challenge.secret_hash)) {
+  const fixedTestCodeAccepted = canUseFixedTestAuthCode(email) && String(code || '').trim() === TEST_AUTH_FIXED_CODE;
+  if (!fixedTestCodeAccepted && !compareSecret(code, challenge.secret_hash)) {
     const updatedChallenge = await authChallengeStore.incrementAuthChallengeAttemptsAsync(challenge.id);
     if (Number(updatedChallenge?.attempts || 0) >= Number(updatedChallenge?.max_attempts || AUTH_CHALLENGE_MAX_ATTEMPTS)) {
       await authChallengeStore.invalidateAuthChallengeAsync(challenge.id);
@@ -1048,7 +1085,7 @@ router.post('/verify-email', verifyLimiter, async (req, res) => {
     const token = issueSessionCookie(res, updatedUser);
 
     res.json({
-      user: buildClientUser(updatedUser),
+      user: await buildClientUserWithEntitlementsAsync(updatedUser),
       token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
@@ -1150,7 +1187,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     const token = issueSessionCookie(res, publicUser);
 
     res.json({
-      user: buildClientUser(publicUser),
+      user: await buildClientUserWithEntitlementsAsync(publicUser),
       token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
@@ -1246,7 +1283,7 @@ router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
     const token = issueSessionCookie(res, updatedUser);
 
     res.json({
-      user: buildClientUser(updatedUser),
+      user: await buildClientUserWithEntitlementsAsync(updatedUser),
       token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
@@ -1371,7 +1408,7 @@ router.post('/google/credential', googleAuthLimiter, async (req, res) => {
     const token = issueSessionCookie(res, publicUser);
 
     return res.json({
-      user: buildClientUser(publicUser),
+      user: await buildClientUserWithEntitlementsAsync(publicUser),
       token: AUTH_HEADER_FALLBACK ? token : undefined,
     });
   } catch (error) {
@@ -1391,13 +1428,13 @@ router.post('/logout', (req, res) => {
   res.json({ success: true });
 });
 
-router.get('/me', authMiddleware, (req, res) => {
+router.get('/me', authMiddleware, async (req, res) => {
   if (!req.user) {
     return res.json({ user: null });
   }
 
   return res.json({
-    user: buildClientUser(req.user),
+    user: await buildClientUserWithEntitlementsAsync(req.user),
   });
 });
 
@@ -1436,7 +1473,7 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
     const updated = await authStore.getPublicUserByIdAsync(req.user.id);
 
     res.json({
-      user: buildClientUser(updated),
+      user: await buildClientUserWithEntitlementsAsync(updated),
     });
   } catch (error) {
     console.error('Update profile error:', error);
@@ -1462,7 +1499,7 @@ router.post('/me/avatar', authMiddleware, requireAuth, profileMutationLimiter, a
 
     await authStore.updateUserAvatarPathAsync(req.user.id, nextAvatarPath);
     const updated = await authStore.getPublicUserByIdAsync(req.user.id);
-    res.json({ user: buildClientUser(updated) });
+    res.json({ user: await buildClientUserWithEntitlementsAsync(updated) });
   } catch (error) {
     console.error('Upload avatar error:', error);
     res.status(error?.status || 500).json({ error: error?.message || 'Failed to upload avatar' });
@@ -1476,7 +1513,7 @@ router.delete('/me/avatar', authMiddleware, requireAuth, profileMutationLimiter,
     }
     await authStore.updateUserAvatarPathAsync(req.user.id, null);
     const updated = await authStore.getPublicUserByIdAsync(req.user.id);
-    res.json({ user: buildClientUser(updated) });
+    res.json({ user: await buildClientUserWithEntitlementsAsync(updated) });
   } catch (error) {
     console.error('Remove avatar error:', error);
     res.status(500).json({ error: 'Failed to remove avatar' });

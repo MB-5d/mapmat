@@ -97,7 +97,6 @@ const ScanProgressModal = ({
         <Button
           variant="secondary"
           onClick={onRequestCancel}
-          disabled={isStoppingScan}
         >
           Cancel
         </Button>
@@ -127,7 +126,7 @@ const ScanProgressModal = ({
         >
           No, Continue Scanning
         </Button>
-        <Button variant="danger" onClick={onCancelScan} disabled={isStoppingScan}>
+        <Button variant="danger" onClick={onCancelScan}>
           Yes, Cancel Scan
         </Button>
       </>

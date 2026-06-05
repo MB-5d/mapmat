@@ -6,6 +6,7 @@ import { getNodeHttpErrorLabel, getNodeStatusCode, isVirtualMissingNode } from '
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
   if (!node) return [];
+  if (node.isEntitlementLocked || node.entitlementLocked) return ['standard'];
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
   const isRenderableText = isRenderableTextUrl(node.url);
@@ -37,6 +38,7 @@ export const getReportTypesForNode = (node, overrides = {}) => {
 
 export const getReportPageType = (node, overrides = {}) => {
   if (!node) return 'Standard';
+  if (node.isEntitlementLocked || node.entitlementLocked) return 'Locked';
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
   const isRenderableText = isRenderableTextUrl(node.url);
@@ -89,6 +91,8 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
       blockedReason: node.blockedReason || '',
       scanStatus: node.scanStatus || '',
       showFullTitle,
+      isEntitlementLocked: Boolean(node.isEntitlementLocked || node.entitlementLocked),
+      entitlementLocked: Boolean(node.isEntitlementLocked || node.entitlementLocked),
     });
     node.children?.forEach((child) => visit(child, { isSubdomain, orphanType }));
   };

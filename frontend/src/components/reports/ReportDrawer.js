@@ -56,6 +56,7 @@ const ReportDrawer = ({
   onRunInsights,
   onLocateNode,
   onLocateUrl,
+  onUpgrade,
   reportTitle,
   reportTimestamp,
   scanMeta,
@@ -136,6 +137,9 @@ const ReportDrawer = ({
   const scanCollapseReason = scanMeta?.partialReason === 'scan_collapsed'
     ? (scanMeta?.scanDiagnostics?.collapseReason || 'Root-only scan returned after discovery signals were found')
     : '';
+  const entitlementNotice = scanMeta?.entitlement?.capped && scanMeta.entitlement.limitReached !== false
+    ? scanMeta.entitlement
+    : null;
 
   const activeFilterKeys = useMemo(
     () => Object.entries(filters).filter(([, value]) => value).map(([key]) => key),
@@ -338,6 +342,21 @@ const ReportDrawer = ({
             </div>
           </div>
         )}
+        {entitlementNotice && (
+          <div className="ui-status-alert ui-status-alert--warning report-upgrade-alert">
+            <AlertTriangle size={16} className="ui-status-alert__icon" />
+            <div className="ui-status-alert__content">
+              <strong>Full map locked.</strong>
+              <span>
+                Showing {entitlementNotice.visiblePageLimit || entitlementNotice.allowedPages || 25} visible pages.
+                Upgrade to see the full map.
+              </span>
+            </div>
+            <Button type="button" variant="primary" size="sm" onClick={onUpgrade}>
+              Upgrade plan
+            </Button>
+          </div>
+        )}
         <section className="report-summary">
           <div className="report-total-card">
             <div className="report-total-value">{stats.total}</div>
@@ -417,6 +436,7 @@ const ReportDrawer = ({
           >
           {sortedEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
+            const isLocked = Boolean(entry.isEntitlementLocked || entry.entitlementLocked);
             const pageInsight = pageInsightLookup.get(entry.id) || pageInsightLookup.get(entry.url) || null;
             const seoRows = [
               ['HTTP status', entry.httpErrorLabel || (entry.statusCode ? `HTTP ${entry.statusCode}` : '')],
@@ -435,15 +455,25 @@ const ReportDrawer = ({
               ['Twitter card', entry.twitter?.card],
             ].filter(([, value]) => value);
             return (
-              <div key={entry.id} className="report-row">
+              <div key={entry.id} className={`report-row ${isLocked ? 'report-row--locked' : ''}`}>
                 <div
                   className={`report-row-main ${isExpanded ? 'report-row-expanded' : ''}`}
-                  onClick={() => setExpandedRow(isExpanded ? null : entry.id)}
+                  onClick={() => {
+                    if (isLocked) {
+                      onUpgrade?.();
+                      return;
+                    }
+                    setExpandedRow(isExpanded ? null : entry.id);
+                  }}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
+                      if (isLocked) {
+                        onUpgrade?.();
+                        return;
+                      }
                       setExpandedRow(isExpanded ? null : entry.id);
                     }
                   }}
@@ -456,27 +486,31 @@ const ReportDrawer = ({
                   <div className="report-cell report-cell-type">{entry.pageType}</div>
                   <div className="report-cell report-cell-title" title={entry.title || entry.url}>
                     <span>{entry.title || entry.url}</span>
-                    {pageInsight && (
+                    {!isLocked && pageInsight && (
                       <span className="report-page-score">{pageInsight.score}</span>
                     )}
                   </div>
-                  <div className="report-cell report-cell-count">{entry.types.length}</div>
+                  <div className="report-cell report-cell-count">{isLocked ? 'Locked' : entry.types.length}</div>
                   <button
                     type="button"
                     className="report-map-link"
                     onClick={(event) => {
                       event.stopPropagation();
+                      if (isLocked) {
+                        onUpgrade?.();
+                        return;
+                      }
                       onLocateNode?.(entry.id);
                     }}
                   >
-                    <Locate size={16} />
-                    See on map
+                    {isLocked ? <ExternalLink size={16} /> : <Locate size={16} />}
+                    {isLocked ? 'Upgrade' : 'See on map'}
                   </button>
                   <span className="report-row-toggle">
-                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    {!isLocked && (isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
                   </span>
                 </div>
-                {isExpanded && (
+                {!isLocked && isExpanded && (
                   <div className="report-row-detail">
                     <div className="report-detail-main">
                       {entry.thumbnailUrl ? (
