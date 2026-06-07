@@ -432,6 +432,17 @@ const getExpandedStackIds = (expandedStacks = {}) => (
     .filter(Boolean)
     .sort()
 );
+const getNextExpandedStackState = (expandedStacks = {}, nodeId) => {
+  const id = String(nodeId || '').trim();
+  if (!id) return expandedStacks || {};
+  return {
+    ...(expandedStacks || {}),
+    [id]: !expandedStacks?.[id],
+  };
+};
+const getMapLayoutRefreshTransformOptions = ({ preserveViewportForStackToggle = false } = {}) => ({
+  skipPanClamp: !!preserveViewportForStackToggle,
+});
 
 const DUPLICATE_REVEAL_MARGIN_PX = 24;
 const getPanToRevealLayoutNode = ({
@@ -2333,6 +2344,8 @@ export const __testing = {
   isStoredScreenshotAsset,
   getImageCaptureStats,
   getLargeMapAutoCenterKey,
+  getNextExpandedStackState,
+  getMapLayoutRefreshTransformOptions,
   mergeLargeMapNodeSnapshot,
   getLargeMapStackSelectionIdsFromNode,
   getLargeMapEditParentId,
@@ -2660,6 +2673,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [orphans]);
   const [lastScanAt, setLastScanAt] = useState(null);
   const [expandedStacks, setExpandedStacks] = useState({});
+  const preserveViewportForStackToggleRef = useRef(false);
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
   const [commentingNodeSnapshot, setCommentingNodeSnapshot] = useState(null);
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
@@ -3930,6 +3944,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     setLargeMapSceneRefreshKey((key) => key + 1);
     return true;
   }, [currentMap?.id, useLargeMapSurface]);
+
+  const toggleExpandedStack = useCallback((nodeId) => {
+    const id = String(nodeId || '').trim();
+    if (!id) return;
+    if (!useLargeMapSurface) {
+      preserveViewportForStackToggleRef.current = true;
+    }
+    setExpandedStacks((prev) => getNextExpandedStackState(prev, id));
+  }, [useLargeMapSurface]);
 
   // Build a unified index for root + orphan + subdomain trees
   const forestIndex = useMemo(() => (
@@ -5211,7 +5234,12 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (!root) return;
-    applyTransform({ scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y });
+    const preserveViewportForStackToggle = preserveViewportForStackToggleRef.current;
+    preserveViewportForStackToggleRef.current = false;
+    applyTransform(
+      { scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y },
+      getMapLayoutRefreshTransformOptions({ preserveViewportForStackToggle })
+    );
   }, [layerVisibility, root, orphans, mapLayout, applyTransform]);
 
   const loadAuthenticatedWorkspace = useCallback(async () => {
@@ -15469,9 +15497,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     sceneRefreshKey={largeMapSceneRefreshKey}
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
-                    onToggleStack={(nodeId) => {
-                      setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
-                    }}
+                    onToggleStack={toggleExpandedStack}
                   />
                 ) : (
                 <SitemapTree
@@ -15533,9 +15559,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   expandedStacks={expandedStacks}
                   viewportBounds={canvasViewportBounds}
                   activeBranchNodeIds={activeBranchNodeIds}
-                  onToggleStack={(nodeId) => {
-                    setExpandedStacks((prev) => ({ ...prev, [nodeId]: !prev[nodeId] }));
-                  }}
+                  onToggleStack={toggleExpandedStack}
                   selectedNodeIds={selectedNodeIds}
                 >
                   {/* SVG Connections Layer */}

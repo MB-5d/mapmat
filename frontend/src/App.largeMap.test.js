@@ -1,6 +1,19 @@
 import { __testing } from './App';
 
 describe('large map viewport behavior', () => {
+  test('stack toggles preserve the current viewport during normal map layout refresh', () => {
+    expect(__testing.getNextExpandedStackState({ parentA: true }, 'parentB')).toEqual({
+      parentA: true,
+      parentB: true,
+    });
+    expect(__testing.getNextExpandedStackState({ parentA: true }, 'parentA')).toEqual({
+      parentA: false,
+    });
+    expect(__testing.getMapLayoutRefreshTransformOptions({
+      preserveViewportForStackToggle: true,
+    })).toEqual({ skipPanClamp: true });
+  });
+
   test('auto-center key ignores image metadata and thumbnail visibility', () => {
     const baseKey = __testing.getLargeMapAutoCenterKey({
       mapId: 'map-1',
