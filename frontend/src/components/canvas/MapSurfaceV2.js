@@ -34,7 +34,7 @@ const mergeSceneNodeSnapshot = (sceneNode, snapshot) => {
     ...snapshot,
     ...sceneNode,
     thumbnailUrl: sceneNode.thumbnailUrl || snapshot.thumbnailUrl || '',
-    thumbnailFullUrl: snapshot.thumbnailFullUrl || sceneNode.thumbnailFullUrl || '',
+    thumbnailFullUrl: sceneNode.thumbnailFullUrl || snapshot.thumbnailFullUrl || '',
     fullScreenshotUrl: sceneNode.fullScreenshotUrl || snapshot.fullScreenshotUrl || '',
     fullScreenshotTruncated: Boolean(sceneNode.fullScreenshotTruncated || snapshot.fullScreenshotTruncated),
     hasThumbnail: Boolean(sceneNode.hasThumbnail || snapshot.hasThumbnail || sceneNode.thumbnailUrl || snapshot.thumbnailUrl),

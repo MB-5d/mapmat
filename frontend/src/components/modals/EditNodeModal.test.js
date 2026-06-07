@@ -226,6 +226,43 @@ describe('EditNodeModal', () => {
     expect(container.textContent).not.toMatch(/HTTP status/i);
   });
 
+  test('views the best available saved image asset from the thumbnail section', () => {
+    const onViewImage = jest.fn();
+
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Image page',
+            url: 'https://example.com/image',
+            pageType: 'Page',
+            thumbnailUrl: '/screenshots/node_thumb_v1.jpg',
+            thumbnailFullUrl: '/screenshots/node_thumb_full_v1.jpg',
+            fullScreenshotUrl: '/screenshots/node_full_v1.jpg',
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onViewImage={onViewImage}
+          mode="edit"
+        />
+      );
+    });
+
+    const viewButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('View')
+    );
+    expect(viewButton).not.toBeUndefined();
+
+    act(() => {
+      viewButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onViewImage).toHaveBeenCalledWith('/screenshots/node_full_v1.jpg', true, 'node-1', 'full');
+  });
+
   test('uploads inline thumbnail data before saving', async () => {
     const onSave = jest.fn();
     const onClose = jest.fn();

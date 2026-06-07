@@ -941,6 +941,8 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
   const node = layoutNode.node || {};
   const rawThumbnailUrl = String(node.thumbnailUrl || '');
   const thumbnailUrl = thumbnailLod === 'none' ? '' : rawThumbnailUrl;
+  const thumbnailFullUrl = String(node.thumbnailFullUrl || '');
+  const fullScreenshotUrl = String(node.fullScreenshotUrl || '');
   const annotations = node.annotations && typeof node.annotations === 'object'
     ? {
       status: node.annotations.status || 'none',
@@ -968,7 +970,10 @@ function sanitizeSceneNode(layoutNode, { thumbnailLod = 'thumbnail' } = {}) {
     w: layoutNode.w,
     h: layoutNode.h,
     thumbnailUrl,
-    hasThumbnail: !!rawThumbnailUrl,
+    thumbnailFullUrl,
+    fullScreenshotUrl,
+    fullScreenshotTruncated: Boolean(node.fullScreenshotTruncated),
+    hasThumbnail: !!thumbnailUrl,
     thumbnailLod,
     annotations,
     comments: Array.isArray(node.comments) ? node.comments.slice(0, 20) : [],

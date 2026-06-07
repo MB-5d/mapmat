@@ -35,8 +35,9 @@ assert(scene.nodeCount >= 41);
 assert(scene.visibleNodeCount > 0);
 assert(scene.homeNode, 'scene should include home node position for initial centering');
 assert.strictEqual(scene.homeNode.id, 'root');
-assert(scene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
-assert(scene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'thumbnailFullUrl')));
+assert(scene.nodes.some((node) => node.fullScreenshotUrl));
+assert(scene.nodes.every((node) => Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
+assert(scene.nodes.every((node) => Object.prototype.hasOwnProperty.call(node, 'thumbnailFullUrl')));
 assert(scene.nodes.some((node) => node.thumbnailUrl));
 assert(scene.nodes.some((node) => node.hasThumbnail === true));
 assert.strictEqual(getThumbnailLod(0.1), 'none');
@@ -93,7 +94,8 @@ const noThumbnailScene = buildMapScene({
   showThumbnails: false,
 });
 assert(noThumbnailScene.nodes.every((node) => node.thumbnailUrl === ''));
-assert(noThumbnailScene.nodes.some((node) => node.hasThumbnail === true));
+assert(noThumbnailScene.nodes.every((node) => node.hasThumbnail === false));
+assert(noThumbnailScene.nodes.some((node) => node.fullScreenshotUrl));
 
 const largeRoot = {
   id: 'large-root',
@@ -120,7 +122,7 @@ assert(largeScene.nodeCount < countMapNodes(largeRoot));
 assert(largeScene.visibleNodeCount < largeScene.nodeCount);
 assert(largeScene.homeNode, 'large scenes should include home node even when viewport is sparse');
 assert.strictEqual(largeScene.homeNode.id, 'large-root');
-assert(largeScene.nodes.every((node) => !Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
+assert(largeScene.nodes.every((node) => Object.prototype.hasOwnProperty.call(node, 'fullScreenshotUrl')));
 assert.strictEqual(largeScene.minimap, undefined);
 
 const largeSceneWithMinimap = buildMapScene({
@@ -185,6 +187,7 @@ const veryCrowdedFarOutScene = buildMapScene({
 assert(veryCrowdedFarOutScene.visibleNodeCount > 1600, 'very crowded low-zoom scene should exceed thumbnail URL limit');
 assert.strictEqual(veryCrowdedFarOutScene.thumbnailLod, 'none');
 assert(veryCrowdedFarOutScene.nodes.every((node) => node.thumbnailUrl === ''));
+assert(veryCrowdedFarOutScene.nodes.every((node) => node.hasThumbnail === false));
 
 const expandedLayout = computeSceneLayout(largeRoot, [], {
   showThumbnails: false,

@@ -3,6 +3,7 @@ const path = require('path');
 const billingStore = require('../stores/billingStore');
 
 const PLAN_CONFIG_PATH = path.join(__dirname, '..', 'config', 'billing', 'plans.json');
+const INTERNAL_TEST_ACCOUNT_EMAILS_ENV = 'VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS';
 
 const METERS = Object.freeze({
   crawlPages: 'crawl_pages',
@@ -68,6 +69,20 @@ function getBillingPlanConfig() {
 function getPlan(config, planKey) {
   const fallback = config.fallbackPlan || 'free';
   return config.plans?.[planKey] || config.plans?.[fallback] || config.plans?.free;
+}
+
+function getInternalTestingEmailSet() {
+  return new Set(
+    String(process.env[INTERNAL_TEST_ACCOUNT_EMAILS_ENV] || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function isInternalTestingAccount(user) {
+  const email = String(user?.email || '').trim().toLowerCase();
+  return !!email && getInternalTestingEmailSet().has(email);
 }
 
 function normalizeLimit(value) {
@@ -335,9 +350,43 @@ async function resolveAccountEntitlementsAsync(user) {
     retention: config.retentionDefaults || {},
     screenshotCreditCosts: config.screenshotCreditCosts || {},
     archived: isArchived(account),
+    internalTesting: false,
   };
 
-  return summary;
+  if (!isInternalTestingAccount(user)) return summary;
+
+  Object.keys(config.plans || {}).forEach((planKey) => {
+    const planFeatures = config.plans?.[planKey]?.features || {};
+    Object.keys(planFeatures).forEach((featureKey) => {
+      summary.features[featureKey] = true;
+    });
+  });
+
+  Object.keys(summary.meters || {}).forEach((key) => {
+    summary.meters[key] = {
+      ...summary.meters[key],
+      included: null,
+      graceLimit: 0,
+      includedRemaining: null,
+      graceRemaining: 0,
+      remaining: null,
+      unlimited: true,
+    };
+  });
+
+  Object.keys(summary.limits || {}).forEach((key) => {
+    summary.limits[key] = {
+      ...summary.limits[key],
+      limit: null,
+      remaining: null,
+      unlimited: true,
+    };
+  });
+
+  return {
+    ...summary,
+    internalTesting: true,
+  };
 }
 
 function entitlementErrorPayload(result) {

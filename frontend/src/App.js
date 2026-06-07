@@ -17227,6 +17227,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
           onUploadNodeImageAsset={uploadNodeImageAsset}
+          onViewImage={viewFullScreenshot}
           onDelete={(nodeId) => {
             setEditModalNode(null);
             requestDeleteNode(nodeId);

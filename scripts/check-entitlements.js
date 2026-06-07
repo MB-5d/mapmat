@@ -50,6 +50,49 @@ async function main() {
   assert.equal(freeScreenshotCheck.allowed, false);
   assert.equal(freeScreenshotCheck.code, 'ENTITLEMENT_REQUIRED');
 
+  const originalInternalTestingEmails = process.env.VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS;
+  const internalTestingEmail = 'vinyl103@gmail.com';
+  process.env.VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS = `Someone@Example.Test, ${internalTestingEmail.toUpperCase()}`;
+  const internalTestingUser = await authStore.createUserAsync({
+    email: internalTestingEmail,
+    passwordHash: 'test',
+    name: 'Internal Testing User',
+    emailVerifiedAt: new Date().toISOString(),
+  });
+  const internalTestingSummary = await resolveAccountEntitlementsAsync(internalTestingUser);
+  assert.equal(internalTestingSummary.internalTesting, true);
+  assert.equal(internalTestingSummary.features.clientShareLinks, true);
+  assert.equal(internalTestingSummary.meters.crawlPages.unlimited, true);
+  assert.equal(internalTestingSummary.meters.screenshotCredits.unlimited, true);
+  assert.equal(internalTestingSummary.meters.organizedExports.unlimited, true);
+  assert.equal(internalTestingSummary.limits.activeProjects.unlimited, true);
+  assert.equal(internalTestingSummary.limits.seats.unlimited, true);
+  assert.equal(internalTestingSummary.limits.scanPagesPerRun.unlimited, true);
+  const internalShareCheck = await checkAccountActionAsync(internalTestingUser, ACTIONS.shareCreate);
+  assert.equal(internalShareCheck.allowed, true);
+
+  const soloTierUser = await authStore.createUserAsync({
+    email: `solo-tier-${Date.now()}@example.test`,
+    passwordHash: 'test',
+    name: 'Solo Tier User',
+    emailVerifiedAt: new Date().toISOString(),
+  });
+  const soloTierAccount = await billingStore.getOrCreateBillingAccountForUserAsync(soloTierUser);
+  await billingStore.updateBillingAccountForAdminAsync({
+    accountId: soloTierAccount.id,
+    planKey: 'solo',
+    accountState: 'active',
+    trialState: 'none',
+  });
+  const soloShareCheck = await checkAccountActionAsync(soloTierUser, ACTIONS.shareCreate);
+  assert.equal(soloShareCheck.allowed, false);
+  assert.equal(soloShareCheck.code, 'ENTITLEMENT_REQUIRED');
+  if (originalInternalTestingEmails === undefined) {
+    delete process.env.VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS;
+  } else {
+    process.env.VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS = originalInternalTestingEmails;
+  }
+
   await recordMeterDebitAsync({
     user,
     accountSummary: summary,

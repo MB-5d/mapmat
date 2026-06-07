@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Upload, X } from 'lucide-react';
+import { Eye, Upload, X } from 'lucide-react';
 
 import Button from '../ui/Button';
 import Field from '../ui/Field';
@@ -56,6 +56,7 @@ const EditNodeModal = ({
   onClose,
   onSave,
   onUploadNodeImageAsset,
+  onViewImage,
   onDelete,
   onLocateUrl,
   canLocateUrl,
@@ -110,6 +111,13 @@ const EditNodeModal = ({
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
   const canDelete = allowDelete && mode === 'edit' && !isHomePageCreation && typeof onDelete === 'function' && node?.id;
+  const fullScreenshotUrl = String(node?.fullScreenshotUrl || '').trim();
+  const thumbnailFullUrl = String(node?.thumbnailFullUrl || '').trim();
+  const currentThumbnailUrl = String(thumbnailUrl || '').trim();
+  const previewImageUrl = currentThumbnailUrl || thumbnailFullUrl || fullScreenshotUrl;
+  const viewableImageUrl = fullScreenshotUrl || thumbnailFullUrl || currentThumbnailUrl;
+  const viewableImageType = fullScreenshotUrl ? 'full' : 'thumb';
+  const canViewImage = !!viewableImageUrl && typeof onViewImage === 'function';
   const duplicateSourceUrl = node?.isDuplicate && node?.duplicateOf ? node.duplicateOf : '';
   const duplicateSourceLabel = duplicateSourceUrl
     ? duplicateSourceUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')
@@ -226,6 +234,11 @@ const EditNodeModal = ({
       setThumbnailUrl(loadEvent.target.result);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleViewImage = () => {
+    if (!canViewImage) return;
+    onViewImage(viewableImageUrl, true, node?.id || null, viewableImageType);
   };
 
   const modalTitle = isHomePageCreation
@@ -456,16 +469,30 @@ const EditNodeModal = ({
         ) : null}
 
         <Field label="Thumbnail / Image">
-          {thumbnailUrl ? (
+          {previewImageUrl ? (
             <div className="thumbnail-preview">
-              <img src={thumbnailUrl} alt="Thumbnail preview" />
-              <button
-                type="button"
-                className="btn-remove-thumb"
-                onClick={() => setThumbnailUrl('')}
-              >
-                <X size={14} />
-              </button>
+              <img src={previewImageUrl} alt="Thumbnail preview" />
+              {canViewImage ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="btn-view-thumb"
+                  startIcon={<Eye />}
+                  onClick={handleViewImage}
+                >
+                  View
+                </Button>
+              ) : null}
+              {currentThumbnailUrl ? (
+                <button
+                  type="button"
+                  className="btn-remove-thumb"
+                  onClick={() => setThumbnailUrl('')}
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
             </div>
           ) : (
             <div

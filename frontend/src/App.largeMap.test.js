@@ -50,6 +50,28 @@ describe('large map viewport behavior', () => {
     });
   });
 
+  test('large-map scene snapshots keep full image metadata when thumbnail URLs are omitted', () => {
+    const sceneNode = {
+      id: 'node-1',
+      title: 'Scene node',
+      thumbnailUrl: '',
+      thumbnailFullUrl: '/screenshots/node_full_thumb_v2.jpg',
+      fullScreenshotUrl: '/screenshots/node_full_v2.jpg',
+      fullScreenshotTruncated: true,
+      hasThumbnail: false,
+    };
+
+    expect(__testing.mergeLargeMapNodeSnapshot(null, sceneNode)).toMatchObject({
+      id: 'node-1',
+      title: 'Scene node',
+      thumbnailUrl: '',
+      thumbnailFullUrl: '/screenshots/node_full_thumb_v2.jpg',
+      fullScreenshotUrl: '/screenshots/node_full_v2.jpg',
+      fullScreenshotTruncated: true,
+      hasThumbnail: false,
+    });
+  });
+
   test('large-map collapsed stack selection uses backend selection ids', () => {
     const node = {
       id: 'visible-stack-card',
