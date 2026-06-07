@@ -440,8 +440,8 @@ const getNextExpandedStackState = (expandedStacks = {}, nodeId) => {
     [id]: !expandedStacks?.[id],
   };
 };
-const getMapLayoutRefreshTransformOptions = ({ preserveViewportForStackToggle = false } = {}) => ({
-  skipPanClamp: !!preserveViewportForStackToggle,
+const getMapLayoutRefreshTransformOptions = () => ({
+  skipPanClamp: true,
 });
 
 const DUPLICATE_REVEAL_MARGIN_PX = 24;
@@ -2673,7 +2673,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [orphans]);
   const [lastScanAt, setLastScanAt] = useState(null);
   const [expandedStacks, setExpandedStacks] = useState({});
-  const preserveViewportForStackToggleRef = useRef(false);
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
   const [commentingNodeSnapshot, setCommentingNodeSnapshot] = useState(null);
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
@@ -3948,11 +3947,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const toggleExpandedStack = useCallback((nodeId) => {
     const id = String(nodeId || '').trim();
     if (!id) return;
-    if (!useLargeMapSurface) {
-      preserveViewportForStackToggleRef.current = true;
-    }
     setExpandedStacks((prev) => getNextExpandedStackState(prev, id));
-  }, [useLargeMapSurface]);
+  }, []);
 
   // Build a unified index for root + orphan + subdomain trees
   const forestIndex = useMemo(() => (
@@ -3972,12 +3968,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     layoutRef.current = mapLayout;
   }, [mapLayout]);
-
-  useEffect(() => {
-    if (!mapLayout?.nodes?.size) return;
-    if (pendingCreatedNodeViewRef.current?.nodeId) return;
-    scheduleResetViewRef.current?.();
-  }, [mapLayout?.orientation, mapLayout?.nodes?.size]);
 
   const mergeLargeMapNodeCache = useCallback((
     incomingNodes,
@@ -5234,11 +5224,9 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (!root) return;
-    const preserveViewportForStackToggle = preserveViewportForStackToggleRef.current;
-    preserveViewportForStackToggleRef.current = false;
     applyTransform(
       { scale: scaleRef.current, x: panRef.current.x, y: panRef.current.y },
-      getMapLayoutRefreshTransformOptions({ preserveViewportForStackToggle })
+      getMapLayoutRefreshTransformOptions()
     );
   }, [layerVisibility, root, orphans, mapLayout, applyTransform]);
 

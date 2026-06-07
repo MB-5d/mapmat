@@ -9,9 +9,7 @@ describe('large map viewport behavior', () => {
     expect(__testing.getNextExpandedStackState({ parentA: true }, 'parentA')).toEqual({
       parentA: false,
     });
-    expect(__testing.getMapLayoutRefreshTransformOptions({
-      preserveViewportForStackToggle: true,
-    })).toEqual({ skipPanClamp: true });
+    expect(__testing.getMapLayoutRefreshTransformOptions()).toEqual({ skipPanClamp: true });
   });
 
   test('auto-center key ignores image metadata and thumbnail visibility', () => {
