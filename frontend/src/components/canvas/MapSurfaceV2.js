@@ -5,7 +5,6 @@ import { isNodeGhostedByLayers } from '../../utils/mapDisplaySummary';
 import { DraggableNodeCard } from '../nodes/NodeCard';
 
 const SCENE_FETCH_IDLE_MS = 80;
-const MAX_HEAP_MB_BEFORE_SAFE_MODE = 900;
 
 const getConnectorPath = (connector) => (
   `M ${connector.x1} ${connector.y1} L ${connector.x2} ${connector.y2}`
@@ -100,7 +99,6 @@ const MapSurfaceV2 = ({
   const [scene, setScene] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [safeMode, setSafeMode] = useState(false);
 
   useEffect(() => {
     sceneRef.current = scene;
@@ -151,12 +149,12 @@ const MapSurfaceV2 = ({
       h: height / view.scale,
       zoom: view.scale,
       orientation,
-      thumbnails: showThumbnails && !safeMode ? '1' : '0',
+      thumbnails: showThumbnails ? '1' : '0',
       overscan: getSceneOverscan(view.scale),
       expandedStacks: expandedStackIds.join(','),
       summary: sceneRef.current?.displaySummary ? '0' : '1',
     };
-  }, [canvasSize?.height, canvasSize?.width, expandedStackIds, orientation, safeMode, showThumbnails]);
+  }, [canvasSize?.height, canvasSize?.width, expandedStackIds, orientation, showThumbnails]);
 
   const fetchScene = useCallback((view) => {
     if (!mapId || !getScene) return;
@@ -200,7 +198,7 @@ const MapSurfaceV2 = ({
 
   useEffect(() => {
     fetchScene(getCurrentView());
-  }, [fetchScene, getCurrentView, orientation, safeMode, sceneRefreshKey, showThumbnails]);
+  }, [fetchScene, getCurrentView, orientation, sceneRefreshKey, showThumbnails]);
 
   useEffect(() => {
     let raf = null;
@@ -208,12 +206,6 @@ const MapSurfaceV2 = ({
       const view = getCurrentView();
       applyViewportTransform(view);
       fetchScene(view);
-      const memory = typeof performance !== 'undefined' && performance?.memory?.usedJSHeapSize
-        ? Math.round(performance.memory.usedJSHeapSize / 1024 / 1024)
-        : null;
-      if (memory && memory > MAX_HEAP_MB_BEFORE_SAFE_MODE) {
-        setSafeMode(true);
-      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

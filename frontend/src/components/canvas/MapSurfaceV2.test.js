@@ -370,7 +370,7 @@ describe('MapSurfaceV2', () => {
     expect(onViewImage).toHaveBeenCalledWith('/screenshots/home_scene_full_v2.jpg', true, 'home', 'full');
   });
 
-  test('keeps cached thumbnails visible when large-map safe mode disables thumbnail fetching', async () => {
+  test('keeps thumbnail requests enabled under high browser memory', async () => {
     Object.defineProperty(performance, 'memory', {
       configurable: true,
       value: { usedJSHeapSize: 950 * 1024 * 1024 },
@@ -422,6 +422,11 @@ describe('MapSurfaceV2', () => {
       await wait(350);
     });
 
+    expect(getScene).toHaveBeenCalledWith(
+      'map-1',
+      expect.objectContaining({ thumbnails: '1' }),
+      expect.any(Object)
+    );
     const image = container.querySelector('.thumb-img');
     expect(image).not.toBeNull();
     expect(image.getAttribute('src')).toContain('/screenshots/home_cached_thumb_v1.jpg');
