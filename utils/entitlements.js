@@ -4,6 +4,7 @@ const billingStore = require('../stores/billingStore');
 
 const PLAN_CONFIG_PATH = path.join(__dirname, '..', 'config', 'billing', 'plans.json');
 const INTERNAL_TEST_ACCOUNT_EMAILS_ENV = 'VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS';
+const STAGING_INTERNAL_TESTING_ENV = 'VELLIC_STAGING_INTERNAL_TESTING';
 const TEST_ACCOUNT_EMAIL_SUFFIX_ENV = 'TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX';
 const DEFAULT_TEST_ACCOUNT_EMAIL_SUFFIX = '@test.vellic.local';
 const TIER_TEST_ACCOUNT_LOCAL_PARTS = new Set(['free', 'solo', 'pro', 'studio', 'agency']);
@@ -91,17 +92,54 @@ function getTestAccountEmailSuffix() {
   return suffix.startsWith('@') ? suffix : `@${suffix}`;
 }
 
+function isTierTestAccountEmail(email) {
+  const suffix = getTestAccountEmailSuffix();
+  if (!email || !suffix || suffix === '@') return false;
+  if (!email.endsWith(suffix)) return false;
+  const localPart = email.slice(0, -suffix.length);
+  return TIER_TEST_ACCOUNT_LOCAL_PARTS.has(localPart);
+}
+
 function isAutoInternalTestingEmail(email) {
   const suffix = getTestAccountEmailSuffix();
   if (!email || !suffix || suffix === '@') return false;
   if (!email.endsWith(suffix)) return false;
   const localPart = email.slice(0, -suffix.length);
-  return !!localPart && !TIER_TEST_ACCOUNT_LOCAL_PARTS.has(localPart);
+  return !!localPart && !isTierTestAccountEmail(email);
+}
+
+function parseEnvBoolean(value, fallback = null) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+function isStagingRuntime() {
+  const explicit = parseEnvBoolean(process.env[STAGING_INTERNAL_TESTING_ENV], null);
+  if (explicit !== null) return explicit;
+  const runtimeValues = [
+    process.env.APP_BASE_URL,
+    process.env.FRONTEND_URL,
+    process.env.GOOGLE_REDIRECT_URI,
+    process.env.RAILWAY_ENVIRONMENT_NAME,
+    process.env.RAILWAY_SERVICE_NAME,
+  ];
+  return runtimeValues.some((value) => String(value || '').toLowerCase().includes('staging'));
+}
+
+function isStagingInternalTestingEmail(email) {
+  return !!email && isStagingRuntime() && !isTierTestAccountEmail(email);
 }
 
 function isInternalTestingAccount(user) {
   const email = String(user?.email || '').trim().toLowerCase();
-  return !!email && (getInternalTestingEmailSet().has(email) || isAutoInternalTestingEmail(email));
+  return !!email && (
+    getInternalTestingEmailSet().has(email)
+    || isAutoInternalTestingEmail(email)
+    || isStagingInternalTestingEmail(email)
+  );
 }
 
 async function getEntitlementUserAsync(user) {

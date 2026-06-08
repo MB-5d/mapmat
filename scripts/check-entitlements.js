@@ -51,6 +51,12 @@ async function main() {
   assert.equal(freeScreenshotCheck.code, 'ENTITLEMENT_REQUIRED');
 
   const originalInternalTestingEmails = process.env.VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS;
+  const originalStagingInternalTesting = process.env.VELLIC_STAGING_INTERNAL_TESTING;
+  const originalAppBaseUrl = process.env.APP_BASE_URL;
+  const originalFrontendUrl = process.env.FRONTEND_URL;
+  const originalGoogleRedirectUri = process.env.GOOGLE_REDIRECT_URI;
+  const originalRailwayEnvironmentName = process.env.RAILWAY_ENVIRONMENT_NAME;
+  const originalRailwayServiceName = process.env.RAILWAY_SERVICE_NAME;
   const internalTestingEmail = 'vinyl103@gmail.com';
   process.env.VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS = `Someone@Example.Test, ${internalTestingEmail.toUpperCase()}`;
   const internalTestingUser = await authStore.createUserAsync({
@@ -102,6 +108,47 @@ async function main() {
   assert.equal(tierTestSummary.meters.screenshotCredits.included, 0);
   const tierTestScreenshotCheck = await checkAccountActionAsync(tierTestUser, ACTIONS.screenshotCapture, { credits: 1 });
   assert.equal(tierTestScreenshotCheck.allowed, false);
+
+  delete process.env.VELLIC_STAGING_INTERNAL_TESTING;
+  process.env.APP_BASE_URL = 'https://staging.vellic.io';
+  process.env.FRONTEND_URL = 'https://staging.vellic.io';
+  process.env.GOOGLE_REDIRECT_URI = 'https://api-staging.vellic.io/auth/google/callback';
+  const stagingRealEmailUser = await authStore.createUserAsync({
+    email: `frank-${Date.now()}@example.com`,
+    passwordHash: 'test',
+    name: 'Staging Real Email User',
+    emailVerifiedAt: new Date().toISOString(),
+  });
+  const stagingRealEmailSummary = await resolveAccountEntitlementsAsync(stagingRealEmailUser);
+  assert.equal(stagingRealEmailSummary.internalTesting, true);
+  assert.equal(stagingRealEmailSummary.meters.screenshotCredits.unlimited, true);
+  const stagingRealEmailScreenshotCheck = await checkAccountActionAsync(stagingRealEmailUser, ACTIONS.screenshotCapture, { credits: 1000 });
+  assert.equal(stagingRealEmailScreenshotCheck.allowed, true);
+
+  const stagingTierUser = await authStore.createUserAsync({
+    email: 'agency@test.vellic.local',
+    passwordHash: 'test',
+    name: 'Agency Tier Test Account',
+    emailVerifiedAt: new Date().toISOString(),
+  });
+  const stagingTierSummary = await resolveAccountEntitlementsAsync(stagingTierUser);
+  assert.equal(stagingTierSummary.internalTesting, false);
+
+  if (originalStagingInternalTesting === undefined) {
+    delete process.env.VELLIC_STAGING_INTERNAL_TESTING;
+  } else {
+    process.env.VELLIC_STAGING_INTERNAL_TESTING = originalStagingInternalTesting;
+  }
+  if (originalAppBaseUrl === undefined) delete process.env.APP_BASE_URL;
+  else process.env.APP_BASE_URL = originalAppBaseUrl;
+  if (originalFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+  else process.env.FRONTEND_URL = originalFrontendUrl;
+  if (originalGoogleRedirectUri === undefined) delete process.env.GOOGLE_REDIRECT_URI;
+  else process.env.GOOGLE_REDIRECT_URI = originalGoogleRedirectUri;
+  if (originalRailwayEnvironmentName === undefined) delete process.env.RAILWAY_ENVIRONMENT_NAME;
+  else process.env.RAILWAY_ENVIRONMENT_NAME = originalRailwayEnvironmentName;
+  if (originalRailwayServiceName === undefined) delete process.env.RAILWAY_SERVICE_NAME;
+  else process.env.RAILWAY_SERVICE_NAME = originalRailwayServiceName;
 
   const soloTierUser = await authStore.createUserAsync({
     email: `solo-tier-${Date.now()}@example.test`,
