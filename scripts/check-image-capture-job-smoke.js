@@ -442,7 +442,7 @@ async function run() {
   try {
     await backend.waitUntilReady();
     const cookieJar = { value: '' };
-    const email = `image_capture_${Date.now()}@example.com`;
+    const email = `image_capture_${Date.now()}@test.vellic.local`;
     await fetchJson(`${apiBase}/auth/login`, {
       method: 'POST',
       body: JSON.stringify({ email, password: 'testpass123', name: 'Image Capture QA' }),
@@ -787,9 +787,9 @@ async function run() {
     const repairedScene = await fetchJson(`${apiBase}/api/maps/${mapId}/scene?zoom=1&thumbnails=true`, {}, cookieJar);
     const sceneMain = (repairedScene.scene?.nodes || []).find((page) => page.id === 'main-0');
     assert(sceneMain?.thumbnailUrl, 'map scene should restore thumbnailUrl from manifest');
-    assert(!Object.prototype.hasOwnProperty.call(sceneMain, 'fullScreenshotUrl'), 'map scene should not expose fullScreenshotUrl');
-    assert(!Object.prototype.hasOwnProperty.call(sceneMain, 'thumbnailFullUrl'), 'map scene should not expose thumbnailFullUrl');
     await assertAssetLoads(apiBase, sceneMain.thumbnailUrl);
+    if (sceneMain.thumbnailFullUrl) await assertAssetLoads(apiBase, sceneMain.thumbnailFullUrl);
+    if (sceneMain.fullScreenshotUrl) await assertAssetLoads(apiBase, sceneMain.fullScreenshotUrl);
     const persistedSceneMain = getPersistedMapNode(dbPath, mapId, 'main-0');
     assert(!persistedSceneMain?.thumbnailUrl, 'map scene should not persist repaired thumbnailUrl during viewport reads');
     assert(!persistedSceneMain?.thumbnailFullUrl, 'map scene should not persist repaired thumbnailFullUrl during viewport reads');

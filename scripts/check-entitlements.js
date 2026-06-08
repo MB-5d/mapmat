@@ -71,6 +71,38 @@ async function main() {
   const internalShareCheck = await checkAccountActionAsync(internalTestingUser, ACTIONS.shareCreate);
   assert.equal(internalShareCheck.allowed, true);
 
+  const autoInternalTestingUser = await authStore.createUserAsync({
+    email: `full-access-${Date.now()}@test.vellic.local`,
+    passwordHash: 'test',
+    name: 'Auto Internal Testing User',
+    emailVerifiedAt: new Date().toISOString(),
+  });
+  const autoInternalTestingSummary = await resolveAccountEntitlementsAsync(autoInternalTestingUser);
+  assert.equal(autoInternalTestingSummary.internalTesting, true);
+  assert.equal(autoInternalTestingSummary.features.clientShareLinks, true);
+  assert.equal(autoInternalTestingSummary.meters.screenshotCredits.unlimited, true);
+  const autoInternalScreenshotCheck = await checkAccountActionAsync(autoInternalTestingUser, ACTIONS.screenshotCapture, { credits: 1000 });
+  assert.equal(autoInternalScreenshotCheck.allowed, true);
+  await recordMeterDebitAsync({
+    user: { id: autoInternalTestingUser.id },
+    meter: METERS.screenshotCredits,
+    quantity: 1000,
+    idempotencyKey: 'entitlements-test:auto-internal-id-only',
+    metadata: { test: true },
+  });
+
+  const tierTestUser = await authStore.createUserAsync({
+    email: `free@test.vellic.local`,
+    passwordHash: 'test',
+    name: 'Free Tier Test Account',
+    emailVerifiedAt: new Date().toISOString(),
+  });
+  const tierTestSummary = await resolveAccountEntitlementsAsync(tierTestUser);
+  assert.equal(tierTestSummary.internalTesting, false);
+  assert.equal(tierTestSummary.meters.screenshotCredits.included, 0);
+  const tierTestScreenshotCheck = await checkAccountActionAsync(tierTestUser, ACTIONS.screenshotCapture, { credits: 1 });
+  assert.equal(tierTestScreenshotCheck.allowed, false);
+
   const soloTierUser = await authStore.createUserAsync({
     email: `solo-tier-${Date.now()}@example.test`,
     passwordHash: 'test',

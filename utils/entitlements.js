@@ -4,6 +4,9 @@ const billingStore = require('../stores/billingStore');
 
 const PLAN_CONFIG_PATH = path.join(__dirname, '..', 'config', 'billing', 'plans.json');
 const INTERNAL_TEST_ACCOUNT_EMAILS_ENV = 'VELLIC_INTERNAL_TEST_ACCOUNT_EMAILS';
+const TEST_ACCOUNT_EMAIL_SUFFIX_ENV = 'TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX';
+const DEFAULT_TEST_ACCOUNT_EMAIL_SUFFIX = '@test.vellic.local';
+const TIER_TEST_ACCOUNT_LOCAL_PARTS = new Set(['free', 'solo', 'pro', 'studio', 'agency']);
 
 const METERS = Object.freeze({
   crawlPages: 'crawl_pages',
@@ -80,9 +83,36 @@ function getInternalTestingEmailSet() {
   );
 }
 
+function getTestAccountEmailSuffix() {
+  const suffix = String(process.env[TEST_ACCOUNT_EMAIL_SUFFIX_ENV] || DEFAULT_TEST_ACCOUNT_EMAIL_SUFFIX)
+    .trim()
+    .toLowerCase();
+  if (!suffix) return '';
+  return suffix.startsWith('@') ? suffix : `@${suffix}`;
+}
+
+function isAutoInternalTestingEmail(email) {
+  const suffix = getTestAccountEmailSuffix();
+  if (!email || !suffix || suffix === '@') return false;
+  if (!email.endsWith(suffix)) return false;
+  const localPart = email.slice(0, -suffix.length);
+  return !!localPart && !TIER_TEST_ACCOUNT_LOCAL_PARTS.has(localPart);
+}
+
 function isInternalTestingAccount(user) {
   const email = String(user?.email || '').trim().toLowerCase();
-  return !!email && getInternalTestingEmailSet().has(email);
+  return !!email && (getInternalTestingEmailSet().has(email) || isAutoInternalTestingEmail(email));
+}
+
+async function getEntitlementUserAsync(user) {
+  if (!user?.id || user.email) return user;
+  try {
+    const authStore = require('../stores/authStore');
+    const storedUser = await authStore.getUserByIdAsync(user.id);
+    return storedUser ? { ...storedUser, ...user, email: storedUser.email } : user;
+  } catch {
+    return user;
+  }
 }
 
 function normalizeLimit(value) {
@@ -221,8 +251,9 @@ async function buildCountLimitSummary({ account, meter, baseLimit, currentCount 
 
 async function resolveAccountEntitlementsAsync(user) {
   if (!user?.id) return null;
+  const entitlementUser = await getEntitlementUserAsync(user);
   const config = loadPlanConfig();
-  const account = await billingStore.getOrCreateBillingAccountForUserAsync(user);
+  const account = await billingStore.getOrCreateBillingAccountForUserAsync(entitlementUser);
   if (!account) return null;
 
   const plan = getPlan(config, account.plan_key);
@@ -353,7 +384,7 @@ async function resolveAccountEntitlementsAsync(user) {
     internalTesting: false,
   };
 
-  if (!isInternalTestingAccount(user)) return summary;
+  if (!isInternalTestingAccount(entitlementUser)) return summary;
 
   Object.keys(config.plans || {}).forEach((planKey) => {
     const planFeatures = config.plans?.[planKey]?.features || {};

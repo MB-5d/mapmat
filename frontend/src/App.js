@@ -12997,9 +12997,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       const response = await api.getMapNode(currentMap.id, sceneNode.id);
       const node = response?.node || sceneNode;
       mergeLargeMapNodeCache(node, { preserveExistingAssetsOnEmpty: false });
-      const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || '';
+      const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || node.thumbnailUrl || '';
       if (directAssetUrl) {
-        viewFullScreenshot(directAssetUrl, true, node.id || sceneNode.id, 'full');
+        viewFullScreenshot(directAssetUrl, true, node.id || sceneNode.id, node.fullScreenshotUrl ? 'full' : 'thumb');
         return;
       }
       const sourceUrl = node.url || sceneNode.url;
