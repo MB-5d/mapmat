@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -2521,8 +2521,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const presenceSessionIdRef = useRef('');
   const mapNameEditStartRef = useRef('');
   const scheduleResetViewRef = useRef(null);
+  const scheduleResetViewTokenRef = useRef(0);
   const centerHomeRef = useRef(null);
-  const largeMapHomeSceneKeyRef = useRef('');
+  const pendingInitialCenterRef = useRef(false);
   const largeMapHomeNodeRef = useRef(null);
   const largeMapVisibleNodesRef = useRef([]);
   const largeMapNodeCacheRef = useRef(new Map());
@@ -3944,11 +3945,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     return true;
   }, [currentMap?.id, useLargeMapSurface]);
 
+  const cancelScheduledResetView = useCallback(() => {
+    scheduleResetViewTokenRef.current += 1;
+  }, []);
+
   const toggleExpandedStack = useCallback((nodeId) => {
     const id = String(nodeId || '').trim();
     if (!id) return;
+    cancelScheduledResetView();
     setExpandedStacks((prev) => getNextExpandedStackState(prev, id));
-  }, []);
+  }, [cancelScheduledResetView]);
 
   // Build a unified index for root + orphan + subdomain trees
   const forestIndex = useMemo(() => (
@@ -4940,19 +4946,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     ));
     if (!scene?.homeNode || !canvasRef.current) return;
     largeMapHomeNodeRef.current = scene.homeNode;
-    const sceneKey = getLargeMapAutoCenterKey({
-      mapId: currentMap?.id,
-      orientation: mapOrientation,
-    });
-    if (largeMapHomeSceneKeyRef.current === sceneKey) return;
-    largeMapHomeSceneKeyRef.current = sceneKey;
-
-    const nextScale = scaleRef.current || 1;
-    const nextTransform = getCenteredNodeTransform(scene.homeNode, nextScale);
-    if (nextTransform) {
-      applyTransform(nextTransform, { skipPanClamp: true });
-    }
-  }, [applyTransform, currentMap?.id, getCenteredNodeTransform, mapOrientation, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
+  }, [currentMap?.id, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
 
   const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
     let homeNode = largeMapHomeNodeRef.current;
@@ -9586,7 +9580,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
 
       setCurrentMap(savedMap);
-      largeMapHomeSceneKeyRef.current = '';
       navigateToRoute(createMapRoute(savedMap.id));
       resetAutosaveTracking({
         snapshot: serializeMapAutosaveSnapshot({
@@ -9775,9 +9768,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
-    largeMapHomeSceneKeyRef.current = '';
     largeMapHomeNodeRef.current = null;
     largeMapVisibleNodesRef.current = [];
+    if (map.homeNode) {
+      largeMapHomeNodeRef.current = map.homeNode;
+    }
     const mapHasThumbnails = mapHasThumbnailAsset(map.root, map.orphans || []);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
@@ -9813,7 +9808,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!silent) {
       showToast(`Loaded "${map.name}"`, 'success');
     }
-    scheduleResetViewRef.current?.();
+    pendingInitialCenterRef.current = true;
   }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
   const loadLargeMapShell = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
@@ -9841,7 +9836,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
-    largeMapHomeSceneKeyRef.current = '';
     largeMapHomeNodeRef.current = null;
     largeMapVisibleNodesRef.current = [];
     setRoot(shellRoot);
@@ -9879,15 +9873,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowProjectsModal(false);
     setEditingProjectId(null);
     setEditingMapId(null);
-    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    const initialHomeTransform = getCenteredNodeTransform(map.homeNode, 1);
+    applyTransform(initialHomeTransform || { scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput(shellRoot.url || '');
     if (!silent) {
       showToast(`Loaded "${map.name}"`, 'success');
     }
-  }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
+  }, [applyTransform, clearCaptureIssues, getCenteredNodeTransform, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
   const loadSavedMapById = useCallback(async (mapId, options = {}) => {
-    const { map: summary } = await api.getMapSummary(mapId);
+    const { map: summary } = await api.getMapSummary(mapId, { orientation: mapOrientation });
     if (!summary) {
       const error = new Error('Map not found');
       error.status = 404;
@@ -9905,7 +9900,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     loadMap(map, options);
     return map;
-  }, [loadLargeMapShell, loadMap]);
+  }, [loadLargeMapShell, loadMap, mapOrientation]);
 
   useEffect(() => {
     loadSavedMapByIdRef.current = loadSavedMapById;
@@ -11349,7 +11344,15 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [applyTransform, getCenteredNodeTransform, renderRoot, root]);
   centerHomeRef.current = centerHome;
 
+  useLayoutEffect(() => {
+    if (!pendingInitialCenterRef.current || useLargeMapSurface) return;
+    if (!mapLayout?.nodes?.size || !canvasRef.current) return;
+    pendingInitialCenterRef.current = false;
+    centerHome(1, { skipPanClamp: true });
+  }, [centerHome, mapLayout, useLargeMapSurface]);
+
   const resetView = useCallback(() => {
+    cancelScheduledResetView();
     if (useLargeMapSurface) {
       centerLargeMapHome(1);
       return;
@@ -11359,17 +11362,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!didCenter) {
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     }
-  }, [applyTransform, centerHome, centerLargeMapHome, useLargeMapSurface]);
+  }, [applyTransform, cancelScheduledResetView, centerHome, centerLargeMapHome, useLargeMapSurface]);
 
-  const scheduleResetView = useCallback((attempts = 8) => {
+  const scheduleResetView = useCallback((attempts = 8, activeToken = null) => {
     if (attempts <= 0) return;
+    const token = activeToken ?? (scheduleResetViewTokenRef.current + 1);
+    if (activeToken == null) {
+      scheduleResetViewTokenRef.current = token;
+    }
     setTimeout(() => {
+      if (token !== scheduleResetViewTokenRef.current) return;
       if (!layoutRef.current || !canvasRef.current) {
-        scheduleResetViewRef.current?.(attempts - 1);
+        scheduleResetViewRef.current?.(attempts - 1, token);
         return;
       }
       if (!layoutRef.current.nodes || layoutRef.current.nodes.size === 0) {
-        scheduleResetViewRef.current?.(attempts - 1);
+        scheduleResetViewRef.current?.(attempts - 1, token);
         return;
       }
       centerHomeRef.current?.();

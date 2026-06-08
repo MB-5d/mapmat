@@ -483,12 +483,17 @@ function hasThumbnailAsset(root, orphans = []) {
   return found;
 }
 
-function summarizeMapRow(row) {
-  const root = safeParse(row.root_data, 'root_data', null);
-  const orphans = safeParse(row.orphans_data, 'orphans_data', []);
+function summarizeMapRow(row, options = {}) {
+  const parsed = options.parsed || {};
+  const root = Object.prototype.hasOwnProperty.call(parsed, 'root')
+    ? parsed.root
+    : safeParse(row.root_data, 'root_data', null);
+  const orphans = Object.prototype.hasOwnProperty.call(parsed, 'orphans')
+    ? parsed.orphans || []
+    : safeParse(row.orphans_data, 'orphans_data', []);
   const colors = safeParse(row.colors, 'colors', null);
   const connectionColors = safeParse(row.connection_colors, 'connection_colors', null);
-  return {
+  const summary = {
     ...row,
     rootSummary: root ? {
       id: root.id || null,
@@ -506,6 +511,22 @@ function summarizeMapRow(row) {
     connection_colors: undefined,
     insights_data: undefined,
   };
+
+  if (options.includeHomeNode && root) {
+    try {
+      summary.homeNode = buildMapScene({
+        root,
+        orphans,
+        orientation: options.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+        showThumbnails: false,
+        viewport: {},
+      }).homeNode || null;
+    } catch (error) {
+      summary.homeNode = null;
+    }
+  }
+
+  return summary;
 }
 
 function stripStaleImageAssetFields(node) {
@@ -1943,7 +1964,13 @@ router.get('/maps/:id/summary', requireAuth, async (req, res) => {
     })) return;
 
     const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
-    res.json({ map: summarizeMapRow(repaired.row) });
+    res.json({
+      map: summarizeMapRow(repaired.row, {
+        parsed: repaired.parsed,
+        includeHomeNode: true,
+        orientation: req.query?.orientation,
+      }),
+    });
   } catch (error) {
     console.error('Get map summary error:', error);
     res.status(500).json({ error: 'Failed to get map summary' });

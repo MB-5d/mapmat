@@ -547,8 +547,13 @@ export async function getMap(id) {
   return fetchApi(`/api/maps/${id}`);
 }
 
-export async function getMapSummary(id) {
-  return fetchApi(`/api/maps/${id}/summary`);
+export async function getMapSummary(id, params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return;
+    query.set(key, String(value));
+  });
+  return fetchApi(`/api/maps/${id}/summary${query.toString() ? `?${query.toString()}` : ''}`);
 }
 
 export async function getMapScene(id, params = {}, options = {}) {
