@@ -11,6 +11,7 @@ describe('MapSurfaceV2', () => {
   let originalRequestAnimationFrame;
   let originalCancelAnimationFrame;
   let originalGetContext;
+  let originalPerformanceMemoryDescriptor;
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -19,6 +20,7 @@ describe('MapSurfaceV2', () => {
     originalRequestAnimationFrame = window.requestAnimationFrame;
     originalCancelAnimationFrame = window.cancelAnimationFrame;
     originalGetContext = window.HTMLCanvasElement.prototype.getContext;
+    originalPerformanceMemoryDescriptor = Object.getOwnPropertyDescriptor(performance, 'memory');
     window.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 16);
     window.cancelAnimationFrame = (id) => clearTimeout(id);
     window.HTMLCanvasElement.prototype.getContext = jest.fn(() => null);
@@ -32,6 +34,11 @@ describe('MapSurfaceV2', () => {
     window.requestAnimationFrame = originalRequestAnimationFrame;
     window.cancelAnimationFrame = originalCancelAnimationFrame;
     window.HTMLCanvasElement.prototype.getContext = originalGetContext;
+    if (originalPerformanceMemoryDescriptor) {
+      Object.defineProperty(performance, 'memory', originalPerformanceMemoryDescriptor);
+    } else {
+      delete performance.memory;
+    }
   });
 
   test('reports scene home node for large-map centering', async () => {
@@ -361,6 +368,63 @@ describe('MapSurfaceV2', () => {
     });
 
     expect(onViewImage).toHaveBeenCalledWith('/screenshots/home_scene_full_v2.jpg', true, 'home', 'full');
+  });
+
+  test('keeps cached thumbnails visible when large-map safe mode disables thumbnail fetching', async () => {
+    Object.defineProperty(performance, 'memory', {
+      configurable: true,
+      value: { usedJSHeapSize: 950 * 1024 * 1024 },
+    });
+    const getScene = jest.fn().mockResolvedValue({
+      scene: {
+        mapId: 'map-1',
+        bounds: { w: 900, h: 600 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 262 },
+        visibleNodeCount: 1,
+        nodes: [{
+          id: 'home',
+          title: 'Home Page',
+          url: 'https://example.com',
+          number: '0',
+          depth: 0,
+          x: 0,
+          y: 0,
+          w: 288,
+          h: 262,
+          thumbnailUrl: '',
+          hasThumbnail: false,
+        }],
+        connectors: [],
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <MapSurfaceV2
+          mapId="map-1"
+          getScene={getScene}
+          getViewState={() => ({ pan: { x: 0, y: 0 }, scale: 1 })}
+          canvasSize={{ width: 1000, height: 700 }}
+          orientation="vertical"
+          showThumbnails
+          colors={{}}
+          selectedNodeIds={new Set()}
+          getNodeSnapshot={() => ({
+            id: 'home',
+            thumbnailUrl: '/screenshots/home_cached_thumb_v1.jpg',
+            fullScreenshotUrl: '/screenshots/home_full_v1.jpg',
+          })}
+          nodeSnapshotVersion={1}
+        />
+      );
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    const image = container.querySelector('.thumb-img');
+    expect(image).not.toBeNull();
+    expect(image.getAttribute('src')).toContain('/screenshots/home_cached_thumb_v1.jpg');
   });
 
   test('renders and toggles collapsed stack controls for large maps', async () => {

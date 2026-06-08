@@ -250,7 +250,7 @@ const MapSurfaceV2 = ({
     onNodeExpand?.({ id: nodeId, url: source });
   }, [onNodeExpand, onViewImage]);
 
-  const renderThumbnails = showThumbnails && !safeMode;
+  const renderThumbnails = showThumbnails;
   const currentView = getCurrentView();
   const connectorTransform = `translate(${currentView.pan.x} ${currentView.pan.y}) scale(${currentView.scale})`;
   const statusFilters = changeFilters?.statuses || {};

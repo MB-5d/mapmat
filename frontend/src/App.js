@@ -2524,6 +2524,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scheduleResetViewTokenRef = useRef(0);
   const centerHomeRef = useRef(null);
   const pendingInitialCenterRef = useRef(false);
+  const pendingInitialLargeMapCenterRef = useRef(false);
   const largeMapHomeNodeRef = useRef(null);
   const largeMapVisibleNodesRef = useRef([]);
   const largeMapNodeCacheRef = useRef(new Map());
@@ -3947,6 +3948,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const cancelScheduledResetView = useCallback(() => {
     scheduleResetViewTokenRef.current += 1;
+    pendingInitialCenterRef.current = false;
+    pendingInitialLargeMapCenterRef.current = false;
   }, []);
 
   const toggleExpandedStack = useCallback((nodeId) => {
@@ -5289,6 +5292,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
     showToast('Shared map loaded!', 'success');
+    pendingInitialCenterRef.current = true;
     scheduleResetViewRef.current?.();
   }, [applyTransform, resetScanLayers, showToast]);
 
@@ -9770,6 +9774,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setExpandedStacks({});
     largeMapHomeNodeRef.current = null;
     largeMapVisibleNodesRef.current = [];
+    pendingInitialCenterRef.current = false;
+    pendingInitialLargeMapCenterRef.current = false;
     if (map.homeNode) {
       largeMapHomeNodeRef.current = map.homeNode;
     }
@@ -9809,6 +9815,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`Loaded "${map.name}"`, 'success');
     }
     pendingInitialCenterRef.current = true;
+    scheduleResetViewRef.current?.();
   }, [applyTransform, clearCaptureIssues, navigateToRoute, resetAutosaveTracking, resetScanLayers, showToast]);
 
   const loadLargeMapShell = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
@@ -9838,6 +9845,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setExpandedStacks({});
     largeMapHomeNodeRef.current = null;
     largeMapVisibleNodesRef.current = [];
+    pendingInitialCenterRef.current = false;
+    pendingInitialLargeMapCenterRef.current = true;
     setRoot(shellRoot);
     setOrphans([]);
     setConnections([]);
@@ -9874,6 +9883,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     setEditingProjectId(null);
     setEditingMapId(null);
     const initialHomeTransform = getCenteredNodeTransform(map.homeNode, 1);
+    if (initialHomeTransform) {
+      pendingInitialLargeMapCenterRef.current = false;
+    }
     applyTransform(initialHomeTransform || { scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
     setUrlInput(shellRoot.url || '');
     if (!silent) {
@@ -11091,6 +11103,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const onPointerDown = (e) => {
     if (!hasMap) return;
     if (e.button !== 0) return;
+    cancelScheduledResetView();
     const isInsideCard = e.target.closest('[data-node-card="1"]');
     const nodeContainer = e.target.closest('[data-node-id]');
     const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .image-capture-toast, .minimap-navigator');
@@ -11268,6 +11281,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const zoomAtClientPoint = useCallback((nextScale, clientX, clientY) => {
     const canvasEl = canvasRef.current;
     if (!canvasEl) return;
+    cancelScheduledResetView();
 
     const { min, max } = getZoomBounds();
     const safeScale = clamp(nextScale, min, max);
@@ -11292,7 +11306,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
 
     applyTransform({ scale: safeScale, x: nextPan.x, y: nextPan.y });
-  }, [applyTransform, getZoomBounds]);
+  }, [applyTransform, cancelScheduledResetView, getZoomBounds]);
 
   const zoomIn = useCallback(() => {
     const canvas = canvasRef.current;
@@ -11349,7 +11363,24 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!mapLayout?.nodes?.size || !canvasRef.current) return;
     pendingInitialCenterRef.current = false;
     centerHome(1, { skipPanClamp: true });
-  }, [centerHome, mapLayout, useLargeMapSurface]);
+  }, [canvasSize.height, canvasSize.width, centerHome, currentMap?.id, mapLayout, useLargeMapSurface]);
+
+  useLayoutEffect(() => {
+    if (!pendingInitialLargeMapCenterRef.current || !useLargeMapSurface) return;
+    if (!largeMapHomeNodeRef.current || !canvasRef.current) return;
+    const nextTransform = getCenteredNodeTransform(largeMapHomeNodeRef.current, 1);
+    if (!nextTransform) return;
+    pendingInitialLargeMapCenterRef.current = false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+  }, [
+    applyTransform,
+    canvasSize.height,
+    canvasSize.width,
+    currentMap?.id,
+    getCenteredNodeTransform,
+    largeMapSceneBounds,
+    useLargeMapSurface,
+  ]);
 
   const resetView = useCallback(() => {
     cancelScheduledResetView();
@@ -11380,7 +11411,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         scheduleResetViewRef.current?.(attempts - 1, token);
         return;
       }
-      centerHomeRef.current?.();
+      if (!pendingInitialCenterRef.current) return;
+      const didCenter = centerHomeRef.current?.();
+      if (didCenter) {
+        pendingInitialCenterRef.current = false;
+      }
     }, 80);
   }, []);
 
@@ -14372,6 +14407,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               setMapVersions([initialVersion]);
               setLatestVersionId(initialVersion.id);
             }
+            pendingInitialCenterRef.current = true;
             scheduleResetViewRef.current?.();
 
             setProjects(prev => {
@@ -16189,12 +16225,14 @@ export default function App({ currentRoute, navigateToRoute }) {
                     layers={layers}
                     connectionTool={connectionTool}
                     onToggleUserFlows={() => {
+                      cancelScheduledResetView();
                       setLayers((currentLayers) => ({ ...currentLayers, userFlows: !currentLayers.userFlows }));
                       if (layers.userFlows && connectionTool === 'userflow') {
                         setConnectionTool(null);
                       }
                     }}
                     onToggleCrossLinks={() => {
+                      cancelScheduledResetView();
                       setLayers((currentLayers) => ({ ...currentLayers, crossLinks: !currentLayers.crossLinks }));
                       if (layers.crossLinks && connectionTool === 'crosslink') {
                         setConnectionTool(null);
