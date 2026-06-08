@@ -444,6 +444,21 @@ const getMapLayoutRefreshTransformOptions = () => ({
   skipPanClamp: true,
 });
 
+const getInitialLargeMapHomeTransform = ({
+  pending,
+  homeNode,
+  canvasWidth,
+  canvasHeight,
+  scale = 1,
+} = {}) => {
+  if (!pending || !homeNode) return null;
+  return getCenteredCanvasNodeTransform(homeNode, {
+    canvasWidth,
+    canvasHeight,
+    scale,
+  });
+};
+
 const DUPLICATE_REVEAL_MARGIN_PX = 24;
 const getPanToRevealLayoutNode = ({
   nodeData,
@@ -2351,6 +2366,7 @@ export const __testing = {
   getLargeMapEditParentId,
   getPanToRevealLayoutNode,
   normalizeCanvasWorldBounds,
+  getInitialLargeMapHomeTransform,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -4949,7 +4965,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     ));
     if (!scene?.homeNode || !canvasRef.current) return;
     largeMapHomeNodeRef.current = scene.homeNode;
-  }, [currentMap?.id, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
+    const initialHomeTransform = getInitialLargeMapHomeTransform({
+      pending: pendingInitialLargeMapCenterRef.current,
+      homeNode: scene.homeNode,
+      canvasWidth: canvasRef.current.clientWidth,
+      canvasHeight: canvasRef.current.clientHeight,
+      scale: 1,
+    });
+    if (initialHomeTransform) {
+      pendingInitialLargeMapCenterRef.current = false;
+      applyTransform(initialHomeTransform, { skipPanClamp: true });
+    }
+  }, [applyTransform, currentMap?.id, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
 
   const centerLargeMapHome = useCallback(async (nextScale = scaleRef.current || 1) => {
     let homeNode = largeMapHomeNodeRef.current;

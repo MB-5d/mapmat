@@ -114,6 +114,17 @@ const {
 
 const app = express();
 const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_PUBLIC_DOMAIN;
+const isStagingRuntime = [
+  process.env.APP_BASE_URL,
+  process.env.FRONTEND_URL,
+  process.env.PUBLIC_APP_URL,
+  process.env.RAILWAY_ENVIRONMENT_NAME,
+  process.env.RAILWAY_SERVICE_NAME,
+  process.env.RAILWAY_PUBLIC_DOMAIN,
+].some((value) => String(value || '').toLowerCase().includes('staging'));
+const runtimeDefault = (stagingValue, prodValue, devValue) => (
+  isStagingRuntime ? stagingValue : (isProd ? prodValue : devValue)
+);
 const RUN_MODE = process.env.RUN_MODE || 'both'; // 'web' | 'worker' | 'both'
 const RUN_WEB = RUN_MODE === 'both' || RUN_MODE === 'web';
 const RUN_WORKER = RUN_MODE === 'both' || RUN_MODE === 'worker';
@@ -279,11 +290,11 @@ const SCAN_RATE_WINDOW_MS = Number(process.env.SCAN_RATE_WINDOW_MS ?? (isProd ? 
 const SCAN_RATE_LIMIT = Number(process.env.SCAN_RATE_LIMIT ?? (isProd ? 60 : 120));
 const SCREENSHOT_QUEUE_MAX = Number(process.env.SCREENSHOT_QUEUE_MAX ?? (isProd ? 25 : 100));
 const SCREENSHOT_MIN_GAP_MS = Number(
-  process.env.SCREENSHOT_MIN_GAP_MS ?? (isProd ? 500 : 150)
+  process.env.SCREENSHOT_MIN_GAP_MS ?? runtimeDefault(150, 500, 150)
 );
 const SCREENSHOT_MAX_CONCURRENCY = Math.max(
   1,
-  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? (isProd ? 3 : 6))
+  Number(process.env.SCREENSHOT_MAX_CONCURRENCY ?? runtimeDefault(6, 3, 6))
 );
 const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
@@ -291,15 +302,15 @@ const SCREENSHOT_CAPTURE_TIMEOUT_MS = Math.max(
 );
 const SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? 20000)
+  Number(process.env.SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS ?? runtimeDefault(12000, 20000, 20000))
 );
 const SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   5000,
-  Number(process.env.SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS ?? 6000)
+  Number(process.env.SCREENSHOT_PRIMARY_THUMB_CAPTURE_TIMEOUT_MS ?? runtimeDefault(5000, 6000, 6000))
 );
 const SCREENSHOT_PRIMARY_NETWORK_SETTLE_TIMEOUT_MS = Math.max(
   250,
-  Number(process.env.SCREENSHOT_PRIMARY_NETWORK_SETTLE_TIMEOUT_MS ?? 750)
+  Number(process.env.SCREENSHOT_PRIMARY_NETWORK_SETTLE_TIMEOUT_MS ?? runtimeDefault(500, 750, 750))
 );
 const SCREENSHOT_CACHE_TTL_MS = Math.max(
   60000,
@@ -387,11 +398,17 @@ const IMAGE_CAPTURE_ASSET_SAVE_MAX_DELAY_MS = Math.max(
 );
 const IMAGE_CAPTURE_PRIMARY_CONCURRENCY = Math.max(
   1,
-  Number(process.env.IMAGE_CAPTURE_PRIMARY_CONCURRENCY ?? Math.min(SCREENSHOT_MAX_CONCURRENCY, 3))
+  Number(
+    process.env.IMAGE_CAPTURE_PRIMARY_CONCURRENCY
+    ?? Math.min(SCREENSHOT_MAX_CONCURRENCY, isStagingRuntime ? 5 : 3)
+  )
 );
 const IMAGE_CAPTURE_RECOVERY_CONCURRENCY = Math.max(
   1,
-  Number(process.env.IMAGE_CAPTURE_RECOVERY_CONCURRENCY ?? Math.min(SCREENSHOT_MAX_CONCURRENCY, 2))
+  Number(
+    process.env.IMAGE_CAPTURE_RECOVERY_CONCURRENCY
+    ?? Math.min(SCREENSHOT_MAX_CONCURRENCY, isStagingRuntime ? 3 : 2)
+  )
 );
 const IMAGE_CAPTURE_PROGRESS_MIN_INTERVAL_MS = Math.max(
   250,
@@ -419,7 +436,7 @@ const SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS = Math.max(
 );
 const SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS = Math.max(
   SCREENSHOT_THUMB_CAPTURE_TIMEOUT_MS,
-  Number(process.env.SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS ?? 45000)
+  Number(process.env.SCREENSHOT_RECOVERY_THUMB_CAPTURE_TIMEOUT_MS ?? runtimeDefault(20000, 45000, 45000))
 );
 const SCREENSHOT_RECOVERY_CAPTURE_TIMEOUT_MS = Math.max(
   SCREENSHOT_CAPTURE_TIMEOUT_MS,
@@ -427,7 +444,7 @@ const SCREENSHOT_RECOVERY_CAPTURE_TIMEOUT_MS = Math.max(
 );
 const SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS = Math.max(
   SCREENSHOT_NETWORK_SETTLE_TIMEOUT_MS,
-  Number(process.env.SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS ?? 5000)
+  Number(process.env.SCREENSHOT_RECOVERY_NETWORK_SETTLE_TIMEOUT_MS ?? runtimeDefault(2000, 5000, 5000))
 );
 const SCREENSHOT_FULL_WARMUP_MAX_STOPS = Math.max(
   2,

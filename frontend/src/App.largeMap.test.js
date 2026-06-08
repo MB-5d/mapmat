@@ -12,6 +12,24 @@ describe('large map viewport behavior', () => {
     expect(__testing.getMapLayoutRefreshTransformOptions()).toEqual({ skipPanClamp: true });
   });
 
+  test('large-map initial scene centers home when the home node arrives late', () => {
+    expect(__testing.getInitialLargeMapHomeTransform({
+      pending: true,
+      homeNode: { x: 1000, y: 200, w: 300, h: 180 },
+      canvasWidth: 1200,
+      canvasHeight: 800,
+      scale: 1,
+    })).toEqual({ scale: 1, x: -550, y: 110 });
+
+    expect(__testing.getInitialLargeMapHomeTransform({
+      pending: false,
+      homeNode: { x: 1000, y: 200, w: 300, h: 180 },
+      canvasWidth: 1200,
+      canvasHeight: 800,
+      scale: 1,
+    })).toBeNull();
+  });
+
   test('auto-center key ignores image metadata and thumbnail visibility', () => {
     const baseKey = __testing.getLargeMapAutoCenterKey({
       mapId: 'map-1',
