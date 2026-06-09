@@ -22,4 +22,16 @@ describe('canvasView', () => {
       y: -2050,
     });
   });
+
+  test('does not center before the canvas has real dimensions', () => {
+    expect(getCenteredNodeTransform(
+      { x: 0, y: 0, w: 288, h: 200 },
+      { canvasWidth: 0, canvasHeight: 800, scale: 1 }
+    )).toBeNull();
+
+    expect(getCenteredNodeTransform(
+      { x: 0, y: 0, w: 288, h: 200 },
+      { canvasWidth: 1200, canvasHeight: 0, scale: 1 }
+    )).toBeNull();
+  });
 });

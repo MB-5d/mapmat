@@ -9799,7 +9799,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
-    largeMapHomeNodeRef.current = null;
+    largeMapHomeNodeRef.current = map.homeNode || null;
     largeMapVisibleNodesRef.current = [];
     pendingInitialCenterRef.current = false;
     pendingInitialLargeMapCenterRef.current = false;

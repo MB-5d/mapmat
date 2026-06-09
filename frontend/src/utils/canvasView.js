@@ -6,7 +6,15 @@ export const getCenteredNodeTransform = (node, {
   const width = Number(canvasWidth);
   const height = Number(canvasHeight);
   const nextScale = Number(scale);
-  if (!node || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(nextScale)) {
+  if (
+    !node
+    || !Number.isFinite(width)
+    || !Number.isFinite(height)
+    || width <= 0
+    || height <= 0
+    || !Number.isFinite(nextScale)
+    || nextScale <= 0
+  ) {
     return null;
   }
 

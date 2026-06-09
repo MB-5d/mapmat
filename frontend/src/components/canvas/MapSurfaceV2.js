@@ -104,6 +104,23 @@ const MapSurfaceV2 = ({
     sceneRef.current = scene;
   }, [scene]);
 
+  useEffect(() => {
+    setScene(null);
+    sceneRef.current = null;
+    lastFetchKeyRef.current = '';
+    lastTransformRef.current = '';
+    setLoading(true);
+    setError('');
+    if (fetchTimerRef.current) {
+      clearTimeout(fetchTimerRef.current);
+      fetchTimerRef.current = null;
+    }
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+      fetchAbortRef.current = null;
+    }
+  }, [mapId]);
+
   const getCurrentView = useCallback(() => {
     const view = getViewState?.() || {};
     return {
