@@ -2539,6 +2539,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scheduleResetViewRef = useRef(null);
   const scheduleResetViewTokenRef = useRef(0);
   const centerHomeRef = useRef(null);
+  const centerKnownLargeMapHomeRef = useRef(null);
   const pendingInitialCenterRef = useRef(false);
   const pendingInitialLargeMapCenterRef = useRef(false);
   const largeMapHomeNodeRef = useRef(null);
@@ -2852,7 +2853,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      setCanvasSize({ width: 0, height: 0 });
+      return undefined;
+    }
     const updateSize = () => {
       setCanvasSize({
         width: canvas.clientWidth,
@@ -2860,10 +2864,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
     };
     updateSize();
+    const frame = requestAnimationFrame(updateSize);
     const observer = new ResizeObserver(updateSize);
     observer.observe(canvas);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [root]);
 
   // Close view dropdown when clicking outside
   useEffect(() => {
@@ -4932,6 +4940,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, []);
 
+  const centerKnownLargeMapHome = useCallback((nextScale = 1) => {
+    const nextTransform = getCenteredNodeTransform(largeMapHomeNodeRef.current, nextScale);
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [applyTransform, getCenteredNodeTransform]);
+  centerKnownLargeMapHomeRef.current = centerKnownLargeMapHome;
+
   const handleLargeMapSceneLoaded = useCallback((scene) => {
     if (!useLargeMapSurface) return;
     setLargeMapSceneBounds(scene?.bounds || null);
@@ -4975,6 +4991,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (initialHomeTransform) {
       pendingInitialLargeMapCenterRef.current = false;
       applyTransform(initialHomeTransform, { skipPanClamp: true });
+    } else if (pendingInitialLargeMapCenterRef.current) {
+      scheduleResetViewRef.current?.(20);
     }
   }, [applyTransform, currentMap?.id, mergeLargeMapNodeCache, showThumbnails, showToast, useLargeMapSurface]);
 
@@ -9914,6 +9932,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       pendingInitialLargeMapCenterRef.current = false;
     }
     applyTransform(initialHomeTransform || { scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    if (pendingInitialLargeMapCenterRef.current) {
+      scheduleResetViewRef.current?.(20);
+    }
     setUrlInput(shellRoot.url || '');
     if (!silent) {
       showToast(`Loaded "${map.name}"`, 'success');
@@ -11394,9 +11415,15 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useLayoutEffect(() => {
     if (!pendingInitialLargeMapCenterRef.current || !useLargeMapSurface) return;
-    if (!largeMapHomeNodeRef.current || !canvasRef.current) return;
+    if (!largeMapHomeNodeRef.current || !canvasRef.current) {
+      scheduleResetViewRef.current?.(20);
+      return;
+    }
     const nextTransform = getCenteredNodeTransform(largeMapHomeNodeRef.current, 1);
-    if (!nextTransform) return;
+    if (!nextTransform) {
+      scheduleResetViewRef.current?.(20);
+      return;
+    }
     pendingInitialLargeMapCenterRef.current = false;
     applyTransform(nextTransform, { skipPanClamp: true });
   }, [
@@ -11412,7 +11439,16 @@ export default function App({ currentRoute, navigateToRoute }) {
   const resetView = useCallback(() => {
     cancelScheduledResetView();
     if (useLargeMapSurface) {
-      centerLargeMapHome(1);
+      pendingInitialLargeMapCenterRef.current = true;
+      centerLargeMapHome(1)
+        .then((didCenter) => {
+          pendingInitialLargeMapCenterRef.current = !didCenter;
+          if (!didCenter) scheduleResetViewRef.current?.(20);
+        })
+        .catch(() => {
+          pendingInitialLargeMapCenterRef.current = true;
+          scheduleResetViewRef.current?.(20);
+        });
       return;
     }
 
@@ -11430,6 +11466,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     setTimeout(() => {
       if (token !== scheduleResetViewTokenRef.current) return;
+      if (pendingInitialLargeMapCenterRef.current) {
+        if (!canvasRef.current) {
+          scheduleResetViewRef.current?.(attempts - 1, token);
+          return;
+        }
+        const didCenterLargeMap = centerKnownLargeMapHomeRef.current?.(1);
+        if (didCenterLargeMap) {
+          pendingInitialLargeMapCenterRef.current = false;
+          return;
+        }
+        scheduleResetViewRef.current?.(attempts - 1, token);
+        return;
+      }
       if (!layoutRef.current || !canvasRef.current) {
         scheduleResetViewRef.current?.(attempts - 1, token);
         return;

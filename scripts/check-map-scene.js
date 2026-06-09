@@ -52,6 +52,7 @@ assert.strictEqual(normalNodes.get('child-0').parentId, 'root');
 assert.strictEqual(normalNodes.get('child-0').x, 0);
 assert.strictEqual(normalNodes.get('child-0').y, DEFAULT_LAYOUT.NODE_H_THUMB + DEFAULT_LAYOUT.BUS_Y_GAP);
 assert.strictEqual(normalNodes.get('child-1').x, DEFAULT_LAYOUT.NODE_W + DEFAULT_LAYOUT.GAP_L1_X);
+assert.strictEqual(scene.homeNode.h, DEFAULT_LAYOUT.NODE_H_THUMB, 'thumbnail scenes should center using thumbnail-height home node');
 
 const branchRoot = {
   id: 'branch-root',
@@ -96,6 +97,7 @@ const noThumbnailScene = buildMapScene({
 assert(noThumbnailScene.nodes.every((node) => node.thumbnailUrl === ''));
 assert(noThumbnailScene.nodes.every((node) => node.hasThumbnail === false));
 assert(noThumbnailScene.nodes.some((node) => node.fullScreenshotUrl));
+assert.strictEqual(noThumbnailScene.homeNode.h, DEFAULT_LAYOUT.NODE_H_COLLAPSED, 'non-thumbnail scenes should center using collapsed-height home node');
 
 const largeRoot = {
   id: 'large-root',

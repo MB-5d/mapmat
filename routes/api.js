@@ -493,6 +493,7 @@ function summarizeMapRow(row, options = {}) {
     : safeParse(row.orphans_data, 'orphans_data', []);
   const colors = safeParse(row.colors, 'colors', null);
   const connectionColors = safeParse(row.connection_colors, 'connection_colors', null);
+  const hasThumbnails = hasThumbnailAsset(root, orphans);
   const summary = {
     ...row,
     rootSummary: root ? {
@@ -502,7 +503,7 @@ function summarizeMapRow(row, options = {}) {
     } : null,
     nodeCount: countMapNodes(root, orphans),
     displaySummary: buildMapDisplaySummary(root, orphans),
-    hasThumbnails: hasThumbnailAsset(root, orphans),
+    hasThumbnails,
     colors,
     connectionColors,
     root_data: undefined,
@@ -518,7 +519,7 @@ function summarizeMapRow(row, options = {}) {
         root,
         orphans,
         orientation: options.orientation === 'horizontal' ? 'horizontal' : 'vertical',
-        showThumbnails: false,
+        showThumbnails: hasThumbnails,
         viewport: {},
       }).homeNode || null;
     } catch (error) {
