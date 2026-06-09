@@ -1,7 +1,7 @@
 const DEFAULT_LAYOUT = Object.freeze({
   NODE_W: 288,
   NODE_H_COLLAPSED: 200,
-  NODE_H_THUMB: 262,
+  NODE_H_THUMB: 278,
   GAP_L1_X: 80,
   GAP_STACK_Y: 56,
   INDENT_X: 40,

@@ -88,7 +88,7 @@ export const ANNOTATION_STATUS_LABELS = ANNOTATION_STATUS_OPTIONS.reduce((acc, o
 export const LAYOUT = {
   NODE_W: 288,
   NODE_H_COLLAPSED: 200, // Must match CSS .node-card min-height
-  NODE_H_THUMB: 262,     // header 8 + thumb 152 + content ~60 + actions ~42
+  NODE_H_THUMB: 278,     // Must match CSS .node-card.with-thumb height
   GAP_L1_X: 80,         // Horizontal gap between Level 1 siblings (and orphans) - increased for drop zones
   GAP_STACK_Y: 56,      // Vertical gap between bottom of parent and top of child - increased for drop zones
   INDENT_X: 40,         // Per-depth indentation for depth >= 2

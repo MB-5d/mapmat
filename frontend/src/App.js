@@ -3998,7 +3998,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [expandedStacks, mapOrientation, renderRoot, showThumbnails, useLargeMapSurface, visibleOrphans]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     layoutRef.current = mapLayout;
   }, [mapLayout]);
 
@@ -4806,6 +4806,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     return { x: clampedX, y: clampedY };
   }, [largeMapSceneBounds, useLargeMapSurface, worldBounds]);
 
+  const resetCanvasNativeScroll = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (canvas.scrollLeft !== 0) canvas.scrollLeft = 0;
+    if (canvas.scrollTop !== 0) canvas.scrollTop = 0;
+  }, []);
+
   const applyCanvasTransformDom = useCallback((nextScale, nextPan) => {
     const content = contentRef.current;
     if (content && content.dataset.largeMapSurface !== '1') {
@@ -4813,13 +4820,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     const canvas = canvasRef.current;
     if (canvas) {
+      resetCanvasNativeScroll();
       const grid = getCanvasGridMetrics(nextScale);
       canvas.style.setProperty('--canvas-pan-x', `${nextPan.x || 0}px`);
       canvas.style.setProperty('--canvas-pan-y', `${nextPan.y || 0}px`);
       canvas.style.setProperty('--canvas-grid-size', `${grid.size}px`);
       canvas.style.setProperty('--canvas-grid-dot-radius', `${grid.dotRadius}px`);
     }
-  }, []);
+  }, [resetCanvasNativeScroll]);
 
   const scheduleTransformStateCommit = useCallback(() => {
     if (transformCommitRef.current.timer) {
@@ -11409,8 +11417,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   useLayoutEffect(() => {
     if (!pendingInitialCenterRef.current || useLargeMapSurface) return;
     if (!mapLayout?.nodes?.size || !canvasRef.current) return;
-    pendingInitialCenterRef.current = false;
-    centerHome(1, { skipPanClamp: true });
+    const didCenter = centerHome(1, { skipPanClamp: true });
+    if (didCenter) {
+      pendingInitialCenterRef.current = false;
+    } else {
+      scheduleResetViewRef.current?.(20);
+    }
   }, [canvasSize.height, canvasSize.width, centerHome, currentMap?.id, mapLayout, useLargeMapSurface]);
 
   useLayoutEffect(() => {
@@ -15228,6 +15240,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onScroll={resetCanvasNativeScroll}
        
       >
         {showInviteAcceptGate && (
@@ -16188,7 +16201,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   zone.type === activeDropZone.type;
 
                 // Size based on zone type and layout, scaled to match current zoom
-                const baseCardHeight = showThumbnails ? 262 : 200;
+                const baseCardHeight = showThumbnails ? 278 : 200;
                 const scaledCardWidth = 288 * scale;
                 const scaledCardHeight = baseCardHeight * scale;
                 let width, height;

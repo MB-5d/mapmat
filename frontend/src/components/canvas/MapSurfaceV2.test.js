@@ -251,7 +251,7 @@ describe('MapSurfaceV2', () => {
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
-        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 262 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 278 },
         visibleNodeCount: 1,
         nodes: [{
           id: 'home',
@@ -262,7 +262,7 @@ describe('MapSurfaceV2', () => {
           x: 0,
           y: 0,
           w: 288,
-          h: 262,
+          h: 278,
           thumbnailUrl: '',
           hasThumbnail: true,
         }],
@@ -313,7 +313,7 @@ describe('MapSurfaceV2', () => {
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
-        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 262 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 278 },
         visibleNodeCount: 1,
         nodes: [{
           id: 'home',
@@ -324,7 +324,7 @@ describe('MapSurfaceV2', () => {
           x: 0,
           y: 0,
           w: 288,
-          h: 262,
+          h: 278,
           thumbnailUrl: '',
           thumbnailFullUrl: '/screenshots/home_scene_thumb_full_v2.jpg',
           fullScreenshotUrl: '/screenshots/home_scene_full_v2.jpg',
@@ -379,7 +379,7 @@ describe('MapSurfaceV2', () => {
       scene: {
         mapId: 'map-1',
         bounds: { w: 900, h: 600 },
-        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 262 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 278 },
         visibleNodeCount: 1,
         nodes: [{
           id: 'home',
@@ -390,7 +390,7 @@ describe('MapSurfaceV2', () => {
           x: 0,
           y: 0,
           w: 288,
-          h: 262,
+          h: 278,
           thumbnailUrl: '',
           hasThumbnail: false,
         }],
