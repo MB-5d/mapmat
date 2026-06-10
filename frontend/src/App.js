@@ -87,7 +87,7 @@ import {
   getMapNameConflictMessage,
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
-import { getValidScanPrefillOptions, getValidScanPrefillUrl } from './utils/scanPrefill';
+import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
 import { getCenteredNodeTransform as getCenteredCanvasNodeTransform } from './utils/canvasView';
 import { normalizeWorldBounds as normalizeCanvasWorldBounds } from './utils/canvasBounds';
 import {
@@ -251,13 +251,13 @@ function getScanLimitPromptSubtitle(prompt = null) {
   const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
   const planName = prompt.planName || 'Free';
   if (prompt.mode === 'guest') {
-    return `Only the first ${allowed} pages will be fully visible for logged-out and Free tier users.`;
+    return `Free and logged-out scans show the first ${allowed} pages. Sign in, upgrade, or continue with the limited scan.`;
+  }
+  if (String(planName).toLowerCase() === 'free') {
+    return `Your Free plan shows the first ${allowed} pages per scan. Upgrade for larger maps, or continue with the limited scan.`;
   }
   if (prompt.capReason === 'monthly_remaining') {
     return `This scan is larger than the crawl pages available in the current billing period. It will stop at ${allowed} pages.`;
-  }
-  if (prompt.capReason === 'per_scan_limit' && String(planName).toLowerCase() === 'free') {
-    return `Only the first ${allowed} pages will be fully visible for Free tier users.`;
   }
   if (prompt.capReason === 'per_scan_limit') {
     return `This scan is larger than the per-scan page limit for ${planName}. It will stop at ${allowed} pages.`;
@@ -267,7 +267,24 @@ function getScanLimitPromptSubtitle(prompt = null) {
 
 function getScanLimitPromptActionCopy(prompt = null) {
   const allowed = formatEntitlementCount(prompt?.allowedPages || prompt?.remaining || 0);
-  return `The scan will continue and stop at ${allowed} pages. Locked pages will appear as grey upgrade previews.`;
+  return `Continue now to scan up to ${allowed} pages. Locked pages will appear as grey upgrade previews.`;
+}
+
+function getScanLimitPromptTitle(prompt = null) {
+  if (!prompt) return 'Scan limit reached';
+  if (prompt.mode === 'guest' || String(prompt.planName || '').toLowerCase() === 'free') {
+    return 'Free scan preview';
+  }
+  return 'Scan limit reached';
+}
+
+function getScanLimitContinueLabel(prompt = null) {
+  if (!prompt) return 'Continue';
+  const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
+  if (prompt.mode === 'guest' || String(prompt.planName || '').toLowerCase() === 'free') {
+    return `Continue with ${allowed}-page scan`;
+  }
+  return 'Continue';
 }
 
 function shouldShowScanLimitPreview(entitlement = null) {
@@ -2350,6 +2367,8 @@ export const __testing = {
   addScanLimitGhosts,
   getScanLimitGhostCounts,
   getScanLimitPromptSubtitle,
+  getScanLimitPromptTitle,
+  getScanLimitContinueLabel,
   shouldShowScanLimitPreview,
   canRescanEntitlementLimitedMap,
   getVisibleScanAllowanceForEntitlements,
@@ -2499,12 +2518,21 @@ export default function App({ currentRoute, navigateToRoute }) {
     const prefillUrl = getValidScanPrefillUrl(currentRoute);
     if (!prefillUrl) return;
     const prefillOptions = getValidScanPrefillOptions(currentRoute);
-    const prefillKey = `${currentRoute?.pathname || ''}|${prefillUrl}|${JSON.stringify(prefillOptions)}`;
+    const shouldStartScan = shouldStartScanFromPrefill(currentRoute);
+    const prefillKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}|${prefillUrl}|${JSON.stringify(prefillOptions)}`;
     if (scanPrefillAppliedRef.current === prefillKey) return;
     scanPrefillAppliedRef.current = prefillKey;
-    setUrlInput((current) => current.trim() ? current : prefillUrl);
+    setUrlInput((current) => shouldStartScan ? prefillUrl : (current.trim() ? current : prefillUrl));
     if (Object.keys(prefillOptions).length) {
       setScanOptions((current) => ({ ...current, ...prefillOptions }));
+    }
+    if (shouldStartScan) {
+      window.setTimeout(() => {
+        scanRef.current?.(prefillUrl, false, {
+          fromMarketingScan: true,
+          scanOptionsOverride: prefillOptions,
+        });
+      }, 0);
     }
   }, [currentRoute]);
   const [scanMessage, setScanMessage] = useState('');
@@ -3741,9 +3769,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     return false;
   }, [currentUser?.entitlements, showEntitlementLock]);
 
-  const getScanEntitlementPreview = useCallback((requestedPages = DEFAULT_SCAN_REQUESTED_PAGES) => {
-    const entitlements = currentUser?.entitlements || null;
-    if (!isLoggedIn) {
+  const getScanEntitlementPreview = useCallback((requestedPages = DEFAULT_SCAN_REQUESTED_PAGES, context = {}) => {
+    const effectiveUser = context.user || currentUser || null;
+    const effectiveIsLoggedIn = context.isLoggedIn ?? isLoggedIn;
+    const entitlements = context.entitlements || effectiveUser?.entitlements || null;
+    if (!effectiveIsLoggedIn) {
       return {
         mode: 'guest',
         planName: 'Guest',
@@ -3794,7 +3824,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       capReason,
       meter,
     };
-  }, [currentUser?.entitlements, isLoggedIn]);
+  }, [currentUser, isLoggedIn]);
 
   const resolveScanLimitPrompt = useCallback((choice) => {
     const resolver = scanLimitPromptResolveRef.current;
@@ -6472,7 +6502,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanRef.current?.(
           pendingScan.url,
           pendingScan.preserveName,
-          pendingScan.authFlow || {}
+          {
+            ...(pendingScan.authFlow || {}),
+            currentUser: user,
+          }
         );
       }, 0);
     }
@@ -10514,22 +10547,30 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
+    const effectiveCurrentUser = authFlow.currentUser || currentUser;
+    const effectiveIsLoggedIn = Boolean(authFlow.currentUser) || isLoggedIn;
+    const activeScanOptions = authFlow.scanOptionsOverride
+      ? { ...scanOptions, ...authFlow.scanOptionsOverride }
+      : scanOptions;
     const requestedScanConfig = normalizeScanConfig({
       url,
-      options: scanOptions,
+      options: activeScanOptions,
     });
     const shouldReplaceEntitlementLimitedMap = isUnsavedScannedMap
       && canRescanEntitlementLimitedMap({
         scanMeta,
-        entitlements: currentUser?.entitlements,
-        isLoggedIn,
+        entitlements: effectiveCurrentUser?.entitlements,
+        isLoggedIn: effectiveIsLoggedIn,
         requestedPages: DEFAULT_SCAN_REQUESTED_PAGES,
       });
     const shouldMergeScanResult = isUnsavedScannedMap
       && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig)
       && !shouldReplaceEntitlementLimitedMap;
     const requestedPages = DEFAULT_SCAN_REQUESTED_PAGES;
-    const scanEntitlementPreview = getScanEntitlementPreview(requestedPages);
+    const scanEntitlementPreview = getScanEntitlementPreview(requestedPages, {
+      user: effectiveCurrentUser,
+      isLoggedIn: effectiveIsLoggedIn,
+    });
     if (scanEntitlementPreview.blocked) {
       showEntitlementLock({
         title: scanEntitlementPreview.title || 'Scan locked',
@@ -10546,10 +10587,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           pendingAuthScanRef.current = {
             url,
             preserveName,
-            authFlow: {
-              ...authFlow,
-              skipScanLimitPrompt: true,
-            },
+            authFlow,
           };
           openAuthModal({
             contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
@@ -10571,11 +10609,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     }
 
-    if (isLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
+    if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
       try {
         const precheck = await api.precheckScanAuth({
           url,
-          options: scanOptions,
+          options: activeScanOptions,
         });
         if (precheck?.authRequired) {
           setScanAuthPrompt({
@@ -10610,9 +10648,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
 
     const scanConfig = {
-      ...scanOptions,
+      ...activeScanOptions,
       authenticatedPages: AUTHENTICATED_SCAN_ENABLED
-        ? Boolean(scanOptions.authenticatedPages || authFlow.authSessionId)
+        ? Boolean(activeScanOptions.authenticatedPages || authFlow.authSessionId)
         : false,
     };
     let jobId;
@@ -15090,7 +15128,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const isWelcomeModalEligible = currentRoute?.surface === ROUTE_SURFACES.APP
     && (currentRoute?.section === 'home' || currentRoute?.section === 'map')
     && !showInviteAcceptGate
-    && !showMapAccessGate;
+    && !showMapAccessGate
+    && !shouldStartScanFromPrefill(currentRoute);
   const showWelcomeModal = isWelcomeModalEligible
     && !welcomeModalDismissedForSession
     && (!isLoggedIn || !welcomeModalHidden);
@@ -16889,39 +16928,30 @@ export default function App({ currentRoute, navigateToRoute }) {
         <Modal
           show
           onClose={() => resolveScanLimitPrompt('cancel')}
-          title={scanLimitPrompt.mode === 'guest' ? 'Limited guest scan' : 'Scan limit reached'}
+          title={getScanLimitPromptTitle(scanLimitPrompt)}
           subtitle={getScanLimitPromptSubtitle(scanLimitPrompt)}
           className="scan-limit-modal"
           footer={(
             <>
               {scanLimitPrompt.mode === 'guest' ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    onClick={() => resolveScanLimitPrompt('sign-up')}
-                  >
-                    Sign up
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => resolveScanLimitPrompt('sign-in')}
-                  >
-                    Sign in
-                  </Button>
-                </>
-              ) : (
                 <Button
                   variant="secondary"
-                  onClick={() => resolveScanLimitPrompt('view-plan')}
+                  onClick={() => resolveScanLimitPrompt('sign-in')}
                 >
-                  Upgrade plan
+                  Sign in
                 </Button>
-              )}
+              ) : null}
+              <Button
+                variant="secondary"
+                onClick={() => resolveScanLimitPrompt('view-plan')}
+              >
+                Upgrade
+              </Button>
               <Button
                 variant="primary"
                 onClick={() => resolveScanLimitPrompt('continue')}
               >
-                OK
+                {getScanLimitContinueLabel(scanLimitPrompt)}
               </Button>
             </>
           )}

@@ -126,8 +126,8 @@ describe('RootApp device support gate', () => {
     expect(container.textContent).not.toContain('Use desktop or tablet landscape');
   });
 
-  test('keeps the marketing preview v2 available on phone-sized screens', () => {
-    window.history.pushState({}, '', '/marketing-preview-v2/features');
+  test('keeps the canonical marketing preview v2 available on phone-sized screens', () => {
+    window.history.pushState({}, '', '/features');
     setViewport({
       width: 390,
       height: 844,

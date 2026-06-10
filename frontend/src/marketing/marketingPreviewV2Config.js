@@ -1,7 +1,8 @@
 import { MARKETING_ORIGIN } from '../utils/constants';
 
 export const MARKETING_PREVIEW_V2_VERSION = 'v2';
-export const MARKETING_PREVIEW_V2_BASE_PATH = '/marketing-preview-v2';
+export const MARKETING_PREVIEW_V2_BASE_PATH = '/';
+export const MARKETING_PREVIEW_V2_LEGACY_BASE_PATH = '/marketing-preview-v2';
 
 const section = ({
   id,
@@ -87,6 +88,10 @@ export const MARKETING_PREVIEW_V2_NAV_SECTION_IDS = [
 ];
 
 const trimPath = (value) => String(value || '').replace(/^\/+|\/+$/g, '');
+const normalizePathname = (value) => {
+  const normalized = `/${trimPath(value)}`;
+  return normalized === '/' ? normalized : normalized.replace(/\/+$/, '');
+};
 
 export function getMarketingPreviewV2SectionById(sectionId = 'home') {
   return MARKETING_PREVIEW_V2_SECTIONS.find((entry) => entry.id === sectionId)
@@ -95,22 +100,39 @@ export function getMarketingPreviewV2SectionById(sectionId = 'home') {
 
 export function buildMarketingPreviewV2Path(sectionId = 'home', search = '') {
   const resolvedSection = getMarketingPreviewV2SectionById(sectionId);
-  const suffix = resolvedSection.slug ? `/${resolvedSection.slug}` : '';
+  const path = resolvedSection.slug ? `/${resolvedSection.slug}` : MARKETING_PREVIEW_V2_BASE_PATH;
   const query = search ? (String(search).startsWith('?') ? search : `?${search}`) : '';
-  return `${MARKETING_PREVIEW_V2_BASE_PATH}${suffix}${query}`;
+  return `${path}${query}`;
 }
 
 export function buildMarketingPreviewV2CanonicalUrl(sectionId = 'home') {
   return `${MARKETING_ORIGIN}${buildMarketingPreviewV2Path(sectionId)}`;
 }
 
-export function getMarketingPreviewV2SectionByPathname(pathname) {
-  const normalized = `/${trimPath(pathname)}`;
-  if (normalized === MARKETING_PREVIEW_V2_BASE_PATH) {
-    return getMarketingPreviewV2SectionById('home');
+export function getMarketingPreviewV2RouteMatchByPathname(pathname) {
+  const normalized = normalizePathname(pathname);
+  if (normalized === '/') {
+    return { section: getMarketingPreviewV2SectionById('home'), legacyAlias: false };
   }
-  if (!normalized.startsWith(`${MARKETING_PREVIEW_V2_BASE_PATH}/`)) return null;
-  const slug = normalized.slice(MARKETING_PREVIEW_V2_BASE_PATH.length + 1);
-  if (slug === 'start') return getMarketingPreviewV2SectionById('home');
-  return MARKETING_PREVIEW_V2_SECTIONS.find((entry) => entry.slug === slug) || null;
+
+  if (normalized === MARKETING_PREVIEW_V2_LEGACY_BASE_PATH) {
+    return { section: getMarketingPreviewV2SectionById('home'), legacyAlias: true };
+  }
+
+  if (normalized.startsWith(`${MARKETING_PREVIEW_V2_LEGACY_BASE_PATH}/`)) {
+    const legacySlug = normalized.slice(MARKETING_PREVIEW_V2_LEGACY_BASE_PATH.length + 1);
+    const sectionId = legacySlug === 'start' ? 'home' : null;
+    const section = sectionId
+      ? getMarketingPreviewV2SectionById(sectionId)
+      : MARKETING_PREVIEW_V2_SECTIONS.find((entry) => entry.slug === legacySlug);
+    return section ? { section, legacyAlias: true } : null;
+  }
+
+  const slug = trimPath(normalized);
+  const section = MARKETING_PREVIEW_V2_SECTIONS.find((entry) => entry.slug === slug);
+  return section ? { section, legacyAlias: false } : null;
+}
+
+export function getMarketingPreviewV2SectionByPathname(pathname) {
+  return getMarketingPreviewV2RouteMatchByPathname(pathname)?.section || null;
 }

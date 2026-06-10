@@ -89,6 +89,21 @@ function RootApp() {
   }, [navigateToRoute, route.accessLevel, route.legacyShareQuery, route.orientation, route.shareId]);
 
   useEffect(() => {
+    if (route.marketingPreviewVersion !== 'v2' || !route.marketingLegacyAlias) return;
+    navigateToRoute(
+      createMarketingPreviewV2Route(route.marketingPageId || route.section || 'home', route.search || ''),
+      { replace: true }
+    );
+  }, [
+    navigateToRoute,
+    route.marketingLegacyAlias,
+    route.marketingPageId,
+    route.marketingPreviewVersion,
+    route.search,
+    route.section,
+  ]);
+
+  useEffect(() => {
     initAnalytics(hasStoredConsent ? consent : null);
   }, [consent, hasStoredConsent]);
 

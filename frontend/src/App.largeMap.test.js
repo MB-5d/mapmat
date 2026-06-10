@@ -209,6 +209,21 @@ describe('large map viewport behavior', () => {
   });
 
   test('scan limit prompt uses paid account allowance copy', () => {
+    expect(__testing.getScanLimitPromptTitle({
+      mode: 'guest',
+      planName: 'Guest',
+      allowedPages: 25,
+    })).toBe('Free scan preview');
+    expect(__testing.getScanLimitPromptSubtitle({
+      mode: 'guest',
+      planName: 'Guest',
+      allowedPages: 25,
+    })).toContain('Free and logged-out scans show the first 25 pages');
+    expect(__testing.getScanLimitContinueLabel({
+      mode: 'guest',
+      planName: 'Guest',
+      allowedPages: 25,
+    })).toBe('Continue with 25-page scan');
     expect(__testing.getScanLimitPromptSubtitle({
       mode: 'account',
       planName: 'Solo',

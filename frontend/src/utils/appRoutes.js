@@ -7,7 +7,7 @@ import {
   MARKETING_PREVIEW_V2_VERSION,
   buildMarketingPreviewV2Path,
   getMarketingPreviewV2SectionById,
-  getMarketingPreviewV2SectionByPathname,
+  getMarketingPreviewV2RouteMatchByPathname,
 } from '../marketing/marketingPreviewV2Config';
 
 export const ROUTE_SURFACES = Object.freeze({
@@ -60,7 +60,7 @@ export function parseCurrentRoute(locationLike = window.location) {
   const legacyShareId = searchParams.get('share');
   const legacyAccess = searchParams.get('access');
   const orientation = parseMapOrientation(searchParams);
-  const marketingPreviewV2Section = getMarketingPreviewV2SectionByPathname(pathname);
+  const marketingPreviewV2Match = getMarketingPreviewV2RouteMatchByPathname(pathname);
   const marketingPage = getMarketingPageByPathname(pathname);
 
   if (legacyShareId) {
@@ -171,15 +171,16 @@ export function parseCurrentRoute(locationLike = window.location) {
     };
   }
 
-  if (marketingPreviewV2Section) {
+  if (marketingPreviewV2Match) {
     return {
       surface: ROUTE_SURFACES.MARKETING,
       marketingPreviewVersion: MARKETING_PREVIEW_V2_VERSION,
       pathname,
       search,
       searchParams,
-      marketingPageId: marketingPreviewV2Section.id,
-      section: marketingPreviewV2Section.id,
+      marketingPageId: marketingPreviewV2Match.section.id,
+      section: marketingPreviewV2Match.section.id,
+      marketingLegacyAlias: marketingPreviewV2Match.legacyAlias,
     };
   }
 

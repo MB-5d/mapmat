@@ -59,7 +59,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('renders a direct V2 section route with route-aware metadata', () => {
-    renderAt('/marketing-preview-v2/features');
+    renderAt('/features');
 
     expect(container.textContent).toContain('The map is the workspace.');
     expect(container.textContent).toContain('Bulk screenshots');
@@ -78,22 +78,22 @@ describe('MarketingPreviewV2', () => {
     expect(container.querySelector('.marketing-v2-feature-upcoming')).toBeNull();
     expect(container.querySelector('.marketing-v2-header__nav a[aria-current="page"]')?.textContent).toBe('Features');
     expect(document.title).toBe('Features | Vellic Marketing Preview V2');
-    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://vellic.io/marketing-preview-v2/features');
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://vellic.io/features');
     expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: expect.any(Number) }));
   });
 
   test('uses real nav links and intercepts V2 routing for SPA navigation', () => {
     const navigateToRoute = jest.fn();
-    renderAt('/marketing-preview-v2', navigateToRoute);
+    renderAt('/', navigateToRoute);
     const examplesLink = Array.from(container.querySelectorAll('a')).find((link) => (
-      link.getAttribute('href') === '/marketing-preview-v2/examples'
+      link.getAttribute('href') === '/examples'
     ));
 
     act(() => {
       examplesLink.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
 
-    expect(examplesLink.getAttribute('href')).toBe('/marketing-preview-v2/examples');
+    expect(examplesLink.getAttribute('href')).toBe('/examples');
     expect(navigateToRoute).toHaveBeenCalledWith(expect.objectContaining({
       surface: ROUTE_SURFACES.MARKETING,
       marketingPreviewVersion: 'v2',
@@ -103,7 +103,7 @@ describe('MarketingPreviewV2', () => {
 
   test('opens the app scan URL on desktop', () => {
     const openApp = jest.fn();
-    renderAt('/marketing-preview-v2', jest.fn(), { onOpenApp: openApp });
+    renderAt('/', jest.fn(), { onOpenApp: openApp });
 
     const input = container.querySelector('.marketing-scan-bar input');
     act(() => {
@@ -123,7 +123,7 @@ describe('MarketingPreviewV2', () => {
   test('shows the mobile scan modal instead of routing phones to the removed start section', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     const navigateToRoute = jest.fn();
-    renderAt('/marketing-preview-v2', navigateToRoute);
+    renderAt('/', navigateToRoute);
 
     const input = container.querySelector('.marketing-scan-bar input');
     act(() => {
@@ -140,7 +140,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('keeps updates and mailing-list content without the removed start handoff', () => {
-    renderAt('/marketing-preview-v2/features');
+    renderAt('/features');
 
     expect(container.textContent).toContain('Vellic is moving rapidly');
     expect(container.textContent).toContain('Join mailing list');
@@ -150,7 +150,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('keeps the hero scan CTA without the removed start-mode boxes', () => {
-    renderAt('/marketing-preview-v2');
+    renderAt('/');
 
     expect(container.querySelector('#marketing-v2-home-title')?.textContent).toBe('Be the architect of your next build.');
     expect(container.querySelector('.marketing-v2-hero .marketing-scan-bar input')?.getAttribute('placeholder')).toBe('Try it now. Enter a URL to start');
@@ -166,20 +166,20 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('uses the updated mission and final scan CTA copy', () => {
-    renderAt('/marketing-preview-v2/mission');
+    renderAt('/mission');
 
     expect(container.textContent).toContain('Because foundations matter');
     expect(container.textContent).toContain('Information architecture shapes how people find, understand, and act.');
     expect(container.textContent).toContain('Improve constantly with and for the people doing the work');
 
-    renderAt('/marketing-preview-v2');
+    renderAt('/');
 
     expect(container.textContent).toContain('Start planning your next site');
     expect(container.querySelector('.marketing-v2-final-cta .marketing-scan-bar input')?.getAttribute('placeholder')).toBe('Enter a URL to start');
   });
 
   test('switches competitor comparison groups', () => {
-    renderAt('/marketing-preview-v2/features');
+    renderAt('/features');
 
     expect(container.textContent).toContain('AI-ready handoff package');
     expect(container.textContent).not.toContain('Organized screenshot downloads');
@@ -196,7 +196,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('renders supplied product screenshot examples', () => {
-    renderAt('/marketing-preview-v2/examples');
+    renderAt('/examples');
 
     expect(container.textContent).toContain('Raycast main site');
     expect(container.textContent).toContain('Anthropic full site');
@@ -207,7 +207,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('renders public pricing plans without the internal Solo plan', () => {
-    renderAt('/marketing-preview-v2/pricing');
+    renderAt('/pricing');
 
     ['Free', 'Pro', 'Studio', 'Agency'].forEach((plan) => {
       expect(container.textContent).toContain(plan);
@@ -222,7 +222,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('renders FAQ answers as closed accordions until opened', () => {
-    renderAt('/marketing-preview-v2/faq');
+    renderAt('/faq');
 
     expect(container.textContent).toContain('What is Vellic?');
     expect(container.textContent).not.toContain('Vellic is a visual sitemap workspace for auditing');
@@ -239,7 +239,7 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('opens contact forms for inquiries and support', () => {
-    renderAt('/marketing-preview-v2/contact');
+    renderAt('/contact');
 
     expect(container.textContent).toContain('Need help? Want a demo? Have some feedback? Or just want to say Hello👋?');
     expect(container.textContent).toContain('Send a note to the right inbox and we will follow up ASAP.');

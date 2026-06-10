@@ -1,5 +1,5 @@
 import { ROUTE_SURFACES } from './appRoutes';
-import { getValidScanPrefillOptions, getValidScanPrefillUrl } from './scanPrefill';
+import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './scanPrefill';
 
 describe('getValidScanPrefillUrl', () => {
   test('returns a sanitized URL for the app home route', () => {
@@ -38,5 +38,25 @@ describe('getValidScanPrefillUrl', () => {
       duplicates: false,
       files: true,
     });
+  });
+
+  test('starts only valid app home scan intent URLs', () => {
+    expect(shouldStartScanFromPrefill({
+      surface: ROUTE_SURFACES.APP,
+      section: 'home',
+      searchParams: new URLSearchParams('intent=scan&url=example.com'),
+    })).toBe(true);
+
+    expect(shouldStartScanFromPrefill({
+      surface: ROUTE_SURFACES.APP,
+      section: 'home',
+      searchParams: new URLSearchParams('url=example.com'),
+    })).toBe(false);
+
+    expect(shouldStartScanFromPrefill({
+      surface: ROUTE_SURFACES.APP,
+      section: 'map',
+      searchParams: new URLSearchParams('intent=scan&url=example.com'),
+    })).toBe(false);
   });
 });

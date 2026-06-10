@@ -80,7 +80,32 @@ describe('appRoutes admin surface', () => {
     );
   });
 
-  it('parses marketing preview v2 section routes as the marketing surface', () => {
+  it('parses the root URL as the canonical marketing preview v2 home', () => {
+    const route = parseCurrentRoute({
+      pathname: '/',
+      search: '',
+    });
+
+    expect(route.surface).toBe(ROUTE_SURFACES.MARKETING);
+    expect(route.marketingPreviewVersion).toBe('v2');
+    expect(route.marketingPageId).toBe('home');
+    expect(route.marketingLegacyAlias).toBe(false);
+  });
+
+  it('parses canonical marketing preview v2 section routes as the marketing surface', () => {
+    const route = parseCurrentRoute({
+      pathname: '/features',
+      search: '',
+    });
+
+    expect(route.surface).toBe(ROUTE_SURFACES.MARKETING);
+    expect(route.marketingPreviewVersion).toBe('v2');
+    expect(route.marketingPageId).toBe('features');
+    expect(route.section).toBe('features');
+    expect(route.marketingLegacyAlias).toBe(false);
+  });
+
+  it('parses legacy marketing preview v2 section routes as aliases', () => {
     const route = parseCurrentRoute({
       pathname: '/marketing-preview-v2/features',
       search: '',
@@ -90,6 +115,7 @@ describe('appRoutes admin surface', () => {
     expect(route.marketingPreviewVersion).toBe('v2');
     expect(route.marketingPageId).toBe('features');
     expect(route.section).toBe('features');
+    expect(route.marketingLegacyAlias).toBe(true);
   });
 
   it('keeps the old marketing preview v2 start path on the v2 home route', () => {
@@ -105,9 +131,10 @@ describe('appRoutes admin surface', () => {
   });
 
   it('builds marketing preview v2 route URLs with search', () => {
-    expect(buildRouteUrl(createMarketingPreviewV2Route('home'))).toBe('/marketing-preview-v2');
+    expect(buildRouteUrl(createMarketingPreviewV2Route('home'))).toBe('/');
     expect(buildRouteUrl(createMarketingPreviewV2Route('start', '?url=https%3A%2F%2Fexample.com%2F'))).toBe(
-      '/marketing-preview-v2?url=https%3A%2F%2Fexample.com%2F'
+      '/?url=https%3A%2F%2Fexample.com%2F'
     );
+    expect(buildRouteUrl(createMarketingPreviewV2Route('features'))).toBe('/features');
   });
 });
