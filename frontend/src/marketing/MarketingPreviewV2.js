@@ -742,7 +742,7 @@ const defaultOpenApp = (url) => {
   window.location.assign(url);
 };
 
-const MARKETING_V2_HEADER_FALLBACK_BOTTOM = 80;
+const MARKETING_V2_HEADER_FALLBACK_BOTTOM = 84;
 const MARKETING_V2_SECTION_GAP = 80;
 
 function isPlainLeftClick(event) {
@@ -752,7 +752,8 @@ function isPlainLeftClick(event) {
 function getMarketingV2HeaderBottom() {
   const header = document.querySelector('.marketing-v2-header');
   const bottom = header?.getBoundingClientRect?.().bottom;
-  return Number.isFinite(bottom) && bottom > 0 ? Math.ceil(bottom) : MARKETING_V2_HEADER_FALLBACK_BOTTOM;
+  if (!Number.isFinite(bottom) || bottom <= 0) return MARKETING_V2_HEADER_FALLBACK_BOTTOM;
+  return Math.min(Math.ceil(bottom), MARKETING_V2_HEADER_FALLBACK_BOTTOM);
 }
 
 function getMarketingV2TransformY(element) {
