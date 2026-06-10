@@ -1853,7 +1853,11 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
       </main>
       <footer className="marketing-v2-footer">
         <img src={vellicLogo} alt="Vellic" />
-        <p>Better UX starts with solid foundations.</p>
+        <p>
+          Better UX starts with solid foundations.
+          <br />
+          Make those foundations with Vellic.
+        </p>
       </footer>
       <MobileScanModal
         show={showMobileScanModal}

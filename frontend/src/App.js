@@ -15300,7 +15300,6 @@ export default function App({ currentRoute, navigateToRoute }) {
               <div className="blank-heading">
                 <h1 className="blank-title">Map a site from one of these</h1>
               </div>
-              <h2 className="blank-section-label blank-scan-label">Scan a URL</h2>
               <div className="blank-scan-primary">
                 <div className="search-container scan-bar-shell blank-scan-shell">
                   <ScanBar
@@ -15324,6 +15323,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onClearUrl={() => setUrlInput('')}
                     showClearUrl={!!urlInput.trim()}
                     sharedTitle={root?.title || 'Shared Sitemap'}
+                    placeholder="Enter a URL to start"
                   />
                 </div>
               </div>

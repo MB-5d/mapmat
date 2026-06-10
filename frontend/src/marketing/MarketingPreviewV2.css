@@ -1792,7 +1792,7 @@ body:has(.marketing-preview-v2) {
   margin: 0;
   padding: var(--unit-32) max(var(--unit-24), calc((100% - 1184px) / 2)) var(--unit-40);
   border-top: 1px solid var(--marketing-v2-line);
-  background: var(--marketing-v2-bg);
+  background: var(--color-neutral-white);
   color: var(--marketing-v2-muted);
 }
 

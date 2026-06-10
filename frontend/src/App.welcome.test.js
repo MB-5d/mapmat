@@ -214,7 +214,8 @@ describe('App blank home and welcome modal', () => {
 
     expect(container.textContent).toContain('Map a site from one of these');
     expect(container.querySelector('.blank-title')?.tagName).toBe('H1');
-    expect(container.textContent).toContain('Scan a URL');
+    expect(container.querySelector('.blank-scan-label')).toBeNull();
+    expect(container.querySelector('.blank-scan-shell input')?.getAttribute('placeholder')).toBe('Enter a URL to start');
     expect(container.textContent).toContain('Or choose another starting point');
     expect(container.textContent).toContain('Start from scratch');
     expect(container.textContent).toContain('Open saved maps and shared work');

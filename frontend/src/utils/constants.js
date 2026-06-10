@@ -1,7 +1,18 @@
 import runtimePalettes from './runtimePalettes.json';
 
 export const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:4002';
-export const APP_ORIGIN = String(process.env.REACT_APP_APP_ORIGIN || 'https://app.vellic.io').replace(/\/+$/, '');
+
+const getDefaultAppOrigin = () => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'staging.vellic.io' || hostname === 'mapmat-staging.vercel.app') {
+      return 'https://staging.vellic.io';
+    }
+  }
+  return 'https://app.vellic.io';
+};
+
+export const APP_ORIGIN = String(process.env.REACT_APP_APP_ORIGIN || getDefaultAppOrigin()).replace(/\/+$/, '');
 export const MARKETING_ORIGIN = String(process.env.REACT_APP_MARKETING_ORIGIN || 'https://vellic.io').replace(/\/+$/, '');
 
 function parseEnvBool(value, fallback = false) {
