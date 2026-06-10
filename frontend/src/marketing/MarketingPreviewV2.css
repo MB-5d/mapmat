@@ -932,6 +932,8 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-hero {
   display: block;
+  min-width: 0;
+  max-width: 100%;
   padding: var(--unit-24) 0 0;
   scroll-margin-top: var(--unit-80);
 }
@@ -1042,6 +1044,8 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-section {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
   padding: 0;
   scroll-margin-top: var(--unit-80);
 }
@@ -1089,6 +1093,8 @@ body:has(.marketing-preview-v2) {
 .marketing-v2-mission-list {
   display: grid;
   gap: var(--unit-24);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .marketing-v2-card-grid--three {
@@ -1248,6 +1254,9 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-comparison {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin-top: var(--unit-40);
   overflow-x: auto;
   border: 1px solid var(--marketing-v2-blue-border);
@@ -2026,6 +2035,10 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     padding-bottom: 0;
   }
 
+  .marketing-v2-scan-cta {
+    display: none;
+  }
+
   .marketing-v2-hero h1 {
     font-size: 38px;
     line-height: 44px;
@@ -2068,7 +2081,14 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-comparison__header {
-    min-width: 1080px;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .marketing-v2-comparison-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
   }
 
   .marketing-v2-final-cta {
