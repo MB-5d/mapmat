@@ -11,11 +11,9 @@ import { useConsent } from './contexts/ConsentContext';
 import {
   ROUTE_SURFACES,
   buildRouteUrl,
-  createAppHomeRoute,
   createMarketingPreviewV2Route,
   parseCurrentRoute,
 } from './utils/appRoutes';
-import { APP_ONLY_MODE } from './utils/constants';
 import { getAppDeviceSupport } from './utils/deviceSupport';
 
 function DeviceSupportBlocker({ message }) {
@@ -91,11 +89,6 @@ function RootApp() {
   }, [navigateToRoute, route.accessLevel, route.legacyShareQuery, route.orientation, route.shareId]);
 
   useEffect(() => {
-    if (!APP_ONLY_MODE || ![ROUTE_SURFACES.WEBSITE, ROUTE_SURFACES.MARKETING].includes(route.surface)) return;
-    navigateToRoute(createAppHomeRoute(), { replace: true });
-  }, [navigateToRoute, route.surface]);
-
-  useEffect(() => {
     initAnalytics(hasStoredConsent ? consent : null);
   }, [consent, hasStoredConsent]);
 
@@ -115,7 +108,6 @@ function RootApp() {
   );
 
   if (route.surface === ROUTE_SURFACES.WEBSITE) {
-    if (APP_ONLY_MODE) return null;
     const marketingHomeRoute = createMarketingPreviewV2Route('home');
     return (
       <>
@@ -126,7 +118,6 @@ function RootApp() {
   }
 
   if (route.surface === ROUTE_SURFACES.MARKETING) {
-    if (APP_ONLY_MODE) return null;
     if (route.marketingPreviewVersion === 'v2') {
       return (
         <>
