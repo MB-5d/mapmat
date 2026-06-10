@@ -60,6 +60,7 @@ import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from './component
 import Modal from './components/ui/Modal';
 import StatusAlert from './components/ui/StatusAlert';
 import Toast from './components/ui/Toast';
+import TextInput from './components/ui/TextInput';
 import ColorKey from './components/toolbar/ColorKey';
 import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
@@ -2361,12 +2362,12 @@ export const __testing = {
   getLargeMapAutoCenterKey,
   getNextExpandedStackState,
   getMapLayoutRefreshTransformOptions,
+  getInitialLargeMapHomeTransform,
   mergeLargeMapNodeSnapshot,
   getLargeMapStackSelectionIdsFromNode,
   getLargeMapEditParentId,
   getPanToRevealLayoutNode,
   normalizeCanvasWorldBounds,
-  getInitialLargeMapHomeTransform,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -2542,6 +2543,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const centerKnownLargeMapHomeRef = useRef(null);
   const pendingInitialCenterRef = useRef(false);
   const pendingInitialLargeMapCenterRef = useRef(false);
+  const largeMapHomeSceneKeyRef = useRef('');
   const largeMapHomeNodeRef = useRef(null);
   const largeMapVisibleNodesRef = useRef([]);
   const largeMapNodeCacheRef = useRef(new Map());
@@ -5370,7 +5372,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
       } catch (e) {
         // Not logged in or error - that's fine
-        console.log('Not authenticated');
       } finally {
         setAuthLoading(false);
       }
@@ -9637,6 +9638,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
 
       setCurrentMap(savedMap);
+      largeMapHomeSceneKeyRef.current = '';
       navigateToRoute(createMapRoute(savedMap.id));
       resetAutosaveTracking({
         snapshot: serializeMapAutosaveSnapshot({
@@ -9765,6 +9767,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const clearLoadedMapView = useCallback(() => {
     resetAutosaveTracking();
+    cancelScheduledResetView();
     setMapPermissions(null);
     resetScanLayers();
     setLargeMapDisplaySummary(null);
@@ -9801,7 +9804,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowThumbnails(false);
     setUrlInput('');
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-  }, [applyTransform, resetAutosaveTracking, resetScanLayers]);
+  }, [applyTransform, cancelScheduledResetView, resetAutosaveTracking, resetScanLayers]);
 
   useEffect(() => {
     clearLoadedMapViewRef.current = clearLoadedMapView;
@@ -9825,13 +9828,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
+    largeMapHomeSceneKeyRef.current = '';
     largeMapHomeNodeRef.current = map.homeNode || null;
     largeMapVisibleNodesRef.current = [];
     pendingInitialCenterRef.current = false;
     pendingInitialLargeMapCenterRef.current = false;
-    if (map.homeNode) {
-      largeMapHomeNodeRef.current = map.homeNode;
-    }
     const mapHasThumbnails = mapHasThumbnailAsset(map.root, map.orphans || []);
     setRoot(map.root);
     setOrphans(normalizeOrphans(map.orphans));
@@ -9896,7 +9897,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     setExpandedStacks({});
-    largeMapHomeNodeRef.current = null;
+    largeMapHomeSceneKeyRef.current = '';
+    largeMapHomeNodeRef.current = map.homeNode || null;
     largeMapVisibleNodesRef.current = [];
     pendingInitialCenterRef.current = false;
     pendingInitialLargeMapCenterRef.current = true;
@@ -11511,41 +11513,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     scheduleResetViewRef.current = scheduleResetView;
   }, [scheduleResetView]);
 
-  const fitToScreen = () => {
-    if (!canvasRef.current) return;
-    const bounds = worldBounds;
-    if (!bounds) return;
-
-    const mapWidth = bounds.maxX - bounds.minX;
-    const mapHeight = bounds.maxY - bounds.minY;
-    if (mapWidth <= 0 || mapHeight <= 0) return;
-
-    const padding = 80;
-    const viewportWidth = canvasRef.current.clientWidth;
-    const viewportHeight = canvasRef.current.clientHeight;
-    const availableWidth = Math.max(0, viewportWidth - padding * 2);
-    const availableHeight = Math.max(0, viewportHeight - padding * 2);
-
-    const scaleX = availableWidth / mapWidth;
-    const scaleY = availableHeight / mapHeight;
-    const newScale = clamp(Math.min(scaleX, scaleY), MIN_SCALE, 1);
-
-    const mapCenterX = (bounds.minX + bounds.maxX) / 2;
-    const mapCenterY = (bounds.minY + bounds.maxY) / 2;
-    const canvasCenterX = viewportWidth / 2;
-    const canvasCenterY = viewportHeight / 2;
-
-    const nextPan = {
-      x: canvasCenterX - mapCenterX * newScale,
-      y: canvasCenterY - mapCenterY * newScale,
-    };
-
-    applyTransform({ scale: newScale, x: nextPan.x, y: nextPan.y });
-  };
-
   // Undo/Redo implementation
   const saveStateForUndo = useCallback((overrideState = null) => {
-    console.log('SAVING STATE FOR UNDO');
     const snapshot = overrideState || { root, orphans, connections, colors, connectionColors };
     setUndoStack(prev => [...prev, JSON.stringify(snapshot)]);
     setRedoStack([]); // Clear redo on new action
@@ -11579,9 +11548,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
     }
-    console.log('UNDO CLICKED, stack:', undoStack.length);
     if (undoStack.length === 0) {
-      console.log('Nothing to undo');
       return;
     }
 
@@ -11611,7 +11578,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (parsed.connectionColors !== undefined) {
       setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
     }
-    console.log('UNDO COMPLETE');
   };
 
   const handleRedo = () => {
@@ -11619,9 +11585,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
     }
-    console.log('REDO CLICKED, stack:', redoStack.length);
     if (redoStack.length === 0) {
-      console.log('Nothing to redo');
       return;
     }
 
@@ -11651,7 +11615,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (parsed.connectionColors !== undefined) {
       setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
     }
-    console.log('REDO COMPLETE');
   };
 
   const canUndo = undoStack.length > 0;
@@ -12827,32 +12790,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? (getNodeById(nodeMenu.nodeId)?.annotations?.status || 'none')
     : 'none';
 
-  // Navigate to a node - pan canvas to center the node and optionally zoom
-  const navigateToNode = (nodeId) => {
-    const layout = layoutRef.current;
-    if (!nodeId || !layout || !canvasRef.current) return;
-    const nodeData = layout.nodes.get(nodeId);
-    if (!nodeData) return;
-
-    // Calculate center of canvas, offset left if comments panel is open
-    // Comments panel is 320px wide, so offset by half that (160px)
-    const panelOffset = showCommentsPanel ? 160 : 0;
-    const canvas = canvasRef.current;
-    const canvasCenterX = (canvas.clientWidth / 2) - panelOffset;
-    const canvasCenterY = canvas.clientHeight / 2;
-
-    const nodeCenterX = nodeData.x + nodeData.w / 2;
-    const nodeCenterY = nodeData.y + nodeData.h / 2;
-
-    const nextScale = scaleRef.current < 0.8 ? 1 : scaleRef.current;
-    const nextPan = {
-      x: canvasCenterX - nodeCenterX * nextScale,
-      y: canvasCenterY - nodeCenterY * nextScale,
-    };
-
-    applyTransform({ scale: nextScale, x: nextPan.x, y: nextPan.y });
-  };
-
   // Open comment popover positioned next to a node
   const openCommentPopover = (nodeOrId) => {
     if (!canvasRef.current) return;
@@ -13085,9 +13022,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       const response = await api.getMapNode(currentMap.id, sceneNode.id);
       const node = response?.node || sceneNode;
       mergeLargeMapNodeCache(node, { preserveExistingAssetsOnEmpty: false });
-      const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || node.thumbnailUrl || '';
+      const directAssetUrl = node.fullScreenshotUrl || node.thumbnailFullUrl || '';
       if (directAssetUrl) {
-        viewFullScreenshot(directAssetUrl, true, node.id || sceneNode.id, node.fullScreenshotUrl ? 'full' : 'thumb');
+        viewFullScreenshot(directAssetUrl, true, node.id || sceneNode.id, 'full');
         return;
       }
       const sourceUrl = node.url || sceneNode.url;
@@ -15068,8 +15005,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         parseType = 'Text';
       }
 
-      console.log(`Parsed ${parseType}: found ${urls.length} URLs`);
-
       if (urls.length === 0) {
         showToast(`No URLs found in ${parseType} file`, 'error');
         setImportLoading(false);
@@ -15363,9 +15298,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           <div className="blank">
             <div className="blank-shell">
               <div className="blank-heading">
-                <div className="blank-title">Start with a URL</div>
-                <div className="blank-subtitle">Scan a site, then shape the map from the canvas.</div>
+                <h1 className="blank-title">Map a site from one of these</h1>
               </div>
+              <h2 className="blank-section-label blank-scan-label">Scan a URL</h2>
               <div className="blank-scan-primary">
                 <div className="search-container scan-bar-shell blank-scan-shell">
                   <ScanBar
@@ -15392,19 +15327,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   />
                 </div>
               </div>
-              <h3 className="blank-start-label">Or start here</h3>
-              <div className="blank-card-guide" aria-hidden="true">
-                <svg className="blank-guide-svg" viewBox="0 0 960 120" fill="none" preserveAspectRatio="none">
-                  <path className="blank-guide-line" d="M480 0V46" />
-                  <path className="blank-guide-line" d="M154 46H806" />
-                  <path className="blank-guide-line" d="M154 46V112" />
-                  <path className="blank-guide-line" d="M480 46V112" />
-                  <path className="blank-guide-line" d="M806 46V112" />
-                  <path className="blank-guide-arrow" d="M146 104L154 112L162 104" />
-                  <path className="blank-guide-arrow" d="M472 104L480 112L488 104" />
-                  <path className="blank-guide-arrow" d="M798 104L806 112L814 104" />
-                </svg>
-              </div>
+              <h2 className="blank-section-label blank-start-label">Or choose another starting point</h2>
               <div className="blank-card-grid">
                 <button
                   type="button"
@@ -15418,7 +15341,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Create</span>
                   </div>
-                  <div className="blank-card-copy">Start a new map from scratch</div>
+                  <div className="blank-card-copy">Start from scratch</div>
                 </button>
 
                 <button
@@ -15449,7 +15372,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       : (
                         <>
                           <span>Use existing sitemap files</span>
-                          <span className="blank-card-copy-secondary">(drag in here or click to select)</span>
+                          <span className="blank-card-copy-secondary">(XML, HTML, CSV, Markdown, or text)</span>
                         </>
                       )}
                   </div>
@@ -15476,7 +15399,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   <div className="blank-card-title-row">
                     <span className="blank-card-title">Modify</span>
                   </div>
-                  <div className="blank-card-copy">Make updates to existing maps</div>
+                  <div className="blank-card-copy">Open saved maps and shared work</div>
                 </button>
               </div>
               <input
@@ -16327,11 +16250,15 @@ export default function App({ currentRoute, navigateToRoute }) {
                         setConnectionTool(null);
                       }
                     }}
-                    onToggleBrokenLinks={() => setLayers((currentLayers) => ({ ...currentLayers, brokenLinks: !currentLayers.brokenLinks }))}
+                    onToggleBrokenLinks={() => {
+                      cancelScheduledResetView();
+                      setLayers((currentLayers) => ({ ...currentLayers, brokenLinks: !currentLayers.brokenLinks }));
+                    }}
                     connectionAvailability={connectionAvailability}
                     scanLayerAvailability={effectiveScanLayerAvailability}
                     scanLayerVisibility={scanLayerVisibility}
                     onToggleScanLayer={(layerKey) => {
+                      cancelScheduledResetView();
                       setScanLayerVisibility((prev) => ({
                         ...prev,
                         [layerKey]: !prev[layerKey],
@@ -16339,6 +16266,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                     changeFilters={changeFilters}
                     onToggleChangeStatus={(status) => {
+                      cancelScheduledResetView();
                       setChangeFilters((prev) => ({
                         ...prev,
                         statuses: {
@@ -17190,8 +17118,10 @@ export default function App({ currentRoute, navigateToRoute }) {
                   />
                 </button>
                 <div className="scan-auth-browser-controls">
-                  <input
+                  <TextInput
                     type="text"
+                    size="sm"
+                    shellClassName="scan-auth-browser-input"
                     value={scanAuthPrompt.authBrowser.text || ''}
                     placeholder="Type selected field text here"
                     onChange={(event) => setScanAuthPrompt((current) => current ? {
@@ -17374,7 +17304,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           onClose={() => setEditModalNode(null)}
           onSave={saveNodeChanges}
           onUploadNodeImageAsset={uploadNodeImageAsset}
-          onViewImage={viewFullScreenshot}
           onDelete={(nodeId) => {
             setEditModalNode(null);
             requestDeleteNode(nodeId);

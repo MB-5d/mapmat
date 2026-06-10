@@ -7,12 +7,13 @@ const appCss = fs.readFileSync(path.join(__dirname, 'App.css'), 'utf8');
 const generatedCss = fs.readFileSync(path.join(__dirname, 'design-system.generated.css'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, 'App.js'), 'utf8');
 const minimapCss = fs.readFileSync(path.join(__dirname, 'components/minimap/minimapNavigator.css'), 'utf8');
+const adminCss = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.css'), 'utf8');
 
 describe('UI design-system contract', () => {
   test('home title, canvas elevation, connection stroke, and disabled state use shared tokens', () => {
     expect(generatedCss).toContain('--type-home-title-lg-size: 32px;');
     expect(generatedCss).toContain('--type-home-title-lg-line-height: 40px;');
-    expect(generatedCss).toContain('--type-home-title-lg-weight: 600;');
+    expect(generatedCss).toContain('--type-home-title-lg-weight: 500;');
     expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(0, 0, 0, 0.1);');
     expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(180, 180, 180, 0.12);');
     expect(generatedCss).toContain('--shadow-card: 0 1px 3px rgba(180, 180, 180, 0.12), 0 1px 2px rgba(160, 160, 160, 0.08);');
@@ -20,7 +21,9 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
 
-    expect(appCss).toContain('font-size: var(--type-home-title-lg-size);');
+    expect(appCss).toContain('font-size: var(--type-size-4xl);');
+    expect(appCss).toContain('line-height: var(--type-line-height-48);');
+    expect(appCss).toContain('font-weight: var(--type-weight-bold);');
     expect(appCss).toContain('box-shadow: var(--shadow-canvas-control);');
     expect(appCss).toContain('box-shadow: var(--shadow-drawer);');
     expect(appCss).toContain('box-shadow: var(--ui-overlay-shadow);');
@@ -34,6 +37,26 @@ describe('UI design-system contract', () => {
     );
     expect(appCss).not.toContain('.share-email-btn:hover');
     expect(appCss).not.toMatch(/\.share-email-btn \{[^}]*color:/);
+  });
+
+  test('input labels use the compact label token and 4px control spacing', () => {
+    expect(generatedCss).toContain('--type-label-sm-size: 12px;');
+    expect(generatedCss).toContain('--type-label-sm-line-height: 16px;');
+    expect(generatedCss).toContain('--type-label-sm-weight: 500;');
+    expect(appCss).toMatch(/\.field \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.field-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.scan-options-depth-field \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.scan-options-depth-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.share-collab-setting \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.share-collab-setting-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.feedback-field-group \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.feedback-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminCss).toMatch(/\.admin-console-auth-form span \{[\s\S]*margin-bottom: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminCss).toMatch(/\.admin-feedback-item-controls label,[\s\S]*gap: var\(--space-xs\);/);
+    expect(adminCss).toMatch(/\.admin-feedback-item-controls span,[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminCss).toMatch(/\.admin-storage-form label \{[\s\S]*gap: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminCss).toMatch(/\.admin-usage-filters label \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(adminCss).toMatch(/\.admin-usage-filters label span \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
   });
 
   test('top scan bar is limited to unsaved scans and supports clear/update states', () => {
@@ -327,15 +350,20 @@ describe('map image asset persistence', () => {
     const formBlock = appCss.match(/\.edit-node-form \{([\s\S]*?)\}/)?.[1] || '';
     expect(formBlock).not.toContain('flex: 1;');
     expect(formBlock).not.toContain('min-height: 0;');
-    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-20\);/);
+    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-16\);/);
     expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding-bottom: var\(--space-none\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
-    expect(appCss).toMatch(/\.edit-node-form \.field \{[\s\S]*gap: var\(--unit-12\);/);
-    expect(appCss).toMatch(/\.edit-node-form > \.field:last-child \{[\s\S]*margin-bottom: var\(--unit-24\);/);
+    expect(generatedCss).toContain('--type-label-sm-weight: 500;');
+    expect(appCss).toMatch(/\.field \{[\s\S]*gap: var\(--space-xs\);/);
+    expect(appCss).toMatch(/\.field-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.edit-node-form > \.field:last-child \{[\s\S]*margin-bottom: var\(--unit-16\);/);
     expect(appCss).toMatch(/\.edit-node-modal__footer-actions \{[\s\S]*gap: var\(--unit-12\);/);
-    expect(appCss).toMatch(/\.edit-node-duplicate-section \{[\s\S]*gap: var\(--unit-12\);[\s\S]*padding: var\(--unit-12\);/);
-    expect(appCss).toMatch(/\.edit-node-duplicate-row \{[\s\S]*gap: var\(--unit-12\);/);
+    expect(appCss).toMatch(/\.edit-node-duplicate-section \{[\s\S]*gap: var\(--unit-10\);[\s\S]*padding: var\(--unit-14\);/);
+    expect(appCss).toMatch(/\.edit-node-duplicate-row \{[\s\S]*grid-template-columns: minmax\(120px, 0\.4fr\) minmax\(0, 1fr\);[\s\S]*gap: var\(--unit-8\);/);
     expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*gap: var\(--unit-12\);/);
-    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*column-gap: var\(--unit-20\);[\s\S]*row-gap: var\(--unit-12\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*background: var\(--ui-color-surface\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*border-radius: var\(--ui-radius-lg\);/);
+    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*column-gap: var\(--unit-20\);[\s\S]*row-gap: var\(--unit-10\);/);
+    expect(appCss).toMatch(/\.image-upload-zone \{[\s\S]*border: var\(--border-width-subtle\) dashed var\(--ui-color-border-strong\);/);
   });
 
   test('autosave snapshots only track canvas content changes', () => {

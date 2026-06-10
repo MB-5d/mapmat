@@ -532,6 +532,7 @@ const EditNodeModal = ({
               <span className="upload-text-small">or enter URL</span>
               <TextInput
                 type="text"
+                size="sm"
                 className="url-input-small"
                 placeholder="https://example.com/image.jpg"
                 onKeyDown={(event) => {

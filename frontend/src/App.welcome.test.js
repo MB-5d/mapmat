@@ -196,8 +196,13 @@ describe('App blank home and welcome modal', () => {
 
     expect(getWelcomeModal()).not.toBeNull();
     expect(container.textContent).toContain('Welcome to Vellic');
-    expect(container.textContent).toContain('Make site or software structure visual, actionable, and easy to review');
-    expect(container.textContent).toContain('Scan a site, import a sitemap, or start from scratch');
+    expect(container.textContent).toContain('planning and auditing');
+    expect(container.textContent).toContain('IA, content, UX, product, and development');
+    expect(container.textContent).not.toContain('development work');
+    expect(container.textContent).toContain('Scan a URL');
+    expect(container.textContent).toContain('Import or create');
+    expect(container.textContent).toContain('build a map from scratch');
+    expect(container.textContent).toContain('Review and share');
     expect(container.querySelector('.welcome-modal .modal-header h3')?.textContent).toBe('Welcome to Vellic');
     expect(container.querySelector('.welcome-modal-copy h2')).toBeNull();
   });
@@ -207,12 +212,16 @@ describe('App blank home and welcome modal', () => {
 
     await renderApp();
 
-    expect(container.textContent).toContain('Start with a URL');
-    expect(container.textContent).toContain('Scan a site, then shape the map from the canvas.');
-    expect(container.textContent).toContain('Start a new map from scratch');
-    expect(container.textContent).toContain('Make updates to existing maps');
+    expect(container.textContent).toContain('Map a site from one of these');
+    expect(container.querySelector('.blank-title')?.tagName).toBe('H1');
+    expect(container.textContent).toContain('Scan a URL');
+    expect(container.textContent).toContain('Or choose another starting point');
+    expect(container.textContent).toContain('Start from scratch');
+    expect(container.textContent).toContain('Open saved maps and shared work');
     expect(container.textContent).toContain('Use existing sitemap files');
-    expect(container.textContent).toContain('(drag in here or click to select)');
+    expect(container.textContent).toContain('(XML, HTML, CSV, Markdown, or text)');
+    expect(container.textContent).not.toContain('start blank');
+    expect(container.textContent).not.toContain('blank structure');
     expect(getBlankCardButton('Modify')).not.toBeNull();
     expect(getBlankCardButton('Modify').disabled).toBe(false);
     expect(Array.from(container.querySelectorAll('.blank-card-title')).map((title) => title.textContent.trim()))
@@ -306,12 +315,12 @@ describe('App blank home and welcome modal', () => {
     expect(getWelcomeModal()).toBeNull();
   });
 
-  test('checking the box and clicking OK persists dismissal for logged-in users', async () => {
+  test('checking the box and clicking Start mapping persists dismissal for logged-in users', async () => {
     api.getMe.mockResolvedValue({ user: defaultUser });
     await renderApp();
 
     await click(getDontShowAgainCheckbox());
-    await click(getButton('OK'));
+    await click(getButton('Start mapping'));
 
     expect(window.localStorage.getItem(WELCOME_MODAL_STORAGE_KEY)).toBe('true');
     expect(getWelcomeModal()).toBeNull();
@@ -371,6 +380,6 @@ describe('App blank home and welcome modal', () => {
 
     expect(setItemSpy).toHaveBeenCalled();
     expect(getWelcomeModal()).toBeNull();
-    expect(container.textContent).toContain('Start with a URL');
+    expect(container.textContent).toContain('Map a site from one of these');
   });
 });

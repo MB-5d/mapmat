@@ -165,26 +165,26 @@ const elevation = {
 const typography = {
   display: {
     xl: {
-      cssSize: 'clamp(2.9rem, 5vw, 4.7rem)',
-      figmaSize: 72,
-      lineHeight: '1.02',
-      weight: 700,
-      letterSpacing: '-0.04em',
+      cssSize: 'clamp(56px, 5.15vw, 74px)',
+      figmaSize: 74,
+      lineHeight: '88px',
+      weight: 300,
+      letterSpacing: '0',
     },
   },
   heading: {
     xl: {
-      cssSize: 'clamp(2rem, 3vw, 3rem)',
+      cssSize: '48px',
       figmaSize: 48,
-      lineHeight: '1.08',
-      weight: 600,
+      lineHeight: '56px',
+      weight: 500,
       letterSpacing: '-0.03em',
     },
     lg: {
       cssSize: '32px',
       figmaSize: 32,
       lineHeight: '40px',
-      weight: 700,
+      weight: 500,
       letterSpacing: '-0.02em',
     },
   },
@@ -193,15 +193,33 @@ const typography = {
       cssSize: '20px',
       figmaSize: 20,
       lineHeight: '26px',
-      weight: 600,
+      weight: 500,
       letterSpacing: '-0.02em',
     },
     md: {
       cssSize: '18px',
       figmaSize: 18,
       lineHeight: '24px',
-      weight: 600,
+      weight: 500,
       letterSpacing: '-0.01em',
+    },
+  },
+  statement: {
+    lg: {
+      cssSize: '20px',
+      figmaSize: 20,
+      lineHeight: '30px',
+      weight: 500,
+      letterSpacing: '0',
+    },
+  },
+  price: {
+    md: {
+      cssSize: '32px',
+      figmaSize: 32,
+      lineHeight: '40px',
+      weight: 700,
+      letterSpacing: '0',
     },
   },
   subtitle: {
@@ -209,14 +227,14 @@ const typography = {
       cssSize: '16px',
       figmaSize: 16,
       lineHeight: '24px',
-      weight: 600,
+      weight: 500,
       letterSpacing: '-0.01em',
     },
     sm: {
       cssSize: '14px',
       figmaSize: 14,
       lineHeight: '20px',
-      weight: 600,
+      weight: 500,
       letterSpacing: '0',
     },
   },
@@ -234,7 +252,7 @@ const typography = {
       cssSize: '32px',
       figmaSize: 32,
       lineHeight: '40px',
-      weight: 600,
+      weight: 500,
       letterSpacing: '0',
     },
   },
@@ -287,7 +305,7 @@ const typography = {
       cssSize: '12px',
       figmaSize: 12,
       lineHeight: '16px',
-      weight: 600,
+      weight: 500,
       letterSpacing: '0',
     },
   },
@@ -707,7 +725,7 @@ function parsePixelValue(value) {
 }
 
 function collectUnitScale() {
-  const values = new Set([0, 1, 2, 3, 28]);
+  const values = new Set([0, 1, 2, 3, 28, 64]);
 
   const add = (candidate) => {
     const numeric = parsePixelValue(candidate);
@@ -774,6 +792,7 @@ const typePrimitives = {
     relaxed: '1.08',
   },
   weight: {
+    light: 300,
     regular: 400,
     medium: 500,
     semiBold: 600,

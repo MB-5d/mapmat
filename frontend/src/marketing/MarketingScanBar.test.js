@@ -36,8 +36,15 @@ describe('MarketingScanBar', () => {
     });
 
     const input = container.querySelector('input');
+    expect(container.querySelector('.scan-btn')?.disabled).toBe(true);
+
     act(() => {
       setInputValue(input, 'example.com');
+    });
+
+    expect(container.querySelector('.scan-btn')?.disabled).toBe(false);
+
+    act(() => {
       container.querySelector('.scan-btn').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
 
@@ -65,12 +72,35 @@ describe('MarketingScanBar', () => {
     expect(navigate).toHaveBeenCalledWith('/marketing-preview/start?url=https%3A%2F%2Fvellic.io%2F');
   });
 
+  test('allows a phone scan override without routing to the start handoff', () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const phoneScan = jest.fn();
+    const navigate = jest.fn();
+    act(() => {
+      root.render(<MarketingScanBar onNavigate={navigate} onPhoneScan={phoneScan} onOpenApp={jest.fn()} />);
+    });
+
+    const input = container.querySelector('input');
+    act(() => {
+      setInputValue(input, 'vellic.io');
+      container.querySelector('.scan-btn').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(navigate).not.toHaveBeenCalled();
+    expect(phoneScan).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://vellic.io/',
+      appUrl: expect.stringContaining('https%3A%2F%2Fvellic.io%2F'),
+    }));
+  });
+
   test('shows an accessible validation error for invalid URLs', () => {
     act(() => {
       root.render(<MarketingScanBar onOpenApp={jest.fn()} />);
     });
 
+    const input = container.querySelector('input');
     act(() => {
+      setInputValue(input, 'not a url');
       container.querySelector('.scan-btn').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
 

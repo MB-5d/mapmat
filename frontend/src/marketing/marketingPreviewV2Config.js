@@ -23,7 +23,7 @@ export const MARKETING_PREVIEW_V2_SECTIONS = [
     slug: '',
     navLabel: 'Home',
     metaTitle: 'Vellic Marketing Preview V2 | Vellic',
-    metaDescription: 'A light, product-led Vellic marketing preview for scanning, editing, reviewing, and sharing visual website maps.',
+    metaDescription: 'A product-led Vellic marketing preview for visual sitemap audits, screenshots, collaboration, exports, and IA planning.',
   }),
   section({
     id: 'use-cases',
@@ -37,7 +37,7 @@ export const MARKETING_PREVIEW_V2_SECTIONS = [
     slug: 'features',
     navLabel: 'Features',
     metaTitle: 'Features | Vellic Marketing Preview V2',
-    metaDescription: 'Scan, create, import, edit, review, capture screenshots, export, and share website structure in Vellic.',
+    metaDescription: 'Explore Vellic features for IA audits, editable maps, bulk screenshots, collaboration, export packages, and planning handoff.',
   }),
   section({
     id: 'examples',
@@ -51,14 +51,14 @@ export const MARKETING_PREVIEW_V2_SECTIONS = [
     slug: 'pricing',
     navLabel: 'Pricing',
     metaTitle: 'Pricing | Vellic Marketing Preview V2',
-    metaDescription: 'Preview compact Vellic plan direction for scans, saved maps, exports, screenshots, and team review.',
+    metaDescription: 'Preview Vellic Free, Pro, Studio, and Agency plans for saved maps, screenshots, exports, and team review.',
   }),
   section({
     id: 'faq',
     slug: 'faq',
     navLabel: 'FAQ',
     metaTitle: 'FAQ | Vellic Marketing Preview V2',
-    metaDescription: 'Answers about Vellic website scans, visual maps, screenshots, sharing, exports, and device support.',
+    metaDescription: 'Answers about Vellic visual sitemaps, IA audits, bulk screenshots, collaboration, exports, AI handoff, and device support.',
   }),
   section({
     id: 'mission',
@@ -73,13 +73,6 @@ export const MARKETING_PREVIEW_V2_SECTIONS = [
     navLabel: 'Contact',
     metaTitle: 'Contact | Vellic Marketing Preview V2',
     metaDescription: 'Contact Vellic for product questions, walkthroughs, agency workflows, and early feedback.',
-  }),
-  section({
-    id: 'start',
-    slug: 'start',
-    navLabel: 'Start',
-    metaTitle: 'Start | Vellic Marketing Preview V2',
-    metaDescription: 'Start a Vellic site scan from desktop or tablet, or copy the app scan link from mobile.',
   }),
 ];
 
@@ -118,5 +111,6 @@ export function getMarketingPreviewV2SectionByPathname(pathname) {
   }
   if (!normalized.startsWith(`${MARKETING_PREVIEW_V2_BASE_PATH}/`)) return null;
   const slug = normalized.slice(MARKETING_PREVIEW_V2_BASE_PATH.length + 1);
+  if (slug === 'start') return getMarketingPreviewV2SectionById('home');
   return MARKETING_PREVIEW_V2_SECTIONS.find((entry) => entry.slug === slug) || null;
 }

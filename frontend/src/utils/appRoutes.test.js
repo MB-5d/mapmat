@@ -92,10 +92,22 @@ describe('appRoutes admin surface', () => {
     expect(route.section).toBe('features');
   });
 
+  it('keeps the old marketing preview v2 start path on the v2 home route', () => {
+    const route = parseCurrentRoute({
+      pathname: '/marketing-preview-v2/start',
+      search: '?url=https%3A%2F%2Fexample.com%2F',
+    });
+
+    expect(route.surface).toBe(ROUTE_SURFACES.MARKETING);
+    expect(route.marketingPreviewVersion).toBe('v2');
+    expect(route.marketingPageId).toBe('home');
+    expect(route.search).toBe('?url=https%3A%2F%2Fexample.com%2F');
+  });
+
   it('builds marketing preview v2 route URLs with search', () => {
     expect(buildRouteUrl(createMarketingPreviewV2Route('home'))).toBe('/marketing-preview-v2');
     expect(buildRouteUrl(createMarketingPreviewV2Route('start', '?url=https%3A%2F%2Fexample.com%2F'))).toBe(
-      '/marketing-preview-v2/start?url=https%3A%2F%2Fexample.com%2F'
+      '/marketing-preview-v2?url=https%3A%2F%2Fexample.com%2F'
     );
   });
 });

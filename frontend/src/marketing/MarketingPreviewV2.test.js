@@ -61,10 +61,21 @@ describe('MarketingPreviewV2', () => {
   test('renders a direct V2 section route with route-aware metadata', () => {
     renderAt('/marketing-preview-v2/features');
 
-    expect(container.textContent).toContain('Scan, create, edit, review, capture, export.');
-    expect(container.textContent).toContain('Live site crawl from URL');
-    expect(container.textContent).toContain('Create / import');
-    expect(container.querySelector('#marketing-v2-features')?.textContent).toContain('Templates and assistant');
+    expect(container.textContent).toContain('The map is the workspace.');
+    expect(container.textContent).toContain('Bulk screenshots');
+    expect(container.textContent).toContain('Flows & crosslinks');
+    expect(container.textContent).toContain('Exports & Handoff');
+    expect(container.textContent).toContain('Sitemap tools');
+    expect(container.textContent).toContain('FlowMapp');
+    expect(container.textContent).toContain('Slickplan');
+    expect(container.textContent).toContain('Octopus.do');
+    expect(container.textContent).toContain('DYNO Mapper');
+    expect(container.textContent).toContain('mySitemapGenerator');
+    expect(container.textContent).toContain('AI-ready handoff package');
+    expect(container.querySelector('#marketing-v2-features')?.textContent).toContain('AI-ready handoff packageYes');
+    expect(container.textContent).toContain('Collaboration');
+    expect(container.querySelector('#marketing-v2-features')?.textContent).toContain('This is just the start!');
+    expect(container.querySelector('.marketing-v2-feature-upcoming')).toBeNull();
     expect(container.querySelector('.marketing-v2-header__nav a[aria-current="page"]')?.textContent).toBe('Features');
     expect(document.title).toBe('Features | Vellic Marketing Preview V2');
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://vellic.io/marketing-preview-v2/features');
@@ -109,7 +120,7 @@ describe('MarketingPreviewV2', () => {
     expect(openedUrl.searchParams.get('url')).toBe('https://example.com/');
   });
 
-  test('routes phone scan CTA to the V2 start section', () => {
+  test('shows the mobile scan modal instead of routing phones to the removed start section', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
     const navigateToRoute = jest.fn();
     renderAt('/marketing-preview-v2', navigateToRoute);
@@ -122,20 +133,144 @@ describe('MarketingPreviewV2', () => {
       );
     });
 
-    expect(navigateToRoute).toHaveBeenCalledWith(expect.objectContaining({
-      surface: ROUTE_SURFACES.MARKETING,
-      marketingPreviewVersion: 'v2',
-      marketingPageId: 'start',
-      search: '?url=https%3A%2F%2Fvellic.io%2F',
-    }));
+    expect(navigateToRoute).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Use a larger screen');
+    expect(container.textContent).toContain('Join mailing list');
+    expect(container.textContent).toContain('Spread the word');
   });
 
-  test('keeps upcoming and start handoff content on the one-page concept', () => {
-    renderAt('/marketing-preview-v2/start?url=https%3A%2F%2Fexample.com%2F');
+  test('keeps updates and mailing-list content without the removed start handoff', () => {
+    renderAt('/marketing-preview-v2/features');
 
-    expect(container.textContent).toContain('Templates and assistant');
-    expect(container.textContent).toContain('Tree testing / navigation prototyping');
-    expect(container.textContent).toContain('Copy app link');
-    expect(container.textContent).toContain('Open app anyway');
+    expect(container.textContent).toContain('Vellic is moving rapidly');
+    expect(container.textContent).toContain('Join mailing list');
+    expect(container.textContent).toContain('*Emails sent only occasionally for bigger updates and major rollouts.');
+    expect(container.textContent).not.toContain('Copy app link');
+    expect(container.textContent).not.toContain('Open app anyway');
+  });
+
+  test('keeps the hero scan CTA without the removed start-mode boxes', () => {
+    renderAt('/marketing-preview-v2');
+
+    expect(container.querySelector('#marketing-v2-home-title')?.textContent).toBe('Be the architect of your next build.');
+    expect(container.querySelector('.marketing-v2-hero .marketing-scan-bar input')?.getAttribute('placeholder')).toBe('Try it now. Enter a URL to start');
+    expect(container.querySelector('.marketing-v2-hero .marketing-scan-bar .scan-btn')?.disabled).toBe(true);
+    expect(container.querySelector('.marketing-v2-background')).not.toBeNull();
+    expect(container.querySelectorAll('.marketing-v2-bg-shape')).toHaveLength(126);
+    expect(container.querySelectorAll('.marketing-v2-bg-structure')).toHaveLength(0);
+    expect(container.querySelector('.marketing-v2-hero .marketing-scan-bar')).not.toBeNull();
+    expect(container.querySelector('.marketing-v2-hero-product img')?.getAttribute('alt')).toContain('Vellic canvas');
+    expect(container.textContent).toContain('Scan a URL, import a file, or build from scratch.');
+    expect(container.textContent).toContain('Capture screenshots, trace flows, and mark findings.');
+    expect(container.querySelector('.marketing-v2-start-modes')).toBeNull();
+  });
+
+  test('uses the updated mission and final scan CTA copy', () => {
+    renderAt('/marketing-preview-v2/mission');
+
+    expect(container.textContent).toContain('Because foundations matter');
+    expect(container.textContent).toContain('Information architecture shapes how people find, understand, and act.');
+    expect(container.textContent).toContain('Improve constantly with and for the people doing the work');
+
+    renderAt('/marketing-preview-v2');
+
+    expect(container.textContent).toContain('Start planning your next site');
+    expect(container.querySelector('.marketing-v2-final-cta .marketing-scan-bar input')?.getAttribute('placeholder')).toBe('Enter a URL to start');
+  });
+
+  test('switches competitor comparison groups', () => {
+    renderAt('/marketing-preview-v2/features');
+
+    expect(container.textContent).toContain('AI-ready handoff package');
+    expect(container.textContent).not.toContain('Organized screenshot downloads');
+
+    const screenshotTab = Array.from(container.querySelectorAll('.marketing-v2-comparison-tabs button'))
+      .find((button) => button.textContent === 'Bulk screenshot');
+
+    act(() => {
+      screenshotTab.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(screenshotTab.getAttribute('aria-selected')).toBe('true');
+    expect(container.textContent).toContain('Organized screenshot downloads');
+  });
+
+  test('renders supplied product screenshot examples', () => {
+    renderAt('/marketing-preview-v2/examples');
+
+    expect(container.textContent).toContain('Raycast main site');
+    expect(container.textContent).toContain('Anthropic full site');
+    expect(container.querySelector('.marketing-v2-example__stats')).toBeNull();
+    expect(container.querySelectorAll('.marketing-v2-example__actions .ui-btn--type-link')).toHaveLength(2);
+    expect(container.textContent).toContain('Show me');
+    expect(container.querySelectorAll('.marketing-v2-example img')).toHaveLength(2);
+  });
+
+  test('renders public pricing plans without the internal Solo plan', () => {
+    renderAt('/marketing-preview-v2/pricing');
+
+    ['Free', 'Pro', 'Studio', 'Agency'].forEach((plan) => {
+      expect(container.textContent).toContain(plan);
+    });
+    ['$0', '$8', '$15', '$25'].forEach((price) => {
+      expect(container.textContent).toContain(price);
+    });
+    expect(container.textContent).toContain('2 organized exports');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')).toHaveLength(4);
+    expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')[0].textContent).toContain('Start trial');
+    expect(container.textContent).not.toContain('Solo');
+  });
+
+  test('renders FAQ answers as closed accordions until opened', () => {
+    renderAt('/marketing-preview-v2/faq');
+
+    expect(container.textContent).toContain('What is Vellic?');
+    expect(container.textContent).not.toContain('Vellic is a visual sitemap workspace for auditing');
+
+    const firstQuestion = Array.from(container.querySelectorAll('.marketing-v2-faq-item button'))
+      .find((button) => button.textContent.includes('What is Vellic?'));
+
+    act(() => {
+      firstQuestion.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(firstQuestion.getAttribute('aria-expanded')).toBe('true');
+    expect(container.textContent).toContain('Vellic is a visual sitemap workspace for auditing');
+  });
+
+  test('opens contact forms for inquiries and support', () => {
+    renderAt('/marketing-preview-v2/contact');
+
+    expect(container.textContent).toContain('Need help? Want a demo? Have some feedback? Or just want to say Hello👋?');
+    expect(container.textContent).toContain('Send a note to the right inbox and we will follow up ASAP.');
+    expect(container.textContent).toContain('Inquiries & Feedback');
+    expect(container.textContent).toContain('Product support');
+    expect(container.textContent).not.toContain('Best fit');
+
+    const contactButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Contact us'));
+    const supportButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Get help'));
+
+    expect(contactButton.className).toContain('ui-btn');
+    expect(contactButton.className).toContain('ui-btn--type-secondary');
+    expect(contactButton.className).toContain('ui-btn--style-brand');
+    expect(contactButton.className).toContain('ui-btn--md');
+    expect(contactButton.className).toContain('marketing-v2-contact-card__button');
+    expect(supportButton.className).toContain('ui-btn');
+    expect(supportButton.className).toContain('ui-btn--type-secondary');
+    expect(supportButton.className).toContain('ui-btn--style-brand');
+    expect(supportButton.className).toContain('ui-btn--md');
+    expect(supportButton.className).toContain('marketing-v2-contact-card__button');
+
+    act(() => {
+      contactButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(container.textContent).toContain('This opens a prepared email to hello@vellic.io.');
+    expect(container.querySelector('#marketing-v2-contact-name')).not.toBeNull();
+    expect(container.querySelector('#marketing-v2-contact-email')).not.toBeNull();
+    expect(container.querySelector('#marketing-v2-contact-reason')).not.toBeNull();
+    expect(container.querySelector('#marketing-v2-contact-message')).not.toBeNull();
   });
 });

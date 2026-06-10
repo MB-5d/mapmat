@@ -357,6 +357,7 @@ const ImageReportDrawer = ({
                 type="text"
                 className="report-search-input"
                 framed={false}
+                aria-label="Search image report issues"
                 placeholder="Search image issues"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}

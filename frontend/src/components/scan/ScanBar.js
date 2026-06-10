@@ -26,11 +26,14 @@ const ScanBar = ({
   scanLabel = 'Scan',
   scanDisabled,
   scanTitle,
+  placeholder = 'https://example.com',
   sharedTitle,
   optionsDisabled,
   onClearUrl,
   showClearUrl,
 }) => {
+  const inputPlaceholder = placeholder || 'https://example.com';
+
   if (!canEdit) {
     return (
       <div className="shared-map-title">
@@ -49,8 +52,8 @@ const ScanBar = ({
         onChange={onUrlInputChange}
         onKeyDown={onUrlKeyDown}
         onFocus={(e) => { if (!urlInput) e.target.placeholder = ''; }}
-        onBlur={(e) => { if (!urlInput) e.target.placeholder = 'https://example.com'; }}
-        placeholder="https://example.com"
+        onBlur={(e) => { if (!urlInput) e.target.placeholder = inputPlaceholder; }}
+        placeholder={inputPlaceholder}
         spellCheck={false}
       />
       {showClearUrl && (

@@ -1,10 +1,29 @@
 import React, { useEffect } from 'react';
+import { FileUp, Search, Share2 } from 'lucide-react';
 
 import Button from '../ui/Button';
 import VellicLogo from '../brand/VellicLogo';
 import CheckboxField from '../ui/CheckboxField';
 import Modal from '../ui/Modal';
 import { APP_BRAND_NAME } from '../../utils/constants';
+
+const WELCOME_STEPS = [
+  {
+    icon: Search,
+    title: 'Scan a URL',
+    copy: 'Turn a live site into a map you can review.',
+  },
+  {
+    icon: FileUp,
+    title: 'Import or create',
+    copy: 'Bring in sitemap files or build a map from scratch.',
+  },
+  {
+    icon: Share2,
+    title: 'Review and share',
+    copy: 'Use screenshots, notes, and saved maps to align the team.',
+  },
+];
 
 const WelcomeModal = ({
   show,
@@ -34,6 +53,7 @@ const WelcomeModal = ({
       show={show}
       onClose={onClose}
       title={`Welcome to ${APP_BRAND_NAME}`}
+      subtitle="Start with a URL, import a sitemap, or build a map from scratch."
       size="md"
       scrollable
       className="welcome-modal"
@@ -51,7 +71,7 @@ const WelcomeModal = ({
               Close
             </Button>
             <Button variant="primary" onClick={onConfirm}>
-              OK
+              Start mapping
             </Button>
           </div>
         </div>
@@ -63,14 +83,22 @@ const WelcomeModal = ({
 
       <div className="welcome-modal-copy">
         <p className="welcome-modal-lead">
-          Make site or software structure visual, actionable, and easy to review
-          without the mess of flat crawl data or spreadsheets.
+          Vellic turns site structure into a shared map for planning and auditing
+          IA, content, UX, product, and development.
         </p>
-        <p className="welcome-modal-lead">
-          Scan a site, import a sitemap, or start from scratch to spot issues,
-          organize pages, make connections, and gather screenshots to get content,
-          UX, product, and dev aligned faster together.
-        </p>
+        <ul className="welcome-modal-steps" aria-label="Ways to start">
+          {WELCOME_STEPS.map(({ icon: StepIcon, title, copy }) => (
+            <li className="welcome-modal-step" key={title}>
+              <span className="welcome-modal-step-icon" aria-hidden="true">
+                <StepIcon size={24} strokeWidth={2} />
+              </span>
+              <span className="welcome-modal-step-copy">
+                <strong>{title}</strong>
+                <span>{copy}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
     </Modal>
   );

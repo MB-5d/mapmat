@@ -23,9 +23,11 @@ function MarketingScanBar({
   initialValue = '',
   onNavigate,
   onOpenApp = defaultOpenApp,
+  onPhoneScan,
   buildStartPath,
   buildScanUrl = buildAppScanUrl,
   compact = false,
+  placeholder = 'https://example.com',
 }) {
   const [urlValue, setUrlValue] = useState(initialValue);
   const [scanOptions, setScanOptions] = useState({ ...DEFAULT_MARKETING_SCAN_OPTIONS });
@@ -56,6 +58,11 @@ function MarketingScanBar({
     const appUrl = buildScanUrl(sanitizedUrl, scanOptions);
 
     if (isMarketingPhoneViewport()) {
+      if (onPhoneScan) {
+        onPhoneScan({ url: sanitizedUrl, appUrl, options: scanOptions });
+        return;
+      }
+
       const startUrl = buildStartPath
         ? buildStartPath(sanitizedUrl)
         : buildMarketingPath('start', `url=${encodeURIComponent(sanitizedUrl)}`);
@@ -90,8 +97,9 @@ function MarketingScanBar({
           onToggleOptions={() => setShowOptions((open) => !open)}
           onOptionChange={(key) => setScanOptions((prev) => ({ ...prev, [key]: !prev[key] }))}
           onScan={handleScan}
-          scanDisabled={false}
+          scanDisabled={!urlValue.trim()}
           scanTitle="Scan"
+          placeholder={placeholder}
           optionsDisabled={false}
           showClearUrl={false}
         />

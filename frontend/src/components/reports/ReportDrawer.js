@@ -18,6 +18,7 @@ import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import SegmentedControl from '../ui/SegmentedControl';
+import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
@@ -395,6 +396,7 @@ const ReportDrawer = ({
                 type="text"
                 className="report-search-input"
                 framed={false}
+                aria-label="Search report pages"
                 placeholder="Search by page name, number, or URL"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -656,24 +658,30 @@ const ReportDrawer = ({
                   <Button type="button" variant="secondary" size="sm" onClick={onRunInsights}>
                     Rerun Insights
                   </Button>
-                  <label className="insights-filter">
-                    Category
-                    <select value={insightCategory} onChange={(event) => setInsightCategory(event.target.value)}>
-                      <option value="all">All</option>
-                      {Object.entries(INSIGHT_CATEGORY_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="insights-filter">
-                    Severity
-                    <select value={insightSeverity} onChange={(event) => setInsightSeverity(event.target.value)}>
-                      <option value="all">All</option>
-                      {Object.entries(INSIGHT_SEVERITY_LABELS).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
-                  </label>
+                  <SelectInput
+                    size="sm"
+                    label="Category"
+                    fieldClassName="insights-filter"
+                    value={insightCategory}
+                    onChange={(event) => setInsightCategory(event.target.value)}
+                  >
+                    <option value="all">All</option>
+                    {Object.entries(INSIGHT_CATEGORY_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </SelectInput>
+                  <SelectInput
+                    size="sm"
+                    label="Severity"
+                    fieldClassName="insights-filter"
+                    value={insightSeverity}
+                    onChange={(event) => setInsightSeverity(event.target.value)}
+                  >
+                    <option value="all">All</option>
+                    {Object.entries(INSIGHT_SEVERITY_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </SelectInput>
                 </section>
 
                 <section className="insights-findings">

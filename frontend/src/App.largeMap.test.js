@@ -114,6 +114,45 @@ describe('large map viewport behavior', () => {
     expect(__testing.getLargeMapStackSelectionIdsFromNode({ id: 'solo' })).toEqual(['solo']);
   });
 
+  test('saved-map layout refresh preserves the current viewport', () => {
+    expect(__testing.getMapLayoutRefreshTransformOptions()).toEqual({ skipPanClamp: true });
+  });
+
+  test('saved-map stack toggles only update expanded stack state', () => {
+    expect(__testing.getNextExpandedStackState({ stackA: true }, 'stackB')).toEqual({
+      stackA: true,
+      stackB: true,
+    });
+    expect(__testing.getNextExpandedStackState({ stackA: true }, 'stackA')).toEqual({
+      stackA: false,
+    });
+  });
+
+  test('initial large-map Home transform only runs while pending with a real canvas', () => {
+    const homeNode = { x: 0, y: 0, w: 288, h: 200 };
+    expect(__testing.getInitialLargeMapHomeTransform({
+      pending: false,
+      homeNode,
+      canvasWidth: 1200,
+      canvasHeight: 800,
+      scale: 1,
+    })).toBeNull();
+    expect(__testing.getInitialLargeMapHomeTransform({
+      pending: true,
+      homeNode,
+      canvasWidth: 0,
+      canvasHeight: 800,
+      scale: 1,
+    })).toBeNull();
+    expect(__testing.getInitialLargeMapHomeTransform({
+      pending: true,
+      homeNode,
+      canvasWidth: 1200,
+      canvasHeight: 800,
+      scale: 1,
+    })).toEqual({ scale: 1, x: 456, y: 300 });
+  });
+
   test('capped scans add locked root and subdomain preview nodes', () => {
     const root = {
       id: 'root',

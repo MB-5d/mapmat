@@ -69,5 +69,7 @@ export const resolveButtonModel = ({
     defaultVariant,
   }),
   size: new Set(validSizes).has(size) ? size : fallbackSize,
-  legacyVariantClass: Object.prototype.hasOwnProperty.call(variantMap, variant) ? variant : null,
+  legacyVariantClass: VISUAL_BUTTON_TYPES.has(type)
+    ? null
+    : (Object.prototype.hasOwnProperty.call(variantMap, variant) ? variant : null),
 });

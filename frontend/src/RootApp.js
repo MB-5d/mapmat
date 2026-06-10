@@ -4,7 +4,6 @@ import App from './App';
 import AdminConsole from './components/admin/AdminConsole';
 import ConsentDrawer from './components/consent/ConsentDrawer';
 import ConsentSettingsModal from './components/consent/ConsentSettingsModal';
-import LandingPage from './LandingPage';
 import MarketingPreviewV2 from './marketing/MarketingPreviewV2';
 import MarketingSite from './marketing/MarketingSite';
 import { initAnalytics, trackPageView } from './utils/analytics';
@@ -13,6 +12,7 @@ import {
   ROUTE_SURFACES,
   buildRouteUrl,
   createAppHomeRoute,
+  createMarketingPreviewV2Route,
   parseCurrentRoute,
 } from './utils/appRoutes';
 import { APP_ONLY_MODE } from './utils/constants';
@@ -30,8 +30,22 @@ function DeviceSupportBlocker({ message }) {
   );
 }
 
+function isBrowserReload() {
+  const navigationEntry = window.performance?.getEntriesByType?.('navigation')?.[0];
+  return navigationEntry?.type === 'reload' || window.performance?.navigation?.type === 1;
+}
+
+function getInitialRoute() {
+  const route = parseCurrentRoute(window.location);
+  if (route.marketingPreviewVersion !== 'v2' || !isBrowserReload()) return route;
+  const homeRoute = createMarketingPreviewV2Route('home');
+  window.history.replaceState({}, '', buildRouteUrl(homeRoute));
+  window.scrollTo?.(0, 0);
+  return homeRoute;
+}
+
 function RootApp() {
-  const [route, setRoute] = useState(() => parseCurrentRoute(window.location));
+  const [route, setRoute] = useState(getInitialRoute);
   const [deviceSupport, setDeviceSupport] = useState(() => getAppDeviceSupport());
   const { consent, hasStoredConsent } = useConsent();
 
@@ -102,9 +116,10 @@ function RootApp() {
 
   if (route.surface === ROUTE_SURFACES.WEBSITE) {
     if (APP_ONLY_MODE) return null;
+    const marketingHomeRoute = createMarketingPreviewV2Route('home');
     return (
       <>
-        <LandingPage onLaunchApp={() => navigateToRoute(createAppHomeRoute())} />
+        <MarketingPreviewV2 route={marketingHomeRoute} navigateToRoute={navigateToRoute} />
         {consentUi}
       </>
     );
