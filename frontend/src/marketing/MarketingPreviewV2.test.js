@@ -1,12 +1,13 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { submitMarketingContact } from '../api';
+import { submitMarketingContact, submitMarketingMailingListSignup } from '../api';
 import MarketingPreviewV2 from './MarketingPreviewV2';
 import { parseCurrentRoute, ROUTE_SURFACES } from '../utils/appRoutes';
 
 jest.mock('../api', () => ({
   submitMarketingContact: jest.fn(),
+  submitMarketingMailingListSignup: jest.fn(),
 }));
 
 function setInputValue(input, value) {
@@ -59,6 +60,15 @@ describe('MarketingPreviewV2', () => {
     return button;
   };
 
+  const openMailingListModal = () => {
+    const button = Array.from(container.querySelectorAll('button'))
+      .find((candidate) => candidate.textContent.trim() === 'Join mailing list');
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    return button;
+  };
+
   const fillContactForm = ({
     name = 'Avery Test',
     email = 'avery@example.com',
@@ -75,6 +85,14 @@ describe('MarketingPreviewV2', () => {
     });
   };
 
+  const submitMailingListForm = async () => {
+    await act(async () => {
+      container.querySelector('#marketing-v2-mailing-form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      );
+    });
+  };
+
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -86,6 +104,7 @@ describe('MarketingPreviewV2', () => {
     window.scrollTo = scrollTo;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
     submitMarketingContact.mockResolvedValue({ ok: true });
+    submitMarketingMailingListSignup.mockResolvedValue({ alreadySubscribed: false });
   });
 
   afterEach(() => {
@@ -190,6 +209,68 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('*Emails sent only occasionally for bigger updates and major rollouts.');
     expect(container.textContent).not.toContain('Copy app link');
     expect(container.textContent).not.toContain('Open app anyway');
+  });
+
+  test('blocks invalid mailing-list emails without submitting', async () => {
+    renderAt('/features');
+    openMailingListModal();
+
+    act(() => {
+      setInputValue(container.querySelector('#marketing-v2-mailing-email'), 'example.com');
+    });
+    await submitMailingListForm();
+
+    expect(submitMarketingMailingListSignup).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Enter a valid email address.');
+  });
+
+  test('submits valid mailing-list emails and shows success', async () => {
+    submitMarketingMailingListSignup.mockResolvedValueOnce({
+      alreadySubscribed: false,
+      signup: { email: 'person@example.com' },
+    });
+    renderAt('/features');
+    openMailingListModal();
+
+    act(() => {
+      setInputValue(container.querySelector('#marketing-v2-mailing-email'), 'person@example.com');
+    });
+    await submitMailingListForm();
+
+    expect(submitMarketingMailingListSignup).toHaveBeenCalledWith('person@example.com', expect.objectContaining({
+      source: 'marketing-preview-v2',
+      routePath: '/features',
+    }));
+    expect(container.textContent).toContain('You are on the mailing list.');
+  });
+
+  test('handles duplicate mailing-list signups as already subscribed', async () => {
+    submitMarketingMailingListSignup.mockResolvedValueOnce({
+      alreadySubscribed: true,
+      signup: { email: 'person@example.com' },
+    });
+    renderAt('/features');
+    openMailingListModal();
+
+    act(() => {
+      setInputValue(container.querySelector('#marketing-v2-mailing-email'), 'person@example.com');
+    });
+    await submitMailingListForm();
+
+    expect(container.textContent).toContain('You are already on the mailing list.');
+  });
+
+  test('shows mailing-list submit failures', async () => {
+    submitMarketingMailingListSignup.mockRejectedValueOnce(new Error('Storage unavailable.'));
+    renderAt('/features');
+    openMailingListModal();
+
+    act(() => {
+      setInputValue(container.querySelector('#marketing-v2-mailing-email'), 'person@example.com');
+    });
+    await submitMailingListForm();
+
+    expect(container.textContent).toContain('Storage unavailable.');
   });
 
   test('keeps the hero scan CTA without the removed start-mode boxes', () => {

@@ -10,6 +10,7 @@ const imageAssetStore = require('../stores/imageAssetStore');
 const collaborationStore = require('../stores/collaborationStore');
 const mapCommentStore = require('../stores/mapCommentStore');
 const feedbackStore = require('../stores/feedbackStore');
+const marketingMailingListStore = require('../stores/marketingMailingListStore');
 const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
@@ -1712,6 +1713,34 @@ router.post('/contact', async (req, res) => {
   } catch (error) {
     console.error('Marketing contact email error:', error);
     return res.status(502).json({ error: 'Failed to send contact message.' });
+  }
+});
+
+// POST /api/marketing/mailing-list-signups - capture public marketing mailing-list signups
+router.post('/marketing/mailing-list-signups', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const email = marketingMailingListStore.normalizeEmail(body.email);
+
+    if (!marketingMailingListStore.isValidEmail(email)) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
+    }
+
+    const result = await marketingMailingListStore.createOrGetSignupAsync({
+      email,
+      source: body.source || 'marketing-preview-v2',
+      routePath: body.route_path || body.routePath || null,
+    });
+
+    return res.status(result.alreadySubscribed ? 200 : 201).json({
+      signup: marketingMailingListStore.serializeSignup(result.signup),
+      alreadySubscribed: result.alreadySubscribed,
+    });
+  } catch (error) {
+    console.error('Create marketing mailing-list signup error:', error);
+    return res.status(error?.status || 500).json({
+      error: error?.status ? error.message : 'Failed to join the mailing list.',
+    });
   }
 });
 

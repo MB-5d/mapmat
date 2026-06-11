@@ -491,6 +491,16 @@ export async function submitFeedback(payload = {}) {
   });
 }
 
+export async function submitMarketingMailingListSignup(email, payload = {}) {
+  return fetchJson('/api/marketing/mailing-list-signups', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
+      email,
+    }),
+  }, { includeUserToken: false });
+}
+
 export async function recordClientUsage(eventType, meta = {}, quantity = 1) {
   return fetchApi('/api/usage-events', {
     method: 'POST',
