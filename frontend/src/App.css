@@ -1430,6 +1430,7 @@ body {
   --ui-badge-bg-current: var(--ui-color-accent-soft);
   --ui-badge-border-current: transparent;
   --ui-badge-text-current: var(--ui-color-primary);
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1440,11 +1441,13 @@ body {
   border: var(--border-width-subtle) solid var(--ui-badge-border-current);
   background: var(--ui-badge-bg-current);
   color: var(--ui-badge-text-current);
+  font-family: var(--font-sans);
   font-size: var(--type-badge-md-size);
   line-height: var(--type-badge-md-line-height);
   font-weight: var(--type-badge-md-weight);
   letter-spacing: var(--type-badge-md-letter-spacing);
   text-transform: uppercase;
+  text-align: center;
   white-space: nowrap;
   max-width: 100%;
 }
@@ -1475,6 +1478,8 @@ body {
   text-overflow: ellipsis;
   line-height: inherit;
   text-align: center;
+  text-box-edge: cap alphabetic;
+  text-box-trim: trim-both;
 }
 
 .ui-badge--type-fill.ui-badge--style-brand {
