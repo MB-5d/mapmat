@@ -2529,21 +2529,12 @@ export default function App({ currentRoute, navigateToRoute }) {
     const prefillUrl = getValidScanPrefillUrl(currentRoute);
     if (!prefillUrl) return;
     const prefillOptions = getValidScanPrefillOptions(currentRoute);
-    const shouldStartScan = shouldStartScanFromPrefill(currentRoute);
-    const prefillKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}|${prefillUrl}|${JSON.stringify(prefillOptions)}`;
+    const prefillKey = `${currentRoute?.pathname || ''}|${prefillUrl}|${JSON.stringify(prefillOptions)}`;
     if (scanPrefillAppliedRef.current === prefillKey) return;
     scanPrefillAppliedRef.current = prefillKey;
-    setUrlInput((current) => shouldStartScan ? prefillUrl : (current.trim() ? current : prefillUrl));
+    setUrlInput((current) => current.trim() ? current : prefillUrl);
     if (Object.keys(prefillOptions).length) {
       setScanOptions((current) => ({ ...current, ...prefillOptions }));
-    }
-    if (shouldStartScan) {
-      window.setTimeout(() => {
-        scanRef.current?.(prefillUrl, false, {
-          fromMarketingScan: true,
-          scanOptionsOverride: prefillOptions,
-        });
-      }, 0);
     }
   }, [currentRoute]);
   const [scanMessage, setScanMessage] = useState('');
@@ -2805,6 +2796,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanJobAccessTokenRef = useRef(null);
   const eventSourceRef = useRef(null);
   const pendingAuthScanRef = useRef(null);
+  const handledScanIntentKeyRef = useRef('');
   const scanRef = useRef(null);
   const scanLimitPromptResolveRef = useRef(null);
   const scanTimerRef = useRef(null);
@@ -11313,6 +11305,40 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   };
   scanRef.current = scan;
+
+  useEffect(() => {
+    if (authLoading || loading) return;
+    if (!shouldStartScanFromPrefill(currentRoute)) {
+      handledScanIntentKeyRef.current = '';
+      return;
+    }
+    if (currentRoute?.searchParams?.get('billing')) return;
+    const prefillUrl = getValidScanPrefillUrl(currentRoute);
+    if (!prefillUrl) return;
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    if (handledScanIntentKeyRef.current === intentKey) return;
+    handledScanIntentKeyRef.current = intentKey;
+
+    const prefillOptions = getValidScanPrefillOptions(currentRoute);
+    const nextScanOptions = { ...scanOptions, ...prefillOptions };
+    setUrlInput(prefillUrl);
+    if (Object.keys(prefillOptions).length) {
+      setScanOptions((current) => ({ ...current, ...prefillOptions }));
+    }
+    window.setTimeout(() => {
+      scanRef.current?.(prefillUrl, false, {
+        scanOptionsOverride: nextScanOptions,
+      });
+    }, 0);
+  }, [
+    authLoading,
+    currentRoute,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    loading,
+    scanOptions,
+  ]);
 
   const continueScanWithoutTargetAuth = () => {
     const prompt = scanAuthPrompt;
