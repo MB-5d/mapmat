@@ -2297,25 +2297,49 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     width: 100px;
   }
 
-  .marketing-v2-comparison__panel,
+  .marketing-v2-comparison {
+    --marketing-v2-comparison-feature-width: 148px;
+    --marketing-v2-comparison-vellic-width: 80px;
+    --marketing-v2-comparison-competitor-width: 132px;
+    --marketing-v2-comparison-table-width: 888px;
+    overflow: hidden;
+  }
+
+  .marketing-v2-comparison__header {
+    min-width: 0;
+  }
+
+  .marketing-v2-comparison__panel {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .marketing-v2-comparison table {
-    min-width: 1080px;
+    width: var(--marketing-v2-comparison-table-width);
+    min-width: var(--marketing-v2-comparison-table-width);
+    border-collapse: separate;
+    border-spacing: 0;
   }
 
   .marketing-v2-comparison__feature-col {
-    width: 164px;
+    width: var(--marketing-v2-comparison-feature-width);
   }
 
   .marketing-v2-comparison__data-col {
-    width: 140px;
+    width: var(--marketing-v2-comparison-competitor-width);
   }
 
   .marketing-v2-comparison__panel col:nth-child(2) {
-    width: 80px;
+    width: var(--marketing-v2-comparison-vellic-width);
   }
 
   .marketing-v2-comparison th,
   .marketing-v2-comparison td {
+    box-sizing: border-box;
     height: var(--unit-56);
     padding: var(--unit-12) var(--unit-16);
   }
@@ -2331,8 +2355,25 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   .marketing-v2-comparison thead th.is-highlighted,
   .marketing-v2-comparison td.is-highlighted {
     position: sticky;
-    left: 164px;
+    left: var(--marketing-v2-comparison-feature-width);
     z-index: 3;
+    width: var(--marketing-v2-comparison-vellic-width);
+    min-width: var(--marketing-v2-comparison-vellic-width);
+    max-width: var(--marketing-v2-comparison-vellic-width);
+  }
+
+  .marketing-v2-comparison thead th:first-child,
+  .marketing-v2-comparison tbody th {
+    width: var(--marketing-v2-comparison-feature-width);
+    min-width: var(--marketing-v2-comparison-feature-width);
+    max-width: var(--marketing-v2-comparison-feature-width);
+  }
+
+  .marketing-v2-comparison thead th:nth-child(n + 3),
+  .marketing-v2-comparison tbody td:nth-child(n + 3) {
+    width: var(--marketing-v2-comparison-competitor-width);
+    min-width: var(--marketing-v2-comparison-competitor-width);
+    max-width: var(--marketing-v2-comparison-competitor-width);
   }
 
   .marketing-v2-update-cta {
