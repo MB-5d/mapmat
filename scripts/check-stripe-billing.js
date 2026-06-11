@@ -5,6 +5,8 @@ const path = require('path');
 process.env.DB_PATH = path.join(os.tmpdir(), `vellic-stripe-billing-${process.pid}-${Date.now()}.db`);
 process.env.TEST_AUTH_ENABLED = 'false';
 process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_pro_test';
+process.env.STRIPE_PRICE_PRO_YEARLY = 'price_pro_yearly_test';
+process.env.STRIPE_PRICE_STUDIO_ANNUAL = 'price_studio_annual_test';
 process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_100 = 'price_screenshot_100_test';
 
 const authStore = require('../stores/authStore');
@@ -17,9 +19,11 @@ const {
   recordMeterDebitAsync,
 } = require('../utils/entitlements');
 const {
+  getBillingCatalogForClient,
   getPlanPriceConfigByStripePrice,
   getAddOnPriceConfigByStripePrice,
   applyStripeSubscriptionToAccountAsync,
+  refreshBillingAccountFromStripeAsync,
 } = require('../utils/stripeBilling');
 
 async function createTestUser(label) {
@@ -62,6 +66,18 @@ function buildSubscription({ accountId, status = 'active' }) {
 async function main() {
   const planPrice = getPlanPriceConfigByStripePrice('price_pro_test');
   assert.equal(planPrice.key, 'pro');
+  assert.equal(planPrice.billingCycle, 'monthly');
+  const yearlyPlanPrice = getPlanPriceConfigByStripePrice('price_pro_yearly_test');
+  assert.equal(yearlyPlanPrice.key, 'pro');
+  assert.equal(yearlyPlanPrice.billingCycle, 'yearly');
+  assert.equal(yearlyPlanPrice.interval, 'year');
+  const annualFallbackPrice = getPlanPriceConfigByStripePrice('price_studio_annual_test');
+  assert.equal(annualFallbackPrice.key, 'studio');
+  assert.equal(annualFallbackPrice.billingCycle, 'yearly');
+  const billingCatalog = getBillingCatalogForClient();
+  const proCatalog = billingCatalog.plans.find((entry) => entry.key === 'pro');
+  assert.equal(proCatalog.prices.monthly.configured, true);
+  assert.equal(proCatalog.prices.yearly.configured, true);
   const addOnPrice = getAddOnPriceConfigByStripePrice('price_screenshot_100_test');
   assert.equal(addOnPrice.key, 'screenshot_credits_100');
   assert.equal(addOnPrice.meter, METERS.screenshotCredits);
@@ -80,6 +96,8 @@ async function main() {
   const proSummary = await resolveAccountEntitlementsAsync(subscriber);
   assert.equal(proSummary.plan.key, 'pro');
   assert.equal(proSummary.trial.active, false);
+  assert.equal(proSummary.meters.crawlPages.included, 1000);
+  assert.equal(proSummary.meters.screenshotCredits.included, 100);
   assert.equal(proSummary.account.stripeCustomerId, 'cus_test_pro');
   assert.equal(proSummary.account.stripeSubscriptionId, 'sub_test_pro');
   assert.equal(proSummary.account.stripeSubscriptionStatus, 'active');
@@ -174,6 +192,69 @@ async function main() {
     objectId: 'cs_test',
   });
   assert.equal(webhookDuplicate.duplicate, true);
+
+  const refreshUser = await createTestUser('refresh');
+  const refreshAccount = (await resolveAccountEntitlementsAsync(refreshUser)).account;
+  const fakeStripe = {
+    checkout: {
+      sessions: {
+        retrieve: async () => ({
+          id: 'cs_refresh_screenshot',
+          mode: 'payment',
+          payment_status: 'paid',
+          status: 'complete',
+          customer: 'cus_refresh',
+          payment_intent: 'pi_refresh',
+          metadata: {
+            vellicAccountId: refreshAccount.id,
+            checkoutType: 'addon',
+            addonKey: 'screenshot_credits_100',
+          },
+        }),
+        listLineItems: async () => ({
+          data: [
+            {
+              quantity: 1,
+              price: {
+                id: 'price_screenshot_100_test',
+              },
+            },
+          ],
+        }),
+      },
+    },
+    subscriptions: {
+      retrieve: async () => buildSubscription({ accountId: refreshAccount.id }),
+    },
+  };
+  const refreshResult = await refreshBillingAccountFromStripeAsync({
+    account: refreshAccount,
+    checkoutSessionId: 'cs_refresh_screenshot',
+    stripeClient: fakeStripe,
+  });
+  assert.equal(refreshResult.refreshed, true);
+  const refreshedCredits = await resolveAccountEntitlementsAsync(refreshUser);
+  assert.equal(refreshedCredits.meters.screenshotCredits.grantRemaining, 100);
+  await assert.rejects(
+    refreshBillingAccountFromStripeAsync({
+      account: refreshAccount,
+      checkoutSessionId: 'cs_refresh_unowned',
+      stripeClient: {
+        checkout: {
+          sessions: {
+            retrieve: async () => ({
+              id: 'cs_refresh_unowned',
+              mode: 'payment',
+              payment_status: 'paid',
+              customer: 'cus_other',
+              metadata: {},
+            }),
+          },
+        },
+      },
+    }),
+    (error) => error?.code === 'BILLING_ACCOUNT_MISMATCH'
+  );
 
   console.log('Stripe billing checks passed');
 }

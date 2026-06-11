@@ -50,6 +50,66 @@ async function main() {
   assert.equal(freeScreenshotCheck.allowed, false);
   assert.equal(freeScreenshotCheck.code, 'ENTITLEMENT_REQUIRED');
 
+  const tierUser = await authStore.createUserAsync({
+    email: `entitlements-tier-${Date.now()}@example.test`,
+    passwordHash: 'test',
+    name: 'Entitlements Tier Fixture Test',
+    emailVerifiedAt: new Date().toISOString(),
+  });
+  const tierAccount = (await resolveAccountEntitlementsAsync(tierUser)).account;
+  for (const [planKey, expectedAllowedQuantity, expectedResolvedPlanKey = planKey] of [
+    ['free', 25],
+    ['pro', 1050],
+    ['studio', 52500],
+    ['agency', 210000],
+    ['solo', 1050, 'pro'],
+  ]) {
+    await billingStore.updateBillingAccountForAdminAsync({
+      accountId: tierAccount.id,
+      planKey,
+      accountState: 'active',
+      trialState: 'none',
+      trialKind: null,
+      trialStartedAt: null,
+      trialEndsAt: null,
+    });
+    const tierSummary = await resolveAccountEntitlementsAsync(tierUser);
+    assert.equal(tierSummary.plan.key, expectedResolvedPlanKey);
+    const tierScanCheck = await checkAccountActionAsync(tierUser, ACTIONS.scanStart, { requestedPages: 300000 });
+    assert.equal(tierScanCheck.allowed, true);
+    assert.equal(tierScanCheck.allowedQuantity, expectedAllowedQuantity);
+    assert.equal(tierScanCheck.capped, true);
+  }
+
+  await billingStore.updateBillingAccountForAdminAsync({
+    accountId: tierAccount.id,
+    planKey: 'test_unlimited',
+    accountState: 'active',
+    trialState: 'none',
+    trialKind: null,
+    trialStartedAt: null,
+    trialEndsAt: null,
+  });
+  const testUnlimited = await resolveAccountEntitlementsAsync(tierUser);
+  assert.equal(testUnlimited.plan.key, 'test_unlimited');
+  assert.equal(testUnlimited.plan.name, 'Test Unlimited');
+  assert.equal(testUnlimited.meters.crawlPages.unlimited, true);
+  assert.equal(testUnlimited.meters.screenshotCredits.unlimited, true);
+  assert.equal(testUnlimited.meters.organizedExports.unlimited, true);
+  assert.equal(testUnlimited.limits.activeProjects.unlimited, true);
+  assert.equal(testUnlimited.limits.seats.unlimited, true);
+  assert.equal(testUnlimited.limits.scanPagesPerRun.unlimited, true);
+  assert.equal(testUnlimited.features.clientShareLinks, true);
+  assert.equal(testUnlimited.features.scheduledRescans, true);
+
+  const testUnlimitedScanCheck = await checkAccountActionAsync(tierUser, ACTIONS.scanStart, { requestedPages: 300000 });
+  assert.equal(testUnlimitedScanCheck.allowed, true);
+  assert.equal(testUnlimitedScanCheck.allowedQuantity, 300000);
+  assert.equal(testUnlimitedScanCheck.capped, false);
+  const testUnlimitedScreenshotCheck = await checkAccountActionAsync(tierUser, ACTIONS.screenshotCapture, { credits: 99999 });
+  assert.equal(testUnlimitedScreenshotCheck.allowed, true);
+  assert.equal(testUnlimitedScreenshotCheck.allowedQuantity, 99999);
+
   await recordMeterDebitAsync({
     user,
     accountSummary: summary,
@@ -89,7 +149,7 @@ async function main() {
   const personalTrial = await resolveAccountEntitlementsAsync(user);
   assert.equal(personalTrial.trial.active, true);
   assert.equal(personalTrial.trial.kind, 'personal');
-  assert.equal(personalTrial.trial.effectivePlanKey, 'solo');
+  assert.equal(personalTrial.trial.effectivePlanKey, 'pro');
   assert.equal(personalTrial.meters.crawlPages.included, 1000);
   assert.equal(personalTrial.meters.crawlPages.graceLimit, 0);
   assert.equal(personalTrial.meters.screenshotCredits.included, 15);

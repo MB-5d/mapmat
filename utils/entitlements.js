@@ -34,7 +34,7 @@ function loadPlanConfig() {
       fallbackPlan: 'free',
       trialDefaults: {
         fallbackPlan: 'free',
-        basePlan: 'solo',
+        basePlan: 'pro',
         personalDays: 7,
         teamDays: 7,
         teamSeatCap: 4,
@@ -65,9 +65,17 @@ function getBillingPlanConfig() {
   return loadPlanConfig();
 }
 
+function getCanonicalBillingPlanKey(config, planKey) {
+  const rawKey = String(planKey || '').trim().toLowerCase();
+  if (!rawKey) return config.fallbackPlan || 'free';
+  const aliasKey = config.planAliases?.[rawKey];
+  return aliasKey || rawKey;
+}
+
 function getPlan(config, planKey) {
   const fallback = config.fallbackPlan || 'free';
-  return config.plans?.[planKey] || config.plans?.[fallback] || config.plans?.free;
+  const canonicalPlanKey = getCanonicalBillingPlanKey(config, planKey);
+  return config.plans?.[canonicalPlanKey] || config.plans?.[fallback] || config.plans?.free;
 }
 
 function normalizeLimit(value) {
@@ -598,6 +606,7 @@ module.exports = {
   ACTIONS,
   METERS,
   getBillingPlanConfig,
+  getCanonicalBillingPlanKey,
   resolveAccountEntitlementsAsync,
   checkAccountActionAsync,
   requireAccountActionAsync,

@@ -36,7 +36,7 @@ import TextInput from '../components/ui/TextInput';
 import { ROUTE_SURFACES } from '../utils/appRoutes';
 import classNames from '../utils/classNames';
 import MarketingScanBar, { isMarketingPhoneViewport } from './MarketingScanBar';
-import { buildAppScanUrl } from './marketingConfig';
+import { buildAppBillingUrl, buildAppScanUrl, buildAppSignupUrl, buildAppTrialUrl } from './marketingConfig';
 import {
   MARKETING_PREVIEW_V2_BASE_PATH,
   MARKETING_PREVIEW_V2_NAV_SECTION_IDS,
@@ -620,36 +620,44 @@ const exampleCards = [
 
 const pricingCards = [
   {
+    key: 'free',
     title: 'Free',
     price: '$0',
     accent: 'green',
     description: 'For trying Vellic on a small site or one-off audit.',
     details: ['1 active project', '100 crawl pages', '25 pages per run', 'No screenshot credits', '1 editor'],
-    cta: 'Start trial',
+    cta: 'Get started',
+    action: 'signup',
   },
   {
+    key: 'pro',
     title: 'Pro',
     price: '$8',
     accent: 'blue',
     description: 'For solo audits with screenshots and saved work.',
     details: ['5 active projects', '1,000 crawl pages', '100 screenshot credits', '2 organized exports', '1 editor'],
     cta: 'Start trial',
+    action: 'trial',
   },
   {
+    key: 'studio',
     title: 'Studio',
     price: '$15',
     accent: 'purple',
     description: 'For small teams handling recurring site work.',
     details: ['50 active projects', '50,000 crawl pages', '3,000 screenshot credits', 'Unlimited organized exports', '5 seats'],
-    cta: 'Start trial',
+    cta: 'Subscribe',
+    action: 'checkout',
   },
   {
+    key: 'agency',
     title: 'Agency',
     price: '$25',
     accent: 'coral',
     description: 'For heavier client audits and shared delivery.',
     details: ['Unlimited projects', '200,000 crawl pages', '10,000 screenshot credits', 'Unlimited organized exports', '15 seats'],
-    cta: 'Start trial',
+    cta: 'Subscribe',
+    action: 'checkout',
   },
 ];
 
@@ -1291,7 +1299,7 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
         type="button"
         variant="secondary"
         buttonStyle="brand"
-        onClick={onGetStarted}
+        onClick={() => onGetStarted(plan)}
       >
         {plan.cta}
       </Button>
@@ -1640,12 +1648,16 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     setShowMobileScanModal(true);
   };
 
-  const handlePricingGetStarted = () => {
-    if (isMarketingPhoneViewport()) {
-      handleMobileScan();
+  const handlePricingGetStarted = (plan) => {
+    if (plan?.action === 'checkout') {
+      onOpenApp(buildAppBillingUrl(plan.key));
       return;
     }
-    onOpenApp(buildAppScanUrl());
+    if (plan?.action === 'trial') {
+      onOpenApp(buildAppTrialUrl(plan.key));
+      return;
+    }
+    onOpenApp(buildAppSignupUrl());
   };
 
   const handleShowExample = (example) => {

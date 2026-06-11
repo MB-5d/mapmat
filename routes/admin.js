@@ -302,7 +302,9 @@ const ADMIN_GRANT_FEATURES = new Set([
 ]);
 const ADMIN_BILLING_TEST_SCENARIOS = new Set([
   'active_free',
+  'active_pro',
   'active_solo',
+  'test_unlimited',
   'team_trial',
   'trial_ended',
   'archived',
@@ -477,8 +479,11 @@ async function applyAdminBillingTestScenarioAsync({ user, scenario }) {
   let planKey = 'free';
   let update = baseUpdate;
 
-  if (scenario === 'active_solo' || scenario === 'scan_limit_prompt') {
-    planKey = 'solo';
+  if (scenario === 'active_pro' || scenario === 'active_solo' || scenario === 'scan_limit_prompt') {
+    planKey = 'pro';
+    update = { ...baseUpdate, planKey };
+  } else if (scenario === 'test_unlimited') {
+    planKey = 'test_unlimited';
     update = { ...baseUpdate, planKey };
   } else if (scenario === 'team_trial') {
     update = {

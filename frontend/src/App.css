@@ -8886,6 +8886,38 @@ body {
   gap: 18px;
 }
 
+.plans-modal-cycle {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface-muted);
+}
+
+.plans-modal-cycle button {
+  min-width: 88px;
+  border: 0;
+  border-radius: calc(var(--ui-radius-md) - 3px);
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--ui-color-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.plans-modal-cycle button.active {
+  background: var(--modal-card-bg);
+  color: var(--ui-color-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+.plans-modal-cycle button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .plans-modal-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

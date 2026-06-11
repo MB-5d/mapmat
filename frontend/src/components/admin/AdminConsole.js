@@ -87,11 +87,12 @@ const DEFAULT_GRANT_FORM = Object.freeze({
 
 const BILLING_TEST_SCENARIO_OPTIONS = Object.freeze([
   { value: 'active_free', label: 'Active Free', description: 'Free plan with a fresh usage period.' },
-  { value: 'active_solo', label: 'Active Solo', description: 'Paid Solo plan with no trial.' },
+  { value: 'active_pro', label: 'Active Pro', description: 'Paid Pro plan with no trial.' },
+  { value: 'test_unlimited', label: 'Test Unlimited', description: 'Internal unlimited access for non-tier testing accounts.' },
   { value: 'team_trial', label: 'Team Trial', description: '7-day no-card team trial with four seats.' },
   { value: 'trial_ended', label: 'Trial Ended', description: 'Expired trial state for upgrade prompts.' },
   { value: 'archived', label: 'Archived', description: 'Cancelled account after access window starts.' },
-  { value: 'scan_limit_prompt', label: 'Scan Limit Prompt', description: 'Solo plan nearly out of crawl pages.' },
+  { value: 'scan_limit_prompt', label: 'Scan Limit Prompt', description: 'Pro plan nearly out of crawl pages.' },
   { value: 'usage_exhausted', label: 'Usage Exhausted', description: 'Free plan with crawl and screenshot usage spent.' },
 ]);
 

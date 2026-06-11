@@ -3,7 +3,7 @@
   "fallbackPlan": "free",
   "trialDefaults": {
     "fallbackPlan": "free",
-    "basePlan": "solo",
+    "basePlan": "pro",
     "personalDays": 7,
     "teamDays": 7,
     "teamSeatCap": 4,
@@ -32,21 +32,44 @@
   "stripe": {
     "portalConfigurationEnv": "STRIPE_BILLING_PORTAL_CONFIGURATION_ID",
     "plans": {
-      "solo": {
-        "priceEnv": "STRIPE_PRICE_SOLO_MONTHLY",
-        "interval": "month"
-      },
       "pro": {
-        "priceEnv": "STRIPE_PRICE_PRO_MONTHLY",
-        "interval": "month"
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_PRO_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_PRO_YEARLY",
+            "priceEnvFallbacks": ["STRIPE_PRICE_PRO_ANNUAL"],
+            "interval": "year"
+          }
+        }
       },
       "studio": {
-        "priceEnv": "STRIPE_PRICE_STUDIO_MONTHLY",
-        "interval": "month"
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_STUDIO_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_STUDIO_YEARLY",
+            "priceEnvFallbacks": ["STRIPE_PRICE_STUDIO_ANNUAL"],
+            "interval": "year"
+          }
+        }
       },
       "agency": {
-        "priceEnv": "STRIPE_PRICE_AGENCY_MONTHLY",
-        "interval": "month"
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_AGENCY_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_AGENCY_YEARLY",
+            "priceEnvFallbacks": ["STRIPE_PRICE_AGENCY_ANNUAL"],
+            "interval": "year"
+          }
+        }
       }
     },
     "addOns": {
@@ -100,6 +123,9 @@
       }
     }
   },
+  "planAliases": {
+    "solo": "pro"
+  },
   "plans": {
     "free": {
       "key": "free",
@@ -124,9 +150,9 @@
         "clientWorkspaces": false
       }
     },
-    "solo": {
-      "key": "solo",
-      "name": "Solo",
+    "pro": {
+      "key": "pro",
+      "name": "Pro",
       "paid": true,
       "limits": {
         "activeProjects": 5,
@@ -140,28 +166,6 @@
         "standardExports": true,
         "advancedExports": false,
         "clientShareLinks": false,
-        "brandedReports": false,
-        "scheduledRescans": false,
-        "priorityQueue": false,
-        "clientWorkspaces": false
-      }
-    },
-    "pro": {
-      "key": "pro",
-      "name": "Pro",
-      "paid": true,
-      "limits": {
-        "activeProjects": 20,
-        "crawlPages": 10000,
-        "screenshotCredits": 750,
-        "organizedScreenshotExports": 20,
-        "seats": 1
-      },
-      "features": {
-        "limitedExports": false,
-        "standardExports": true,
-        "advancedExports": true,
-        "clientShareLinks": true,
         "brandedReports": false,
         "scheduledRescans": false,
         "priorityQueue": false,
@@ -200,6 +204,30 @@
         "screenshotCredits": 10000,
         "organizedScreenshotExports": null,
         "seats": 15
+      },
+      "features": {
+        "limitedExports": false,
+        "standardExports": true,
+        "advancedExports": true,
+        "clientShareLinks": true,
+        "brandedReports": true,
+        "scheduledRescans": true,
+        "priorityQueue": true,
+        "clientWorkspaces": true
+      }
+    },
+    "test_unlimited": {
+      "key": "test_unlimited",
+      "name": "Test Unlimited",
+      "paid": false,
+      "internal": true,
+      "limits": {
+        "activeProjects": null,
+        "crawlPages": null,
+        "scanPagesPerRun": null,
+        "screenshotCredits": null,
+        "organizedScreenshotExports": null,
+        "seats": null
       },
       "features": {
         "limitedExports": false,

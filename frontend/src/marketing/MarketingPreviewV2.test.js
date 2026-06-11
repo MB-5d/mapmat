@@ -341,8 +341,34 @@ describe('MarketingPreviewV2', () => {
     });
     expect(container.textContent).toContain('2 organized exports');
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')).toHaveLength(4);
-    expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')[0].textContent).toContain('Start trial');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')[0].textContent).toContain('Get started');
     expect(container.textContent).not.toContain('Solo');
+  });
+
+  test('routes pricing CTAs to signup, no-card trial, or checkout instead of scan', () => {
+    const openApp = jest.fn();
+    renderAt('/pricing', jest.fn(), { onOpenApp: openApp });
+
+    const buttons = Array.from(container.querySelectorAll('.marketing-v2-pricing-card__cta'));
+    buttons.forEach((button) => {
+      act(() => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+      });
+    });
+
+    const urls = openApp.mock.calls.map(([url]) => new URL(url));
+    expect(urls).toHaveLength(4);
+    expect(urls[0].searchParams.get('intent')).toBe('signup');
+    expect(urls[1].searchParams.get('intent')).toBe('trial');
+    expect(urls[1].searchParams.get('trialPlan')).toBe('pro');
+    expect(urls[1].searchParams.has('billingPlan')).toBe(false);
+    expect(urls[2].searchParams.get('intent')).toBe('checkout');
+    expect(urls[2].searchParams.get('billingPlan')).toBe('studio');
+    expect(urls[3].searchParams.get('intent')).toBe('checkout');
+    expect(urls[3].searchParams.get('billingPlan')).toBe('agency');
+    urls.forEach((url) => {
+      expect(url.searchParams.get('intent')).not.toBe('scan');
+    });
   });
 
   test('renders FAQ answers as closed accordions until opened', () => {

@@ -275,6 +275,20 @@ export async function createBillingPortalSession(payload = {}) {
   });
 }
 
+export async function startBillingTrial(payload = {}) {
+  return fetchApi('/api/billing/trials', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function refreshBillingAccount(payload = {}) {
+  return fetchApi('/api/billing/account/refresh', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function updateProfile(data) {
   return fetchApi('/auth/me', {
     method: 'PUT',

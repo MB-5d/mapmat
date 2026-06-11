@@ -1,6 +1,9 @@
 const Stripe = require('stripe');
 const billingStore = require('../stores/billingStore');
-const { getBillingPlanConfig } = require('./entitlements');
+const {
+  getBillingPlanConfig,
+  getCanonicalBillingPlanKey,
+} = require('./entitlements');
 
 class BillingError extends Error {
   constructor(message, status = 400, code = 'BILLING_ERROR') {
@@ -25,6 +28,13 @@ function parseEnvBool(value, fallback = false) {
 function normalizeText(value) {
   const normalized = String(value || '').trim();
   return normalized || null;
+}
+
+function normalizeBillingCycle(value, fallback = 'monthly') {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['year', 'yearly', 'annual', 'annually'].includes(normalized)) return 'yearly';
+  if (['month', 'monthly'].includes(normalized)) return 'monthly';
+  return fallback;
 }
 
 function getStripeSecretKey() {
@@ -70,38 +80,133 @@ function normalizeReturnPath(rawPath, fallback = '/app') {
   }
 }
 
-function buildReturnUrl(rawPath, result) {
+function buildReturnUrl(rawPath, result, params = {}) {
   const base = getAppBaseUrl();
   const path = normalizeReturnPath(rawPath);
   const url = new URL(path, base);
   if (result) url.searchParams.set('billing', result);
-  return url.toString();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  });
+  return url.toString().replace(/%7B([A-Z_]+)%7D/g, '{$1}');
+}
+
+function getEnvNameCandidates(value) {
+  if (Array.isArray(value)) return value.map(normalizeText).filter(Boolean);
+  const key = normalizeText(value);
+  return key ? [key] : [];
+}
+
+function getPriceEnvCandidates(entry) {
+  const candidates = [];
+  if (entry?.priceEnv) candidates.push(entry.priceEnv);
+  if (Array.isArray(entry?.priceEnvFallbacks)) candidates.push(...entry.priceEnvFallbacks);
+  if (Array.isArray(entry?.priceEnvCandidates)) candidates.push(...entry.priceEnvCandidates);
+  return getEnvNameCandidates(candidates);
 }
 
 function resolveConfiguredPrice(envName) {
-  const key = normalizeText(envName);
-  return key ? normalizeText(process.env[key]) : null;
+  for (const key of getEnvNameCandidates(envName)) {
+    const value = normalizeText(process.env[key]);
+    if (value) return value;
+  }
+  return null;
 }
 
 function getStripeConfig() {
   return getBillingPlanConfig().stripe || {};
 }
 
+function getStripePlanPriceEntries(planKey, entry) {
+  if (entry?.prices && typeof entry.prices === 'object') {
+    return Object.entries(entry.prices).map(([cycle, priceEntry]) => ({
+      planKey,
+      billingCycle: normalizeBillingCycle(cycle),
+      entry: priceEntry || {},
+    }));
+  }
+  const billingCycle = normalizeBillingCycle(entry?.billingCycle || entry?.cycle || entry?.interval);
+  return [{
+    planKey,
+    billingCycle,
+    entry: entry || {},
+  }];
+}
+
 function listConfiguredPlanPrices() {
   const billingConfig = getBillingPlanConfig();
   const stripeConfig = billingConfig.stripe || {};
-  return Object.entries(stripeConfig.plans || {}).map(([planKey, entry]) => {
-    const plan = billingConfig.plans?.[planKey] || null;
-    const priceId = resolveConfiguredPrice(entry.priceEnv);
-    return {
-      key: planKey,
-      name: plan?.name || planKey,
-      priceEnv: entry.priceEnv || null,
-      priceId,
-      interval: entry.interval || 'month',
+  return Object.entries(stripeConfig.plans || {}).flatMap(([planKey, entry]) => {
+    const normalizedPlanKey = getCanonicalBillingPlanKey(billingConfig, planKey);
+    const plan = billingConfig.plans?.[normalizedPlanKey] || null;
+    return getStripePlanPriceEntries(normalizedPlanKey, entry).map((priceEntry) => {
+      const priceEnvCandidates = getPriceEnvCandidates(priceEntry.entry);
+      const priceId = resolveConfiguredPrice(priceEnvCandidates);
+      const primaryPriceEnv = priceEnvCandidates[0] || null;
+      const interval = priceEntry.entry.interval
+        || (priceEntry.billingCycle === 'yearly' ? 'year' : 'month');
+      return {
+        key: normalizedPlanKey,
+        name: plan?.name || normalizedPlanKey,
+        billingCycle: priceEntry.billingCycle,
+        priceEnv: primaryPriceEnv,
+        priceEnvFallbacks: priceEnvCandidates.slice(1),
+        priceId,
+        interval,
+        enabled: !!priceId,
+      };
+    });
+  });
+}
+
+function listConfiguredPlanCatalogEntries() {
+  const grouped = new Map();
+  for (const { priceId, ...entry } of listConfiguredPlanPrices()) {
+    const current = grouped.get(entry.key) || {
+      key: entry.key,
+      name: entry.name,
+      configured: false,
+      prices: {},
+    };
+    current.prices[entry.billingCycle] = {
+      billingCycle: entry.billingCycle,
+      priceEnv: entry.priceEnv,
+      priceEnvFallbacks: entry.priceEnvFallbacks,
+      interval: entry.interval,
+      configured: !!priceId,
       enabled: !!priceId,
     };
-  });
+    current.configured = current.configured || !!priceId;
+    grouped.set(entry.key, current);
+  }
+  return Array.from(grouped.values()).map((entry) => ({
+    ...entry,
+    enabled: entry.configured,
+  }));
+}
+
+function listConfiguredLegacyPlanPrices() {
+  return listConfiguredPlanPrices().map(({ priceId, ...entry }) => ({
+    ...entry,
+    configured: !!priceId,
+  }));
+}
+
+function getPlanPriceConfig(planKey, billingCycle = 'monthly') {
+  const normalizedKey = getCanonicalBillingPlanKey(getBillingPlanConfig(), planKey);
+  const normalizedCycle = normalizeBillingCycle(billingCycle);
+  const entry = listConfiguredPlanPrices().find((item) => (
+    item.key === normalizedKey && item.billingCycle === normalizedCycle
+  ));
+  if (!entry) {
+    throw new BillingError('Choose a valid paid plan.', 400, 'INVALID_PLAN');
+  }
+  if (!entry.priceId) {
+    throw new BillingError('This plan is not configured for checkout yet.', 503, 'BILLING_PRICE_NOT_CONFIGURED');
+  }
+  return entry;
 }
 
 function listConfiguredAddOnPrices() {
@@ -129,27 +234,13 @@ function listConfiguredAddOnPrices() {
 function getBillingCatalogForClient() {
   return {
     enabled: isStripeBillingEnabled(),
-    plans: listConfiguredPlanPrices().map(({ priceId, ...entry }) => ({
-      ...entry,
-      configured: !!priceId,
-    })),
+    plans: listConfiguredPlanCatalogEntries(),
+    planPrices: listConfiguredLegacyPlanPrices(),
     addOns: listConfiguredAddOnPrices().map(({ priceId, ...entry }) => ({
       ...entry,
       configured: !!priceId,
     })),
   };
-}
-
-function getPlanPriceConfig(planKey) {
-  const normalizedKey = String(planKey || '').trim().toLowerCase();
-  const entry = listConfiguredPlanPrices().find((item) => item.key === normalizedKey);
-  if (!entry) {
-    throw new BillingError('Choose a valid paid plan.', 400, 'INVALID_PLAN');
-  }
-  if (!entry.priceId) {
-    throw new BillingError('This plan is not configured for checkout yet.', 503, 'BILLING_PRICE_NOT_CONFIGURED');
-  }
-  return entry;
 }
 
 function getAddOnPriceConfig(addonKey) {
@@ -252,9 +343,9 @@ async function getOrCreateStripeCustomerAsync({ stripe, account, user }) {
   return customer.id;
 }
 
-async function createPlanCheckoutSessionAsync({ user, account, planKey, returnPath = '/app' }) {
+async function createPlanCheckoutSessionAsync({ user, account, planKey, billingCycle = 'monthly', returnPath = '/app' }) {
   const stripe = getStripeClient();
-  const plan = getPlanPriceConfig(planKey);
+  const plan = getPlanPriceConfig(planKey, billingCycle);
   if (account?.stripe_subscription_id && ['active', 'trialing', 'past_due', 'unpaid'].includes(String(account.stripe_subscription_status || '').toLowerCase())) {
     throw new BillingError('Use the billing portal to change this subscription.', 409, 'BILLING_PORTAL_REQUIRED');
   }
@@ -263,17 +354,21 @@ async function createPlanCheckoutSessionAsync({ user, account, planKey, returnPa
     mode: 'subscription',
     customer: customerId,
     line_items: [{ price: plan.priceId, quantity: 1 }],
-    success_url: buildReturnUrl(returnPath, 'success'),
+    success_url: buildReturnUrl(returnPath, 'success', {
+      billingSessionId: '{CHECKOUT_SESSION_ID}',
+    }),
     cancel_url: buildReturnUrl(returnPath, 'cancelled'),
     metadata: {
       checkoutType: 'plan',
       planKey: plan.key,
+      billingCycle: plan.billingCycle,
       vellicAccountId: account.id,
       vellicOwnerUserId: account.owner_user_id,
     },
     subscription_data: {
       metadata: {
         planKey: plan.key,
+        billingCycle: plan.billingCycle,
         vellicAccountId: account.id,
         vellicOwnerUserId: account.owner_user_id,
       },
@@ -292,7 +387,9 @@ async function createAddOnCheckoutSessionAsync({ user, account, addonKey, quanti
     mode: addOn.mode || 'payment',
     customer: customerId,
     line_items: [{ price: addOn.priceId, quantity: safeQuantity }],
-    success_url: buildReturnUrl(returnPath, 'success'),
+    success_url: buildReturnUrl(returnPath, 'success', {
+      billingSessionId: '{CHECKOUT_SESSION_ID}',
+    }),
     cancel_url: buildReturnUrl(returnPath, 'cancelled'),
     metadata: {
       checkoutType: 'addon',
@@ -442,6 +539,63 @@ async function handleCheckoutSessionCompletedAsync({ stripe, session }) {
   return { accountId: account.id, grants: [] };
 }
 
+function assertCheckoutSessionBelongsToAccount({ session, account }) {
+  const sessionAccountId = session?.metadata?.vellicAccountId || null;
+  const customerId = getStripeObjectId(session?.customer);
+  if (sessionAccountId && sessionAccountId !== account.id) {
+    throw new BillingError('Stripe checkout does not belong to this Vellic billing account.', 403, 'BILLING_ACCOUNT_MISMATCH');
+  }
+  if (!sessionAccountId && (!customerId || !account.stripe_customer_id || customerId !== account.stripe_customer_id)) {
+    throw new BillingError('Stripe checkout does not belong to this Vellic billing account.', 403, 'BILLING_ACCOUNT_MISMATCH');
+  }
+}
+
+async function refreshBillingAccountFromStripeAsync({ account, checkoutSessionId = null, stripeClient = null }) {
+  if (!account) {
+    throw new BillingError('Billing account is not available.', 404, 'BILLING_ACCOUNT_NOT_FOUND');
+  }
+  const stripe = stripeClient || getStripeClient();
+  const sessionId = normalizeText(checkoutSessionId);
+
+  if (sessionId) {
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    assertCheckoutSessionBelongsToAccount({ session, account });
+    if (session.mode === 'payment' && session.payment_status && session.payment_status !== 'paid') {
+      return {
+        accountId: account.id,
+        refreshed: false,
+        source: 'checkout_session',
+        status: session.payment_status,
+      };
+    }
+    const result = await handleCheckoutSessionCompletedAsync({ stripe, session });
+    return {
+      ...result,
+      refreshed: true,
+      source: 'checkout_session',
+      status: session.status || null,
+    };
+  }
+
+  if (account.stripe_subscription_id) {
+    const subscription = await stripe.subscriptions.retrieve(account.stripe_subscription_id);
+    const updatedAccount = await applyStripeSubscriptionToAccountAsync(subscription, account.id);
+    return {
+      accountId: updatedAccount?.id || account.id,
+      refreshed: true,
+      source: 'subscription',
+      status: subscription.status || null,
+    };
+  }
+
+  return {
+    accountId: account.id,
+    refreshed: false,
+    source: 'none',
+    status: null,
+  };
+}
+
 async function handleInvoiceStatusAsync({ stripe, invoice, failed = false }) {
   const subscriptionId = getStripeObjectId(invoice?.subscription);
   const customerId = getStripeObjectId(invoice?.customer);
@@ -548,6 +702,7 @@ module.exports = {
   createPlanCheckoutSessionAsync,
   createAddOnCheckoutSessionAsync,
   createPortalSessionAsync,
+  refreshBillingAccountFromStripeAsync,
   applyStripeSubscriptionToAccountAsync,
   processStripeWebhookAsync,
 };

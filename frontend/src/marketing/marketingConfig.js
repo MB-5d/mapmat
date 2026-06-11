@@ -52,6 +52,29 @@ export const buildAppScanUrl = (scanUrl = '', options = null) => {
   return `${APP_ORIGIN}/app?${params.toString()}`;
 };
 
+export const buildAppBillingUrl = (planKey = '', billingCycle = 'monthly') => {
+  const params = new URLSearchParams();
+  params.set('intent', 'checkout');
+  params.set('billingPlan', String(planKey || '').trim().toLowerCase());
+  if (String(billingCycle || '').trim().toLowerCase() === 'yearly') {
+    params.set('billingCycle', 'yearly');
+  }
+  return `${APP_ORIGIN}/app?${params.toString()}`;
+};
+
+export const buildAppSignupUrl = () => {
+  const params = new URLSearchParams();
+  params.set('intent', 'signup');
+  return `${APP_ORIGIN}/app?${params.toString()}`;
+};
+
+export const buildAppTrialUrl = (planKey = 'pro') => {
+  const params = new URLSearchParams();
+  params.set('intent', 'trial');
+  params.set('trialPlan', String(planKey || 'pro').trim().toLowerCase());
+  return `${APP_ORIGIN}/app?${params.toString()}`;
+};
+
 const page = ({
   id,
   slug,

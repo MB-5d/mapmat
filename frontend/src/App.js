@@ -185,11 +185,16 @@ const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
 const GUEST_SCAN_PAGE_LIMIT = 25;
 const PLAN_OPTION_CARDS = [
-  { key: 'solo', name: 'Solo', scan: '1,000 pages/mo', screenshots: '100 screenshots/mo', note: 'For one person' },
-  { key: 'pro', name: 'Pro', scan: '10,000 pages/mo', screenshots: '750 screenshots/mo', note: 'For client-ready work' },
+  { key: 'pro', name: 'Pro', scan: '1,000 pages/mo', screenshots: '100 screenshots/mo', note: 'For one person' },
   { key: 'studio', name: 'Studio', scan: '50,000 pages/mo', screenshots: '3,000 screenshots/mo', note: 'For small teams' },
   { key: 'agency', name: 'Agency', scan: '200,000 pages/mo', screenshots: '10,000 screenshots/mo', note: 'For larger teams' },
 ];
+const BILLING_CYCLE_OPTIONS = [
+  { key: 'monthly', label: 'Monthly' },
+  { key: 'yearly', label: 'Yearly' },
+];
+const BILLING_PLAN_KEYS = new Set(PLAN_OPTION_CARDS.map((plan) => plan.key));
+const TRIAL_PLAN_KEYS = new Set(['pro']);
 const SCREENSHOT_CREDIT_PACKS = [
   { key: 'screenshot_credits_25', label: '25 credits', price: '$5' },
   { key: 'screenshot_credits_50', label: '50 credits', price: '$8' },
@@ -199,6 +204,12 @@ const SCREENSHOT_CREDIT_PACKS = [
 function formatEntitlementCount(value) {
   if (value === null || value === undefined) return 'Unlimited';
   return Number(value || 0).toLocaleString();
+}
+
+function normalizeBillingCycle(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['year', 'yearly', 'annual', 'annually'].includes(normalized)) return 'yearly';
+  return 'monthly';
 }
 
 function isEntitlementLockedNode(node) {
@@ -2582,6 +2593,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [largeMapDisplaySummary, setLargeMapDisplaySummary] = useState(null);
   const [largeMapMinimapOverview, setLargeMapMinimapOverview] = useState(null);
   const handledAuthRedirectKeyRef = useRef('');
+  const handledBillingRedirectKeyRef = useRef('');
+  const handledBillingIntentKeyRef = useRef('');
+  const handledTrialIntentKeyRef = useRef('');
+  const handledSignupIntentKeyRef = useRef('');
 
   useEffect(() => {
     largeMapNodeCacheRef.current = new Map();
@@ -2648,7 +2663,11 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanLimitPrompt, setScanLimitPrompt] = useState(null);
   const [entitlementLockModal, setEntitlementLockModal] = useState(null);
   const [plansModal, setPlansModal] = useState(null);
+  const [billingCatalog, setBillingCatalog] = useState(null);
+  const [billingCatalogLoading, setBillingCatalogLoading] = useState(false);
+  const [billingCatalogError, setBillingCatalogError] = useState('');
   const [billingActionKey, setBillingActionKey] = useState('');
+  const [billingCycle, setBillingCycle] = useState('monthly');
   const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
@@ -3704,8 +3723,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setToast(null);
   };
 
-  const refreshCurrentUser = useCallback(async () => {
-    if (!isLoggedIn) return null;
+  const refreshCurrentUser = useCallback(async ({ force = false } = {}) => {
+    if (!force && !isLoggedIn) return null;
     try {
       const { user } = await api.getMe();
       if (user) {
@@ -3731,6 +3750,44 @@ export default function App({ currentRoute, navigateToRoute }) {
   const openPlansModal = useCallback((context = 'upgrade') => {
     setPlansModal({ context });
   }, []);
+
+  useEffect(() => {
+    if (!plansModal) return undefined;
+    let active = true;
+    setBillingCatalogLoading(true);
+    setBillingCatalogError('');
+
+    api.getBillingConfig()
+      .then((catalog) => {
+        if (active) setBillingCatalog(catalog || null);
+      })
+      .catch((error) => {
+        if (active) setBillingCatalogError(error.message || 'Billing options are not available yet.');
+      })
+      .finally(() => {
+        if (active) setBillingCatalogLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [plansModal]);
+
+  const billingPlanCatalogByKey = useMemo(() => new Map(
+    (billingCatalog?.plans || []).map((entry) => [entry.key, entry])
+  ), [billingCatalog]);
+
+  const billingAddonCatalogByKey = useMemo(() => new Map(
+    (billingCatalog?.addOns || []).map((entry) => [entry.key, entry])
+  ), [billingCatalog]);
+
+  const getBillingCheckoutUnavailableReason = useCallback((entry, cycle = billingCycle) => {
+    if (!billingCatalog) return '';
+    if (!billingCatalog.enabled) return 'Billing not enabled';
+    const planPrice = entry?.prices ? entry.prices[normalizeBillingCycle(cycle)] : entry;
+    if (!planPrice?.configured) return 'Checkout not configured';
+    return '';
+  }, [billingCatalog, billingCycle]);
 
   const showEntitlementLock = useCallback(({
     title = 'Plan limit reached',
@@ -6410,18 +6467,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [getBillingReturnPath, isLoggedIn, openAuthModal, redirectToBillingUrl, showToast]);
 
-  const handlePlanCheckout = useCallback(async (planKey) => {
+  const handlePlanCheckout = useCallback(async (planKey, cycle = billingCycle) => {
     if (!isLoggedIn) {
       setPlansModal(null);
       openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
       return;
     }
-    const actionKey = `plan:${planKey}`;
+    const normalizedCycle = normalizeBillingCycle(cycle);
+    const actionKey = `plan:${planKey}:${normalizedCycle}`;
     setBillingActionKey(actionKey);
     try {
       const session = await api.createBillingCheckoutSession({
         type: 'plan',
         planKey,
+        billingCycle: normalizedCycle,
         returnPath: getBillingReturnPath(),
       });
       redirectToBillingUrl(session.url);
@@ -6437,9 +6496,44 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [
     getBillingReturnPath,
     handleBillingPortal,
+    billingCycle,
     isLoggedIn,
     openAuthModal,
     redirectToBillingUrl,
+    showToast,
+  ]);
+
+  const handleBillingTrial = useCallback(async (context = 'trial') => {
+    if (!isLoggedIn) {
+      setPlansModal(null);
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    const actionKey = `trial:${context}`;
+    setBillingActionKey(actionKey);
+    try {
+      const result = await api.startBillingTrial({
+        kind: context === 'team' ? 'team' : 'personal',
+      });
+      if (result?.entitlements) {
+        setCurrentUser((current) => current ? ({
+          ...current,
+          account: result.entitlements.account || current.account || null,
+          entitlements: result.entitlements,
+        }) : current);
+      }
+      await refreshCurrentUser();
+      setPlansModal(null);
+      showToast(result?.trialAlreadyActive ? 'Trial is already active' : 'Trial started', 'success');
+    } catch (error) {
+      showToast(error.message || 'Trial is not available yet.', 'error');
+    } finally {
+      setBillingActionKey((current) => (current === actionKey ? '' : current));
+    }
+  }, [
+    isLoggedIn,
+    openAuthModal,
+    refreshCurrentUser,
     showToast,
   ]);
 
@@ -6465,6 +6559,125 @@ export default function App({ currentRoute, navigateToRoute }) {
       setBillingActionKey((current) => (current === actionKey ? '' : current));
     }
   }, [getBillingReturnPath, isLoggedIn, openAuthModal, redirectToBillingUrl, showToast]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+    if (intent !== 'signup') {
+      handledSignupIntentKeyRef.current = '';
+      return;
+    }
+
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+
+    if (!isLoggedIn) {
+      const anonymousIntentKey = `${intentKey}:anonymous`;
+      if (handledSignupIntentKeyRef.current === anonymousIntentKey) return;
+      handledSignupIntentKeyRef.current = anonymousIntentKey;
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+
+    const authenticatedIntentKey = `${intentKey}:authenticated`;
+    if (handledSignupIntentKeyRef.current === authenticatedIntentKey) return;
+    handledSignupIntentKeyRef.current = authenticatedIntentKey;
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('intent');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    isLoggedIn,
+    openAuthModal,
+  ]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+    const trialPlan = String(currentRoute?.searchParams?.get('trialPlan') || 'pro').trim().toLowerCase();
+    if (intent !== 'trial' || !TRIAL_PLAN_KEYS.has(trialPlan)) {
+      handledTrialIntentKeyRef.current = '';
+      return;
+    }
+
+    if (!isLoggedIn) {
+      const anonymousIntentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}:anonymous`;
+      if (handledTrialIntentKeyRef.current === anonymousIntentKey) return;
+      handledTrialIntentKeyRef.current = anonymousIntentKey;
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    const authenticatedIntentKey = `${intentKey}:authenticated`;
+    if (handledTrialIntentKeyRef.current === authenticatedIntentKey) return;
+    handledTrialIntentKeyRef.current = authenticatedIntentKey;
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('intent');
+    nextSearchParams.delete('trialPlan');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+    handleBillingTrial(trialPlan);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    handleBillingTrial,
+    isLoggedIn,
+    openAuthModal,
+  ]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const intent = String(currentRoute?.searchParams?.get('intent') || '').trim().toLowerCase();
+    const planKey = String(currentRoute?.searchParams?.get('billingPlan') || '').trim().toLowerCase();
+    const requestedBillingCycle = normalizeBillingCycle(currentRoute?.searchParams?.get('billingCycle'));
+    if (intent !== 'checkout' || !BILLING_PLAN_KEYS.has(planKey)) {
+      handledBillingIntentKeyRef.current = '';
+      return;
+    }
+
+    if (!isLoggedIn) {
+      const anonymousIntentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}:anonymous`;
+      if (handledBillingIntentKeyRef.current === anonymousIntentKey) return;
+      handledBillingIntentKeyRef.current = anonymousIntentKey;
+      openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+
+    const intentKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    const authenticatedIntentKey = `${intentKey}:authenticated`;
+    if (handledBillingIntentKeyRef.current === authenticatedIntentKey) return;
+    handledBillingIntentKeyRef.current = authenticatedIntentKey;
+
+    const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+    nextSearchParams.delete('intent');
+    nextSearchParams.delete('billingPlan');
+    nextSearchParams.delete('billingCycle');
+    const nextSearch = nextSearchParams.toString();
+    const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+    window.history.replaceState({}, '', nextUrl);
+    handlePlanCheckout(planKey, requestedBillingCycle);
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    handlePlanCheckout,
+    isLoggedIn,
+    openAuthModal,
+  ]);
 
   const handleAuthSuccess = async (user) => {
     setCurrentUser(user);
@@ -6558,6 +6771,65 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.searchParams,
     currentUser,
     openAuthModal,
+    showToast,
+  ]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    const billingResult = currentRoute?.searchParams?.get('billing') || '';
+    const checkoutSessionId = currentRoute?.searchParams?.get('billingSessionId') || '';
+    if (!billingResult) {
+      handledBillingRedirectKeyRef.current = '';
+      return;
+    }
+
+    const billingRedirectKey = `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}`;
+    if (handledBillingRedirectKeyRef.current === billingRedirectKey) return;
+    handledBillingRedirectKeyRef.current = billingRedirectKey;
+
+    const clearBillingParams = () => {
+      const nextSearchParams = new URLSearchParams(currentRoute?.search || '');
+      nextSearchParams.delete('billing');
+      nextSearchParams.delete('billingSessionId');
+      const nextSearch = nextSearchParams.toString();
+      const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
+      window.history.replaceState({}, '', nextUrl);
+    };
+
+    const refreshBillingReturn = async () => {
+      try {
+        if (billingResult === 'success' || billingResult === 'portal_return') {
+          if (isLoggedIn) {
+            try {
+              await api.refreshBillingAccount({
+                checkoutSessionId: checkoutSessionId || undefined,
+              });
+            } catch (error) {
+              console.warn('Failed to refresh billing account from Stripe', error);
+            }
+            await refreshCurrentUser();
+          }
+          showToast(
+            billingResult === 'portal_return' ? 'Billing settings updated' : 'Plan updated',
+            'success'
+          );
+        } else if (billingResult === 'cancelled') {
+          showToast('Checkout cancelled', 'info');
+        }
+      } finally {
+        clearBillingParams();
+      }
+    };
+
+    refreshBillingReturn();
+  }, [
+    authLoading,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    currentRoute?.searchParams,
+    isLoggedIn,
+    refreshCurrentUser,
     showToast,
   ]);
 
@@ -17026,10 +17298,18 @@ export default function App({ currentRoute, navigateToRoute }) {
                 Close
               </Button>
               <Button
+                variant="secondary"
+                onClick={() => handleBillingTrial('pro')}
+                loading={billingActionKey.startsWith('trial:')}
+                disabled={!!billingActionKey || currentUser?.entitlements?.trial?.active}
+              >
+                {currentUser?.entitlements?.trial?.active ? 'Trial active' : 'Start trial'}
+              </Button>
+              <Button
                 variant="primary"
                 onClick={() => handleBillingPortal(plansModal.context || 'plans-modal')}
                 loading={billingActionKey.startsWith('portal:')}
-                disabled={!!billingActionKey}
+                disabled={!!billingActionKey || Boolean(billingCatalog && !billingCatalog.enabled)}
               >
                 Manage billing
               </Button>
@@ -17037,36 +17317,68 @@ export default function App({ currentRoute, navigateToRoute }) {
           )}
         >
           <div className="plans-modal-body">
-            <div className="plans-modal-grid" aria-label="Plan options">
-              {PLAN_OPTION_CARDS.map((plan) => (
+            {billingCatalogLoading ? (
+              <StatusAlert tone="loading">Checking billing availability...</StatusAlert>
+            ) : null}
+            {billingCatalogError ? (
+              <StatusAlert tone="warning">{billingCatalogError}</StatusAlert>
+            ) : null}
+            {billingCatalog && !billingCatalog.enabled ? (
+              <StatusAlert tone="warning">Billing is not enabled yet.</StatusAlert>
+            ) : null}
+            <div className="plans-modal-cycle" role="group" aria-label="Billing cycle">
+              {BILLING_CYCLE_OPTIONS.map((option) => (
                 <button
                   type="button"
-                  className="plans-modal-card"
-                  key={plan.key}
+                  key={option.key}
+                  className={billingCycle === option.key ? 'active' : ''}
+                  aria-pressed={billingCycle === option.key}
                   disabled={!!billingActionKey}
-                  onClick={() => handlePlanCheckout(plan.key)}
+                  onClick={() => setBillingCycle(option.key)}
                 >
-                  <strong>{plan.name}</strong>
-                  <span>{plan.scan}</span>
-                  <span>{plan.screenshots}</span>
-                  <small>{billingActionKey === `plan:${plan.key}` ? 'Opening checkout...' : plan.note}</small>
+                  {option.label}
                 </button>
               ))}
+            </div>
+            <div className="plans-modal-grid" aria-label="Plan options">
+              {PLAN_OPTION_CARDS.map((plan) => {
+                const catalogEntry = billingPlanCatalogByKey.get(plan.key);
+                const unavailableReason = getBillingCheckoutUnavailableReason(catalogEntry, billingCycle);
+                const planActionKey = `plan:${plan.key}:${billingCycle}`;
+                return (
+                  <button
+                    type="button"
+                    className="plans-modal-card"
+                    key={plan.key}
+                    disabled={!!billingActionKey || !!unavailableReason}
+                    onClick={() => handlePlanCheckout(plan.key, billingCycle)}
+                  >
+                    <strong>{plan.name}</strong>
+                    <span>{plan.scan}</span>
+                    <span>{plan.screenshots}</span>
+                    <small>{billingActionKey === planActionKey ? 'Opening checkout...' : (unavailableReason || `${plan.note} - ${billingCycle === 'yearly' ? 'Yearly billing' : 'Monthly billing'}`)}</small>
+                  </button>
+                );
+              })}
             </div>
             <div className="plans-modal-packs">
               <span>Screenshot credit packs</span>
               <div>
-                {SCREENSHOT_CREDIT_PACKS.map((pack) => (
-                  <button
-                    type="button"
-                    key={pack.key}
-                    disabled={!!billingActionKey}
-                    onClick={() => handleAddOnCheckout(pack.key)}
-                  >
-                    <strong>{pack.label}</strong>
-                    <small>{billingActionKey === `addon:${pack.key}` ? 'Opening checkout...' : pack.price}</small>
-                  </button>
-                ))}
+                {SCREENSHOT_CREDIT_PACKS.map((pack) => {
+                  const catalogEntry = billingAddonCatalogByKey.get(pack.key);
+                  const unavailableReason = getBillingCheckoutUnavailableReason(catalogEntry);
+                  return (
+                    <button
+                      type="button"
+                      key={pack.key}
+                      disabled={!!billingActionKey || !!unavailableReason}
+                      onClick={() => handleAddOnCheckout(pack.key)}
+                    >
+                      <strong>{pack.label}</strong>
+                      <small>{billingActionKey === `addon:${pack.key}` ? 'Opening checkout...' : (unavailableReason || pack.price)}</small>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
