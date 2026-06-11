@@ -602,6 +602,7 @@ const exampleCards = [
   {
     title: 'Raycast main site',
     text: 'A main-site map with nearly 5,000 pages and full-page screenshots.',
+    mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleRaycastImage,
     alt: 'Vellic example map showing the Raycast main site with many page cards and screenshots',
     sourceUrl: 'https://www.raycast.com',
@@ -609,6 +610,7 @@ const exampleCards = [
   {
     title: 'Anthropic full site',
     text: 'A 600+ page map with subdomains, orphans, and screenshots in the same workspace.',
+    mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleAnthropicImage,
     alt: 'Vellic example map showing the Anthropic full site with subdomains, orphans, and screenshots',
     sourceUrl: 'https://www.anthropic.com',
@@ -1227,6 +1229,7 @@ function MarketingV2ExampleCard({ example, index, onShowExample }) {
       <div className="marketing-v2-example__copy">
         <h3>{example.title}</h3>
         <p>{example.text}</p>
+        {example.mobileNote ? <span className="marketing-v2-example__mobile-note">{example.mobileNote}</span> : null}
         <div className="marketing-v2-example__actions">
           <Button type="link" endIcon={<ExternalLink />} onClick={() => onShowExample(example)}>
             Show me
@@ -1688,7 +1691,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
           <div className="marketing-v2-hero__copy marketing-v2-reveal">
             <div className="marketing-v2-eyebrow">Better Information Architecture</div>
             <h1 id="marketing-v2-home-title">Be the architect of your next build.</h1>
-            <p>Vellic brings audits, planning, screenshots, flows, comments, and exports into one visual workspace.</p>
+            <p>Vellic brings audits, planning, screenshots, flows, comments, and exports into one workspace.</p>
             <MarketingV2ScanCta onNavigatePath={navigateToPath} onMobileScan={handleMobileScan} onOpenApp={onOpenApp} />
             <div className="marketing-v2-hero-brief" aria-label="Vellic workflow summary">
               {heroHighlights.map(({ icon: Icon, label, text }) => (
@@ -1710,7 +1713,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         <SectionShell
           id="use-cases"
           eyebrow="Use cases"
-          title="Designed for cross-functional website work."
+          title="Designed for cross-functional teams."
           summary="UX, content, product, dev, and SEO can review the same structure instead of trading screenshots and spreadsheets."
           className="marketing-v2-section--use-cases"
         >
@@ -1728,7 +1731,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
           id="features"
           eyebrow="Features"
           title="The map is the workspace."
-          summary="Capture evidence, trace flows, collaborate, and hand off the plan from one place."
+          summary="Capture evidence, trace flows, strategise, collaborate, and hand off in one place."
           className="marketing-v2-section--features"
         >
           <div className="marketing-v2-card-grid marketing-v2-card-grid--three">
@@ -1753,7 +1756,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         <SectionShell
           id="examples"
           eyebrow="Examples"
-          title="See how audit decisions stay connected."
+          title="See how decisions stay connected."
           summary="Example views show structure, screenshots, review context, flows, and handoff in one product-led surface."
           className="marketing-v2-section--examples"
         >
