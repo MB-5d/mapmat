@@ -13202,7 +13202,21 @@ body {
 }
 
 .feedback-widget-tab,
-.feedback-drawer {
+.feedback-widget .modal-overlay {
+  pointer-events: auto;
+}
+
+.feedback-widget .modal-overlay {
+  justify-content: flex-start;
+  background: transparent;
+  padding: var(--unit-24) var(--unit-24) var(--unit-24) var(--unit-32);
+}
+
+.feedback-widget.is-selecting-target .modal-overlay {
+  pointer-events: none;
+}
+
+.feedback-widget.is-selecting-target .modal-card {
   pointer-events: auto;
 }
 
@@ -13253,62 +13267,48 @@ body {
   flex-shrink: 0;
 }
 
-.feedback-drawer {
-  position: absolute;
-  left: 20px;
-  top: 84px;
-  bottom: 24px;
-  width: min(360px, calc(100vw - 40px));
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  background: var(--modal-bg);
-  box-shadow: 0 18px 40px rgba(var(--shadow-rgb-deep), 0.22);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+.feedback-modal.modal-card {
+  width: min(492px, calc(100vw - 68px));
+  max-width: min(492px, calc(100vw - 68px));
+  height: min(680px, calc(100vh - 48px));
+  max-height: calc(100vh - 48px);
+  border: 1px solid var(--modal-card-border);
 }
 
-.feedback-drawer-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 18px 14px;
-  border-bottom: 1px solid var(--color-border);
+.feedback-choice-button.ui-btn,
+.feedback-rating-button.ui-btn,
+.feedback-target-picker.ui-btn {
+  flex: 0 0 auto;
+  transition-duration: 0.08s;
 }
 
-.feedback-drawer-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--color-text-primary);
+.feedback-choice-button.ui-btn:hover:not(:disabled),
+.feedback-rating-button.ui-btn:hover:not(:disabled),
+.feedback-target-picker.ui-btn:hover:not(:disabled) {
+  background: var(--ui-color-surface-muted);
+  border-color: var(--ui-button-mono-quiet-hover);
+  color: var(--ui-button-mono-quiet-hover);
 }
 
-.feedback-drawer-subtitle {
-  margin-top: 4px;
-  color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 1.45;
+.feedback-choice-button.ui-btn.is-active,
+.feedback-rating-button.ui-btn.is-active {
+  background: var(--ui-color-surface-muted);
+  border-color: var(--ui-button-mono-quiet);
+  color: var(--ui-button-mono-quiet);
+  box-shadow: inset 0 0 0 1px var(--ui-button-mono-quiet);
 }
 
-.feedback-chip,
-.feedback-rating-pill,
-.feedback-target-picker {
-  border: 1px solid transparent;
-  border-radius: 10px;
-  font: inherit;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-}
-
-.feedback-chip:hover,
-.feedback-rating-pill:hover,
-.feedback-target-picker:hover {
-  background: var(--color-bg-hover);
+.feedback-choice-button.ui-btn.is-active:hover:not(:disabled),
+.feedback-rating-button.ui-btn.is-active:hover:not(:disabled) {
+  background: var(--ui-color-surface-muted);
+  border-color: var(--ui-button-mono-quiet-hover);
+  color: var(--ui-button-mono-quiet-hover);
+  box-shadow: inset 0 0 0 1px var(--ui-button-mono-quiet-hover);
 }
 
 .modal-close.ui-icon-btn,
 .account-drawer-close.ui-icon-btn,
 .report-drawer-close.ui-icon-btn,
-.feedback-drawer-close.ui-icon-btn,
 .image-overlay-close.ui-icon-btn,
 .comments-panel-close.ui-icon-btn,
 .comment-popover-close.ui-icon-btn {
@@ -13318,7 +13318,6 @@ body {
 .modal-close.ui-icon-btn:hover:not(:disabled),
 .account-drawer-close.ui-icon-btn:hover:not(:disabled),
 .report-drawer-close.ui-icon-btn:hover:not(:disabled),
-.feedback-drawer-close.ui-icon-btn:hover:not(:disabled),
 .image-overlay-close.ui-icon-btn:hover:not(:disabled),
 .comments-panel-close.ui-icon-btn:hover:not(:disabled),
 .comment-popover-close.ui-icon-btn:hover:not(:disabled) {
@@ -13345,126 +13344,92 @@ body {
   box-shadow: 0 14px 28px var(--feedback-tab-shadow-hover);
 }
 
-.feedback-drawer-body {
-  flex: 1;
+.feedback-modal-body {
   min-height: 0;
-  overflow: auto;
-  padding: 18px;
+}
+
+.feedback-modal .modal-footer {
+  align-items: stretch;
+}
+
+.feedback-form {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--modal-gap);
+}
+
+.feedback-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 100%;
+}
+
+.feedback-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--modal-gap);
+}
+
+.feedback-footer-error {
+  width: 100%;
 }
 
 .feedback-field-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--space-sm);
 }
 
-.feedback-label {
-  color: var(--color-text-secondary);
-  font-size: var(--type-label-sm-size);
-  line-height: var(--type-label-sm-line-height);
-  font-weight: var(--type-label-sm-weight);
-}
-
-.feedback-chip-grid,
+.feedback-choice-grid,
 .feedback-rating-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-}
-
-.feedback-chip,
-.feedback-rating-pill,
-.feedback-target-picker {
-  min-height: 38px;
-  padding: 8px 12px;
-  background: var(--color-bg-primary);
-  border-color: var(--color-border);
-  color: var(--color-text-primary);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.feedback-chip.is-active,
-.feedback-rating-pill.is-active {
-  background: var(--ui-color-accent-soft);
-  border-color: var(--ui-color-accent-soft-border);
-  color: var(--color-primary);
+  gap: var(--space-sm);
 }
 
 .feedback-target-row {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-sm);
 }
 
-.feedback-target-picker {
-  width: 100%;
-  justify-content: center;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.feedback-target-picker.ui-btn {
+  align-self: flex-start;
 }
 
 .feedback-target-selected,
-.feedback-target-hint,
-.feedback-inline-error {
+.feedback-target-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
-  border-radius: 12px;
-  padding: 10px 12px;
-  font-size: 14px;
+  gap: var(--space-sm);
+  border-radius: var(--ui-radius-md);
+  padding: var(--unit-10) var(--unit-12);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
 }
 
 .feedback-target-selected {
-  background: rgba(16, 185, 129, 0.08);
-  color: #0f766e;
+  background: var(--ui-status-success-bg);
+  color: var(--ui-status-success-text);
 }
 
 .feedback-target-hint {
-  background: var(--color-bg-hover);
-  color: var(--color-text-secondary);
+  background: var(--ui-color-surface-muted);
+  color: var(--ui-color-muted);
 }
 
 .feedback-textarea {
   width: 100%;
   box-sizing: border-box;
-  min-height: 132px;
+  min-height: 104px;
   resize: vertical;
-  line-height: 1.5;
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+  font-weight: var(--type-body-md-weight);
+  letter-spacing: var(--type-body-md-letter-spacing);
 }
 
 .feedback-checkbox-row {
-  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: var(--color-text-primary);
-  font-size: 14px;
-}
-
-.feedback-inline-error {
-  background: rgba(239, 68, 68, 0.09);
-  color: var(--ui-color-danger);
-}
-
-.feedback-drawer-actions {
-  margin-top: auto;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.feedback-drawer-actions .modal-btn {
-  min-width: 132px;
-  min-height: 38px;
-}
-
-.feedback-spin {
-  animation: spin 1s linear infinite;
 }
 
 .feedback-target-highlight {
@@ -13500,14 +13465,39 @@ body.feedback-selecting-target * {
   cursor: crosshair !important;
 }
 
+body.feedback-selecting-target .feedback-widget,
+body.feedback-selecting-target .feedback-widget .modal-card {
+  cursor: default !important;
+}
+
+body.feedback-selecting-target .feedback-widget button:not(:disabled),
+body.feedback-selecting-target .feedback-widget label,
+body.feedback-selecting-target .feedback-widget input[type="checkbox"]:not(:disabled) {
+  cursor: pointer !important;
+}
+
+body.feedback-selecting-target .feedback-widget input:not([type="checkbox"]):not(:disabled),
+body.feedback-selecting-target .feedback-widget textarea:not(:disabled) {
+  cursor: text !important;
+}
+
+body.feedback-selecting-target .feedback-widget button:disabled,
+body.feedback-selecting-target .feedback-widget input:disabled,
+body.feedback-selecting-target .feedback-widget textarea:disabled {
+  cursor: not-allowed !important;
+}
+
 @media (max-width: 900px) {
-  .feedback-drawer {
-    top: auto;
-    bottom: 16px;
-    left: 12px;
-    right: 12px;
-    width: auto;
-    max-height: min(80vh, 720px);
+  .feedback-widget .modal-overlay {
+    align-items: center;
+    padding: var(--unit-24) var(--unit-16) var(--unit-24) var(--unit-32);
+  }
+
+  .feedback-modal.modal-card {
+    width: min(492px, calc(100vw - 60px));
+    max-width: min(492px, calc(100vw - 60px));
+    height: calc(100dvh - 48px);
+    max-height: calc(100dvh - 48px);
   }
 
   .feedback-widget-tab {

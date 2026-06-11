@@ -26,6 +26,15 @@ function resolveInteractiveElement(startElement) {
   return startElement.closest('button, [role="button"], a, input, textarea, select, label');
 }
 
+function resolveVisibleAppElement(startElement) {
+  if (!startElement || typeof startElement.closest !== 'function') return null;
+  const candidate = startElement.closest(
+    '[data-feedback-label], [aria-label], [title], article, section, aside, header, nav, main, [class]'
+  );
+  if (!candidate || candidate === document.body || candidate === document.documentElement) return null;
+  return candidate;
+}
+
 function getElementText(element) {
   if (!element) return '';
   const explicit = normalizeText(
@@ -41,7 +50,7 @@ function getElementText(element) {
     if (titleText) return titleText;
   }
 
-  return normalizeText(element.textContent, 200);
+  return normalizeText(element.innerText || element.textContent, 200);
 }
 
 function buildSelectorHint(element) {
@@ -74,6 +83,7 @@ export function findFeedbackTargetElement(startElement) {
     resolveExplicitFeedbackElement(startElement)
     || resolveStableNodeElement(startElement)
     || resolveInteractiveElement(startElement)
+    || resolveVisibleAppElement(startElement)
     || null
   );
 }

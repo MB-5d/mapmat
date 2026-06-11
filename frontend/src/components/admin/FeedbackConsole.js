@@ -506,7 +506,15 @@ export default function FeedbackConsole({ onSessionExpired }) {
                     {item.rating ? <span className="admin-feedback-chip is-rating">Rating {item.rating}</span> : null}
                   </div>
                   <div className="admin-feedback-item-meta">
-                    <span>{item.actorName || item.actorEmail || 'Anonymous'}</span>
+                    <span>{item.actorName || 'Anonymous'}</span>
+                    {item.actorEmail ? (
+                      <a
+                        href={`mailto:${encodeURIComponent(item.actorEmail)}`}
+                        className="admin-feedback-inline-link"
+                      >
+                        {item.actorEmail}
+                      </a>
+                    ) : null}
                     <span>{formatDateTime(item.createdAt)}</span>
                     {item.routeSection ? <span>{item.routeSection}</span> : null}
                   </div>

@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertCircle,
   CheckCircle2,
   Crosshair,
   MessageSquarePlus,
-  X,
 } from 'lucide-react';
 
 import * as api from '../../api';
+import classNames from '../../utils/classNames';
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
-import IconButton from '../ui/IconButton';
+import Field from '../ui/Field';
+import Modal from '../ui/Modal';
+import StatusAlert from '../ui/StatusAlert';
+import TextInput from '../ui/TextInput';
 import TextareaInput from '../ui/TextareaInput';
 import { trackEvent } from '../../utils/analytics';
 import {
@@ -33,6 +35,9 @@ const SCOPE_OPTIONS = [
   { value: 'flow', label: 'This flow' },
   { value: 'specific_thing', label: 'Specific thing' },
 ];
+
+const FEEDBACK_FORM_ID = 'feedback-form';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getActiveSurfaceList(activeSurfaces = {}) {
   return Object.entries(activeSurfaces)
@@ -58,6 +63,7 @@ export default function FeedbackWidget({
   const [rating, setRating] = useState(null);
   const [message, setMessage] = useState('');
   const [allowFollowUp, setAllowFollowUp] = useState(false);
+  const [contactEmail, setContactEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [isSelectingTarget, setIsSelectingTarget] = useState(false);
@@ -65,7 +71,7 @@ export default function FeedbackWidget({
   const [selectedTarget, setSelectedTarget] = useState(null);
   const widgetRootRef = useRef(null);
   const selectedElementRef = useRef(null);
-  const isVisible = currentRoute?.surface === ROUTE_SURFACES.APP && !!currentUser?.id;
+  const isVisible = currentRoute?.surface === ROUTE_SURFACES.APP;
 
   const routeContext = useMemo(() => ({
     surface: currentRoute?.surface || ROUTE_SURFACES.APP,
@@ -115,6 +121,7 @@ export default function FeedbackWidget({
       if (event.key === 'Escape') {
         setIsSelectingTarget(false);
         setHoverTarget(null);
+        setIsOpen(true);
       }
     };
 
@@ -140,6 +147,7 @@ export default function FeedbackWidget({
     setRating(null);
     setMessage('');
     setAllowFollowUp(false);
+    setContactEmail('');
     setError('');
     setSelectedTarget(null);
     selectedElementRef.current = null;
@@ -172,6 +180,8 @@ export default function FeedbackWidget({
     setError('');
 
     const trimmedMessage = String(message || '').trim();
+    const trimmedContactEmail = String(contactEmail || '').trim();
+    const needsContactEmail = allowFollowUp && !currentUser?.id;
     if (!intent) {
       setError('Choose a feedback type.');
       return;
@@ -180,13 +190,16 @@ export default function FeedbackWidget({
       setError('Choose a scope.');
       return;
     }
-    if (!trimmedMessage) {
-      setError('Tell us what happened.');
-      return;
-    }
-
     if (scope === 'specific_thing' && !selectedTarget) {
       setError('Pick the thing on screen you want to reference.');
+      return;
+    }
+    if (needsContactEmail && !trimmedContactEmail) {
+      setError('Enter an email address for follow-up.');
+      return;
+    }
+    if (needsContactEmail && !EMAIL_REGEX.test(trimmedContactEmail)) {
+      setError('Enter a valid email address.');
       return;
     }
 
@@ -221,6 +234,7 @@ export default function FeedbackWidget({
         rating,
         message: trimmedMessage,
         allowFollowUp,
+        contactEmail: needsContactEmail ? trimmedContactEmail : null,
         surface: routeContext.surface,
         routePath: routeContext.routePath,
         routeSection: routeContext.routeSection,
@@ -273,13 +287,17 @@ export default function FeedbackWidget({
         </div>
       ) : null}
 
-      <div className="feedback-widget" ref={widgetRootRef} data-feedback-root="1">
-        {!isOpen ? (
+      <div
+        className={classNames('feedback-widget', isSelectingTarget && 'is-selecting-target')}
+        ref={widgetRootRef}
+        data-feedback-root="1"
+      >
+        {!isOpen && !isSelectingTarget ? (
           <button
             type="button"
             className="feedback-widget-tab"
             onClick={handleOpen}
-            aria-label="Open feedback drawer"
+            aria-label="Open feedback form"
           >
             <span className="feedback-widget-tab-label">Feedback</span>
             <span className="feedback-widget-tab-icon" aria-hidden="true">
@@ -288,145 +306,179 @@ export default function FeedbackWidget({
           </button>
         ) : null}
 
-        {isOpen ? (
-          <aside className="feedback-drawer" role="dialog" aria-label="Feedback drawer">
-            <div className="feedback-drawer-header">
-              <div>
-                <div className="feedback-drawer-title">Feedback</div>
-                <div className="feedback-drawer-subtitle">Share what felt good, off, or broken.</div>
-              </div>
-              <IconButton
-                className="feedback-drawer-close"
-                size="lg"
-                variant="ghost"
-                icon={<X />}
-                label="Close feedback drawer"
-                onClick={handleClose}
-              />
-            </div>
-
-            <form className="feedback-drawer-body" onSubmit={handleSubmit}>
-              <section className="feedback-field-group">
-                <div className="feedback-label">Type</div>
-                <div className="feedback-chip-grid">
-                  {INTENT_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`feedback-chip ${intent === option.value ? 'is-active' : ''}`}
-                      onClick={() => setIntent(option.value)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="feedback-field-group">
-                <div className="feedback-label">Scope</div>
-                <div className="feedback-chip-grid">
-                  {SCOPE_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`feedback-chip ${scope === option.value ? 'is-active' : ''}`}
-                      onClick={() => {
-                        setScope(option.value);
-                        if (option.value === 'specific_thing') {
-                          setError('');
-                        }
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                {scope === 'specific_thing' ? (
-                  <div className="feedback-target-row">
-                    <button
-                      type="button"
-                      className="feedback-target-picker"
-                      onClick={handlePickSpecificThing}
-                    >
-                      <Crosshair size={16} />
-                      <span>{selectedTarget ? 'Change selected thing' : 'Pick something on screen'}</span>
-                    </button>
-                    {selectedTarget ? (
-                      <div className="feedback-target-selected">
-                        <CheckCircle2 size={14} />
-                        <span>{renderSelectedTargetLabel(selectedTarget)}</span>
-                      </div>
-                    ) : (
-                      <div className="feedback-target-hint">Pick the specific control, node, or panel you mean.</div>
-                    )}
-                  </div>
-                ) : null}
-              </section>
-
-              <section className="feedback-field-group">
-                <div className="feedback-label">Satisfaction</div>
-                <div className="feedback-rating-row" role="radiogroup" aria-label="Optional satisfaction rating">
-                  {[1, 2, 3, 4, 5].map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`feedback-rating-pill ${rating === value ? 'is-active' : ''}`}
-                      onClick={() => setRating((current) => (current === value ? null : value))}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="feedback-field-group">
-                <label className="feedback-label" htmlFor="feedback-message">Tell us more</label>
-                <TextareaInput
-                  id="feedback-message"
-                  className="feedback-textarea"
-                  size="lg"
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  placeholder="What happened, what you expected, or what felt unclear."
-                  rows={6}
-                  maxLength={4000}
-                />
-              </section>
-
-              <CheckboxField
-                className="feedback-checkbox-row"
-                checked={allowFollowUp}
-                onChange={(event) => setAllowFollowUp(event.target.checked)}
-                label="Okay to follow up with me"
-              />
-
+        <Modal
+          show={isOpen}
+          onClose={handleClose}
+          title="Feedback"
+          subtitle="Share what felt good, off, or broken."
+          size="sm"
+          scrollable
+          className="feedback-modal"
+          bodyClassName="feedback-modal-body"
+          closeLabel="Close feedback form"
+          footer={(
+            <div className="feedback-footer">
               {error ? (
-                <div className="feedback-inline-error">
-                  <AlertCircle size={14} />
-                  <span>{error}</span>
-                </div>
+                <StatusAlert tone="danger" className="feedback-inline-error feedback-footer-error">
+                  {error}
+                </StatusAlert>
               ) : null}
-
-              <div className="feedback-drawer-actions">
+              <div className="feedback-footer-actions">
                 <Button
-                  type="button"
-                  variant="secondary"
+                  htmlType="button"
+                  type="ghost"
+                  buttonStyle="mono"
+                  size="sm"
                   onClick={handleClose}
                   disabled={submitting}
                 >
                   Cancel
                 </Button>
                 <Button
-                  type="submit"
-                  variant="primary"
+                  htmlType="submit"
+                  form={FEEDBACK_FORM_ID}
+                  type="secondary"
+                  buttonStyle="mono"
+                  size="sm"
                   loading={submitting}
                 >
-                  <span>{submitting ? 'Sending' : 'Send feedback'}</span>
+                  {submitting ? 'Sending' : 'Send feedback'}
                 </Button>
               </div>
-            </form>
-          </aside>
-        ) : null}
+            </div>
+          )}
+        >
+          <form id={FEEDBACK_FORM_ID} className="feedback-form" onSubmit={handleSubmit}>
+            <section className="field feedback-field-group">
+              <div className="field-label">Type</div>
+              <div className="feedback-choice-grid">
+                {INTENT_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    htmlType="button"
+                    type="secondary"
+                    buttonStyle="mono"
+                    size="sm"
+                    className={classNames('feedback-choice-button', intent === option.value && 'is-active')}
+                    onClick={() => setIntent(option.value)}
+                    aria-pressed={intent === option.value}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </section>
+
+            <section className="field feedback-field-group">
+              <div className="field-label">Scope</div>
+              <div className="feedback-choice-grid">
+                {SCOPE_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    htmlType="button"
+                    type="secondary"
+                    buttonStyle="mono"
+                    size="sm"
+                    className={classNames('feedback-choice-button', scope === option.value && 'is-active')}
+                    onClick={() => {
+                      setScope(option.value);
+                      if (option.value === 'specific_thing') {
+                        setError('');
+                      }
+                    }}
+                    aria-pressed={scope === option.value}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              {scope === 'specific_thing' ? (
+                <div className="feedback-target-row">
+                  <Button
+                    htmlType="button"
+                    type="secondary"
+                    buttonStyle="mono"
+                    size="sm"
+                    className="feedback-target-picker"
+                    onClick={handlePickSpecificThing}
+                    startIcon={<Crosshair />}
+                  >
+                    {selectedTarget ? 'Change selected thing' : 'Pick something on screen'}
+                  </Button>
+                  {selectedTarget ? (
+                    <div className="feedback-target-selected">
+                      <CheckCircle2 size={14} />
+                      <span>{renderSelectedTargetLabel(selectedTarget)}</span>
+                    </div>
+                  ) : (
+                    <div className="feedback-target-hint">Pick the specific control, node, or panel you mean.</div>
+                  )}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="field feedback-field-group">
+              <div className="field-label">Satisfaction</div>
+              <div className="feedback-rating-row" role="radiogroup" aria-label="Optional satisfaction rating">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <Button
+                    key={value}
+                    htmlType="button"
+                    type="secondary"
+                    buttonStyle="mono"
+                    size="sm"
+                    className={classNames('feedback-rating-button', rating === value && 'is-active')}
+                    onClick={() => setRating((current) => (current === value ? null : value))}
+                    role="radio"
+                    aria-checked={rating === value}
+                  >
+                    {value}
+                  </Button>
+                ))}
+              </div>
+            </section>
+
+            <Field label="Tell us more (optional)" htmlFor="feedback-message" className="feedback-field-group">
+              <TextareaInput
+                id="feedback-message"
+                className="feedback-textarea"
+                size="lg"
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder="What happened, what you expected, or what felt unclear."
+                rows={4}
+                maxLength={4000}
+              />
+            </Field>
+
+            <CheckboxField
+              className="feedback-checkbox-row"
+              checked={allowFollowUp}
+              onChange={(event) => {
+                const checked = event.target.checked;
+                setAllowFollowUp(checked);
+                if (!checked) setContactEmail('');
+              }}
+              label="Okay to follow up with me"
+            />
+
+            {allowFollowUp && !currentUser?.id ? (
+              <TextInput
+                id="feedback-contact-email"
+                name="feedback-contact-email"
+                type="email"
+                size="md"
+                label="Email"
+                fieldClassName="feedback-contact-email feedback-field-group"
+                value={contactEmail}
+                onChange={(event) => setContactEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                disabled={submitting}
+              />
+            ) : null}
+          </form>
+        </Modal>
       </div>
     </>
   );

@@ -136,6 +136,8 @@ const FEATURE_GATES = Object.freeze({
   presenceView: permissionPolicy.FEATURES.PRESENCE_VIEW,
 });
 const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
+const FEEDBACK_CONTACT_EMAIL_MAX_LENGTH = 240;
+const FEEDBACK_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -192,6 +194,10 @@ function parseBooleanLike(value, fallback = false) {
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return fallback;
+}
+
+function normalizeFeedbackContactEmail(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function serializeFeedbackItem(row) {
@@ -1583,18 +1589,19 @@ async function resolveMapPermissionContextAsync({ mapId, actorUserId }) {
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// POST /api/feedback - capture authenticated in-app feedback
-router.post('/feedback', requireAuth, async (req, res) => {
+// POST /api/feedback - capture in-app feedback from authenticated or anonymous users
+router.post('/feedback', async (req, res) => {
   try {
     const body = req.body || {};
     const message = String(body.message || '').trim();
     const intent = String(body.intent || '').trim();
     const scope = String(body.scope || '').trim();
     const surface = String(body.surface || '').trim();
+    const allowFollowUp = parseBooleanLike(body.allow_follow_up ?? body.allowFollowUp, false);
+    const contactEmail = normalizeFeedbackContactEmail(
+      body.contact_email ?? body.contactEmail ?? body.actor_email ?? body.actorEmail
+    );
 
-    if (!message) {
-      return res.status(400).json({ error: 'Feedback message is required.' });
-    }
     if (!feedbackStore.ITEM_INTENTS.has(intent)) {
       return res.status(400).json({ error: 'Invalid feedback intent.' });
     }
@@ -1606,6 +1613,14 @@ router.post('/feedback', requireAuth, async (req, res) => {
     }
     if (message.length > FEEDBACK_MESSAGE_MAX_LENGTH) {
       return res.status(400).json({ error: `Feedback message must be ${FEEDBACK_MESSAGE_MAX_LENGTH} characters or less.` });
+    }
+    if (allowFollowUp && !req.user?.email) {
+      if (!contactEmail) {
+        return res.status(400).json({ error: 'Email is required for follow-up.' });
+      }
+      if (contactEmail.length > FEEDBACK_CONTACT_EMAIL_MAX_LENGTH || !FEEDBACK_EMAIL_REGEX.test(contactEmail)) {
+        return res.status(400).json({ error: 'Enter a valid email address.' });
+      }
     }
 
     await feedbackStore.ensureFeedbackSchemaAsync();
@@ -1625,7 +1640,7 @@ router.post('/feedback', requireAuth, async (req, res) => {
       id: feedbackId,
       actorUserId: req.user?.id || null,
       actorName: req.user?.name || 'Anonymous',
-      actorEmail: req.user?.email || null,
+      actorEmail: req.user?.email || (allowFollowUp ? contactEmail : null),
       surface,
       routePath: body.route_path || body.routePath || null,
       routeSection: body.route_section || body.routeSection || null,
@@ -1639,7 +1654,7 @@ router.post('/feedback', requireAuth, async (req, res) => {
       componentLabel: body.component_label || body.componentLabel || null,
       domHint: body.dom_hint || body.domHint || null,
       screenshotPath,
-      allowFollowUp: parseBooleanLike(body.allow_follow_up ?? body.allowFollowUp, false),
+      allowFollowUp,
       context: body.context || null,
     });
 
