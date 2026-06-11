@@ -1,13 +1,30 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { submitMarketingContact } from '../api';
 import MarketingPreviewV2 from './MarketingPreviewV2';
 import { parseCurrentRoute, ROUTE_SURFACES } from '../utils/appRoutes';
+
+jest.mock('../api', () => ({
+  submitMarketingContact: jest.fn(),
+}));
 
 function setInputValue(input, value) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
   setter.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setTextareaValue(textarea, value) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+  setter.call(textarea, value);
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function setSelectValue(select, value) {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(select, value);
+  select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 describe('MarketingPreviewV2', () => {
@@ -33,6 +50,31 @@ describe('MarketingPreviewV2', () => {
     return { route, navigateToRoute };
   };
 
+  const openContactModal = (buttonText = 'Contact us') => {
+    const button = Array.from(container.querySelectorAll('button'))
+      .find((candidate) => candidate.textContent.includes(buttonText));
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    return button;
+  };
+
+  const fillContactForm = ({
+    name = 'Avery Test',
+    email = 'avery@example.com',
+    reason = 'Demo request',
+    reasonDetail = 'Enterprise rollout',
+    message = 'I would like to schedule a demo.',
+  } = {}) => {
+    act(() => {
+      setInputValue(container.querySelector('#marketing-v2-contact-name'), name);
+      setInputValue(container.querySelector('#marketing-v2-contact-email'), email);
+      setSelectValue(container.querySelector('#marketing-v2-contact-reason'), reason);
+      setInputValue(container.querySelector('#marketing-v2-contact-reason-detail'), reasonDetail);
+      setTextareaValue(container.querySelector('#marketing-v2-contact-message'), message);
+    });
+  };
+
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -43,6 +85,7 @@ describe('MarketingPreviewV2', () => {
     window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
     window.scrollTo = scrollTo;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    submitMarketingContact.mockResolvedValue({ ok: true });
   });
 
   afterEach(() => {
@@ -267,10 +310,92 @@ describe('MarketingPreviewV2', () => {
       contactButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
 
-    expect(container.textContent).toContain('This opens a prepared email to hello@vellic.io.');
+    expect(container.textContent).toContain('Sends to hello@vellic.io.');
     expect(container.querySelector('#marketing-v2-contact-name')).not.toBeNull();
     expect(container.querySelector('#marketing-v2-contact-email')).not.toBeNull();
     expect(container.querySelector('#marketing-v2-contact-reason')).not.toBeNull();
     expect(container.querySelector('#marketing-v2-contact-message')).not.toBeNull();
+  });
+
+  test('submits inquiry contact forms to the backend and shows success', async () => {
+    renderAt('/contact');
+    openContactModal('Contact us');
+    fillContactForm();
+
+    await act(async () => {
+      container.querySelector('#marketing-v2-contact-form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(submitMarketingContact).toHaveBeenCalledWith(expect.objectContaining({
+      targetKey: 'inquiries',
+      name: 'Avery Test',
+      email: 'avery@example.com',
+      reason: 'Demo request',
+      reasonDetail: 'Enterprise rollout',
+      message: 'I would like to schedule a demo.',
+    }));
+    expect(container.textContent).toContain('Message sent. We will follow up soon.');
+  });
+
+  test('shows validation errors without submitting contact forms', async () => {
+    renderAt('/contact');
+    openContactModal('Get help');
+
+    await act(async () => {
+      container.querySelector('#marketing-v2-contact-form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(submitMarketingContact).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Enter your name.');
+    expect(container.textContent).toContain('Enter a valid email address.');
+    expect(container.textContent).toContain('Enter a message.');
+  });
+
+  test('shows loading and send-failure states for contact forms', async () => {
+    let resolveSubmit;
+    submitMarketingContact.mockReturnValueOnce(new Promise((resolve) => {
+      resolveSubmit = resolve;
+    }));
+    renderAt('/contact');
+    openContactModal('Get help');
+    fillContactForm({
+      reason: 'Scan issue',
+      message: 'A scan did not finish.',
+    });
+
+    await act(async () => {
+      container.querySelector('#marketing-v2-contact-form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(container.textContent).toContain('Sending');
+    expect(submitMarketingContact).toHaveBeenCalledWith(expect.objectContaining({
+      targetKey: 'support',
+      reason: 'Scan issue',
+      message: 'A scan did not finish.',
+    }));
+
+    await act(async () => {
+      resolveSubmit({ ok: true });
+    });
+
+    submitMarketingContact.mockRejectedValueOnce(new Error('Email delivery is not configured.'));
+    fillContactForm({
+      reason: 'Scan issue',
+      message: 'A scan still did not finish.',
+    });
+
+    await act(async () => {
+      container.querySelector('#marketing-v2-contact-form').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true })
+      );
+    });
+
+    expect(container.textContent).toContain('Email delivery is not configured.');
   });
 });

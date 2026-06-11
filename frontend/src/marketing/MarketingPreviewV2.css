@@ -1769,6 +1769,14 @@ body:has(.marketing-preview-v2) {
   letter-spacing: var(--type-body-sm-letter-spacing);
 }
 
+.marketing-v2-modal-note--success {
+  color: var(--color-green-700, #047857);
+}
+
+.marketing-v2-modal-note--error {
+  color: var(--color-red-700, #b91c1c);
+}
+
 .marketing-v2-mobile-scan {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);

@@ -24,6 +24,7 @@ import exampleAnthropicImage from '../assets/marketing/example-anthropic.png';
 import exampleRaycastImage from '../assets/marketing/example-raycast.png';
 import vellicCanvasImage from '../assets/marketing/vellic-canvas.png';
 import vellicLogo from '../assets/vellic-logo.svg';
+import { submitMarketingContact } from '../api';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Field from '../components/ui/Field';
@@ -679,6 +680,13 @@ const emptyContactForm = {
   message: '',
 };
 
+const CONTACT_SUBMIT_STATUS = Object.freeze({
+  IDLE: 'idle',
+  SUBMITTING: 'submitting',
+  SUCCESS: 'success',
+  ERROR: 'error',
+});
+
 const faqItems = [
   {
     question: 'What is Vellic?',
@@ -1301,6 +1309,8 @@ function ContactFormModal({
   errors,
   form,
   show,
+  submitError,
+  submitStatus,
   submitted,
   target,
   onChange,
@@ -1309,21 +1319,27 @@ function ContactFormModal({
 }) {
   const title = target ? `${target.cta}: ${target.title}` : 'Contact Vellic';
   const reasonOptions = target?.reasonOptions?.length ? target.reasonOptions : ['General question', 'Other'];
+  const isSubmitting = submitStatus === CONTACT_SUBMIT_STATUS.SUBMITTING;
 
   return (
     <Modal
       show={show}
       onClose={onClose}
       title={title}
-      subtitle={target ? `This opens a prepared email to ${target.email}.` : ''}
+      subtitle={target ? `Sends to ${target.email}.` : ''}
       className="marketing-v2-contact-modal"
       footer={(
         <div className="marketing-v2-modal-actions">
-          <Button type="button" variant="secondary" buttonStyle="mono" onClick={onClose}>
+          <Button type="button" variant="secondary" buttonStyle="mono" onClick={onClose} disabled={isSubmitting}>
             Close
           </Button>
-          <Button type="submit" form="marketing-v2-contact-form" startIcon={<Mail />}>
-            Open email
+          <Button
+            type="submit"
+            form="marketing-v2-contact-form"
+            startIcon={<Mail />}
+            loading={isSubmitting}
+          >
+            {isSubmitting ? 'Sending' : 'Send message'}
           </Button>
         </div>
       )}
@@ -1339,6 +1355,7 @@ function ContactFormModal({
             autoComplete="name"
             required
             error={errors.name}
+            disabled={isSubmitting}
           />
           <TextInput
             id="marketing-v2-contact-email"
@@ -1350,6 +1367,7 @@ function ContactFormModal({
             autoComplete="email"
             required
             error={errors.email}
+            disabled={isSubmitting}
           />
         </div>
         <div className="marketing-v2-contact-form__row">
@@ -1358,6 +1376,7 @@ function ContactFormModal({
             label="Reason"
             value={form.reason || reasonOptions[0]}
             onChange={(event) => onChange('reason', event.target.value)}
+            disabled={isSubmitting}
           >
             {reasonOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -1369,6 +1388,7 @@ function ContactFormModal({
             value={form.reasonDetail}
             onChange={(event) => onChange('reasonDetail', event.target.value)}
             placeholder="Optional detail"
+            disabled={isSubmitting}
           />
         </div>
         <Field label="Message" htmlFor="marketing-v2-contact-message" required error={errors.message}>
@@ -1380,11 +1400,17 @@ function ContactFormModal({
             rows={5}
             invalid={Boolean(errors.message)}
             required
+            disabled={isSubmitting}
           />
         </Field>
         {submitted ? (
-          <p className="marketing-v2-modal-note" role="status">
-            Your email app should open with the message prepared.
+          <p className="marketing-v2-modal-note marketing-v2-modal-note--success" role="status">
+            Message sent. We will follow up soon.
+          </p>
+        ) : null}
+        {submitError ? (
+          <p className="marketing-v2-modal-note marketing-v2-modal-note--error" role="alert">
+            {submitError}
           </p>
         ) : null}
       </form>
@@ -1410,6 +1436,8 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
   const [contactTarget, setContactTarget] = useState(null);
   const [contactForm, setContactForm] = useState(emptyContactForm);
   const [contactErrors, setContactErrors] = useState({});
+  const [contactSubmitStatus, setContactSubmitStatus] = useState(CONTACT_SUBMIT_STATUS.IDLE);
+  const [contactSubmitError, setContactSubmitError] = useState('');
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const pendingScrollBehaviorRef = useRef('auto');
 
@@ -1596,6 +1624,8 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
       reason: target.reasonOptions[0],
     });
     setContactErrors({});
+    setContactSubmitStatus(CONTACT_SUBMIT_STATUS.IDLE);
+    setContactSubmitError('');
     setContactSubmitted(false);
   };
 
@@ -1612,11 +1642,16 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
       return next;
     });
     if (contactSubmitted) setContactSubmitted(false);
+    if (contactSubmitStatus !== CONTACT_SUBMIT_STATUS.IDLE) {
+      setContactSubmitStatus(CONTACT_SUBMIT_STATUS.IDLE);
+      setContactSubmitError('');
+    }
   };
 
-  const handleContactSubmit = (event) => {
+  const handleContactSubmit = async (event) => {
     event.preventDefault();
     if (!contactTarget) return;
+    if (contactSubmitStatus === CONTACT_SUBMIT_STATUS.SUBMITTING) return;
     const nextErrors = {};
     const name = contactForm.name.trim();
     const email = contactForm.email.trim();
@@ -1626,21 +1661,33 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     if (!message) nextErrors.message = 'Enter a message.';
     if (Object.keys(nextErrors).length > 0) {
       setContactErrors(nextErrors);
+      setContactSubmitStatus(CONTACT_SUBMIT_STATUS.IDLE);
+      setContactSubmitError('');
       return;
     }
 
     const reason = contactForm.reason || contactTarget.reasonOptions[0];
-    const subject = `Vellic: ${reason}`;
-    const body = [
-      `Name: ${name}`,
-      `Email: ${email}`,
-      `Reason: ${reason}`,
-      contactForm.reasonDetail.trim() ? `Reason detail: ${contactForm.reasonDetail.trim()}` : '',
-      '',
-      message,
-    ].filter(Boolean).join('\n');
-    window.location.href = `mailto:${contactTarget.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    setContactSubmitted(true);
+    setContactErrors({});
+    setContactSubmitted(false);
+    setContactSubmitStatus(CONTACT_SUBMIT_STATUS.SUBMITTING);
+    setContactSubmitError('');
+
+    try {
+      await submitMarketingContact({
+        targetKey: contactTarget.key,
+        name,
+        email,
+        reason,
+        reasonDetail: contactForm.reasonDetail.trim(),
+        message,
+        sourceUrl: typeof window !== 'undefined' ? window.location.href : '',
+      });
+      setContactSubmitStatus(CONTACT_SUBMIT_STATUS.SUCCESS);
+      setContactSubmitted(true);
+    } catch (error) {
+      setContactSubmitStatus(CONTACT_SUBMIT_STATUS.ERROR);
+      setContactSubmitError(error?.message || 'Could not send your message. Try again or email us directly.');
+    }
   };
 
   const handleShareMarketing = async () => {
@@ -1888,6 +1935,8 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         target={contactTarget}
         form={contactForm}
         errors={contactErrors}
+        submitError={contactSubmitError}
+        submitStatus={contactSubmitStatus}
         submitted={contactSubmitted}
         onChange={handleContactChange}
         onClose={closeContactModal}

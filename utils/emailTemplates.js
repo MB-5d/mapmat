@@ -7,6 +7,7 @@ const EMAIL_TEMPLATE_KEYS = Object.freeze({
   COLLABORATION_ACCESS_REMOVED: 'collaboration.access.removed',
   AUTH_EMAIL_VERIFICATION: 'auth.email_verification',
   AUTH_PASSWORD_RESET: 'auth.password_reset',
+  MARKETING_CONTACT: 'marketing.contact',
 });
 
 function normalizeBaseUrl(value) {
@@ -365,6 +366,64 @@ function renderAuthPasswordResetEmail(payload = {}) {
   });
 }
 
+function renderMarketingContactEmail(payload = {}) {
+  const targetKey = String(payload.targetKey || '').trim().toLowerCase() === 'support'
+    ? 'support'
+    : 'inquiries';
+  const targetLabel = targetKey === 'support' ? 'Product support' : 'Inquiries & Feedback';
+  const subjectPrefix = targetKey === 'support' ? 'Vellic support' : 'Vellic inquiry';
+  const name = trimText(payload.name, 120) || 'Unknown sender';
+  const email = trimText(payload.email, 240) || 'No email provided';
+  const reason = trimText(payload.reason, 120) || 'General question';
+  const reasonDetail = trimText(payload.reasonDetail, 240);
+  const message = trimText(payload.message, 4000) || 'No message provided.';
+  const submittedAt = formatDateLabel(payload.submittedAt);
+  const sourceUrl = trimText(payload.sourceUrl, 500);
+  const subject = `${subjectPrefix}: ${reason}`;
+  const detailPairs = [
+    { label: 'Name', value: name },
+    { label: 'Email', value: email },
+    { label: 'Inbox', value: targetLabel },
+    { label: 'Reason', value: reason },
+    reasonDetail ? { label: 'Reason detail', value: reasonDetail } : null,
+    submittedAt ? { label: 'Submitted', value: submittedAt } : null,
+    sourceUrl ? { label: 'Source page', value: sourceUrl } : null,
+  ].filter(Boolean);
+
+  const textLines = [
+    `${name} submitted the ${targetLabel} contact form.`,
+    ...detailPairs.map((pair) => `${pair.label}: ${pair.value}`),
+    '',
+    'Message:',
+    message,
+  ];
+
+  const safeSubject = escapeHtml(subject);
+  const safeIntro = escapeHtml(`${name} submitted the ${targetLabel} contact form.`);
+  const safePairs = detailPairs.map((pair) => ({
+    label: escapeHtml(pair.label),
+    value: escapeHtml(pair.value),
+  }));
+  const safeMessage = escapeHtml(message);
+
+  return {
+    subject,
+    text: textLines.join('\n'),
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; color: #1f2937; line-height: 1.5;">
+        <h1 style="font-size: 22px; margin-bottom: 16px;">${safeSubject}</h1>
+        <p style="margin: 0 0 12px;">${safeIntro}</p>
+        ${safePairs.map((pair) => `<p style="margin: 0 0 8px;"><strong>${pair.label}:</strong> ${pair.value}</p>`).join('')}
+        <div style="margin: 16px 0 0; padding: 16px; border-radius: 8px; background: #f9fafb; border: 1px solid #e5e7eb;">
+          <p style="margin: 0 0 8px;"><strong>Message:</strong></p>
+          <p style="margin: 0; white-space: pre-wrap;">${safeMessage}</p>
+        </div>
+        <p style="margin: 16px 0 0; color: #6b7280; font-size: 14px;">Reply directly to this email to follow up.</p>
+      </div>
+    `.trim(),
+  };
+}
+
 function renderTemplatedEmail({ templateKey, payload }) {
   switch (String(templateKey || '').trim()) {
     case EMAIL_TEMPLATE_KEYS.COLLABORATION_INVITE:
@@ -383,6 +442,8 @@ function renderTemplatedEmail({ templateKey, payload }) {
       return renderAuthEmailVerificationEmail(payload);
     case EMAIL_TEMPLATE_KEYS.AUTH_PASSWORD_RESET:
       return renderAuthPasswordResetEmail(payload);
+    case EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT:
+      return renderMarketingContactEmail(payload);
     default:
       throw new Error(`Unknown email template: ${templateKey}`);
   }

@@ -94,6 +94,19 @@ async function main() {
         expiresMinutes: 15,
       },
     },
+    {
+      templateKey: EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT,
+      payload: {
+        targetKey: 'inquiries',
+        name: 'QA Contact',
+        email: 'qa-contact@example.com',
+        reason: 'Demo request',
+        reasonDetail: 'Email delivery check',
+        message: 'Please follow up about Vellic.',
+        sourceUrl: 'https://vellic.io/contact',
+        submittedAt: new Date().toISOString(),
+      },
+    },
   ];
 
   const results = [];

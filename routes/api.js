@@ -28,7 +28,8 @@ const {
   summarizeCoeditingRolloutConfigAsync,
 } = require('../utils/coeditingRollout');
 const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservability');
-const { buildHealthSnapshot: getEmailHealthSnapshot } = require('../utils/emailProvider');
+const { buildHealthSnapshot: getEmailHealthSnapshot, sendEmailAsync } = require('../utils/emailProvider');
+const { EMAIL_TEMPLATE_KEYS, renderTemplatedEmail } = require('../utils/emailTemplates');
 const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
 const { analyzeMapInsights } = require('../utils/mapInsights');
 const { recordUsageEvent } = require('../utils/usageMetering');
@@ -138,6 +139,17 @@ const FEATURE_GATES = Object.freeze({
 const FEEDBACK_MESSAGE_MAX_LENGTH = 4000;
 const FEEDBACK_CONTACT_EMAIL_MAX_LENGTH = 240;
 const FEEDBACK_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CONTACT_NAME_MAX_LENGTH = 120;
+const CONTACT_EMAIL_MAX_LENGTH = 240;
+const CONTACT_REASON_MAX_LENGTH = 120;
+const CONTACT_REASON_DETAIL_MAX_LENGTH = 240;
+const CONTACT_MESSAGE_MAX_LENGTH = 4000;
+const CONTACT_SOURCE_URL_MAX_LENGTH = 500;
+const CONTACT_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MARKETING_CONTACT_RECIPIENTS = Object.freeze({
+  inquiries: 'hello@vellic.io',
+  support: 'support@vellic.io',
+});
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -198,6 +210,27 @@ function parseBooleanLike(value, fallback = false) {
 
 function normalizeFeedbackContactEmail(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function normalizeContactText(value) {
+  return String(value || '').trim();
+}
+
+function resolveMarketingContactTarget(value) {
+  const normalized = String(value || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  if (['support', 'product-support', 'help'].includes(normalized)) return 'support';
+  if (['inquiries', 'inquiry', 'demo', 'feedback', 'partnership', 'general', 'hello'].includes(normalized)) {
+    return 'inquiries';
+  }
+  return null;
+}
+
+function inferMarketingContactTargetFromReason(reason) {
+  const normalized = String(reason || '').trim().toLowerCase();
+  if (/(support|scan|screenshot|export|account|issue|bug|help)/.test(normalized)) {
+    return 'support';
+  }
+  return 'inquiries';
 }
 
 function serializeFeedbackItem(row) {
@@ -1588,6 +1621,99 @@ async function resolveMapPermissionContextAsync({ mapId, actorUserId }) {
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
+
+// POST /api/contact - send public marketing contact form submissions
+router.post('/contact', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const name = normalizeContactText(body.name);
+    const email = normalizeContactText(body.email).toLowerCase();
+    const reason = normalizeContactText(body.reason);
+    const reasonDetail = normalizeContactText(body.reasonDetail ?? body.reason_detail);
+    const message = normalizeContactText(body.message);
+    const sourceUrl = normalizeContactText(body.sourceUrl ?? body.source_url);
+    const targetKey = resolveMarketingContactTarget(
+      body.target ?? body.targetKey ?? body.category ?? body.kind ?? body.type
+    ) || inferMarketingContactTargetFromReason(reason);
+    const recipientEmail = MARKETING_CONTACT_RECIPIENTS[targetKey];
+
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required.' });
+    }
+    if (name.length > CONTACT_NAME_MAX_LENGTH) {
+      return res.status(400).json({ error: `Name must be ${CONTACT_NAME_MAX_LENGTH} characters or less.` });
+    }
+    if (!email || email.length > CONTACT_EMAIL_MAX_LENGTH || !CONTACT_EMAIL_REGEX.test(email)) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
+    }
+    if (!reason) {
+      return res.status(400).json({ error: 'Reason is required.' });
+    }
+    if (reason.length > CONTACT_REASON_MAX_LENGTH) {
+      return res.status(400).json({ error: `Reason must be ${CONTACT_REASON_MAX_LENGTH} characters or less.` });
+    }
+    if (reasonDetail.length > CONTACT_REASON_DETAIL_MAX_LENGTH) {
+      return res.status(400).json({ error: `Reason details must be ${CONTACT_REASON_DETAIL_MAX_LENGTH} characters or less.` });
+    }
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required.' });
+    }
+    if (message.length > CONTACT_MESSAGE_MAX_LENGTH) {
+      return res.status(400).json({ error: `Message must be ${CONTACT_MESSAGE_MAX_LENGTH} characters or less.` });
+    }
+    if (sourceUrl.length > CONTACT_SOURCE_URL_MAX_LENGTH) {
+      return res.status(400).json({ error: `Source page must be ${CONTACT_SOURCE_URL_MAX_LENGTH} characters or less.` });
+    }
+    if (!recipientEmail) {
+      return res.status(400).json({ error: 'Contact target is not supported.' });
+    }
+
+    const rendered = renderTemplatedEmail({
+      templateKey: EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT,
+      payload: {
+        targetKey,
+        name,
+        email,
+        reason,
+        reasonDetail,
+        message,
+        sourceUrl,
+        submittedAt: new Date().toISOString(),
+      },
+    });
+
+    const result = await sendEmailAsync({
+      toEmail: recipientEmail,
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+      replyToEmail: email,
+      metadata: {
+        templateKey: EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT,
+        targetKey,
+        submittedEmail: email,
+        reason,
+      },
+    });
+
+    if (result.status === 'skipped') {
+      return res.status(503).json({ error: 'Email delivery is not configured.' });
+    }
+
+    return res.status(201).json({
+      ok: true,
+      contact: {
+        target: targetKey,
+        recipient: recipientEmail,
+        provider: result.provider || null,
+        status: result.status || 'sent',
+      },
+    });
+  } catch (error) {
+    console.error('Marketing contact email error:', error);
+    return res.status(502).json({ error: 'Failed to send contact message.' });
+  }
+});
 
 // POST /api/feedback - capture in-app feedback from authenticated or anonymous users
 router.post('/feedback', async (req, res) => {

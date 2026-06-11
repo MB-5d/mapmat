@@ -477,6 +477,13 @@ export async function downloadAdminFeedbackThemeExport() {
   triggerBlobDownload(blob, 'vellic-feedback-themes.csv');
 }
 
+export async function submitMarketingContact(payload = {}) {
+  return fetchApi('/api/contact', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function submitFeedback(payload = {}) {
   return fetchApi('/api/feedback', {
     method: 'POST',

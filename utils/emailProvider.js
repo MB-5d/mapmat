@@ -83,10 +83,11 @@ function buildHealthSnapshot() {
   };
 }
 
-async function sendViaResendAsync({ config, toEmail, subject, text, html }) {
+async function sendViaResendAsync({ config, toEmail, subject, text, html, replyToEmail = null }) {
   if (!config.resendApiKeyConfigured) {
     throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend.');
   }
+  const resolvedReplyToEmail = normalizeEmailAddress(replyToEmail) || config.replyToAddress;
 
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -100,7 +101,7 @@ async function sendViaResendAsync({ config, toEmail, subject, text, html }) {
       subject,
       text,
       html,
-      reply_to: config.replyToAddress || undefined,
+      reply_to: resolvedReplyToEmail || undefined,
     }),
   });
 
@@ -132,10 +133,11 @@ async function sendViaResendAsync({ config, toEmail, subject, text, html }) {
   };
 }
 
-async function sendViaPostmarkAsync({ config, toEmail, subject, text, html }) {
+async function sendViaPostmarkAsync({ config, toEmail, subject, text, html, replyToEmail = null }) {
   if (!config.postmarkServerTokenConfigured) {
     throw new Error('POSTMARK_SERVER_TOKEN is required when EMAIL_PROVIDER=postmark.');
   }
+  const resolvedReplyToEmail = normalizeEmailAddress(replyToEmail) || config.replyToAddress;
 
   const response = await fetch('https://api.postmarkapp.com/email', {
     method: 'POST',
@@ -150,7 +152,7 @@ async function sendViaPostmarkAsync({ config, toEmail, subject, text, html }) {
       Subject: subject,
       TextBody: text,
       HtmlBody: html,
-      ReplyTo: config.replyToAddress || undefined,
+      ReplyTo: resolvedReplyToEmail || undefined,
     }),
   });
 
@@ -187,10 +189,12 @@ async function sendEmailAsync({
   subject,
   text,
   html,
+  replyToEmail = null,
   metadata = null,
 }) {
   const config = getEmailConfigSnapshot();
   const normalizedToEmail = normalizeEmailAddress(toEmail);
+  const normalizedReplyToEmail = normalizeEmailAddress(replyToEmail);
   if (!normalizedToEmail) {
     throw new Error('A valid recipient email is required for email delivery.');
   }
@@ -217,7 +221,7 @@ async function sendEmailAsync({
       provider: 'log',
       toEmail: normalizedToEmail,
       subject: normalizedSubject,
-      replyTo: config.replyToAddress,
+      replyTo: normalizedReplyToEmail || config.replyToAddress,
       metadata: metadata || null,
       text: String(text || '').trim(),
     }));
@@ -238,6 +242,7 @@ async function sendEmailAsync({
       subject: normalizedSubject,
       text,
       html,
+      replyToEmail: normalizedReplyToEmail,
     });
   }
 
@@ -248,6 +253,7 @@ async function sendEmailAsync({
       subject: normalizedSubject,
       text,
       html,
+      replyToEmail: normalizedReplyToEmail,
     });
   }
 
