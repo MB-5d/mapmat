@@ -10,6 +10,9 @@ const { spawn } = require('child_process');
 const PORT = Number(process.env.AUTH_CHECK_PORT || 4311);
 const API_BASE = `http://127.0.0.1:${PORT}`;
 const DB_PATH = process.env.AUTH_CHECK_DB_PATH || path.join(os.tmpdir(), `vellic-auth-check-${process.pid}.db`);
+process.env.DB_PATH = DB_PATH;
+const bcrypt = require('bcryptjs');
+const authStore = require('../stores/authStore');
 const START_TIMEOUT_MS = 30000;
 const WAIT_STEP_MS = 150;
 
@@ -23,6 +26,18 @@ function randomEmail() {
 
 function randomPassword() {
   return `pw_${Math.random().toString(36).slice(2, 10)}A1`;
+}
+
+async function createPendingPasswordUserAsync({ email, password, name }) {
+  const passwordHash = await bcrypt.hash(password, 10);
+  return authStore.createUserAsync({
+    email,
+    passwordHash,
+    name,
+    emailVerifiedAt: null,
+    emailVerificationRequired: true,
+    authProvider: 'password',
+  });
 }
 
 function buildHeaders(options = {}) {
@@ -235,6 +250,45 @@ async function run() {
       token: bypassSignup.token,
     });
     assert.strictEqual(bypassMe.user?.emailVerified, true, 'bypassed /auth/me should show verified email');
+
+    const pendingSignupEmail = `auth_pending_signup_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const pendingSignupPassword = randomPassword();
+    await createPendingPasswordUserAsync({
+      email: pendingSignupEmail,
+      password: pendingSignupPassword,
+      name: 'Old Pending Signup',
+    });
+    const pendingSignupBypass = await fetchJson(`${API_BASE}/auth/signup`, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: pendingSignupEmail,
+        password: pendingSignupPassword,
+        name: 'Old Pending Signup',
+      }),
+    });
+    assert.strictEqual(pendingSignupBypass.emailVerificationSkipped, true, 'existing pending example.com signup should skip verification');
+    assert.strictEqual(pendingSignupBypass.verificationRequired, false, 'existing pending signup should not require verification');
+    assert.strictEqual(pendingSignupBypass.user?.email, pendingSignupEmail, 'existing pending signup should return the existing user');
+    assert.strictEqual(pendingSignupBypass.user?.emailVerified, true, 'existing pending signup should return a verified user');
+    assert(pendingSignupBypass.token, 'existing pending signup should return an auth token');
+
+    const pendingLoginEmail = `auth_pending_login_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@mail.com`;
+    const pendingLoginPassword = randomPassword();
+    await createPendingPasswordUserAsync({
+      email: pendingLoginEmail,
+      password: pendingLoginPassword,
+      name: 'Old Pending Login',
+    });
+    const pendingLoginBypass = await fetchJson(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: pendingLoginEmail,
+        password: pendingLoginPassword,
+      }),
+    });
+    assert.strictEqual(pendingLoginBypass.user?.email, pendingLoginEmail, 'existing pending mail.com login should return the user');
+    assert.strictEqual(pendingLoginBypass.user?.emailVerified, true, 'existing pending mail.com login should return a verified user');
+    assert(pendingLoginBypass.token, 'existing pending mail.com login should return an auth token');
 
     const signupStartedAt = Date.now();
     const signup = await fetchJson(`${API_BASE}/auth/signup`, {

@@ -239,6 +239,46 @@ function isVerificationPending(user) {
   return !!user && !isUserEmailVerified(user);
 }
 
+async function markSkippedVerificationAccountVerifiedAsync(user) {
+  if (!isVerificationPending(user) || !shouldSkipEmailVerificationForTesting(user.email)) {
+    return user;
+  }
+
+  const updatedUser = await authStore.markUserEmailVerifiedAsync(user.id);
+  await authChallengeStore.ensureAuthChallengeSchemaAsync();
+  await authChallengeStore.invalidateActiveAuthChallengesAsync({
+    userId: user.id,
+    email: normalizeEmail(user.email),
+    purpose: AUTH_CHALLENGE_PURPOSES.EMAIL_VERIFICATION,
+  });
+  return updatedUser;
+}
+
+async function validatePasswordLoginAsync(user, password) {
+  const passwordHashCurrent = String(user?.password_hash || '');
+  if (!passwordHashCurrent) {
+    return {
+      ok: false,
+      status: 401,
+      payload: {
+        error: 'This account does not have a password yet. Use Google sign-in or reset your password.',
+        code: 'PASSWORD_LOGIN_UNAVAILABLE',
+      },
+    };
+  }
+
+  const isValid = await bcrypt.compare(password, passwordHashCurrent);
+  if (!isValid) {
+    return {
+      ok: false,
+      status: 401,
+      payload: { error: 'Invalid email/username or password' },
+    };
+  }
+
+  return { ok: true };
+}
+
 const logSecurityEvent = (event, details = {}, level = 'warn') => {
   const payload = {
     ts: new Date().toISOString(),
@@ -1030,6 +1070,23 @@ router.post('/signup', signupLimiter, async (req, res) => {
     const existingUser = await authStore.getUserByEmailAsync(emailNormalized);
     if (existingUser) {
       if (isVerificationPending(existingUser)) {
+        if (shouldSkipEmailVerificationForTesting(existingUser.email)) {
+          const passwordValidation = await validatePasswordLoginAsync(existingUser, password);
+          if (!passwordValidation.ok) {
+            return res.status(passwordValidation.status).json(passwordValidation.payload);
+          }
+
+          const verifiedUser = await markSkippedVerificationAccountVerifiedAsync(existingUser);
+          const publicUser = await authStore.getPublicUserByIdAsync(verifiedUser.id);
+          const token = issueSessionCookie(res, publicUser);
+          return res.json({
+            user: await buildClientUserWithEntitlementsAsync(publicUser),
+            token: AUTH_HEADER_FALLBACK ? token : undefined,
+            verificationRequired: false,
+            emailVerificationSkipped: true,
+          });
+        }
+
         return res.status(409).json({
           error: 'This account is waiting for email verification.',
           code: 'EMAIL_NOT_VERIFIED',
@@ -1214,6 +1271,16 @@ router.post('/login', loginLimiter, async (req, res) => {
       });
     }
 
+    let passwordAlreadyValidated = false;
+    if (isVerificationPending(user) && shouldSkipEmailVerificationForTesting(user.email)) {
+      const passwordValidation = await validatePasswordLoginAsync(user, password);
+      if (!passwordValidation.ok) {
+        return res.status(passwordValidation.status).json(passwordValidation.payload);
+      }
+      passwordAlreadyValidated = true;
+      user = await markSkippedVerificationAccountVerifiedAsync(user);
+    }
+
     if (isVerificationPending(user)) {
       return res.status(403).json({
         error: 'Check your email for a verification code before logging in.',
@@ -1223,17 +1290,11 @@ router.post('/login', loginLimiter, async (req, res) => {
       });
     }
 
-    const passwordHashCurrent = String(user.password_hash || '');
-    if (!passwordHashCurrent) {
-      return res.status(401).json({
-        error: 'This account does not have a password yet. Use Google sign-in or reset your password.',
-        code: 'PASSWORD_LOGIN_UNAVAILABLE',
-      });
-    }
-
-    const isValid = await bcrypt.compare(password, passwordHashCurrent);
-    if (!isValid) {
-      return res.status(401).json({ error: 'Invalid email/username or password' });
+    if (!passwordAlreadyValidated) {
+      const passwordValidation = await validatePasswordLoginAsync(user, password);
+      if (!passwordValidation.ok) {
+        return res.status(passwordValidation.status).json(passwordValidation.payload);
+      }
     }
 
     const publicUser = await authStore.getPublicUserByIdAsync(user.id);
