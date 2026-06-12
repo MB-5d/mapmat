@@ -443,7 +443,15 @@ describe('MarketingPreviewV2', () => {
       reasonDetail: 'Enterprise rollout',
       message: 'I would like to schedule a demo.',
     }));
-    expect(container.textContent).toContain('Message sent. We will follow up soon.');
+    expect(container.textContent).toContain('Message sent');
+    expect(container.textContent).toContain('We will follow up soon.');
+    expect(container.querySelector('#marketing-v2-contact-form')).toBeNull();
+    expect(container.querySelector('#marketing-v2-contact-name')).toBeNull();
+    expect(container.textContent).not.toContain('Send message');
+
+    const footerButtons = Array.from(container.querySelectorAll('.marketing-v2-modal-actions button'));
+    expect(footerButtons).toHaveLength(1);
+    expect(footerButtons[0].textContent).toContain('Close');
   });
 
   test('shows validation errors without submitting contact forms', async () => {
@@ -463,9 +471,9 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('shows loading and send-failure states for contact forms', async () => {
-    let resolveSubmit;
-    submitMarketingContact.mockReturnValueOnce(new Promise((resolve) => {
-      resolveSubmit = resolve;
+    let rejectSubmit;
+    submitMarketingContact.mockReturnValueOnce(new Promise((resolve, reject) => {
+      rejectSubmit = reject;
     }));
     renderAt('/contact');
     openContactModal('Get help');
@@ -488,21 +496,11 @@ describe('MarketingPreviewV2', () => {
     }));
 
     await act(async () => {
-      resolveSubmit({ ok: true });
-    });
-
-    submitMarketingContact.mockRejectedValueOnce(new Error('Email delivery is not configured.'));
-    fillContactForm({
-      reason: 'Scan issue',
-      message: 'A scan still did not finish.',
-    });
-
-    await act(async () => {
-      container.querySelector('#marketing-v2-contact-form').dispatchEvent(
-        new Event('submit', { bubbles: true, cancelable: true })
-      );
+      rejectSubmit(new Error('Email delivery is not configured.'));
     });
 
     expect(container.textContent).toContain('Email delivery is not configured.');
+    expect(container.querySelector('#marketing-v2-contact-form')).not.toBeNull();
+    expect(container.textContent).toContain('Send message');
   });
 });

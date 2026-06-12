@@ -1343,6 +1343,7 @@ function ContactFormModal({
   const title = target ? `${target.cta}: ${target.title}` : 'Contact Vellic';
   const reasonOptions = target?.reasonOptions?.length ? target.reasonOptions : ['General question', 'Other'];
   const isSubmitting = submitStatus === CONTACT_SUBMIT_STATUS.SUBMITTING;
+  const isSubmitted = submitted || submitStatus === CONTACT_SUBMIT_STATUS.SUCCESS;
 
   return (
     <Modal
@@ -1356,87 +1357,96 @@ function ContactFormModal({
           <Button type="button" variant="secondary" buttonStyle="mono" onClick={onClose} disabled={isSubmitting}>
             Close
           </Button>
-          <Button
-            type="submit"
-            form="marketing-v2-contact-form"
-            startIcon={<Mail />}
-            loading={isSubmitting}
-          >
-            {isSubmitting ? 'Sending' : 'Send message'}
-          </Button>
+          {isSubmitted ? null : (
+            <Button
+              type="submit"
+              form="marketing-v2-contact-form"
+              startIcon={<Mail />}
+              loading={isSubmitting}
+            >
+              {isSubmitting ? 'Sending' : 'Send message'}
+            </Button>
+          )}
         </div>
       )}
     >
-      <form id="marketing-v2-contact-form" className="marketing-v2-contact-form" onSubmit={onSubmit}>
-        <div className="marketing-v2-contact-form__row">
-          <TextInput
-            id="marketing-v2-contact-name"
-            label="Name"
-            value={form.name}
-            onChange={(event) => onChange('name', event.target.value)}
-            placeholder="Your name"
-            autoComplete="name"
-            required
-            error={errors.name}
-            disabled={isSubmitting}
-          />
-          <TextInput
-            id="marketing-v2-contact-email"
-            type="email"
-            label="Email"
-            value={form.email}
-            onChange={(event) => onChange('email', event.target.value)}
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-            error={errors.email}
-            disabled={isSubmitting}
-          />
+      {isSubmitted ? (
+        <div className="marketing-v2-contact-confirmation" role="status">
+          <span className="marketing-v2-contact-confirmation__icon" aria-hidden="true">
+            <Check size={22} strokeWidth={2.4} />
+          </span>
+          <div>
+            <h3>Message sent</h3>
+            <p>We will follow up soon.</p>
+          </div>
         </div>
-        <div className="marketing-v2-contact-form__row">
-          <SelectInput
-            id="marketing-v2-contact-reason"
-            label="Reason"
-            value={form.reason || reasonOptions[0]}
-            onChange={(event) => onChange('reason', event.target.value)}
-            disabled={isSubmitting}
-          >
-            {reasonOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </SelectInput>
-          <TextInput
-            id="marketing-v2-contact-reason-detail"
-            label="Reason details"
-            value={form.reasonDetail}
-            onChange={(event) => onChange('reasonDetail', event.target.value)}
-            placeholder="Optional detail"
-            disabled={isSubmitting}
-          />
-        </div>
-        <Field label="Message" htmlFor="marketing-v2-contact-message" required error={errors.message}>
-          <TextareaInput
-            id="marketing-v2-contact-message"
-            value={form.message}
-            onChange={(event) => onChange('message', event.target.value)}
-            placeholder="What should we know?"
-            rows={5}
-            invalid={Boolean(errors.message)}
-            required
-            disabled={isSubmitting}
-          />
-        </Field>
-        {submitted ? (
-          <p className="marketing-v2-modal-note marketing-v2-modal-note--success" role="status">
-            Message sent. We will follow up soon.
-          </p>
-        ) : null}
-        {submitError ? (
-          <p className="marketing-v2-modal-note marketing-v2-modal-note--error" role="alert">
-            {submitError}
-          </p>
-        ) : null}
-      </form>
+      ) : (
+        <form id="marketing-v2-contact-form" className="marketing-v2-contact-form" onSubmit={onSubmit}>
+          <div className="marketing-v2-contact-form__row">
+            <TextInput
+              id="marketing-v2-contact-name"
+              label="Name"
+              value={form.name}
+              onChange={(event) => onChange('name', event.target.value)}
+              placeholder="Your name"
+              autoComplete="name"
+              required
+              error={errors.name}
+              disabled={isSubmitting}
+            />
+            <TextInput
+              id="marketing-v2-contact-email"
+              type="email"
+              label="Email"
+              value={form.email}
+              onChange={(event) => onChange('email', event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+              error={errors.email}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="marketing-v2-contact-form__row">
+            <SelectInput
+              id="marketing-v2-contact-reason"
+              label="Reason"
+              value={form.reason || reasonOptions[0]}
+              onChange={(event) => onChange('reason', event.target.value)}
+              disabled={isSubmitting}
+            >
+              {reasonOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </SelectInput>
+            <TextInput
+              id="marketing-v2-contact-reason-detail"
+              label="Reason details"
+              value={form.reasonDetail}
+              onChange={(event) => onChange('reasonDetail', event.target.value)}
+              placeholder="Optional detail"
+              disabled={isSubmitting}
+            />
+          </div>
+          <Field label="Message" htmlFor="marketing-v2-contact-message" required error={errors.message}>
+            <TextareaInput
+              id="marketing-v2-contact-message"
+              value={form.message}
+              onChange={(event) => onChange('message', event.target.value)}
+              placeholder="What should we know?"
+              rows={5}
+              invalid={Boolean(errors.message)}
+              required
+              disabled={isSubmitting}
+            />
+          </Field>
+          {submitError ? (
+            <p className="marketing-v2-modal-note marketing-v2-modal-note--error" role="alert">
+              {submitError}
+            </p>
+          ) : null}
+        </form>
+      )}
     </Modal>
   );
 }

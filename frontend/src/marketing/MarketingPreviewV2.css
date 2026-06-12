@@ -1760,6 +1760,43 @@ body:has(.marketing-preview-v2) {
   gap: var(--unit-16);
 }
 
+.marketing-v2-contact-confirmation {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: var(--unit-16);
+  align-items: flex-start;
+  max-width: 520px;
+}
+
+.marketing-v2-contact-confirmation__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--ui-radius-md);
+  color: var(--color-green-700, #047857);
+  background: var(--color-green-50, #ecfdf5);
+}
+
+.marketing-v2-contact-confirmation h3 {
+  margin: 0 0 var(--unit-8);
+  color: var(--marketing-v2-ink);
+  font-size: var(--type-title-md-size);
+  font-weight: var(--type-title-md-weight);
+  line-height: var(--type-title-md-line-height);
+  letter-spacing: var(--type-title-md-letter-spacing);
+}
+
+.marketing-v2-contact-confirmation p {
+  margin: 0;
+  color: var(--marketing-v2-muted);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+}
+
 .marketing-v2-modal-note {
   margin: 0;
   color: var(--marketing-v2-muted);
