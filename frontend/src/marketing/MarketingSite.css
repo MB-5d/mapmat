@@ -588,6 +588,13 @@ body:has(.marketing-site) {
   min-height: 56px;
 }
 
+.marketing-scan-bar .scan-bar__input:focus,
+.marketing-scan-bar .scan-bar__input:focus-visible {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
 .marketing-scan-bar__app-shell.is-invalid {
   border-color: var(--ui-input-error-border);
   box-shadow: var(--shadow-focus-danger);

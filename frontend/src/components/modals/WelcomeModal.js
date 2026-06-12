@@ -71,7 +71,7 @@ const WelcomeModal = ({
               Close
             </Button>
             <Button variant="primary" onClick={onConfirm}>
-              Start mapping
+              Okay
             </Button>
           </div>
         </div>

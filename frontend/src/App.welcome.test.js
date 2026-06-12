@@ -316,12 +316,12 @@ describe('App blank home and welcome modal', () => {
     expect(getWelcomeModal()).toBeNull();
   });
 
-  test('checking the box and clicking Start mapping persists dismissal for logged-in users', async () => {
+  test('checking the box and clicking Okay persists dismissal for logged-in users', async () => {
     api.getMe.mockResolvedValue({ user: defaultUser });
     await renderApp();
 
     await click(getDontShowAgainCheckbox());
-    await click(getButton('Start mapping'));
+    await click(getButton('Okay'));
 
     expect(window.localStorage.getItem(WELCOME_MODAL_STORAGE_KEY)).toBe('true');
     expect(getWelcomeModal()).toBeNull();

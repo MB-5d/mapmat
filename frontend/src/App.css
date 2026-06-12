@@ -9327,6 +9327,106 @@ body {
   }
 }
 
+.scan-limit-modal .scan-limit-action-copy {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.plans-modal-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface-muted);
+}
+
+.plans-modal-current span {
+  color: var(--ui-color-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.plans-modal-current strong {
+  color: var(--ui-color-text);
+  font-size: 15px;
+}
+
+.plans-modal-grid {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.plans-modal-card {
+  gap: 12px;
+  padding: 16px;
+}
+
+.plans-modal-card-header,
+.plans-modal-card-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plans-modal-current-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--ui-color-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.plans-modal-card-price-row .plans-modal-card-price {
+  color: var(--ui-color-text);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.plans-modal-card p {
+  margin: 0;
+  color: var(--ui-color-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.plans-modal-card-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 18px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ui-color-text);
+  font-size: 13px;
+}
+
+.plans-modal-card-action {
+  align-self: flex-start;
+  color: var(--ui-color-primary);
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .plans-modal-current,
+  .plans-modal-card-header,
+  .plans-modal-card-price-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .plans-modal-card-features {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Auth Modal */
 .auth-modal {
   overflow: hidden;

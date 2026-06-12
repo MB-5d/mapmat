@@ -88,7 +88,10 @@ import {
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
 import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
-import { getCenteredNodeTransform as getCenteredCanvasNodeTransform } from './utils/canvasView';
+import {
+  getCenteredNodeTransform as getCenteredCanvasNodeTransform,
+  getFitBoundsTransform,
+} from './utils/canvasView';
 import { normalizeWorldBounds as normalizeCanvasWorldBounds } from './utils/canvasBounds';
 import {
   getViewportSelectionRectStyle,
@@ -185,9 +188,27 @@ const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
 const GUEST_SCAN_PAGE_LIMIT = 25;
 const PLAN_OPTION_CARDS = [
-  { key: 'pro', name: 'Pro', scan: '1,000 pages/mo', screenshots: '100 screenshots/mo', note: 'For one person' },
-  { key: 'studio', name: 'Studio', scan: '50,000 pages/mo', screenshots: '3,000 screenshots/mo', note: 'For small teams' },
-  { key: 'agency', name: 'Agency', scan: '200,000 pages/mo', screenshots: '10,000 screenshots/mo', note: 'For larger teams' },
+  {
+    key: 'pro',
+    name: 'Pro',
+    price: '$8/mo',
+    note: 'For solo audits with screenshots and saved work.',
+    features: ['5 active projects', '1,000 crawl pages', '100 screenshot credits', '2 organized exports', '1 editor'],
+  },
+  {
+    key: 'studio',
+    name: 'Studio',
+    price: '$15/mo',
+    note: 'For small teams handling recurring site work.',
+    features: ['50 active projects', '50,000 crawl pages', '3,000 screenshot credits', 'Unlimited organized exports', '5 seats'],
+  },
+  {
+    key: 'agency',
+    name: 'Agency',
+    price: '$25/mo',
+    note: 'For heavier client audits and shared delivery.',
+    features: ['Unlimited projects', '200,000 crawl pages', '10,000 screenshot credits', 'Unlimited organized exports', '15 seats'],
+  },
 ];
 const BILLING_CYCLE_OPTIONS = [
   { key: 'monthly', label: 'Monthly' },
@@ -262,23 +283,23 @@ function getScanLimitPromptSubtitle(prompt = null) {
   const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
   const planName = prompt.planName || 'Free';
   if (prompt.mode === 'guest') {
-    return `Free and logged-out scans show the first ${allowed} pages. Sign in, upgrade, or continue with the limited scan.`;
+    return `Free and logged-out scans are limited to ${allowed} pages. Sign in, upgrade, or continue before scanning.`;
   }
   if (String(planName).toLowerCase() === 'free') {
-    return `Your Free plan shows the first ${allowed} pages per scan. Upgrade for larger maps, or continue with the limited scan.`;
+    return `Free plan scans are limited to ${allowed} pages. Upgrade for larger maps, or continue before scanning.`;
   }
   if (prompt.capReason === 'monthly_remaining') {
-    return `This scan is larger than the crawl pages available in the current billing period. It will stop at ${allowed} pages.`;
+    return `Your current billing period has ${allowed} pages available. Upgrade for more pages, or continue with that limit.`;
   }
   if (prompt.capReason === 'per_scan_limit') {
-    return `This scan is larger than the per-scan page limit for ${planName}. It will stop at ${allowed} pages.`;
+    return `${planName} scans are limited to ${allowed} pages per run. Upgrade for larger maps, or continue with that limit.`;
   }
-  return `This scan will stop at ${allowed} pages based on the current plan.`;
+  return `Your current plan can scan up to ${allowed} pages for this run. Upgrade for more pages, or continue with that limit.`;
 }
 
 function getScanLimitPromptActionCopy(prompt = null) {
   const allowed = formatEntitlementCount(prompt?.allowedPages || prompt?.remaining || 0);
-  return `Continue now to scan up to ${allowed} pages. Locked pages will appear as grey upgrade previews.`;
+  return `Vellic will start scanning after you continue and stop when the ${allowed}-page limit is reached.`;
 }
 
 function getScanLimitPromptTitle(prompt = null) {
@@ -289,12 +310,7 @@ function getScanLimitPromptTitle(prompt = null) {
   return 'Scan limit reached';
 }
 
-function getScanLimitContinueLabel(prompt = null) {
-  if (!prompt) return 'Continue';
-  const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
-  if (prompt.mode === 'guest' || String(prompt.planName || '').toLowerCase() === 'free') {
-    return `Continue with ${allowed}-page scan`;
-  }
+function getScanLimitContinueLabel() {
   return 'Continue';
 }
 
@@ -6437,7 +6453,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const redirectToBillingUrl = useCallback((url) => {
     if (!url) throw new Error('Billing did not return a checkout link.');
-    window.location.assign(url);
+    const openedWindow = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!openedWindow) {
+      window.location.assign(url);
+    }
   }, []);
 
   const handleBillingPortal = useCallback(async (context = 'portal') => {
@@ -11191,7 +11210,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(`Scan complete${hostname ? `: ${hostname}` : ''}`, 'success');
       }
       refreshCurrentUser();
-      setTimeout(resetView, 100);
+      setTimeout(() => {
+        if (!shouldMergeScanResult && fitCurrentMapToView()) return;
+        resetView();
+      }, 100);
 
       streamHandled = true;
       resetScanUi();
@@ -11751,6 +11773,38 @@ export default function App({ currentRoute, navigateToRoute }) {
     return true;
   }, [applyTransform, getCenteredNodeTransform, renderRoot, root]);
   centerHomeRef.current = centerHome;
+
+  const fitCurrentMapToView = useCallback(() => {
+    const canvas = canvasRef.current;
+    const layout = layoutRef.current;
+    const nodes = layout?.nodes;
+    if (!canvas || !nodes || nodes.size === 0) return false;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    nodes.forEach((node) => {
+      minX = Math.min(minX, Number(node.x || 0));
+      minY = Math.min(minY, Number(node.y || 0));
+      maxX = Math.max(maxX, Number(node.x || 0) + Number(node.w || 0));
+      maxY = Math.max(maxY, Number(node.y || 0) + Number(node.h || 0));
+    });
+
+    const nextTransform = getFitBoundsTransform(
+      { minX, minY, maxX, maxY },
+      {
+        canvasWidth: canvas.clientWidth,
+        canvasHeight: canvas.clientHeight,
+        padding: 96,
+        minScale: MIN_SCALE,
+        maxScale: 1,
+      }
+    );
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [applyTransform]);
 
   useLayoutEffect(() => {
     if (!pendingInitialCenterRef.current || useLargeMapSurface) return;
@@ -15463,6 +15517,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canvasGridDotRadius = canvasGridMetrics.dotRadius;
   const scanLockedByArchive = Boolean(currentUser?.entitlements?.archived);
   const archiveScanTitle = 'New scans are locked while this account is archived';
+  const currentBillingPlan = currentUser?.entitlements?.plan || null;
+  const currentBillingPlanKey = currentBillingPlan?.key || (isLoggedIn ? 'free' : 'guest');
+  const currentBillingPlanName = currentBillingPlan?.name || (isLoggedIn ? 'Free' : 'Not signed in');
 
   return (
     <AuthProvider value={authValue}>
@@ -17231,6 +17288,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           className="scan-limit-modal"
           footer={(
             <>
+              <Button
+                variant="ghost"
+                onClick={() => resolveScanLimitPrompt('cancel')}
+              >
+                Cancel
+              </Button>
               {scanLimitPrompt.mode === 'guest' ? (
                 <Button
                   variant="secondary"
@@ -17255,25 +17318,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           )}
         >
           <div className="scan-limit-modal-body">
-            <div className="scan-limit-summary">
-              <div className="scan-limit-summary-item">
-                <span>Requested</span>
-                <strong>{formatEntitlementCount(scanLimitPrompt.requestedPages)}</strong>
-              </div>
-              <div className="scan-limit-summary-item">
-                <span>Available</span>
-                <strong>{formatEntitlementCount(scanLimitPrompt.allowedPages || scanLimitPrompt.remaining)}</strong>
-              </div>
-              <div className="scan-limit-summary-item">
-                <span>Plan</span>
-                <strong>{scanLimitPrompt.planName || currentUser?.entitlements?.plan?.name || 'Free'}</strong>
-              </div>
-            </div>
-            <div className="scan-limit-actions">
-              <div className="scan-limit-action-copy">
-                <span>Limited map preview</span>
-                <p>{getScanLimitPromptActionCopy(scanLimitPrompt)}</p>
-              </div>
+            <div className="scan-limit-action-copy">
+              <span>Before scanning</span>
+              <p>{getScanLimitPromptActionCopy(scanLimitPrompt)}</p>
             </div>
           </div>
         </Modal>
@@ -17315,34 +17362,21 @@ export default function App({ currentRoute, navigateToRoute }) {
         <Modal
           show
           onClose={() => setPlansModal(null)}
-          title="Plan options"
-          subtitle="Choose a plan or add credits."
+          title="Upgrade"
+          subtitle="Choose a plan to open Stripe Checkout in a new tab."
           className="plans-modal"
+          scrollable
           footer={(
-            <>
-              <Button variant="secondary" onClick={() => setPlansModal(null)}>
-                Close
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => handleBillingTrial('pro')}
-                loading={billingActionKey.startsWith('trial:')}
-                disabled={!!billingActionKey || currentUser?.entitlements?.trial?.active}
-              >
-                {currentUser?.entitlements?.trial?.active ? 'Trial active' : 'Start trial'}
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => handleBillingPortal(plansModal.context || 'plans-modal')}
-                loading={billingActionKey.startsWith('portal:')}
-                disabled={!!billingActionKey || Boolean(billingCatalog && !billingCatalog.enabled)}
-              >
-                Manage billing
-              </Button>
-            </>
+            <Button variant="secondary" onClick={() => setPlansModal(null)}>
+              Close
+            </Button>
           )}
         >
           <div className="plans-modal-body">
+            <div className="plans-modal-current">
+              <span>Current plan</span>
+              <strong>{currentBillingPlanName}</strong>
+            </div>
             {billingCatalogLoading ? (
               <StatusAlert tone="loading">Checking billing availability...</StatusAlert>
             ) : null}
@@ -17371,6 +17405,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 const catalogEntry = billingPlanCatalogByKey.get(plan.key);
                 const unavailableReason = getBillingCheckoutUnavailableReason(catalogEntry, billingCycle);
                 const planActionKey = `plan:${plan.key}:${billingCycle}`;
+                const isCurrentPlan = currentBillingPlanKey === plan.key;
                 return (
                   <button
                     type="button"
@@ -17379,10 +17414,23 @@ export default function App({ currentRoute, navigateToRoute }) {
                     disabled={!!billingActionKey || !!unavailableReason}
                     onClick={() => handlePlanCheckout(plan.key, billingCycle)}
                   >
-                    <strong>{plan.name}</strong>
-                    <span>{plan.scan}</span>
-                    <span>{plan.screenshots}</span>
-                    <small>{billingActionKey === planActionKey ? 'Opening checkout...' : (unavailableReason || `${plan.note} - ${billingCycle === 'yearly' ? 'Yearly billing' : 'Monthly billing'}`)}</small>
+                    <div className="plans-modal-card-header">
+                      <strong>{plan.name}</strong>
+                      {isCurrentPlan ? <span className="plans-modal-current-badge">Current plan</span> : null}
+                    </div>
+                    <div className="plans-modal-card-price-row">
+                      <strong className="plans-modal-card-price">{plan.price}</strong>
+                      <span>{billingCycle === 'yearly' ? 'Yearly checkout' : 'Monthly checkout'}</span>
+                    </div>
+                    <p>{plan.note}</p>
+                    <ul className="plans-modal-card-features">
+                      {plan.features.map((feature) => (
+                        <li key={feature}>{feature}</li>
+                      ))}
+                    </ul>
+                    <small className="plans-modal-card-action">
+                      {billingActionKey === planActionKey ? 'Opening checkout...' : (unavailableReason || 'Checkout')}
+                    </small>
                   </button>
                 );
               })}

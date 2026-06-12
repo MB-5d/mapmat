@@ -5,6 +5,7 @@ import {
   Copy,
   ExternalLink,
   FileDown,
+  GalleryHorizontal,
   ImageIcon,
   MapIcon,
   Menu,
@@ -40,7 +41,7 @@ import {
 } from './marketingConfig';
 import './MarketingSite.css';
 
-const featureIcons = [Scan, MapIcon, PenLine, ImageIcon, FileDown, Share2, Sparkles];
+const featureIcons = [Scan, MapIcon, PenLine, GalleryHorizontal, FileDown, Share2, Sparkles];
 const MARKETING_ROOT_ID = 'overview';
 const MARKETING_CHILD_INDENT_X = 40;
 const MARKETING_STROKE_PAD_X = 20;

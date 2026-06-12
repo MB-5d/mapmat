@@ -4,13 +4,13 @@ import {
   ChevronDown,
   Check,
   ExternalLink,
+  GalleryHorizontal,
   ListChecks,
   Mail,
   Menu,
   MessagesSquare,
   Monitor,
   Network,
-  Image,
   PackageCheck,
   ScrollText,
   Share2,
@@ -113,7 +113,7 @@ const featureCards = [
     accent: 'brand',
   },
   {
-    icon: Image,
+    icon: GalleryHorizontal,
     title: 'Bulk screenshots',
     text: 'Capture and download page screenshots for public web pages',
     accent: 'brand',
@@ -1147,6 +1147,7 @@ function MailingListModal({
   show,
 }) {
   const isSubmitting = submitStatus === MAILING_LIST_SUBMIT_STATUS.SUBMITTING;
+  const isSuccess = submitStatus === MAILING_LIST_SUBMIT_STATUS.SUCCESS;
 
   return (
     <Modal
@@ -1160,38 +1161,42 @@ function MailingListModal({
           <Button type="button" variant="secondary" buttonStyle="mono" onClick={onClose}>
             Close
           </Button>
-          <Button type="submit" form="marketing-v2-mailing-form" startIcon={<Mail />} loading={isSubmitting}>
-            {isSubmitting ? 'Joining' : 'Join list'}
-          </Button>
+          {!isSuccess ? (
+            <Button type="submit" form="marketing-v2-mailing-form" startIcon={<Mail />} loading={isSubmitting}>
+              {isSubmitting ? 'Joining' : 'Join list'}
+            </Button>
+          ) : null}
         </div>
       )}
     >
-      <form id="marketing-v2-mailing-form" className="marketing-v2-mailing-form" onSubmit={onSubmit}>
-        <TextInput
-          id="marketing-v2-mailing-email"
-          type="email"
-          label="Email"
-          value={email}
-          onChange={(event) => onChangeEmail(event.target.value)}
-          placeholder="you@example.com"
-          autoComplete="email"
-          error={emailError}
-          disabled={isSubmitting}
-        />
-        {submitStatus === MAILING_LIST_SUBMIT_STATUS.SUCCESS ? (
-          <p className="marketing-v2-modal-note marketing-v2-modal-note--success" role="status">
-            {submitMessage || 'You are on the preview list.'}
-          </p>
-        ) : submitStatus === MAILING_LIST_SUBMIT_STATUS.ERROR ? (
-          <p className="marketing-v2-modal-note marketing-v2-modal-note--error" role="alert">
-            {submitMessage || 'Could not join the mailing list. Please try again.'}
-          </p>
-        ) : (
-          <p className="marketing-v2-modal-note">
-            We will keep it quiet and only send bigger release or product updates.
-          </p>
-        )}
-      </form>
+      {isSuccess ? (
+        <p className="marketing-v2-modal-note marketing-v2-modal-note--success" role="status">
+          {submitMessage || 'You are on the preview list.'}
+        </p>
+      ) : (
+        <form id="marketing-v2-mailing-form" className="marketing-v2-mailing-form" onSubmit={onSubmit}>
+          <TextInput
+            id="marketing-v2-mailing-email"
+            type="email"
+            label="Email"
+            value={email}
+            onChange={(event) => onChangeEmail(event.target.value)}
+            placeholder="you@example.com"
+            autoComplete="email"
+            error={emailError}
+            disabled={isSubmitting}
+          />
+          {submitStatus === MAILING_LIST_SUBMIT_STATUS.ERROR ? (
+            <p className="marketing-v2-modal-note marketing-v2-modal-note--error" role="alert">
+              {submitMessage || 'Could not join the mailing list. Please try again.'}
+            </p>
+          ) : (
+            <p className="marketing-v2-modal-note">
+              We will keep it quiet and only send bigger release or product updates.
+            </p>
+          )}
+        </form>
+      )}
     </Modal>
   );
 }
@@ -1322,7 +1327,6 @@ function MarketingV2ContactCard({ card, index, onOpenContact }) {
         >
           {card.cta}
         </Button>
-        <span className="marketing-v2-contact-card__email">{card.email}</span>
       </div>
     </MarketingV2Card>
   );
@@ -1602,15 +1606,21 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
     navigateToPath(`${url.pathname}${url.search}`, { behavior: 'smooth' });
   };
 
-  const openMailingModal = () => {
+  const resetMailingModal = () => {
+    setMailingEmail('');
     setMailingEmailError('');
     setMailingSubmitStatus(MAILING_LIST_SUBMIT_STATUS.IDLE);
     setMailingSubmitMessage('');
+  };
+
+  const openMailingModal = () => {
+    resetMailingModal();
     setShowMailingModal(true);
   };
 
   const closeMailingModal = () => {
     setShowMailingModal(false);
+    resetMailingModal();
   };
 
   const handleMailingEmailChange = (value) => {
@@ -1641,7 +1651,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
         source: 'marketing-preview-v2',
         routePath: typeof window !== 'undefined' ? window.location.pathname : '',
       });
-      setMailingEmail(email);
+      setMailingEmail('');
       setMailingSubmitStatus(MAILING_LIST_SUBMIT_STATUS.SUCCESS);
       setMailingSubmitMessage(result?.alreadySubscribed
         ? 'You are already on the mailing list.'

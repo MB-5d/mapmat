@@ -1,4 +1,4 @@
-import { getCenteredNodeTransform } from './canvasView';
+import { getCenteredNodeTransform, getFitBoundsTransform } from './canvasView';
 
 describe('canvasView', () => {
   test('centers a node at 100 percent zoom', () => {
@@ -20,6 +20,28 @@ describe('canvasView', () => {
       scale: 1,
       x: -4344,
       y: -2050,
+    });
+  });
+
+  test('fits wide bounds inside the canvas without zooming past maxScale', () => {
+    const transform = getFitBoundsTransform(
+      { minX: 0, minY: 0, maxX: 2000, maxY: 400 },
+      { canvasWidth: 1000, canvasHeight: 600, padding: 100, maxScale: 1 }
+    );
+
+    expect(transform.scale).toBeCloseTo(0.4);
+    expect(transform.x).toBeCloseTo(100);
+    expect(transform.y).toBeCloseTo(220);
+  });
+
+  test('keeps small maps at maxScale and centers them', () => {
+    expect(getFitBoundsTransform(
+      { minX: 100, minY: 50, maxX: 388, maxY: 250 },
+      { canvasWidth: 1280, canvasHeight: 720, padding: 96, maxScale: 1 }
+    )).toEqual({
+      scale: 1,
+      x: 396,
+      y: 210,
     });
   });
 

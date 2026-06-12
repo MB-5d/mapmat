@@ -1258,6 +1258,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-comparison {
+  --marketing-v2-comparison-row-height: calc(var(--unit-56) + 1px);
+
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -1313,7 +1315,6 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-comparison__panel {
   min-width: 1080px;
-  min-height: 552px;
 }
 
 .marketing-v2-comparison table {
@@ -1333,7 +1334,8 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-comparison th,
 .marketing-v2-comparison td {
-  padding: var(--unit-16);
+  height: var(--marketing-v2-comparison-row-height);
+  padding: var(--unit-12) var(--unit-16);
   border-bottom: 1px solid var(--marketing-v2-line);
   color: var(--marketing-v2-muted);
   font-size: var(--type-label-sm-size);
@@ -1350,7 +1352,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-comparison tbody tr {
-  height: 56px;
+  height: var(--marketing-v2-comparison-row-height);
 }
 
 .marketing-v2-comparison thead th {
@@ -1700,6 +1702,13 @@ body:has(.marketing-preview-v2) {
   opacity: 1;
 }
 
+.marketing-preview-v2 .marketing-scan-bar .scan-bar__input:focus,
+.marketing-preview-v2 .marketing-scan-bar .scan-bar__input:focus-visible {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
 .marketing-v2-scan-cta .marketing-scan-bar {
   margin: 0;
 }
@@ -1739,14 +1748,6 @@ body:has(.marketing-preview-v2) {
 .marketing-v2-contact-card__button.ui-btn {
   width: 120px;
   justify-content: center;
-}
-
-.marketing-v2-contact-card__email {
-  color: var(--marketing-v2-muted);
-  font-size: var(--type-caption-md-size);
-  font-weight: var(--type-caption-md-weight);
-  line-height: var(--type-caption-md-line-height);
-  letter-spacing: var(--type-caption-md-letter-spacing);
 }
 
 .marketing-v2-contact-form {
@@ -2232,7 +2233,6 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   .marketing-v2-card p,
   .marketing-v2-comparison__header p,
   .marketing-v2-pricing-card li,
-  .marketing-v2-contact-card__email,
   .marketing-v2-faq-item__answer p {
     font-size: var(--type-mobile-body-md-size);
     font-weight: var(--type-mobile-body-md-weight);
@@ -2346,6 +2346,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     --marketing-v2-comparison-feature-width: 148px;
     --marketing-v2-comparison-vellic-width: 80px;
     --marketing-v2-comparison-competitor-width: 132px;
+    --marketing-v2-comparison-row-height: calc(var(--unit-64) + var(--unit-8) + 1px);
     --marketing-v2-comparison-table-width: 888px;
     overflow: hidden;
   }
@@ -2385,7 +2386,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   .marketing-v2-comparison th,
   .marketing-v2-comparison td {
     box-sizing: border-box;
-    height: var(--unit-56);
+    height: var(--marketing-v2-comparison-row-height);
     padding: var(--unit-12) var(--unit-16);
   }
 

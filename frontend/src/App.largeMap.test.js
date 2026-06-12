@@ -218,12 +218,12 @@ describe('large map viewport behavior', () => {
       mode: 'guest',
       planName: 'Guest',
       allowedPages: 25,
-    })).toContain('Free and logged-out scans show the first 25 pages');
+    })).toContain('Free and logged-out scans are limited to 25 pages');
     expect(__testing.getScanLimitContinueLabel({
       mode: 'guest',
       planName: 'Guest',
       allowedPages: 25,
-    })).toBe('Continue with 25-page scan');
+    })).toBe('Continue');
     expect(__testing.getScanLimitPromptSubtitle({
       mode: 'account',
       planName: 'Solo',

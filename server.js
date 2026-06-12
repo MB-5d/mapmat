@@ -4072,6 +4072,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     rootContentType: null,
     rootTitleSource: null,
     rootClassification: null,
+    rootBlockedReason: null,
     rootExtractedLinks: 0,
     rootAllowedLinks: 0,
     queuedCount: 0,
@@ -4438,6 +4439,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanDiagnostics.fetchedPageCount += 1;
     } catch (e) {
       scanDiagnostics.failedFetches += 1;
+      if (url === seed) {
+        scanDiagnostics.rootStatus = status;
+        scanDiagnostics.rootClassification = 'inactive';
+        scanDiagnostics.rootBlockedReason = 'fetch_failed';
+      }
       if (source === 'common_path') return;
       // Still store node with fallback title so tree doesn't break
       if (scanOptions.brokenLinks) brokenLinks.push({ url, reason: 'fetch_failed' });
@@ -4473,6 +4479,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanDiagnostics.rootContentType = normalizeContentType(contentType);
       scanDiagnostics.rootTitleSource = classification.titleSource;
       scanDiagnostics.rootClassification = classification.scanStatus;
+      scanDiagnostics.rootBlockedReason = classification.blockedReason || null;
     }
     if (status >= 400) {
       if (source === 'common_path') return;
@@ -5208,6 +5215,29 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       rootAllowedLinks: scanDiagnostics.rootAllowedLinks,
       sitemapUrlsQueued: scanDiagnostics.sitemapUrlsQueued,
       renderedLinksQueued: scanDiagnostics.renderedLinksQueued,
+    });
+  }
+  const getRootOnlyFailureReason = () => {
+    if (scanDiagnostics.rootBlockedReason) return scanDiagnostics.rootBlockedReason;
+    if (scanDiagnostics.rootClassification === 'auth') return 'auth_required';
+    if (scanDiagnostics.rootClassification === 'scan_limited') return 'scan_limited';
+    if (scanDiagnostics.rootClassification === 'inactive') return 'fetch_failed';
+    if (scanDiagnostics.fetchedPageCount === 0 && scanDiagnostics.failedFetches > 0) return 'fetch_failed';
+    return null;
+  };
+  const rootOnlyFailureReason = scanDiagnostics.treeNodeCount <= 1
+    ? getRootOnlyFailureReason()
+    : null;
+  if (!partialReason && rootOnlyFailureReason) {
+    partialReason = 'root_discovery_failed';
+    scanDiagnostics.collapseReason = rootOnlyFailureReason;
+    console.warn('[scan] Root discovery failed because the root page was not crawlable:', {
+      seed,
+      collapseReason: scanDiagnostics.collapseReason,
+      rootStatus: scanDiagnostics.rootStatus,
+      rootClassification: scanDiagnostics.rootClassification,
+      treeNodeCount: scanDiagnostics.treeNodeCount,
+      pageMapCount: scanDiagnostics.pageMapCount,
     });
   }
   const hasDiscoveryFailureSignal = (

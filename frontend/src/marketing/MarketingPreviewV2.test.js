@@ -69,6 +69,12 @@ describe('MarketingPreviewV2', () => {
     return button;
   };
 
+  const getMailingListModal = () => container.querySelector('.marketing-v2-mailing-modal');
+
+  const getMailingListModalButton = (label) => Array.from(
+    getMailingListModal()?.querySelectorAll('button') || []
+  ).find((candidate) => candidate.textContent.trim() === label);
+
   const fillContactForm = ({
     name = 'Avery Test',
     email = 'avery@example.com',
@@ -242,6 +248,9 @@ describe('MarketingPreviewV2', () => {
       routePath: '/features',
     }));
     expect(container.textContent).toContain('You are on the mailing list.');
+    expect(getMailingListModal().querySelector('#marketing-v2-mailing-email')).toBeNull();
+    expect(getMailingListModalButton('Join list')).toBeUndefined();
+    expect(getMailingListModalButton('Close')).not.toBeUndefined();
   });
 
   test('handles duplicate mailing-list signups as already subscribed', async () => {
@@ -258,6 +267,8 @@ describe('MarketingPreviewV2', () => {
     await submitMailingListForm();
 
     expect(container.textContent).toContain('You are already on the mailing list.');
+    expect(getMailingListModal().querySelector('#marketing-v2-mailing-email')).toBeNull();
+    expect(getMailingListModalButton('Join list')).toBeUndefined();
   });
 
   test('shows mailing-list submit failures', async () => {
@@ -271,6 +282,49 @@ describe('MarketingPreviewV2', () => {
     await submitMailingListForm();
 
     expect(container.textContent).toContain('Storage unavailable.');
+  });
+
+  test('resets mailing-list form after close and reopen', () => {
+    renderAt('/features');
+    openMailingListModal();
+
+    act(() => {
+      setInputValue(container.querySelector('#marketing-v2-mailing-email'), 'person@example.com');
+    });
+
+    act(() => {
+      getMailingListModalButton('Close').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+      );
+    });
+    openMailingListModal();
+
+    expect(container.querySelector('#marketing-v2-mailing-email').value).toBe('');
+  });
+
+  test('resets mailing-list form after successful submission and reopen', async () => {
+    submitMarketingMailingListSignup.mockResolvedValueOnce({
+      alreadySubscribed: false,
+      signup: { email: 'person@example.com' },
+    });
+    renderAt('/features');
+    openMailingListModal();
+
+    act(() => {
+      setInputValue(container.querySelector('#marketing-v2-mailing-email'), 'person@example.com');
+    });
+    await submitMailingListForm();
+
+    act(() => {
+      getMailingListModalButton('Close').dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+      );
+    });
+    openMailingListModal();
+
+    expect(container.querySelector('#marketing-v2-mailing-email').value).toBe('');
+    expect(getMailingListModal().textContent).not.toContain('You are on the mailing list.');
+    expect(getMailingListModalButton('Join list')).not.toBeUndefined();
   });
 
   test('keeps the hero scan CTA without the removed start-mode boxes', () => {
@@ -396,6 +450,8 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('Inquiries & Feedback');
     expect(container.textContent).toContain('Product support');
     expect(container.textContent).not.toContain('Best fit');
+    expect(container.textContent).not.toContain('hello@vellic.io');
+    expect(container.textContent).not.toContain('support@vellic.io');
 
     const contactButton = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent.includes('Contact us'));
