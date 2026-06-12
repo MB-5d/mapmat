@@ -75,9 +75,15 @@ async function main() {
   assert.equal(annualFallbackPrice.key, 'studio');
   assert.equal(annualFallbackPrice.billingCycle, 'yearly');
   const billingCatalog = getBillingCatalogForClient();
+  const freeCatalog = billingCatalog.plans.find((entry) => entry.key === 'free');
+  assert.equal(freeCatalog.prices.monthly.formatted, '$0');
+  assert.equal(freeCatalog.featureHighlights.includes('25 pages per run'), true);
   const proCatalog = billingCatalog.plans.find((entry) => entry.key === 'pro');
   assert.equal(proCatalog.prices.monthly.configured, true);
   assert.equal(proCatalog.prices.yearly.configured, true);
+  assert.equal(proCatalog.prices.monthly.formatted, '$8');
+  assert.equal(proCatalog.limits.crawlPages, 1000);
+  assert.equal(proCatalog.featureHighlights.includes('1,000 crawl pages'), true);
   const addOnPrice = getAddOnPriceConfigByStripePrice('price_screenshot_100_test');
   assert.equal(addOnPrice.key, 'screenshot_credits_100');
   assert.equal(addOnPrice.meter, METERS.screenshotCredits);

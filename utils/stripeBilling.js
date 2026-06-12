@@ -16,6 +16,13 @@ class BillingError extends Error {
 
 let stripeClient = null;
 let stripeClientKey = null;
+let stripePriceDisplayCache = {
+  key: '',
+  expiresAt: 0,
+  displays: new Map(),
+};
+
+const STRIPE_PRICE_DISPLAY_CACHE_MS = 5 * 60 * 1000;
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -161,37 +168,271 @@ function listConfiguredPlanPrices() {
   });
 }
 
-function listConfiguredPlanCatalogEntries() {
-  const grouped = new Map();
-  for (const { priceId, ...entry } of listConfiguredPlanPrices()) {
-    const current = grouped.get(entry.key) || {
-      key: entry.key,
-      name: entry.name,
-      configured: false,
-      prices: {},
-    };
-    current.prices[entry.billingCycle] = {
-      billingCycle: entry.billingCycle,
-      priceEnv: entry.priceEnv,
-      priceEnvFallbacks: entry.priceEnvFallbacks,
-      interval: entry.interval,
-      configured: !!priceId,
-      enabled: !!priceId,
-    };
-    current.configured = current.configured || !!priceId;
-    grouped.set(entry.key, current);
+function normalizeCurrency(value) {
+  return String(value || 'usd').trim().toUpperCase() || 'USD';
+}
+
+function formatCurrencyAmount(amount, currency = 'usd') {
+  const safeAmount = Math.max(0, Math.floor(Number(amount || 0)));
+  const normalizedCurrency = normalizeCurrency(currency);
+  const majorAmount = safeAmount / 100;
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: normalizedCurrency,
+      minimumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+      maximumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+    }).format(majorAmount);
+  } catch {
+    return `$${majorAmount.toLocaleString('en-US', {
+      minimumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+      maximumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+    })}`;
   }
-  return Array.from(grouped.values()).map((entry) => ({
-    ...entry,
-    enabled: entry.configured,
+}
+
+function getBillingCyclePriceSuffix(billingCycle) {
+  return normalizeBillingCycle(billingCycle) === 'yearly' ? '/yr' : '/mo';
+}
+
+function getBillingCycleIntervalLabel(billingCycle) {
+  return normalizeBillingCycle(billingCycle) === 'yearly' ? 'Yearly' : 'Monthly';
+}
+
+function getPlanDisplay(plan) {
+  return plan?.display && typeof plan.display === 'object' ? plan.display : {};
+}
+
+function getStaticPlanPriceDisplay(plan, billingCycle) {
+  const cycle = normalizeBillingCycle(billingCycle);
+  const configured = getPlanDisplay(plan).prices?.[cycle] || null;
+  if (!configured) return null;
+  const amount = Math.max(0, Math.floor(Number(configured.amount || configured.unitAmount || 0)));
+  const currency = String(configured.currency || 'usd').trim().toLowerCase() || 'usd';
+  return {
+    amount,
+    unitAmount: amount,
+    currency,
+    formatted: configured.formatted || formatCurrencyAmount(amount, currency),
+    suffix: configured.suffix || getBillingCyclePriceSuffix(cycle),
+    intervalLabel: configured.intervalLabel || getBillingCycleIntervalLabel(cycle),
+    source: 'config',
+  };
+}
+
+function formatPlanLimitValue(value, singular, plural = `${singular}s`, {
+  zeroLabel = null,
+  unlimitedLabel = null,
+} = {}) {
+  if (value === null) return unlimitedLabel || `Unlimited ${plural}`;
+  const number = Math.max(0, Math.floor(Number(value || 0)));
+  if (number === 0 && zeroLabel) return zeroLabel;
+  return `${number.toLocaleString('en-US')} ${number === 1 ? singular : plural}`;
+}
+
+function buildPlanFeatureHighlights(plan) {
+  const limits = plan?.limits || {};
+  const highlights = [
+    formatPlanLimitValue(limits.activeProjects, 'active project', 'active projects', {
+      unlimitedLabel: 'Unlimited projects',
+    }),
+    formatPlanLimitValue(limits.crawlPages, 'crawl page', 'crawl pages'),
+  ];
+
+  if (limits.scanPagesPerRun !== undefined && limits.scanPagesPerRun !== null) {
+    highlights.push(formatPlanLimitValue(limits.scanPagesPerRun, 'page per run', 'pages per run'));
+  }
+
+  highlights.push(formatPlanLimitValue(limits.screenshotCredits, 'screenshot credit', 'screenshot credits', {
+    zeroLabel: 'No screenshot credits',
+  }));
+  highlights.push(formatPlanLimitValue(limits.organizedScreenshotExports, 'organized export', 'organized exports', {
+    zeroLabel: 'No organized exports',
+    unlimitedLabel: 'Unlimited organized exports',
+  }));
+  highlights.push(formatPlanLimitValue(limits.seats, 'editor', 'seats'));
+
+  return highlights.filter(Boolean);
+}
+
+function mergePriceDisplay({ plan, billingCycle, priceId = null, liveDisplayByPriceId = new Map() }) {
+  const cycle = normalizeBillingCycle(billingCycle);
+  const staticDisplay = getStaticPlanPriceDisplay(plan, cycle) || {
+    amount: 0,
+    unitAmount: 0,
+    currency: 'usd',
+    formatted: formatCurrencyAmount(0, 'usd'),
+    suffix: getBillingCyclePriceSuffix(cycle),
+    intervalLabel: getBillingCycleIntervalLabel(cycle),
+    source: 'config',
+  };
+  const liveDisplay = priceId ? liveDisplayByPriceId.get(priceId) : null;
+  return {
+    ...staticDisplay,
+    ...(liveDisplay || {}),
+    suffix: liveDisplay?.suffix || staticDisplay.suffix || getBillingCyclePriceSuffix(cycle),
+    intervalLabel: liveDisplay?.intervalLabel || staticDisplay.intervalLabel || getBillingCycleIntervalLabel(cycle),
+    source: liveDisplay ? 'stripe' : staticDisplay.source,
+  };
+}
+
+function getPublicPlans(config) {
+  return Object.values(config.plans || {})
+    .filter((plan) => plan && !plan.internal)
+    .sort((a, b) => {
+      const order = ['free', 'pro', 'studio', 'agency'];
+      return order.indexOf(a.key) - order.indexOf(b.key);
+    });
+}
+
+function buildFreePlanPriceEntries(plan) {
+  return ['monthly', 'yearly'].map((billingCycle) => ({
+    key: plan.key,
+    name: plan.name,
+    billingCycle,
+    priceEnv: null,
+    priceEnvFallbacks: [],
+    priceId: null,
+    interval: billingCycle === 'yearly' ? 'year' : 'month',
+    enabled: true,
   }));
 }
 
-function listConfiguredLegacyPlanPrices() {
-  return listConfiguredPlanPrices().map(({ priceId, ...entry }) => ({
-    ...entry,
-    configured: !!priceId,
+function listConfiguredPlanCatalogEntries(liveDisplayByPriceId = new Map()) {
+  const billingConfig = getBillingPlanConfig();
+  const planPriceEntries = listConfiguredPlanPrices();
+  const entriesByPlan = planPriceEntries.reduce((acc, entry) => {
+    if (!acc.has(entry.key)) acc.set(entry.key, []);
+    acc.get(entry.key).push(entry);
+    return acc;
+  }, new Map());
+
+  return getPublicPlans(billingConfig).map((plan) => {
+    const display = getPlanDisplay(plan);
+    const priceEntries = plan.paid ? (entriesByPlan.get(plan.key) || []) : buildFreePlanPriceEntries(plan);
+    const prices = {};
+    priceEntries.forEach((entry) => {
+      const displayPrice = mergePriceDisplay({
+        plan,
+        billingCycle: entry.billingCycle,
+        priceId: entry.priceId,
+        liveDisplayByPriceId,
+      });
+      prices[entry.billingCycle] = {
+        billingCycle: entry.billingCycle,
+        priceEnv: entry.priceEnv,
+        priceEnvFallbacks: entry.priceEnvFallbacks,
+        interval: entry.interval,
+        configured: plan.paid ? !!entry.priceId : true,
+        enabled: plan.paid ? !!entry.priceId : true,
+        ...displayPrice,
+      };
+    });
+    const configured = plan.paid
+      ? Object.values(prices).some((price) => price.configured)
+      : true;
+    return {
+      key: plan.key,
+      name: plan.name,
+      paid: Boolean(plan.paid),
+      configured,
+      enabled: configured,
+      description: display.description || '',
+      appNote: display.appNote || display.description || '',
+      accent: display.accent || 'brand',
+      marketingCta: display.marketingCta || (plan.paid ? 'Subscribe' : 'Get started'),
+      marketingAction: display.marketingAction || (plan.paid ? 'checkout' : 'signup'),
+      prices,
+      limits: plan.limits || {},
+      features: plan.features || {},
+      featureHighlights: buildPlanFeatureHighlights(plan),
+    };
+  });
+}
+
+function listConfiguredLegacyPlanPrices(liveDisplayByPriceId = new Map()) {
+  const billingConfig = getBillingPlanConfig();
+  return listConfiguredPlanPrices().map(({ priceId, ...entry }) => {
+    const plan = billingConfig.plans?.[entry.key] || null;
+    return {
+      ...entry,
+      configured: !!priceId,
+      ...mergePriceDisplay({
+        plan,
+        billingCycle: entry.billingCycle,
+        priceId,
+        liveDisplayByPriceId,
+      }),
+    };
+  });
+}
+
+async function getLiveStripePriceDisplaysAsync() {
+  const entries = listConfiguredPlanPrices().filter((entry) => entry.priceId);
+  if (!isStripeBillingEnabled() || entries.length === 0) return new Map();
+  const cacheKey = entries.map((entry) => entry.priceId).sort().join('|');
+  const now = Date.now();
+  if (
+    stripePriceDisplayCache.key === cacheKey
+    && stripePriceDisplayCache.expiresAt > now
+  ) {
+    return stripePriceDisplayCache.displays;
+  }
+
+  const stripe = getStripeClient();
+  const displays = new Map();
+  await Promise.all(entries.map(async (entry) => {
+    try {
+      const price = await stripe.prices.retrieve(entry.priceId, { expand: ['product'] });
+      const unitAmount = Number(price.unit_amount ?? 0);
+      const currency = String(price.currency || 'usd').trim().toLowerCase() || 'usd';
+      const productName = typeof price.product === 'object' ? normalizeText(price.product?.name) : null;
+      displays.set(entry.priceId, {
+        amount: unitAmount,
+        unitAmount,
+        currency,
+        formatted: formatCurrencyAmount(unitAmount, currency),
+        suffix: getBillingCyclePriceSuffix(entry.billingCycle),
+        intervalLabel: getBillingCycleIntervalLabel(entry.billingCycle),
+        productName,
+        source: 'stripe',
+      });
+    } catch (error) {
+      console.warn('Stripe price display lookup failed:', {
+        priceEnv: entry.priceEnv,
+        billingCycle: entry.billingCycle,
+        message: error?.message || String(error),
+      });
+    }
   }));
+
+  stripePriceDisplayCache = {
+    key: cacheKey,
+    expiresAt: now + STRIPE_PRICE_DISPLAY_CACHE_MS,
+    displays,
+  };
+  return displays;
+}
+
+function buildBillingCatalog(liveDisplayByPriceId = new Map()) {
+  return {
+    enabled: isStripeBillingEnabled(),
+    plans: listConfiguredPlanCatalogEntries(liveDisplayByPriceId),
+    planPrices: listConfiguredLegacyPlanPrices(liveDisplayByPriceId),
+    addOns: listConfiguredAddOnPrices().map(({ priceId, ...entry }) => ({
+      ...entry,
+      configured: !!priceId,
+    })),
+  };
+}
+
+function getBillingCatalogForClient() {
+  return buildBillingCatalog();
+}
+
+async function getBillingCatalogForClientAsync() {
+  const liveDisplayByPriceId = await getLiveStripePriceDisplaysAsync();
+  return buildBillingCatalog(liveDisplayByPriceId);
 }
 
 function getPlanPriceConfig(planKey, billingCycle = 'monthly') {
@@ -229,18 +470,6 @@ function listConfiguredAddOnPrices() {
       enabled: !!priceId,
     };
   });
-}
-
-function getBillingCatalogForClient() {
-  return {
-    enabled: isStripeBillingEnabled(),
-    plans: listConfiguredPlanCatalogEntries(),
-    planPrices: listConfiguredLegacyPlanPrices(),
-    addOns: listConfiguredAddOnPrices().map(({ priceId, ...entry }) => ({
-      ...entry,
-      configured: !!priceId,
-    })),
-  };
 }
 
 function getAddOnPriceConfig(addonKey) {
@@ -697,6 +926,7 @@ module.exports = {
   BillingError,
   isStripeBillingEnabled,
   getBillingCatalogForClient,
+  getBillingCatalogForClientAsync,
   getPlanPriceConfigByStripePrice,
   getAddOnPriceConfigByStripePrice,
   createPlanCheckoutSessionAsync,

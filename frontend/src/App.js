@@ -180,6 +180,11 @@ import {
   collectNodeIds as collectBranchNodeIds,
   getBranchMoveBlockReason,
 } from './utils/treeMoveUtils';
+import {
+  BILLING_CYCLE_OPTIONS,
+  PAID_BILLING_PLAN_KEYS,
+  buildPlanCardsFromBillingCatalog,
+} from './utils/billingPlans';
 
 const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
@@ -187,34 +192,7 @@ const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
 const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
 const GUEST_SCAN_PAGE_LIMIT = 25;
-const PLAN_OPTION_CARDS = [
-  {
-    key: 'pro',
-    name: 'Pro',
-    price: '$8/mo',
-    note: 'For solo audits with screenshots and saved work.',
-    features: ['5 active projects', '1,000 crawl pages', '100 screenshot credits', '2 organized exports', '1 editor'],
-  },
-  {
-    key: 'studio',
-    name: 'Studio',
-    price: '$15/mo',
-    note: 'For small teams handling recurring site work.',
-    features: ['50 active projects', '50,000 crawl pages', '3,000 screenshot credits', 'Unlimited organized exports', '5 seats'],
-  },
-  {
-    key: 'agency',
-    name: 'Agency',
-    price: '$25/mo',
-    note: 'For heavier client audits and shared delivery.',
-    features: ['Unlimited projects', '200,000 crawl pages', '10,000 screenshot credits', 'Unlimited organized exports', '15 seats'],
-  },
-];
-const BILLING_CYCLE_OPTIONS = [
-  { key: 'monthly', label: 'Monthly' },
-  { key: 'yearly', label: 'Yearly' },
-];
-const BILLING_PLAN_KEYS = new Set(PLAN_OPTION_CARDS.map((plan) => plan.key));
+const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
 const SCREENSHOT_CREDIT_PACKS = [
   { key: 'screenshot_credits_25', label: '25 credits', price: '$5' },
@@ -3788,6 +3766,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   const billingAddonCatalogByKey = useMemo(() => new Map(
     (billingCatalog?.addOns || []).map((entry) => [entry.key, entry])
   ), [billingCatalog]);
+
+  const planOptionCards = useMemo(() => buildPlanCardsFromBillingCatalog(billingCatalog, {
+    billingCycle,
+    includeFree: false,
+    paidOnly: true,
+  }), [billingCatalog, billingCycle]);
 
   const getBillingCheckoutUnavailableReason = useCallback((entry, cycle = billingCycle) => {
     if (!billingCatalog) return '';
@@ -17401,7 +17385,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               ))}
             </div>
             <div className="plans-modal-grid" aria-label="Plan options">
-              {PLAN_OPTION_CARDS.map((plan) => {
+              {planOptionCards.map((plan) => {
                 const catalogEntry = billingPlanCatalogByKey.get(plan.key);
                 const unavailableReason = getBillingCheckoutUnavailableReason(catalogEntry, billingCycle);
                 const planActionKey = `plan:${plan.key}:${billingCycle}`;
@@ -17420,7 +17404,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     </div>
                     <div className="plans-modal-card-price-row">
                       <strong className="plans-modal-card-price">{plan.price}</strong>
-                      <span>{billingCycle === 'yearly' ? 'Yearly checkout' : 'Monthly checkout'}</span>
+                      <span>{plan.priceSuffix} · {plan.priceIntervalLabel} checkout</span>
                     </div>
                     <p>{plan.note}</p>
                     <ul className="plans-modal-card-features">

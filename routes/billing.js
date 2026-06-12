@@ -4,7 +4,7 @@ const { authMiddleware, requireAuth } = require('./auth');
 const { getBillingPlanConfig, resolveAccountEntitlementsAsync } = require('../utils/entitlements');
 const {
   BillingError,
-  getBillingCatalogForClient,
+  getBillingCatalogForClientAsync,
   createPlanCheckoutSessionAsync,
   createAddOnCheckoutSessionAsync,
   createPortalSessionAsync,
@@ -52,9 +52,9 @@ function getTrialDays(kind) {
     : Number(defaults.personalDays || 7);
 }
 
-router.get('/config', (_req, res) => {
+router.get('/config', async (_req, res) => {
   try {
-    return res.json(getBillingCatalogForClient());
+    return res.json(await getBillingCatalogForClientAsync());
   } catch (error) {
     return handleBillingError(res, error, 'Billing config');
   }

@@ -131,6 +131,24 @@
       "key": "free",
       "name": "Free",
       "paid": false,
+      "display": {
+        "accent": "green",
+        "description": "For trying Vellic on a small site or one-off audit.",
+        "marketingCta": "Get started",
+        "marketingAction": "signup",
+        "prices": {
+          "monthly": {
+            "amount": 0,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 0,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
       "limits": {
         "activeProjects": 1,
         "crawlPages": 100,
@@ -154,6 +172,25 @@
       "key": "pro",
       "name": "Pro",
       "paid": true,
+      "display": {
+        "accent": "blue",
+        "description": "For solo audits with screenshots and saved work.",
+        "appNote": "For solo audits with screenshots and saved work.",
+        "marketingCta": "Start trial",
+        "marketingAction": "trial",
+        "prices": {
+          "monthly": {
+            "amount": 800,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 7200,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
       "limits": {
         "activeProjects": 5,
         "crawlPages": 1000,
@@ -176,6 +213,25 @@
       "key": "studio",
       "name": "Studio",
       "paid": true,
+      "display": {
+        "accent": "purple",
+        "description": "For small teams handling recurring site work.",
+        "appNote": "For small teams handling recurring site work.",
+        "marketingCta": "Subscribe",
+        "marketingAction": "checkout",
+        "prices": {
+          "monthly": {
+            "amount": 1800,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 14400,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
       "limits": {
         "activeProjects": 50,
         "crawlPages": 50000,
@@ -198,6 +254,25 @@
       "key": "agency",
       "name": "Agency",
       "paid": true,
+      "display": {
+        "accent": "coral",
+        "description": "For heavier client audits and shared delivery.",
+        "appNote": "For heavier client audits and shared delivery.",
+        "marketingCta": "Subscribe",
+        "marketingAction": "checkout",
+        "prices": {
+          "monthly": {
+            "amount": 8800,
+            "currency": "usd",
+            "interval": "month"
+          },
+          "yearly": {
+            "amount": 96000,
+            "currency": "usd",
+            "interval": "year"
+          }
+        }
+      },
       "limits": {
         "activeProjects": null,
         "crawlPages": 200000,

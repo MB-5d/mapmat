@@ -24,7 +24,7 @@ import exampleAnthropicImage from '../assets/marketing/example-anthropic.png';
 import exampleRaycastImage from '../assets/marketing/example-raycast.png';
 import vellicCanvasImage from '../assets/marketing/vellic-canvas.png';
 import vellicLogo from '../assets/vellic-logo.svg';
-import { submitMarketingContact, submitMarketingMailingListSignup } from '../api';
+import { getBillingConfig, submitMarketingContact, submitMarketingMailingListSignup } from '../api';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Field from '../components/ui/Field';
@@ -34,6 +34,11 @@ import SelectInput from '../components/ui/SelectInput';
 import TextareaInput from '../components/ui/TextareaInput';
 import TextInput from '../components/ui/TextInput';
 import { ROUTE_SURFACES } from '../utils/appRoutes';
+import {
+  BILLING_CYCLE_OPTIONS,
+  buildPlanCardsFromBillingCatalog,
+  hasYearlyBillingPrices,
+} from '../utils/billingPlans';
 import classNames from '../utils/classNames';
 import MarketingScanBar, { isMarketingPhoneViewport } from './MarketingScanBar';
 import { buildAppBillingUrl, buildAppScanUrl, buildAppSignupUrl, buildAppTrialUrl } from './marketingConfig';
@@ -615,49 +620,6 @@ const exampleCards = [
     image: exampleAnthropicImage,
     alt: 'Vellic example map showing the Anthropic full site with subdomains, orphans, and screenshots',
     sourceUrl: 'https://www.anthropic.com',
-  },
-];
-
-const pricingCards = [
-  {
-    key: 'free',
-    title: 'Free',
-    price: '$0',
-    accent: 'green',
-    description: 'For trying Vellic on a small site or one-off audit.',
-    details: ['1 active project', '100 crawl pages', '25 pages per run', 'No screenshot credits', '1 editor'],
-    cta: 'Get started',
-    action: 'signup',
-  },
-  {
-    key: 'pro',
-    title: 'Pro',
-    price: '$8',
-    accent: 'blue',
-    description: 'For solo audits with screenshots and saved work.',
-    details: ['5 active projects', '1,000 crawl pages', '100 screenshot credits', '2 organized exports', '1 editor'],
-    cta: 'Start trial',
-    action: 'trial',
-  },
-  {
-    key: 'studio',
-    title: 'Studio',
-    price: '$15',
-    accent: 'purple',
-    description: 'For small teams handling recurring site work.',
-    details: ['50 active projects', '50,000 crawl pages', '3,000 screenshot credits', 'Unlimited organized exports', '5 seats'],
-    cta: 'Subscribe',
-    action: 'checkout',
-  },
-  {
-    key: 'agency',
-    title: 'Agency',
-    price: '$25',
-    accent: 'coral',
-    description: 'For heavier client audits and shared delivery.',
-    details: ['Unlimited projects', '200,000 crawl pages', '10,000 screenshot credits', 'Unlimited organized exports', '15 seats'],
-    cta: 'Subscribe',
-    action: 'checkout',
   },
 ];
 
@@ -1287,7 +1249,7 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
         <h3>{plan.title}</h3>
         <div>
           <strong>{plan.price}</strong>
-          <span>/mo</span>
+          <span>{plan.priceSuffix}</span>
         </div>
       </div>
       <p>{plan.description}</p>
@@ -1477,7 +1439,30 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
   const [contactSubmitStatus, setContactSubmitStatus] = useState(CONTACT_SUBMIT_STATUS.IDLE);
   const [contactSubmitError, setContactSubmitError] = useState('');
   const [contactSubmitted, setContactSubmitted] = useState(false);
+  const [billingCatalog, setBillingCatalog] = useState(null);
+  const [pricingBillingCycle, setPricingBillingCycle] = useState('monthly');
   const pendingScrollBehaviorRef = useRef('auto');
+
+  useEffect(() => {
+    let active = true;
+    getBillingConfig()
+      .then((catalog) => {
+        if (active) setBillingCatalog(catalog || null);
+      })
+      .catch(() => {
+        if (active) setBillingCatalog(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const pricingCards = useMemo(() => buildPlanCardsFromBillingCatalog(billingCatalog, {
+    billingCycle: pricingBillingCycle,
+    includeFree: true,
+  }), [billingCatalog, pricingBillingCycle]);
+
+  const hasYearlyPricing = hasYearlyBillingPrices(billingCatalog);
 
   useEffect(() => {
     if (!('scrollRestoration' in window.history)) return undefined;
@@ -1670,7 +1655,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
   const handlePricingGetStarted = (plan) => {
     if (plan?.action === 'checkout') {
-      onOpenApp(buildAppBillingUrl(plan.key));
+      onOpenApp(buildAppBillingUrl(plan.key, pricingBillingCycle));
       return;
     }
     if (plan?.action === 'trial') {
@@ -1897,9 +1882,24 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
           summary="Plans are shaped around saved maps, screenshots, exports, reports, and team review."
           className="marketing-v2-section--pricing"
         >
+          {hasYearlyPricing ? (
+            <div className="marketing-v2-pricing-cycle" role="group" aria-label="Billing cycle">
+              {BILLING_CYCLE_OPTIONS.map((option) => (
+                <button
+                  type="button"
+                  key={option.key}
+                  className={pricingBillingCycle === option.key ? 'active' : ''}
+                  aria-pressed={pricingBillingCycle === option.key}
+                  onClick={() => setPricingBillingCycle(option.key)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="marketing-v2-pricing-grid">
             {pricingCards.map((plan, index) => (
-              <MarketingV2PricingCard key={plan.title} plan={plan} index={index} onGetStarted={handlePricingGetStarted} />
+              <MarketingV2PricingCard key={plan.key} plan={plan} index={index} onGetStarted={handlePricingGetStarted} />
             ))}
           </div>
         </SectionShell>

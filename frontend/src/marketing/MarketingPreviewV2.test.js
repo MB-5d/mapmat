@@ -1,11 +1,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { submitMarketingContact, submitMarketingMailingListSignup } from '../api';
+import { getBillingConfig, submitMarketingContact, submitMarketingMailingListSignup } from '../api';
 import MarketingPreviewV2 from './MarketingPreviewV2';
 import { parseCurrentRoute, ROUTE_SURFACES } from '../utils/appRoutes';
 
 jest.mock('../api', () => ({
+  getBillingConfig: jest.fn(),
   submitMarketingContact: jest.fn(),
   submitMarketingMailingListSignup: jest.fn(),
 }));
@@ -109,6 +110,7 @@ describe('MarketingPreviewV2', () => {
     window.HTMLElement.prototype.scrollIntoView = scrollIntoView;
     window.scrollTo = scrollTo;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    getBillingConfig.mockReturnValue(new Promise(() => {}));
     submitMarketingContact.mockResolvedValue({ ok: true });
     submitMarketingMailingListSignup.mockResolvedValue({ alreadySubscribed: false });
   });
@@ -390,7 +392,7 @@ describe('MarketingPreviewV2', () => {
     ['Free', 'Pro', 'Studio', 'Agency'].forEach((plan) => {
       expect(container.textContent).toContain(plan);
     });
-    ['$0', '$8', '$15', '$25'].forEach((price) => {
+    ['$0', '$8', '$18', '$88'].forEach((price) => {
       expect(container.textContent).toContain(price);
     });
     expect(container.textContent).toContain('2 organized exports');
@@ -399,9 +401,61 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).not.toContain('Solo');
   });
 
+  test('renders pricing from the billing catalog when available', async () => {
+    getBillingConfig.mockResolvedValue({
+      enabled: true,
+      plans: [
+        {
+          key: 'free',
+          name: 'Free',
+          paid: false,
+          accent: 'green',
+          description: 'Catalog free plan.',
+          marketingCta: 'Get started',
+          marketingAction: 'signup',
+          featureHighlights: ['1 active project', '100 crawl pages'],
+          prices: {
+            monthly: { formatted: '$0', suffix: '/mo', configured: true },
+            yearly: { formatted: '$0', suffix: '/yr', configured: true },
+          },
+        },
+        {
+          key: 'pro',
+          name: 'Pro',
+          paid: true,
+          accent: 'blue',
+          description: 'Catalog pro plan.',
+          marketingCta: 'Start trial',
+          marketingAction: 'trial',
+          featureHighlights: ['9 active projects', '9,000 crawl pages'],
+          prices: {
+            monthly: { formatted: '$9', suffix: '/mo', configured: true },
+            yearly: { formatted: '$90', suffix: '/yr', configured: true },
+          },
+        },
+      ],
+    });
+
+    renderAt('/pricing');
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(container.textContent).toContain('$9');
+    expect(container.textContent).toContain('9 active projects');
+    expect(container.textContent).toContain('Catalog pro plan.');
+  });
+
   test('routes pricing CTAs to signup, no-card trial, or checkout instead of scan', () => {
     const openApp = jest.fn();
     renderAt('/pricing', jest.fn(), { onOpenApp: openApp });
+
+    const yearlyButton = Array.from(container.querySelectorAll('.marketing-v2-pricing-cycle button'))
+      .find((button) => button.textContent === 'Yearly');
+    act(() => {
+      yearlyButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
 
     const buttons = Array.from(container.querySelectorAll('.marketing-v2-pricing-card__cta'));
     buttons.forEach((button) => {
@@ -418,8 +472,10 @@ describe('MarketingPreviewV2', () => {
     expect(urls[1].searchParams.has('billingPlan')).toBe(false);
     expect(urls[2].searchParams.get('intent')).toBe('checkout');
     expect(urls[2].searchParams.get('billingPlan')).toBe('studio');
+    expect(urls[2].searchParams.get('billingCycle')).toBe('yearly');
     expect(urls[3].searchParams.get('intent')).toBe('checkout');
     expect(urls[3].searchParams.get('billingPlan')).toBe('agency');
+    expect(urls[3].searchParams.get('billingCycle')).toBe('yearly');
     urls.forEach((url) => {
       expect(url.searchParams.get('intent')).not.toBe('scan');
     });

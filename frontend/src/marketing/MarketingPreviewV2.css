@@ -1114,6 +1114,38 @@ body:has(.marketing-preview-v2) {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.marketing-v2-pricing-cycle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--unit-4);
+  padding: var(--unit-4);
+  border: 1px solid var(--marketing-v2-line-strong);
+  border-radius: var(--ui-radius-md);
+  background: var(--marketing-v2-paper);
+}
+
+.marketing-v2-pricing-cycle button {
+  min-width: 92px;
+  height: 36px;
+  padding: 0 var(--unit-16);
+  border: 0;
+  border-radius: var(--ui-radius-sm);
+  color: var(--marketing-v2-muted);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.marketing-v2-pricing-cycle button.active {
+  color: var(--marketing-v2-ink);
+  background: var(--marketing-v2-surface);
+  box-shadow: inset 0 0 0 1px var(--marketing-v2-line);
+}
+
 .marketing-v2-examples,
 .marketing-v2-contact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
