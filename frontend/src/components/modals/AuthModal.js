@@ -205,6 +205,12 @@ const AuthModal = ({
   const handleSignupSubmit = async () => {
     const result = await api.signup(email, password, name);
     trackEvent('signup', { method: 'password' });
+    if (result?.user) {
+      onSuccess?.(result.user);
+      onClose?.();
+      showToast?.(`Welcome, ${result.user.name}!`, 'success');
+      return;
+    }
     setCode('');
     setCodeLength(result?.codeLength || 6);
     setExpiresInMinutes(result?.expiresInMinutes || 10);

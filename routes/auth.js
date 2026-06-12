@@ -82,6 +82,7 @@ const AUTH_CHALLENGE_PURPOSES = Object.freeze({
 const AUTH_CODE_LENGTH = 6;
 const TEST_AUTH_FIXED_CODE = String(process.env.TEST_AUTH_FIXED_CODE || '123456').replace(/\D+/g, '').slice(0, AUTH_CODE_LENGTH);
 const TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX = String(process.env.TEST_AUTH_FIXED_CODE_EMAIL_SUFFIX || '@test.vellic.local').trim().toLowerCase();
+const DEFAULT_AUTH_EMAIL_VERIFICATION_SKIP_DOMAINS = 'example.com,mail.com';
 const AUTH_CHALLENGE_MAX_ATTEMPTS = Math.max(
   3,
   Number(process.env.AUTH_CHALLENGE_MAX_ATTEMPTS ?? 5)
@@ -112,6 +113,45 @@ let googleJwksCache = {
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+function parseEmailDomainList(value) {
+  return Array.from(new Set(
+    String(value || '')
+      .split(/[,\n]/)
+      .map((entry) => entry.trim().toLowerCase().replace(/^@+/, ''))
+      .filter(Boolean)
+  ));
+}
+
+function getEmailDomain(email) {
+  const normalizedEmail = normalizeEmail(email);
+  const atIndex = normalizedEmail.lastIndexOf('@');
+  return atIndex >= 0 ? normalizedEmail.slice(atIndex + 1) : '';
+}
+
+function isStagingLikeEnvironment() {
+  const values = [
+    process.env.RAILWAY_ENVIRONMENT_NAME,
+    process.env.RAILWAY_ENVIRONMENT,
+    process.env.APP_BASE_URL,
+    process.env.FRONTEND_URL,
+  ].join(' ');
+  return /\bstaging\b/i.test(values);
+}
+
+const AUTH_EMAIL_VERIFICATION_SKIP_ENABLED = parseEnvBool(
+  process.env.AUTH_EMAIL_VERIFICATION_SKIP_ENABLED,
+  !isProd || isStagingLikeEnvironment()
+);
+const AUTH_EMAIL_VERIFICATION_SKIP_DOMAINS = parseEmailDomainList(
+  process.env.AUTH_EMAIL_VERIFICATION_SKIP_DOMAINS || DEFAULT_AUTH_EMAIL_VERIFICATION_SKIP_DOMAINS
+);
+
+function shouldSkipEmailVerificationForTesting(email) {
+  if (!AUTH_EMAIL_VERIFICATION_SKIP_ENABLED) return false;
+  const domain = getEmailDomain(email);
+  return Boolean(domain && AUTH_EMAIL_VERIFICATION_SKIP_DOMAINS.includes(domain));
 }
 
 function isEmailIdentifier(value) {
@@ -1003,17 +1043,30 @@ router.post('/signup', signupLimiter, async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
     const displayName = String(name || '').trim() || emailNormalized.split('@')[0];
 
+    const skipVerification = shouldSkipEmailVerificationForTesting(emailNormalized);
     const createdUser = await authStore.createUserAsync({
       email: emailNormalized,
       passwordHash,
       name: displayName,
-      emailVerificationRequired: true,
+      emailVerifiedAt: skipVerification ? new Date().toISOString() : null,
+      emailVerificationRequired: !skipVerification,
       authProvider: 'password',
     });
 
+    if (skipVerification) {
+      const publicUser = await authStore.getPublicUserByIdAsync(createdUser.id);
+      const token = issueSessionCookie(res, publicUser);
+      return res.json({
+        user: await buildClientUserWithEntitlementsAsync(publicUser),
+        token: AUTH_HEADER_FALLBACK ? token : undefined,
+        verificationRequired: false,
+        emailVerificationSkipped: true,
+      });
+    }
+
     const verificationState = await queueEmailVerificationCodeAsync(createdUser);
 
-    res.json({
+    return res.json({
       pendingVerification: true,
       verificationRequired: true,
       email: createdUser.email,

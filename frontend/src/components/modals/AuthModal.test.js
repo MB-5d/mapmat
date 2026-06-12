@@ -283,6 +283,61 @@ describe('AuthModal', () => {
     expect(container.textContent).toContain('Verification Code');
   });
 
+  test('completes signup immediately when verification is skipped', async () => {
+    api.signup.mockResolvedValue({
+      user: {
+        id: 'u-skip',
+        name: 'Pro',
+        email: 'pro@example.com',
+        emailVerified: true,
+        authProvider: 'password',
+      },
+      emailVerificationSkipped: true,
+    });
+
+    const onSuccess = jest.fn();
+    const onClose = jest.fn();
+    const showToast = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <AuthModal
+          onClose={onClose}
+          onSuccess={onSuccess}
+          onDemo={jest.fn()}
+          showToast={showToast}
+        />
+      );
+    });
+
+    await clickButton('Sign Up');
+
+    const inputs = container.querySelectorAll('input');
+    const form = container.querySelector('form');
+
+    await act(async () => {
+      setInputValue(inputs[0], 'Pro');
+      inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+      setInputValue(inputs[1], 'pro@example.com');
+      inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+      setInputValue(inputs[2], 'secret123');
+      inputs[2].dispatchEvent(new Event('input', { bubbles: true }));
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+
+    expect(api.signup).toHaveBeenCalledWith('pro@example.com', 'secret123', 'Pro');
+    expect(onSuccess).toHaveBeenCalledWith({
+      id: 'u-skip',
+      name: 'Pro',
+      email: 'pro@example.com',
+      emailVerified: true,
+      authProvider: 'password',
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith('Welcome, Pro!', 'success');
+    expect(container.textContent).not.toContain('Verify your email');
+  });
+
   test('moves unverified login attempts into the verification flow', async () => {
     const error = new Error('Check your email for a verification code before logging in.');
     error.code = 'EMAIL_NOT_VERIFIED';

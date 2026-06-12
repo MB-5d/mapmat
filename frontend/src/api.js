@@ -173,10 +173,12 @@ function buildWebSocketUrl(endpoint) {
 // ============================================
 
 export async function signup(email, password, name) {
-  return fetchApi('/auth/signup', {
+  const result = await fetchApi('/auth/signup', {
     method: 'POST',
     body: JSON.stringify({ email, password, name }),
   });
+  if (result?.token) setStoredAuthToken(result.token);
+  return result;
 }
 
 export async function login(identifier, password) {

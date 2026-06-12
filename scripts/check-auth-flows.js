@@ -18,7 +18,7 @@ function sleep(ms) {
 }
 
 function randomEmail() {
-  return `auth_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@example.com`;
+  return `auth_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@auth-flow.test`;
 }
 
 function randomPassword() {
@@ -213,6 +213,28 @@ async function run() {
       false,
       'google auth should stay disabled when Google env vars are missing'
     );
+
+    const bypassEmail = `auth_bypass_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@example.com`;
+    const bypassPassword = randomPassword();
+    const bypassSignup = await fetchJson(`${API_BASE}/auth/signup`, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: bypassEmail,
+        password: bypassPassword,
+        name: 'Auth Bypass Check',
+      }),
+    });
+    assert.strictEqual(bypassSignup.emailVerificationSkipped, true, 'example.com signup should skip verification in test/staging environments');
+    assert.strictEqual(bypassSignup.verificationRequired, false, 'bypassed signup should not require verification');
+    assert.strictEqual(bypassSignup.user?.email, bypassEmail, 'bypassed signup should return the user');
+    assert.strictEqual(bypassSignup.user?.emailVerified, true, 'bypassed signup should return a verified user');
+    assert(bypassSignup.token, 'bypassed signup should return an auth token');
+
+    const bypassMe = await fetchJson(`${API_BASE}/auth/me`, {
+      headers: {},
+      token: bypassSignup.token,
+    });
+    assert.strictEqual(bypassMe.user?.emailVerified, true, 'bypassed /auth/me should show verified email');
 
     const signupStartedAt = Date.now();
     const signup = await fetchJson(`${API_BASE}/auth/signup`, {
