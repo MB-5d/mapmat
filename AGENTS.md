@@ -37,11 +37,13 @@
 - Production realtime verification: `npm run verify:realtime:production:preflight`
 
 ## Realtime Rollout Checks
+- `npm run verify:realtime:rollout-state` requires `COEDITING_STAGING_ADMIN_KEY` and `COEDITING_PRODUCTION_ADMIN_KEY` in the local terminal.
+- `npm run verify:realtime:*:preflight` requires `COEDITING_ADMIN_KEY` plus the exact target rollout variables, including `COEDITING_PREFLIGHT_CHANGE_TYPE`.
 - Before scope or broad-rollout changes, compare staging vs production policy with `npm run verify:realtime:rollout-state`.
 - For staged canary rollout checks, run `npm run verify:realtime:staging:canary` and `npm run verify:realtime:staging:canary:window`.
-- For cross-environment canary window checks, run `npm run verify:realtime:all:canary:window`.
+- For cross-environment canary checks, run `npm run verify:realtime:all:canary` and `npm run verify:realtime:all:canary:window`.
 - Only when a broad rollout is explicitly intended, run `npm run verify:realtime:staging:broad` and `npm run verify:realtime:staging:broad:window`.
-- For cross-environment broad rollout window checks, run `npm run verify:realtime:all:broad:window`.
+- For cross-environment broad rollout checks, run `npm run verify:realtime:all:broad` and `npm run verify:realtime:all:broad:window`.
 
 ## Automation Worktrees
 - In Codex automation worktrees, `git status --short --branch` may show `## HEAD (no branch)`; treat that detached state as normal unless another signal shows a real git problem.
