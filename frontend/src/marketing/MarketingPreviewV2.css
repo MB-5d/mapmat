@@ -2231,7 +2231,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     width: 816px;
     max-width: none;
     height: 444px;
-    margin-left: calc((100% - 816px) / 2);
+    margin-left: 0;
     margin-top: var(--unit-64);
     overflow: hidden;
   }
@@ -2381,12 +2381,22 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     width: 100px;
   }
 
+  .marketing-v2-pricing-cycle.marketing-v2-comparison-tabs {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .marketing-v2-pricing-cycle .marketing-v2-comparison-tab.ui-btn {
+    width: auto;
+  }
+
   .marketing-v2-comparison {
     --marketing-v2-comparison-feature-width: 124px;
-    --marketing-v2-comparison-vellic-width: 56px;
-    --marketing-v2-comparison-competitor-width: 108px;
+    --marketing-v2-comparison-vellic-width: 72px;
+    --marketing-v2-comparison-competitor-width: 104px;
     --marketing-v2-comparison-row-height: calc(var(--unit-64) + var(--unit-8) + 1px);
-    --marketing-v2-comparison-table-width: 720px;
+    --marketing-v2-comparison-table-width: 716px;
     overflow: hidden;
   }
 
@@ -2426,7 +2436,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   .marketing-v2-comparison td {
     box-sizing: border-box;
     height: var(--marketing-v2-comparison-row-height);
-    padding: var(--unit-12) var(--unit-16);
+    padding: var(--unit-12) var(--unit-8);
   }
 
   .marketing-v2-comparison thead th:first-child,
@@ -2541,6 +2551,18 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     font-size: var(--type-mobile-body-lg-size);
     font-weight: var(--type-mobile-title-lg-weight);
     line-height: var(--type-mobile-body-lg-line-height);
+  }
+
+  .marketing-v2-faq-item.is-open .marketing-v2-faq-item__button.ui-btn {
+    align-items: flex-start;
+    height: auto;
+    min-height: 0;
+    padding-top: var(--unit-16);
+    padding-bottom: 0;
+  }
+
+  .marketing-v2-faq-item.is-open .marketing-v2-faq-item__button .ui-btn__icon--end {
+    margin-top: var(--unit-4);
   }
 
   .marketing-v2-faq-item__answer {
