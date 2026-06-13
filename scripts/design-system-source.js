@@ -475,7 +475,7 @@ const appSemantics = {
     'ui-button-brand-fill': 'var(--color-brand-700)',
     'ui-button-brand-fill-hover': 'var(--color-brand-800)',
     'ui-button-brand-fill-disabled': 'var(--color-brand-300)',
-    'ui-button-brand-fill-disabled-contrast': 'var(--color-brand-950)',
+    'ui-button-brand-fill-disabled-contrast': 'var(--color-neutral-white)',
     'ui-button-brand-contrast': 'var(--color-neutral-white)',
     'ui-button-brand-quiet': 'var(--color-brand-700)',
     'ui-button-brand-quiet-hover': 'var(--color-brand-800)',

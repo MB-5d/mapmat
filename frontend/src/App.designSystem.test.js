@@ -21,6 +21,7 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
     expect(generatedCss).toContain('--ui-button-brand-fill-disabled: var(--color-brand-300);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-neutral-white);');
     expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-brand-950);');
     expect(generatedCss).toContain('--ui-button-brand-quiet-disabled: var(--color-brand-300);');
 
