@@ -405,6 +405,14 @@ async function updateUserNameAsync(userId, name) {
   );
 }
 
+async function updateUserEmailAsync(userId, email) {
+  await ensureAuthSchemaAsync();
+  return await adapter.executeAsync(
+    'UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [normalizeEmail(email), userId]
+  );
+}
+
 async function updateUserAvatarPathAsync(userId, avatarPath) {
   await ensureAuthSchemaAsync();
   return await adapter.executeAsync(
@@ -598,6 +606,7 @@ module.exports = {
   markUserEmailVerifiedAsync,
   linkGoogleIdentityAsync,
   updateUserNameAsync,
+  updateUserEmailAsync,
   updateUserAvatarPathAsync,
   getUserPasswordHashAsync,
   deleteUserAsync,

@@ -230,6 +230,13 @@ describe('ProfileDrawer', () => {
 
     expect(usernameInput.readOnly).toBe(false);
     expect(emailInput.readOnly).toBe(true);
+
+    act(() => {
+      container.querySelector('button[aria-label="Edit email"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(usernameInput.readOnly).toBe(true);
+    expect(emailInput.readOnly).toBe(false);
   });
 
   test('keeps password fields collapsed until opened', () => {
@@ -292,6 +299,51 @@ describe('ProfileDrawer', () => {
     });
 
     expect(saveButton.disabled).toBe(false);
+  });
+
+  test('enables save when email changes and submits profile email', async () => {
+    api.updateProfile.mockResolvedValue({
+      user: { ...baseUser, email: 'new@example.com' },
+    });
+    const onUpdate = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={baseUser}
+          onClose={jest.fn()}
+          onUpdate={onUpdate}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Changes')
+    );
+    const emailInput = container.querySelector('input[placeholder="Email address"]');
+    expect(saveButton.disabled).toBe(true);
+
+    act(() => {
+      container.querySelector('button[aria-label="Edit email"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    act(() => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      valueSetter.call(emailInput, 'new@example.com');
+      emailInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(emailInput.readOnly).toBe(false);
+    expect(saveButton.disabled).toBe(false);
+
+    await act(async () => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(api.updateProfile).toHaveBeenCalledWith({ email: 'new@example.com' });
+    expect(onUpdate).toHaveBeenCalledWith({ ...baseUser, email: 'new@example.com' });
   });
 
   test('keeps delete account collapsed until opened and confirms inline', () => {

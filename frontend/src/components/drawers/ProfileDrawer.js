@@ -150,8 +150,9 @@ const ProfileDrawer = ({
     { label: 'Seats', item: entitlements?.limits?.seats },
   ].filter((row) => row.item);
   const hasNameChange = Boolean(user) && name.trim() !== String(user?.name || '').trim();
+  const hasEmailChange = Boolean(user) && email.trim().toLowerCase() !== String(user?.email || '').trim().toLowerCase();
   const hasPasswordDraft = Boolean(currentPassword || newPassword || confirmPassword);
-  const canSaveChanges = Boolean(user && !loading && (hasNameChange || hasPasswordDraft || hasPendingAvatarChange));
+  const canSaveChanges = Boolean(user && !loading && (hasNameChange || hasEmailChange || hasPasswordDraft || hasPendingAvatarChange));
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -165,6 +166,10 @@ const ProfileDrawer = ({
       const trimmedName = name.trim();
       if (trimmedName && trimmedName !== user.name) {
         updateData.name = trimmedName;
+      }
+      const trimmedEmail = email.trim().toLowerCase();
+      if (hasEmailChange) {
+        updateData.email = trimmedEmail;
       }
       if (newPassword) {
         if (newPassword !== confirmPassword) {
@@ -213,6 +218,7 @@ const ProfileDrawer = ({
       setPendingAvatarDataUrl('');
       setPendingAvatarRemoved(false);
       if (updatedUser?.name) setName(updatedUser.name);
+      if (updatedUser?.email) setEmail(updatedUser.email);
     } catch (err) {
       setError(err.message || 'Failed to update profile');
     } finally {
@@ -510,7 +516,7 @@ const ProfileDrawer = ({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email address"
-                readOnly
+                readOnly={activeProfileField !== 'email'}
                 disabled={!user || loading}
                 inputClassName="profile-inline-edit-input"
                 shellClassName={classNames(
@@ -671,7 +677,7 @@ const ProfileDrawer = ({
               variant="primary"
               htmlType="submit"
               disabled={!canSaveChanges}
-              loading={loading && (hasNameChange || hasPasswordDraft || hasPendingAvatarChange)}
+              loading={loading && (hasNameChange || hasEmailChange || hasPasswordDraft || hasPendingAvatarChange)}
             >
               Save Changes
             </Button>

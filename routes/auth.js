@@ -1555,7 +1555,22 @@ router.get('/me', authMiddleware, async (req, res) => {
 router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (req, res) => {
   try {
     await authStore.ensureAuthSchemaAsync();
-    const { name, currentPassword, newPassword } = req.body || {};
+    const { name, email, currentPassword, newPassword } = req.body || {};
+    let emailNormalized = null;
+
+    if (email !== undefined) {
+      emailNormalized = normalizeEmail(email);
+      if (!emailNormalized || !emailNormalized.includes('@')) {
+        return res.status(400).json({ error: 'Enter a valid email address' });
+      }
+
+      if (emailNormalized !== normalizeEmail(req.user.email)) {
+        const existingUser = await authStore.getUserByEmailAsync(emailNormalized);
+        if (existingUser && existingUser.id !== req.user.id) {
+          return res.status(400).json({ error: 'An account with this email already exists' });
+        }
+      }
+    }
 
     if (newPassword) {
       const passwordHashCurrent = await authStore.getUserPasswordHashAsync(req.user.id);
@@ -1582,6 +1597,10 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
 
     if (name !== undefined) {
       await authStore.updateUserNameAsync(req.user.id, name);
+    }
+
+    if (emailNormalized && emailNormalized !== normalizeEmail(req.user.email)) {
+      await authStore.updateUserEmailAsync(req.user.id, emailNormalized);
     }
 
     const updated = await authStore.getPublicUserByIdAsync(req.user.id);
