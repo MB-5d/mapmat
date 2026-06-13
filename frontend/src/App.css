@@ -9774,13 +9774,6 @@ body {
   width: 100%;
 }
 
-.profile-save-button:disabled {
-  background: var(--ui-color-surface-muted);
-  border-color: var(--ui-color-border);
-  color: var(--ui-color-muted);
-  box-shadow: none;
-}
-
 .form-section h4 {
   font-size: 14px;
   font-weight: 600;

@@ -288,6 +288,7 @@ describe('ProfileDrawer', () => {
     );
     const usernameInput = container.querySelector('input[placeholder="Your username"]');
     expect(saveButton.disabled).toBe(true);
+    expect(saveButton.className).toContain('ui-btn--style-mono');
 
     act(() => {
       container.querySelector('button[aria-label="Edit username"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -299,6 +300,42 @@ describe('ProfileDrawer', () => {
     });
 
     expect(saveButton.disabled).toBe(false);
+    expect(saveButton.className).toContain('ui-btn--style-brand');
+  });
+
+  test('keeps save disabled when user data loads after drawer opens', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={null}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={baseUser}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Changes')
+    );
+    expect(container.querySelector('input[placeholder="Your username"]').value).toBe(baseUser.name);
+    expect(container.querySelector('input[placeholder="Email address"]').value).toBe(baseUser.email);
+    expect(saveButton.disabled).toBe(true);
   });
 
   test('enables save when email changes and submits profile email', async () => {

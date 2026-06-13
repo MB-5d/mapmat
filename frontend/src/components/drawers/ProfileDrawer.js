@@ -94,12 +94,14 @@ const ProfileDrawer = ({
   const [success, setSuccess] = useState('');
 
   const wasOpenRef = useRef(false);
+  const initializedUserIdRef = useRef(null);
   const avatarInputRef = useRef(null);
   const nameInputRef = useRef(null);
   const emailInputRef = useRef(null);
 
   useEffect(() => {
-    if (isOpen && !wasOpenRef.current) {
+    const userId = user?.id || null;
+    if (isOpen && (!wasOpenRef.current || (userId && initializedUserIdRef.current !== userId))) {
       setName(user?.name || '');
       setEmail(user?.email || '');
       setCurrentPassword('');
@@ -121,9 +123,13 @@ const ProfileDrawer = ({
       setPasswordDetailsOpen(false);
       setDeleteDetailsOpen(false);
       setActiveProfileField(null);
+      initializedUserIdRef.current = userId;
+    }
+    if (!isOpen) {
+      initializedUserIdRef.current = null;
     }
     wasOpenRef.current = isOpen;
-  }, [isOpen, user]);
+  }, [isOpen, user?.email, user?.id, user?.name]);
 
   const avatarUrl = resolveApiAssetUrl(user?.avatarUrl);
   const avatarInitial = String(user?.name || user?.email || 'A').trim().charAt(0).toUpperCase();
@@ -152,7 +158,8 @@ const ProfileDrawer = ({
   const hasNameChange = Boolean(user) && name.trim() !== String(user?.name || '').trim();
   const hasEmailChange = Boolean(user) && email.trim().toLowerCase() !== String(user?.email || '').trim().toLowerCase();
   const hasPasswordDraft = Boolean(currentPassword || newPassword || confirmPassword);
-  const canSaveChanges = Boolean(user && !loading && (hasNameChange || hasEmailChange || hasPasswordDraft || hasPendingAvatarChange));
+  const hasProfileChanges = hasNameChange || hasEmailChange || hasPasswordDraft || hasPendingAvatarChange;
+  const canSaveChanges = Boolean(user && !loading && hasProfileChanges);
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -675,9 +682,10 @@ const ProfileDrawer = ({
               className="profile-save-button"
               type="button"
               variant="primary"
+              buttonStyle={hasProfileChanges ? 'brand' : 'mono'}
               htmlType="submit"
               disabled={!canSaveChanges}
-              loading={loading && (hasNameChange || hasEmailChange || hasPasswordDraft || hasPendingAvatarChange)}
+              loading={loading && hasProfileChanges}
             >
               Save Changes
             </Button>
