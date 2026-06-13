@@ -6800,14 +6800,16 @@ body {
   bottom: -2px;
   width: 22px;
   height: 22px;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
+  background: var(--ui-color-surface);
+  color: var(--ui-color-text);
   box-shadow: var(--shadow-card);
+  pointer-events: none;
 }
 
 .account-hero-avatar-image img {
@@ -9641,7 +9643,9 @@ body {
 .profile-form {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 16px;
+  min-height: 0;
 }
 
 .form-section {
@@ -9735,6 +9739,35 @@ body {
 
 .profile-password-chevron.is-open {
   transform: rotate(180deg);
+}
+
+.profile-password-summary .account-plan-title,
+.profile-delete-summary .account-plan-title {
+  color: var(--ui-color-text);
+}
+
+.profile-delete-copy {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ui-color-muted);
+}
+
+.profile-delete-details .account-danger {
+  margin-top: 2px;
+}
+
+.profile-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding-top: 12px;
+  background: var(--modal-bg);
+}
+
+.profile-save-button {
+  width: 100%;
 }
 
 .form-section h4 {

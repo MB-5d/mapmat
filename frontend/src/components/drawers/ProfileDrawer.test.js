@@ -70,6 +70,7 @@ describe('ProfileDrawer', () => {
 
     const avatar = container.querySelector('.account-hero-avatar');
     expect(avatar).not.toBeNull();
+    expect(container.querySelector('.account-hero-avatar-edit-icon')).not.toBeNull();
     expect(avatar.textContent).toContain('M');
     expect(avatar.className).toContain('ui-avatar--circle');
     expect(container.textContent).toContain('Username');
@@ -247,6 +248,7 @@ describe('ProfileDrawer', () => {
 
     const passwordSummary = container.querySelector('.profile-password-summary');
     expect(passwordSummary).not.toBeNull();
+    expect(passwordSummary.closest('.account-plan-section')).not.toBeNull();
     expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('input[placeholder="Enter current password"]')).toBeNull();
 
@@ -260,7 +262,77 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('input[placeholder="Confirm new password"]')).not.toBeNull();
   });
 
-  test('opens cropper from avatar edit and uploads cropped avatar', async () => {
+  test('keeps save disabled until profile fields change', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={baseUser}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Changes')
+    );
+    const usernameInput = container.querySelector('input[placeholder="Your username"]');
+    expect(saveButton.disabled).toBe(true);
+
+    act(() => {
+      container.querySelector('button[aria-label="Edit username"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    act(() => {
+      const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      valueSetter.call(usernameInput, 'Maya F.');
+      usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(saveButton.disabled).toBe(false);
+  });
+
+  test('keeps delete account collapsed until opened and confirms inline', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={baseUser}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const deleteSummary = container.querySelector('.profile-delete-summary');
+    expect(deleteSummary).not.toBeNull();
+    expect(deleteSummary.closest('.account-plan-section')).not.toBeNull();
+    expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(container.textContent).not.toContain('Deleting your account will permanently remove');
+
+    act(() => {
+      deleteSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(deleteSummary.getAttribute('aria-expanded')).toBe('true');
+    expect(container.textContent).toContain('Deleting your account will permanently remove');
+
+    const deleteButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Delete Account')
+    );
+    act(() => {
+      deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('This action cannot be undone');
+    expect(container.querySelector('input[placeholder="Your password"]')).not.toBeNull();
+  });
+
+  test('opens cropper from avatar edit and saves cropped avatar with profile changes', async () => {
     avatarCrop.createCroppedAvatarDataUrl.mockResolvedValue('data:image/webp;base64,cropped');
     api.uploadMyAvatar.mockResolvedValue({
       user: { ...baseUser, avatarUrl: '/uploads/avatars/new.webp' },
@@ -293,6 +365,11 @@ describe('ProfileDrawer', () => {
     expect(container.textContent).toContain('Remove Avatar');
     expect(container.querySelector('[data-testid="avatar-cropper"]')).not.toBeNull();
 
+    const profileSaveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save Changes')
+    );
+    expect(profileSaveButton.disabled).toBe(true);
+
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Save Avatar')
     );
@@ -304,11 +381,19 @@ describe('ProfileDrawer', () => {
       expect.stringContaining('/uploads/avatars/maya.webp'),
       expect.objectContaining({ width: 128, height: 128 })
     );
+    expect(api.uploadMyAvatar).not.toHaveBeenCalled();
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(profileSaveButton.disabled).toBe(false);
+
+    await act(async () => {
+      profileSaveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
     expect(api.uploadMyAvatar).toHaveBeenCalledWith({
       imageDataUrl: 'data:image/webp;base64,cropped',
     });
     expect(onUpdate).toHaveBeenCalledWith({ ...baseUser, avatarUrl: '/uploads/avatars/new.webp' });
-    expect(showToast).toHaveBeenCalledWith('Avatar updated', 'success');
+    expect(showToast).toHaveBeenCalledWith('Profile updated', 'success');
     expect(container.textContent).not.toContain('Avatar updated');
   });
 });
