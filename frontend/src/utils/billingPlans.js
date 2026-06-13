@@ -115,6 +115,15 @@ function getYearlyMonthlyDisplayPrice(price) {
   };
 }
 
+function getYearlyMonthlyComparisonPrice(price) {
+  const displayPrice = getYearlyMonthlyDisplayPrice(price);
+  if (displayPrice === price) return price;
+  return {
+    ...displayPrice,
+    suffix: '/mo yearly',
+  };
+}
+
 function normalizePlanEntry(entry, billingCycle) {
   const fallback = getFallbackPlan(entry?.key) || {};
   const cycle = normalizeBillingCycle(billingCycle);
@@ -125,7 +134,9 @@ function normalizePlanEntry(entry, billingCycle) {
     || fallback.prices?.[comparisonCycle]
     || fallback.prices?.monthly
     || {};
-  const yearlyComparisonPrice = cycle === 'yearly' ? selectedPrice : comparisonPrice;
+  const yearlyComparisonPrice = cycle === 'yearly'
+    ? selectedPrice
+    : getYearlyMonthlyComparisonPrice(comparisonPrice);
   const features = Array.isArray(entry?.featureHighlights) && entry.featureHighlights.length
     ? entry.featureHighlights
     : (fallback.features || []);
