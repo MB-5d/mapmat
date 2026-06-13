@@ -10031,6 +10031,17 @@ body {
   color: var(--ui-color-muted);
 }
 
+.account-menu-external-icon {
+  color: var(--ui-color-text);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.account-menu-item--external:hover .account-menu-external-icon,
+.account-menu-item--external:focus-visible .account-menu-external-icon {
+  opacity: 1;
+}
+
 .account-menu-item-badge {
   min-width: 18px;
   height: 18px;

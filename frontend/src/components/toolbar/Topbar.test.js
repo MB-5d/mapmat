@@ -117,6 +117,8 @@ describe('Topbar', () => {
       button.textContent.includes('Billing')
     );
     expect(billingButton).not.toBeNull();
+    expect(billingButton.className).toContain('account-menu-item--external');
+    expect(billingButton.querySelector('.account-menu-external-icon')).not.toBeNull();
 
     act(() => {
       billingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

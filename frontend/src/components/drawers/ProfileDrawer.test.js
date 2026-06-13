@@ -194,7 +194,12 @@ describe('ProfileDrawer', () => {
 
     expect(planButton).not.toBeNull();
     expect(billingButton).not.toBeNull();
+    expect(planButton.className).toContain('ui-btn--type-secondary');
+    expect(planButton.className).toContain('ui-btn--style-mono');
+    expect(planButton.className).not.toContain('ui-btn--style-brand');
     expect(billingButton.className).toContain('ui-btn--type-ghost');
+    expect(billingButton.className).toContain('ui-btn--style-mono');
+    expect(billingButton.className).not.toContain('ui-btn--style-brand');
 
     act(() => {
       planButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   CreditCard,
+  ExternalLink,
   Folder,
   History,
   LogIn,
@@ -200,10 +201,11 @@ const Topbar = ({
                     }}
                   />
                   <MenuItem
-                    className="account-menu-item"
+                    className="account-menu-item account-menu-item--external"
                     role="menuitem"
                     icon={<CreditCard size={16} />}
                     label="Billing"
+                    endSlot={<ExternalLink className="account-menu-external-icon" size={14} aria-hidden="true" />}
                     onClick={() => {
                       closeMenu();
                       onShowBilling?.();

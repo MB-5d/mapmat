@@ -459,6 +459,7 @@ const ProfileDrawer = ({
                 <Button
                   type="button"
                   variant="secondary"
+                  buttonStyle="mono"
                   size="sm"
                   onClick={onOpenPlans}
                   disabled={!user}
