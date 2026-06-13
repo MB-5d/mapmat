@@ -1560,17 +1560,19 @@ body:has(.marketing-preview-v2) {
   margin-top: 1px;
 }
 
-.marketing-v2-pricing-card__cta {
-  width: 100%;
-  margin-top: var(--unit-32);
-}
-
-.marketing-v2-pricing-card__cta.ui-btn {
+.marketing-v2-pricing-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-8);
   margin-top: auto;
 }
 
+.marketing-v2-pricing-card__cta {
+  width: 100%;
+}
+
 .marketing-v2-pricing-card__screenshot-note {
-  margin: var(--unit-8) 0 0;
+  margin: 0;
   color: var(--marketing-v2-muted);
   font-size: var(--type-body-xs-size);
   font-weight: var(--type-body-xs-weight);

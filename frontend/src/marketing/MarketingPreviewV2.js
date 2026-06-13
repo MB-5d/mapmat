@@ -1266,18 +1266,20 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
           </li>
         ))}
       </ul>
-      <Button
-        className="marketing-v2-pricing-card__cta"
-        type="button"
-        variant="secondary"
-        buttonStyle="brand"
-        onClick={() => onGetStarted(plan)}
-      >
-        {plan.cta}
-      </Button>
-      <p className="marketing-v2-pricing-card__screenshot-note">
-        *additional screenshot credits can be purchased anytime
-      </p>
+      <div className="marketing-v2-pricing-card__actions">
+        <Button
+          className="marketing-v2-pricing-card__cta"
+          type="button"
+          variant="secondary"
+          buttonStyle="brand"
+          onClick={() => onGetStarted(plan)}
+        >
+          {plan.cta}
+        </Button>
+        <p className="marketing-v2-pricing-card__screenshot-note">
+          *additional screenshot credits can be purchased anytime
+        </p>
+      </div>
     </MarketingV2Card>
   );
 }

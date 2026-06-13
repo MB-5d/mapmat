@@ -404,6 +404,7 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('3,000 screenshot credits*');
     expect(container.textContent).toContain('10,000 screenshot credits*');
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')).toHaveLength(4);
+    expect(container.querySelectorAll('.marketing-v2-pricing-card__actions')).toHaveLength(4);
     expect(container.querySelectorAll('.marketing-v2-pricing-card__screenshot-note')).toHaveLength(4);
     container.querySelectorAll('.marketing-v2-pricing-card__screenshot-note').forEach((note) => {
       expect(note.textContent).toBe('*additional screenshot credits can be purchased anytime');
