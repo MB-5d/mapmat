@@ -13,6 +13,7 @@ import Modal from '../ui/Modal';
 import TextInput from '../ui/TextInput';
 import { createCroppedAvatarDataUrl } from '../../utils/avatarCrop';
 import { resolveApiAssetUrl } from '../../utils/assets';
+import classNames from '../../utils/classNames';
 
 const AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -71,6 +72,7 @@ const ProfileDrawer = ({
   showToast,
 }) => {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -83,15 +85,20 @@ const ProfileDrawer = ({
   const [avatarZoom, setAvatarZoom] = useState(1);
   const [avatarCropPixels, setAvatarCropPixels] = useState(null);
   const [planDetailsOpen, setPlanDetailsOpen] = useState(false);
+  const [passwordDetailsOpen, setPasswordDetailsOpen] = useState(false);
+  const [activeProfileField, setActiveProfileField] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const wasOpenRef = useRef(false);
   const avatarInputRef = useRef(null);
+  const nameInputRef = useRef(null);
+  const emailInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && !wasOpenRef.current) {
       setName(user?.name || '');
+      setEmail(user?.email || '');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -106,6 +113,8 @@ const ProfileDrawer = ({
       setAvatarZoom(1);
       setAvatarCropPixels(null);
       setPlanDetailsOpen(false);
+      setPasswordDetailsOpen(false);
+      setActiveProfileField(null);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, user]);
@@ -169,6 +178,7 @@ const ProfileDrawer = ({
 
       const { user: updatedUser } = await api.updateProfile(updateData);
       onUpdate?.(updatedUser);
+      setActiveProfileField(null);
       setSuccess('Profile updated successfully');
       setCurrentPassword('');
       setNewPassword('');
@@ -229,6 +239,22 @@ const ProfileDrawer = ({
     }
   };
 
+  const activateProfileField = (field) => {
+    setActiveProfileField(field);
+    const focusInput = () => {
+      const inputRef = field === 'name' ? nameInputRef : emailInputRef;
+      inputRef.current?.focus();
+      inputRef.current?.select?.();
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(focusInput);
+      return;
+    }
+
+    setTimeout(focusInput, 0);
+  };
+
   const handleSaveAvatarCrop = async () => {
     setError('');
     setSuccess('');
@@ -238,7 +264,7 @@ const ProfileDrawer = ({
       const imageDataUrl = await createCroppedAvatarDataUrl(avatarCropSrc, avatarCropPixels);
       const { user: updatedUser } = await api.uploadMyAvatar({ imageDataUrl });
       onUpdate?.(updatedUser);
-      setSuccess('Avatar updated');
+      showToast?.('Avatar updated', 'success');
       setAvatarCropSrc('');
     } catch (err) {
       setError(err.message || 'Failed to upload avatar');
@@ -254,7 +280,7 @@ const ProfileDrawer = ({
     try {
       const { user: updatedUser } = await api.removeMyAvatar();
       onUpdate?.(updatedUser);
-      setSuccess('Avatar removed');
+      showToast?.('Avatar removed', 'success');
       setAvatarCropSrc('');
     } catch (err) {
       setError(err.message || 'Failed to remove avatar');
@@ -313,9 +339,7 @@ const ProfileDrawer = ({
         </button>
         <div className="account-hero-details">
           <div className="account-hero-name">{user?.name || 'Your account'}</div>
-          <div className="account-hero-email">{user?.email || ''}</div>
         </div>
-        <div className="account-hero-badge">{isArchived ? 'Archived' : planName}</div>
       </div>
 
       {!showDeleteConfirm ? (
@@ -404,7 +428,7 @@ const ProfileDrawer = ({
             </div>
           ) : null}
 
-          <div className="form-section">
+          <div className="form-section profile-fields-section">
             <input
               ref={avatarInputRef}
               type="file"
@@ -414,57 +438,110 @@ const ProfileDrawer = ({
             />
             <Field label="Username">
               <TextInput
+                ref={nameInputRef}
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your username"
+                readOnly={activeProfileField !== 'name'}
                 disabled={!user || loading}
+                inputClassName="profile-inline-edit-input"
+                shellClassName={classNames(
+                  'profile-inline-edit-shell',
+                  activeProfileField === 'name' && 'is-active'
+                )}
+                rightElement={(
+                  <button
+                    type="button"
+                    className="profile-inline-edit-button"
+                    aria-label="Edit username"
+                    onClick={() => activateProfileField('name')}
+                  >
+                    <EditIcon size={14} />
+                  </button>
+                )}
               />
             </Field>
             <Field label="Email">
               <TextInput
+                ref={emailInputRef}
                 type="email"
-                value={user?.email || ''}
-                disabled
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email address"
+                readOnly
+                disabled={!user || loading}
+                inputClassName="profile-inline-edit-input"
+                shellClassName={classNames(
+                  'profile-inline-edit-shell',
+                  activeProfileField === 'email' && 'is-active'
+                )}
+                rightElement={(
+                  <button
+                    type="button"
+                    className="profile-inline-edit-button"
+                    aria-label="Edit email"
+                    onClick={() => activateProfileField('email')}
+                  >
+                    <EditIcon size={14} />
+                  </button>
+                )}
               />
             </Field>
           </div>
 
-          <div className="form-section">
-            <h4>{hasPassword ? 'Change Password' : 'Set Password'}</h4>
-            {!hasPassword ? (
-              <p className="field-hint">You signed in without a password. Set one here if you want email/password login too.</p>
-            ) : null}
-            {hasPassword ? (
-              <Field label="Current Password">
-                <TextInput
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter current password"
-                  disabled={!user || loading}
-                />
-              </Field>
-            ) : null}
-            <Field label="New Password">
-              <TextInput
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min 6 characters"
-                minLength={6}
-                disabled={!user || loading}
+          <div className="form-section profile-password-section">
+            <button
+              type="button"
+              className="profile-password-summary"
+              aria-expanded={passwordDetailsOpen}
+              aria-controls="profile-password-details"
+              onClick={() => setPasswordDetailsOpen((open) => !open)}
+            >
+              <span>{hasPassword ? 'Change Password' : 'Set Password'}</span>
+              <ChevronDown
+                className={classNames('profile-password-chevron', passwordDetailsOpen && 'is-open')}
+                size={18}
+                aria-hidden="true"
               />
-            </Field>
-            <Field label="Confirm New Password">
-              <TextInput
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm new password"
-                disabled={!user || loading}
-              />
-            </Field>
+            </button>
+            {passwordDetailsOpen ? (
+              <div className="profile-password-details" id="profile-password-details">
+                {!hasPassword ? (
+                  <p className="field-hint">You signed in without a password. Set one here if you want email/password login too.</p>
+                ) : null}
+                {hasPassword ? (
+                  <Field label="Current Password">
+                    <TextInput
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter current password"
+                      disabled={!user || loading}
+                    />
+                  </Field>
+                ) : null}
+                <Field label="New Password">
+                  <TextInput
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Must be at least 8 characters"
+                    minLength={8}
+                    disabled={!user || loading}
+                  />
+                </Field>
+                <Field label="Confirm New Password">
+                  <TextInput
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    disabled={!user || loading}
+                  />
+                </Field>
+              </div>
+            ) : null}
           </div>
 
           <Button

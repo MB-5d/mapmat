@@ -6753,11 +6753,12 @@ body {
 .account-hero {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--modal-card-bg);
+  gap: 16px;
+  padding: 0 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .account-hero-avatar-edit {
@@ -6783,8 +6784,8 @@ body {
 }
 
 .account-hero-avatar {
-  width: 36px;
-  height: 36px;
+  width: 52px;
+  height: 52px;
   border-radius: 999px;
   background: var(--color-bg-hover);
   color: var(--color-text-secondary);
@@ -6795,10 +6796,10 @@ body {
 
 .account-hero-avatar-edit-icon {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 18px;
-  height: 18px;
+  right: -2px;
+  bottom: -2px;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -6826,7 +6827,8 @@ body {
 }
 
 .account-hero-name {
-  font-size: 14px;
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
   font-weight: 600;
   color: var(--color-text-primary);
   white-space: nowrap;
@@ -9646,6 +9648,93 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.profile-fields-section,
+.profile-password-details {
+  gap: 20px;
+}
+
+.profile-password-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-inline-edit-shell {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.profile-inline-edit-input[readonly] {
+  color: var(--ui-color-text);
+  -webkit-text-fill-color: var(--ui-color-text);
+  cursor: default;
+}
+
+.profile-inline-edit-button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--ui-input-icon);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.profile-fields-section .field:hover .profile-inline-edit-button,
+.profile-inline-edit-shell:focus-within .profile-inline-edit-button,
+.profile-inline-edit-shell.is-active .profile-inline-edit-button,
+.profile-inline-edit-button:focus-visible {
+  opacity: 1;
+}
+
+.profile-inline-edit-button:hover,
+.profile-inline-edit-button:focus-visible {
+  color: var(--ui-color-text);
+  background: var(--ui-color-surface-muted);
+  outline: none;
+}
+
+.profile-password-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ui-color-text);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-password-summary:focus-visible {
+  outline: 2px solid var(--ui-focus-ring);
+  outline-offset: 3px;
+  border-radius: var(--ui-radius-sm);
+}
+
+.profile-password-chevron {
+  flex: 0 0 auto;
+  color: var(--ui-color-text-muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.profile-password-summary:hover .profile-password-chevron,
+.profile-password-summary:focus-visible .profile-password-chevron {
+  color: var(--ui-color-text);
+}
+
+.profile-password-chevron.is-open {
+  transform: rotate(180deg);
 }
 
 .form-section h4 {

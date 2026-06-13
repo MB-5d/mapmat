@@ -73,6 +73,8 @@ describe('ProfileDrawer', () => {
     expect(avatar.textContent).toContain('M');
     expect(avatar.className).toContain('ui-avatar--circle');
     expect(container.textContent).toContain('Username');
+    expect(container.querySelector('.account-hero-email')).toBeNull();
+    expect(container.querySelector('.account-hero-badge')).toBeNull();
     expect(container.querySelector('button[aria-label="Upload avatar"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Upload Avatar');
     expect(container.textContent).not.toContain('Remove Avatar');
@@ -202,12 +204,69 @@ describe('ProfileDrawer', () => {
     expect(onOpenBilling).toHaveBeenCalledTimes(1);
   });
 
+  test('keeps profile fields inactive until the edit control is used', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={baseUser}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const usernameInput = container.querySelector('input[placeholder="Your username"]');
+    const emailInput = container.querySelector('input[placeholder="Email address"]');
+    expect(usernameInput.readOnly).toBe(true);
+    expect(emailInput.readOnly).toBe(true);
+
+    act(() => {
+      container.querySelector('button[aria-label="Edit username"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(usernameInput.readOnly).toBe(false);
+    expect(emailInput.readOnly).toBe(true);
+  });
+
+  test('keeps password fields collapsed until opened', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={baseUser}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const passwordSummary = container.querySelector('.profile-password-summary');
+    expect(passwordSummary).not.toBeNull();
+    expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('input[placeholder="Enter current password"]')).toBeNull();
+
+    act(() => {
+      passwordSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(passwordSummary.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('input[placeholder="Enter current password"]')).not.toBeNull();
+    expect(container.querySelector('input[placeholder="Must be at least 8 characters"]')).not.toBeNull();
+    expect(container.querySelector('input[placeholder="Confirm new password"]')).not.toBeNull();
+  });
+
   test('opens cropper from avatar edit and uploads cropped avatar', async () => {
     avatarCrop.createCroppedAvatarDataUrl.mockResolvedValue('data:image/webp;base64,cropped');
     api.uploadMyAvatar.mockResolvedValue({
       user: { ...baseUser, avatarUrl: '/uploads/avatars/new.webp' },
     });
     const onUpdate = jest.fn();
+    const showToast = jest.fn();
 
     await act(async () => {
       root.render(
@@ -217,7 +276,7 @@ describe('ProfileDrawer', () => {
           onClose={jest.fn()}
           onUpdate={onUpdate}
           onLogout={jest.fn()}
-          showToast={jest.fn()}
+          showToast={showToast}
         />
       );
     });
@@ -249,5 +308,7 @@ describe('ProfileDrawer', () => {
       imageDataUrl: 'data:image/webp;base64,cropped',
     });
     expect(onUpdate).toHaveBeenCalledWith({ ...baseUser, avatarUrl: '/uploads/avatars/new.webp' });
+    expect(showToast).toHaveBeenCalledWith('Avatar updated', 'success');
+    expect(container.textContent).not.toContain('Avatar updated');
   });
 });
