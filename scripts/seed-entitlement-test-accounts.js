@@ -11,6 +11,7 @@ const { resolveAccountEntitlementsAsync } = require('../utils/entitlements');
 const PASSWORD = process.env.VELLIC_TEST_ACCOUNT_PASSWORD || 'Test1234!';
 const TEST_ACCOUNTS = [
   { email: 'free@test.vellic.local', name: 'Free Tier Test', planKey: 'free' },
+  { email: 'solo@test.vellic.local', name: 'Solo Tier Test', planKey: 'solo' },
   { email: 'pro@test.vellic.local', name: 'Pro Tier Test', planKey: 'pro' },
   { email: 'studio@test.vellic.local', name: 'Studio Tier Test', planKey: 'studio' },
   { email: 'agency@test.vellic.local', name: 'Agency Tier Test', planKey: 'agency' },
