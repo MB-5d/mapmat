@@ -395,9 +395,23 @@ describe('MarketingPreviewV2', () => {
     ['$0', '$8', '$18', '$88'].forEach((price) => {
       expect(container.textContent).toContain(price);
     });
+    ['$72/yr', '$144/yr', '$960/yr'].forEach((price) => {
+      expect(container.textContent).toContain(`(${price})`);
+    });
     expect(container.textContent).toContain('2 organized exports');
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')).toHaveLength(4);
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')[0].textContent).toContain('Get started');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')[1].textContent).toContain('Subscribe');
+    expect(container.textContent).toContain('Billing cycle');
+    expect(container.querySelector('.marketing-v2-pricing-cycle.marketing-v2-comparison-tabs')).not.toBeNull();
+    expect(container.querySelectorAll('.marketing-v2-pricing-cycle .marketing-v2-comparison-tab.ui-btn')).toHaveLength(2);
+    const yearlyButton = Array.from(container.querySelectorAll('.marketing-v2-pricing-cycle button'))
+      .find((button) => button.textContent === 'Yearly');
+    act(() => {
+      yearlyButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    expect(container.textContent).toContain('$72');
+    expect(container.textContent).toContain('($8/mo)');
     expect(container.textContent).not.toContain('Solo');
   });
 
@@ -425,8 +439,8 @@ describe('MarketingPreviewV2', () => {
           paid: true,
           accent: 'blue',
           description: 'Catalog pro plan.',
-          marketingCta: 'Start trial',
-          marketingAction: 'trial',
+          marketingCta: 'Subscribe',
+          marketingAction: 'checkout',
           featureHighlights: ['9 active projects', '9,000 crawl pages'],
           prices: {
             monthly: { formatted: '$9', suffix: '/mo', configured: true },
@@ -443,11 +457,12 @@ describe('MarketingPreviewV2', () => {
     });
 
     expect(container.textContent).toContain('$9');
+    expect(container.textContent).toContain('($90/yr)');
     expect(container.textContent).toContain('9 active projects');
     expect(container.textContent).toContain('Catalog pro plan.');
   });
 
-  test('routes pricing CTAs to signup, no-card trial, or checkout instead of scan', () => {
+  test('routes pricing CTAs to signup or checkout instead of scan', () => {
     const openApp = jest.fn();
     renderAt('/pricing', jest.fn(), { onOpenApp: openApp });
 
@@ -467,9 +482,9 @@ describe('MarketingPreviewV2', () => {
     const urls = openApp.mock.calls.map(([url]) => new URL(url));
     expect(urls).toHaveLength(4);
     expect(urls[0].searchParams.get('intent')).toBe('signup');
-    expect(urls[1].searchParams.get('intent')).toBe('trial');
-    expect(urls[1].searchParams.get('trialPlan')).toBe('pro');
-    expect(urls[1].searchParams.has('billingPlan')).toBe(false);
+    expect(urls[1].searchParams.get('intent')).toBe('checkout');
+    expect(urls[1].searchParams.get('billingPlan')).toBe('pro');
+    expect(urls[1].searchParams.get('billingCycle')).toBe('yearly');
     expect(urls[2].searchParams.get('intent')).toBe('checkout');
     expect(urls[2].searchParams.get('billingPlan')).toBe('studio');
     expect(urls[2].searchParams.get('billingCycle')).toBe('yearly');

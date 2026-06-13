@@ -176,8 +176,8 @@
         "accent": "blue",
         "description": "For solo audits with screenshots and saved work.",
         "appNote": "For solo audits with screenshots and saved work.",
-        "marketingCta": "Start trial",
-        "marketingAction": "trial",
+        "marketingCta": "Subscribe",
+        "marketingAction": "checkout",
         "prices": {
           "monthly": {
             "amount": 800,

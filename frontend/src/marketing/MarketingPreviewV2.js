@@ -1247,9 +1247,16 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
     >
       <div className="marketing-v2-pricing-card__top">
         <h3>{plan.title}</h3>
-        <div>
-          <strong>{plan.price}</strong>
-          <span>{plan.priceSuffix}</span>
+        <div className="marketing-v2-pricing-card__price">
+          <div className="marketing-v2-pricing-card__price-main">
+            <strong>{plan.price}</strong>
+            <span>{plan.priceSuffix}</span>
+          </div>
+          {plan.priceComparison ? (
+            <span className="marketing-v2-pricing-card__price-compare">
+              ({plan.priceComparison.price}{plan.priceComparison.suffix})
+            </span>
+          ) : null}
         </div>
       </div>
       <p>{plan.description}</p>
@@ -1883,18 +1890,29 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
           className="marketing-v2-section--pricing"
         >
           {hasYearlyPricing ? (
-            <div className="marketing-v2-pricing-cycle" role="group" aria-label="Billing cycle">
-              {BILLING_CYCLE_OPTIONS.map((option) => (
-                <button
-                  type="button"
-                  key={option.key}
-                  className={pricingBillingCycle === option.key ? 'active' : ''}
-                  aria-pressed={pricingBillingCycle === option.key}
-                  onClick={() => setPricingBillingCycle(option.key)}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="marketing-v2-pricing-cycle-control">
+              <span className="marketing-v2-pricing-cycle-label">Billing cycle</span>
+              <div
+                className="marketing-v2-comparison-tabs marketing-v2-pricing-cycle"
+                role="tablist"
+                aria-label="Billing cycle"
+              >
+                {BILLING_CYCLE_OPTIONS.map((option) => (
+                  <Button
+                    type="button"
+                    key={option.key}
+                    variant={pricingBillingCycle === option.key ? 'secondary' : 'ghost'}
+                    buttonStyle="mono"
+                    size="sm"
+                    className="marketing-v2-comparison-tab marketing-v2-pricing-cycle__option"
+                    role="tab"
+                    aria-selected={pricingBillingCycle === option.key}
+                    onClick={() => setPricingBillingCycle(option.key)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
             </div>
           ) : null}
           <div className="marketing-v2-pricing-grid">

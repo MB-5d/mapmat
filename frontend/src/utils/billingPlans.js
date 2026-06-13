@@ -30,8 +30,8 @@ const FALLBACK_PLAN_CARDS = [
     accent: 'blue',
     description: 'For solo audits with screenshots and saved work.',
     appNote: 'For solo audits with screenshots and saved work.',
-    marketingCta: 'Start trial',
-    marketingAction: 'trial',
+    marketingCta: 'Subscribe',
+    marketingAction: 'checkout',
     features: ['5 active projects', '1,000 crawl pages', '100 screenshot credits', '2 organized exports', '1 editor'],
     prices: {
       monthly: { formatted: '$8', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
@@ -83,7 +83,12 @@ function getFallbackPlan(key) {
 function normalizePlanEntry(entry, billingCycle) {
   const fallback = getFallbackPlan(entry?.key) || {};
   const cycle = normalizeBillingCycle(billingCycle);
+  const comparisonCycle = cycle === 'yearly' ? 'monthly' : 'yearly';
   const price = entry?.prices?.[cycle] || fallback.prices?.[cycle] || fallback.prices?.monthly || {};
+  const comparisonPrice = entry?.prices?.[comparisonCycle]
+    || fallback.prices?.[comparisonCycle]
+    || fallback.prices?.monthly
+    || {};
   const features = Array.isArray(entry?.featureHighlights) && entry.featureHighlights.length
     ? entry.featureHighlights
     : (fallback.features || []);
@@ -103,6 +108,11 @@ function normalizePlanEntry(entry, billingCycle) {
     price: price.formatted || fallback.prices?.monthly?.formatted || '$0',
     priceSuffix: price.suffix || (cycle === 'yearly' ? '/yr' : '/mo'),
     priceIntervalLabel: price.intervalLabel || (cycle === 'yearly' ? 'Yearly' : 'Monthly'),
+    priceComparison: comparisonPrice.formatted ? {
+      price: comparisonPrice.formatted,
+      suffix: comparisonPrice.suffix || (comparisonCycle === 'yearly' ? '/yr' : '/mo'),
+      billingCycle: comparisonCycle,
+    } : null,
     prices: entry?.prices || fallback.prices || {},
     catalogEntry: entry || null,
   };
