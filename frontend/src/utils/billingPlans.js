@@ -105,7 +105,7 @@ function getPriceMajorAmount(price) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function getYearlyMonthlyDisplayPrice(price) {
+function getYearlyMonthlyEquivalentPrice(price) {
   const yearlyMajorAmount = getPriceMajorAmount(price);
   if (yearlyMajorAmount === null) return price;
   return {
@@ -115,7 +115,7 @@ function getYearlyMonthlyDisplayPrice(price) {
   };
 }
 
-function getAnnualTotalComparisonPrice(price, cycle) {
+function getAnnualTotalPrice(price, cycle) {
   const majorAmount = getPriceMajorAmount(price);
   if (majorAmount === null) return price;
   const annualMajorAmount = normalizeBillingCycle(cycle) === 'yearly' ? majorAmount : majorAmount * 12;
@@ -130,8 +130,10 @@ function normalizePlanEntry(entry, billingCycle) {
   const fallback = getFallbackPlan(entry?.key) || {};
   const cycle = normalizeBillingCycle(billingCycle);
   const selectedPrice = entry?.prices?.[cycle] || fallback.prices?.[cycle] || fallback.prices?.monthly || {};
-  const price = cycle === 'yearly' ? getYearlyMonthlyDisplayPrice(selectedPrice) : selectedPrice;
-  const annualComparisonPrice = getAnnualTotalComparisonPrice(selectedPrice, cycle);
+  const price = cycle === 'yearly' ? getAnnualTotalPrice(selectedPrice, cycle) : selectedPrice;
+  const comparisonPrice = cycle === 'yearly'
+    ? getYearlyMonthlyEquivalentPrice(selectedPrice)
+    : getAnnualTotalPrice(selectedPrice, cycle);
   const features = Array.isArray(entry?.featureHighlights) && entry.featureHighlights.length
     ? entry.featureHighlights
     : (fallback.features || []);
@@ -151,9 +153,9 @@ function normalizePlanEntry(entry, billingCycle) {
     price: price.formatted || fallback.prices?.monthly?.formatted || '$0',
     priceSuffix: price.suffix || (cycle === 'yearly' ? '/yr' : '/mo'),
     priceIntervalLabel: price.intervalLabel || (cycle === 'yearly' ? 'Yearly' : 'Monthly'),
-    priceComparison: annualComparisonPrice.formatted ? {
-      price: annualComparisonPrice.formatted,
-      suffix: annualComparisonPrice.suffix || '/year',
+    priceComparison: comparisonPrice.formatted ? {
+      price: comparisonPrice.formatted,
+      suffix: comparisonPrice.suffix || (cycle === 'yearly' ? '/mo' : '/year'),
       billingCycle: cycle,
     } : null,
     prices: entry?.prices || fallback.prices || {},

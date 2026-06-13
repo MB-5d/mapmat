@@ -414,17 +414,17 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('Billing cycle');
     expect(container.querySelector('.marketing-v2-pricing-cycle.marketing-v2-comparison-tabs')).not.toBeNull();
     expect(container.querySelectorAll('.marketing-v2-pricing-cycle .marketing-v2-comparison-tab.ui-btn')).toHaveLength(2);
+    expect(container.querySelectorAll('.marketing-v2-pricing-card')[1].textContent).toContain('Pro$8/mo($96/year)');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card')[2].textContent).toContain('Studio$18/mo($216/year)');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card')[3].textContent).toContain('Agency$88/mo($1,056/year)');
     const yearlyButton = Array.from(container.querySelectorAll('.marketing-v2-pricing-cycle button'))
       .find((button) => button.textContent === 'Yearly');
     act(() => {
       yearlyButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
-    expect(container.textContent).toContain('$6');
-    expect(container.textContent).toContain('$12');
-    expect(container.textContent).toContain('$80');
-    expect(container.textContent).toContain('($72/year)');
-    expect(container.textContent).toContain('($144/year)');
-    expect(container.textContent).toContain('($960/year)');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card')[1].textContent).toContain('Pro$72/year($6/mo)');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card')[2].textContent).toContain('Studio$144/year($12/mo)');
+    expect(container.querySelectorAll('.marketing-v2-pricing-card')[3].textContent).toContain('Agency$960/year($80/mo)');
     expect(container.textContent).not.toContain('Solo');
   });
 
