@@ -884,14 +884,16 @@ function MarketingV2Header({ activeSectionId, onMobileScan, onOpenApp }) {
 
 function HeroProductImage() {
   return (
-    <figure className="marketing-v2-hero-product marketing-v2-reveal" aria-label="Vellic canvas preview">
-      <img
-        src={vellicCanvasImage}
-        alt="Vellic canvas showing a visual sitemap with page screenshot cards connected across a large site map"
-        loading="eager"
-        decoding="async"
-      />
-    </figure>
+    <div className="marketing-v2-hero-product-scroll marketing-v2-reveal">
+      <figure className="marketing-v2-hero-product" aria-label="Vellic canvas preview">
+        <img
+          src={vellicCanvasImage}
+          alt="Vellic canvas showing a visual sitemap with page screenshot cards connected across a large site map"
+          loading="eager"
+          decoding="async"
+        />
+      </figure>
+    </div>
   );
 }
 

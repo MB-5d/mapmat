@@ -1027,6 +1027,10 @@ body:has(.marketing-preview-v2) {
   letter-spacing: var(--type-body-md-letter-spacing);
 }
 
+.marketing-v2-hero-product-scroll {
+  min-width: 0;
+}
+
 .marketing-v2-hero-product {
   min-width: 0;
   height: 640px;
@@ -2227,12 +2231,26 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     grid-template-columns: var(--unit-40) minmax(0, 1fr);
   }
 
+  .marketing-v2-hero-product-scroll {
+    width: min(374px, calc(100vw - var(--unit-16)));
+    max-width: none;
+    margin-left: 0;
+    margin-top: var(--unit-64);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .marketing-v2-hero-product-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
   .marketing-v2-hero-product {
     width: 816px;
     max-width: none;
     height: 444px;
-    margin-left: 0;
-    margin-top: var(--unit-64);
+    margin: 0;
     overflow: hidden;
   }
 
@@ -2546,19 +2564,26 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-faq-item__button.ui-btn {
+    gap: var(--unit-8);
     height: 54px;
     min-height: 54px;
+    padding-right: var(--unit-8);
     font-size: var(--type-mobile-body-lg-size);
     font-weight: var(--type-mobile-title-lg-weight);
     line-height: var(--type-mobile-body-lg-line-height);
   }
 
+  .marketing-v2-faq-item__button .ui-btn__content {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .marketing-v2-faq-item.is-open .marketing-v2-faq-item__button.ui-btn {
     align-items: flex-start;
     height: auto;
-    min-height: 0;
+    min-height: 54px;
     padding-top: var(--unit-16);
-    padding-bottom: 0;
+    padding-bottom: var(--unit-16);
   }
 
   .marketing-v2-faq-item.is-open .marketing-v2-faq-item__button .ui-btn__icon--end {
@@ -2566,7 +2591,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-faq-item__answer {
-    padding: var(--unit-16) var(--unit-16) var(--unit-16);
+    padding: 0 var(--unit-16) var(--unit-16);
   }
 
   .marketing-v2-contact {
