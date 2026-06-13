@@ -54,7 +54,7 @@ describe('UI design-system contract', () => {
 
   test('accordion uses one shared visual contract', () => {
     expect(appCss).toMatch(
-      /\.ui-accordion \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--ui-color-border\);[\s\S]*background: transparent;[\s\S]*\}/
+      /\.ui-accordion \{[\s\S]*flex: 0 0 auto;[\s\S]*border: var\(--border-width-subtle\) solid var\(--ui-color-border\);[\s\S]*background: transparent;[\s\S]*overflow: visible;[\s\S]*\}/
     );
     expect(appCss).toMatch(
       /\.ui-accordion:hover \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*\}/
@@ -62,7 +62,10 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(/\.ui-accordion:hover \{\n  border-color: var\(--ui-color-border-strong\);\n\}/);
     expect(appCss).toMatch(/\.ui-accordion\.is-open \{[\s\S]*box-shadow: var\(--shadow-card\);[\s\S]*\}/);
     expect(appCss).toMatch(/\.ui-accordion__trigger:focus-visible \{[\s\S]*box-shadow: inset var\(--ui-focus-ring\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-accordion__content \{[\s\S]*gap: var\(--unit-16\);[\s\S]*padding: var\(--unit-12\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.profile-form \{[\s\S]*flex: 0 0 auto;[\s\S]*min-height: 100%;[\s\S]*\}/);
     expect(appCss).toMatch(/\.profile-password-details \{[\s\S]*gap: var\(--unit-16\);[\s\S]*\}/);
+    expect(appCss).not.toContain('.account-plan-details {');
     expect(appCss).not.toContain('.account-plan-summary');
     expect(appCss).not.toContain('.profile-password-summary');
     expect(marketingPreviewCss).not.toContain('.marketing-v2-faq-item__button');

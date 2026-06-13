@@ -205,6 +205,57 @@ describe('ProfileDrawer', () => {
     expect(onOpenBilling).toHaveBeenCalledTimes(1);
   });
 
+  test('keeps only one profile accordion open at a time', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={{
+            ...baseUser,
+            entitlements: {
+              account: { state: 'active' },
+              plan: { name: 'Studio' },
+              meters: {},
+              limits: {},
+            },
+          }}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const planSummary = container.querySelector('button[aria-controls="account-plan-details"]');
+    const passwordSummary = container.querySelector('button[aria-controls="profile-password-details"]');
+    const deleteSummary = container.querySelector('button[aria-controls="profile-delete-details"]');
+
+    act(() => {
+      planSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(planSummary.getAttribute('aria-expanded')).toBe('true');
+    expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
+
+    act(() => {
+      passwordSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(planSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(passwordSummary.getAttribute('aria-expanded')).toBe('true');
+    expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
+
+    act(() => {
+      deleteSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(planSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(deleteSummary.getAttribute('aria-expanded')).toBe('true');
+  });
+
   test('keeps profile fields inactive until the edit control is used', () => {
     act(() => {
       root.render(

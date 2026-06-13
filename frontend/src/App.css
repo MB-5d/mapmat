@@ -1242,10 +1242,11 @@ body {
 }
 
 .ui-accordion {
+  flex: 0 0 auto;
   border: var(--border-width-subtle) solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
   background: transparent;
-  overflow: hidden;
+  overflow: visible;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -1322,8 +1323,8 @@ body {
 .ui-accordion__content {
   display: flex;
   flex-direction: column;
-  gap: var(--unit-12);
-  padding: 0 var(--unit-12) var(--unit-12);
+  gap: var(--unit-16);
+  padding: var(--unit-12);
 }
 
 .ui-accordion__content > p {
@@ -9732,9 +9733,9 @@ body {
 .profile-form {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 0 0 auto;
   gap: 16px;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .form-section {
@@ -9827,10 +9828,6 @@ body {
 
 .account-plan-status-badge {
   flex: 0 0 auto;
-}
-
-.account-plan-details {
-  gap: var(--unit-12);
 }
 
 .account-plan-actions {
