@@ -399,7 +399,15 @@ describe('MarketingPreviewV2', () => {
       expect(container.textContent).toContain(`(${price})`);
     });
     expect(container.textContent).toContain('2 organized exports');
+    expect(container.textContent).toContain('No screenshot credits*');
+    expect(container.textContent).toContain('100 screenshot credits*');
+    expect(container.textContent).toContain('3,000 screenshot credits*');
+    expect(container.textContent).toContain('10,000 screenshot credits*');
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')).toHaveLength(4);
+    expect(container.querySelectorAll('.marketing-v2-pricing-card__screenshot-note')).toHaveLength(4);
+    container.querySelectorAll('.marketing-v2-pricing-card__screenshot-note').forEach((note) => {
+      expect(note.textContent).toBe('*additional screenshot credits can be purchased anytime');
+    });
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')[0].textContent).toContain('Get started');
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')[1].textContent).toContain('Subscribe');
     expect(container.textContent).toContain('Billing cycle');

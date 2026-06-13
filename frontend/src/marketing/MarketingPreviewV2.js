@@ -1231,6 +1231,11 @@ function MarketingV2ExampleCard({ example, index, onShowExample }) {
   );
 }
 
+function formatPricingDetail(detail) {
+  if (!/screenshot credits/i.test(detail)) return detail;
+  return `${detail}*`;
+}
+
 function MarketingV2PricingCard({ plan, index, onGetStarted }) {
   return (
     <MarketingV2Card
@@ -1257,7 +1262,7 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
         {plan.details.map((detail) => (
           <li key={detail}>
             <Check size={15} aria-hidden="true" />
-            <span>{detail}</span>
+            <span>{formatPricingDetail(detail)}</span>
           </li>
         ))}
       </ul>
@@ -1270,6 +1275,9 @@ function MarketingV2PricingCard({ plan, index, onGetStarted }) {
       >
         {plan.cta}
       </Button>
+      <p className="marketing-v2-pricing-card__screenshot-note">
+        *additional screenshot credits can be purchased anytime
+      </p>
     </MarketingV2Card>
   );
 }

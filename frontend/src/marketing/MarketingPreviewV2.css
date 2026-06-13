@@ -1569,6 +1569,15 @@ body:has(.marketing-preview-v2) {
   margin-top: auto;
 }
 
+.marketing-v2-pricing-card__screenshot-note {
+  margin: var(--unit-8) 0 0;
+  color: var(--marketing-v2-muted);
+  font-size: var(--type-body-xs-size);
+  font-weight: var(--type-body-xs-weight);
+  line-height: var(--type-body-xs-line-height);
+  letter-spacing: var(--type-body-xs-letter-spacing);
+}
+
 .marketing-v2-faq {
   display: grid;
   gap: var(--unit-16);
