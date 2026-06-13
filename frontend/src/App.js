@@ -88,6 +88,7 @@ import {
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
 import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
+import { openBillingUrlInNewTab } from './utils/billingRedirect';
 import {
   getCenteredNodeTransform as getCenteredCanvasNodeTransform,
   getFitBoundsTransform,
@@ -2653,6 +2654,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [billingCatalogError, setBillingCatalogError] = useState('');
   const [billingActionKey, setBillingActionKey] = useState('');
   const [billingCycle, setBillingCycle] = useState('monthly');
+  const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
+  const isBillingReturnRoute = billingRouteResult === 'success'
+    || billingRouteResult === 'portal_return'
+    || billingRouteResult === 'cancelled';
   const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
@@ -6436,11 +6441,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, []);
 
   const redirectToBillingUrl = useCallback((url) => {
-    if (!url) throw new Error('Billing did not return a checkout link.');
-    const openedWindow = window.open(url, '_blank', 'noopener,noreferrer');
-    if (!openedWindow) {
-      window.location.assign(url);
-    }
+    openBillingUrlInNewTab(url);
   }, []);
 
   const handleBillingPortal = useCallback(async (context = 'portal') => {
@@ -6772,7 +6773,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     if (authLoading) return;
 
-    const billingResult = currentRoute?.searchParams?.get('billing') || '';
+    const billingResult = billingRouteResult;
     const checkoutSessionId = currentRoute?.searchParams?.get('billingSessionId') || '';
     if (!billingResult) {
       handledBillingRedirectKeyRef.current = '';
@@ -6790,6 +6791,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       const nextSearch = nextSearchParams.toString();
       const nextUrl = `${currentRoute?.pathname || '/app'}${nextSearch ? `?${nextSearch}` : ''}`;
       window.history.replaceState({}, '', nextUrl);
+      const PopStateEventCtor = window.PopStateEvent || window.Event;
+      window.dispatchEvent(new PopStateEventCtor('popstate', { state: window.history.state }));
     };
 
     const refreshBillingReturn = async () => {
@@ -6820,6 +6823,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     refreshBillingReturn();
   }, [
     authLoading,
+    billingRouteResult,
     currentRoute?.pathname,
     currentRoute?.search,
     currentRoute?.searchParams,
@@ -10303,6 +10307,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || !currentRoute?.mapId) return undefined;
     if (currentMap?.id && sameId(currentMap.id, currentRoute.mapId)) return undefined;
+    if (isBillingReturnRoute) return undefined;
     if (authLoading) return undefined;
 
     if (!isLoggedIn) {
@@ -10361,6 +10366,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentMap?.id,
     currentRoute?.mapId,
     currentRoute?.surface,
+    isBillingReturnRoute,
     isLoggedIn,
     loadPendingMapInvites,
     loadSavedMapById,
@@ -15467,6 +15473,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     && currentRoute?.section === 'invite_accept';
   const showMapAccessGate = currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'map'
+    && !isBillingReturnRoute
     && (!currentMap?.id || !sameId(currentMap.id, currentRoute?.mapId))
     && (
       !!routeMapGateState
@@ -15478,6 +15485,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     && (currentRoute?.section === 'home' || currentRoute?.section === 'map')
     && !showInviteAcceptGate
     && !showMapAccessGate
+    && !isBillingReturnRoute
     && !shouldStartScanFromPrefill(currentRoute);
   const showWelcomeModal = isWelcomeModalEligible
     && !welcomeModalDismissedForSession
