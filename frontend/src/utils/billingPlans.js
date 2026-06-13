@@ -19,8 +19,8 @@ const FALLBACK_PLAN_CARDS = [
     marketingAction: 'signup',
     features: ['1 active project', '100 crawl pages', '25 pages per run', 'No screenshot credits', 'No organized exports', '1 editor'],
     prices: {
-      monthly: { formatted: '$0', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
-      yearly: { formatted: '$0', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
+      monthly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
+      yearly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
     },
   },
   {
@@ -34,8 +34,8 @@ const FALLBACK_PLAN_CARDS = [
     marketingAction: 'checkout',
     features: ['5 active projects', '1,000 crawl pages', '100 screenshot credits', '2 organized exports', '1 editor'],
     prices: {
-      monthly: { formatted: '$8', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
-      yearly: { formatted: '$72', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
+      monthly: { amount: 800, currency: 'usd', formatted: '$8', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
+      yearly: { amount: 7200, currency: 'usd', formatted: '$72', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
     },
   },
   {
@@ -49,8 +49,8 @@ const FALLBACK_PLAN_CARDS = [
     marketingAction: 'checkout',
     features: ['50 active projects', '50,000 crawl pages', '3,000 screenshot credits', 'Unlimited organized exports', '5 seats'],
     prices: {
-      monthly: { formatted: '$18', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
-      yearly: { formatted: '$144', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
+      monthly: { amount: 1800, currency: 'usd', formatted: '$18', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
+      yearly: { amount: 14400, currency: 'usd', formatted: '$144', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
     },
   },
   {
@@ -64,8 +64,8 @@ const FALLBACK_PLAN_CARDS = [
     marketingAction: 'checkout',
     features: ['Unlimited projects', '200,000 crawl pages', '10,000 screenshot credits', 'Unlimited organized exports', '15 seats'],
     prices: {
-      monthly: { formatted: '$88', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
-      yearly: { formatted: '$960', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
+      monthly: { amount: 8800, currency: 'usd', formatted: '$88', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
+      yearly: { amount: 96000, currency: 'usd', formatted: '$960', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
     },
   },
 ];
@@ -80,15 +80,52 @@ function getFallbackPlan(key) {
   return FALLBACK_PLAN_CARDS.find((plan) => plan.key === key) || null;
 }
 
+function formatCurrencyMajorAmount(value, currency = 'usd') {
+  const safeValue = Math.max(0, Number(value) || 0);
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: String(currency || 'usd').trim().toUpperCase() || 'USD',
+      minimumFractionDigits: Number.isInteger(safeValue) ? 0 : 2,
+      maximumFractionDigits: Number.isInteger(safeValue) ? 0 : 2,
+    }).format(safeValue);
+  } catch {
+    return `$${safeValue.toLocaleString('en-US', {
+      minimumFractionDigits: Number.isInteger(safeValue) ? 0 : 2,
+      maximumFractionDigits: Number.isInteger(safeValue) ? 0 : 2,
+    })}`;
+  }
+}
+
+function getPriceMajorAmount(price) {
+  const amount = price?.amount ?? price?.unitAmount;
+  if (Number.isFinite(Number(amount))) return Number(amount) / 100;
+  const formatted = String(price?.formatted || '').replace(/[^0-9.]/g, '');
+  const parsed = Number(formatted);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getYearlyMonthlyDisplayPrice(price) {
+  const yearlyMajorAmount = getPriceMajorAmount(price);
+  if (yearlyMajorAmount === null) return price;
+  return {
+    ...price,
+    formatted: formatCurrencyMajorAmount(yearlyMajorAmount / 12, price?.currency),
+    suffix: '/mo',
+  };
+}
+
 function normalizePlanEntry(entry, billingCycle) {
   const fallback = getFallbackPlan(entry?.key) || {};
   const cycle = normalizeBillingCycle(billingCycle);
   const comparisonCycle = cycle === 'yearly' ? 'monthly' : 'yearly';
-  const price = entry?.prices?.[cycle] || fallback.prices?.[cycle] || fallback.prices?.monthly || {};
+  const selectedPrice = entry?.prices?.[cycle] || fallback.prices?.[cycle] || fallback.prices?.monthly || {};
+  const price = cycle === 'yearly' ? getYearlyMonthlyDisplayPrice(selectedPrice) : selectedPrice;
   const comparisonPrice = entry?.prices?.[comparisonCycle]
     || fallback.prices?.[comparisonCycle]
     || fallback.prices?.monthly
     || {};
+  const yearlyComparisonPrice = cycle === 'yearly' ? selectedPrice : comparisonPrice;
   const features = Array.isArray(entry?.featureHighlights) && entry.featureHighlights.length
     ? entry.featureHighlights
     : (fallback.features || []);
@@ -108,10 +145,10 @@ function normalizePlanEntry(entry, billingCycle) {
     price: price.formatted || fallback.prices?.monthly?.formatted || '$0',
     priceSuffix: price.suffix || (cycle === 'yearly' ? '/yr' : '/mo'),
     priceIntervalLabel: price.intervalLabel || (cycle === 'yearly' ? 'Yearly' : 'Monthly'),
-    priceComparison: comparisonPrice.formatted ? {
-      price: comparisonPrice.formatted,
-      suffix: comparisonPrice.suffix || (comparisonCycle === 'yearly' ? '/yr' : '/mo'),
-      billingCycle: comparisonCycle,
+    priceComparison: yearlyComparisonPrice.formatted ? {
+      price: yearlyComparisonPrice.formatted,
+      suffix: yearlyComparisonPrice.suffix || (cycle === 'yearly' ? '/yr' : (comparisonCycle === 'yearly' ? '/yr' : '/mo')),
+      billingCycle: cycle === 'yearly' ? 'yearly' : comparisonCycle,
     } : null,
     prices: entry?.prices || fallback.prices || {},
     catalogEntry: entry || null,

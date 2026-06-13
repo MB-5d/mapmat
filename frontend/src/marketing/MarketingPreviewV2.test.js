@@ -419,8 +419,10 @@ describe('MarketingPreviewV2', () => {
     act(() => {
       yearlyButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
-    expect(container.textContent).toContain('$72');
-    expect(container.textContent).toContain('($8/mo)');
+    expect(container.textContent).toContain('$6');
+    expect(container.textContent).toContain('$12');
+    expect(container.textContent).toContain('$80');
+    expect(container.textContent).toContain('($72/yr)');
     expect(container.textContent).not.toContain('Solo');
   });
 
