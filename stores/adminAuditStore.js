@@ -34,7 +34,7 @@ async function ensureAdminAuditSchemaAsync() {
         action TEXT NOT NULL,
         target_user_id TEXT,
         metadata TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE SET NULL
       )
     `);
