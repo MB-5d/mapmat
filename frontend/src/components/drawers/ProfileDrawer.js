@@ -680,10 +680,8 @@ const ProfileDrawer = ({
           <div className="profile-form-actions">
             <Button
               className="profile-save-button"
-              type="button"
+              type="submit"
               variant="primary"
-              buttonStyle={hasProfileChanges ? 'brand' : 'mono'}
-              htmlType="submit"
               disabled={!canSaveChanges}
               loading={loading && hasProfileChanges}
             >

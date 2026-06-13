@@ -288,7 +288,8 @@ describe('ProfileDrawer', () => {
     );
     const usernameInput = container.querySelector('input[placeholder="Your username"]');
     expect(saveButton.disabled).toBe(true);
-    expect(saveButton.className).toContain('ui-btn--style-mono');
+    expect(saveButton.className).toContain('ui-btn--style-brand');
+    expect(saveButton.className).not.toContain('ui-btn--style-mono');
 
     act(() => {
       container.querySelector('button[aria-label="Edit username"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
