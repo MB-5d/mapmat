@@ -37,7 +37,7 @@ describe('LandingPage', () => {
       root.render(<LandingPage onLaunchApp={() => {}} />);
     });
 
-    const faqButton = container.querySelector('#faq-button-0');
+    const faqButton = container.querySelector('button[aria-controls="faq-panel-0"]');
     expect(faqButton).not.toBeNull();
     expect(faqButton.getAttribute('aria-expanded')).toBe('false');
     expect(container.textContent).not.toContain(

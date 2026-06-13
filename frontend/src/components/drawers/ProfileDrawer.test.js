@@ -172,7 +172,7 @@ describe('ProfileDrawer', () => {
       );
     });
 
-    const summaryButton = container.querySelector('.account-plan-summary');
+    const summaryButton = container.querySelector('button[aria-controls="account-plan-details"]');
     expect(summaryButton).not.toBeNull();
     expect(summaryButton.getAttribute('aria-expanded')).toBe('false');
     expect(summaryButton.textContent).toContain('Plan:');
@@ -253,9 +253,9 @@ describe('ProfileDrawer', () => {
       );
     });
 
-    const passwordSummary = container.querySelector('.profile-password-summary');
+    const passwordSummary = container.querySelector('button[aria-controls="profile-password-details"]');
     expect(passwordSummary).not.toBeNull();
-    expect(passwordSummary.closest('.account-plan-section')).not.toBeNull();
+    expect(passwordSummary.closest('.ui-accordion')).not.toBeNull();
     expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('input[placeholder="Enter current password"]')).toBeNull();
 
@@ -398,9 +398,9 @@ describe('ProfileDrawer', () => {
       );
     });
 
-    const deleteSummary = container.querySelector('.profile-delete-summary');
+    const deleteSummary = container.querySelector('button[aria-controls="profile-delete-details"]');
     expect(deleteSummary).not.toBeNull();
-    expect(deleteSummary.closest('.account-plan-section')).not.toBeNull();
+    expect(deleteSummary.closest('.ui-accordion')).not.toBeNull();
     expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
     expect(container.textContent).not.toContain('Deleting your account will permanently remove');
 

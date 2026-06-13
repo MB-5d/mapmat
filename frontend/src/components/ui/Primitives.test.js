@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import Accordion from './Accordion';
 import Avatar from './Avatar';
 import Badge from './Badge';
 import Button from './Button';
@@ -51,6 +52,62 @@ describe('ui primitives', () => {
     expect(button.getAttribute('aria-busy')).toBe('true');
     expect(button.textContent).toContain('Save');
     expect(container.querySelector('.ui-btn__spinner')).not.toBeNull();
+  });
+
+  test('Accordion wires ARIA, meta content, class hooks, and toggle state', () => {
+    const onOpenChange = jest.fn();
+
+    act(() => {
+      root.render(
+        <Accordion
+          id="accordion-panel"
+          open={false}
+          onOpenChange={onOpenChange}
+          title={<strong>Panel title</strong>}
+          meta={<span className="accordion-meta-marker">Meta</span>}
+          className="custom-accordion"
+          contentClassName="custom-accordion-content"
+        >
+          <p>Panel content</p>
+        </Accordion>
+      );
+    });
+
+    const button = container.querySelector('button[aria-controls="accordion-panel"]');
+    expect(button).not.toBeNull();
+    expect(button.id).toBe('accordion-panel-trigger');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.custom-accordion.ui-accordion')).not.toBeNull();
+    expect(container.querySelector('.accordion-meta-marker')?.textContent).toBe('Meta');
+    expect(container.querySelector('#accordion-panel')).toBeNull();
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+
+    act(() => {
+      root.render(
+        <Accordion
+          id="accordion-panel"
+          open
+          onOpenChange={onOpenChange}
+          title="Panel title"
+          contentClassName="custom-accordion-content"
+        >
+          <p>Panel content</p>
+        </Accordion>
+      );
+    });
+
+    const panel = container.querySelector('#accordion-panel');
+    expect(container.querySelector('.ui-accordion.is-open')).not.toBeNull();
+    expect(panel).not.toBeNull();
+    expect(panel.className).toContain('custom-accordion-content');
+    expect(panel.getAttribute('role')).toBe('region');
+    expect(panel.getAttribute('aria-labelledby')).toBe('accordion-panel-trigger');
+    expect(panel.textContent).toContain('Panel content');
   });
 
   test('Avatar supports image and fallback states', () => {

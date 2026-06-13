@@ -6,8 +6,10 @@ import { __testing } from './App';
 const appCss = fs.readFileSync(path.join(__dirname, 'App.css'), 'utf8');
 const generatedCss = fs.readFileSync(path.join(__dirname, 'design-system.generated.css'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, 'App.js'), 'utf8');
+const landingCss = fs.readFileSync(path.join(__dirname, 'LandingPage.css'), 'utf8');
 const minimapCss = fs.readFileSync(path.join(__dirname, 'components/minimap/minimapNavigator.css'), 'utf8');
 const adminCss = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.css'), 'utf8');
+const marketingPreviewCss = fs.readFileSync(path.join(__dirname, 'marketing/MarketingPreviewV2.css'), 'utf8');
 
 describe('UI design-system contract', () => {
   test('home title, canvas elevation, connection stroke, and disabled state use shared tokens', () => {
@@ -50,13 +52,21 @@ describe('UI design-system contract', () => {
     expect(appCss).not.toMatch(/\.share-email-btn \{[^}]*color:/);
   });
 
-  test('profile accordion rows have a shared hover state', () => {
+  test('accordion uses one shared visual contract', () => {
     expect(appCss).toMatch(
-      /\.account-plan-summary:hover \{[\s\S]*background: var\(--ui-color-surface\);[\s\S]*\}/
+      /\.ui-accordion \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--ui-color-border\);[\s\S]*background: transparent;[\s\S]*\}/
     );
     expect(appCss).toMatch(
-      /\.account-plan-summary:hover \.account-plan-title,\n\.account-plan-summary:hover \.account-plan-chevron \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*\}/
+      /\.ui-accordion:hover \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*\}/
     );
+    expect(appCss).toMatch(/\.ui-accordion:hover \{\n  border-color: var\(--ui-color-border-strong\);\n\}/);
+    expect(appCss).toMatch(/\.ui-accordion\.is-open \{[\s\S]*box-shadow: var\(--shadow-card\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-accordion__trigger:focus-visible \{[\s\S]*box-shadow: inset var\(--ui-focus-ring\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.profile-password-details \{[\s\S]*gap: var\(--unit-16\);[\s\S]*\}/);
+    expect(appCss).not.toContain('.account-plan-summary');
+    expect(appCss).not.toContain('.profile-password-summary');
+    expect(marketingPreviewCss).not.toContain('.marketing-v2-faq-item__button');
+    expect(landingCss).not.toContain('.faq-question');
   });
 
   test('input labels use the compact label token and shared control spacing', () => {

@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ChevronDown, ImagePlus, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
+import Accordion from '../ui/Accordion';
 import Avatar from '../ui/Avatar';
 import Badge from '../ui/Badge';
 import Button from '../ui/Button';
@@ -402,84 +403,76 @@ const ProfileDrawer = ({
           {success && <div className="auth-success">{success}</div>}
 
           {entitlements ? (
-            <div className="form-section account-plan-section">
-              <button
-                type="button"
-                className="account-plan-summary"
-                aria-expanded={planDetailsOpen}
-                aria-controls="account-plan-details"
-                onClick={() => setPlanDetailsOpen((open) => !open)}
-              >
-                <span className="account-plan-title">Plan: <strong>{planName}</strong></span>
-                <span className="account-plan-summary-meta">
-                  <Badge
-                    className="account-plan-status-badge"
-                    type="hollow"
-                    badgeStyle={planStatus.style}
-                    size="sm"
-                  >
-                    {planStatus.label}
-                  </Badge>
-                  <ChevronDown className="account-plan-chevron" size={16} aria-hidden="true" />
-                </span>
-              </button>
-              {planDetailsOpen ? (
-                <div className="account-plan-details" id="account-plan-details">
-                  {isArchived ? (
-                    <div className="account-plan-notice">
-                      This account is archived. Existing work can be viewed, but new scans, screenshots, exports, invites, and shares are locked.
-                    </div>
-                  ) : trialEnded ? (
-                    <div className="account-plan-notice">
-                      Your trial has ended. The account is now limited to Free plan allowances unless upgraded.
-                    </div>
-                  ) : entitlements.trial?.active && entitlements.trial?.organizedDownloadsAllowed === false ? (
-                    <div className="account-plan-notice">
-                      Screenshot capture is included during this trial. Organized screenshot downloads require a paid plan.
-                    </div>
-                  ) : null}
-                  <div className="account-usage-list">
-                    {usageRows.map(({ label, item }) => (
-                      <div className="account-usage-row" key={item.meter || label}>
-                        <div className="account-usage-copy">
-                          <span>{label}</span>
-                          <span>{formatUsageSummary(item)}</span>
-                        </div>
-                        {!item.unlimited ? (
-                          <div className="account-usage-track" aria-hidden="true">
-                            <div
-                              className="account-usage-fill"
-                              style={{ width: `${getUsagePercent(item)}%` }}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="account-plan-actions">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={onOpenPlans}
-                      disabled={!user}
-                    >
-                      Switch plan
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={onOpenBilling}
-                      disabled={!user || !onOpenBilling}
-                      loading={billingLoading}
-                    >
-                      Manage billing
-                    </Button>
-                  </div>
+            <Accordion
+              id="account-plan-details"
+              open={planDetailsOpen}
+              onOpenChange={setPlanDetailsOpen}
+              title={<>Plan: <strong>{planName}</strong></>}
+              meta={(
+                <Badge
+                  className="account-plan-status-badge"
+                  type="hollow"
+                  badgeStyle={planStatus.style}
+                  size="sm"
+                >
+                  {planStatus.label}
+                </Badge>
+              )}
+              contentClassName="account-plan-details"
+            >
+              {isArchived ? (
+                <div className="account-plan-notice">
+                  This account is archived. Existing work can be viewed, but new scans, screenshots, exports, invites, and shares are locked.
+                </div>
+              ) : trialEnded ? (
+                <div className="account-plan-notice">
+                  Your trial has ended. The account is now limited to Free plan allowances unless upgraded.
+                </div>
+              ) : entitlements.trial?.active && entitlements.trial?.organizedDownloadsAllowed === false ? (
+                <div className="account-plan-notice">
+                  Screenshot capture is included during this trial. Organized screenshot downloads require a paid plan.
                 </div>
               ) : null}
-            </div>
+              <div className="account-usage-list">
+                {usageRows.map(({ label, item }) => (
+                  <div className="account-usage-row" key={item.meter || label}>
+                    <div className="account-usage-copy">
+                      <span>{label}</span>
+                      <span>{formatUsageSummary(item)}</span>
+                    </div>
+                    {!item.unlimited ? (
+                      <div className="account-usage-track" aria-hidden="true">
+                        <div
+                          className="account-usage-fill"
+                          style={{ width: `${getUsagePercent(item)}%` }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+              <div className="account-plan-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={onOpenPlans}
+                  disabled={!user}
+                >
+                  Switch plan
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onOpenBilling}
+                  disabled={!user || !onOpenBilling}
+                  loading={billingLoading}
+                >
+                  Manage billing
+                </Button>
+              </div>
+            </Accordion>
           ) : null}
 
           <div className="form-section profile-fields-section">
@@ -544,138 +537,118 @@ const ProfileDrawer = ({
             </Field>
           </div>
 
-          <div className="form-section account-plan-section profile-password-section">
-            <button
-              type="button"
-              className="account-plan-summary profile-password-summary"
-              aria-expanded={passwordDetailsOpen}
-              aria-controls="profile-password-details"
-              onClick={() => setPasswordDetailsOpen((open) => !open)}
-            >
-              <span className="account-plan-title"><strong>{hasPassword ? 'Change Password' : 'Set Password'}</strong></span>
-              <ChevronDown
-                className="account-plan-chevron profile-password-chevron"
-                size={18}
-                aria-hidden="true"
-              />
-            </button>
-            {passwordDetailsOpen ? (
-              <div className="account-plan-details profile-password-details" id="profile-password-details">
-                {!hasPassword ? (
-                  <p className="field-hint">You signed in without a password. Set one here if you want email/password login too.</p>
-                ) : null}
-                {hasPassword ? (
-                  <Field label="Current Password">
-                    <TextInput
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="Enter current password"
-                      disabled={!user || loading}
-                    />
-                  </Field>
-                ) : null}
-                <Field label="New Password">
-                  <TextInput
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Must be at least 8 characters"
-                    minLength={8}
-                    disabled={!user || loading}
-                  />
-                </Field>
-                <Field label="Confirm New Password">
-                  <TextInput
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
-                    disabled={!user || loading}
-                  />
-                </Field>
-              </div>
+          <Accordion
+            id="profile-password-details"
+            open={passwordDetailsOpen}
+            onOpenChange={setPasswordDetailsOpen}
+            title={<strong>{hasPassword ? 'Change Password' : 'Set Password'}</strong>}
+            contentClassName="profile-password-details"
+          >
+            {!hasPassword ? (
+              <p className="field-hint">You signed in without a password. Set one here if you want email/password login too.</p>
             ) : null}
-          </div>
+            {hasPassword ? (
+              <Field label="Current Password">
+                <TextInput
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  disabled={!user || loading}
+                />
+              </Field>
+            ) : null}
+            <Field label="New Password">
+              <TextInput
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Must be at least 8 characters"
+                minLength={8}
+                disabled={!user || loading}
+              />
+            </Field>
+            <Field label="Confirm New Password">
+              <TextInput
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                disabled={!user || loading}
+              />
+            </Field>
+          </Accordion>
 
-          <div className="form-section account-plan-section profile-delete-section">
-            <button
-              type="button"
-              className="account-plan-summary profile-delete-summary"
-              aria-expanded={deleteDetailsOpen}
-              aria-controls="profile-delete-details"
-              onClick={toggleDeleteDetails}
-            >
-              <span className="account-plan-title"><strong>Delete account</strong></span>
-              <ChevronDown className="account-plan-chevron" size={18} aria-hidden="true" />
-            </button>
-            {deleteDetailsOpen ? (
-              <div className="account-plan-details profile-delete-details" id="profile-delete-details">
-                {!showDeleteConfirm ? (
-                  <>
-                    <p className="profile-delete-copy">Deleting your account will permanently remove all your projects, maps, and data.</p>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={() => setShowDeleteConfirm(true)}
-                      disabled={loading || !user}
-                    >
-                      Delete Account
-                    </Button>
-                  </>
-                ) : (
-                  <div className="account-danger">
-                    <div className="account-danger-header">
-                      <AlertTriangle size={36} />
-                      <div>
-                        <div className="account-danger-title">Delete Account?</div>
-                        <div className="account-danger-subtitle">
-                          This action cannot be undone. All projects, maps, and scan history will be deleted.
-                        </div>
-                      </div>
-                    </div>
-                    {hasPassword ? (
-                      <Field label="Enter your password to confirm">
-                        <TextInput
-                          type="password"
-                          value={deletePassword}
-                          onChange={(e) => setDeletePassword(e.target.value)}
-                          placeholder="Your password"
-                          autoFocus
-                          disabled={loading}
-                        />
-                      </Field>
-                    ) : (
-                      <div className="field-hint">This account does not have a password yet. You can delete it from your current signed-in session.</div>
-                    )}
-                    <div className="account-danger-actions">
-                      <Button
-                        type="button"
-                        variant="danger"
-                        onClick={handleDeleteAccount}
-                        disabled={loading || (hasPassword && !deletePassword)}
-                        loading={loading}
-                      >
-                        Yes, Delete My Account
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => {
-                          setShowDeleteConfirm(false);
-                          setDeletePassword('');
-                          setError('');
-                        }}
-                        disabled={loading}
-                      >
-                        Cancel
-                      </Button>
+          <Accordion
+            id="profile-delete-details"
+            open={deleteDetailsOpen}
+            onOpenChange={toggleDeleteDetails}
+            title={<strong>Delete account</strong>}
+            contentClassName="profile-delete-details"
+          >
+            {!showDeleteConfirm ? (
+              <>
+                <p className="profile-delete-copy">Deleting your account will permanently remove all your projects, maps, and data.</p>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={loading || !user}
+                >
+                  Delete Account
+                </Button>
+              </>
+            ) : (
+              <div className="account-danger">
+                <div className="account-danger-header">
+                  <AlertTriangle size={36} />
+                  <div>
+                    <div className="account-danger-title">Delete Account?</div>
+                    <div className="account-danger-subtitle">
+                      This action cannot be undone. All projects, maps, and scan history will be deleted.
                     </div>
                   </div>
+                </div>
+                {hasPassword ? (
+                  <Field label="Enter your password to confirm">
+                    <TextInput
+                      type="password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      placeholder="Your password"
+                      autoFocus
+                      disabled={loading}
+                    />
+                  </Field>
+                ) : (
+                  <div className="field-hint">This account does not have a password yet. You can delete it from your current signed-in session.</div>
                 )}
+                <div className="account-danger-actions">
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={handleDeleteAccount}
+                    disabled={loading || (hasPassword && !deletePassword)}
+                    loading={loading}
+                  >
+                    Yes, Delete My Account
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeletePassword('');
+                      setError('');
+                    }}
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
-            ) : null}
-          </div>
+            )}
+          </Accordion>
 
           <div className="profile-form-actions">
             <Button

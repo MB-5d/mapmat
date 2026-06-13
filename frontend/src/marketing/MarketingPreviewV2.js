@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
-  ChevronDown,
   Check,
   ExternalLink,
   GalleryHorizontal,
@@ -25,6 +24,7 @@ import exampleRaycastImage from '../assets/marketing/example-raycast.png';
 import vellicCanvasImage from '../assets/marketing/vellic-canvas.png';
 import vellicLogo from '../assets/vellic-logo.svg';
 import { getBillingConfig, submitMarketingContact, submitMarketingMailingListSignup } from '../api';
+import Accordion from '../components/ui/Accordion';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Field from '../components/ui/Field';
@@ -1038,25 +1038,16 @@ function MarketingV2FaqItem({ item, index, isOpen, onToggle }) {
   const answerId = `marketing-v2-faq-answer-${index}`;
 
   return (
-    <div className={classNames('marketing-v2-faq-item', isOpen && 'is-open')}>
-      <Button
-        type="button"
-        variant="ghost"
-        buttonStyle="mono"
-        className="marketing-v2-faq-item__button"
-        aria-expanded={isOpen}
-        aria-controls={answerId}
-        onClick={onToggle}
-        endIcon={<ChevronDown size={18} />}
-      >
-        <span>{item.question}</span>
-      </Button>
-      {isOpen ? (
-        <div id={answerId} className="marketing-v2-faq-item__answer">
-          <p>{item.answer}</p>
-        </div>
-      ) : null}
-    </div>
+    <Accordion
+      id={answerId}
+      className="marketing-v2-faq-item"
+      contentClassName="marketing-v2-faq-item__answer"
+      open={isOpen}
+      onOpenChange={onToggle}
+      title={<span>{item.question}</span>}
+    >
+      <p>{item.answer}</p>
+    </Accordion>
   );
 }
 

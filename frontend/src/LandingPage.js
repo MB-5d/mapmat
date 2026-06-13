@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Check,
-  ChevronDown,
   Download,
   Eye,
   FolderOpen,
@@ -17,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import vellicLogo from './assets/vellic-logo.svg';
+import Accordion from './components/ui/Accordion';
 import './LandingPage.css';
 
 const audienceCards = [
@@ -777,28 +777,20 @@ const LandingPage = ({ onLaunchApp }) => {
             <div className="faq-list">
               {faqs.map((faq, index) => {
                 const isOpen = activeFaq === index;
-                const buttonId = `faq-button-${index}`;
                 const panelId = `faq-panel-${index}`;
 
                 return (
-                  <article key={faq.question} className={`faq-item ${isOpen ? 'active' : ''}`}>
-                    <button
-                      id={buttonId}
-                      type="button"
-                      className="faq-question"
-                      aria-expanded={isOpen}
-                      aria-controls={panelId}
-                      onClick={() => setActiveFaq(isOpen ? null : index)}
-                    >
-                      <span>{faq.question}</span>
-                      <ChevronDown size={18} />
-                    </button>
-                    {isOpen ? (
-                      <div id={panelId} className="faq-answer" role="region" aria-labelledby={buttonId}>
-                        <p>{faq.answer}</p>
-                      </div>
-                    ) : null}
-                  </article>
+                  <Accordion
+                    key={faq.question}
+                    id={panelId}
+                    className="faq-item"
+                    contentClassName="faq-answer"
+                    open={isOpen}
+                    onOpenChange={() => setActiveFaq(isOpen ? null : index)}
+                    title={<span>{faq.question}</span>}
+                  >
+                    <p>{faq.answer}</p>
+                  </Accordion>
                 );
               })}
             </div>

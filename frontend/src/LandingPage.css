@@ -677,53 +677,6 @@ body:has(.landing) {
   margin-top: 2.25rem;
 }
 
-.faq-item {
-  border-radius: var(--landing-radius-md);
-  border: 1px solid var(--landing-border);
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.04);
-}
-
-.faq-item.active {
-  border-color: rgba(79, 70, 229, 0.26);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.06);
-}
-
-.faq-question {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.15rem 1.2rem;
-  border: none;
-  border-radius: inherit;
-  background: none;
-  color: var(--landing-title);
-  cursor: pointer;
-  text-align: left;
-  font-weight: 700;
-}
-
-.faq-question svg {
-  color: var(--landing-text-muted);
-}
-
-.faq-item.active .faq-question svg {
-  transform: rotate(180deg);
-  color: var(--landing-primary-strong);
-}
-
-.faq-answer {
-  padding: 0 1.2rem 1.15rem;
-}
-
-.faq-answer p {
-  margin: 0;
-  color: var(--landing-text-muted);
-  line-height: 1.7;
-}
-
 .contact-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
