@@ -115,28 +115,23 @@ function getYearlyMonthlyDisplayPrice(price) {
   };
 }
 
-function getYearlyMonthlyComparisonPrice(price) {
-  const displayPrice = getYearlyMonthlyDisplayPrice(price);
-  if (displayPrice === price) return price;
+function getAnnualTotalComparisonPrice(price, cycle) {
+  const majorAmount = getPriceMajorAmount(price);
+  if (majorAmount === null) return price;
+  const annualMajorAmount = normalizeBillingCycle(cycle) === 'yearly' ? majorAmount : majorAmount * 12;
   return {
-    ...displayPrice,
-    suffix: '/mo yearly',
+    ...price,
+    formatted: formatCurrencyMajorAmount(annualMajorAmount, price?.currency),
+    suffix: '/year',
   };
 }
 
 function normalizePlanEntry(entry, billingCycle) {
   const fallback = getFallbackPlan(entry?.key) || {};
   const cycle = normalizeBillingCycle(billingCycle);
-  const comparisonCycle = cycle === 'yearly' ? 'monthly' : 'yearly';
   const selectedPrice = entry?.prices?.[cycle] || fallback.prices?.[cycle] || fallback.prices?.monthly || {};
   const price = cycle === 'yearly' ? getYearlyMonthlyDisplayPrice(selectedPrice) : selectedPrice;
-  const comparisonPrice = entry?.prices?.[comparisonCycle]
-    || fallback.prices?.[comparisonCycle]
-    || fallback.prices?.monthly
-    || {};
-  const yearlyComparisonPrice = cycle === 'yearly'
-    ? selectedPrice
-    : getYearlyMonthlyComparisonPrice(comparisonPrice);
+  const annualComparisonPrice = getAnnualTotalComparisonPrice(selectedPrice, cycle);
   const features = Array.isArray(entry?.featureHighlights) && entry.featureHighlights.length
     ? entry.featureHighlights
     : (fallback.features || []);
@@ -156,10 +151,10 @@ function normalizePlanEntry(entry, billingCycle) {
     price: price.formatted || fallback.prices?.monthly?.formatted || '$0',
     priceSuffix: price.suffix || (cycle === 'yearly' ? '/yr' : '/mo'),
     priceIntervalLabel: price.intervalLabel || (cycle === 'yearly' ? 'Yearly' : 'Monthly'),
-    priceComparison: yearlyComparisonPrice.formatted ? {
-      price: yearlyComparisonPrice.formatted,
-      suffix: yearlyComparisonPrice.suffix || (cycle === 'yearly' ? '/yr' : (comparisonCycle === 'yearly' ? '/yr' : '/mo')),
-      billingCycle: cycle === 'yearly' ? 'yearly' : comparisonCycle,
+    priceComparison: annualComparisonPrice.formatted ? {
+      price: annualComparisonPrice.formatted,
+      suffix: annualComparisonPrice.suffix || '/year',
+      billingCycle: cycle,
     } : null,
     prices: entry?.prices || fallback.prices || {},
     catalogEntry: entry || null,

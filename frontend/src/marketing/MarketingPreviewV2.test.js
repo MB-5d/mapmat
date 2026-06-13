@@ -395,7 +395,7 @@ describe('MarketingPreviewV2', () => {
     ['$0', '$8', '$18', '$88'].forEach((price) => {
       expect(container.textContent).toContain(price);
     });
-    ['$6/mo yearly', '$12/mo yearly', '$80/mo yearly'].forEach((price) => {
+    ['$96/year', '$216/year', '$1,056/year'].forEach((price) => {
       expect(container.textContent).toContain(`(${price})`);
     });
     expect(container.textContent).toContain('2 organized exports');
@@ -422,7 +422,9 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('$6');
     expect(container.textContent).toContain('$12');
     expect(container.textContent).toContain('$80');
-    expect(container.textContent).toContain('($72/yr)');
+    expect(container.textContent).toContain('($72/year)');
+    expect(container.textContent).toContain('($144/year)');
+    expect(container.textContent).toContain('($960/year)');
     expect(container.textContent).not.toContain('Solo');
   });
 
@@ -468,7 +470,7 @@ describe('MarketingPreviewV2', () => {
     });
 
     expect(container.textContent).toContain('$9');
-    expect(container.textContent).toContain('($7.50/mo yearly)');
+    expect(container.textContent).toContain('($108/year)');
     expect(container.textContent).toContain('9 active projects');
     expect(container.textContent).toContain('Catalog pro plan.');
   });
