@@ -73,12 +73,14 @@ describe('ProfileDrawer', () => {
     expect(avatar.textContent).toContain('M');
     expect(avatar.className).toContain('ui-avatar--circle');
     expect(container.textContent).toContain('Username');
-    expect(container.textContent).toContain('Upload Avatar');
+    expect(container.querySelector('button[aria-label="Upload avatar"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Upload Avatar');
+    expect(container.textContent).not.toContain('Remove Avatar');
     expect(container.textContent).not.toContain('ProfileUpload Avatar');
   });
 
-  test('uses change and ghost remove controls when avatar exists', () => {
-    act(() => {
+  test('shows change and ghost remove controls in the avatar edit modal', async () => {
+    await act(async () => {
       root.render(
         <ProfileDrawer
           isOpen
@@ -91,11 +93,18 @@ describe('ProfileDrawer', () => {
       );
     });
 
+    const editButton = container.querySelector('button[aria-label="Edit avatar"]');
+    await act(async () => {
+      editButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Edit Avatar');
     expect(container.textContent).toContain('Change Avatar');
     const removeButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Remove Avatar')
     );
     expect(removeButton.className).toContain('ui-btn--type-ghost');
+    expect(removeButton.className).toContain('ui-btn--style-danger');
     expect(removeButton.disabled).toBe(false);
   });
 
@@ -121,12 +130,9 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('.account-hero-avatar img')?.getAttribute('src')).toBe(
       'https://lh3.googleusercontent.com/a/avatar'
     );
-    expect(container.textContent).toContain('Change Avatar');
-
-    const removeButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Remove Avatar')
-    );
-    expect(removeButton.disabled).toBe(true);
+    expect(container.querySelector('button[aria-label="Change avatar"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Change Avatar');
+    expect(container.textContent).not.toContain('Remove Avatar');
 
     const editButton = container.querySelector('button[aria-label="Change avatar"]');
     await act(async () => {
@@ -136,7 +142,7 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('[data-testid="avatar-cropper"]')).toBeNull();
   });
 
-  test('shows plan options and manage billing actions in the plan section', () => {
+  test('shows collapsed plan summary and expands plan actions', () => {
     const onOpenPlans = jest.fn();
     const onOpenBilling = jest.fn();
 
@@ -163,8 +169,21 @@ describe('ProfileDrawer', () => {
       );
     });
 
+    const summaryButton = container.querySelector('.account-plan-summary');
+    expect(summaryButton).not.toBeNull();
+    expect(summaryButton.getAttribute('aria-expanded')).toBe('false');
+    expect(summaryButton.textContent).toContain('Plan:');
+    expect(summaryButton.textContent).toContain('Studio');
+    expect(container.querySelector('.account-plan-status-badge')?.textContent).toContain('Active');
+    expect(container.textContent).not.toContain('Switch plan');
+    expect(container.textContent).not.toContain('Manage billing');
+
+    act(() => {
+      summaryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
     const planButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Plan options')
+      button.textContent.includes('Switch plan')
     );
     const billingButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Manage billing')
@@ -172,6 +191,7 @@ describe('ProfileDrawer', () => {
 
     expect(planButton).not.toBeNull();
     expect(billingButton).not.toBeNull();
+    expect(billingButton.className).toContain('ui-btn--type-ghost');
 
     act(() => {
       planButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -207,7 +227,11 @@ describe('ProfileDrawer', () => {
       editButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('Crop Avatar');
+    expect(container.textContent).toContain('Edit Avatar');
+    expect(container.textContent).not.toContain('Crop Avatar');
+    expect(container.textContent).toContain('Position your image inside the circle.');
+    expect(container.textContent).toContain('Change Avatar');
+    expect(container.textContent).toContain('Remove Avatar');
     expect(container.querySelector('[data-testid="avatar-cropper"]')).not.toBeNull();
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>

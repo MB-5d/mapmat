@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ImagePlus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
 import Avatar from '../ui/Avatar';
+import Badge from '../ui/Badge';
 import Button from '../ui/Button';
 import { EditIcon } from '../ui/icons';
 import Field from '../ui/Field';
@@ -44,6 +45,20 @@ function formatUsageSummary(item) {
   return `${formatUsageValue(remaining)} left / ${formatUsageValue(included)} included${suffix}`;
 }
 
+function formatStatusLabel(value) {
+  return String(value || 'active')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getPlanStatusBadge({ accountState, entitlements, isArchived, trialEnded }) {
+  if (isArchived) return { label: 'Archived', style: 'warning' };
+  if (trialEnded) return { label: 'Trial ended', style: 'warning' };
+  if (entitlements?.trial?.active) return { label: 'Trial', style: 'info' };
+  if (String(accountState || '').toLowerCase() === 'active') return { label: 'Active', style: 'success' };
+  return { label: formatStatusLabel(accountState), style: 'neutral' };
+}
+
 const ProfileDrawer = ({
   isOpen,
   user,
@@ -67,6 +82,7 @@ const ProfileDrawer = ({
   const [avatarCrop, setAvatarCrop] = useState({ x: 0, y: 0 });
   const [avatarZoom, setAvatarZoom] = useState(1);
   const [avatarCropPixels, setAvatarCropPixels] = useState(null);
+  const [planDetailsOpen, setPlanDetailsOpen] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -89,6 +105,7 @@ const ProfileDrawer = ({
       setAvatarCrop({ x: 0, y: 0 });
       setAvatarZoom(1);
       setAvatarCropPixels(null);
+      setPlanDetailsOpen(false);
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, user]);
@@ -106,6 +123,7 @@ const ProfileDrawer = ({
   const accountState = entitlements?.account?.state || 'active';
   const isArchived = entitlements?.archived;
   const trialEnded = isTrialEnded(entitlements);
+  const planStatus = getPlanStatusBadge({ accountState, entitlements, isArchived, trialEnded });
   const usageRows = [
     { label: 'Crawl pages', item: entitlements?.meters?.crawlPages },
     { label: 'Screenshot credits', item: entitlements?.meters?.screenshotCredits },
@@ -237,6 +255,7 @@ const ProfileDrawer = ({
       const { user: updatedUser } = await api.removeMyAvatar();
       onUpdate?.(updatedUser);
       setSuccess('Avatar removed');
+      setAvatarCropSrc('');
     } catch (err) {
       setError(err.message || 'Failed to remove avatar');
     } finally {
@@ -306,104 +325,93 @@ const ProfileDrawer = ({
 
           {entitlements ? (
             <div className="form-section account-plan-section">
-              <div className="account-plan-header">
-                <div>
-                  <h4>Plan</h4>
-                  <p>{planName} · {accountState}</p>
-                </div>
-                {isArchived ? (
-                  <span className="account-plan-pill account-plan-pill--warning">Archived</span>
-                ) : entitlements.trial?.active ? (
-                  <span className="account-plan-pill">Trial</span>
-                ) : trialEnded ? (
-                  <span className="account-plan-pill account-plan-pill--warning">Trial ended</span>
-                ) : null}
-              </div>
-              <div className="account-plan-actions">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={onOpenPlans}
-                  disabled={!user}
-                >
-                  Plan options
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={onOpenBilling}
-                  disabled={!user || !onOpenBilling}
-                  loading={billingLoading}
-                >
-                  Manage billing
-                </Button>
-              </div>
-              {isArchived ? (
-                <div className="account-plan-notice">
-                  This account is archived. Existing work can be viewed, but new scans, screenshots, exports, invites, and shares are locked.
-                </div>
-              ) : trialEnded ? (
-                <div className="account-plan-notice">
-                  Your trial has ended. The account is now limited to Free plan allowances unless upgraded.
-                </div>
-              ) : entitlements.trial?.active && entitlements.trial?.organizedDownloadsAllowed === false ? (
-                <div className="account-plan-notice">
-                  Screenshot capture is included during this trial. Organized screenshot downloads require a paid plan.
+              <button
+                type="button"
+                className="account-plan-summary"
+                aria-expanded={planDetailsOpen}
+                aria-controls="account-plan-details"
+                onClick={() => setPlanDetailsOpen((open) => !open)}
+              >
+                <span className="account-plan-title">Plan: <strong>{planName}</strong></span>
+                <span className="account-plan-summary-meta">
+                  <Badge
+                    className="account-plan-status-badge"
+                    type="hollow"
+                    badgeStyle={planStatus.style}
+                    size="sm"
+                  >
+                    {planStatus.label}
+                  </Badge>
+                  <ChevronDown className="account-plan-chevron" size={16} aria-hidden="true" />
+                </span>
+              </button>
+              {planDetailsOpen ? (
+                <div className="account-plan-details" id="account-plan-details">
+                  {isArchived ? (
+                    <div className="account-plan-notice">
+                      This account is archived. Existing work can be viewed, but new scans, screenshots, exports, invites, and shares are locked.
+                    </div>
+                  ) : trialEnded ? (
+                    <div className="account-plan-notice">
+                      Your trial has ended. The account is now limited to Free plan allowances unless upgraded.
+                    </div>
+                  ) : entitlements.trial?.active && entitlements.trial?.organizedDownloadsAllowed === false ? (
+                    <div className="account-plan-notice">
+                      Screenshot capture is included during this trial. Organized screenshot downloads require a paid plan.
+                    </div>
+                  ) : null}
+                  <div className="account-usage-list">
+                    {usageRows.map(({ label, item }) => (
+                      <div className="account-usage-row" key={item.meter || label}>
+                        <div className="account-usage-copy">
+                          <span>{label}</span>
+                          <span>{formatUsageSummary(item)}</span>
+                        </div>
+                        {!item.unlimited ? (
+                          <div className="account-usage-track" aria-hidden="true">
+                            <div
+                              className="account-usage-fill"
+                              style={{ width: `${getUsagePercent(item)}%` }}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="account-plan-actions">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={onOpenPlans}
+                      disabled={!user}
+                    >
+                      Switch plan
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={onOpenBilling}
+                      disabled={!user || !onOpenBilling}
+                      loading={billingLoading}
+                    >
+                      Manage billing
+                    </Button>
+                  </div>
                 </div>
               ) : null}
-              <div className="account-usage-list">
-                {usageRows.map(({ label, item }) => (
-                  <div className="account-usage-row" key={item.meter || label}>
-                    <div className="account-usage-copy">
-                      <span>{label}</span>
-                      <span>{formatUsageSummary(item)}</span>
-                    </div>
-                    {!item.unlimited ? (
-                      <div className="account-usage-track" aria-hidden="true">
-                        <div
-                          className="account-usage-fill"
-                          style={{ width: `${getUsagePercent(item)}%` }}
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
             </div>
           ) : null}
 
           <div className="form-section">
-            <div className="profile-avatar-controls">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={!user || avatarLoading}
-                loading={avatarLoading}
-              >
-                {!avatarLoading ? <ImagePlus size={16} /> : null}
-                {hasDisplayAvatar ? 'Change Avatar' : 'Upload Avatar'}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleRemoveAvatar}
-                disabled={!user || avatarLoading || !hasCustomAvatar}
-                loading={avatarLoading}
-              >
-                {!avatarLoading ? <Trash2 size={16} /> : null}
-                Remove Avatar
-              </Button>
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,image/webp"
-                className="hidden-file-input"
-                onChange={handleAvatarFile}
-              />
-            </div>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              className="hidden-file-input"
+              onChange={handleAvatarFile}
+            />
             <Field label="Username">
               <TextInput
                 type="text"
@@ -535,8 +543,7 @@ const ProfileDrawer = ({
       <Modal
         show={!!avatarCropSrc}
         onClose={() => !avatarLoading && setAvatarCropSrc('')}
-        title={hasCustomAvatar ? 'Crop Avatar' : 'Upload Avatar'}
-        subtitle="Position your image inside the circle."
+        title="Edit Avatar"
         size="sm"
         className="avatar-crop-modal"
         bodyClassName="avatar-crop-modal-body"
@@ -576,7 +583,8 @@ const ProfileDrawer = ({
             onCropComplete={(_, croppedAreaPixels) => setAvatarCropPixels(croppedAreaPixels)}
           />
         </div>
-        <Field label="Zoom">
+        <p className="avatar-crop-caption">Position your image inside the circle.</p>
+        <Field className="avatar-crop-zoom-field" label="Zoom">
           <input
             type="range"
             min="1"
@@ -588,6 +596,30 @@ const ProfileDrawer = ({
             disabled={avatarLoading}
           />
         </Field>
+        <div className="avatar-crop-source-actions">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={!user || avatarLoading}
+          >
+            {!avatarLoading ? <ImagePlus size={16} /> : null}
+            {hasDisplayAvatar ? 'Change Avatar' : 'Upload Avatar'}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            buttonStyle="danger"
+            size="sm"
+            onClick={handleRemoveAvatar}
+            disabled={!user || avatarLoading || !hasCustomAvatar}
+            loading={avatarLoading}
+          >
+            {!avatarLoading ? <Trash2 size={16} /> : null}
+            Remove Avatar
+          </Button>
+        </div>
       </Modal>
     </AccountDrawer>
   );
