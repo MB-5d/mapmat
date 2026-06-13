@@ -9796,6 +9796,11 @@ body {
   font: inherit;
   cursor: pointer;
   text-align: left;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.account-plan-summary:hover {
+  background: var(--ui-color-surface);
 }
 
 .account-plan-summary:focus-visible {
@@ -9830,7 +9835,12 @@ body {
 .account-plan-chevron {
   flex: 0 0 auto;
   color: var(--ui-color-muted);
-  transition: transform 160ms ease;
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.account-plan-summary:hover .account-plan-title,
+.account-plan-summary:hover .account-plan-chevron {
+  color: var(--ui-color-text);
 }
 
 .account-plan-summary[aria-expanded="true"] .account-plan-chevron {

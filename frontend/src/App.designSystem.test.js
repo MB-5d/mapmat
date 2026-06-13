@@ -50,6 +50,15 @@ describe('UI design-system contract', () => {
     expect(appCss).not.toMatch(/\.share-email-btn \{[^}]*color:/);
   });
 
+  test('profile accordion rows have a shared hover state', () => {
+    expect(appCss).toMatch(
+      /\.account-plan-summary:hover \{[\s\S]*background: var\(--ui-color-surface\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.account-plan-summary:hover \.account-plan-title,\n\.account-plan-summary:hover \.account-plan-chevron \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*\}/
+    );
+  });
+
   test('input labels use the compact label token and shared control spacing', () => {
     expect(generatedCss).toContain('--type-label-sm-size: 12px;');
     expect(generatedCss).toContain('--type-label-sm-line-height: 16px;');
