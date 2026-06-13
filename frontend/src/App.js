@@ -88,7 +88,12 @@ import {
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
 import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
-import { openBillingUrlInNewTab } from './utils/billingRedirect';
+import {
+  BILLING_RETURN_EVENT_KEY,
+  isBillingFlowWindow,
+  openBillingUrlInNewTab,
+  publishBillingReturnEvent,
+} from './utils/billingRedirect';
 import {
   getCenteredNodeTransform as getCenteredCanvasNodeTransform,
   getFitBoundsTransform,
@@ -2580,6 +2585,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [largeMapMinimapOverview, setLargeMapMinimapOverview] = useState(null);
   const handledAuthRedirectKeyRef = useRef('');
   const handledBillingRedirectKeyRef = useRef('');
+  const handledBillingStorageReturnKeyRef = useRef('');
+  const handledBillingWindowReturnKeyRef = useRef('');
   const handledBillingIntentKeyRef = useRef('');
   const handledTrialIntentKeyRef = useRef('');
   const handledSignupIntentKeyRef = useRef('');
@@ -2655,9 +2662,11 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [billingActionKey, setBillingActionKey] = useState('');
   const [billingCycle, setBillingCycle] = useState('monthly');
   const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
+  const billingRouteSessionId = String(currentRoute?.searchParams?.get('billingSessionId') || '');
   const isBillingReturnRoute = billingRouteResult === 'success'
     || billingRouteResult === 'portal_return'
     || billingRouteResult === 'cancelled';
+  const isBillingReturnFromBillingWindow = isBillingReturnRoute && isBillingFlowWindow();
   const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
@@ -3727,6 +3736,73 @@ export default function App({ currentRoute, navigateToRoute }) {
       return null;
     }
   }, [isLoggedIn]);
+
+  const handleBillingReturnResult = useCallback(async ({ billingResult, checkoutSessionId } = {}) => {
+    if (!billingResult) return;
+    if (billingResult === 'success' || billingResult === 'portal_return') {
+      if (isLoggedIn) {
+        try {
+          await api.refreshBillingAccount({
+            checkoutSessionId: checkoutSessionId || undefined,
+          });
+        } catch (error) {
+          console.warn('Failed to refresh billing account from Stripe', error);
+        }
+        await refreshCurrentUser();
+      }
+      showToast(
+        billingResult === 'portal_return' ? 'Billing settings updated' : 'Plan updated',
+        'success'
+      );
+    } else if (billingResult === 'cancelled') {
+      showToast('Checkout cancelled', 'info');
+    }
+  }, [isLoggedIn, refreshCurrentUser, showToast]);
+
+  useLayoutEffect(() => {
+    if (!isBillingReturnFromBillingWindow) return;
+    const returnKey = `${billingRouteResult}:${billingRouteSessionId}:${currentRoute?.pathname || ''}:${currentRoute?.search || ''}`;
+    if (handledBillingWindowReturnKeyRef.current === returnKey) return;
+    handledBillingWindowReturnKeyRef.current = returnKey;
+    publishBillingReturnEvent({
+      billingResult: billingRouteResult,
+      checkoutSessionId: billingRouteSessionId || undefined,
+      returnUrl: window.location.href,
+    });
+    window.close();
+  }, [
+    billingRouteResult,
+    billingRouteSessionId,
+    currentRoute?.pathname,
+    currentRoute?.search,
+    isBillingReturnFromBillingWindow,
+  ]);
+
+  useEffect(() => {
+    const handleBillingStorageReturn = (event) => {
+      if (event.key !== BILLING_RETURN_EVENT_KEY || !event.newValue) return;
+      let payload = null;
+      try {
+        payload = JSON.parse(event.newValue);
+      } catch {
+        return;
+      }
+      const returnKey = [
+        payload?.billingResult || '',
+        payload?.checkoutSessionId || '',
+        payload?.timestamp || '',
+      ].join(':');
+      if (!payload?.billingResult || handledBillingStorageReturnKeyRef.current === returnKey) return;
+      handledBillingStorageReturnKeyRef.current = returnKey;
+      handleBillingReturnResult({
+        billingResult: payload.billingResult,
+        checkoutSessionId: payload.checkoutSessionId || '',
+      });
+    };
+
+    window.addEventListener('storage', handleBillingStorageReturn);
+    return () => window.removeEventListener('storage', handleBillingStorageReturn);
+  }, [handleBillingReturnResult]);
 
   const syncEntitlementsFromError = useCallback((error) => {
     const entitlements = error?.payload?.entitlements;
@@ -6774,7 +6850,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (authLoading) return;
 
     const billingResult = billingRouteResult;
-    const checkoutSessionId = currentRoute?.searchParams?.get('billingSessionId') || '';
+    const checkoutSessionId = billingRouteSessionId;
+    if (isBillingReturnFromBillingWindow) return;
     if (!billingResult) {
       handledBillingRedirectKeyRef.current = '';
       return;
@@ -6797,24 +6874,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     const refreshBillingReturn = async () => {
       try {
-        if (billingResult === 'success' || billingResult === 'portal_return') {
-          if (isLoggedIn) {
-            try {
-              await api.refreshBillingAccount({
-                checkoutSessionId: checkoutSessionId || undefined,
-              });
-            } catch (error) {
-              console.warn('Failed to refresh billing account from Stripe', error);
-            }
-            await refreshCurrentUser();
-          }
-          showToast(
-            billingResult === 'portal_return' ? 'Billing settings updated' : 'Plan updated',
-            'success'
-          );
-        } else if (billingResult === 'cancelled') {
-          showToast('Checkout cancelled', 'info');
-        }
+        await handleBillingReturnResult({ billingResult, checkoutSessionId });
       } finally {
         clearBillingParams();
       }
@@ -6824,12 +6884,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [
     authLoading,
     billingRouteResult,
+    billingRouteSessionId,
     currentRoute?.pathname,
     currentRoute?.search,
     currentRoute?.searchParams,
-    isLoggedIn,
-    refreshCurrentUser,
-    showToast,
+    handleBillingReturnResult,
+    isBillingReturnFromBillingWindow,
   ]);
 
   useEffect(() => {
@@ -15525,6 +15585,16 @@ export default function App({ currentRoute, navigateToRoute }) {
   const currentBillingPlan = currentUser?.entitlements?.plan || null;
   const currentBillingPlanKey = currentBillingPlan?.key || (isLoggedIn ? 'free' : 'guest');
   const currentBillingPlanName = currentBillingPlan?.name || (isLoggedIn ? 'Free' : 'Not signed in');
+
+  if (isBillingReturnFromBillingWindow) {
+    return (
+      <div className="app">
+        <div className="canvas">
+          <StatusAlert tone="loading">Returning to Vellic...</StatusAlert>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AuthProvider value={authValue}>
