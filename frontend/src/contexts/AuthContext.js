@@ -6,6 +6,7 @@ const AuthContext = createContext({
   onLogin: () => {},
   onLogout: () => {},
   onShowProfile: () => {},
+  onShowBilling: () => {},
   onShowSettings: () => {},
 });
 

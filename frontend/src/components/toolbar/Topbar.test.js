@@ -9,6 +9,13 @@ describe('Topbar', () => {
   let root;
 
   const renderTopbar = (authValue = {}) => {
+    const authHandlers = {
+      onShowProfile: jest.fn(),
+      onShowBilling: jest.fn(),
+      onShowSettings: jest.fn(),
+      onLogout: jest.fn(),
+      onLogin: jest.fn(),
+    };
     act(() => {
       root.render(
         <AuthProvider
@@ -18,10 +25,7 @@ describe('Topbar', () => {
               name: 'Matthew',
               avatarUrl: 'https://example.com/avatar.png',
             },
-            onShowProfile: jest.fn(),
-            onShowSettings: jest.fn(),
-            onLogout: jest.fn(),
-            onLogin: jest.fn(),
+            ...authHandlers,
             ...authValue,
           }}
         >
@@ -55,6 +59,7 @@ describe('Topbar', () => {
         </AuthProvider>
       );
     });
+    return { ...authHandlers, ...authValue };
   };
 
   beforeEach(() => {
@@ -96,5 +101,27 @@ describe('Topbar', () => {
       'Account',
     ]);
     expect(container.querySelectorAll('.account-menu-item-badge')).toHaveLength(2);
+  });
+
+  test('opens billing from the account menu', () => {
+    const auth = renderTopbar();
+
+    const trigger = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Matthew')
+    );
+    act(() => {
+      trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const billingButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Billing')
+    );
+    expect(billingButton).not.toBeNull();
+
+    act(() => {
+      billingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(auth.onShowBilling).toHaveBeenCalledTimes(1);
   });
 });

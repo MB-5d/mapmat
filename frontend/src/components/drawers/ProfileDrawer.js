@@ -44,7 +44,17 @@ function formatUsageSummary(item) {
   return `${formatUsageValue(remaining)} left / ${formatUsageValue(included)} included${suffix}`;
 }
 
-const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, onOpenPlans, showToast }) => {
+const ProfileDrawer = ({
+  isOpen,
+  user,
+  onClose,
+  onUpdate,
+  onLogout,
+  onOpenPlans,
+  onOpenBilling,
+  billingLoading = false,
+  showToast,
+}) => {
   const [name, setName] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -318,6 +328,16 @@ const ProfileDrawer = ({ isOpen, user, onClose, onUpdate, onLogout, onOpenPlans,
                   disabled={!user}
                 >
                   Plan options
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={onOpenBilling}
+                  disabled={!user || !onOpenBilling}
+                  loading={billingLoading}
+                >
+                  Manage billing
                 </Button>
               </div>
               {isArchived ? (

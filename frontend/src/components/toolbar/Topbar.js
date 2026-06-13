@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  CreditCard,
   Folder,
   History,
   LogIn,
@@ -48,7 +49,7 @@ const Topbar = ({
   pendingInviteCount = 0,
   pendingAccessRequestCount = 0,
 }) => {
-  const { isLoggedIn, currentUser, onShowProfile, onShowSettings, onLogout, onLogin } = useAuth();
+  const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
 
@@ -196,6 +197,16 @@ const Topbar = ({
                     onClick={() => {
                       closeMenu();
                       onShowProfile();
+                    }}
+                  />
+                  <MenuItem
+                    className="account-menu-item"
+                    role="menuitem"
+                    icon={<CreditCard size={16} />}
+                    label="Billing"
+                    onClick={() => {
+                      closeMenu();
+                      onShowBilling?.();
                     }}
                   />
                   <MenuItem

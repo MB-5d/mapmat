@@ -136,6 +136,52 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('[data-testid="avatar-cropper"]')).toBeNull();
   });
 
+  test('shows plan options and manage billing actions in the plan section', () => {
+    const onOpenPlans = jest.fn();
+    const onOpenBilling = jest.fn();
+
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={{
+            ...baseUser,
+            entitlements: {
+              account: { state: 'active' },
+              plan: { name: 'Studio' },
+              meters: {},
+              limits: {},
+            },
+          }}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          onOpenPlans={onOpenPlans}
+          onOpenBilling={onOpenBilling}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const planButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Plan options')
+    );
+    const billingButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Manage billing')
+    );
+
+    expect(planButton).not.toBeNull();
+    expect(billingButton).not.toBeNull();
+
+    act(() => {
+      planButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      billingButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOpenPlans).toHaveBeenCalledTimes(1);
+    expect(onOpenBilling).toHaveBeenCalledTimes(1);
+  });
+
   test('opens cropper from avatar edit and uploads cropped avatar', async () => {
     avatarCrop.createCroppedAvatarDataUrl.mockResolvedValue('data:image/webp;base64,cropped');
     api.uploadMyAvatar.mockResolvedValue({

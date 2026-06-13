@@ -7203,6 +7203,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const handleShowProjects = openProjectsPanel;
 
+  const handleShowBilling = useCallback(() => {
+    handleBillingPortal('account-menu');
+  }, [handleBillingPortal]);
+
   const handleShowHistory = useCallback(() => {
     setShowHistoryModal(true);
     setShowProjectsModal(false);
@@ -7220,8 +7224,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     onLogin: handleLogin,
     onLogout: handleLogout,
     onShowProfile: handleShowProfile,
+    onShowBilling: handleShowBilling,
     onShowSettings: handleShowSettings,
-  }), [isLoggedIn, currentUser, handleLogin, handleLogout, handleShowProfile, handleShowSettings]);
+  }), [
+    isLoggedIn,
+    currentUser,
+    handleLogin,
+    handleLogout,
+    handleShowProfile,
+    handleShowBilling,
+    handleShowSettings,
+  ]);
 
   const startMapNameEdit = useCallback(() => {
     if (!canEdit()) return;
@@ -17659,6 +17672,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUpdate={(updatedUser) => setCurrentUser(updatedUser)}
         onLogout={handleLogout}
         onOpenPlans={() => openPlansModal('profile')}
+        onOpenBilling={() => handleBillingPortal('profile')}
+        billingLoading={billingActionKey === 'portal:profile'}
         showToast={showToast}
       />
 
