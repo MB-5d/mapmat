@@ -331,7 +331,7 @@ body {
 .ui-btn--primary:disabled {
   background: var(--ui-button-brand-fill-disabled);
   border-color: var(--ui-button-brand-fill-disabled);
-  color: var(--ui-button-brand-contrast);
+  color: var(--ui-button-brand-fill-disabled-contrast);
 }
 
 .ui-btn--type-primary.ui-btn--style-mono:disabled {
@@ -615,7 +615,7 @@ body {
 .ui-icon-btn--primary:disabled {
   background: var(--ui-button-brand-fill-disabled);
   border-color: var(--ui-button-brand-fill-disabled);
-  color: var(--ui-button-brand-contrast);
+  color: var(--ui-button-brand-fill-disabled-contrast);
 }
 
 .ui-icon-btn--type-primary.ui-icon-btn--style-mono:disabled {
@@ -2977,12 +2977,6 @@ body {
 [data-theme="dark"] .blank-scan-shell .ui-btn--type-secondary.ui-btn--style-brand:hover:not(:disabled) {
   border-color: var(--color-brand-200);
   color: var(--color-brand-200);
-}
-
-[data-theme="dark"] .blank-scan-shell .ui-btn--type-primary.ui-btn--style-brand:disabled {
-  background: var(--color-brand-300);
-  border-color: var(--color-brand-300);
-  color: var(--color-brand-950);
 }
 
 .blank-start-label {

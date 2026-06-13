@@ -20,6 +20,9 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.25px;');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled: var(--color-brand-300);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-brand-950);');
+    expect(generatedCss).toContain('--ui-button-brand-quiet-disabled: var(--color-brand-300);');
 
     expect(appCss).toContain('font-size: var(--type-size-4xl);');
     expect(appCss).toContain('line-height: var(--type-line-height-48);');
@@ -27,8 +30,15 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('box-shadow: var(--shadow-canvas-control);');
     expect(appCss).toContain('box-shadow: var(--shadow-drawer);');
     expect(appCss).toContain('box-shadow: var(--ui-overlay-shadow);');
-    expect(appCss).toContain('stroke-width: var(--ui-connection-map-stroke-width);');
+    expect(appJs).toContain('strokeWidth="var(--ui-connection-map-stroke-width)"');
     expect(appCss).toContain('color: var(--ui-control-disabled-content);');
+    expect(appCss).toMatch(
+      /\.ui-btn--type-primary\.ui-btn--style-brand:disabled,\n\.ui-btn--primary:disabled \{[\s\S]*background: var\(--ui-button-brand-fill-disabled\);[\s\S]*border-color: var\(--ui-button-brand-fill-disabled\);[\s\S]*color: var\(--ui-button-brand-fill-disabled-contrast\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.ui-icon-btn--type-primary\.ui-icon-btn--style-brand:disabled,\n\.ui-icon-btn--primary:disabled \{[\s\S]*background: var\(--ui-button-brand-fill-disabled\);[\s\S]*border-color: var\(--ui-button-brand-fill-disabled\);[\s\S]*color: var\(--ui-button-brand-fill-disabled-contrast\);[\s\S]*\}/
+    );
+    expect(appCss).not.toContain('.blank-scan-shell .ui-btn--type-primary.ui-btn--style-brand:disabled');
   });
 
   test('brand filled button hover keeps contrast text and is not overridden by share modal styles', () => {
@@ -39,7 +49,7 @@ describe('UI design-system contract', () => {
     expect(appCss).not.toMatch(/\.share-email-btn \{[^}]*color:/);
   });
 
-  test('input labels use the compact label token and 4px control spacing', () => {
+  test('input labels use the compact label token and shared control spacing', () => {
     expect(generatedCss).toContain('--type-label-sm-size: 12px;');
     expect(generatedCss).toContain('--type-label-sm-line-height: 16px;');
     expect(generatedCss).toContain('--type-label-sm-weight: 500;');
@@ -49,8 +59,7 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(/\.scan-options-depth-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
     expect(appCss).toMatch(/\.share-collab-setting \{[\s\S]*gap: var\(--space-xs\);/);
     expect(appCss).toMatch(/\.share-collab-setting-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
-    expect(appCss).toMatch(/\.feedback-field-group \{[\s\S]*gap: var\(--space-xs\);/);
-    expect(appCss).toMatch(/\.feedback-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.feedback-field-group \{[\s\S]*gap: var\(--space-sm\);/);
     expect(adminCss).toMatch(/\.admin-console-auth-form span \{[\s\S]*margin-bottom: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
     expect(adminCss).toMatch(/\.admin-feedback-item-controls label,[\s\S]*gap: var\(--space-xs\);/);
     expect(adminCss).toMatch(/\.admin-feedback-item-controls span,[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
@@ -61,7 +70,7 @@ describe('UI design-system contract', () => {
 
   test('top scan bar is limited to unsaved scans and supports clear/update states', () => {
     expect(appJs).toContain('showScanBar={isUnsavedScannedMap');
-    expect(appJs).toContain("scanLabel={hasTopbarRescanChanges ? 'Update' : 'Scan'}");
+    expect(appJs).toContain("scanLabel={canTopbarRescan ? 'Update' : 'Scan'}");
     expect(appJs).toContain('showClearUrl={!!urlInput.trim()}');
     expect(appJs).toContain('scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig)');
   });
