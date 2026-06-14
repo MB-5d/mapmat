@@ -931,7 +931,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-hero {
-  display: block;
+  display: flow-root;
   min-width: 0;
   max-width: 100%;
   padding: var(--unit-24) 0 0;
@@ -1051,6 +1051,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-section {
+  display: flow-root;
   position: relative;
   min-width: 0;
   max-width: 100%;
@@ -1151,12 +1152,12 @@ body:has(.marketing-preview-v2) {
     margin: calc(var(--unit-16) + var(--unit-24)) 0;
   }
 
-  .marketing-v2-section--use-cases > .marketing-v2-card-grid,
-  .marketing-v2-section--features > .marketing-v2-card-grid,
-  .marketing-v2-section--examples > .marketing-v2-examples,
-  .marketing-v2-section--mission > .marketing-v2-mission-list,
-  .marketing-v2-section--contact > .marketing-v2-contact {
-    margin-top: var(--unit-24);
+  .marketing-v2-section--use-cases > .marketing-v2-section__header,
+  .marketing-v2-section--features > .marketing-v2-section__header,
+  .marketing-v2-section--examples > .marketing-v2-section__header,
+  .marketing-v2-section--mission > .marketing-v2-section__header,
+  .marketing-v2-section--contact > .marketing-v2-section__header {
+    margin-bottom: calc(var(--unit-32) + var(--unit-24));
   }
 }
 
