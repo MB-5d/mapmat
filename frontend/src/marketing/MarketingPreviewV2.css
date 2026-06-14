@@ -874,7 +874,7 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-main {
   display: grid;
-  gap: calc(var(--unit-80) + var(--unit-80) + var(--unit-16));
+  gap: calc(var(--unit-80) + var(--unit-80) + var(--unit-48) + var(--unit-16));
   width: min(1184px, calc(100% - var(--unit-48)));
   margin: 0 auto;
   padding: calc(var(--unit-80) + var(--unit-56)) 0 calc(var(--unit-80) + var(--unit-16));
@@ -1149,7 +1149,7 @@ body:has(.marketing-preview-v2) {
 
 @media (min-width: 721px) {
   .marketing-v2-hero .marketing-v2-scan-cta {
-    margin: calc(var(--unit-16) + var(--unit-24)) 0;
+    margin: calc(var(--unit-16) + var(--unit-24)) 0 calc(var(--unit-16) + var(--unit-24) + var(--unit-16));
   }
 
   .marketing-v2-section--use-cases > .marketing-v2-section__header,
