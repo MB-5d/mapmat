@@ -874,7 +874,7 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-main {
   display: grid;
-  gap: var(--unit-80);
+  gap: calc(var(--unit-80) + var(--unit-16));
   width: min(1184px, calc(100% - var(--unit-48)));
   margin: 0 auto;
   padding: calc(var(--unit-80) + var(--unit-56)) 0 calc(var(--unit-80) + var(--unit-16));
@@ -970,7 +970,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-hero .marketing-v2-scan-cta {
-  margin: var(--unit-16) 0;
+  margin: var(--unit-24) 0;
 }
 
 .marketing-v2-hero-brief {
@@ -1127,10 +1127,10 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-pricing-cycle-label {
   color: var(--marketing-v2-muted);
-  font-size: var(--type-label-sm-size);
-  font-weight: var(--type-label-sm-weight);
-  line-height: var(--type-label-sm-line-height);
-  letter-spacing: var(--type-label-sm-letter-spacing);
+  font-size: var(--type-label-md-size);
+  font-weight: var(--type-label-md-weight);
+  line-height: var(--type-label-md-line-height);
+  letter-spacing: var(--type-label-md-letter-spacing);
 }
 
 .marketing-v2-pricing-cycle.marketing-v2-comparison-tabs {
@@ -1144,6 +1144,14 @@ body:has(.marketing-preview-v2) {
 .marketing-v2-examples,
 .marketing-v2-contact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.marketing-v2-section--use-cases > .marketing-v2-card-grid,
+.marketing-v2-section--features > .marketing-v2-card-grid,
+.marketing-v2-section--examples > .marketing-v2-examples,
+.marketing-v2-section--mission > .marketing-v2-mission-list,
+.marketing-v2-section--contact > .marketing-v2-contact {
+  margin-top: var(--unit-24);
 }
 
 .marketing-v2-example {
@@ -1571,19 +1579,23 @@ body:has(.marketing-preview-v2) {
   width: 100%;
 }
 
-.marketing-v2-pricing-card__screenshot-note {
+.marketing-v2-pricing-card p.marketing-v2-pricing-card__screenshot-note {
   margin: 0;
   color: var(--marketing-v2-muted);
-  font-size: var(--type-body-xs-size);
-  font-weight: var(--type-body-xs-weight);
-  line-height: var(--type-body-xs-line-height);
-  letter-spacing: var(--type-body-xs-letter-spacing);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
 }
 
 .marketing-v2-faq {
   display: grid;
   gap: var(--unit-16);
   max-width: 840px;
+}
+
+.marketing-v2-section--faq .marketing-v2-faq-item.ui-accordion {
+  background: var(--marketing-v2-paper);
 }
 
 .marketing-v2-mission-list {
@@ -2243,6 +2255,13 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     font-weight: var(--type-mobile-body-md-weight);
     line-height: var(--type-mobile-body-md-line-height);
     letter-spacing: var(--type-mobile-body-md-letter-spacing);
+  }
+
+  .marketing-v2-pricing-card p.marketing-v2-pricing-card__screenshot-note {
+    font-size: var(--type-body-xs-size);
+    font-weight: var(--type-body-xs-weight);
+    line-height: var(--type-body-xs-line-height);
+    letter-spacing: var(--type-body-xs-letter-spacing);
   }
 
   .marketing-v2-example p,
