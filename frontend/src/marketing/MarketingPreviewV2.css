@@ -874,7 +874,7 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-main {
   display: grid;
-  gap: calc(var(--unit-80) + var(--unit-16));
+  gap: calc(var(--unit-80) + var(--unit-80) + var(--unit-16));
   width: min(1184px, calc(100% - var(--unit-48)));
   margin: 0 auto;
   padding: calc(var(--unit-80) + var(--unit-56)) 0 calc(var(--unit-80) + var(--unit-16));
@@ -970,7 +970,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-hero .marketing-v2-scan-cta {
-  margin: var(--unit-24) 0;
+  margin: var(--unit-16) 0;
 }
 
 .marketing-v2-hero-brief {
@@ -1146,12 +1146,18 @@ body:has(.marketing-preview-v2) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.marketing-v2-section--use-cases > .marketing-v2-card-grid,
-.marketing-v2-section--features > .marketing-v2-card-grid,
-.marketing-v2-section--examples > .marketing-v2-examples,
-.marketing-v2-section--mission > .marketing-v2-mission-list,
-.marketing-v2-section--contact > .marketing-v2-contact {
-  margin-top: var(--unit-24);
+@media (min-width: 721px) {
+  .marketing-v2-hero .marketing-v2-scan-cta {
+    margin: calc(var(--unit-16) + var(--unit-24)) 0;
+  }
+
+  .marketing-v2-section--use-cases > .marketing-v2-card-grid,
+  .marketing-v2-section--features > .marketing-v2-card-grid,
+  .marketing-v2-section--examples > .marketing-v2-examples,
+  .marketing-v2-section--mission > .marketing-v2-mission-list,
+  .marketing-v2-section--contact > .marketing-v2-contact {
+    margin-top: var(--unit-24);
+  }
 }
 
 .marketing-v2-example {
