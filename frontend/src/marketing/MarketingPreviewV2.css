@@ -1127,10 +1127,10 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-pricing-cycle-label {
   color: var(--marketing-v2-muted);
-  font-size: var(--type-label-md-size);
-  font-weight: var(--type-label-md-weight);
-  line-height: var(--type-label-md-line-height);
-  letter-spacing: var(--type-label-md-letter-spacing);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
 }
 
 .marketing-v2-pricing-cycle.marketing-v2-comparison-tabs {
