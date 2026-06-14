@@ -8,11 +8,13 @@ import {
   buildMarketingPath,
 } from './marketingConfig';
 
+const MARKETING_PHONE_BREAKPOINT = 768;
+
 export function isMarketingPhoneViewport(source = {}) {
   const win = source.window || (typeof window !== 'undefined' ? window : null);
   const width = Number(source.width ?? win?.innerWidth ?? 1024);
-  if (Number.isFinite(width) && width <= 767) return true;
-  return typeof win?.matchMedia === 'function' && win.matchMedia('(max-width: 767px)').matches;
+  if (Number.isFinite(width) && width <= MARKETING_PHONE_BREAKPOINT) return true;
+  return typeof win?.matchMedia === 'function' && win.matchMedia(`(max-width: ${MARKETING_PHONE_BREAKPOINT}px)`).matches;
 }
 
 const defaultOpenApp = (url) => {

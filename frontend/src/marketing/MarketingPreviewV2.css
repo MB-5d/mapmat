@@ -88,26 +88,26 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-structure--top-right {
-  --marketing-v2-bg-x: 17px;
-  --marketing-v2-bg-y: -31px;
+  --marketing-v2-bg-x: 18px;
+  --marketing-v2-bg-y: -32px;
   --marketing-v2-bg-scale: 1.02;
-  --marketing-v2-bg-structure-width: 523px;
+  --marketing-v2-bg-structure-width: 524px;
   top: 3.7%;
   right: -248px;
 }
 
 .marketing-v2-bg-structure--mid-left {
-  --marketing-v2-bg-x: -41px;
-  --marketing-v2-bg-y: 23px;
+  --marketing-v2-bg-x: -42px;
+  --marketing-v2-bg-y: 24px;
   --marketing-v2-bg-scale: 1.07;
-  --marketing-v2-bg-structure-width: 567px;
+  --marketing-v2-bg-structure-width: 568px;
   top: 35.9%;
   left: -286px;
 }
 
 .marketing-v2-bg-structure--mid-right {
-  --marketing-v2-bg-x: 37px;
-  --marketing-v2-bg-y: -29px;
+  --marketing-v2-bg-x: 38px;
+  --marketing-v2-bg-y: -30px;
   --marketing-v2-bg-scale: 1.15;
   --marketing-v2-bg-structure-width: 548px;
   top: 47.3%;
@@ -115,8 +115,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-structure--bottom-left {
-  --marketing-v2-bg-x: -33px;
-  --marketing-v2-bg-y: 19px;
+  --marketing-v2-bg-x: -34px;
+  --marketing-v2-bg-y: 20px;
   --marketing-v2-bg-scale: 1.09;
   --marketing-v2-bg-structure-width: 552px;
   top: 80.7%;
@@ -124,8 +124,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-structure--bottom-right {
-  --marketing-v2-bg-x: 29px;
-  --marketing-v2-bg-y: -23px;
+  --marketing-v2-bg-x: 30px;
+  --marketing-v2-bg-y: -24px;
   --marketing-v2-bg-scale: 1.05;
   --marketing-v2-bg-structure-width: 558px;
   top: 88.9%;
@@ -167,8 +167,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--hero-top-left-small {
-  --marketing-v2-bg-x: -21px;
-  --marketing-v2-bg-y: 17px;
+  --marketing-v2-bg-x: -22px;
+  --marketing-v2-bg-y: 18px;
   --marketing-v2-bg-scale: 0.84;
   --marketing-v2-bg-shape-opacity: 0.52;
   top: 1.5%;
@@ -213,12 +213,12 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--hero-upper-left-mid {
-  --marketing-v2-bg-x: -37px;
-  --marketing-v2-bg-y: 13px;
+  --marketing-v2-bg-x: -38px;
+  --marketing-v2-bg-y: 14px;
   --marketing-v2-bg-scale: 1.03;
   top: 10.9%;
   left: -168px;
-  width: 341px;
+  width: 342px;
   height: auto;
 }
 
@@ -289,8 +289,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--feature-right-full {
-  --marketing-v2-bg-x: 21px;
-  --marketing-v2-bg-y: -37px;
+  --marketing-v2-bg-x: 22px;
+  --marketing-v2-bg-y: -38px;
   --marketing-v2-bg-scale: 1.03;
   --marketing-v2-bg-shape-opacity: 0.42;
   top: 30.9%;
@@ -300,35 +300,35 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--feature-center-small {
-  --marketing-v2-bg-x: 23px;
-  --marketing-v2-bg-y: 17px;
+  --marketing-v2-bg-x: 24px;
+  --marketing-v2-bg-y: 18px;
   --marketing-v2-bg-scale: 0.74;
   --marketing-v2-bg-shape-opacity: 0.5;
   top: 37.3%;
   left: 67.7vw;
-  width: 171px;
+  width: 172px;
   height: auto;
   color: var(--marketing-v2-bg-stroke-strong);
 }
 
 .marketing-v2-bg-shape--feature-lower-left-mid {
-  --marketing-v2-bg-x: -27px;
-  --marketing-v2-bg-y: 31px;
+  --marketing-v2-bg-x: -28px;
+  --marketing-v2-bg-y: 32px;
   --marketing-v2-bg-scale: 0.93;
   --marketing-v2-bg-shape-opacity: 0.4;
   top: 38.8%;
-  left: -89px;
-  width: 297px;
+  left: -90px;
+  width: 298px;
   height: auto;
 }
 
 .marketing-v2-bg-shape--feature-left-bridge {
-  --marketing-v2-bg-x: -39px;
+  --marketing-v2-bg-x: -40px;
   --marketing-v2-bg-y: 22px;
   --marketing-v2-bg-scale: 1.07;
   top: 34.9%;
-  left: -243px;
-  width: 411px;
+  left: -244px;
+  width: 412px;
   height: auto;
 }
 
@@ -387,8 +387,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--examples-band-a {
-  --marketing-v2-bg-x: 41px;
-  --marketing-v2-bg-y: 19px;
+  --marketing-v2-bg-x: 42px;
+  --marketing-v2-bg-y: 20px;
   --marketing-v2-bg-scale: 1.06;
   --marketing-v2-bg-shape-opacity: 0.44;
   top: 48.7%;
@@ -399,8 +399,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--examples-band-b {
-  --marketing-v2-bg-x: 77px;
-  --marketing-v2-bg-y: 51px;
+  --marketing-v2-bg-x: 78px;
+  --marketing-v2-bg-y: 52px;
   --marketing-v2-bg-scale: 0.98;
   --marketing-v2-bg-shape-opacity: 0.34;
   top: 51.6%;
@@ -410,7 +410,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--examples-left-mid {
-  --marketing-v2-bg-x: -31px;
+  --marketing-v2-bg-x: -32px;
   --marketing-v2-bg-y: 24px;
   --marketing-v2-bg-scale: 0.9;
   --marketing-v2-bg-shape-opacity: 0.4;
@@ -477,8 +477,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--faq-center-right {
-  --marketing-v2-bg-x: 19px;
-  --marketing-v2-bg-y: -33px;
+  --marketing-v2-bg-x: 20px;
+  --marketing-v2-bg-y: -34px;
   --marketing-v2-bg-scale: 1.31;
   --marketing-v2-bg-shape-opacity: 0.4;
   top: 61.9%;
@@ -489,8 +489,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--faq-middle-left-small {
-  --marketing-v2-bg-x: 23px;
-  --marketing-v2-bg-y: 19px;
+  --marketing-v2-bg-x: 24px;
+  --marketing-v2-bg-y: 20px;
   --marketing-v2-bg-scale: 0.71;
   --marketing-v2-bg-shape-opacity: 0.48;
   top: 67.2%;
@@ -501,40 +501,40 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--faq-right-mid {
-  --marketing-v2-bg-x: 31px;
-  --marketing-v2-bg-y: -21px;
+  --marketing-v2-bg-x: 32px;
+  --marketing-v2-bg-y: -22px;
   --marketing-v2-bg-scale: 0.94;
   --marketing-v2-bg-shape-opacity: 0.38;
   top: 67.8%;
-  right: -211px;
+  right: -212px;
   width: 452px;
   height: auto;
 }
 
 .marketing-v2-bg-shape--faq-left-bridge {
   --marketing-v2-bg-x: -38px;
-  --marketing-v2-bg-y: 25px;
+  --marketing-v2-bg-y: 26px;
   --marketing-v2-bg-scale: 1.01;
   top: 69.7%;
-  left: -257px;
-  width: 431px;
+  left: -258px;
+  width: 432px;
   height: auto;
 }
 
 .marketing-v2-bg-shape--mission-left-edge {
-  --marketing-v2-bg-x: -71px;
+  --marketing-v2-bg-x: -72px;
   --marketing-v2-bg-y: 26px;
   --marketing-v2-bg-scale: 1.63;
   --marketing-v2-bg-shape-opacity: 0.38;
   top: 72.8%;
   left: -352px;
-  width: 409px;
+  width: 410px;
   height: auto;
 }
 
 .marketing-v2-bg-shape--mission-small-center {
   --marketing-v2-bg-x: 18px;
-  --marketing-v2-bg-y: -13px;
+  --marketing-v2-bg-y: -14px;
   --marketing-v2-bg-scale: 0.69;
   --marketing-v2-bg-shape-opacity: 0.5;
   top: 77.6%;
@@ -544,8 +544,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--mission-center-mid {
-  --marketing-v2-bg-x: 33px;
-  --marketing-v2-bg-y: -25px;
+  --marketing-v2-bg-x: 34px;
+  --marketing-v2-bg-y: -26px;
   --marketing-v2-bg-scale: 0.88;
   --marketing-v2-bg-shape-opacity: 0.38;
   top: 77.8%;
@@ -556,7 +556,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--mission-gap-center-bridge {
-  --marketing-v2-bg-x: 29px;
+  --marketing-v2-bg-x: 30px;
   --marketing-v2-bg-y: -22px;
   --marketing-v2-bg-scale: 0.96;
   top: 80.4%;
@@ -566,7 +566,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--contact-right-full {
-  --marketing-v2-bg-x: 37px;
+  --marketing-v2-bg-x: 38px;
   --marketing-v2-bg-y: -26px;
   --marketing-v2-bg-scale: 1.02;
   --marketing-v2-bg-shape-opacity: 0.42;
@@ -577,8 +577,8 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--contact-left-mid {
-  --marketing-v2-bg-x: -39px;
-  --marketing-v2-bg-y: 23px;
+  --marketing-v2-bg-x: -40px;
+  --marketing-v2-bg-y: 24px;
   --marketing-v2-bg-scale: 0.88;
   --marketing-v2-bg-shape-opacity: 0.4;
   top: 87.5%;
@@ -598,35 +598,35 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--footer-band-a {
-  --marketing-v2-bg-x: 31px;
-  --marketing-v2-bg-y: 37px;
+  --marketing-v2-bg-x: 32px;
+  --marketing-v2-bg-y: 38px;
   --marketing-v2-bg-scale: 1.22;
   --marketing-v2-bg-shape-opacity: 0.38;
   top: 91.1%;
   left: 8.3vw;
-  width: 437px;
+  width: 438px;
   height: auto;
   color: var(--marketing-v2-bg-stroke-strong);
 }
 
 .marketing-v2-bg-shape--footer-band-b {
-  --marketing-v2-bg-x: 91px;
-  --marketing-v2-bg-y: 61px;
+  --marketing-v2-bg-x: 92px;
+  --marketing-v2-bg-y: 62px;
   --marketing-v2-bg-scale: 1.07;
   --marketing-v2-bg-shape-opacity: 0.3;
   top: 92.6%;
   left: 18.9vw;
-  width: 413px;
+  width: 414px;
   height: auto;
 }
 
 .marketing-v2-bg-shape--footer-left-medium {
-  --marketing-v2-bg-x: -39px;
-  --marketing-v2-bg-y: 21px;
+  --marketing-v2-bg-x: -40px;
+  --marketing-v2-bg-y: 22px;
   --marketing-v2-bg-scale: 0.98;
   --marketing-v2-bg-shape-opacity: 0.4;
   top: 94.3%;
-  left: -211px;
+  left: -212px;
   width: 392px;
   height: auto;
   color: var(--marketing-v2-bg-stroke-strong);
@@ -656,33 +656,33 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-bg-shape--footer-right-mid {
-  --marketing-v2-bg-x: 27px;
-  --marketing-v2-bg-y: -21px;
+  --marketing-v2-bg-x: 28px;
+  --marketing-v2-bg-y: -22px;
   --marketing-v2-bg-scale: 0.98;
   --marketing-v2-bg-shape-opacity: 0.42;
   top: 94.9%;
   right: 14.9vw;
-  width: 337px;
+  width: 338px;
   height: auto;
 }
 
 .marketing-v2-bg-shape--footer-bottom-bridge {
-  --marketing-v2-bg-x: 31px;
-  --marketing-v2-bg-y: -17px;
+  --marketing-v2-bg-x: 32px;
+  --marketing-v2-bg-y: -18px;
   --marketing-v2-bg-scale: 1.03;
   top: 97.1%;
   left: 43.7vw;
-  width: 391px;
+  width: 392px;
   height: auto;
 }
 
 .marketing-v2-bg-shape--footer-right-edge {
-  --marketing-v2-bg-x: 43px;
-  --marketing-v2-bg-y: -27px;
+  --marketing-v2-bg-x: 44px;
+  --marketing-v2-bg-y: -28px;
   --marketing-v2-bg-scale: 1.68;
   --marketing-v2-bg-shape-opacity: 0.36;
   top: 91.6%;
-  right: -331px;
+  right: -332px;
   width: 412px;
   height: auto;
 }
@@ -1147,7 +1147,7 @@ body:has(.marketing-preview-v2) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (min-width: 721px) {
+@media (min-width: 720px) {
   .marketing-v2-hero .marketing-v2-scan-cta {
     margin: calc(var(--unit-16) + var(--unit-24)) 0 calc(var(--unit-16) + var(--unit-24) + var(--unit-16));
   }
@@ -1304,7 +1304,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-comparison {
-  --marketing-v2-comparison-row-height: calc(var(--unit-56) + 1px);
+  --marketing-v2-comparison-row-height: var(--unit-56);
 
   width: 100%;
   min-width: 0;
@@ -1572,7 +1572,7 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-pricing-card li svg {
   flex: 0 0 auto;
-  margin-top: 1px;
+  margin-top: var(--unit-2);
 }
 
 .marketing-v2-pricing-card__actions {
@@ -1601,7 +1601,7 @@ body:has(.marketing-preview-v2) {
   max-width: 840px;
 }
 
-.marketing-v2-section--faq .marketing-v2-faq-item.ui-accordion {
+.marketing-preview-v2 .marketing-v2-faq-item.ui-accordion {
   background: var(--marketing-v2-paper);
 }
 
@@ -1615,7 +1615,7 @@ body:has(.marketing-preview-v2) {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   gap: var(--unit-24);
-  min-height: 107px;
+  min-height: calc(var(--unit-56) * 2);
   padding: var(--unit-24) 0;
   border-top: 1px solid rgba(99, 102, 241, 0.28);
 }
@@ -1651,7 +1651,7 @@ body:has(.marketing-preview-v2) {
   gap: var(--unit-24);
   width: min(920px, 100%);
   max-width: 920px;
-  min-height: 187px;
+  min-height: calc(var(--unit-64) * 3);
   margin: 0 auto;
   padding: var(--unit-32);
   border: 1px solid var(--marketing-v2-brand);
@@ -1700,10 +1700,10 @@ body:has(.marketing-preview-v2) {
 .marketing-v2-scan-cta__label {
   margin: 0 0 var(--unit-8);
   color: var(--marketing-v2-ink);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 16.8px;
-  letter-spacing: 0;
+  font-size: var(--type-label-md-size);
+  font-weight: var(--type-label-md-weight);
+  line-height: var(--type-label-md-line-height);
+  letter-spacing: var(--type-label-md-letter-spacing);
 }
 
 .marketing-preview-v2 .marketing-scan-bar .scan-bar__input::placeholder {
@@ -2158,7 +2158,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-hero p {
-    max-width: 345px;
+    max-width: 344px;
     margin-top: var(--unit-24);
     font-size: var(--type-mobile-subtitle-lg-size);
     font-weight: var(--type-mobile-subtitle-lg-weight);
@@ -2307,7 +2307,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-example figure {
-    height: 187px;
+    height: 184px;
   }
 
   .marketing-v2-example__copy {
@@ -2329,7 +2329,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-comparison {
-    width: min(374px, calc(100vw - var(--unit-16)));
+    width: min(376px, calc(100vw - var(--unit-16)));
     max-width: none;
     margin-top: var(--unit-64);
     overflow-x: auto;
@@ -2347,9 +2347,9 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   .marketing-v2-comparison-tabs {
     display: flex;
     flex-wrap: nowrap;
-    width: 341px;
+    width: 344px;
     max-width: 100%;
-    gap: 5px;
+    gap: var(--unit-4);
   }
 
   .marketing-v2-comparison-tab.ui-btn {
@@ -2362,15 +2362,15 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-comparison-tab:nth-child(1).ui-btn {
-    width: 105px;
+    width: 104px;
   }
 
   .marketing-v2-comparison-tab:nth-child(2).ui-btn {
-    width: 118px;
+    width: 120px;
   }
 
   .marketing-v2-comparison-tab:nth-child(3).ui-btn {
-    width: 100px;
+    width: 104px;
   }
 
   .marketing-v2-pricing-cycle.marketing-v2-comparison-tabs {
@@ -2384,11 +2384,12 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-comparison {
-    --marketing-v2-comparison-feature-width: 124px;
+    --marketing-v2-comparison-feature-width: 128px;
     --marketing-v2-comparison-vellic-width: 72px;
     --marketing-v2-comparison-competitor-width: 104px;
-    --marketing-v2-comparison-row-height: calc(var(--unit-64) + var(--unit-8) + 1px);
-    --marketing-v2-comparison-table-width: 716px;
+    --marketing-v2-comparison-row-height: calc(var(--unit-64) + var(--unit-8));
+    --marketing-v2-comparison-header-row-height: calc(var(--marketing-v2-comparison-row-height) - var(--unit-24));
+    --marketing-v2-comparison-table-width: 720px;
     overflow: hidden;
   }
 
@@ -2429,6 +2430,12 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     box-sizing: border-box;
     height: var(--marketing-v2-comparison-row-height);
     padding: var(--unit-12) var(--unit-8);
+  }
+
+  .marketing-v2-comparison thead th {
+    height: var(--marketing-v2-comparison-header-row-height);
+    padding-top: var(--unit-8);
+    padding-bottom: var(--unit-8);
   }
 
   .marketing-v2-comparison thead th:first-child,

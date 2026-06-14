@@ -92,7 +92,7 @@ body:has(.landing) {
   align-items: center;
   gap: 0.4rem;
   padding: 0.7rem 0.95rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   color: var(--landing-text-muted);
 }
 
@@ -113,7 +113,7 @@ body:has(.landing) {
   justify-content: center;
   gap: 0.55rem;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   cursor: pointer;
   color: var(--color-neutral-white);
   background: linear-gradient(135deg, var(--landing-primary) 0%, var(--landing-primary-strong) 100%);
@@ -146,7 +146,7 @@ body:has(.landing) {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--landing-border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.72);
   color: var(--landing-title);
   cursor: pointer;
@@ -210,7 +210,7 @@ body:has(.landing) {
   align-items: center;
   margin-bottom: 1rem;
   padding: 0.45rem 0.72rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.66);
   border: 1px solid var(--landing-border);
   color: var(--landing-primary-strong);
@@ -258,7 +258,7 @@ body:has(.landing) {
   align-items: center;
   gap: 0.45rem;
   padding: 0.72rem 0.9rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.74);
   border: 1px solid rgba(99, 102, 241, 0.14);
   color: var(--landing-title);
@@ -309,7 +309,7 @@ body:has(.landing) {
 .product-dots span {
   width: 0.7rem;
   height: 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: #d6dcf0;
 }
 
@@ -337,7 +337,7 @@ body:has(.landing) {
 
 .product-bar-pill {
   padding: 0.45rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--landing-primary-soft);
   color: var(--landing-primary-strong);
   font-size: 0.82rem;
@@ -445,7 +445,7 @@ body:has(.landing) {
 
 .product-tag-row span {
   padding: 0.45rem 0.65rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(15, 118, 110, 0.12);
   color: var(--landing-text);
@@ -582,7 +582,7 @@ body:has(.landing) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--landing-primary) 0%, var(--landing-primary-strong) 100%);
   color: var(--color-neutral-white);
   font-weight: 700;
@@ -630,7 +630,7 @@ body:has(.landing) {
   position: sticky;
   left: 0;
   z-index: 1;
-  min-width: 235px;
+  min-width: 240px;
   color: var(--landing-title);
   font-weight: 700;
 }
@@ -643,7 +643,7 @@ body:has(.landing) {
   display: inline-flex;
   align-items: center;
   padding: 0.44rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: var(--type-badge-md-size);
   font-weight: var(--type-badge-md-weight);
   white-space: nowrap;
@@ -802,7 +802,7 @@ body:has(.landing) {
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(99, 102, 241, 0.12);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgba(248, 251, 255, 0.94);
   color: var(--landing-title);
   cursor: pointer;

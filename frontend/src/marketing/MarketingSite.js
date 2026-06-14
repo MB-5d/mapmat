@@ -43,6 +43,7 @@ import './MarketingSite.css';
 
 const featureIcons = [Scan, MapIcon, PenLine, GalleryHorizontal, FileDown, Share2, Sparkles];
 const MARKETING_ROOT_ID = 'overview';
+const MARKETING_PHONE_BREAKPOINT = 768;
 const MARKETING_CHILD_INDENT_X = 40;
 const MARKETING_STROKE_PAD_X = 20;
 
@@ -255,7 +256,7 @@ function MarketingHeader({ activePage, onNavigatePath }) {
 
   const handleStartClick = (event) => {
     if (!isPlainLeftClick(event)) return;
-    if (window.innerWidth > 767) return;
+    if (window.innerWidth > MARKETING_PHONE_BREAKPOINT) return;
     event.preventDefault();
     setMenuOpen(false);
     onNavigatePath(buildMarketingPath('start'));
@@ -455,7 +456,7 @@ function MarketingPageContent({ page, active, route, onNavigatePath, onOpenApp }
 
   const handleStartLinkClick = (event) => {
     if (!isPlainLeftClick(event)) return;
-    if (window.innerWidth > 767) return;
+    if (window.innerWidth > MARKETING_PHONE_BREAKPOINT) return;
     event.preventDefault();
     onNavigatePath(buildMarketingPath('start'));
   };
