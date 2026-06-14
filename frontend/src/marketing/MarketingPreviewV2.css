@@ -2329,7 +2329,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   }
 
   .marketing-v2-comparison {
-    width: min(376px, calc(100vw - var(--unit-16)));
+    width: 100vw;
     max-width: none;
     margin-top: var(--unit-64);
     overflow-x: auto;
@@ -2474,7 +2474,7 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     align-items: flex-start;
     width: 100%;
     min-height: 370px;
-    margin-top: 120px;
+    margin-top: var(--unit-88);
     padding: var(--unit-24);
     gap: var(--unit-32);
   }
