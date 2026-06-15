@@ -446,7 +446,7 @@ const MinimapNavigator = ({
       </div>
       <div className="minimap-navigator-zoom-row">
         <IconButton
-          size="sm"
+          size="xxs"
           variant="ghost"
           buttonStyle="mono"
           className="minimap-navigator-zoom-btn"
@@ -496,7 +496,7 @@ const MinimapNavigator = ({
           />
         </div>
         <IconButton
-          size="sm"
+          size="xxs"
           variant="ghost"
           buttonStyle="mono"
           className="minimap-navigator-zoom-btn"

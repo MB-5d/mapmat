@@ -87,7 +87,7 @@ const CommentPopover = ({
     <div className={`comment-item ${comment.completed ? 'completed' : ''}`} style={{ marginLeft: depth * 16 }}>
       <div className="comment-header">
         <IconButton
-          size="sm"
+          size="xxs"
           variant="ghost"
           className={`comment-checkbox ${comment.completed ? 'checked' : ''}`}
           onClick={() => onToggleCompleted(node.id, comment.id)}
@@ -103,7 +103,7 @@ const CommentPopover = ({
         {canComment && (
           <div className="comment-actions">
             <IconButton
-              size="sm"
+              size="xxs"
               variant="ghost"
               className="comment-action-btn"
               onClick={() => {
@@ -116,7 +116,7 @@ const CommentPopover = ({
               <CornerDownRight size={14} />
             </IconButton>
             <IconButton
-              size="sm"
+              size="xxs"
               variant="ghost"
               className="comment-action-btn delete"
               onClick={() => onDeleteComment(node.id, comment.id)}
@@ -155,7 +155,7 @@ const CommentPopover = ({
     <div className="comment-popover" onWheel={(e) => e.stopPropagation()}>
       <div className="comment-popover-header">
         <h3>Comments on "{node.title || 'Untitled'}"</h3>
-        <IconButton className="comment-popover-close" size="lg" variant="ghost" onClick={handleCancel} aria-label="Close comments">
+        <IconButton className="comment-popover-close" size="sm" variant="ghost" onClick={handleCancel} aria-label="Close comments">
           <X size={18} />
         </IconButton>
       </div>
@@ -181,7 +181,7 @@ const CommentPopover = ({
               <div className="replying-to-banner">
                 <span>Replying to comment</span>
                 <IconButton
-                  size="sm"
+                  size="xxs"
                   variant="ghost"
                   onClick={() => setReplyingTo(null)}
                   aria-label="Cancel reply"

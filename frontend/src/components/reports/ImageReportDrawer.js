@@ -297,7 +297,7 @@ const ImageReportDrawer = ({
         <div className="report-header-actions">
           <IconButton
             className="report-drawer-close"
-            size="lg"
+            size="sm"
             variant="ghost"
             icon={<X />}
             label="Close image report"

@@ -102,7 +102,7 @@ const EditColorModal = ({ depth, color, onChange, onClose, position }) => {
         <IconButton
           className="modal-close"
           variant="ghost"
-          size="lg"
+          size="sm"
           icon={<X />}
           label="Close color picker"
           onClick={onClose}

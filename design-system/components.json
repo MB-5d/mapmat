@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedOn": "2026-06-11",
+    "generatedOn": "2026-06-15",
     "sources": [
       "frontend/src/components/ui",
       "frontend/src/components/ui/icons.js",
@@ -155,11 +155,11 @@
         ],
         "variant": "legacy alias: default | primary | danger | ghost",
         "size": [
+          "xxs",
+          "xs",
           "sm",
           "md",
-          "lg",
-          "xl",
-          "xxl"
+          "lg"
         ],
         "icon": "node",
         "label": "string",
@@ -175,7 +175,8 @@
         "loading"
       ],
       "notes": [
-        "Small icon buttons use radius/xs (4px).",
+        "Icon button sizes are xxs 16px, xs 24px, sm 32px, md 40px, lg 48px.",
+        "XXS icon buttons use radius/xs (4px).",
         "Active icon buttons use primary fill with inverse icon color."
       ]
     },

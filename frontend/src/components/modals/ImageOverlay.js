@@ -33,7 +33,7 @@ const ImageOverlay = ({ imageUrl, loading, onClose, onLoad, onError }) => {
     >
       <IconButton
         className="image-overlay-close"
-        size="lg"
+        size="sm"
         variant="ghost"
         icon={<X />}
         label="Close image"

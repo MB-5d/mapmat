@@ -130,6 +130,13 @@ const radius = {
 
 const componentTokens = {
   iconButton: {
+    size: {
+      xxs: '16px',
+      xs: '24px',
+      sm: '32px',
+      md: '40px',
+      lg: '48px',
+    },
     radius: {
       sm: 'var(--radius-xs)',
     },
@@ -325,8 +332,8 @@ const typography = {
       letterSpacing: '0',
     },
     lg: {
-      cssSize: '14px',
-      figmaSize: 14,
+      cssSize: '16px',
+      figmaSize: 16,
       lineHeight: '20px',
       weight: 700,
       letterSpacing: '0',
@@ -1321,7 +1328,7 @@ const components = [
       type: ['primary', 'secondary', 'ghost', 'link'],
       style: ['brand', 'mono', 'danger'],
       variant: 'legacy alias: default | primary | danger | ghost',
-      size: ['sm', 'md', 'lg', 'xl', 'xxl'],
+      size: ['xxs', 'xs', 'sm', 'md', 'lg'],
       icon: 'node',
       label: 'string',
       htmlType: 'native button type override',
@@ -1329,7 +1336,8 @@ const components = [
     },
     states: ['rest', 'hover', 'active', 'focus-visible', 'disabled', 'loading'],
     notes: [
-      'Small icon buttons use radius/xs (4px).',
+      'Icon button sizes are xxs 16px, xs 24px, sm 32px, md 40px, lg 48px.',
+      'XXS icon buttons use radius/xs (4px).',
       'Active icon buttons use primary fill with inverse icon color.',
     ],
   },

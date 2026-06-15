@@ -151,10 +151,10 @@ describe('MinimapNavigator', () => {
     const zoomOutButton = container.querySelector('button[aria-label="Zoom out"]');
     const zoomInButton = container.querySelector('button[aria-label="Zoom in"]');
     expect(zoomOutButton.className).toContain('ui-icon-btn');
-    expect(zoomOutButton.className).toContain('ui-icon-btn--sm');
+    expect(zoomOutButton.className).toContain('ui-icon-btn--xxs');
     expect(zoomOutButton.className).toContain('ui-icon-btn--style-mono');
     expect(zoomInButton.className).toContain('ui-icon-btn');
-    expect(zoomInButton.className).toContain('ui-icon-btn--sm');
+    expect(zoomInButton.className).toContain('ui-icon-btn--xxs');
     expect(zoomInButton.className).toContain('ui-icon-btn--style-mono');
 
     act(() => {

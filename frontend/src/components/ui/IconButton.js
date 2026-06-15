@@ -3,22 +3,27 @@ import { Loader2 } from 'lucide-react';
 
 import classNames from '../../utils/classNames';
 import Icon from './Icon';
-import { ICON_BUTTON_SIZES, ICON_BUTTON_VARIANT_MAP, resolveButtonModel } from './buttonModel';
+import {
+  ICON_BUTTON_SIZES,
+  ICON_BUTTON_SIZE_ALIASES,
+  ICON_BUTTON_VARIANT_MAP,
+  resolveButtonModel,
+} from './buttonModel';
 
 const ICON_BUTTON_ICON_SIZE = {
   default: {
-    sm: 14,
-    md: 20,
-    lg: 24,
-    xl: 32,
-    xxl: 40,
+    xxs: 14,
+    xs: 20,
+    sm: 24,
+    md: 32,
+    lg: 40,
   },
   link: {
-    sm: 16,
-    md: 24,
-    lg: 32,
-    xl: 40,
-    xxl: 48,
+    xxs: 16,
+    xs: 24,
+    sm: 32,
+    md: 40,
+    lg: 48,
   },
 };
 
@@ -26,7 +31,7 @@ const IconButton = React.forwardRef(
   (
     {
       variant = 'default',
-      size = 'xl',
+      size = 'md',
       type,
       style,
       buttonStyle,
@@ -54,7 +59,8 @@ const IconButton = React.forwardRef(
       htmlType,
       variant,
       size,
-      fallbackSize: 'xl',
+      fallbackSize: 'md',
+      sizeAliases: ICON_BUTTON_SIZE_ALIASES,
       validSizes: ICON_BUTTON_SIZES,
       defaultVariant: 'default',
       variantMap: ICON_BUTTON_VARIANT_MAP,
@@ -63,7 +69,7 @@ const IconButton = React.forwardRef(
       resolvedButton.visual.type === 'link'
         ? ICON_BUTTON_ICON_SIZE.link
         : ICON_BUTTON_ICON_SIZE.default
-    )[resolvedButton.size] || ICON_BUTTON_ICON_SIZE.default.xl;
+    )[resolvedButton.size] || ICON_BUTTON_ICON_SIZE.default.md;
 
     return (
       <button

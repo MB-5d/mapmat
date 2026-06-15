@@ -396,7 +396,7 @@ const VersionHistoryDrawer = ({
             {canBookmarkVersion ? (
               <IconButton
                 variant="ghost"
-                size="sm"
+                size="xxs"
                 className="version-history-inline-action"
                 icon={isBookmarked ? <Pencil /> : <BookmarkPlus />}
                 onClick={() => startBookmarkEdit(version)}
@@ -409,7 +409,7 @@ const VersionHistoryDrawer = ({
               {hasNotes ? (
                 <IconButton
                   variant="ghost"
-                  size="sm"
+                  size="xxs"
                   className="version-history-detail-toggle"
                   icon={detailsExpanded ? <ChevronUp /> : <ChevronDown />}
                   onClick={() => toggleVersionDetails(version.id)}

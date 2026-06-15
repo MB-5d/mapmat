@@ -863,7 +863,6 @@ body:has(.marketing-preview-v2) {
 
 .marketing-v2-header__cta.ui-btn {
   margin-left: 12px;
-  padding: var(--unit-10);
   white-space: nowrap;
 }
 
@@ -1356,7 +1355,7 @@ body:has(.marketing-preview-v2) {
 }
 
 .marketing-v2-comparison-tab.ui-btn {
-  min-height: 32px;
+  min-height: var(--unit-32);
 }
 
 .marketing-v2-comparison__panel {
@@ -2356,9 +2355,6 @@ body:has(.marketing-preview-v2) .feedback-widget-tab-label {
     flex: 0 0 auto;
     min-height: var(--unit-32);
     padding: 0 var(--unit-8);
-    font-size: var(--type-mobile-body-md-size);
-    font-weight: var(--type-mobile-title-md-weight);
-    line-height: var(--type-mobile-body-md-line-height);
   }
 
   .marketing-v2-comparison-tab:nth-child(1).ui-btn {

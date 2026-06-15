@@ -101,6 +101,11 @@
   --ui-icon-size-lg: 20px;
   --icon-size-xl: 24px;
   --ui-icon-size-xl: 24px;
+  --ui-icon-button-size-xxs: 16px;
+  --ui-icon-button-size-xs: 24px;
+  --ui-icon-button-size-sm: 32px;
+  --ui-icon-button-size-md: 40px;
+  --ui-icon-button-size-lg: 48px;
   --ui-icon-button-radius-sm: var(--radius-xs);
   --ui-icon-button-active-bg: var(--ui-color-primary);
   --ui-icon-button-active-bg-hover: var(--ui-color-primary-hover);
@@ -302,7 +307,7 @@
   --type-button-md-line-height: 20px;
   --type-button-md-weight: 700;
   --type-button-md-letter-spacing: 0;
-  --type-button-lg-size: 14px;
+  --type-button-lg-size: 16px;
   --type-button-lg-line-height: 20px;
   --type-button-lg-weight: 700;
   --type-button-lg-letter-spacing: 0;

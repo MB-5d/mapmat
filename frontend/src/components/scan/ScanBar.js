@@ -59,7 +59,7 @@ const ScanBar = ({
       {showClearUrl && (
         <IconButton
           className="scan-clear-btn"
-          size="sm"
+          size="xxs"
           variant="ghost"
           icon={<RotateCcw size={16} />}
           label="Clear URL"

@@ -79,8 +79,9 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
-  min-height: 40px;
-  padding: 10px 16px;
+  height: var(--unit-40);
+  min-height: var(--unit-40);
+  padding: 0 16px;
   border-radius: var(--ui-radius-md);
   border: 1px solid transparent;
   font-family: var(--font-sans);
@@ -118,40 +119,49 @@ body {
 }
 
 .ui-btn--sm {
-  min-height: 32px;
-  padding: 7px 12px;
+  height: var(--unit-32);
+  min-height: var(--unit-32);
+  padding: 0 12px;
   font-size: var(--type-button-sm-size);
   line-height: var(--type-button-sm-line-height);
+  font-weight: var(--type-button-sm-weight);
+  letter-spacing: var(--type-button-sm-letter-spacing);
 }
 
 .ui-btn--md {
-  min-height: 40px;
-  padding: 10px 16px;
+  height: var(--unit-40);
+  min-height: var(--unit-40);
+  padding: 0 16px;
   font-size: var(--type-button-md-size);
   line-height: var(--type-button-md-line-height);
+  font-weight: var(--type-button-md-weight);
+  letter-spacing: var(--type-button-md-letter-spacing);
 }
 
 .ui-btn--lg {
-  min-height: 48px;
-  padding: 12px 18px;
+  height: var(--unit-48);
+  min-height: var(--unit-48);
+  padding: 0 18px;
   font-size: var(--type-button-lg-size);
   line-height: var(--type-button-lg-line-height);
+  font-weight: var(--type-button-lg-weight);
+  letter-spacing: var(--type-button-lg-letter-spacing);
 }
 
 .ui-btn--icon-only {
   padding: 0;
-  width: 40px;
-  min-width: 40px;
+  width: var(--unit-40);
+  min-width: var(--unit-40);
 }
 
 .ui-btn--icon-only.ui-btn--sm {
-  width: 32px;
-  min-width: 32px;
+  width: var(--unit-32);
+  min-width: var(--unit-32);
 }
 
 .ui-btn--icon-only.ui-btn--lg {
-  width: 48px;
-  min-width: 48px;
+  width: var(--unit-48);
+  min-width: var(--unit-48);
 }
 
 .ui-btn--type-primary.ui-btn--style-brand,
@@ -385,8 +395,8 @@ body {
 }
 
 .ui-icon-btn {
-  width: 40px;
-  height: 40px;
+  width: var(--ui-icon-button-size-md);
+  height: var(--ui-icon-button-size-md);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -413,30 +423,30 @@ body {
   animation: spin 1s linear infinite;
 }
 
-.ui-icon-btn--sm {
-  width: 16px;
-  height: 16px;
+.ui-icon-btn--xxs {
+  width: var(--ui-icon-button-size-xxs);
+  height: var(--ui-icon-button-size-xxs);
   border-radius: var(--ui-icon-button-radius-sm);
 }
 
+.ui-icon-btn--xs {
+  width: var(--ui-icon-button-size-xs);
+  height: var(--ui-icon-button-size-xs);
+}
+
+.ui-icon-btn--sm {
+  width: var(--ui-icon-button-size-sm);
+  height: var(--ui-icon-button-size-sm);
+}
+
 .ui-icon-btn--md {
-  width: 24px;
-  height: 24px;
+  width: var(--ui-icon-button-size-md);
+  height: var(--ui-icon-button-size-md);
 }
 
 .ui-icon-btn--lg {
-  width: 32px;
-  height: 32px;
-}
-
-.ui-icon-btn--xl {
-  width: 40px;
-  height: 40px;
-}
-
-.ui-icon-btn--xxl {
-  width: 48px;
-  height: 48px;
+  width: var(--ui-icon-button-size-lg);
+  height: var(--ui-icon-button-size-lg);
 }
 
 .ui-icon-btn:focus-visible {

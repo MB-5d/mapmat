@@ -184,7 +184,7 @@ describe('ui primitives', () => {
           <IconButton
             type="secondary"
             style="brand"
-            size="xxl"
+            size="lg"
             icon={<span className="icon-button-marker">+</span>}
             label="Add node"
           />
@@ -197,7 +197,7 @@ describe('ui primitives', () => {
     expect(styledButton.getAttribute('aria-label')).toBe('Add node');
     expect(styledButton.className).toContain('ui-icon-btn--type-secondary');
     expect(styledButton.className).toContain('ui-icon-btn--style-brand');
-    expect(styledButton.className).toContain('ui-icon-btn--xxl');
+    expect(styledButton.className).toContain('ui-icon-btn--lg');
     expect(styledButton.querySelector('.ui-icon-btn__icon .icon-button-marker')).not.toBeNull();
     expect(loadingButton.disabled).toBe(true);
     expect(loadingButton.getAttribute('aria-busy')).toBe('true');

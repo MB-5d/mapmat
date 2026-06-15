@@ -298,7 +298,7 @@ const ReportDrawer = ({
           </Button>
           <IconButton
             className="report-drawer-close"
-            size="lg"
+            size="sm"
             variant="ghost"
             icon={<X />}
             label="Close report"

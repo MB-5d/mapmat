@@ -65,7 +65,7 @@ const Modal = ({
               <IconButton
                 htmlType="button"
                 className="modal-close"
-                size="lg"
+                size="sm"
                 variant="ghost"
                 icon={<X />}
                 label={closeLabel}

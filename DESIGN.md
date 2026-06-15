@@ -208,9 +208,13 @@ Shared primitives live under `frontend/src/components/ui`, with styling owned ma
 ### Buttons
 
 - **Shape:** 8px radius for standard buttons.
+- **Sizes:** Small is 32px high, medium is 40px high, and large is 48px high.
+- **Text:** Small and medium labels use 14px bold button text. Large labels use 16px bold button text.
 - **Primary:** Action Indigo fill with white text, 40px default height, 10px by 16px padding.
 - **Hover / Focus:** Preserve contrast text and icon color. Use tokenized hover fill and focus ring.
 - **Secondary / Ghost / Link:** Keep the same type and radius system. Change emphasis through border, background, and text color only.
+- **Link buttons:** Use 0px padding and auto width/height from the text and icon. Inline sentence links are text with brand color.
+- **Icon buttons:** Use xxs 16px, xs 24px, small 32px, medium 40px, and large 48px.
 
 ### Chips
 

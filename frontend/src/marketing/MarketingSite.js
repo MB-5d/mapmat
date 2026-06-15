@@ -272,7 +272,7 @@ function MarketingHeader({ activePage, onNavigatePath }) {
         type="button"
         variant="ghost"
         buttonStyle="mono"
-        size="md"
+        size="xs"
         icon={menuOpen ? <X size={20} /> : <Menu size={20} />}
         label={menuOpen ? 'Close navigation' : 'Open navigation'}
         aria-label={menuOpen ? 'Close navigation' : 'Open navigation'}

@@ -139,11 +139,24 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(/\.canvas\.panning \.canvas-map-name-input \{[\s\S]*user-select: text !important;/);
   });
 
+  test('button size typography tokens match the shared scale', () => {
+    expect(generatedCss).toContain('--type-button-lg-size: 16px;');
+    expect(generatedCss).toContain('--type-button-lg-weight: 700;');
+    expect(appCss).toMatch(/\.ui-btn--sm \{[\s\S]*height: var\(--unit-32\);[\s\S]*min-height: var\(--unit-32\);[\s\S]*font-size: var\(--type-button-sm-size\);[\s\S]*font-weight: var\(--type-button-sm-weight\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-btn--md \{[\s\S]*height: var\(--unit-40\);[\s\S]*min-height: var\(--unit-40\);[\s\S]*font-size: var\(--type-button-md-size\);[\s\S]*font-weight: var\(--type-button-md-weight\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-btn--lg \{[\s\S]*height: var\(--unit-48\);[\s\S]*min-height: var\(--unit-48\);[\s\S]*font-size: var\(--type-button-lg-size\);[\s\S]*font-weight: var\(--type-button-lg-weight\);[\s\S]*\}/);
+  });
+
   test('icon button active state has enough specificity for styled icon buttons', () => {
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active {');
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {');
     expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-icon-button-active-bg\);[\s\S]*color: var\(--ui-icon-button-active-fg\);[\s\S]*\}/);
-    expect(appCss).toMatch(/\.ui-icon-btn--sm \{[\s\S]*border-radius: var\(--ui-icon-button-radius-sm\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn--xxs \{[\s\S]*border-radius: var\(--ui-icon-button-radius-sm\);[\s\S]*\}/);
+    expect(generatedCss).toContain('--ui-icon-button-size-xxs: 16px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-xs: 24px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-sm: 32px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-md: 40px;');
+    expect(generatedCss).toContain('--ui-icon-button-size-lg: 48px;');
     expect(generatedCss).toContain('--ui-icon-button-radius-sm: var(--radius-xs);');
     expect(generatedCss).toContain('--ui-icon-button-active-bg: var(--ui-color-primary);');
     expect(generatedCss).toContain('--ui-icon-button-active-bg-hover: var(--ui-color-primary-hover);');
