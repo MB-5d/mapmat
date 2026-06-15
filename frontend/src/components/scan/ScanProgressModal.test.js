@@ -71,6 +71,8 @@ describe('ScanProgressModal', () => {
     expect(container.textContent).toContain('No, Continue Scanning');
 
     const buttons = Array.from(container.querySelectorAll('button'));
+    expect(buttons[0].className).toContain('ui-btn--style-mono');
+    expect(buttons[1].className).toContain('ui-btn--style-danger');
 
     act(() => {
       buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));

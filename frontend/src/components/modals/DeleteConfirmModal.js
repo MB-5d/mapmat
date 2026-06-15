@@ -15,7 +15,7 @@ const DeleteConfirmModal = ({ node, onCancel, onConfirm }) => {
       className="confirm-modal"
       footer={(
         <>
-          <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+          <Button variant="secondary" buttonStyle="mono" onClick={onCancel}>Cancel</Button>
           <Button variant="danger" onClick={onConfirm}>Delete</Button>
         </>
       )}

@@ -103,6 +103,11 @@ describe('ProfileDrawer', () => {
 
     expect(container.textContent).toContain('Edit Avatar');
     expect(container.textContent).toContain('Change Avatar');
+    const changeButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Change Avatar')
+    );
+    expect(changeButton.className).toContain('ui-btn--type-secondary');
+    expect(changeButton.className).toContain('ui-btn--style-mono');
     const removeButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Remove Avatar')
     );

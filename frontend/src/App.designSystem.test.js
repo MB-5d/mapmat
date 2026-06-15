@@ -111,6 +111,11 @@ describe('UI design-system contract', () => {
     expect(findDisabledOverridesForSharedButtonClasses()).toEqual([]);
   });
 
+  test('danger confirm modal uses mono companion action', () => {
+    expect(appJs).toContain("buttonStyle={confirmModal.danger ? 'mono' : undefined}");
+    expect(appJs).toContain("variant={confirmModal.danger ? 'danger' : 'primary'}");
+  });
+
   test('brand filled button hover keeps contrast text and is not overridden by share modal styles', () => {
     expect(appCss).toMatch(
       /\.ui-btn--type-primary\.ui-btn--style-brand:hover:not\(:disabled\),\n\.ui-btn--primary:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-button-brand-fill-hover\);[\s\S]*border-color: var\(--ui-button-brand-fill-hover\);[\s\S]*color: var\(--ui-button-brand-contrast\);[\s\S]*\}/

@@ -295,7 +295,13 @@ const EditNodeModal = ({
             </Button>
           ) : null}
           <div className="edit-node-modal__footer-actions">
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
+            <Button
+              type="button"
+              variant="secondary"
+              buttonStyle={canDelete ? 'mono' : undefined}
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
             <Button

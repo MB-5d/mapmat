@@ -327,7 +327,10 @@ describe('EditNodeModal', () => {
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent === 'Delete');
+    const cancelButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Cancel');
     expect(deleteButton).not.toBeUndefined();
+    expect(cancelButton.className).toContain('ui-btn--style-mono');
 
     act(() => {
       deleteButton.click();

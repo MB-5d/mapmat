@@ -121,6 +121,7 @@ const ScanProgressModal = ({
       <>
         <Button
           variant="secondary"
+          buttonStyle="mono"
           onClick={onContinueScan}
           disabled={isStoppingScan}
         >

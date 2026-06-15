@@ -17859,7 +17859,11 @@ export default function App({ currentRoute, navigateToRoute }) {
           className="confirm-modal"
           footer={(
             <>
-              <Button variant="secondary" onClick={confirmModal.onCancel}>
+              <Button
+                variant="secondary"
+                buttonStyle={confirmModal.danger ? 'mono' : undefined}
+                onClick={confirmModal.onCancel}
+              >
                 {confirmModal.cancelText}
               </Button>
               <Button

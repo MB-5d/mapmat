@@ -641,6 +641,7 @@ const ProfileDrawer = ({
                   <Button
                     type="button"
                     variant="secondary"
+                    buttonStyle="mono"
                     onClick={() => {
                       setShowDeleteConfirm(false);
                       setDeletePassword('');
@@ -727,6 +728,7 @@ const ProfileDrawer = ({
           <Button
             type="button"
             variant="secondary"
+            buttonStyle="mono"
             size="sm"
             onClick={() => avatarInputRef.current?.click()}
             disabled={!user || avatarLoading}
