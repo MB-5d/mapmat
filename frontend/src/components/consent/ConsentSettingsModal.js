@@ -17,9 +17,9 @@ const FOCUSABLE_SELECTOR = [
 const ConsentSettingsModal = () => {
   const {
     consent,
+    hasStoredConsent,
     isSettingsOpen,
     closeSettings,
-    acceptResearch,
     rejectOptional,
     saveChoices,
   } = useConsent();
@@ -28,9 +28,9 @@ const ConsentSettingsModal = () => {
 
   useEffect(() => {
     if (!isSettingsOpen) return;
-    setAnalytics(consent.analytics);
-    setExperienceResearch(consent.experienceResearch);
-  }, [consent.analytics, consent.experienceResearch, isSettingsOpen]);
+    setAnalytics(hasStoredConsent ? consent.analytics : true);
+    setExperienceResearch(hasStoredConsent ? consent.experienceResearch : true);
+  }, [consent.analytics, consent.experienceResearch, hasStoredConsent, isSettingsOpen]);
 
   useEffect(() => {
     if (!isSettingsOpen) return undefined;
@@ -61,11 +61,6 @@ const ConsentSettingsModal = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSettingsOpen]);
 
-  const handleAccept = () => {
-    acceptResearch();
-    closeSettings();
-  };
-
   const handleReject = () => {
     rejectOptional();
     closeSettings();
@@ -88,14 +83,11 @@ const ConsentSettingsModal = () => {
       bodyClassName="consent-settings-modal__body"
       footer={(
         <div className="consent-settings-modal__actions">
-          <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={handleReject}>
-            Reject all optional
-          </Button>
-          <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={handleAccept}>
-            Accept research cookies
-          </Button>
           <Button onClick={handleSave}>
             Save choices
+          </Button>
+          <Button variant="secondary" type="secondary" buttonStyle="brand" onClick={handleReject}>
+            Reject all optional
           </Button>
         </div>
       )}
@@ -105,7 +97,7 @@ const ConsentSettingsModal = () => {
           className="consent-toggle-row"
           checked
           disabled
-          label="Necessary storage"
+          label="Necessary Storage"
           description="Required. Used for login, security, preferences, core app functionality, and remembering your privacy choices. Always on."
         />
         <ToggleSwitch

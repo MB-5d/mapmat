@@ -74,11 +74,23 @@ describe('ConsentDrawer', () => {
     clickButton('Cookie settings');
     expect(container.textContent).toContain('Privacy Settings');
     expect(container.textContent).toContain('Reject all optional');
+    expect(container.textContent).not.toContain('Accept research cookies');
 
     const toggles = container.querySelectorAll('.consent-toggle-row input');
+    expect(toggles[1].checked).toBe(true);
+    expect(toggles[2].checked).toBe(true);
+
     act(() => {
-      toggles[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      toggles[2].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+
+    const actionButtons = Array.from(container.querySelectorAll('.consent-settings-modal__actions button'));
+    expect(actionButtons.map((button) => button.textContent.trim())).toEqual([
+      'Save choices',
+      'Reject all optional',
+    ]);
+    expect(actionButtons[1].className).toContain('ui-btn--style-brand');
+
     clickButton('Save choices');
 
     const saved = JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY));
