@@ -250,7 +250,7 @@ const backgroundShapes = [
   { id: '25-1025', x: 1126, y: 7376, width: 126, height: 274 },
   { id: '25-1026', x: 996, y: 7650, width: 88, height: 190 },
   { id: '26-117', x: 930, y: 6952, width: 372, height: 522 },
-  { id: '25-1020', x: 1082, y: 6762, width: 438, height: 614 },
+  { id: '25-1020', x: 1084, y: 6760, width: 438, height: 614 },
   { id: '25-1021', x: 1044, y: 6638, width: 308, height: 432 },
   { id: '25-1023', x: 1216, y: 6374, width: 124, height: 172 },
   { id: '43-8', x: 1232, y: 5696, width: 172, height: 240 },
