@@ -1606,7 +1606,7 @@ body:has(.marketing-preview-v2) {
 
 @media (min-width: 721px) {
   .marketing-preview-v2 .marketing-v2-faq-item__answer {
-    padding-top: var(--unit-8);
+    padding-top: 0;
   }
 }
 
