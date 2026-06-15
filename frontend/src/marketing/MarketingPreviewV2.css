@@ -1604,6 +1604,12 @@ body:has(.marketing-preview-v2) {
   background: var(--marketing-v2-paper);
 }
 
+@media (min-width: 721px) {
+  .marketing-preview-v2 .marketing-v2-faq-item__answer {
+    padding-top: var(--unit-8);
+  }
+}
+
 .marketing-v2-mission-list {
   gap: 0;
   max-width: 840px;
