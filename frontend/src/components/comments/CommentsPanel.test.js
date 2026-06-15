@@ -48,6 +48,7 @@ describe('CommentsPanel', () => {
     act(() => {
       root.render(
         <CommentsPanel
+          isOpen
           root={rootNode}
           orphans={[]}
           onClose={jest.fn()}
@@ -67,5 +68,35 @@ describe('CommentsPanel', () => {
 
     expect(container.textContent).not.toContain('Done already');
     expect(container.textContent).toContain('Keep this open');
+  });
+
+  test('marks the selected comment and reports node/comment ids in one click', () => {
+    const onCommentClick = jest.fn();
+    const onNavigateToNode = jest.fn();
+
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          selectedCommentId="c1"
+          onClose={jest.fn()}
+          onCommentClick={onCommentClick}
+          onNavigateToNode={onNavigateToNode}
+        />
+      );
+    });
+
+    const selected = container.querySelector('.comments-panel-item.is-selected');
+    expect(selected).not.toBeNull();
+    expect(selected.textContent).toContain('Keep this open');
+
+    act(() => {
+      selected.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onNavigateToNode).toHaveBeenCalledWith('root');
+    expect(onCommentClick).toHaveBeenCalledWith('root', 'c1');
   });
 });

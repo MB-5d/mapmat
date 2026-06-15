@@ -15,6 +15,7 @@ const AccountDrawer = ({
   bodyRef,
   onBodyScroll,
   children,
+  ...props
 }) => {
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
@@ -53,6 +54,7 @@ const AccountDrawer = ({
       className={`account-drawer ${className} ${isClosing ? 'account-drawer-closing' : 'account-drawer-open'}`}
       role="dialog"
       aria-label={ariaLabel || title}
+      {...props}
       onPointerDown={(e) => e.stopPropagation()}
       onWheel={(e) => {
         e.stopPropagation();

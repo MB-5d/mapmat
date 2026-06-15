@@ -1,9 +1,8 @@
 import React, { useRef, useState } from 'react';
 import {
   Check,
-  CheckSquare,
-  CornerDownRight,
-  Square,
+  CheckCircle2,
+  Reply,
   Trash2,
   X,
 } from 'lucide-react';
@@ -21,6 +20,7 @@ const CommentPopover = ({
   collaborators,
   canComment,
   readOnlyMessage = '',
+  activeCommentId = null,
 }) => {
   const [newComment, setNewComment] = useState('');
   const [showMentions, setShowMentions] = useState(false);
@@ -84,17 +84,19 @@ const CommentPopover = ({
 
   // Recursive component to render a comment and its replies
   const CommentItem = ({ comment, depth = 0 }) => (
-    <div className={`comment-item ${comment.completed ? 'completed' : ''}`} style={{ marginLeft: depth * 16 }}>
+    <div
+      className={`comment-item ${comment.completed ? 'completed' : ''}${activeCommentId === comment.id ? ' is-active' : ''}`}
+      style={{ marginLeft: depth * 16 }}
+    >
       <div className="comment-header">
         <IconButton
           size="xxs"
           variant="ghost"
           className={`comment-checkbox ${comment.completed ? 'checked' : ''}`}
           onClick={() => onToggleCompleted(node.id, comment.id)}
-          title={comment.completed ? 'Mark as incomplete' : 'Mark as complete'}
           aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
         >
-          {comment.completed ? <CheckSquare size={16} /> : <Square size={16} />}
+          <CheckCircle2 size={18} />
         </IconButton>
         <div className="comment-meta">
           <span className="comment-author">{comment.author}</span>
@@ -110,17 +112,15 @@ const CommentPopover = ({
                 setReplyingTo(comment.id);
                 inputRef.current?.focus();
               }}
-              title="Reply"
               aria-label="Reply to comment"
             >
-              <CornerDownRight size={14} />
+              <Reply size={14} />
             </IconButton>
             <IconButton
               size="xxs"
               variant="ghost"
               className="comment-action-btn delete"
               onClick={() => onDeleteComment(node.id, comment.id)}
-              title="Delete"
               aria-label="Delete comment"
             >
               <Trash2 size={14} />

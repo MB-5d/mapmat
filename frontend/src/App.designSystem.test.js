@@ -340,7 +340,7 @@ describe('scan config and differential rescan behavior', () => {
 });
 
 describe('comment popover positioning', () => {
-  const { getCommentPopoverPosition } = __testing;
+  const { getCommentPopoverDrawerPosition, getCommentPopoverPosition } = __testing;
   const canvasRect = {
     left: 100,
     top: 200,
@@ -384,29 +384,25 @@ describe('comment popover positioning', () => {
     });
   });
 
-  test('comments drawer selections force the right-side anchor', () => {
-    expect(getCommentPopoverPosition({
+  test('comments drawer selections use drawer spacing without delayed popover open', () => {
+    expect(getCommentPopoverDrawerPosition({
       canvasRect,
-      forceSide: 'right',
-      nodeRect: {
+      drawerRect: {
         left: 900,
-        right: 1188,
-        top: 300,
-        bottom: 578,
-        width: 288,
-        height: 278,
       },
     })).toEqual({
       side: 'right',
-      x: 1096,
-      y: 239,
+      x: 448,
+      y: 400,
     });
 
-    expect(appJs).toContain("openCommentPopover(nodeId, { forceSide: 'right' })");
+    expect(appJs).toContain("openCommentPopover(nodeId, { mode: 'drawer', commentId })");
+    expect(appJs).not.toContain('setTimeout(() => openCommentPopover(nodeId, { forceSide:');
   });
 
   test('popover container stays fixed-size outside the zoomed canvas content', () => {
     expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 320px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
   });
 });
 

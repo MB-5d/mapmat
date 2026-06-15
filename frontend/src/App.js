@@ -204,6 +204,7 @@ const TRIAL_PLAN_KEYS = new Set(['pro']);
 const ADD_ON_QUANTITY_MAX = 100;
 const COMMENT_POPOVER_WIDTH = 320;
 const COMMENT_POPOVER_EDGE_GAP = 8;
+const COMMENT_POPOVER_DRAWER_GAP = 32;
 
 function formatEntitlementCount(value) {
   if (value === null || value === undefined) return 'Unlimited';
@@ -256,6 +257,21 @@ function getCommentPopoverPosition({
       ? relativeRight + edgeGap
       : relativeLeft - popoverWidth - edgeGap),
     y: Math.round(relativeCenterY),
+  };
+}
+
+function getCommentPopoverDrawerPosition({
+  canvasRect,
+  drawerRect,
+  popoverWidth = COMMENT_POPOVER_WIDTH,
+  drawerGap = COMMENT_POPOVER_DRAWER_GAP,
+}) {
+  if (!canvasRect || !drawerRect) return null;
+
+  return {
+    side: 'right',
+    x: Math.round(drawerRect.left - canvasRect.left - popoverWidth - drawerGap),
+    y: Math.round(canvasRect.height / 2),
   };
 }
 
@@ -2429,6 +2445,7 @@ export const __testing = {
   getPanToRevealLayoutNode,
   normalizeCanvasWorldBounds,
   getCommentPopoverPosition,
+  getCommentPopoverDrawerPosition,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -2775,6 +2792,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
   const [commentingNodeSnapshot, setCommentingNodeSnapshot] = useState(null);
   const [commentPopoverPos, setCommentPopoverPos] = useState({ x: 0, y: 0, side: 'right' }); // Position for popover
+  const [commentPopoverAnchor, setCommentPopoverAnchor] = useState({ mode: 'node' });
+  const [selectedCommentId, setSelectedCommentId] = useState(null);
   const [savedMapCommentsByNode, setSavedMapCommentsByNode] = useState({});
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
   const [readMentionCommentIds, setReadMentionCommentIds] = useState(() => new Set());
@@ -11632,6 +11651,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const nodeContainer = e.target.closest('[data-node-id]');
     const isUIControl = e.target.closest('.zoom-controls, .color-key, .color-key-toggle, .layers-panel, .canvas-toolbar, .canvas-map-header, .topbar-collaborator-menu, .image-capture-toast, .minimap-navigator');
     const isInsidePopover = e.target.closest('.comment-popover-container');
+    const isInsideCommentsDrawer = e.target.closest('.comments-drawer');
     const isInsideConnectionMenu = e.target.closest('.connection-menu');
     const isInsideNodeMenu = e.target.closest('.node-menu');
     const isOnConnection = e.target.closest('.connection-hit, .connection-line, .connection-glow');
@@ -11649,11 +11669,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (commentingNodeId && !isInsidePopover && !isInsideCard) {
       setCommentingNodeId(null);
       setCommentingNodeSnapshot(null);
+      setSelectedCommentId(null);
+    }
+
+    if (showCommentsPanel && !isInsideCommentsDrawer && !isInsidePopover) {
+      setShowCommentsPanel(false);
+      setCommentingNodeId(null);
+      setCommentingNodeSnapshot(null);
+      setSelectedCommentId(null);
     }
 
     const shiftActive = e.shiftKey || isShiftPressed;
-    if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
-    if (shiftActive && (isUIControl || isInsidePopover || isInsideConnectionMenu || isInsideNodeMenu)) return;
+    if (!shiftActive && (isInsideCard || isUIControl || isInsidePopover || isInsideCommentsDrawer || isInsideConnectionMenu || isInsideNodeMenu || isOnConnection)) return;
+    if (shiftActive && (isUIControl || isInsidePopover || isInsideCommentsDrawer || isInsideConnectionMenu || isInsideNodeMenu)) return;
 
     const canStartSelection = shiftActive && canEdit();
     if (canStartSelection) {
@@ -12249,8 +12277,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         if (showCommentsPanel) {
           setActiveTool('select');
+          setShowCommentsPanel(false);
           setCommentingNodeId(null); // Close popover when switching tools
           setCommentingNodeSnapshot(null);
+          setSelectedCommentId(null);
         }
         if (showReportDrawer) {
           setShowReportDrawer(false);
@@ -12322,7 +12352,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const wheelTarget = e.target;
       if (
         wheelTarget instanceof Element
-        && wheelTarget.closest('.comment-popover, .comments-panel, .mention-dropdown, .canvas-toolbar, .canvas-tool-menu, .zoom-controls, .color-key, .layers-panel, .report-drawer, .account-drawer, .settings-drawer, .minimap-navigator')
+        && wheelTarget.closest('.comment-popover, .comments-drawer, .mention-dropdown, .canvas-toolbar, .canvas-tool-menu, .zoom-controls, .color-key, .layers-panel, .report-drawer, .account-drawer, .settings-drawer, .minimap-navigator')
       ) {
         return;
       }
@@ -13288,23 +13318,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? (getNodeById(nodeMenu.nodeId)?.annotations?.status || 'none')
     : 'none';
 
-  // Open comment popover anchored to a node in canvas screen space.
-  const openCommentPopover = (nodeOrId, options = {}) => {
-    if (!canvasRef.current) return;
-    const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
-    if (!nodeId) return;
-    markMentionCommentsRead((entry) => sameId(entry.nodeId, nodeId));
-    if (useBackendComments && currentMap?.id) {
-      loadSavedMapComments(currentMap.id);
-    }
-    if (typeof nodeOrId === 'object') {
-      setCommentingNodeSnapshot(nodeOrId);
-    } else {
-      const resolvedNode = getNodeById(nodeId);
-      setCommentingNodeSnapshot(resolvedNode || null);
-    }
+  const resolveCommentPopoverPosition = useCallback((nodeId, options = {}) => {
+    if (!canvasRef.current) return null;
 
     const canvasRect = canvasRef.current.getBoundingClientRect();
+    if (options.mode === 'drawer') {
+      const drawerRect = document.querySelector('.comments-drawer')?.getBoundingClientRect();
+      const drawerPosition = getCommentPopoverDrawerPosition({ canvasRect, drawerRect });
+      if (drawerPosition) return drawerPosition;
+    }
+
     const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
     let nodeRect = nodeElement?.getBoundingClientRect() || null;
 
@@ -13328,16 +13351,65 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     }
 
-    const popoverPosition = getCommentPopoverPosition({
+    return getCommentPopoverPosition({
       nodeRect,
       canvasRect,
       forceSide: options.forceSide,
     });
+  }, [pan, scale, showThumbnails]);
+
+  // Open comment popover anchored to a node in canvas screen space.
+  const openCommentPopover = (nodeOrId, options = {}) => {
+    if (!canvasRef.current) return;
+    const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
+    if (!nodeId) return;
+    markMentionCommentsRead((entry) => sameId(entry.nodeId, nodeId));
+    if (useBackendComments && currentMap?.id) {
+      loadSavedMapComments(currentMap.id);
+    }
+    if (typeof nodeOrId === 'object') {
+      setCommentingNodeSnapshot(nodeOrId);
+    } else {
+      const resolvedNode = getNodeById(nodeId);
+      setCommentingNodeSnapshot(resolvedNode || null);
+    }
+
+    const nextAnchor = { mode: options.mode || 'node', forceSide: options.forceSide || null };
+    const popoverPosition = resolveCommentPopoverPosition(nodeId, nextAnchor);
     if (!popoverPosition) return;
 
+    setCommentPopoverAnchor(nextAnchor);
     setCommentPopoverPos(popoverPosition);
+    setSelectedCommentId(options.commentId || null);
     setCommentingNodeId(nodeId);
   };
+
+  useLayoutEffect(() => {
+    if (!commentingNodeId) return;
+    const nextPosition = resolveCommentPopoverPosition(commentingNodeId, commentPopoverAnchor);
+    if (!nextPosition) return;
+    setCommentPopoverPos((prev) => (
+      prev.x === nextPosition.x && prev.y === nextPosition.y && prev.side === nextPosition.side
+        ? prev
+        : nextPosition
+    ));
+  }, [
+    canvasSize.height,
+    canvasSize.width,
+    commentPopoverAnchor,
+    commentingNodeId,
+    resolveCommentPopoverPosition,
+    showCommentsPanel,
+  ]);
+
+  useEffect(() => {
+    if (showCommentsPanel) return;
+    setSelectedCommentId(null);
+    if (commentPopoverAnchor.mode === 'drawer') {
+      setCommentingNodeId(null);
+      setCommentingNodeSnapshot(null);
+    }
+  }, [commentPopoverAnchor.mode, showCommentsPanel]);
 
   const handleActivitySelect = async (event) => {
     if (!event) return;
@@ -16034,6 +16106,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onSceneLoaded={handleLargeMapSceneLoaded}
                     getNodeSnapshot={getLargeMapNodeSnapshot}
                     nodeSnapshotVersion={largeMapNodeCacheVersion}
+                    commentsByNode={savedMapCommentsByNode}
                     sceneRefreshKey={largeMapSceneRefreshKey}
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
@@ -16573,6 +16646,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onClose={() => {
                       setCommentingNodeId(null);
                       setCommentingNodeSnapshot(null);
+                      setSelectedCommentId(null);
                     }}
                     onAddComment={addCommentToNode}
                     onToggleCompleted={toggleCommentCompleted}
@@ -16580,6 +16654,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     collaborators={collaborators}
                     canComment={canComment()}
                     readOnlyMessage={commentPopoverReadOnlyMessage}
+                    activeCommentId={selectedCommentId}
                   />
                 </div>
               );
@@ -17136,18 +17211,22 @@ export default function App({ currentRoute, navigateToRoute }) {
       />
 
       {/* Comments Panel - Right Rail */}
-      {showCommentsPanel && (
-        <CommentsPanel
-          root={renderRoot}
-          orphans={visibleOrphans}
-          onClose={() => setShowCommentsPanel(false)}
-          onCommentClick={(nodeId) => {
-            // Small delay to let animated pan complete before calculating popover position
-            setTimeout(() => openCommentPopover(nodeId, { forceSide: 'right' }), 480);
-          }}
-          onNavigateToNode={focusNodeById}
-        />
-      )}
+      <CommentsPanel
+        isOpen={showCommentsPanel}
+        root={renderRoot}
+        orphans={visibleOrphans}
+        selectedCommentId={selectedCommentId}
+        onClose={() => {
+          setShowCommentsPanel(false);
+          setCommentingNodeId(null);
+          setCommentingNodeSnapshot(null);
+          setSelectedCommentId(null);
+        }}
+        onCommentClick={(nodeId, commentId) => {
+          openCommentPopover(nodeId, { mode: 'drawer', commentId });
+        }}
+        onNavigateToNode={focusNodeById}
+      />
 
       <EditColorModal
         depth={editingConnectionKey ?? editingColorDepth}

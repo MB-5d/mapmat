@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
 
-import IconButton from '../ui/IconButton';
+import AccountDrawer from '../drawers/AccountDrawer';
 import CheckboxField from '../ui/CheckboxField';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
-const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNode }) => {
+const CommentsPanel = ({
+  isOpen,
+  root,
+  orphans,
+  selectedCommentId,
+  onClose,
+  onCommentClick,
+  onNavigateToNode,
+}) => {
   const [filter, setFilter] = useState('');
   const [filterType, setFilterType] = useState('all'); // 'all', 'author', 'mention'
   const [showCompleted, setShowCompleted] = useState(true);
@@ -73,19 +80,14 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
   });
 
   return (
-    <div
-      className="comments-panel"
+    <AccountDrawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title="All Comments"
+      className="comments-drawer"
       data-feedback-id="comments-panel"
       data-feedback-label="Comments panel"
-      onWheel={(e) => e.stopPropagation()}
     >
-      <div className="comments-panel-header">
-        <h3>All Comments</h3>
-        <IconButton className="comments-panel-close" size="sm" variant="ghost" onClick={onClose} aria-label="Close comments panel">
-          <X size={18} />
-        </IconButton>
-      </div>
-
       <div className="comments-panel-filter">
         <div className="comments-filter-row">
           <TextInput
@@ -116,13 +118,17 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
       <div className="comments-panel-body">
         {filteredComments.length > 0 ? (
           <div className="comments-panel-list">
-            {filteredComments.map(comment => (
-              <div
+            {filteredComments.map(comment => {
+              const isSelected = selectedCommentId === comment.id;
+              return (
+              <button
+                type="button"
                 key={comment.id}
-                className="comments-panel-item"
+                className={`comments-panel-item${isSelected ? ' is-selected' : ''}`}
+                aria-pressed={isSelected}
                 onClick={() => {
                   onNavigateToNode(comment.nodeId);
-                  onCommentClick(comment.nodeId);
+                  onCommentClick(comment.nodeId, comment.id);
                 }}
               >
                 <div className="comments-panel-item-header">
@@ -133,8 +139,9 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
                   <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
                 </div>
                 <div className="comments-panel-text">{comment.text}</div>
-              </div>
-            ))}
+              </button>
+              );
+            })}
           </div>
         ) : (
           <div className="comments-panel-empty">
@@ -142,7 +149,7 @@ const CommentsPanel = ({ root, orphans, onClose, onCommentClick, onNavigateToNod
           </div>
         )}
       </div>
-    </div>
+    </AccountDrawer>
   );
 };
 

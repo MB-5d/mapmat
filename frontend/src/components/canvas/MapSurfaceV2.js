@@ -83,6 +83,7 @@ const MapSurfaceV2 = ({
   onSceneLoaded,
   getNodeSnapshot,
   nodeSnapshotVersion = 0,
+  commentsByNode = {},
   sceneRefreshKey = 0,
   activeBranchNodeIds,
   expandedStacks,
@@ -240,8 +241,12 @@ const MapSurfaceV2 = ({
     void nodeSnapshotVersion;
     return (scene?.nodes || [])
       .map((node) => mergeSceneNodeSnapshot(node, getNodeSnapshot?.(node.id)))
+      .map((node) => {
+        const comments = commentsByNode?.[node.id];
+        return Array.isArray(comments) ? { ...node, comments } : node;
+      })
       .map(toSceneNodeData);
-  }, [getNodeSnapshot, nodeSnapshotVersion, scene?.nodes]);
+  }, [commentsByNode, getNodeSnapshot, nodeSnapshotVersion, scene?.nodes]);
 
   const connectorPaths = useMemo(() => (
     (scene?.connectors || []).map(getConnectorPath)
