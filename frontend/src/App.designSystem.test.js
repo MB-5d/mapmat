@@ -11,6 +11,67 @@ const minimapCss = fs.readFileSync(path.join(__dirname, 'components/minimap/mini
 const adminCss = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.css'), 'utf8');
 const marketingPreviewCss = fs.readFileSync(path.join(__dirname, 'marketing/MarketingPreviewV2.css'), 'utf8');
 
+const listFiles = (dir, extensions, results = []) => {
+  fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+    const filePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      listFiles(filePath, extensions, results);
+      return;
+    }
+    if (extensions.some((extension) => filePath.endsWith(extension))) {
+      results.push(filePath);
+    }
+  });
+  return results;
+};
+
+const extractSharedButtonClassNames = () => {
+  const sourceFiles = listFiles(__dirname, ['.js', '.jsx', '.ts', '.tsx']);
+  const classNames = new Set();
+
+  sourceFiles.forEach((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    Array.from(source.matchAll(/<(Button|IconButton)\b[\s\S]*?>/g)).forEach(([tag]) => {
+      const classNameMatch = tag.match(/className\s*=\s*("[^"]+"|'[^']+'|\{[\s\S]*?\})/);
+      if (!classNameMatch) return;
+
+      Array.from(classNameMatch[1].matchAll(/['"`]([^'"`{}]+)['"`]/g)).forEach(([, value]) => {
+        value
+          .split(/\s+/)
+          .map((token) => token.trim())
+          .filter((token) => /^[A-Za-z][A-Za-z0-9_-]*$/.test(token))
+          .forEach((token) => classNames.add(token));
+      });
+    });
+  });
+
+  return classNames;
+};
+
+const findDisabledOverridesForSharedButtonClasses = () => {
+  const sharedButtonClassNames = extractSharedButtonClassNames();
+  const cssFiles = listFiles(__dirname, ['.css']);
+  const overrides = [];
+
+  cssFiles.forEach((filePath) => {
+    const css = fs.readFileSync(filePath, 'utf8');
+    Array.from(css.matchAll(/([^{}]+)\{[^{}]*\}/g)).forEach(([, selectorGroup]) => {
+      selectorGroup.split(',').forEach((rawSelector) => {
+        const selector = rawSelector.trim().replace(/\s+/g, ' ');
+        if (!selector.includes(':disabled') || selector.includes(':not(:disabled)')) return;
+
+        const selectorClassNames = Array.from(selector.matchAll(/\.([A-Za-z0-9_-]+)/g)).map((match) => match[1]);
+        const matchedClassNames = selectorClassNames.filter((className) => sharedButtonClassNames.has(className));
+        if (matchedClassNames.length > 0) {
+          overrides.push(`${path.relative(__dirname, filePath)}: ${selector}`);
+        }
+      });
+    });
+  });
+
+  return overrides;
+};
+
 describe('UI design-system contract', () => {
   test('home title, canvas elevation, connection stroke, and disabled state use shared tokens', () => {
     expect(generatedCss).toContain('--type-home-title-lg-size: 32px;');
@@ -42,6 +103,12 @@ describe('UI design-system contract', () => {
       /\.ui-icon-btn--type-primary\.ui-icon-btn--style-brand:disabled,\n\.ui-icon-btn--primary:disabled \{[\s\S]*background: var\(--ui-button-brand-fill-disabled\);[\s\S]*border-color: var\(--ui-button-brand-fill-disabled\);[\s\S]*color: var\(--ui-button-brand-fill-disabled-contrast\);[\s\S]*\}/
     );
     expect(appCss).not.toContain('.blank-scan-shell .ui-btn--type-primary.ui-btn--style-brand:disabled');
+    expect(appCss).not.toContain('.scan-btn:disabled');
+    expect(appCss).not.toContain('[data-theme="dark"] .scan-btn:disabled');
+  });
+
+  test('shared Button and IconButton disabled states are not overridden by local classes', () => {
+    expect(findDisabledOverridesForSharedButtonClasses()).toEqual([]);
   });
 
   test('brand filled button hover keeps contrast text and is not overridden by share modal styles', () => {

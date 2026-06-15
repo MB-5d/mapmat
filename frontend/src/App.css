@@ -2322,11 +2322,6 @@ body {
   white-space: nowrap;
 }
 
-.scan-btn:disabled {
-  opacity: 0.62;
-  box-shadow: none;
-}
-
 .scan-options {
   position: relative;
   display: flex;
@@ -13018,7 +13013,6 @@ body {
 }
 
 /* Dark mode: disabled controls use explicit token contrast */
-[data-theme="dark"] .scan-btn:disabled,
 [data-theme="dark"] .scan-options-item.disabled,
 [data-theme="dark"] .layers-panel-item.disabled,
 [data-theme="dark"] .canvas-tool-btn.disabled,
