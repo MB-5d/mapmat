@@ -129,6 +129,8 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(
       /\.color-swatch\.editing \{[\s\S]*box-shadow: 0 0 0 2px var\(--ui-color-border-strong\);[\s\S]*\}/
     );
+    expect(appCss).toMatch(/\.color-edit-icon \{[\s\S]*color: inherit;[\s\S]*\}/);
+    expect(appCss).not.toContain('[data-theme="dark"] .color-edit-icon');
     expect(appCss).toMatch(/\.canvas-tool-btn\.active \{[\s\S]*background: var\(--ui-color-primary\);[\s\S]*\}/);
   });
 

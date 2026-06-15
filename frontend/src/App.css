@@ -4550,7 +4550,7 @@ body {
 
 .color-edit-icon {
   opacity: 0;
-  color: var(--ui-color-input-placeholder);
+  color: inherit;
   margin-left: auto;
   transition: opacity 0.2s;
 }
@@ -12757,10 +12757,6 @@ body {
 [data-theme="dark"] .key-toggle:hover {
   background: #301E3F;
   color: #e2e0e8;
-}
-
-[data-theme="dark"] .color-edit-icon {
-  color: #A48EBB;
 }
 
 [data-theme="dark"] .connection-menu {
