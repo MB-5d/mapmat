@@ -339,6 +339,77 @@ describe('scan config and differential rescan behavior', () => {
   });
 });
 
+describe('comment popover positioning', () => {
+  const { getCommentPopoverPosition } = __testing;
+  const canvasRect = {
+    left: 100,
+    top: 200,
+    width: 1000,
+    height: 800,
+  };
+
+  test('left-half nodes anchor popovers to the right edge', () => {
+    expect(getCommentPopoverPosition({
+      canvasRect,
+      nodeRect: {
+        left: 200,
+        right: 488,
+        top: 300,
+        bottom: 578,
+        width: 288,
+        height: 278,
+      },
+    })).toEqual({
+      side: 'right',
+      x: 396,
+      y: 239,
+    });
+  });
+
+  test('right-half nodes anchor popovers to the left edge', () => {
+    expect(getCommentPopoverPosition({
+      canvasRect,
+      nodeRect: {
+        left: 900,
+        right: 1188,
+        top: 300,
+        bottom: 578,
+        width: 288,
+        height: 278,
+      },
+    })).toEqual({
+      side: 'left',
+      x: 472,
+      y: 239,
+    });
+  });
+
+  test('comments drawer selections force the right-side anchor', () => {
+    expect(getCommentPopoverPosition({
+      canvasRect,
+      forceSide: 'right',
+      nodeRect: {
+        left: 900,
+        right: 1188,
+        top: 300,
+        bottom: 578,
+        width: 288,
+        height: 278,
+      },
+    })).toEqual({
+      side: 'right',
+      x: 1096,
+      y: 239,
+    });
+
+    expect(appJs).toContain("openCommentPopover(nodeId, { forceSide: 'right' })");
+  });
+
+  test('popover container stays fixed-size outside the zoomed canvas content', () => {
+    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 320px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
+  });
+});
+
 describe('map image asset persistence', () => {
   const {
     applyNodeAssetUpdatesToMap,

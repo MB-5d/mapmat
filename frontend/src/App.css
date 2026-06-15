@@ -10253,7 +10253,8 @@ body {
 .comment-popover-container {
   pointer-events: auto;
   z-index: 2001;
-  position: relative;
+  width: 320px;
+  transform: translateY(-50%);
 }
 
 /* Arrow pointing to node */

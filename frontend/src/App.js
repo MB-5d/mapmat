@@ -200,6 +200,8 @@ const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
 const GUEST_SCAN_PAGE_LIMIT = 25;
 const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
+const COMMENT_POPOVER_WIDTH = 320;
+const COMMENT_POPOVER_EDGE_GAP = 8;
 const SCREENSHOT_CREDIT_PACKS = [
   { key: 'screenshot_credits_25', label: '25 credits', price: '$5' },
   { key: 'screenshot_credits_50', label: '50 credits', price: '$8' },
@@ -226,6 +228,32 @@ function cloneScanNode(node) {
   return {
     ...node,
     children: Array.isArray(node.children) ? node.children.map(cloneScanNode) : [],
+  };
+}
+
+function getCommentPopoverPosition({
+  nodeRect,
+  canvasRect,
+  forceSide = null,
+  popoverWidth = COMMENT_POPOVER_WIDTH,
+  edgeGap = COMMENT_POPOVER_EDGE_GAP,
+}) {
+  if (!nodeRect || !canvasRect) return null;
+
+  const nodeWidth = nodeRect.width ?? (nodeRect.right - nodeRect.left);
+  const nodeHeight = nodeRect.height ?? (nodeRect.bottom - nodeRect.top);
+  const relativeLeft = nodeRect.left - canvasRect.left;
+  const relativeRight = nodeRect.right - canvasRect.left;
+  const relativeCenterX = relativeLeft + nodeWidth / 2;
+  const relativeCenterY = (nodeRect.top - canvasRect.top) + nodeHeight / 2;
+  const side = forceSide || (relativeCenterX <= canvasRect.width / 2 ? 'right' : 'left');
+
+  return {
+    side,
+    x: Math.round(side === 'right'
+      ? relativeRight + edgeGap
+      : relativeLeft - popoverWidth - edgeGap),
+    y: Math.round(relativeCenterY),
   };
 }
 
@@ -2398,6 +2426,7 @@ export const __testing = {
   getLargeMapEditParentId,
   getPanToRevealLayoutNode,
   normalizeCanvasWorldBounds,
+  getCommentPopoverPosition,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -13243,8 +13272,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     ? (getNodeById(nodeMenu.nodeId)?.annotations?.status || 'none')
     : 'none';
 
-  // Open comment popover positioned next to a node
-  const openCommentPopover = (nodeOrId) => {
+  // Open comment popover anchored to a node in canvas screen space.
+  const openCommentPopover = (nodeOrId, options = {}) => {
     if (!canvasRef.current) return;
     const nodeId = typeof nodeOrId === 'object' ? nodeOrId?.id : nodeOrId;
     if (!nodeId) return;
@@ -13259,56 +13288,38 @@ export default function App({ currentRoute, navigateToRoute }) {
       setCommentingNodeSnapshot(resolvedNode || null);
     }
 
-    let nodeX = null;
-    let nodeY = null;
-    let nodeW = LAYOUT.NODE_W;
-    let nodeRect = null;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
     const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+    let nodeRect = nodeElement?.getBoundingClientRect() || null;
 
-    if (nodeElement) {
-      const nodeWrapper = nodeElement.closest('.sitemap-node-positioned');
-      if (nodeWrapper) {
-        const wrapperLeft = parseFloat(nodeWrapper.style.left);
-        const wrapperTop = parseFloat(nodeWrapper.style.top);
-        if (Number.isFinite(wrapperLeft)) nodeX = wrapperLeft;
-        if (Number.isFinite(wrapperTop)) nodeY = wrapperTop;
-      }
-      nodeRect = nodeElement.getBoundingClientRect();
-    }
-
-    if (nodeX === null || nodeY === null) {
+    if (!nodeRect) {
       const layoutNode = layoutRef.current?.nodes?.get(nodeId);
       if (layoutNode) {
-        nodeX = layoutNode.x ?? 0;
-        nodeY = layoutNode.y ?? 0;
-        nodeW = layoutNode.w ?? LAYOUT.NODE_W;
+        const scaleValue = scaleRef.current || scale || 1;
+        const panValue = panRef.current || pan || { x: 0, y: 0 };
+        const nodeX = layoutNode.x ?? 0;
+        const nodeY = layoutNode.y ?? 0;
+        const nodeW = layoutNode.w ?? LAYOUT.NODE_W;
+        const nodeH = layoutNode.h ?? (showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED);
+        nodeRect = {
+          left: canvasRect.left + panValue.x + nodeX * scaleValue,
+          right: canvasRect.left + panValue.x + (nodeX + nodeW) * scaleValue,
+          top: canvasRect.top + panValue.y + nodeY * scaleValue,
+          bottom: canvasRect.top + panValue.y + (nodeY + nodeH) * scaleValue,
+          width: nodeW * scaleValue,
+          height: nodeH * scaleValue,
+        };
       }
     }
 
-    if (nodeX === null || nodeY === null) return;
-    const popoverWidth = 320;
-    const gap = 16;
+    const popoverPosition = getCommentPopoverPosition({
+      nodeRect,
+      canvasRect,
+      forceSide: options.forceSide,
+    });
+    if (!popoverPosition) return;
 
-    // Get the node's screen position to check if popover fits on right
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-
-    // Check if there's enough room on the right side of the node (in screen space)
-    const rightSpaceAvailable = nodeRect
-      ? (canvasRect.right - nodeRect.right)
-      : (() => {
-        const scaleValue = scaleRef.current || scale || 1;
-        const screenRight = canvasRect.left + panRef.current.x + (nodeX + nodeW) * scaleValue;
-        return canvasRect.right - screenRight;
-      })();
-    const needsLeftPosition = rightSpaceAvailable < (popoverWidth + gap);
-
-    // Calculate popover position in canvas coordinates
-    const side = needsLeftPosition ? 'left' : 'right';
-    const popoverX = side === 'right'
-      ? nodeX + nodeW + gap
-      : nodeX - popoverWidth - gap;
-
-    setCommentPopoverPos({ x: popoverX, y: nodeY, side });
+    setCommentPopoverPos(popoverPosition);
     setCommentingNodeId(nodeId);
   };
 
@@ -16524,11 +16535,14 @@ export default function App({ currentRoute, navigateToRoute }) {
                 </MenuPanel>
               )}
 
-              {/* Comment Popover - positioned next to node */}
-              {(() => {
-                const activeNode = commentingNodeId ? (getNodeById(commentingNodeId) || commentingNodeSnapshot) : null;
-                if (!commentingNodeId || !activeNode) return null;
-                return (
+            </div>
+            </div>
+
+            {/* Comment Popover - canvas overlay anchored to the node edge */}
+            {(() => {
+              const activeNode = commentingNodeId ? (getNodeById(commentingNodeId) || commentingNodeSnapshot) : null;
+              if (!commentingNodeId || !activeNode) return null;
+              return (
                 <div
                   className={`comment-popover-container ${commentPopoverPos.side}`}
                   style={{
@@ -16552,10 +16566,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     readOnlyMessage={commentPopoverReadOnlyMessage}
                   />
                 </div>
-                );
-              })()}
-            </div>
-            </div>
+              );
+            })()}
 
             {/* DragOverlay - full-size floating card with children, scaled 5% larger than current zoom */}
             <DragOverlay>
@@ -17115,7 +17127,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           onClose={() => setShowCommentsPanel(false)}
           onCommentClick={(nodeId) => {
             // Small delay to let animated pan complete before calculating popover position
-            setTimeout(() => openCommentPopover(nodeId), 480);
+            setTimeout(() => openCommentPopover(nodeId, { forceSide: 'right' }), 480);
           }}
           onNavigateToNode={focusNodeById}
         />
