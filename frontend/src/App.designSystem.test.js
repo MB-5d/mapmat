@@ -116,6 +116,22 @@ describe('UI design-system contract', () => {
     expect(appJs).toContain("variant={confirmModal.danger ? 'danger' : 'primary'}");
   });
 
+  test('toolbar panels use compact mono menu states without changing toolbar icon states', () => {
+    expect(appCss).toMatch(/\.canvas-tool-menu\.canvas-tool-menu-panel \{[\s\S]*min-width: 200px;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.layers-panel\.layers-panel-embedded \{[\s\S]*min-width: 176px;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.color-key\.color-key-embedded \{[\s\S]*min-width: 176px;[\s\S]*\}/);
+    expect(appCss).toMatch(
+      /\.canvas-tool-menu-panel \.ui-menu-item--selected \{[\s\S]*background: var\(--ui-color-icon-hover\);[\s\S]*color: var\(--ui-color-text\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.color-key-item\.editing \{[\s\S]*background: var\(--ui-color-icon-hover\);[\s\S]*color: var\(--ui-color-text\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(
+      /\.color-swatch\.editing \{[\s\S]*box-shadow: 0 0 0 2px var\(--ui-color-border-strong\);[\s\S]*\}/
+    );
+    expect(appCss).toMatch(/\.canvas-tool-btn\.active \{[\s\S]*background: var\(--ui-color-primary\);[\s\S]*\}/);
+  });
+
   test('brand filled button hover keeps contrast text and is not overridden by share modal styles', () => {
     expect(appCss).toMatch(
       /\.ui-btn--type-primary\.ui-btn--style-brand:hover:not\(:disabled\),\n\.ui-btn--primary:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-button-brand-fill-hover\);[\s\S]*border-color: var\(--ui-button-brand-fill-hover\);[\s\S]*color: var\(--ui-button-brand-contrast\);[\s\S]*\}/
