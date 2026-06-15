@@ -190,6 +190,7 @@ import {
   BILLING_CYCLE_OPTIONS,
   PAID_BILLING_PLAN_KEYS,
   buildPlanCardsFromBillingCatalog,
+  buildScreenshotCreditPackCards,
 } from './utils/billingPlans';
 
 const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
@@ -200,17 +201,18 @@ const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
 const GUEST_SCAN_PAGE_LIMIT = 25;
 const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
+const ADD_ON_QUANTITY_MAX = 100;
 const COMMENT_POPOVER_WIDTH = 320;
 const COMMENT_POPOVER_EDGE_GAP = 8;
-const SCREENSHOT_CREDIT_PACKS = [
-  { key: 'screenshot_credits_25', label: '25 credits', price: '$5' },
-  { key: 'screenshot_credits_50', label: '50 credits', price: '$8' },
-  { key: 'screenshot_credits_100', label: '100 credits', price: '$15' },
-];
 
 function formatEntitlementCount(value) {
   if (value === null || value === undefined) return 'Unlimited';
   return Number(value || 0).toLocaleString();
+}
+
+function normalizeAddOnQuantity(value) {
+  const parsed = Math.floor(Number(value || 1));
+  return Math.min(ADD_ON_QUANTITY_MAX, Math.max(1, Number.isFinite(parsed) ? parsed : 1));
 }
 
 function normalizeBillingCycle(value) {
@@ -2690,6 +2692,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [billingCatalogError, setBillingCatalogError] = useState('');
   const [billingActionKey, setBillingActionKey] = useState('');
   const [billingCycle, setBillingCycle] = useState('monthly');
+  const [screenshotPackQuantities, setScreenshotPackQuantities] = useState({});
   const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
   const billingRouteSessionId = String(currentRoute?.searchParams?.get('billingSessionId') || '');
   const isBillingReturnRoute = billingRouteResult === 'success'
@@ -3873,15 +3876,27 @@ export default function App({ currentRoute, navigateToRoute }) {
     (billingCatalog?.plans || []).map((entry) => [entry.key, entry])
   ), [billingCatalog]);
 
-  const billingAddonCatalogByKey = useMemo(() => new Map(
-    (billingCatalog?.addOns || []).map((entry) => [entry.key, entry])
-  ), [billingCatalog]);
-
   const planOptionCards = useMemo(() => buildPlanCardsFromBillingCatalog(billingCatalog, {
     billingCycle,
     includeFree: false,
     paidOnly: true,
   }), [billingCatalog, billingCycle]);
+
+  const screenshotCreditPacks = useMemo(
+    () => buildScreenshotCreditPackCards(billingCatalog),
+    [billingCatalog]
+  );
+
+  const getScreenshotPackQuantity = useCallback((packKey) => (
+    normalizeAddOnQuantity(screenshotPackQuantities[packKey])
+  ), [screenshotPackQuantities]);
+
+  const updateScreenshotPackQuantity = useCallback((packKey, value) => {
+    setScreenshotPackQuantities((current) => ({
+      ...current,
+      [packKey]: normalizeAddOnQuantity(value),
+    }));
+  }, []);
 
   const getBillingCheckoutUnavailableReason = useCallback((entry, cycle = billingCycle) => {
     if (!billingCatalog) return '';
@@ -6638,19 +6653,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast,
   ]);
 
-  const handleAddOnCheckout = useCallback(async (addonKey) => {
+  const handleAddOnCheckout = useCallback(async (addonKey, quantity = 1) => {
     if (!isLoggedIn) {
       setPlansModal(null);
       openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
       return;
     }
+    const checkoutQuantity = normalizeAddOnQuantity(quantity);
     const actionKey = `addon:${addonKey}`;
     setBillingActionKey(actionKey);
     try {
       const session = await api.createBillingCheckoutSession({
         type: 'addon',
         addonKey,
-        quantity: 1,
+        quantity: checkoutQuantity,
         returnPath: getBillingReturnPath(),
       });
       redirectToBillingUrl(session.url);
@@ -17524,23 +17540,50 @@ export default function App({ currentRoute, navigateToRoute }) {
             </div>
             <div className="plans-modal-packs">
               <span>Screenshot credit packs</span>
-              <div>
-                {SCREENSHOT_CREDIT_PACKS.map((pack) => {
-                  const catalogEntry = billingAddonCatalogByKey.get(pack.key);
-                  const unavailableReason = getBillingCheckoutUnavailableReason(catalogEntry);
-                  return (
-                    <button
-                      type="button"
-                      key={pack.key}
-                      disabled={!!billingActionKey || !!unavailableReason}
-                      onClick={() => handleAddOnCheckout(pack.key)}
-                    >
-                      <strong>{pack.label}</strong>
-                      <small>{billingActionKey === `addon:${pack.key}` ? 'Opening checkout...' : (unavailableReason || pack.price)}</small>
-                    </button>
-                  );
-                })}
-              </div>
+              {screenshotCreditPacks.length ? (
+                <div className="plans-modal-pack-grid">
+                  {screenshotCreditPacks.map((pack) => {
+                    const unavailableReason = getBillingCheckoutUnavailableReason(pack);
+                    const packQuantity = getScreenshotPackQuantity(pack.key);
+                    const totalCredits = Math.max(0, pack.quantity * packQuantity);
+                    const packActionKey = `addon:${pack.key}`;
+                    const isPackLoading = billingActionKey === packActionKey;
+                    return (
+                      <div className="plans-modal-pack-card" key={pack.key}>
+                        <div className="plans-modal-pack-main">
+                          <strong>{formatEntitlementCount(pack.quantity)} credits</strong>
+                          <small>{pack.priceLabel}</small>
+                        </div>
+                        <TextInput
+                          type="number"
+                          min="1"
+                          max={ADD_ON_QUANTITY_MAX}
+                          step="1"
+                          size="sm"
+                          label="Quantity"
+                          labelHidden
+                          value={packQuantity}
+                          disabled={!!billingActionKey || !!unavailableReason}
+                          onChange={(event) => updateScreenshotPackQuantity(pack.key, event.target.value)}
+                        />
+                        <small>{formatEntitlementCount(totalCredits)} total credits</small>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          loading={isPackLoading}
+                          disabled={!!billingActionKey || !!unavailableReason}
+                          onClick={() => handleAddOnCheckout(pack.key, packQuantity)}
+                        >
+                          {unavailableReason || 'Checkout'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : billingCatalog && !billingCatalogLoading ? (
+                <StatusAlert tone="warning">Screenshot credit packs are not configured yet.</StatusAlert>
+              ) : null}
             </div>
           </div>
         </Modal>

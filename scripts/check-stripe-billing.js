@@ -7,7 +7,12 @@ process.env.TEST_AUTH_ENABLED = 'false';
 process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_pro_test';
 process.env.STRIPE_PRICE_PRO_YEARLY = 'price_pro_yearly_test';
 process.env.STRIPE_PRICE_STUDIO_ANNUAL = 'price_studio_annual_test';
-process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_100 = 'price_screenshot_100_test';
+process.env.STRIPE_PRICE_SCREENSHOT_PACK_1 = 'price_screenshot_pack_1_test';
+process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_25 = 'price_screenshot_pack_2_test';
+process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_50 = 'price_screenshot_pack_3_test';
+process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_100 = 'price_screenshot_pack_4_test';
+process.env.STRIPE_PRICE_SCREENSHOT_PACK_5 = 'price_screenshot_pack_5_test';
+process.env.STRIPE_PRICE_SCREENSHOT_PACK_6 = 'price_screenshot_pack_6_test';
 
 const authStore = require('../stores/authStore');
 const billingStore = require('../stores/billingStore');
@@ -21,6 +26,7 @@ const {
 const {
   getBillingCatalogForClient,
   getPlanPriceConfigByStripePrice,
+  getAddOnPriceConfig,
   getAddOnPriceConfigByStripePrice,
   applyStripeSubscriptionToAccountAsync,
   refreshBillingAccountFromStripeAsync,
@@ -84,10 +90,24 @@ async function main() {
   assert.equal(proCatalog.prices.monthly.formatted, '$8');
   assert.equal(proCatalog.limits.crawlPages, 1000);
   assert.equal(proCatalog.featureHighlights.includes('1,000 crawl pages'), true);
-  const addOnPrice = getAddOnPriceConfigByStripePrice('price_screenshot_100_test');
-  assert.equal(addOnPrice.key, 'screenshot_credits_100');
+  const screenshotPacks = billingCatalog.addOns.filter((entry) => entry.meter === METERS.screenshotCredits);
+  assert.deepEqual(screenshotPacks.map((entry) => entry.key), [
+    'screenshot_pack_1',
+    'screenshot_pack_2',
+    'screenshot_pack_3',
+    'screenshot_pack_4',
+    'screenshot_pack_5',
+    'screenshot_pack_6',
+  ]);
+  assert.deepEqual(screenshotPacks.map((entry) => entry.quantity), [10, 25, 50, 100, 1000, 10000]);
+  assert.equal(screenshotPacks.find((entry) => entry.key === 'screenshot_pack_2').priceEnvFallbacks.includes('STRIPE_PRICE_SCREENSHOT_CREDITS_25'), true);
+  assert.equal(screenshotPacks.every((entry) => entry.configured), true);
+  const addOnPrice = getAddOnPriceConfigByStripePrice('price_screenshot_pack_4_test');
+  assert.equal(addOnPrice.key, 'screenshot_pack_4');
   assert.equal(addOnPrice.meter, METERS.screenshotCredits);
   assert.equal(addOnPrice.quantity, 100);
+  const legacyAddOnAlias = getAddOnPriceConfig('screenshot_credits_100');
+  assert.equal(legacyAddOnAlias.key, 'screenshot_pack_4');
 
   const subscriber = await createTestUser('subscriber');
   await billingStore.startTrialAsync({
@@ -129,15 +149,15 @@ async function main() {
   const firstGrant = await billingStore.upsertEntitlementGrantByExternalRefAsync({
     accountId: creditsSummary.account.id,
     source: 'addon',
-    externalRef: 'stripe:checkout:cs_test:screenshot_credits_100:price_screenshot_100_test',
+    externalRef: 'stripe:checkout:cs_test:screenshot_pack_4:price_screenshot_pack_4_test',
     meter: METERS.screenshotCredits,
     quantity: 100,
     resetBehavior: 'rollover',
     metadata: {
       provider: 'stripe',
       checkoutSessionId: 'cs_test',
-      priceId: 'price_screenshot_100_test',
-      addonKey: 'screenshot_credits_100',
+      priceId: 'price_screenshot_pack_4_test',
+      addonKey: 'screenshot_pack_4',
     },
   });
   assert.equal(firstGrant.created, true);
@@ -145,7 +165,7 @@ async function main() {
   const duplicateGrant = await billingStore.upsertEntitlementGrantByExternalRefAsync({
     accountId: creditsSummary.account.id,
     source: 'addon',
-    externalRef: 'stripe:checkout:cs_test:screenshot_credits_100:price_screenshot_100_test',
+    externalRef: 'stripe:checkout:cs_test:screenshot_pack_4:price_screenshot_pack_4_test',
     meter: METERS.screenshotCredits,
     quantity: 100,
   });
@@ -214,7 +234,7 @@ async function main() {
           metadata: {
             vellicAccountId: refreshAccount.id,
             checkoutType: 'addon',
-            addonKey: 'screenshot_credits_100',
+            addonKey: 'screenshot_pack_4',
           },
         }),
         listLineItems: async () => ({
@@ -222,7 +242,7 @@ async function main() {
             {
               quantity: 1,
               price: {
-                id: 'price_screenshot_100_test',
+                id: 'price_screenshot_pack_4_test',
               },
             },
           ],

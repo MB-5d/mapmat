@@ -126,6 +126,12 @@ function getStripeConfig() {
   return getBillingPlanConfig().stripe || {};
 }
 
+function getCanonicalAddOnKey(addonKey) {
+  const normalizedKey = String(addonKey || '').trim().toLowerCase();
+  const aliases = getStripeConfig().addOnAliases || {};
+  return String(aliases[normalizedKey] || normalizedKey).trim().toLowerCase();
+}
+
 function getStripePlanPriceEntries(planKey, entry) {
   if (entry?.prices && typeof entry.prices === 'object') {
     return Object.entries(entry.prices).map(([cycle, priceEntry]) => ({
@@ -368,7 +374,10 @@ function listConfiguredLegacyPlanPrices(liveDisplayByPriceId = new Map()) {
 }
 
 async function getLiveStripePriceDisplaysAsync() {
-  const entries = listConfiguredPlanPrices().filter((entry) => entry.priceId);
+  const entries = [
+    ...listConfiguredPlanPrices(),
+    ...listConfiguredAddOnPrices(),
+  ].filter((entry) => entry.priceId);
   if (!isStripeBillingEnabled() || entries.length === 0) return new Map();
   const cacheKey = entries.map((entry) => entry.priceId).sort().join('|');
   const now = Date.now();
@@ -392,8 +401,8 @@ async function getLiveStripePriceDisplaysAsync() {
         unitAmount,
         currency,
         formatted: formatCurrencyAmount(unitAmount, currency),
-        suffix: getBillingCyclePriceSuffix(entry.billingCycle),
-        intervalLabel: getBillingCycleIntervalLabel(entry.billingCycle),
+        suffix: entry.billingCycle ? getBillingCyclePriceSuffix(entry.billingCycle) : '',
+        intervalLabel: entry.billingCycle ? getBillingCycleIntervalLabel(entry.billingCycle) : 'One-time',
         productName,
         source: 'stripe',
       });
@@ -419,10 +428,22 @@ function buildBillingCatalog(liveDisplayByPriceId = new Map()) {
     enabled: isStripeBillingEnabled(),
     plans: listConfiguredPlanCatalogEntries(liveDisplayByPriceId),
     planPrices: listConfiguredLegacyPlanPrices(liveDisplayByPriceId),
-    addOns: listConfiguredAddOnPrices().map(({ priceId, ...entry }) => ({
-      ...entry,
-      configured: !!priceId,
-    })),
+    addOns: listConfiguredAddOnPrices().map(({ priceId, ...entry }) => {
+      const liveDisplay = priceId ? liveDisplayByPriceId.get(priceId) : null;
+      return {
+        ...entry,
+        configured: !!priceId,
+        amount: liveDisplay?.amount ?? null,
+        unitAmount: liveDisplay?.unitAmount ?? null,
+        currency: liveDisplay?.currency || 'usd',
+        formatted: liveDisplay?.formatted || null,
+        price: liveDisplay?.formatted || null,
+        suffix: liveDisplay?.suffix || '',
+        intervalLabel: liveDisplay?.intervalLabel || 'One-time',
+        productName: liveDisplay?.productName || null,
+        source: liveDisplay ? 'stripe' : null,
+      };
+    }),
   };
 }
 
@@ -453,11 +474,13 @@ function getPlanPriceConfig(planKey, billingCycle = 'monthly') {
 function listConfiguredAddOnPrices() {
   const stripeConfig = getStripeConfig();
   return Object.entries(stripeConfig.addOns || {}).map(([addonKey, entry]) => {
-    const priceId = resolveConfiguredPrice(entry.priceEnv);
+    const priceEnvCandidates = getPriceEnvCandidates(entry);
+    const priceId = resolveConfiguredPrice(priceEnvCandidates);
     return {
       key: addonKey,
       name: entry.name || addonKey,
-      priceEnv: entry.priceEnv || null,
+      priceEnv: priceEnvCandidates[0] || null,
+      priceEnvFallbacks: priceEnvCandidates.slice(1),
       priceId,
       mode: entry.mode || 'payment',
       meter: entry.meter || null,
@@ -473,7 +496,7 @@ function listConfiguredAddOnPrices() {
 }
 
 function getAddOnPriceConfig(addonKey) {
-  const normalizedKey = String(addonKey || '').trim().toLowerCase();
+  const normalizedKey = getCanonicalAddOnKey(addonKey);
   const entry = listConfiguredAddOnPrices().find((item) => item.key === normalizedKey);
   if (!entry) {
     throw new BillingError('Choose a valid add-on.', 400, 'INVALID_ADDON');
@@ -928,6 +951,7 @@ module.exports = {
   getBillingCatalogForClient,
   getBillingCatalogForClientAsync,
   getPlanPriceConfigByStripePrice,
+  getAddOnPriceConfig,
   getAddOnPriceConfigByStripePrice,
   createPlanCheckoutSessionAsync,
   createAddOnCheckoutSessionAsync,

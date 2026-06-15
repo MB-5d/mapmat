@@ -6,6 +6,7 @@ export const BILLING_CYCLE_OPTIONS = [
 export const PAID_BILLING_PLAN_KEYS = ['pro', 'studio', 'agency'];
 
 const PLAN_ORDER = ['free', 'pro', 'studio', 'agency'];
+const SCREENSHOT_CREDITS_METER = 'screenshot_credits';
 
 const FALLBACK_PLAN_CARDS = [
   {
@@ -97,6 +98,10 @@ function formatCurrencyMajorAmount(value, currency = 'usd') {
   }
 }
 
+function formatBillingCount(value) {
+  return Math.max(0, Math.floor(Number(value || 0))).toLocaleString('en-US');
+}
+
 function getPriceMajorAmount(price) {
   const amount = price?.amount ?? price?.unitAmount;
   if (Number.isFinite(Number(amount))) return Number(amount) / 100;
@@ -182,4 +187,19 @@ export function buildPlanCardsFromBillingCatalog(catalog, {
 export function hasYearlyBillingPrices(catalog) {
   if (!catalog?.plans?.length) return true;
   return catalog.plans.some((plan) => plan?.key !== 'free' && !!plan?.prices?.yearly);
+}
+
+export function buildScreenshotCreditPackCards(catalog) {
+  return (catalog?.addOns || [])
+    .filter((entry) => entry?.meter === SCREENSHOT_CREDITS_METER)
+    .map((entry) => {
+      const quantity = Math.max(0, Math.floor(Number(entry.quantity || 0)));
+      return {
+        ...entry,
+        quantity,
+        label: entry.name || `${formatBillingCount(quantity)} screenshot credits`,
+        priceLabel: entry.formatted || entry.price || (entry.configured ? 'Stripe checkout' : 'Not configured'),
+      };
+    })
+    .sort((left, right) => (left.quantity - right.quantity) || String(left.key).localeCompare(String(right.key)));
 }

@@ -81,28 +81,55 @@
         "quantity": 1000,
         "resetBehavior": "rollover"
       },
-      "screenshot_credits_25": {
+      "screenshot_pack_1": {
+        "name": "10 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_1",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 10,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_2": {
         "name": "25 screenshot credits",
-        "priceEnv": "STRIPE_PRICE_SCREENSHOT_CREDITS_25",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_2",
+        "priceEnvFallbacks": ["STRIPE_PRICE_SCREENSHOT_CREDITS_25"],
         "mode": "payment",
         "meter": "screenshot_credits",
         "quantity": 25,
         "resetBehavior": "rollover"
       },
-      "screenshot_credits_50": {
+      "screenshot_pack_3": {
         "name": "50 screenshot credits",
-        "priceEnv": "STRIPE_PRICE_SCREENSHOT_CREDITS_50",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_3",
+        "priceEnvFallbacks": ["STRIPE_PRICE_SCREENSHOT_CREDITS_50"],
         "mode": "payment",
         "meter": "screenshot_credits",
         "quantity": 50,
         "resetBehavior": "rollover"
       },
-      "screenshot_credits_100": {
+      "screenshot_pack_4": {
         "name": "100 screenshot credits",
-        "priceEnv": "STRIPE_PRICE_SCREENSHOT_CREDITS_100",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_4",
+        "priceEnvFallbacks": ["STRIPE_PRICE_SCREENSHOT_CREDITS_100"],
         "mode": "payment",
         "meter": "screenshot_credits",
         "quantity": 100,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_5": {
+        "name": "1,000 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_5",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 1000,
+        "resetBehavior": "rollover"
+      },
+      "screenshot_pack_6": {
+        "name": "10,000 screenshot credits",
+        "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_6",
+        "mode": "payment",
+        "meter": "screenshot_credits",
+        "quantity": 10000,
         "resetBehavior": "rollover"
       },
       "organized_exports_10": {
@@ -121,6 +148,11 @@
         "quantity": 1,
         "resetBehavior": "rollover"
       }
+    },
+    "addOnAliases": {
+      "screenshot_credits_25": "screenshot_pack_2",
+      "screenshot_credits_50": "screenshot_pack_3",
+      "screenshot_credits_100": "screenshot_pack_4"
     }
   },
   "planAliases": {

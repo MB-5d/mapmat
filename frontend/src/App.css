@@ -9566,6 +9566,60 @@ body {
   font-weight: 800;
 }
 
+.plans-modal-packs > .plans-modal-pack-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.plans-modal-pack-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--modal-card-bg);
+}
+
+.plans-modal-pack-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.plans-modal-pack-main strong {
+  color: var(--ui-color-text);
+  font-size: 15px;
+}
+
+.plans-modal-pack-main small,
+.plans-modal-pack-card > small {
+  color: var(--ui-color-muted);
+  font-size: 12px;
+}
+
+.plans-modal-pack-card .field {
+  margin: 0;
+}
+
+.plans-modal-pack-card .ui-btn {
+  flex-direction: row;
+  gap: 6px;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 12px;
+  text-align: center;
+  transform: none;
+}
+
+.plans-modal-pack-card .ui-btn:hover {
+  transform: none;
+}
+
 @media (max-width: 640px) {
   .plans-modal-current,
   .plans-modal-card-header,
@@ -9575,6 +9629,11 @@ body {
   }
 
   .plans-modal-card-features {
+    grid-template-columns: 1fr;
+  }
+
+  .plans-modal-packs > .plans-modal-pack-grid,
+  .plans-modal-pack-card {
     grid-template-columns: 1fr;
   }
 }
