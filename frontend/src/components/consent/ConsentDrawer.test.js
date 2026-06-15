@@ -47,18 +47,21 @@ describe('ConsentDrawer', () => {
     });
   };
 
-  test('shows the slim notice until optional cookies are rejected', () => {
+  test('shows the slim notice until cookies are accepted', () => {
     renderConsentUi();
 
     expect(container.textContent).toContain('Help us improve Vellic');
+    expect(container.textContent).toContain('Accept Cookies');
+    expect(container.textContent).toContain('Cookie settings');
+    expect(container.querySelector('.consent-drawer').textContent).not.toContain('Reject all optional');
 
-    clickButton('Reject all optional');
+    clickButton('Accept Cookies');
 
     const saved = JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY));
     expect(saved).toMatchObject({
       necessary: true,
-      analytics: false,
-      experienceResearch: false,
+      analytics: true,
+      experienceResearch: true,
       marketing: false,
       version: '2026-04-27',
     });
@@ -68,8 +71,9 @@ describe('ConsentDrawer', () => {
   test('opens settings and saves granular choices', () => {
     renderConsentUi();
 
-    clickButton('Manage settings');
+    clickButton('Cookie settings');
     expect(container.textContent).toContain('Privacy Settings');
+    expect(container.textContent).toContain('Reject all optional');
 
     const toggles = container.querySelectorAll('.consent-toggle-row input');
     act(() => {

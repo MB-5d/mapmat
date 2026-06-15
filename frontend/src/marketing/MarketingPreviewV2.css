@@ -1870,12 +1870,6 @@ body:has(.marketing-preview-v2) {
   color: var(--marketing-v2-muted);
 }
 
-body:has(.marketing-preview-v2) .consent-drawer__copy p,
-body:has(.marketing-preview-v2) .consent-drawer__actions .ui-btn,
-body:has(.marketing-preview-v2) .consent-settings-modal__actions .ui-btn {
-  font-size: 14px;
-}
-
 body:has(.marketing-preview-v2) .feedback-widget-tab-label {
   font-size: 12px;
 }
