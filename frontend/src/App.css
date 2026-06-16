@@ -3931,11 +3931,21 @@ body {
 }
 
 .ui-menu-title {
-  padding: 6px 10px 8px;
+  padding: 6px 10px 12px;
+  border-bottom: 1px solid var(--ui-color-border);
   font-size: var(--type-body-md-size);
   line-height: var(--type-body-md-line-height);
   font-weight: var(--type-label-md-weight);
   color: var(--ui-color-text);
+}
+
+.ui-menu-title + .ui-menu-section,
+.ui-menu-title + .canvas-tool-menu-hint {
+  margin-top: 8px;
+}
+
+.ui-menu-section + .ui-menu-section {
+  margin-top: 8px;
 }
 
 .ui-menu-section-header,
@@ -4130,7 +4140,7 @@ body {
 .canvas-tool-menu-divider,
 .account-menu-divider {
   height: 1px;
-  margin: 4px 6px;
+  margin: 8px 6px;
   background: var(--ui-color-border);
 }
 

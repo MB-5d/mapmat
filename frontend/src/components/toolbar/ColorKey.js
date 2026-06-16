@@ -2,7 +2,7 @@ import React from 'react';
 import { ChevronDown, ChevronUp, Palette } from 'lucide-react';
 
 import { DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
-import { MenuDivider, MenuItem, MenuSection, MenuSectionHeader, MenuTitle } from '../ui/Menu';
+import { MenuItem, MenuSection, MenuSectionHeader, MenuTitle } from '../ui/Menu';
 import { EditIcon } from '../ui/icons';
 
 const ColorKey = ({
@@ -129,7 +129,6 @@ const ColorKey = ({
       {embedded ? (
         <>
           <MenuTitle>Legend</MenuTitle>
-          <MenuDivider className="canvas-tool-menu-divider" />
           {listContent}
         </>
       ) : ((embedded || showColorKey) && listContent)}

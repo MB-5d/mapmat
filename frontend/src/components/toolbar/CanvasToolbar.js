@@ -295,7 +295,6 @@ const CanvasToolbar = ({
           onTouchMoveCapture={containMenuScroll}
         >
           <MenuTitle>Images</MenuTitle>
-          <MenuDivider className="canvas-tool-menu-divider" />
           {imageCaptureRequiresSave && (
             <div className="canvas-tool-menu-hint" role="note">
               {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
@@ -444,7 +443,6 @@ const CanvasToolbar = ({
       {showOrientationMenu && (
         <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
           <MenuTitle>Map Orientation</MenuTitle>
-          <MenuDivider className="canvas-tool-menu-divider" />
           <MenuSection role="radiogroup" aria-label="Map Orientation">
             <MenuRadioItem
               className="canvas-tool-menu-radio-item"

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 
-import { MenuDivider, MenuItem, MenuSection, MenuSectionHeader, MenuTitle } from '../ui/Menu';
+import { MenuItem, MenuSection, MenuSectionHeader, MenuTitle } from '../ui/Menu';
 
 const LayersPanel = ({
   layers,
@@ -154,7 +154,6 @@ const LayersPanel = ({
     return (
       <div className="layers-panel layers-panel-embedded">
         <MenuTitle>Layers</MenuTitle>
-        <MenuDivider className="canvas-tool-menu-divider" />
         {panelSections}
       </div>
     );
