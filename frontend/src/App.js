@@ -206,6 +206,14 @@ const COMMENT_POPOVER_WIDTH = 320;
 const COMMENT_POPOVER_EDGE_GAP = 8;
 const COMMENT_POPOVER_DRAWER_GAP = 32;
 
+function escapeCssSelectorValue(value) {
+  const raw = String(value || '');
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(raw);
+  }
+  return raw.replace(/["\\]/g, '\\$&');
+}
+
 function formatEntitlementCount(value) {
   if (value === null || value === undefined) return 'Unlimited';
   return Number(value || 0).toLocaleString();
@@ -13328,7 +13336,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (drawerPosition) return drawerPosition;
     }
 
-    const nodeElement = contentRef.current?.querySelector(`[data-node-id="${nodeId}"]`);
+    const safeNodeId = escapeCssSelectorValue(nodeId);
+    const nodeCardElement = contentRef.current?.querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`);
+    const nodeElement = nodeCardElement
+      || contentRef.current?.querySelector(`.sitemap-node-positioned[data-node-id="${safeNodeId}"]`);
     let nodeRect = nodeElement?.getBoundingClientRect() || null;
 
     if (!nodeRect) {
@@ -13382,6 +13393,35 @@ export default function App({ currentRoute, navigateToRoute }) {
     setCommentPopoverPos(popoverPosition);
     setSelectedCommentId(options.commentId || null);
     setCommentingNodeId(nodeId);
+  };
+
+  const openCommentPopoverFromDrawer = (nodeId, commentId) => {
+    if (!canvasRef.current || !nodeId) return;
+    const nextAnchor = { mode: 'drawer', forceSide: null };
+    const resolvedNode = getNodeById(nodeId);
+
+    markMentionCommentsRead((entry) => sameId(entry.nodeId, nodeId));
+    if (useBackendComments && currentMap?.id) {
+      loadSavedMapComments(currentMap.id);
+    }
+
+    setSelectedCommentId(commentId || null);
+    setCommentPopoverAnchor(nextAnchor);
+    setCommentingNodeSnapshot(resolvedNode || null);
+    setCommentingNodeId(nodeId);
+
+    const updateDrawerPosition = () => {
+      const nextPosition = resolveCommentPopoverPosition(nodeId, nextAnchor);
+      if (nextPosition) {
+        setCommentPopoverPos(nextPosition);
+      }
+    };
+
+    updateDrawerPosition();
+    requestAnimationFrame(() => {
+      updateDrawerPosition();
+      requestAnimationFrame(updateDrawerPosition);
+    });
   };
 
   useLayoutEffect(() => {
@@ -17223,7 +17263,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           setSelectedCommentId(null);
         }}
         onCommentClick={(nodeId, commentId) => {
-          openCommentPopover(nodeId, { mode: 'drawer', commentId });
+          openCommentPopoverFromDrawer(nodeId, commentId);
         }}
         onNavigateToNode={focusNodeById}
       />

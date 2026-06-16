@@ -152,15 +152,15 @@ const CommentPopover = ({
   );
 
   return (
-    <div className="comment-popover" onWheel={(e) => e.stopPropagation()}>
-      <div className="comment-popover-header">
+    <div className="comment-popover modal-card" role="dialog" aria-label={`Comments on ${node.title || 'Untitled'}`} onWheel={(e) => e.stopPropagation()}>
+      <div className="comment-popover-header modal-header">
         <h3>Comments on "{node.title || 'Untitled'}"</h3>
         <IconButton className="comment-popover-close" size="sm" variant="ghost" onClick={handleCancel} aria-label="Close comments">
           <X size={18} />
         </IconButton>
       </div>
 
-      <div className="comment-popover-body">
+      <div className="comment-popover-body modal-body">
         {/* Show existing comments if any */}
         {node.comments?.length > 0 && (
           <div className="comment-list">
@@ -232,7 +232,7 @@ const CommentPopover = ({
         )}
       </div>
 
-      <div className="comment-popover-footer">
+      <div className="comment-popover-footer modal-footer">
         <Button variant="secondary" size="md" onClick={handleCancel}>
           {canComment ? 'Cancel' : 'Close'}
         </Button>

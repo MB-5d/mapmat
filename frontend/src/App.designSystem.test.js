@@ -396,13 +396,17 @@ describe('comment popover positioning', () => {
       y: 400,
     });
 
-    expect(appJs).toContain("openCommentPopover(nodeId, { mode: 'drawer', commentId })");
+    expect(appJs).toContain('const openCommentPopoverFromDrawer = (nodeId, commentId) => {');
+    expect(appJs).toContain('setSelectedCommentId(commentId || null);');
+    expect(appJs).toContain('openCommentPopoverFromDrawer(nodeId, commentId);');
     expect(appJs).not.toContain('setTimeout(() => openCommentPopover(nodeId, { forceSide:');
   });
 
   test('popover container stays fixed-size outside the zoomed canvas content', () => {
     expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 320px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
-    expect(appCss).toMatch(/\.comment-popover \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
+    expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
+    expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
+    expect(appCss).toMatch(/\.comment-popover-container::before \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
   });
 });
 

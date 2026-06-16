@@ -113,4 +113,26 @@ describe('CommentPopover', () => {
 
     expect(onToggleCompleted).toHaveBeenCalledWith('node-1', 'comment-1');
   });
+
+  test('uses the shared modal shell classes without a centered overlay', () => {
+    act(() => {
+      root.render(
+        <CommentPopover
+          node={node}
+          onClose={jest.fn()}
+          onAddComment={jest.fn()}
+          onToggleCompleted={jest.fn()}
+          onDeleteComment={jest.fn()}
+          collaborators={[]}
+          canComment
+        />
+      );
+    });
+
+    expect(container.querySelector('.comment-popover.modal-card')).not.toBeNull();
+    expect(container.querySelector('.comment-popover-header.modal-header')).not.toBeNull();
+    expect(container.querySelector('.comment-popover-body.modal-body')).not.toBeNull();
+    expect(container.querySelector('.comment-popover-footer.modal-footer')).not.toBeNull();
+    expect(container.querySelector('.modal-overlay')).toBeNull();
+  });
 });

@@ -99,4 +99,37 @@ describe('CommentsPanel', () => {
     expect(onNavigateToNode).toHaveBeenCalledWith('root');
     expect(onCommentClick).toHaveBeenCalledWith('root', 'c1');
   });
+
+  test('marks selected comments even when id types differ', () => {
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={{
+            id: 'root',
+            title: 'Home',
+            comments: [
+              {
+                id: 12,
+                author: 'Alex',
+                text: 'Numeric id',
+                createdAt: '2026-04-15T12:00:00.000Z',
+                completed: false,
+              },
+            ],
+            children: [],
+          }}
+          orphans={[]}
+          selectedCommentId="12"
+          onClose={jest.fn()}
+          onCommentClick={jest.fn()}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    const selected = container.querySelector('.comments-panel-item.is-selected');
+    expect(selected).not.toBeNull();
+    expect(selected.textContent).toContain('Numeric id');
+  });
 });

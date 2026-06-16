@@ -5,6 +5,8 @@ import CheckboxField from '../ui/CheckboxField';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
+const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
+
 const CommentsPanel = ({
   isOpen,
   root,
@@ -119,7 +121,7 @@ const CommentsPanel = ({
         {filteredComments.length > 0 ? (
           <div className="comments-panel-list">
             {filteredComments.map(comment => {
-              const isSelected = selectedCommentId === comment.id;
+              const isSelected = sameCommentId(selectedCommentId, comment.id);
               return (
               <button
                 type="button"

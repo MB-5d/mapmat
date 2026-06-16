@@ -10316,35 +10316,31 @@ body {
   transform: translateY(-50%);
 }
 
-/* Arrow pointing to node */
-.comment-popover-container.right::before {
+.comment-popover-container::before {
   content: '';
   position: absolute;
-  left: -8px;
   top: 50%;
-  transform: translateY(-50%);
-  width: 12px;
-  height: 12px;
-  background: var(--color-neutral-white);
-  clip-path: polygon(100% 0, 0 50%, 100% 100%);
-  filter: drop-shadow(-2px 0 2px rgba(var(--shadow-rgb-deep), 0.12));
+  width: 14px;
+  height: 14px;
+  border: var(--border-width-subtle) solid var(--modal-card-border);
+  background: var(--modal-bg);
+  transform: translateY(-50%) rotate(45deg);
+  z-index: 0;
+}
+
+.comment-popover-container.right::before {
+  left: -7px;
 }
 
 .comment-popover-container.left::before {
-  content: '';
-  position: absolute;
-  right: -8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 12px;
-  height: 12px;
-  background: var(--color-neutral-white);
-  clip-path: polygon(0 0, 100% 50%, 0 100%);
-  filter: drop-shadow(2px 0 2px rgba(var(--shadow-rgb-deep), 0.12));
+  right: -7px;
 }
 
-.comment-popover {
+.comment-popover.modal-card {
+  position: relative;
+  z-index: 1;
   width: 320px;
+  max-width: none;
   max-height: 400px;
   background: var(--modal-bg);
   border: var(--border-width-subtle) solid var(--modal-card-border);
@@ -10353,10 +10349,15 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  z-index: 2001;
+  animation: none;
 }
 
-.comment-popover-header {
+[data-theme="dark"] .comment-popover.modal-card {
+  background: var(--modal-bg);
+  border: var(--border-width-subtle) solid var(--modal-card-border);
+}
+
+.comment-popover-header.modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -10364,7 +10365,7 @@ body {
   border-bottom: var(--border-width-subtle) solid var(--ui-color-border);
 }
 
-.comment-popover-header h3 {
+.comment-popover-header.modal-header h3 {
   margin: 0;
   font-size: var(--modal-title-size);
   font-weight: var(--modal-title-weight);
@@ -10374,7 +10375,7 @@ body {
   white-space: nowrap;
 }
 
-.comment-popover-body {
+.comment-popover-body.modal-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -10571,7 +10572,7 @@ body {
   min-height: 150px;
 }
 
-.comment-popover-footer {
+.comment-popover-footer.modal-footer {
   padding: var(--modal-footer-padding);
   border-top: var(--border-width-subtle) solid var(--ui-color-border);
   display: flex;
