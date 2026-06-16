@@ -64,7 +64,6 @@ import TextInput from './components/ui/TextInput';
 import ColorKey from './components/toolbar/ColorKey';
 import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
-import CanvasMapHeader from './components/toolbar/CanvasMapHeader';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname, isRenderableTextUrl } from './utils/url';
 import { getNodeHttpErrorLabel, isVirtualMissingNode } from './utils/scanStatus';
@@ -15799,6 +15798,20 @@ export default function App({ currentRoute, navigateToRoute }) {
         optionsDisabled={isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
         showClearUrl={!!urlInput.trim()}
+        mapName={mapName}
+        isEditingMapName={isEditingMapName}
+        onMapNameChange={(e) => setMapName(e.target.value)}
+        onMapNameBlur={commitMapNameEdit}
+        onMapNameKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            commitMapNameEdit();
+          }
+          if (e.key === 'Escape') {
+            cancelMapNameEdit();
+          }
+        }}
+        onMapNameClick={startMapNameEdit}
+        collaborators={titleCollaborators}
         sharedTitle={root?.title || 'Shared Sitemap'}
         onCreateMap={() => openCreateMapFlow()}
         onImportFile={() => setShowImportModal(true)}
@@ -15919,26 +15932,6 @@ export default function App({ currentRoute, navigateToRoute }) {
               <PresenceChipList collaborators={liveCollaborators} />
             </>
           </StatusAlert>
-        )}
-
-        {hasMap && !showInviteAcceptGate && !showMapAccessGate && (
-          <CanvasMapHeader
-            canEdit={canEdit()}
-            mapName={mapName}
-            isEditingMapName={isEditingMapName}
-            onMapNameChange={(e) => setMapName(e.target.value)}
-            onMapNameBlur={commitMapNameEdit}
-            onMapNameKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                commitMapNameEdit();
-              }
-              if (e.key === 'Escape') {
-                cancelMapNameEdit();
-              }
-            }}
-            onMapNameClick={startMapNameEdit}
-            collaborators={titleCollaborators}
-          />
         )}
 
         {!hasMap && (

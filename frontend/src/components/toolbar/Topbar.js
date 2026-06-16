@@ -15,6 +15,7 @@ import {
 
 import ScanBar from '../scan/ScanBar';
 import VellicLogo from '../brand/VellicLogo';
+import CanvasMapHeader from './CanvasMapHeader';
 import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
@@ -41,6 +42,14 @@ const Topbar = ({
   optionsDisabled,
   onClearUrl,
   showClearUrl,
+  hasMap,
+  mapName,
+  isEditingMapName,
+  onMapNameChange,
+  onMapNameBlur,
+  onMapNameKeyDown,
+  onMapNameClick,
+  collaborators = [],
   sharedTitle,
   showScanBar = true,
   onShowProjects,
@@ -79,11 +88,25 @@ const Topbar = ({
   );
 
   return (
-    <div className="topbar" data-feedback-id="topbar" data-feedback-label="Top navigation">
+    <div className={`topbar${hasMap ? ' topbar--floating' : ''}`} data-feedback-id="topbar" data-feedback-label="Top navigation">
       <div className="topbar-left">
-        <div className="brand">
-          <VellicLogo className="brand-logo" title={APP_BRAND_NAME} />
-        </div>
+        {hasMap ? (
+          <CanvasMapHeader
+            canEdit={canEdit}
+            mapName={mapName}
+            isEditingMapName={isEditingMapName}
+            onMapNameChange={onMapNameChange}
+            onMapNameBlur={onMapNameBlur}
+            onMapNameKeyDown={onMapNameKeyDown}
+            onMapNameClick={onMapNameClick}
+            collaborators={collaborators}
+            showBrandMark
+          />
+        ) : (
+          <div className="brand">
+            <VellicLogo className="brand-logo" title={APP_BRAND_NAME} />
+          </div>
+        )}
       </div>
 
       <div className="topbar-center">
@@ -124,7 +147,7 @@ const Topbar = ({
               className="topbar-account-trigger"
               type="ghost"
               buttonStyle="mono"
-              size="sm"
+              size="md"
               onClick={handleAccountToggle}
               title="Account Menu"
               aria-expanded={showAccountMenu}
@@ -236,7 +259,15 @@ const Topbar = ({
             )}
           </div>
         ) : (
-          <Button className="topbar-login-btn" title="Log In" onClick={onLogin} startIcon={<LogIn size={18} />}>
+          <Button
+            className="topbar-login-btn"
+            type="ghost"
+            buttonStyle="mono"
+            size="md"
+            title="Log In"
+            onClick={onLogin}
+            startIcon={<LogIn size={18} />}
+          >
             Log In
           </Button>
         )}

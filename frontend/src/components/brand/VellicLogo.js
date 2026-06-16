@@ -25,6 +25,21 @@ export const VellicLogoIcon = ({ className = '', title = 'Vellic', decorative = 
   </svg>
 );
 
+export const VellicLogoMark = ({ className = '', title = 'Vellic', decorative = false }) => (
+  <svg
+    className={className}
+    viewBox="0 0 148 156"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    role={decorative ? undefined : 'img'}
+    aria-hidden={decorative ? 'true' : undefined}
+    aria-label={decorative ? undefined : title}
+    focusable="false"
+  >
+    <path d={markPath} fill="currentColor" />
+  </svg>
+);
+
 const Wordmark = () => (
   <g fill="currentColor">
     <path d={vPath} transform="translate(70.04 12.91)" />

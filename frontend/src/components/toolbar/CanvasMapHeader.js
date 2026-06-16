@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import Avatar from '../ui/Avatar';
+import { VellicLogoMark } from '../brand/VellicLogo';
 import TextInput from '../ui/TextInput';
 
 const CanvasMapHeader = ({
@@ -12,6 +13,7 @@ const CanvasMapHeader = ({
   onMapNameKeyDown,
   onMapNameClick,
   collaborators = [],
+  showBrandMark = false,
 }) => {
   const [showCollaboratorMenu, setShowCollaboratorMenu] = useState(false);
   const collaboratorMenuRef = useRef(null);
@@ -33,6 +35,14 @@ const CanvasMapHeader = ({
   return (
     <div className="canvas-map-header">
       <div className="canvas-map-pill">
+        {showBrandMark && (
+          <>
+            <span className="canvas-map-brand-mark" aria-hidden="true">
+              <VellicLogoMark className="canvas-map-brand-icon" decorative />
+            </span>
+            <span className="canvas-map-pill-divider" aria-hidden="true" />
+          </>
+        )}
         {isEditingMapName ? (
           <TextInput
             className="canvas-map-name-input"
