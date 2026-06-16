@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import CheckboxField from '../ui/CheckboxField';
-import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
@@ -17,7 +16,6 @@ const CommentsPanel = ({
   onNavigateToNode,
 }) => {
   const [filter, setFilter] = useState('');
-  const [filterType, setFilterType] = useState('all'); // 'all', 'author', 'mention'
   const [showCompleted, setShowCompleted] = useState(true);
 
   // Collect all comments from tree and orphans
@@ -67,13 +65,6 @@ const CommentsPanel = ({
     if (!filter) return true;
     const searchLower = filter.toLowerCase();
 
-    if (filterType === 'author') {
-      return comment.author.toLowerCase().includes(searchLower);
-    }
-    if (filterType === 'mention') {
-      return comment.mentions?.some(m => m.toLowerCase().includes(searchLower));
-    }
-    // 'all' - search text, author, and node title
     return (
       comment.text.toLowerCase().includes(searchLower) ||
       comment.author.toLowerCase().includes(searchLower) ||
@@ -85,7 +76,7 @@ const CommentsPanel = ({
     <AccountDrawer
       isOpen={isOpen}
       onClose={onClose}
-      title="All Comments"
+      title="Comments"
       className="comments-drawer"
       data-feedback-id="comments-panel"
       data-feedback-label="Comments panel"
@@ -94,20 +85,11 @@ const CommentsPanel = ({
         <div className="comments-filter-row">
           <TextInput
             type="text"
-            placeholder="Filter comments..."
+            placeholder="Search comments"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="comments-filter-input"
           />
-          <SelectInput
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="comments-filter-select"
-          >
-            <option value="all">All</option>
-            <option value="author">By Author</option>
-            <option value="mention">By Mention</option>
-          </SelectInput>
         </div>
         <CheckboxField
           className="comments-filter-toggle"

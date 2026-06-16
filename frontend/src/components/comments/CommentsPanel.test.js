@@ -70,6 +70,26 @@ describe('CommentsPanel', () => {
     expect(container.textContent).toContain('Keep this open');
   });
 
+  test('uses comments drawer search without the legacy type dropdown', () => {
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          onClose={jest.fn()}
+          onCommentClick={jest.fn()}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Comments');
+    expect(container.textContent).not.toContain('All Comments');
+    expect(container.querySelector('input[placeholder="Search comments"]')).not.toBeNull();
+    expect(container.querySelector('select')).toBeNull();
+  });
+
   test('marks the selected comment and reports node/comment ids in one click', () => {
     const onCommentClick = jest.fn();
     const onNavigateToNode = jest.fn();

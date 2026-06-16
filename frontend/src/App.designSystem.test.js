@@ -421,9 +421,16 @@ describe('comment popover positioning', () => {
     expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 352px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
     expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
     expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
-    expect(appCss).toMatch(/\.comment-popover-container\.right::before \{[\s\S]*border-right: 11px solid var\(--modal-card-border\);/);
-    expect(appCss).toMatch(/\.comment-popover-container\.right::after \{[\s\S]*border-right: 9px solid var\(--modal-bg\);/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right::before \{[\s\S]*background: var\(--modal-card-border\);[\s\S]*clip-path: polygon\(0 50%, 100% 0, 100% 100%\);/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right::after \{[\s\S]*background: var\(--modal-bg\);[\s\S]*clip-path: polygon\(0 50%, 100% 0, 100% 100%\);/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right \.comment-popover\.modal-card::before \{[\s\S]*left: calc\(-1 \* var\(--border-width-subtle\)\);/);
     expect(appCss).toMatch(/\.comment-checkbox\.checked,[\s\S]*\.comment-checkbox\.checked:hover:not\(:disabled\),[\s\S]*\.comment-checkbox\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
+  });
+
+  test('comments drawer items use mono text styles without filter dropdown', () => {
+    expect(appCss).toMatch(/\.comments-panel-node-title \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
+    expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: 14px;/);
+    expect(appCss).not.toMatch(/\.comments-filter-select/);
   });
 });
 
