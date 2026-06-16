@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Check,
   CheckCircle2,
   X,
 } from 'lucide-react';
@@ -40,10 +39,13 @@ const CommentPopover = ({
   activeCommentId = null,
 }) => {
   const [newComment, setNewComment] = useState('');
+  const [replyDraft, setReplyDraft] = useState('');
   const [showMentions, setShowMentions] = useState(false);
   const [mentionFilter, setMentionFilter] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
-  const inputRef = useRef(null);
+  const [activeComposer, setActiveComposer] = useState('new');
+  const newInputRef = useRef(null);
+  const replyInputRef = useRef(null);
 
   const formatTimeAgo = (dateString) => {
     const date = new Date(dateString);
@@ -59,9 +61,14 @@ const CommentPopover = ({
     return date.toLocaleDateString();
   };
 
-  const handleInputChange = (e) => {
+  const handleInputChange = (composerId, e) => {
     const value = e.target.value;
-    setNewComment(value);
+    setActiveComposer(composerId);
+    if (composerId === 'new') {
+      setNewComment(value);
+    } else {
+      setReplyDraft(value);
+    }
 
     // Check for @ mention trigger
     const lastAtIndex = value.lastIndexOf('@');
@@ -77,24 +84,38 @@ const CommentPopover = ({
   };
 
   const insertMention = (name) => {
-    const lastAtIndex = newComment.lastIndexOf('@');
-    const newValue = newComment.slice(0, lastAtIndex) + '@' + name + ' ';
-    setNewComment(newValue);
+    const currentValue = activeComposer === 'new' ? newComment : replyDraft;
+    const lastAtIndex = currentValue.lastIndexOf('@');
+    const newValue = currentValue.slice(0, lastAtIndex) + '@' + name + ' ';
+    if (activeComposer === 'new') {
+      setNewComment(newValue);
+      newInputRef.current?.focus();
+    } else {
+      setReplyDraft(newValue);
+      replyInputRef.current?.focus();
+    }
     setShowMentions(false);
-    inputRef.current?.focus();
   };
 
   const handleSubmit = () => {
-    if (newComment.trim()) {
-      onAddComment(node.id, newComment, replyingTo);
-      setNewComment('');
+    const hasReplyDraft = replyingTo && replyDraft.trim();
+    const hasNewDraft = newComment.trim();
+    if (!hasReplyDraft && !hasNewDraft) return;
+
+    if (hasReplyDraft && activeComposer !== 'new') {
+      onAddComment(node.id, replyDraft, replyingTo);
+      setReplyDraft('');
       setReplyingTo(null);
-      onClose();
+    } else {
+      onAddComment(node.id, newComment, null);
+      setNewComment('');
     }
+    onClose();
   };
 
   const handleCancel = () => {
     setNewComment('');
+    setReplyDraft('');
     setReplyingTo(null);
     onClose();
   };
@@ -105,18 +126,26 @@ const CommentPopover = ({
 
   useEffect(() => {
     if (replyingTo) {
-      inputRef.current?.focus();
+      replyInputRef.current?.focus();
     }
   }, [replyingTo]);
 
-  const renderCommentInput = (placeholder) => (
+  const beginReply = (commentId) => {
+    setReplyingTo(commentId);
+    setReplyDraft('');
+    setActiveComposer(commentId);
+    setShowMentions(false);
+  };
+
+  const renderCommentInput = ({ placeholder, value, composerId, inputRef }) => (
     <div className="comment-input-wrapper">
       <TextareaInput
         ref={inputRef}
         className="comment-input"
         placeholder={placeholder}
-        value={newComment}
-        onChange={handleInputChange}
+        value={value}
+        onFocus={() => setActiveComposer(composerId)}
+        onChange={(event) => handleInputChange(composerId, event)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && e.metaKey) {
             e.preventDefault();
@@ -133,7 +162,7 @@ const CommentPopover = ({
           }
         }}
       />
-      {showMentions && filteredCollaborators.length > 0 && (
+      {showMentions && activeComposer === composerId && filteredCollaborators.length > 0 && (
         <div className="mention-dropdown">
           {filteredCollaborators.map(name => (
             <button
@@ -174,19 +203,13 @@ const CommentPopover = ({
             <span className="comment-author">{comment.author}</span>
             <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
           </div>
-          {comment.completed && comment.completedBy && (
-            <div className="comment-completed-info">
-              <Check size={12} />
-              <span>Completed by {comment.completedBy} · {formatTimeAgo(comment.completedAt)}</span>
-            </div>
-          )}
         </div>
-        {canComment && (
+        {canComment && !isReplyTarget && (
           <IconButton
             size="xs"
             variant="ghost"
             className="comment-reply-btn"
-            onClick={() => setReplyingTo(comment.id)}
+            onClick={() => beginReply(comment.id)}
             aria-label="Reply to comment"
           >
             <MessageSquareReplyIcon />
@@ -194,7 +217,12 @@ const CommentPopover = ({
         )}
         {isReplyTarget && (
           <div className="comment-reply-composer">
-            {renderCommentInput('Write a reply...')}
+            {renderCommentInput({
+              placeholder: 'Write a reply...',
+              value: replyDraft,
+              composerId: comment.id,
+              inputRef: replyInputRef,
+            })}
           </div>
         )}
         {comment.replies?.length > 0 && (
@@ -218,23 +246,28 @@ const CommentPopover = ({
       </div>
 
       <div className="comment-popover-body modal-body">
-        {/* Show existing comments if any */}
-        {node.comments?.length > 0 && (
-          <div className="comment-list">
-            {node.comments.map(comment => (
-              <CommentItem key={comment.id} comment={comment} />
-            ))}
-          </div>
-        )}
+        <div className="comment-thread-scroll">
+          {node.comments?.length > 0 && (
+            <div className="comment-list">
+              {node.comments.map(comment => (
+                <CommentItem key={comment.id} comment={comment} />
+              ))}
+            </div>
+          )}
 
-        {!canComment && readOnlyMessage && (
-          <div className="comment-readonly-note">{readOnlyMessage}</div>
-        )}
+          {!canComment && readOnlyMessage && (
+            <div className="comment-readonly-note">{readOnlyMessage}</div>
+          )}
+        </div>
 
-        {/* Main textarea area - only show if user can comment */}
-        {canComment && !replyingTo && (
+        {canComment && (
           <div className="comment-input-section">
-            {renderCommentInput("Add a comment...\n(use @ to mention)")}
+            {renderCommentInput({
+              placeholder: "Add a comment...\n(use @ to mention)",
+              value: newComment,
+              composerId: 'new',
+              inputRef: newInputRef,
+            })}
           </div>
         )}
       </div>
@@ -248,7 +281,7 @@ const CommentPopover = ({
             variant="primary"
             size="md"
             onClick={handleSubmit}
-            disabled={!newComment.trim()}
+            disabled={!newComment.trim() && !replyDraft.trim()}
           >
             Save
           </Button>

@@ -29,6 +29,8 @@ describe('CommentsPanel', () => {
         text: 'Done already',
         createdAt: '2026-04-15T11:00:00.000Z',
         completed: true,
+        completedBy: 'Sam',
+        completedAt: '2026-04-15T11:30:00.000Z',
       },
     ],
     children: [],
@@ -180,7 +182,7 @@ describe('CommentsPanel', () => {
     });
 
     const deleteButton = container.querySelector('button[aria-label="Delete comment"]');
-    expect(deleteButton.className).toContain('ui-icon-btn--xs');
+    expect(deleteButton.className).toContain('ui-icon-btn--xxs');
 
     act(() => {
       deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -188,6 +190,59 @@ describe('CommentsPanel', () => {
 
     expect(onDeleteComment).toHaveBeenCalledWith('root', 'c1');
     expect(onCommentClick).not.toHaveBeenCalled();
+  });
+
+  test('toggles completed state directly from the drawer and shows completed details in the footer', () => {
+    const onToggleCompleted = jest.fn();
+
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          onClose={jest.fn()}
+          onCommentClick={jest.fn()}
+          onToggleCompleted={onToggleCompleted}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    const toggleButton = container.querySelector('button[aria-label="Mark comment as complete"]');
+
+    act(() => {
+      toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onToggleCompleted).toHaveBeenCalledWith('root', 'c1');
+    expect(container.textContent).toContain('Completed by Sam');
+  });
+
+  test('expands a drawer comment without navigating', () => {
+    const onCommentClick = jest.fn();
+
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          onClose={jest.fn()}
+          onCommentClick={onCommentClick}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    const expandButton = container.querySelector('button[aria-label="Expand comment"]');
+
+    act(() => {
+      expandButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onCommentClick).not.toHaveBeenCalled();
+    expect(container.querySelector('.comments-panel-text.is-expanded')).not.toBeNull();
   });
 
   test('marks selected comments even when id types differ', () => {

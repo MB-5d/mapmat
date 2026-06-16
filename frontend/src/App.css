@@ -10304,7 +10304,7 @@ body {
 .comment-popover-container {
   pointer-events: auto;
   z-index: 2001;
-  width: 352px;
+  width: 384px;
   transform: translateY(-50%);
 }
 
@@ -10356,7 +10356,7 @@ body {
 .comment-popover.modal-card {
   position: relative;
   z-index: 1;
-  width: 352px;
+  width: 384px;
   max-width: none;
   max-height: 400px;
   background: var(--modal-bg);
@@ -10365,7 +10365,7 @@ body {
   box-shadow: var(--modal-shadow);
   display: flex;
   flex-direction: column;
-  overflow: visible;
+  overflow: hidden;
   animation: none;
 }
 
@@ -10415,9 +10415,18 @@ body {
 .comment-popover-body.modal-body {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  padding: var(--modal-padding);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.comment-thread-scroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: var(--modal-padding);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -10431,7 +10440,7 @@ body {
 
 .comment-item {
   position: relative;
-  padding: 16px 48px 16px 16px;
+  padding: 16px 52px 16px 16px;
   background: var(--modal-card-bg);
   border-radius: 8px;
   border: var(--border-width-subtle) solid var(--ui-color-border);
@@ -10542,17 +10551,19 @@ body {
 }
 
 .comment-input-section {
-  flex: 1;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 150px;
+  gap: 0;
+  min-height: 0;
 }
 
 .comment-reply-composer {
   margin-top: 16px;
   padding-top: 16px;
   border-top: var(--border-width-subtle) solid var(--ui-color-border);
+  display: flex;
+  flex-direction: column;
 }
 
 .comment-popover-footer.modal-footer {
@@ -10564,7 +10575,7 @@ body {
 }
 
 .comment-input-wrapper {
-  flex: 1;
+  flex: 0 0 auto;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -10572,9 +10583,14 @@ body {
 
 .comment-input {
   width: 100%;
-  flex: 1;
-  min-height: 120px;
+  min-height: 88px;
+  height: 88px;
   resize: none;
+}
+
+.comment-reply-composer .comment-input {
+  min-height: 72px;
+  height: 72px;
 }
 
 .mention-dropdown {
@@ -10669,13 +10685,17 @@ body {
 .comments-panel-item {
   appearance: none;
   width: 100%;
-  padding: 12px;
+  position: relative;
+  padding: 14px 14px 40px;
   background: var(--modal-card-bg);
   border: var(--border-width-subtle) solid var(--ui-color-border);
   border-radius: 8px;
   color: inherit;
   cursor: pointer;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -10696,7 +10716,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 
 .comments-panel-node-title {
@@ -10711,9 +10731,40 @@ body {
   white-space: nowrap;
 }
 
-.comments-panel-delete {
+.comments-panel-complete,
+.comments-panel-expand {
   flex-shrink: 0;
+}
+
+.comments-panel-complete {
+  color: var(--ui-button-mono-quiet);
+}
+
+.comments-panel-complete.checked,
+.comments-panel-complete.checked:hover:not(:disabled),
+.comments-panel-complete.checked:focus-visible {
+  color: var(--ui-status-success-icon);
+}
+
+.comments-panel-expand {
   color: var(--ui-icon-muted);
+}
+
+.comments-panel-delete {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  color: var(--ui-icon-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.comments-panel-item:hover .comments-panel-delete,
+.comments-panel-item:focus-within .comments-panel-delete,
+.comments-panel-delete:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .comments-panel-delete:hover:not(:disabled),
@@ -10725,7 +10776,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 0;
 }
 
 .comments-panel-author {
@@ -10742,11 +10793,32 @@ body {
 .comments-panel-text {
   font-size: var(--type-body-md-size);
   line-height: var(--type-body-md-line-height);
-  color: var(--ui-color-muted);
+  color: var(--ui-color-text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.comments-panel-text.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: initial;
+  overflow: visible;
+}
+
+.comments-panel-item-footer {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 16px;
+  padding-right: 24px;
+}
+
+.comments-panel-completed-info {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ui-status-success-icon);
+  text-align: right;
 }
 
 .comments-panel-empty {

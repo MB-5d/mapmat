@@ -202,7 +202,7 @@ const GUEST_SCAN_PAGE_LIMIT = 25;
 const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
 const ADD_ON_QUANTITY_MAX = 100;
-const COMMENT_POPOVER_WIDTH = 352;
+const COMMENT_POPOVER_WIDTH = 384;
 const COMMENT_POPOVER_EDGE_GAP = 8;
 const COMMENT_POPOVER_DRAWER_GAP = 32;
 
@@ -17304,6 +17304,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           openCommentPopoverFromDrawer(nodeId, commentId);
         }}
         onDeleteComment={deleteComment}
+        onToggleCompleted={toggleCommentCompleted}
         onNavigateToNode={focusNodeById}
       />
 

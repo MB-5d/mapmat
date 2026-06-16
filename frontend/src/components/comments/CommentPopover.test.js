@@ -43,7 +43,7 @@ describe('CommentPopover', () => {
     jest.clearAllMocks();
   });
 
-  test('starts a reply and submits a new comment', () => {
+  test('starts a reply, keeps the new comment field visible, and submits the reply draft', () => {
     const onAddComment = jest.fn();
     const onClose = jest.fn();
 
@@ -68,8 +68,10 @@ describe('CommentPopover', () => {
 
     expect(container.textContent).not.toContain('Replying to comment');
     expect(container.querySelector('.comment-item.is-replying .comment-reply-composer textarea')).not.toBeNull();
+    expect(container.querySelector('.comment-input-section textarea')).not.toBeNull();
+    expect(container.querySelector('.comment-item.is-replying .comment-reply-btn')).toBeNull();
 
-    const textarea = container.querySelector('textarea');
+    const textarea = container.querySelector('.comment-item.is-replying .comment-reply-composer textarea');
 
     act(() => {
       setTextareaValue(textarea, 'Follow up with design');
@@ -113,7 +115,7 @@ describe('CommentPopover', () => {
     expect(onToggleCompleted).toHaveBeenCalledWith('node-1', 'comment-1');
   });
 
-  test('keeps complete and reply actions visible while omitting delete', () => {
+  test('keeps complete and reply actions visible while omitting delete and completed details', () => {
     act(() => {
       root.render(
         <CommentPopover
@@ -130,6 +132,7 @@ describe('CommentPopover', () => {
     expect(container.querySelector('.comment-complete-btn.ui-icon-btn--xs')).not.toBeNull();
     expect(container.querySelector('.comment-reply-btn.ui-icon-btn--xs')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Delete comment"]')).toBeNull();
+    expect(container.textContent).not.toContain('Completed by');
   });
 
   test('uses the shared modal shell classes without a centered overlay', () => {

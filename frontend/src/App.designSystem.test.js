@@ -383,7 +383,7 @@ describe('comment popover positioning', () => {
       },
     })).toEqual({
       side: 'left',
-      x: 440,
+      x: 408,
       y: 239,
     });
   });
@@ -396,7 +396,7 @@ describe('comment popover positioning', () => {
       },
     })).toEqual({
       side: 'right',
-      x: 416,
+      x: 384,
       y: 400,
     });
 
@@ -406,7 +406,7 @@ describe('comment popover positioning', () => {
         left: 900,
       },
     })).toEqual({
-      screenRight: 408,
+      screenRight: 376,
       screenCenterY: 400,
     });
 
@@ -418,7 +418,7 @@ describe('comment popover positioning', () => {
   });
 
   test('popover container stays fixed-size outside the zoomed canvas content', () => {
-    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 352px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 384px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
     expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
     expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
     expect(appCss).toMatch(/\.comment-popover-container\.right::before \{[\s\S]*background: var\(--modal-card-border\);[\s\S]*clip-path: polygon\(0 50%, 100% 0, 100% 100%\);/);
