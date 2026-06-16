@@ -86,6 +86,162 @@ describe('CanvasToolbar', () => {
     expect(undoButton.disabled).toBe(false);
   });
 
+  test('matches the requested toolbar order for a saved map', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          hasUnreadCommentMentions
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          showOrientationMenu={false}
+          onToggleOrientationMenu={jest.fn()}
+          orientationMenuRef={{ current: null }}
+          onMapOrientationChange={jest.fn()}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo
+          canRedo
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          canOpenShare
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const toolbarLabels = Array.from(container.querySelectorAll('.canvas-toolbar button[aria-label]'))
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(toolbarLabels).toEqual([
+      'Select',
+      'User Flow',
+      'Crosslink',
+      'Add Page',
+      'Duplicate Map',
+      'Undo',
+      'Redo',
+      'Comments',
+      'Report',
+      'Version History',
+      'Images',
+      'Layers',
+      'Legend',
+      'Orientation',
+      'Clear Canvas',
+      'Download',
+      'Share',
+    ]);
+
+    const duplicateButton = container.querySelector('button[aria-label="Duplicate Map"]');
+    expect(duplicateButton).not.toBeNull();
+    expect(duplicateButton.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('.lucide-copy-plus')).toBeNull();
+  });
+
+  test('keeps save map in the final toolbar group for unsaved maps', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          showOrientationMenu={false}
+          onToggleOrientationMenu={jest.fn()}
+          orientationMenuRef={{ current: null }}
+          onMapOrientationChange={jest.fn()}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo
+          canRedo
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          canOpenShare
+          hasMap
+          hasSavedMap={false}
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    const toolbarLabels = Array.from(container.querySelectorAll('.canvas-toolbar button[aria-label]'))
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(toolbarLabels).toEqual([
+      'Select',
+      'User Flow',
+      'Crosslink',
+      'Add Page',
+      'Undo',
+      'Redo',
+      'Comments',
+      'Report',
+      'Version History',
+      'Images',
+      'Layers',
+      'Legend',
+      'Orientation',
+      'Save Map',
+      'Clear Canvas',
+      'Download',
+      'Share',
+    ]);
+  });
+
   test('shows saving state on the canvas save button', () => {
     act(() => {
       root.render(

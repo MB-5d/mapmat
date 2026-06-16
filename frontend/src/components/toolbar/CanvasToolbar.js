@@ -3,7 +3,7 @@ import {
   ArrowDownFromLine,
   ArrowRightFromLine,
   Bookmark,
-  CopyPlus,
+  Copy,
   Download,
   FilePlus,
   GanttChartSquare,
@@ -151,37 +151,124 @@ const CanvasToolbar = ({
   const imageCaptureDisabledReason = imageCaptureRequiresSave ? IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE : undefined;
   const selectionRequiredReason = imageCaptureDisabledReason || (!hasSelection ? 'Select pages first' : undefined);
 
-  return (
-  <div className="canvas-toolbar" data-feedback-id="canvas-toolbar" data-feedback-label="Canvas toolbar">
+  const selectButton = (
     <ToolButton
+      key="select"
       active={activeTool === 'select' && !connectionTool}
       onClick={onSelectTool}
       icon={<MousePointer2 />}
       label="Select"
       title="Select (V)"
     />
-    {canEdit && (
-      <ToolButton
-        active={connectionTool === 'userflow'}
-        onClick={onToggleUserFlow}
-        icon={<Workflow />}
-        label="User Flow"
-        title="User Flow (F)"
-      />
-    )}
-    {canEdit && (
-      <ToolButton
-        active={connectionTool === 'crosslink'}
-        onClick={onToggleCrosslink}
-        icon={<Link2 />}
-        label="Crosslink"
-        title="Crosslink (L)"
-      />
-    )}
+  );
 
-    <div className="canvas-toolbar-divider" />
+  const userFlowButton = canEdit ? (
+    <ToolButton
+      key="userflow"
+      active={connectionTool === 'userflow'}
+      onClick={onToggleUserFlow}
+      icon={<Workflow />}
+      label="User Flow"
+      title="User Flow (F)"
+    />
+  ) : null;
 
-    <div className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
+  const crosslinkButton = canEdit ? (
+    <ToolButton
+      key="crosslink"
+      active={connectionTool === 'crosslink'}
+      onClick={onToggleCrosslink}
+      icon={<Link2 />}
+      label="Crosslink"
+      title="Crosslink (L)"
+    />
+  ) : null;
+
+  const addPageButton = canEdit ? (
+    <ToolButton
+      key="add-page"
+      title="Add Page"
+      onClick={onAddPage}
+      icon={<FilePlus />}
+      label="Add Page"
+    />
+  ) : null;
+
+  const duplicateButton = canEdit && hasSavedMap ? (
+    <ToolButton
+      key="duplicate-map"
+      onClick={onDuplicateMap}
+      disabled={!hasMap}
+      icon={<Copy />}
+      label="Duplicate Map"
+      title="Duplicate Map"
+    />
+  ) : null;
+
+  const undoButton = canEdit ? (
+    <ToolButton
+      key="undo"
+      className={!canUndo ? 'disabled' : ''}
+      onClick={canUndo || undoBlockedByLive ? onUndo : undefined}
+      disabled={!canUndo && !undoBlockedByLive}
+      aria-disabled={!canUndo}
+      icon={<Undo2 />}
+      label="Undo"
+      title={!canUndo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Undo (⌘Z)'}
+    />
+  ) : null;
+
+  const redoButton = canEdit ? (
+    <ToolButton
+      key="redo"
+      className={!canRedo ? 'disabled' : ''}
+      onClick={canRedo || redoBlockedByLive ? onRedo : undefined}
+      disabled={!canRedo && !redoBlockedByLive}
+      aria-disabled={!canRedo}
+      icon={<Redo2 />}
+      label="Redo"
+      title={!canRedo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Redo (⇧⌘Z)'}
+    />
+  ) : null;
+
+  const commentsButton = (
+    <ToolButton
+      key="comments"
+      active={showCommentsPanel}
+      onClick={onToggleCommentsPanel}
+      icon={<MessageSquare />}
+      label="Comments"
+      title="Comments (C)"
+      disabled={!canViewComments}
+    >
+      {hasUnreadCommentMentions && canViewComments && <span className="notification-dot" />}
+    </ToolButton>
+  );
+
+  const reportButton = (
+    <ToolButton
+      key="report"
+      active={showReportDrawer}
+      onClick={onToggleReportDrawer}
+      icon={<GanttChartSquare />}
+      label="Report"
+      title="Report (R)"
+    />
+  );
+
+  const historyButton = canViewVersionHistory && hasMap ? (
+    <ToolButton
+      key="version-history"
+      active={showVersionHistory}
+      onClick={onShowVersionHistory}
+      icon={<History />}
+      label="Version History"
+      title={hasSavedMap ? 'Version History (H)' : 'Version History'}
+    />
+  ) : null;
+
+  const imageMenuButton = (
+    <div key="images-menu" className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
       <ToolButton
         active={showImageMenu}
         onClick={onToggleImageMenu}
@@ -290,26 +377,10 @@ const CanvasToolbar = ({
         </MenuPanel>
       )}
     </div>
+  );
 
-    <ToolButton
-      active={showCommentsPanel}
-      onClick={onToggleCommentsPanel}
-      icon={<MessageSquare />}
-      label="Comments"
-      title="Comments (C)"
-      disabled={!canViewComments}
-    >
-      {hasUnreadCommentMentions && canViewComments && <span className="notification-dot" />}
-    </ToolButton>
-    <ToolButton
-      active={showReportDrawer}
-      onClick={onToggleReportDrawer}
-      icon={<GanttChartSquare />}
-      label="Report"
-      title="Report (R)"
-    />
-    <div className="canvas-toolbar-divider" />
-    <div className="canvas-tool-menu-wrapper" ref={layersMenuRef}>
+  const layersButton = (
+    <div key="layers-menu" className="canvas-tool-menu-wrapper" ref={layersMenuRef}>
       <ToolButton
         active={showLayersMenu}
         onClick={onToggleLayersMenu}
@@ -324,7 +395,10 @@ const CanvasToolbar = ({
         </MenuPanel>
       )}
     </div>
-    <div className="canvas-tool-menu-wrapper" ref={legendMenuRef}>
+  );
+
+  const legendButton = (
+    <div key="legend-menu" className="canvas-tool-menu-wrapper" ref={legendMenuRef}>
       <ToolButton
         active={showLegendMenu}
         onClick={onToggleLegendMenu}
@@ -339,7 +413,10 @@ const CanvasToolbar = ({
         </MenuPanel>
       )}
     </div>
-    <div className="canvas-tool-menu-wrapper" ref={orientationMenuRef}>
+  );
+
+  const orientationButton = (
+    <div key="orientation-menu" className="canvas-tool-menu-wrapper" ref={orientationMenuRef}>
       <ToolButton
         active={showOrientationMenu}
         onClick={onToggleOrientationMenu}
@@ -374,106 +451,74 @@ const CanvasToolbar = ({
         </MenuPanel>
       )}
     </div>
+  );
 
-    {canEdit && <div className="canvas-toolbar-divider" />}
-
-    {canEdit && (
-      <ToolButton
-        className={!canUndo ? 'disabled' : ''}
-        onClick={canUndo || undoBlockedByLive ? onUndo : undefined}
-        disabled={!canUndo && !undoBlockedByLive}
-        aria-disabled={!canUndo}
-        icon={<Undo2 />}
-        label="Undo"
-        title={!canUndo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Undo (⌘Z)'}
-      />
-    )}
-    {canEdit && (
-      <ToolButton
-        className={!canRedo ? 'disabled' : ''}
-        onClick={canRedo || redoBlockedByLive ? onRedo : undefined}
-        disabled={!canRedo && !redoBlockedByLive}
-        aria-disabled={!canRedo}
-        icon={<Redo2 />}
-        label="Redo"
-        title={!canRedo && undoRedoDisabledReason ? undoRedoDisabledReason : 'Redo (⇧⌘Z)'}
-      />
-    )}
-    {canEdit && (
-      <ToolButton
-        onClick={onClearCanvas}
-        disabled={!hasMap}
-        icon={<RefreshCcw />}
-        label="Clear Canvas"
-        title="Clear Canvas"
-      />
-    )}
-
-    {canEdit && <div className="canvas-toolbar-divider" />}
-
-    {canEdit && (
-      <ToolButton
-        title="Add Page"
-        onClick={onAddPage}
-        icon={<FilePlus />}
-        label="Add Page"
-      />
-    )}
-
-    {canEdit && !hasSavedMap && (
-      <ToolButton
-        className={isSavingMap ? 'is-saving' : ''}
-        onClick={onSaveMap}
-        disabled={!hasMap || isSavingMap}
-        icon={isSavingMap ? <Loader2 className="spin" /> : <Bookmark />}
-        label={isSavingMap ? 'Saving' : 'Save Map'}
-        title={isSavingMap ? 'Saving' : 'Save Map'}
-      >
-        {isSavingMap ? 'Saving' : null}
-      </ToolButton>
-    )}
-
-    {canEdit && hasSavedMap && (
-      <ToolButton
-        onClick={onDuplicateMap}
-        disabled={!hasMap}
-        icon={<CopyPlus />}
-        label="Duplicate Map"
-        title="Duplicate Map"
-      />
-    )}
-
-    <div className="canvas-toolbar-divider" />
-
-    {canViewVersionHistory && hasMap && (
-      <ToolButton
-        active={showVersionHistory}
-        onClick={onShowVersionHistory}
-        icon={<History />}
-        label="Version History"
-        title={hasSavedMap ? 'Version History (H)' : 'Version History'}
-      />
-    )}
-
+  const saveButton = canEdit && !hasSavedMap ? (
     <ToolButton
+      key="save-map"
+      className={isSavingMap ? 'is-saving' : ''}
+      onClick={onSaveMap}
+      disabled={!hasMap || isSavingMap}
+      icon={isSavingMap ? <Loader2 className="spin" /> : <Bookmark />}
+      label={isSavingMap ? 'Saving' : 'Save Map'}
+      title={isSavingMap ? 'Saving' : 'Save Map'}
+    >
+      {isSavingMap ? 'Saving' : null}
+    </ToolButton>
+  ) : null;
+
+  const clearCanvasButton = canEdit ? (
+    <ToolButton
+      key="clear-canvas"
+      onClick={onClearCanvas}
+      disabled={!hasMap}
+      icon={<RefreshCcw />}
+      label="Clear Canvas"
+      title="Clear Canvas"
+    />
+  ) : null;
+
+  const exportButton = (
+    <ToolButton
+      key="download"
       onClick={onExport}
       disabled={!hasMap}
       icon={<Download />}
       label="Download"
       title="Download"
     />
+  );
 
-    {canOpenShare && (
-      <ToolButton
-        className={shareUnavailable ? 'disabled' : ''}
-        onClick={shareUnavailable ? onBlockedShareAttempt : onShare}
-        icon={<Share2 />}
-        label="Share"
-        title={shareUnavailable ? shareDisabledReason : 'Share'}
-        aria-disabled={shareUnavailable}
-      />
-    )}
-  </div>
+  const shareButton = canOpenShare ? (
+    <ToolButton
+      key="share"
+      className={shareUnavailable ? 'disabled' : ''}
+      onClick={shareUnavailable ? onBlockedShareAttempt : onShare}
+      icon={<Share2 />}
+      label="Share"
+      title={shareUnavailable ? shareDisabledReason : 'Share'}
+      aria-disabled={shareUnavailable}
+    />
+  ) : null;
+
+  const sections = [
+    [selectButton, userFlowButton, crosslinkButton].filter(Boolean),
+    canEdit ? [addPageButton, duplicateButton].filter(Boolean) : [],
+    canEdit ? [undoButton, redoButton].filter(Boolean) : [],
+    [commentsButton, reportButton, historyButton].filter(Boolean),
+    [imageMenuButton, layersButton, legendButton, orientationButton].filter(Boolean),
+    [saveButton, clearCanvasButton, exportButton, shareButton].filter(Boolean),
+  ].filter((section) => section.length > 0);
+
+  return (
+    <div className="canvas-toolbar" data-feedback-id="canvas-toolbar" data-feedback-label="Canvas toolbar">
+      {sections.map((section, index) => (
+        <React.Fragment key={`section-${index}`}>
+          {index > 0 && <div className="canvas-toolbar-divider" />}
+          {section}
+        </React.Fragment>
+      ))}
+    </div>
   );
 };
 
