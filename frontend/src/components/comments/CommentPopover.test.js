@@ -54,7 +54,6 @@ describe('CommentPopover', () => {
           onClose={onClose}
           onAddComment={onAddComment}
           onToggleCompleted={jest.fn()}
-          onDeleteComment={jest.fn()}
           collaborators={['Alex', 'Sam']}
           canComment
         />
@@ -98,7 +97,6 @@ describe('CommentPopover', () => {
           onClose={jest.fn()}
           onAddComment={jest.fn()}
           onToggleCompleted={onToggleCompleted}
-          onDeleteComment={jest.fn()}
           collaborators={[]}
           canComment
         />
@@ -114,6 +112,25 @@ describe('CommentPopover', () => {
     expect(onToggleCompleted).toHaveBeenCalledWith('node-1', 'comment-1');
   });
 
+  test('keeps complete and reply actions visible while omitting delete', () => {
+    act(() => {
+      root.render(
+        <CommentPopover
+          node={node}
+          onClose={jest.fn()}
+          onAddComment={jest.fn()}
+          onToggleCompleted={jest.fn()}
+          collaborators={[]}
+          canComment
+        />
+      );
+    });
+
+    expect(container.querySelector('.comment-complete-btn.ui-icon-btn--xs')).not.toBeNull();
+    expect(container.querySelector('.comment-reply-btn.ui-icon-btn--xs')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Delete comment"]')).toBeNull();
+  });
+
   test('uses the shared modal shell classes without a centered overlay', () => {
     act(() => {
       root.render(
@@ -122,7 +139,6 @@ describe('CommentPopover', () => {
           onClose={jest.fn()}
           onAddComment={jest.fn()}
           onToggleCompleted={jest.fn()}
-          onDeleteComment={jest.fn()}
           collaborators={[]}
           canComment
         />
@@ -148,7 +164,6 @@ describe('CommentPopover', () => {
           onClose={jest.fn()}
           onAddComment={jest.fn()}
           onToggleCompleted={jest.fn()}
-          onDeleteComment={jest.fn()}
           collaborators={[]}
           canComment
         />

@@ -107,7 +107,6 @@
 }
 
 .admin-console-auth-form input,
-.admin-console-search-input input,
 .admin-console-action-card input,
 .admin-console-action-card select,
 .admin-console-action-card textarea {
@@ -125,14 +124,12 @@
 }
 
 .admin-console-auth-form input::placeholder,
-.admin-console-search-input input::placeholder,
 .admin-console-action-card input::placeholder,
 .admin-console-action-card textarea::placeholder {
   color: var(--ui-color-input-placeholder);
 }
 
 .admin-console-auth-form input:focus,
-.admin-console-search-input input:focus,
 .admin-console-action-card input:focus,
 .admin-console-action-card select:focus,
 .admin-console-action-card textarea:focus {
@@ -334,39 +331,12 @@
 }
 
 .admin-console-search-input {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   flex: 1 1 320px;
   width: min(420px, 100%);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  background: var(--color-bg-primary);
-  padding: 0 14px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-}
-
-.admin-console-search-clear {
-  min-height: 42px;
-  flex-shrink: 0;
-}
-
-.admin-console-search-input:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: var(--ui-focus-ring);
-}
-
-.admin-console-search-input svg {
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
 }
 
 .admin-console-search-input input {
-  border: 0;
-  padding-left: 0;
-  padding-right: 0;
-  background: transparent;
-  box-shadow: none;
+  min-width: 0;
 }
 
 .admin-console-list-meta,
@@ -1576,10 +1546,6 @@
   }
 
   .admin-console-search-input {
-    width: 100%;
-  }
-
-  .admin-console-search-clear {
     width: 100%;
   }
 

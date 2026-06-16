@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import CheckboxField from '../ui/CheckboxField';
-import TextInput from '../ui/TextInput';
+import IconButton from '../ui/IconButton';
+import SearchInput from '../ui/SearchInput';
 
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 
@@ -13,6 +15,7 @@ const CommentsPanel = ({
   selectedCommentId,
   onClose,
   onCommentClick,
+  onDeleteComment,
   onNavigateToNode,
 }) => {
   const [filter, setFilter] = useState('');
@@ -57,6 +60,13 @@ const CommentsPanel = ({
   };
 
   const allComments = getAllComments();
+  const navigateToComment = (comment) => {
+    if (onCommentClick) {
+      onCommentClick(comment.nodeId, comment.id);
+      return;
+    }
+    onNavigateToNode?.(comment.nodeId);
+  };
 
   const filteredComments = allComments.filter(comment => {
     // Filter by completed status
@@ -83,11 +93,11 @@ const CommentsPanel = ({
     >
       <div className="comments-panel-filter">
         <div className="comments-filter-row">
-          <TextInput
-            type="text"
+          <SearchInput
             placeholder="Search comments"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            onClear={() => setFilter('')}
             className="comments-filter-input"
           />
         </div>
@@ -105,28 +115,43 @@ const CommentsPanel = ({
             {filteredComments.map(comment => {
               const isSelected = sameCommentId(selectedCommentId, comment.id);
               return (
-              <button
-                type="button"
+              <div
                 key={comment.id}
                 className={`comments-panel-item${isSelected ? ' is-selected' : ''}`}
+                role="button"
+                tabIndex={0}
                 aria-pressed={isSelected}
-                onClick={() => {
-                  if (onCommentClick) {
-                    onCommentClick(comment.nodeId, comment.id);
-                    return;
+                onClick={() => navigateToComment(comment)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigateToComment(comment);
                   }
-                  onNavigateToNode?.(comment.nodeId);
                 }}
               >
                 <div className="comments-panel-item-header">
                   <span className="comments-panel-node-title">{comment.nodeTitle}</span>
+                  {onDeleteComment ? (
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      className="comments-panel-delete"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onDeleteComment(comment.nodeId, comment.id);
+                      }}
+                      aria-label="Delete comment"
+                    >
+                      <Trash2 />
+                    </IconButton>
+                  ) : null}
                 </div>
+                <div className="comments-panel-text">{comment.text}</div>
                 <div className="comments-panel-item-meta">
                   <span className="comments-panel-author">{comment.author}</span>
                   <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
                 </div>
-                <div className="comments-panel-text">{comment.text}</div>
-              </button>
+              </div>
               );
             })}
           </div>

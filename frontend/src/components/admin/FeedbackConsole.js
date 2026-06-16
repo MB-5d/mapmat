@@ -3,10 +3,10 @@ import {
   ArrowUpRight,
   Download,
   Loader2,
-  Search,
   Sparkles,
 } from 'lucide-react';
 
+import SearchInput from '../ui/SearchInput';
 import {
   createAdminFeedbackTheme,
   downloadAdminFeedbackExport,
@@ -411,15 +411,13 @@ export default function FeedbackConsole({ onSessionExpired }) {
     <div className="admin-feedback-shell">
       <section className="admin-console-panel admin-feedback-panel">
         <div className="admin-feedback-toolbar">
-          <div className="admin-console-search-input admin-feedback-search">
-            <Search size={16} />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search message, actor, route, or component"
-            />
-          </div>
+          <SearchInput
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onClear={() => setQuery('')}
+            placeholder="Search message, actor, route, or component"
+            className="admin-console-search-input admin-feedback-search"
+          />
           <div className="admin-feedback-filter-row">
             <select value={status} onChange={(event) => setStatus(event.target.value)}>
               {ITEM_STATUS_OPTIONS.map((option) => (

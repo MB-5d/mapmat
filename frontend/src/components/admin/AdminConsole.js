@@ -11,7 +11,6 @@ import {
   MessageSquare,
   PanelRightOpen,
   RefreshCw,
-  Search,
   Shield,
   ShieldAlert,
   User,
@@ -23,6 +22,7 @@ import './AdminConsole.css';
 import AccountDrawer from '../drawers/AccountDrawer';
 import Avatar from '../ui/Avatar';
 import FeedbackConsole from './FeedbackConsole';
+import SearchInput from '../ui/SearchInput';
 import UsageCostConsole from './UsageCostConsole';
 import {
   adminApplyUserBillingScenario,
@@ -801,7 +801,6 @@ function AdminConsole({ route, navigateToRoute }) {
 
   const activeUserId = activePanel === 'users' && route?.section === 'user' ? route.userId : null;
   const activeSearchQuery = deferredSearchInput.trim();
-  const hasSearchInput = searchInput.trim().length > 0;
 
   const handleSessionExpired = useCallback((message = 'Admin session expired. Sign in again.') => {
     setIsAuthenticated(false);
@@ -1403,24 +1402,13 @@ function AdminConsole({ route, navigateToRoute }) {
           <section className="admin-console-panel admin-console-table-panel">
             <div className="admin-console-table-toolbar">
               <div className="admin-console-search-row">
-                <div className="admin-console-search-input">
-                  <Search size={16} />
-                  <input
-                    type="search"
-                    value={searchInput}
-                    onChange={handleSearchChange}
-                    placeholder="Search by email or name"
-                  />
-                </div>
-                {hasSearchInput ? (
-                  <button
-                    type="button"
-                    className="admin-console-secondary-btn admin-console-search-clear"
-                    onClick={() => setSearchInput('')}
-                  >
-                    Clear
-                  </button>
-                ) : null}
+                <SearchInput
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  onClear={() => setSearchInput('')}
+                  placeholder="Search by email or name"
+                  className="admin-console-search-input"
+                />
               </div>
 
               <div className="admin-console-list-meta">

@@ -16729,7 +16729,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                     onAddComment={addCommentToNode}
                     onToggleCompleted={toggleCommentCompleted}
-                    onDeleteComment={deleteComment}
                     collaborators={collaborators}
                     canComment={canComment()}
                     readOnlyMessage={commentPopoverReadOnlyMessage}
@@ -17304,6 +17303,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onCommentClick={(nodeId, commentId) => {
           openCommentPopoverFromDrawer(nodeId, commentId);
         }}
+        onDeleteComment={deleteComment}
         onNavigateToNode={focusNodeById}
       />
 

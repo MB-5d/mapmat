@@ -7,14 +7,13 @@ import {
   ExternalLink,
   Filter,
   Locate,
-  Search,
   X,
 } from 'lucide-react';
 
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
-import TextInput from '../ui/TextInput';
+import SearchInput from '../ui/SearchInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
 const UNKNOWN_TYPE = 'unknown';
@@ -351,18 +350,16 @@ const ImageReportDrawer = ({
               Filter by issue
               {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-            <label className="report-search">
-              <Search size={16} />
-              <TextInput
-                type="text"
-                className="report-search-input"
-                framed={false}
-                aria-label="Search image report issues"
-                placeholder="Search image issues"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
+            <SearchInput
+              size="sm"
+              aria-label="Search image report issues"
+              placeholder="Search image issues"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onClear={() => setSearch('')}
+              className="report-search"
+              inputClassName="report-search-input"
+            />
           </div>
           {showFilters && typeOptions.length > 0 && (
             <div className="report-filter-list">

@@ -7,6 +7,11 @@ describe('CommentsPanel', () => {
   let container;
   let root;
 
+  const setInputValue = (element, value) => {
+    const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+    descriptor.set.call(element, value);
+  };
+
   const rootNode = {
     id: 'root',
     title: 'Home',
@@ -90,6 +95,41 @@ describe('CommentsPanel', () => {
     expect(container.querySelector('select')).toBeNull();
   });
 
+  test('clears comment search from the shared search input', () => {
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          onClose={jest.fn()}
+          onCommentClick={jest.fn()}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    const input = container.querySelector('input[placeholder="Search comments"]');
+
+    act(() => {
+      setInputValue(input, 'Keep');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Keep this open');
+    expect(container.textContent).not.toContain('Done already');
+
+    const clearButton = container.querySelector('button[aria-label="Clear search"]');
+
+    act(() => {
+      clearButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(input.value).toBe('');
+    expect(container.textContent).toContain('Keep this open');
+    expect(container.textContent).toContain('Done already');
+  });
+
   test('marks the selected comment and reports node/comment ids in one click', () => {
     const onCommentClick = jest.fn();
     const onNavigateToNode = jest.fn();
@@ -118,6 +158,35 @@ describe('CommentsPanel', () => {
 
     expect(onNavigateToNode).not.toHaveBeenCalled();
     expect(onCommentClick).toHaveBeenCalledWith('root', 'c1');
+  });
+
+  test('deletes from the drawer without opening the comment popover', () => {
+    const onCommentClick = jest.fn();
+    const onDeleteComment = jest.fn();
+
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          selectedCommentId="c1"
+          onClose={jest.fn()}
+          onCommentClick={onCommentClick}
+          onDeleteComment={onDeleteComment}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    const deleteButton = container.querySelector('button[aria-label="Delete comment"]');
+
+    act(() => {
+      deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onDeleteComment).toHaveBeenCalledWith('root', 'c1');
+    expect(onCommentClick).not.toHaveBeenCalled();
   });
 
   test('marks selected comments even when id types differ', () => {

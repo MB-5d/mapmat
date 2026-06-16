@@ -10,16 +10,15 @@ import {
   Filter,
   Locate,
   Loader2,
-  Search,
   X,
 } from 'lucide-react';
 
 import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
+import SearchInput from '../ui/SearchInput';
 import SegmentedControl from '../ui/SegmentedControl';
 import SelectInput from '../ui/SelectInput';
-import TextInput from '../ui/TextInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
 const INSIGHT_CATEGORY_LABELS = {
@@ -390,18 +389,16 @@ const ReportDrawer = ({
               Filter by
               {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
-            <label className="report-search">
-              <Search size={16} />
-              <TextInput
-                type="text"
-                className="report-search-input"
-                framed={false}
-                aria-label="Search report pages"
-                placeholder="Search by page name, number, or URL"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
+            <SearchInput
+              size="sm"
+              aria-label="Search report pages"
+              placeholder="Search by page name, number, or URL"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onClear={() => setSearch('')}
+              className="report-search"
+              inputClassName="report-search-input"
+            />
           </div>
           {showFilters && (
             <div className="report-filter-list">

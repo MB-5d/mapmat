@@ -424,13 +424,21 @@ describe('comment popover positioning', () => {
     expect(appCss).toMatch(/\.comment-popover-container\.right::before \{[\s\S]*background: var\(--modal-card-border\);[\s\S]*clip-path: polygon\(0 50%, 100% 0, 100% 100%\);/);
     expect(appCss).toMatch(/\.comment-popover-container\.right::after \{[\s\S]*background: var\(--modal-bg\);[\s\S]*clip-path: polygon\(0 50%, 100% 0, 100% 100%\);/);
     expect(appCss).toMatch(/\.comment-popover-container\.right \.comment-popover\.modal-card::before \{[\s\S]*left: calc\(-1 \* var\(--border-width-subtle\)\);/);
-    expect(appCss).toMatch(/\.comment-checkbox\.checked,[\s\S]*\.comment-checkbox\.checked:hover:not\(:disabled\),[\s\S]*\.comment-checkbox\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
+    expect(appCss).toMatch(/\.comment-complete-btn\.checked,[\s\S]*\.comment-complete-btn\.checked:hover:not\(:disabled\),[\s\S]*\.comment-complete-btn\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
   });
 
   test('comments drawer items use mono text styles without filter dropdown', () => {
     expect(appCss).toMatch(/\.comments-panel-node-title \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
-    expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: 14px;/);
+    expect(appCss).toMatch(/\.comments-panel-item \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--ui-color-border\);/);
+    expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: var\(--type-body-md-size\);/);
     expect(appCss).not.toMatch(/\.comments-filter-select/);
+  });
+
+  test('shared search and dark input tokens stay consistent', () => {
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-color-input-bg: var\(--color-plum-950\);/);
+    expect(appCss).toMatch(/\.ui-search-input \{[\s\S]*width: 100%;/);
+    expect(appCss).toMatch(/\[data-theme="dark"\] \.modal-card input,[\s\S]*background-color: var\(--ui-color-input-bg\);/);
+    expect(appCss).toMatch(/\[data-theme="dark"\] \.blank-scan-shell\.search-container:hover,[\s\S]*background: var\(--ui-color-input-bg\);/);
   });
 });
 

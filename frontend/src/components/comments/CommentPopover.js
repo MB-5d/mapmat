@@ -2,8 +2,6 @@ import React, { useRef, useState } from 'react';
 import {
   Check,
   CheckCircle2,
-  Reply,
-  Trash2,
   X,
 } from 'lucide-react';
 
@@ -13,12 +11,29 @@ import TextareaInput from '../ui/TextareaInput';
 
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 
+const MessageSquareReplyIcon = ({ size = 24, color = 'currentColor', ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    <path d="m10 11-3-3 3-3" />
+    <path d="M16 14v-2a4 4 0 0 0-4-4H7" />
+  </svg>
+);
+
 const CommentPopover = ({
   node,
   onClose,
   onAddComment,
   onToggleCompleted,
-  onDeleteComment,
   collaborators,
   canComment,
   readOnlyMessage = '',
@@ -90,48 +105,21 @@ const CommentPopover = ({
       className={`comment-item ${comment.completed ? 'completed' : ''}${sameCommentId(activeCommentId, comment.id) ? ' is-active' : ''}`}
       style={{ marginLeft: depth * 16 }}
     >
-      <div className="comment-header">
-        <IconButton
-          size="xxs"
-          variant="ghost"
-          className={`comment-checkbox ${comment.completed ? 'checked' : ''}`}
-          onClick={() => onToggleCompleted(node.id, comment.id)}
-          aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
-        >
-          <CheckCircle2 size={18} />
-        </IconButton>
+      <IconButton
+        size="xs"
+        variant="ghost"
+        className={`comment-complete-btn ${comment.completed ? 'checked' : ''}`}
+        onClick={() => onToggleCompleted(node.id, comment.id)}
+        aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
+      >
+        <CheckCircle2 />
+      </IconButton>
+      <div className="comment-content">
+        <div className="comment-text">{comment.text}</div>
         <div className="comment-meta">
           <span className="comment-author">{comment.author}</span>
           <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
         </div>
-        {canComment && (
-          <div className="comment-actions">
-            <IconButton
-              size="xxs"
-              variant="ghost"
-              className="comment-action-btn"
-              onClick={() => {
-                setReplyingTo(comment.id);
-                inputRef.current?.focus();
-              }}
-              aria-label="Reply to comment"
-            >
-              <Reply size={14} />
-            </IconButton>
-            <IconButton
-              size="xxs"
-              variant="ghost"
-              className="comment-action-btn delete"
-              onClick={() => onDeleteComment(node.id, comment.id)}
-              aria-label="Delete comment"
-            >
-              <Trash2 size={14} />
-            </IconButton>
-          </div>
-        )}
-      </div>
-      <div className="comment-body">
-        <div className="comment-text">{comment.text}</div>
         {comment.completed && comment.completedBy && (
           <div className="comment-completed-info">
             <Check size={12} />
@@ -139,6 +127,20 @@ const CommentPopover = ({
           </div>
         )}
       </div>
+      {canComment && (
+        <IconButton
+          size="xs"
+          variant="ghost"
+          className="comment-reply-btn"
+          onClick={() => {
+            setReplyingTo(comment.id);
+            inputRef.current?.focus();
+          }}
+          aria-label="Reply to comment"
+        >
+          <MessageSquareReplyIcon />
+        </IconButton>
+      )}
       {comment.replies?.length > 0 && (
         <div className="comment-replies">
           {comment.replies.map(reply => (

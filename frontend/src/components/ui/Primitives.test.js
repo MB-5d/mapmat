@@ -15,6 +15,7 @@ import CommentBadge from '../nodes/CommentBadge';
 import NodeBadge from '../nodes/NodeBadge';
 import OptionCard from './OptionCard';
 import RadioCardGroup from './RadioCardGroup';
+import SearchInput from './SearchInput';
 import SegmentedControl from './SegmentedControl';
 import SelectInput from './SelectInput';
 import StatusAlert from './StatusAlert';
@@ -405,6 +406,34 @@ describe('ui primitives', () => {
     expect(shell.className).toContain('ui-input-shell--with-right-icon');
     expect(button).not.toBeNull();
     expect(button.closest('.ui-input-shell__element--right')).not.toBeNull();
+  });
+
+  test('SearchInput uses shared input chrome and clear action', () => {
+    const onClear = jest.fn();
+
+    act(() => {
+      root.render(
+        <SearchInput
+          value="query"
+          onChange={() => {}}
+          onClear={onClear}
+          placeholder="Search things"
+        />
+      );
+    });
+
+    const input = container.querySelector('input[type="search"]');
+    const clearButton = container.querySelector('button[aria-label="Clear search"]');
+
+    expect(container.querySelector('.ui-search-input.ui-input-shell')).not.toBeNull();
+    expect(input.getAttribute('placeholder')).toBe('Search things');
+    expect(clearButton).not.toBeNull();
+
+    act(() => {
+      clearButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onClear).toHaveBeenCalledTimes(1);
   });
 
   test('TextInput can render without chrome for inline uses', () => {
