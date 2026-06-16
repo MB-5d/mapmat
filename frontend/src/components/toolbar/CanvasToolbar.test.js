@@ -335,23 +335,24 @@ describe('CanvasToolbar', () => {
     const buttons = Array.from(container.querySelectorAll('button'));
     const legendButton = container.querySelector('button[aria-label="Legend"]');
     const orientationButton = container.querySelector('button[aria-label="Orientation"]');
-    const verticalButton = buttons.find((button) => button.textContent.includes('Vertical'));
-    const horizontalButton = buttons.find((button) => button.textContent.includes('Horizontal'));
+    const verticalRadio = container.querySelector('input[type="radio"][value="vertical"]');
+    const horizontalRadio = container.querySelector('input[type="radio"][value="horizontal"]');
+    const radioGroup = container.querySelector('[role="radiogroup"]');
 
     expect(orientationButton).not.toBeNull();
     expect(orientationButton.className).toContain('active');
     expect(orientationButton.getAttribute('aria-expanded')).toBe('true');
     expect(buttons.indexOf(orientationButton)).toBe(buttons.indexOf(legendButton) + 1);
-    expect(container.querySelector('.canvas-tool-menu-label').textContent).toBe('Orientation');
-    expect(verticalButton).not.toBeNull();
-    expect(horizontalButton).not.toBeNull();
-    expect(verticalButton.getAttribute('aria-checked')).toBe('false');
-    expect(horizontalButton.getAttribute('aria-checked')).toBe('true');
-    expect(horizontalButton.className).toContain('ui-menu-item--selected');
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Map Orientation');
+    expect(radioGroup?.getAttribute('aria-label')).toBe('Map Orientation');
+    expect(verticalRadio).not.toBeNull();
+    expect(horizontalRadio).not.toBeNull();
+    expect(verticalRadio.checked).toBe(false);
+    expect(horizontalRadio.checked).toBe(true);
 
     act(() => {
       orientationButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      verticalButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      verticalRadio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onToggleOrientationMenu).toHaveBeenCalledTimes(1);
@@ -419,6 +420,7 @@ describe('CanvasToolbar', () => {
     const downloadAll = buttons.find((button) => button.textContent.includes('Download All'));
     const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
     const imageReport = buttons.find((button) => button.textContent.includes('Image report'));
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
     expect(downloadAll).not.toBeNull();
     expect(downloadSelected).not.toBeNull();
     expect(imageReport).not.toBeNull();

@@ -38,6 +38,7 @@ describe('ColorKey', () => {
       );
     });
 
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Legend');
     expect(container.textContent).toContain('Levels');
     expect(container.textContent).not.toContain('Pages');
     expect(container.textContent).toContain('Level 0');

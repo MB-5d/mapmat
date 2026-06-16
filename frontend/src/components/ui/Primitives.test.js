@@ -9,7 +9,7 @@ import CheckboxField from './CheckboxField';
 import Icon from './Icon';
 import IconButton from './IconButton';
 import Modal from './Modal';
-import { MenuItem } from './Menu';
+import { MenuItem, MenuRadioItem, MenuTitle } from './Menu';
 import Tag from './Tag';
 import CommentBadge from '../nodes/CommentBadge';
 import NodeBadge from '../nodes/NodeBadge';
@@ -218,6 +218,37 @@ describe('ui primitives', () => {
     const [selectedItem, dangerItem] = container.querySelectorAll('button');
     expect(selectedItem.className).toContain('ui-menu-item--selected');
     expect(dangerItem.className).toContain('ui-menu-item--danger');
+  });
+
+  test('MenuTitle and MenuRadioItem support shared menu structure and single-select rows', () => {
+    const onChange = jest.fn();
+
+    act(() => {
+      root.render(
+        <div>
+          <MenuTitle>Map Orientation</MenuTitle>
+          <MenuRadioItem
+            name="orientation"
+            value="horizontal"
+            checked={false}
+            label="Horizontal"
+            onChange={onChange}
+          />
+        </div>
+      );
+    });
+
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Map Orientation');
+
+    const radio = container.querySelector('input[type="radio"][value="horizontal"]');
+    const radioRow = container.querySelector('.ui-menu-radio-item');
+    expect(radioRow).not.toBeNull();
+
+    act(() => {
+      radio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalledWith('horizontal');
   });
 
   test('Badge, Tag, and node badges use shared primitives', () => {

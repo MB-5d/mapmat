@@ -26,7 +26,15 @@ import {
 } from 'lucide-react';
 
 import IconButton from '../ui/IconButton';
-import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu';
+import {
+  MenuDivider,
+  MenuItem,
+  MenuPanel,
+  MenuRadioItem,
+  MenuSection,
+  MenuSectionHeader,
+  MenuTitle,
+} from '../ui/Menu';
 
 const ToolButton = ({
   active = false,
@@ -286,23 +294,25 @@ const CanvasToolbar = ({
           onTouchMove={containMenuScroll}
           onTouchMoveCapture={containMenuScroll}
         >
+          <MenuTitle>Images</MenuTitle>
+          <MenuDivider className="canvas-tool-menu-divider" />
+          {imageCaptureRequiresSave && (
+            <div className="canvas-tool-menu-hint" role="note">
+              {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
+            </div>
+          )}
           {hasAnyThumbnails && (
-            <>
+            <MenuSection>
+              <MenuSectionHeader className="canvas-tool-menu-label">View</MenuSectionHeader>
               <MenuItem
                 className="canvas-tool-menu-toggle"
                 label="View screenshots"
                 endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
                 onClick={onToggleThumbnails}
               />
-              <MenuDivider className="canvas-tool-menu-divider" />
-            </>
+            </MenuSection>
           )}
-          {imageCaptureRequiresSave && (
-            <div className="canvas-tool-menu-hint" role="note">
-              {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
-            </div>
-          )}
-          <div className="canvas-tool-menu-section">
+          <MenuSection className="canvas-tool-menu-section">
             <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails (visible area)</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
@@ -325,9 +335,9 @@ const CanvasToolbar = ({
               disabled={imageCaptureDisabled || !hasDownloadableThumbnails}
               title={imageCaptureDisabledReason}
             />
-          </div>
+          </MenuSection>
           <MenuDivider className="canvas-tool-menu-divider" />
-          <div className="canvas-tool-menu-section">
+          <MenuSection className="canvas-tool-menu-section">
             <MenuSectionHeader className="canvas-tool-menu-label">Full page</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
@@ -350,16 +360,20 @@ const CanvasToolbar = ({
               disabled={imageCaptureDisabled || !hasFullScreenshotAssets}
               title={imageCaptureDisabledReason}
             />
-          </div>
+          </MenuSection>
           <MenuDivider className="canvas-tool-menu-divider" />
-          <MenuItem
-            className="canvas-tool-menu-item canvas-tool-menu-report-item"
-            label="Image report"
-            badge={captureIssues.length > 0 ? `${captureIssues.length}` : null}
-            onClick={onOpenImageReport}
-          />
+          <MenuSection className="canvas-tool-menu-section">
+            <MenuSectionHeader className="canvas-tool-menu-label">Review</MenuSectionHeader>
+            <MenuItem
+              className="canvas-tool-menu-item canvas-tool-menu-report-item"
+              label="Image report"
+              badge={captureIssues.length > 0 ? `${captureIssues.length}` : null}
+              onClick={onOpenImageReport}
+            />
+          </MenuSection>
           <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-download-divider" />
-          <div className="canvas-tool-menu-section canvas-tool-menu-download-section">
+          <MenuSection className="canvas-tool-menu-section canvas-tool-menu-download-section">
+            <MenuSectionHeader className="canvas-tool-menu-label">Download</MenuSectionHeader>
             <MenuItem
               className="canvas-tool-menu-item"
               label="Download All"
@@ -373,7 +387,7 @@ const CanvasToolbar = ({
               disabled={!hasSavedMap || !hasSelection || !hasDownloadableSelectedImages}
               title={!hasSavedMap ? imageCaptureDisabledReason : (!hasSelection ? 'Select pages first' : undefined)}
             />
-          </div>
+          </MenuSection>
         </MenuPanel>
       )}
     </div>
@@ -429,25 +443,28 @@ const CanvasToolbar = ({
       />
       {showOrientationMenu && (
         <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
-          <MenuSectionHeader className="canvas-tool-menu-label">Orientation</MenuSectionHeader>
-          <MenuItem
-            className="canvas-tool-menu-item"
-            icon={<ArrowDownFromLine size={16} />}
-            label="Vertical"
-            selected={!isHorizontalOrientation}
-            role="menuitemradio"
-            aria-checked={!isHorizontalOrientation}
-            onClick={() => onMapOrientationChange?.('vertical')}
-          />
-          <MenuItem
-            className="canvas-tool-menu-item"
-            icon={<ArrowRightFromLine size={16} />}
-            label="Horizontal"
-            selected={isHorizontalOrientation}
-            role="menuitemradio"
-            aria-checked={isHorizontalOrientation}
-            onClick={() => onMapOrientationChange?.('horizontal')}
-          />
+          <MenuTitle>Map Orientation</MenuTitle>
+          <MenuDivider className="canvas-tool-menu-divider" />
+          <MenuSection role="radiogroup" aria-label="Map Orientation">
+            <MenuRadioItem
+              className="canvas-tool-menu-radio-item"
+              name="map-orientation"
+              value="vertical"
+              label="Vertical"
+              checked={!isHorizontalOrientation}
+              onChange={() => onMapOrientationChange?.('vertical')}
+              endSlot={<ArrowDownFromLine size={16} />}
+            />
+            <MenuRadioItem
+              className="canvas-tool-menu-radio-item"
+              name="map-orientation"
+              value="horizontal"
+              label="Horizontal"
+              checked={isHorizontalOrientation}
+              onChange={() => onMapOrientationChange?.('horizontal')}
+              endSlot={<ArrowRightFromLine size={16} />}
+            />
+          </MenuSection>
         </MenuPanel>
       )}
     </div>

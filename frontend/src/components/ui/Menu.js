@@ -11,6 +11,18 @@ export const MenuPanel = React.forwardRef(({ className, children, ...props }, re
 
 MenuPanel.displayName = 'MenuPanel';
 
+export const MenuTitle = ({ className, children, ...props }) => (
+  <div className={classNames('ui-menu-title', className)} {...props}>
+    {children}
+  </div>
+);
+
+export const MenuSection = ({ className, children, ...props }) => (
+  <div className={classNames('ui-menu-section', className)} {...props}>
+    {children}
+  </div>
+);
+
 export const MenuSectionHeader = ({ className, children, ...props }) => (
   <div className={classNames('ui-menu-section-header', className)} {...props}>
     {children}
@@ -63,3 +75,52 @@ export const MenuItem = React.forwardRef(
 );
 
 MenuItem.displayName = 'MenuItem';
+
+export const MenuRadioItem = React.forwardRef(
+  (
+    {
+      className,
+      inputClassName,
+      label,
+      description,
+      endSlot = null,
+      checked = false,
+      disabled = false,
+      name,
+      value,
+      onChange,
+      children,
+      ...props
+    },
+    ref
+  ) => (
+    <label
+      className={classNames(
+        'ui-menu-radio-item',
+        checked && 'ui-menu-radio-item--checked',
+        disabled && 'ui-menu-radio-item--disabled',
+        className
+      )}
+    >
+      <input
+        {...props}
+        ref={ref}
+        type="radio"
+        className={classNames('ui-menu-radio-item__control', inputClassName)}
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={() => onChange?.(value)}
+        disabled={disabled}
+      />
+      <span className="ui-menu-radio-item__content">
+        {label != null ? <span className="ui-menu-radio-item__label">{label}</span> : null}
+        {description ? <span className="ui-menu-radio-item__description">{description}</span> : null}
+        {children}
+      </span>
+      {endSlot ? <span className="ui-menu-radio-item__end">{endSlot}</span> : null}
+    </label>
+  )
+);
+
+MenuRadioItem.displayName = 'MenuRadioItem';

@@ -84,6 +84,7 @@ describe('LayersPanel', () => {
     expect(container.textContent).toContain('Primary');
     expect(container.textContent).not.toContain('Subdomain');
     expect(container.textContent).not.toContain('Orphan');
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Layers');
     expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Missing');
     expect(container.textContent).toContain('Duplicate');
@@ -91,6 +92,7 @@ describe('LayersPanel', () => {
     expect(container.textContent).toContain('Error');
     expect(container.textContent).toContain('Inactive');
     expect(container.textContent).toContain('Auth Required');
+    expect(container.querySelector('.ui-menu-item--selected')).toBeNull();
 
     act(() => {
       getButton(container, 'Missing').dispatchEvent(new MouseEvent('click', { bubbles: true }));

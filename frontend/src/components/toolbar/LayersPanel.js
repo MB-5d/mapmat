@@ -1,7 +1,7 @@
 import React from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, Layers } from 'lucide-react';
 
-import { MenuItem, MenuSectionHeader } from '../ui/Menu';
+import { MenuDivider, MenuItem, MenuSection, MenuSectionHeader, MenuTitle } from '../ui/Menu';
 
 const LayersPanel = ({
   layers,
@@ -45,7 +45,6 @@ const LayersPanel = ({
     <MenuItem
       className={`layers-panel-item${disabled ? ' disabled' : ''}`}
       label={label}
-      selected={active}
       onClick={disabled ? undefined : onToggle}
       role="menuitemcheckbox"
       aria-checked={active}
@@ -58,10 +57,10 @@ const LayersPanel = ({
     />
   );
 
-  const panelList = (
+  const panelSections = (
     <div className="layers-panel-list">
       {hasPlacementLayers && (
-        <>
+        <MenuSection>
           <MenuSectionHeader className="layers-panel-section">Placement</MenuSectionHeader>
           {placementLayers.map((option) => (
             <LayerToggle
@@ -71,11 +70,11 @@ const LayersPanel = ({
               onToggle={() => onToggleScanLayer(option.key)}
             />
           ))}
-        </>
+        </MenuSection>
       )}
 
       {showTypeLayers && (
-        <>
+        <MenuSection>
           <MenuSectionHeader className="layers-panel-section">Type</MenuSectionHeader>
           {scanLayerAvailability?.typePages && (
             <LayerToggle
@@ -91,11 +90,11 @@ const LayersPanel = ({
               onToggle={() => onToggleScanLayer('typeFiles')}
             />
           )}
-        </>
+        </MenuSection>
       )}
 
       {hasStatusLayers && (
-        <>
+        <MenuSection>
           <MenuSectionHeader className="layers-panel-section">Status</MenuSectionHeader>
           {statusLayers.map((option) => (
             <LayerToggle
@@ -105,11 +104,11 @@ const LayersPanel = ({
               onToggle={() => onToggleScanLayer(option.key)}
             />
           ))}
-        </>
+        </MenuSection>
       )}
 
       {showConnectionLayers && (
-        <>
+        <MenuSection>
           <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
           {connectionAvailability?.userFlows && (
             <LayerToggle
@@ -132,11 +131,11 @@ const LayersPanel = ({
               onToggle={onToggleBrokenLinks}
             />
           )}
-        </>
+        </MenuSection>
       )}
 
       {showChangeSection && (
-        <>
+        <MenuSection>
           <MenuSectionHeader className="layers-panel-section">Markers</MenuSectionHeader>
           {changeStatusOptions.map((option) => (
             <LayerToggle
@@ -146,7 +145,7 @@ const LayersPanel = ({
               onToggle={() => onToggleChangeStatus?.(option.value)}
             />
           ))}
-        </>
+        </MenuSection>
       )}
     </div>
   );
@@ -154,7 +153,9 @@ const LayersPanel = ({
   if (embedded) {
     return (
       <div className="layers-panel layers-panel-embedded">
-        {panelList}
+        <MenuTitle>Layers</MenuTitle>
+        <MenuDivider className="canvas-tool-menu-divider" />
+        {panelSections}
       </div>
     );
   }
@@ -173,7 +174,7 @@ const LayersPanel = ({
           {showViewDropdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
         </button>
       </div>
-      {showViewDropdown && panelList}
+      {showViewDropdown && panelSections}
     </div>
   );
 };
