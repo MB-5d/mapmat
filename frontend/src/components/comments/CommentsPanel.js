@@ -129,8 +129,11 @@ const CommentsPanel = ({
                 className={`comments-panel-item${isSelected ? ' is-selected' : ''}`}
                 aria-pressed={isSelected}
                 onClick={() => {
-                  onNavigateToNode(comment.nodeId);
-                  onCommentClick(comment.nodeId, comment.id);
+                  if (onCommentClick) {
+                    onCommentClick(comment.nodeId, comment.id);
+                    return;
+                  }
+                  onNavigateToNode?.(comment.nodeId);
                 }}
               >
                 <div className="comments-panel-item-header">

@@ -340,7 +340,11 @@ describe('scan config and differential rescan behavior', () => {
 });
 
 describe('comment popover positioning', () => {
-  const { getCommentPopoverDrawerPosition, getCommentPopoverPosition } = __testing;
+  const {
+    getCommentDrawerNodeFocusTarget,
+    getCommentPopoverDrawerPosition,
+    getCommentPopoverPosition,
+  } = __testing;
   const canvasRect = {
     left: 100,
     top: 200,
@@ -379,7 +383,7 @@ describe('comment popover positioning', () => {
       },
     })).toEqual({
       side: 'left',
-      x: 472,
+      x: 440,
       y: 239,
     });
   });
@@ -392,21 +396,34 @@ describe('comment popover positioning', () => {
       },
     })).toEqual({
       side: 'right',
-      x: 448,
+      x: 416,
       y: 400,
     });
 
+    expect(getCommentDrawerNodeFocusTarget({
+      canvasRect,
+      drawerRect: {
+        left: 900,
+      },
+    })).toEqual({
+      screenRight: 408,
+      screenCenterY: 400,
+    });
+
     expect(appJs).toContain('const openCommentPopoverFromDrawer = (nodeId, commentId) => {');
+    expect(appJs).toContain('focusNodeById(nodeId, focusTarget);');
     expect(appJs).toContain('setSelectedCommentId(commentId || null);');
     expect(appJs).toContain('openCommentPopoverFromDrawer(nodeId, commentId);');
     expect(appJs).not.toContain('setTimeout(() => openCommentPopover(nodeId, { forceSide:');
   });
 
   test('popover container stays fixed-size outside the zoomed canvas content', () => {
-    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 320px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 352px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
     expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
     expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
-    expect(appCss).toMatch(/\.comment-popover-container::before \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right::before \{[\s\S]*border-right: 11px solid var\(--modal-card-border\);/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right::after \{[\s\S]*border-right: 9px solid var\(--modal-bg\);/);
+    expect(appCss).toMatch(/\.comment-checkbox\.checked,[\s\S]*\.comment-checkbox\.checked:hover:not\(:disabled\),[\s\S]*\.comment-checkbox\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
   });
 });
 

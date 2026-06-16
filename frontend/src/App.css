@@ -10312,34 +10312,52 @@ body {
 .comment-popover-container {
   pointer-events: auto;
   z-index: 2001;
-  width: 320px;
+  width: 352px;
   transform: translateY(-50%);
 }
 
-.comment-popover-container::before {
+.comment-popover-container::before,
+.comment-popover-container::after {
   content: '';
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  border: var(--border-width-subtle) solid var(--modal-card-border);
-  background: var(--modal-bg);
-  transform: translateY(-50%) rotate(45deg);
-  z-index: 0;
+  width: 0;
+  height: 0;
+  transform: translateY(-50%);
 }
 
 .comment-popover-container.right::before {
-  left: -7px;
+  left: -11px;
+  border-top: 11px solid transparent;
+  border-bottom: 11px solid transparent;
+  border-right: 11px solid var(--modal-card-border);
+}
+
+.comment-popover-container.right::after {
+  left: -9px;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-right: 9px solid var(--modal-bg);
 }
 
 .comment-popover-container.left::before {
-  right: -7px;
+  right: -11px;
+  border-top: 11px solid transparent;
+  border-bottom: 11px solid transparent;
+  border-left: 11px solid var(--modal-card-border);
+}
+
+.comment-popover-container.left::after {
+  right: -9px;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 9px solid var(--modal-bg);
 }
 
 .comment-popover.modal-card {
   position: relative;
   z-index: 1;
-  width: 320px;
+  width: 352px;
   max-width: none;
   max-height: 400px;
   background: var(--modal-bg);
@@ -10428,15 +10446,13 @@ body {
 }
 
 .comment-checkbox {
-  color: var(--ui-color-input-placeholder);
+  color: var(--ui-button-mono-quiet);
   flex-shrink: 0;
 }
 
-.comment-checkbox:hover {
-  color: var(--ui-color-muted);
-}
-
-.comment-checkbox.checked {
+.comment-checkbox.checked,
+.comment-checkbox.checked:hover:not(:disabled),
+.comment-checkbox.checked:focus-visible {
   color: var(--ui-status-success-icon);
 }
 

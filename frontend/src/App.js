@@ -202,7 +202,7 @@ const GUEST_SCAN_PAGE_LIMIT = 25;
 const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
 const ADD_ON_QUANTITY_MAX = 100;
-const COMMENT_POPOVER_WIDTH = 320;
+const COMMENT_POPOVER_WIDTH = 352;
 const COMMENT_POPOVER_EDGE_GAP = 8;
 const COMMENT_POPOVER_DRAWER_GAP = 32;
 
@@ -280,6 +280,27 @@ function getCommentPopoverDrawerPosition({
     side: 'right',
     x: Math.round(drawerRect.left - canvasRect.left - popoverWidth - drawerGap),
     y: Math.round(canvasRect.height / 2),
+  };
+}
+
+function getCommentDrawerNodeFocusTarget({
+  canvasRect,
+  drawerRect,
+  popoverWidth = COMMENT_POPOVER_WIDTH,
+  drawerGap = COMMENT_POPOVER_DRAWER_GAP,
+  nodeGap = COMMENT_POPOVER_EDGE_GAP,
+}) {
+  const popoverPosition = getCommentPopoverDrawerPosition({
+    canvasRect,
+    drawerRect,
+    popoverWidth,
+    drawerGap,
+  });
+  if (!popoverPosition) return null;
+
+  return {
+    screenRight: Math.round(popoverPosition.x - nodeGap),
+    screenCenterY: popoverPosition.y,
   };
 }
 
@@ -2454,6 +2475,7 @@ export const __testing = {
   normalizeCanvasWorldBounds,
   getCommentPopoverPosition,
   getCommentPopoverDrawerPosition,
+  getCommentDrawerNodeFocusTarget,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -5316,7 +5338,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     applyTransform({ scale: scaleRef.current, x: nextPan.x, y: nextPan.y });
   }, [applyTransform]);
 
-  const focusLargeMapNodeById = useCallback(async (nodeId) => {
+  const focusLargeMapNodeById = useCallback(async (nodeId, options = {}) => {
     const canvas = canvasRef.current;
     if (!nodeId || !canvas || !currentMap?.id) return false;
 
@@ -5353,13 +5375,18 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
       }
 
+      const hasScreenTarget = Number.isFinite(options.screenRight) && Number.isFinite(options.screenCenterY);
       const leftShift = Math.min(240, canvas.clientWidth * 0.25);
       const nodeCenterX = targetNode.x + targetNode.w / 2;
       const nodeCenterY = targetNode.y + targetNode.h / 2;
       applyTransform({
         scale: scaleValue,
-        x: (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scaleValue,
-        y: canvas.clientHeight / 2 - nodeCenterY * scaleValue,
+        x: hasScreenTarget
+          ? options.screenRight - (targetNode.x + targetNode.w) * scaleValue
+          : (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scaleValue,
+        y: hasScreenTarget
+          ? options.screenCenterY - nodeCenterY * scaleValue
+          : canvas.clientHeight / 2 - nodeCenterY * scaleValue,
       }, { skipPanClamp: true });
       return true;
     } catch (error) {
@@ -5391,11 +5418,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     return null;
   }, []);
 
-  const focusNodeById = useCallback((nodeId) => {
+  const focusNodeById = useCallback((nodeId, options = {}) => {
     if (!nodeId || !canvasRef.current) return;
 
     if (useLargeMapSurface) {
-      focusLargeMapNodeById(nodeId);
+      focusLargeMapNodeById(nodeId, options);
       return;
     }
 
@@ -5434,13 +5461,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
 
       const canvas = canvasRef.current;
+      const hasScreenTarget = Number.isFinite(options.screenRight) && Number.isFinite(options.screenCenterY);
       const leftShift = Math.min(240, canvas.clientWidth * 0.25);
       const scale = scaleRef.current;
       const nodeCenterX = nodeData.x + nodeData.w / 2;
       const nodeCenterY = nodeData.y + nodeData.h / 2;
       const targetPan = {
-        x: (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scale,
-        y: canvas.clientHeight / 2 - nodeCenterY * scale,
+        x: hasScreenTarget
+          ? options.screenRight - (nodeData.x + nodeData.w) * scale
+          : (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scale,
+        y: hasScreenTarget
+          ? options.screenCenterY - nodeCenterY * scale
+          : canvas.clientHeight / 2 - nodeCenterY * scale,
       };
       animatePanTo(targetPan, { skipPanClamp: true });
     };
@@ -13399,10 +13431,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!canvasRef.current || !nodeId) return;
     const nextAnchor = { mode: 'drawer', forceSide: null };
     const resolvedNode = getNodeById(nodeId);
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const drawerRect = document.querySelector('.comments-drawer')?.getBoundingClientRect();
+    const focusTarget = getCommentDrawerNodeFocusTarget({ canvasRect, drawerRect });
 
     markMentionCommentsRead((entry) => sameId(entry.nodeId, nodeId));
     if (useBackendComments && currentMap?.id) {
       loadSavedMapComments(currentMap.id);
+    }
+
+    if (focusTarget) {
+      focusNodeById(nodeId, focusTarget);
     }
 
     setSelectedCommentId(commentId || null);

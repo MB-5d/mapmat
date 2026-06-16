@@ -11,6 +11,8 @@ import Button from '../ui/Button';
 import IconButton from '../ui/IconButton';
 import TextareaInput from '../ui/TextareaInput';
 
+const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
+
 const CommentPopover = ({
   node,
   onClose,
@@ -85,7 +87,7 @@ const CommentPopover = ({
   // Recursive component to render a comment and its replies
   const CommentItem = ({ comment, depth = 0 }) => (
     <div
-      className={`comment-item ${comment.completed ? 'completed' : ''}${activeCommentId === comment.id ? ' is-active' : ''}`}
+      className={`comment-item ${comment.completed ? 'completed' : ''}${sameCommentId(activeCommentId, comment.id) ? ' is-active' : ''}`}
       style={{ marginLeft: depth * 16 }}
     >
       <div className="comment-header">

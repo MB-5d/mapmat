@@ -96,7 +96,7 @@ describe('CommentsPanel', () => {
       selected.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onNavigateToNode).toHaveBeenCalledWith('root');
+    expect(onNavigateToNode).not.toHaveBeenCalled();
     expect(onCommentClick).toHaveBeenCalledWith('root', 'c1');
   });
 

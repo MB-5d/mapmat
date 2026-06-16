@@ -135,4 +135,28 @@ describe('CommentPopover', () => {
     expect(container.querySelector('.comment-popover-footer.modal-footer')).not.toBeNull();
     expect(container.querySelector('.modal-overlay')).toBeNull();
   });
+
+  test('marks the active comment even when id types differ', () => {
+    act(() => {
+      root.render(
+        <CommentPopover
+          node={{
+            ...node,
+            comments: [{ ...node.comments[0], id: 12 }],
+          }}
+          activeCommentId="12"
+          onClose={jest.fn()}
+          onAddComment={jest.fn()}
+          onToggleCompleted={jest.fn()}
+          onDeleteComment={jest.fn()}
+          collaborators={[]}
+          canComment
+        />
+      );
+    });
+
+    const activeComment = container.querySelector('.comment-item.is-active');
+    expect(activeComment).not.toBeNull();
+    expect(activeComment.textContent).toContain('Needs follow-up');
+  });
 });
