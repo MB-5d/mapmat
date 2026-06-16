@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -99,61 +99,114 @@ const CommentPopover = ({
     onClose();
   };
 
-  // Recursive component to render a comment and its replies
-  const CommentItem = ({ comment, depth = 0 }) => (
-    <div
-      className={`comment-item ${comment.completed ? 'completed' : ''}${sameCommentId(activeCommentId, comment.id) ? ' is-active' : ''}`}
-      style={{ marginLeft: depth * 16 }}
-    >
-      <IconButton
-        size="xs"
-        variant="ghost"
-        className={`comment-complete-btn ${comment.completed ? 'checked' : ''}`}
-        onClick={() => onToggleCompleted(node.id, comment.id)}
-        aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
-      >
-        <CheckCircle2 />
-      </IconButton>
-      <div className="comment-content">
-        <div className="comment-text">{comment.text}</div>
-        <div className="comment-meta">
-          <span className="comment-author">{comment.author}</span>
-          <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
-        </div>
-        {comment.completed && comment.completedBy && (
-          <div className="comment-completed-info">
-            <Check size={12} />
-            <span>Completed by {comment.completedBy} · {formatTimeAgo(comment.completedAt)}</span>
-          </div>
-        )}
-      </div>
-      {canComment && (
-        <IconButton
-          size="xs"
-          variant="ghost"
-          className="comment-reply-btn"
-          onClick={() => {
-            setReplyingTo(comment.id);
-            inputRef.current?.focus();
-          }}
-          aria-label="Reply to comment"
-        >
-          <MessageSquareReplyIcon />
-        </IconButton>
-      )}
-      {comment.replies?.length > 0 && (
-        <div className="comment-replies">
-          {comment.replies.map(reply => (
-            <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
+  const filteredCollaborators = collaborators.filter(c =>
+    c.toLowerCase().includes(mentionFilter)
+  );
+
+  useEffect(() => {
+    if (replyingTo) {
+      inputRef.current?.focus();
+    }
+  }, [replyingTo]);
+
+  const renderCommentInput = (placeholder) => (
+    <div className="comment-input-wrapper">
+      <TextareaInput
+        ref={inputRef}
+        className="comment-input"
+        placeholder={placeholder}
+        value={newComment}
+        onChange={handleInputChange}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && e.metaKey) {
+            e.preventDefault();
+            handleSubmit();
+          }
+          if (e.key === 'Escape') {
+            if (replyingTo) {
+              setReplyingTo(null);
+            } else if (showMentions) {
+              setShowMentions(false);
+            } else {
+              handleCancel();
+            }
+          }
+        }}
+      />
+      {showMentions && filteredCollaborators.length > 0 && (
+        <div className="mention-dropdown">
+          {filteredCollaborators.map(name => (
+            <button
+              type="button"
+              key={name}
+              className="mention-option"
+              onClick={() => insertMention(name)}
+            >
+              @{name}
+            </button>
           ))}
         </div>
       )}
     </div>
   );
 
-  const filteredCollaborators = collaborators.filter(c =>
-    c.toLowerCase().includes(mentionFilter)
-  );
+  // Recursive component to render a comment and its replies
+  const CommentItem = ({ comment, depth = 0 }) => {
+    const isReplyTarget = sameCommentId(replyingTo, comment.id);
+
+    return (
+      <div
+        className={`comment-item ${comment.completed ? 'completed' : ''}${sameCommentId(activeCommentId, comment.id) ? ' is-active' : ''}${isReplyTarget ? ' is-replying' : ''}`}
+        style={{ marginLeft: depth * 16 }}
+      >
+        <IconButton
+          size="xs"
+          variant="ghost"
+          className={`comment-complete-btn ${comment.completed ? 'checked' : ''}`}
+          onClick={() => onToggleCompleted(node.id, comment.id)}
+          aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
+        >
+          <CheckCircle2 />
+        </IconButton>
+        <div className="comment-content">
+          <div className="comment-text">{comment.text}</div>
+          <div className="comment-meta">
+            <span className="comment-author">{comment.author}</span>
+            <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
+          </div>
+          {comment.completed && comment.completedBy && (
+            <div className="comment-completed-info">
+              <Check size={12} />
+              <span>Completed by {comment.completedBy} · {formatTimeAgo(comment.completedAt)}</span>
+            </div>
+          )}
+        </div>
+        {canComment && (
+          <IconButton
+            size="xs"
+            variant="ghost"
+            className="comment-reply-btn"
+            onClick={() => setReplyingTo(comment.id)}
+            aria-label="Reply to comment"
+          >
+            <MessageSquareReplyIcon />
+          </IconButton>
+        )}
+        {isReplyTarget && (
+          <div className="comment-reply-composer">
+            {renderCommentInput('Write a reply...')}
+          </div>
+        )}
+        {comment.replies?.length > 0 && (
+          <div className="comment-replies">
+            {comment.replies.map(reply => (
+              <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="comment-popover modal-card" role="dialog" aria-label={`Comments on ${node.title || 'Untitled'}`} onWheel={(e) => e.stopPropagation()}>
@@ -179,59 +232,9 @@ const CommentPopover = ({
         )}
 
         {/* Main textarea area - only show if user can comment */}
-        {canComment && (
+        {canComment && !replyingTo && (
           <div className="comment-input-section">
-            {replyingTo && (
-              <div className="replying-to-banner">
-                <span>Replying to comment</span>
-                <IconButton
-                  size="xxs"
-                  variant="ghost"
-                  onClick={() => setReplyingTo(null)}
-                  aria-label="Cancel reply"
-                >
-                  <X size={14} />
-                </IconButton>
-              </div>
-            )}
-            <div className="comment-input-wrapper">
-              <TextareaInput
-                ref={inputRef}
-                className="comment-input"
-                placeholder={replyingTo ? "Write a reply..." : "Add a comment...\n(use @ to mention)"}
-                value={newComment}
-                onChange={handleInputChange}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && e.metaKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                  if (e.key === 'Escape') {
-                    if (replyingTo) {
-                      setReplyingTo(null);
-                    } else if (showMentions) {
-                      setShowMentions(false);
-                    } else {
-                      handleCancel();
-                    }
-                  }
-                }}
-              />
-              {showMentions && filteredCollaborators.length > 0 && (
-                <div className="mention-dropdown">
-                  {filteredCollaborators.map(name => (
-                    <button
-                      type="button"
-                      key={name}
-                      className="mention-option"
-                      onClick={() => insertMention(name)}
-                    >
-                      @{name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            {renderCommentInput("Add a comment...\n(use @ to mention)")}
           </div>
         )}
       </div>

@@ -180,6 +180,7 @@ describe('CommentsPanel', () => {
     });
 
     const deleteButton = container.querySelector('button[aria-label="Delete comment"]');
+    expect(deleteButton.className).toContain('ui-icon-btn--xs');
 
     act(() => {
       deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

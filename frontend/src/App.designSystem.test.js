@@ -430,12 +430,17 @@ describe('comment popover positioning', () => {
   test('comments drawer items use mono text styles without filter dropdown', () => {
     expect(appCss).toMatch(/\.comments-panel-node-title \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
     expect(appCss).toMatch(/\.comments-panel-item \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--ui-color-border\);/);
+    expect(appCss).toMatch(/\.comments-panel-item\.is-selected \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*box-shadow: inset 0 0 0 1px var\(--ui-color-border-strong\);/);
+    const selectedCommentBlock = appCss.match(/\.comments-panel-item\.is-selected \{[\s\S]*?\}/)?.[0] || '';
+    expect(selectedCommentBlock).not.toContain('var(--ui-color-primary)');
     expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: var\(--type-body-md-size\);/);
     expect(appCss).not.toMatch(/\.comments-filter-select/);
   });
 
   test('shared search and dark input tokens stay consistent', () => {
     expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-color-input-bg: var\(--color-plum-950\);/);
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-input-mono-border: var\(--color-plum-600\);[\s\S]*--ui-input-mono-border-hover: var\(--color-plum-500\);[\s\S]*--ui-input-mono-border-focus: var\(--color-plum-400\);/);
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-status-success-icon: var\(--color-green-300\);/);
     expect(appCss).toMatch(/\.ui-search-input \{[\s\S]*width: 100%;/);
     expect(appCss).toMatch(/\[data-theme="dark"\] \.modal-card input,[\s\S]*background-color: var\(--ui-color-input-bg\);/);
     expect(appCss).toMatch(/\[data-theme="dark"\] \.blank-scan-shell\.search-container:hover,[\s\S]*background: var\(--ui-color-input-bg\);/);

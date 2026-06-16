@@ -133,7 +133,7 @@ const CommentsPanel = ({
                   <span className="comments-panel-node-title">{comment.nodeTitle}</span>
                   {onDeleteComment ? (
                     <IconButton
-                      size="sm"
+                      size="xs"
                       variant="ghost"
                       className="comments-panel-delete"
                       onClick={(event) => {

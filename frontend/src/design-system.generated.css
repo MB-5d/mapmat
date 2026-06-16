@@ -583,9 +583,9 @@
   --ui-input-brand-border: var(--color-brand-400);
   --ui-input-brand-border-hover: var(--color-brand-300);
   --ui-input-brand-border-focus: var(--color-brand-300);
-  --ui-input-mono-border: var(--color-plum-400);
-  --ui-input-mono-border-hover: var(--color-plum-300);
-  --ui-input-mono-border-focus: var(--color-neutral-300);
+  --ui-input-mono-border: var(--color-plum-600);
+  --ui-input-mono-border-hover: var(--color-plum-500);
+  --ui-input-mono-border-focus: var(--color-plum-400);
   --ui-input-error-border: var(--color-red-500);
   --ui-input-error-border-hover: var(--color-red-400);
   --ui-input-disabled-bg: var(--color-plum-800);
@@ -619,8 +619,8 @@
   --ui-status-info-icon: var(--color-blue-400);
   --ui-status-success-bg: #102417;
   --ui-status-success-border: var(--color-green-800);
-  --ui-status-success-text: var(--color-green-200);
-  --ui-status-success-icon: var(--color-green-400);
+  --ui-status-success-text: var(--color-green-300);
+  --ui-status-success-icon: var(--color-green-300);
   --ui-status-danger-bg: #2d1313;
   --ui-status-danger-border: var(--color-red-900);
   --ui-status-danger-text: var(--color-red-200);

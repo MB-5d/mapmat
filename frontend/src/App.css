@@ -10432,7 +10432,7 @@ body {
 .comment-item {
   position: relative;
   padding: 16px 48px 16px 16px;
-  background: var(--ui-color-surface-muted);
+  background: var(--modal-card-bg);
   border-radius: 8px;
   border: var(--border-width-subtle) solid var(--ui-color-border);
   transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
@@ -10440,13 +10440,13 @@ body {
 
 .comment-item:hover,
 .comment-item:focus-within {
-  background: var(--modal-card-bg-hover);
+  background: var(--modal-card-bg);
   border-color: var(--ui-color-border-strong);
 }
 
 .comment-item.is-active {
   border-color: var(--ui-color-border-strong);
-  background: var(--modal-card-bg-hover);
+  background: var(--modal-card-bg);
 }
 
 .comment-item.completed {
@@ -10499,36 +10499,6 @@ body {
   border-left: 2px solid var(--ui-color-border);
 }
 
-.replying-to-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--ui-color-surface-muted);
-  border-radius: var(--ui-radius-sm);
-  margin-bottom: 8px;
-  font-size: 13px;
-  color: var(--ui-color-muted);
-}
-
-.replying-to-banner button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
-  background: none;
-  color: var(--ui-color-input-placeholder);
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.replying-to-banner button:hover {
-  background: var(--ui-color-icon-hover);
-  color: var(--ui-color-muted);
-}
-
 .comment-meta {
   display: flex;
   align-items: center;
@@ -10577,6 +10547,12 @@ body {
   flex-direction: column;
   gap: 8px;
   min-height: 150px;
+}
+
+.comment-reply-composer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: var(--border-width-subtle) solid var(--ui-color-border);
 }
 
 .comment-popover-footer.modal-footer {
@@ -10694,7 +10670,7 @@ body {
   appearance: none;
   width: 100%;
   padding: 12px;
-  background: var(--ui-color-surface-muted);
+  background: var(--modal-card-bg);
   border: var(--border-width-subtle) solid var(--ui-color-border);
   border-radius: 8px;
   color: inherit;
@@ -10705,15 +10681,15 @@ body {
 
 .comments-panel-item:hover,
 .comments-panel-item:focus-visible {
-  background: var(--ui-color-icon-hover);
+  background: var(--modal-card-bg);
   border-color: var(--ui-color-border-strong);
   outline: none;
 }
 
 .comments-panel-item.is-selected {
-  background: var(--ui-color-icon-hover);
-  border-color: var(--ui-color-primary);
-  box-shadow: inset 0 0 0 1px var(--ui-color-primary);
+  background: var(--modal-card-bg);
+  border-color: var(--ui-color-border-strong);
+  box-shadow: inset 0 0 0 1px var(--ui-color-border-strong);
 }
 
 .comments-panel-item-header {

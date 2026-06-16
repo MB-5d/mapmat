@@ -66,7 +66,8 @@ describe('CommentPopover', () => {
       replyButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('Replying to comment');
+    expect(container.textContent).not.toContain('Replying to comment');
+    expect(container.querySelector('.comment-item.is-replying .comment-reply-composer textarea')).not.toBeNull();
 
     const textarea = container.querySelector('textarea');
 
