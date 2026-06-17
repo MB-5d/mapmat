@@ -31,6 +31,7 @@ describe('CommentsPanel', () => {
         completed: true,
         completedBy: 'Sam',
         completedAt: '2026-04-15T11:30:00.000Z',
+        mentions: ['Alex'],
       },
     ],
     children: [],
@@ -51,7 +52,7 @@ describe('CommentsPanel', () => {
     root = null;
   });
 
-  test('hides completed comments when the toggle is off', () => {
+  test('filters resolved comments from the compact filter menu', () => {
     act(() => {
       root.render(
         <CommentsPanel
@@ -67,10 +68,17 @@ describe('CommentsPanel', () => {
 
     expect(container.textContent).toContain('Done already');
 
-    const toggle = container.querySelector('.comments-filter-toggle input[type="checkbox"]');
+    const filterButton = container.querySelector('button[aria-label="Filter comments"]');
 
     act(() => {
-      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      filterButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const resolvedOption = Array.from(container.querySelectorAll('.comments-panel-menu-item'))
+      .find((button) => button.textContent.includes('Resolved'));
+
+    act(() => {
+      resolvedOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(container.textContent).not.toContain('Done already');
@@ -93,8 +101,51 @@ describe('CommentsPanel', () => {
 
     expect(container.textContent).toContain('Comments');
     expect(container.textContent).not.toContain('All Comments');
+    expect(container.textContent).not.toContain('Show completed');
     expect(container.querySelector('input[placeholder="Search comments"]')).not.toBeNull();
+    expect(container.querySelector('.comments-filter-input.ui-input-shell--sm')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Filter comments"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Sort comments: Newest"]')).not.toBeNull();
+    expect(container.querySelector('.comments-filter-toggle')).toBeNull();
     expect(container.querySelector('select')).toBeNull();
+  });
+
+  test('uses the compact sort menu and marks the active option with a dot', () => {
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          currentUser={{ name: 'Alex', email: 'alex@example.com' }}
+          onClose={jest.fn()}
+          onCommentClick={jest.fn()}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.comments-panel-item')?.textContent).toContain('Keep this open');
+
+    const sortButton = container.querySelector('button[aria-label="Sort comments: Newest"]');
+
+    act(() => {
+      sortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Newest');
+    expect(container.textContent).toContain('My mentions');
+    expect(container.querySelector('.comments-panel-menu-dot')).not.toBeNull();
+
+    const mentionsOption = Array.from(container.querySelectorAll('.comments-panel-menu-item'))
+      .find((button) => button.textContent.includes('My mentions'));
+
+    act(() => {
+      mentionsOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('button[aria-label="Sort comments: My mentions"]')).not.toBeNull();
+    expect(container.querySelector('.comments-panel-item')?.textContent).toContain('Done already');
   });
 
   test('clears comment search from the shared search input', () => {

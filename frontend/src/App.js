@@ -193,8 +193,6 @@ import {
 } from './utils/billingPlans';
 import {
   buildConnectorBezier,
-  CONNECTOR_GEOMETRY,
-  getReservedAnchorOffsetDistance,
   USER_FLOW_ARROWHEAD,
 } from './utils/connectorGeometry';
 
@@ -5045,51 +5043,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const visibleCanvasNodeIds = useMemo(() => (
     new Set(visibleCanvasNodeData.map((nodeData) => nodeData?.node?.id).filter(Boolean))
   ), [visibleCanvasNodeData]);
-
-  const layoutConnectorAnchorKeys = useMemo(() => {
-    const anchorKeys = new Set();
-    if (!mapLayout?.nodes?.size || !Array.isArray(mapLayout.connectors)) return anchorKeys;
-
-    const anchorsByPoint = new Map();
-    const addAnchorPoint = (x, y, nodeId, anchor) => {
-      const key = `${Math.round(Number(x || 0))}:${Math.round(Number(y || 0))}`;
-      const existing = anchorsByPoint.get(key) || [];
-      existing.push({ nodeId, anchor });
-      anchorsByPoint.set(key, existing);
-    };
-
-    mapLayout.nodes.forEach((nodeData, nodeId) => {
-      const nodeW = Number(nodeData?.w || LAYOUT.NODE_W);
-      const nodeH = Number(nodeData?.h || getNodeH(showThumbnails));
-      const x = Number(nodeData?.x || 0);
-      const y = Number(nodeData?.y || 0);
-      addAnchorPoint(x + nodeW / 2, y, nodeId, 'top');
-      addAnchorPoint(x + nodeW, y + nodeH / 2, nodeId, 'right');
-      addAnchorPoint(x + nodeW / 2, y + nodeH, nodeId, 'bottom');
-      addAnchorPoint(x, y + nodeH / 2, nodeId, 'left');
-    });
-
-    const reserveEndpoint = (x, y) => {
-      const matches = anchorsByPoint.get(`${Math.round(Number(x || 0))}:${Math.round(Number(y || 0))}`) || [];
-      matches.forEach(({ nodeId, anchor }) => {
-        anchorKeys.add(`${nodeId}:${anchor}`);
-      });
-    };
-
-    mapLayout.connectors.forEach((connector) => {
-      reserveEndpoint(connector.x1, connector.y1);
-      reserveEndpoint(connector.x2, connector.y2);
-    });
-
-    return anchorKeys;
-  }, [mapLayout, showThumbnails]);
-
-  const mapConnectorMaskPaths = useMemo(() => {
-    if (!Array.isArray(mapLayout?.connectors)) return [];
-    return mapLayout.connectors.map((connector) => (
-      `M ${connector.x1} ${connector.y1} L ${connector.x2} ${connector.y2}`
-    ));
-  }, [mapLayout]);
 
   const visibleAutoCrosslinkConnections = useMemo(() => (
     autoCrosslinkConnections.filter((conn) => (
@@ -14793,12 +14746,49 @@ export default function App({ currentRoute, navigateToRoute }) {
     return null;
   };
 
+  const getBestAnchorPair = useCallback((sourceId, targetId) => {
+    const anchors = ['top', 'right', 'bottom', 'left'];
+    let best = null;
+
+    anchors.forEach((sourceAnchor) => {
+      const start = getAnchorPosition(sourceId, sourceAnchor);
+      if (!start) return;
+      anchors.forEach((targetAnchor) => {
+        const end = getAnchorPosition(targetId, targetAnchor);
+        if (!end) return;
+        const dist = (start.x - end.x) ** 2 + (start.y - end.y) ** 2;
+        if (!best || dist < best.dist) {
+          best = { sourceAnchor, targetAnchor, dist };
+        }
+      });
+    });
+
+    if (!best) return null;
+    return { sourceAnchor: best.sourceAnchor, targetAnchor: best.targetAnchor };
+  }, [getAnchorPosition]);
+
+  const getRenderedConnectionAnchors = useCallback((conn) => {
+    if (!conn) return null;
+    if (conn.sourceAnchor && conn.targetAnchor) {
+      return {
+        sourceAnchor: conn.sourceAnchor,
+        targetAnchor: conn.targetAnchor,
+      };
+    }
+    if (conn.type === 'crosslink' && conn.autoRoute) {
+      return getBestAnchorPair(conn.sourceNodeId, conn.targetNodeId);
+    }
+    return null;
+  }, [getBestAnchorPair]);
+
   const getConnectionsAtAnchor = (nodeId, anchor, asSource) => {
-    return connections.filter(conn =>
-      asSource
-        ? (conn.sourceNodeId === nodeId && conn.sourceAnchor === anchor)
-        : (conn.targetNodeId === nodeId && conn.targetAnchor === anchor)
-    );
+    return connections.filter((conn) => {
+      const anchors = getRenderedConnectionAnchors(conn);
+      if (!anchors) return false;
+      return asSource
+        ? (conn.sourceNodeId === nodeId && anchors.sourceAnchor === anchor)
+        : (conn.targetNodeId === nodeId && anchors.targetAnchor === anchor);
+    });
   };
 
   const getAnchorSpacing = useCallback((count, anchor) => {
@@ -14814,19 +14804,13 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const getAnchorOffset = (conn, nodeId, anchor, isSource) => {
     const shared = getConnectionsAtAnchor(nodeId, anchor, isSource);
-    const hasReservedAnchor = layoutConnectorAnchorKeys.has(`${nodeId}:${anchor}`);
     const storedIndex = shared.findIndex(c => c.id === conn.id);
     const connectionCount = shared.length + (storedIndex >= 0 ? 0 : 1);
-    if (connectionCount + (hasReservedAnchor ? 1 : 0) <= 1) return { x: 0, y: 0 };
+    if (connectionCount <= 1) return { x: 0, y: 0 };
 
     const index = storedIndex >= 0 ? storedIndex : shared.length;
-    const spacing = getAnchorSpacing(connectionCount + (hasReservedAnchor ? 1 : 0), anchor);
-    const offset = getReservedAnchorOffsetDistance({
-      connectionIndex: index,
-      connectionCount,
-      spacing,
-      hasReservedAnchor,
-    });
+    const spacing = getAnchorSpacing(connectionCount, anchor);
+    const offset = (index - (connectionCount - 1) / 2) * spacing;
 
     return (anchor === 'top' || anchor === 'bottom')
       ? { x: offset, y: 0 }
@@ -14855,27 +14839,6 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     return geometry?.path || '';
   };
-
-  const getBestAnchorPair = useCallback((sourceId, targetId) => {
-    const anchors = ['top', 'right', 'bottom', 'left'];
-    let best = null;
-
-    anchors.forEach((sourceAnchor) => {
-      const start = getAnchorPosition(sourceId, sourceAnchor);
-      if (!start) return;
-      anchors.forEach((targetAnchor) => {
-        const end = getAnchorPosition(targetId, targetAnchor);
-        if (!end) return;
-        const dist = (start.x - end.x) ** 2 + (start.y - end.y) ** 2;
-        if (!best || dist < best.dist) {
-          best = { sourceAnchor, targetAnchor, dist };
-        }
-      });
-    });
-
-    if (!best) return null;
-    return { sourceAnchor: best.sourceAnchor, targetAnchor: best.targetAnchor };
-  }, [getAnchorPosition]);
 
   // ========== END CONNECTION LINE FUNCTIONS ==========
 
@@ -16897,34 +16860,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                       <feMergeNode in="SourceGraphic" />
                     </feMerge>
                   </filter>
-                  {mapConnectorMaskPaths.length > 0 && (
-                    <mask
-                      id="relationship-map-connector-gap-mask"
-                      maskUnits="userSpaceOnUse"
-                      x={0}
-                      y={0}
-                      width={mapLayout?.bounds?.w || 0}
-                      height={mapLayout?.bounds?.h || 0}
-                    >
-                      <rect
-                        x={0}
-                        y={0}
-                        width={mapLayout?.bounds?.w || 0}
-                        height={mapLayout?.bounds?.h || 0}
-                        fill="white"
-                      />
-                      {mapConnectorMaskPaths.map((pathD, index) => (
-                        <path
-                          key={`map-connector-gap-${index}`}
-                          d={pathD}
-                          fill="none"
-                          stroke="black"
-                          strokeWidth={CONNECTOR_GEOMETRY.mapConnectorGapStrokeWidth}
-                          strokeLinecap="butt"
-                        />
-                      ))}
-                    </mask>
-                  )}
                 </defs>
 
                 {layers.crossLinks && visibleAutoCrosslinkConnections.map((conn) => {
@@ -16969,7 +16904,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                         strokeLinecap="round"
                         strokeDasharray="8 6"
                         filter="url(#connection-glow)"
-                        mask={mapConnectorMaskPaths.length > 0 ? 'url(#relationship-map-connector-gap-mask)' : undefined}
                         style={{ pointerEvents: 'none' }}
                       />
                       <path
@@ -16981,7 +16915,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                         strokeDasharray="8 6"
                         strokeLinecap="round"
                         strokeOpacity={lineOpacity}
-                        mask={mapConnectorMaskPaths.length > 0 ? 'url(#relationship-map-connector-gap-mask)' : undefined}
                         style={{ pointerEvents: 'none' }}
                       />
                     </g>
@@ -17048,6 +16981,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                     if (draggingEndpoint?.connectionId === conn.id) return false;
                     return true;
                   })
+                  .sort((a, b) => (
+                    (a.type === 'userflow' ? 1 : 0) - (b.type === 'userflow' ? 1 : 0)
+                  ))
                   .map(conn => {
                     const path = generateConnectionPath(conn);
                     if (!path) return null;
@@ -17127,7 +17063,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                           strokeLinecap="round"
                           strokeDasharray={isUserFlow ? 'none' : '8 6'}
                           filter="url(#connection-glow)"
-                          mask={mapConnectorMaskPaths.length > 0 ? 'url(#relationship-map-connector-gap-mask)' : undefined}
                           style={{ pointerEvents: 'none' }}
                         />
                         {/* Main line */}
@@ -17141,7 +17076,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                           strokeDasharray={isUserFlow ? 'none' : '8 6'}
                           markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
                           strokeOpacity={lineOpacity}
-                          mask={mapConnectorMaskPaths.length > 0 ? 'url(#relationship-map-connector-gap-mask)' : undefined}
                           style={{ pointerEvents: 'none' }}
                         />
                       </g>
@@ -17173,7 +17107,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                       strokeOpacity={0.8}
                       strokeLinecap="round"
                       markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                      mask={mapConnectorMaskPaths.length > 0 ? 'url(#relationship-map-connector-gap-mask)' : undefined}
                     />
                   );
                 })()}
@@ -17209,7 +17142,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                       strokeOpacity={0.8}
                       strokeLinecap="round"
                       markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                      mask={mapConnectorMaskPaths.length > 0 ? 'url(#relationship-map-connector-gap-mask)' : undefined}
                     />
                   );
                 })()}
@@ -17885,6 +17817,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         isOpen={showCommentsPanel}
         root={renderRoot}
         orphans={visibleOrphans}
+        currentUser={currentUser}
         selectedCommentId={selectedCommentId}
         expandedCommentIdsOverride={figmaCaptureExpandedCommentIds}
         onClose={() => {

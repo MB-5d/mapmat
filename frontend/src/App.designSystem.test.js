@@ -213,12 +213,11 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(/\.connections-layer--relationship \{[\s\S]*z-index: 1;/);
     expect(appJs).toContain('className="connector-overlay connector-overlay--map"');
     expect(appJs).toContain('className="connections-layer connections-layer--relationship"');
-    expect(appJs).toContain('layoutConnectorAnchorKeys');
-    expect(appJs).toContain('getReservedAnchorOffsetDistance({');
-    expect(appJs).toContain('relationship-map-connector-gap-mask');
-    expect(appJs).toContain('CONNECTOR_GEOMETRY.mapConnectorGapStrokeWidth');
+    expect(appJs).toContain('getRenderedConnectionAnchors');
+    expect(appJs).toContain("(a.type === 'userflow' ? 1 : 0) - (b.type === 'userflow' ? 1 : 0)");
     expect(appJs).toContain('buildConnectorBezier({');
     expect(appJs).toContain('USER_FLOW_ARROWHEAD.path');
+    expect(appJs).not.toContain('relationship-map-connector-gap-mask');
   });
 
   test('canvas wheel zooms while press-drag remains the pan control', () => {
@@ -442,14 +441,17 @@ describe('comment popover positioning', () => {
     expect(appCss).toMatch(/\.comment-complete-btn\.checked,[\s\S]*\.comment-complete-btn\.checked:hover:not\(:disabled\),[\s\S]*\.comment-complete-btn\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
   });
 
-  test('comments drawer items use mono text styles without filter dropdown', () => {
+  test('comments drawer items use mono text styles and compact menu controls', () => {
     expect(appCss).toMatch(/\.comments-panel-node-title \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
-    expect(appCss).toMatch(/\.comments-panel-item \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--ui-color-border\);/);
+    expect(appCss).toMatch(/\.comments-panel-item \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
     expect(appCss).toMatch(/\.comments-panel-item\.is-selected \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*box-shadow: inset 0 0 0 1px var\(--ui-color-border-strong\);/);
     const selectedCommentBlock = appCss.match(/\.comments-panel-item\.is-selected \{[\s\S]*?\}/)?.[0] || '';
     expect(selectedCommentBlock).not.toContain('var(--ui-color-primary)');
-    expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: var\(--type-body-md-size\);/);
+    expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: var\(--type-body-sm-size\);/);
+    expect(appCss).toMatch(/\.comments-panel-menu \{[\s\S]*width: 128px;[\s\S]*min-width: 128px;/);
+    expect(appCss).toMatch(/\.comments-panel-menu-item\.ui-menu-item \{[\s\S]*min-height: 24px;/);
     expect(appCss).not.toMatch(/\.comments-filter-select/);
+    expect(appCss).not.toMatch(/\.comments-filter-toggle/);
   });
 
   test('shared search and dark input tokens stay consistent', () => {
