@@ -10832,9 +10832,9 @@ body {
   appearance: none;
   width: 100%;
   position: relative;
-  padding: 14px 14px 40px;
+  padding: var(--unit-16);
   background: var(--modal-card-bg);
-  border: var(--border-width-subtle) solid var(--ui-color-border);
+  border: var(--border-width-subtle) solid var(--modal-card-border);
   border-radius: 8px;
   color: inherit;
   cursor: pointer;
@@ -10846,14 +10846,15 @@ body {
 }
 
 .comments-panel-item:hover,
-.comments-panel-item:focus-visible {
-  background: var(--modal-card-bg);
+.comments-panel-item:focus-visible,
+.comments-panel-item:focus-within {
+  background: var(--modal-card-bg-hover);
   border-color: var(--ui-color-border-strong);
   outline: none;
 }
 
 .comments-panel-item.is-selected {
-  background: var(--modal-card-bg);
+  background: var(--modal-card-bg-hover);
   border-color: var(--ui-color-border-strong);
   box-shadow: inset 0 0 0 1px var(--ui-color-border-strong);
 }
@@ -10861,8 +10862,10 @@ body {
 .comments-panel-item-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: var(--space-sm);
   margin-bottom: 0;
+  min-height: var(--unit-24);
 }
 
 .comments-panel-node-title {
@@ -10877,9 +10880,24 @@ body {
   white-space: nowrap;
 }
 
-.comments-panel-complete,
-.comments-panel-expand {
+.comments-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   flex-shrink: 0;
+  min-height: var(--unit-24);
+  margin: calc(-1 * var(--unit-4)) calc(-1 * var(--unit-4)) 0 0;
+}
+
+.comments-panel-delete,
+.comments-panel-complete {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.comments-panel-delete {
+  color: var(--ui-button-mono-quiet);
 }
 
 .comments-panel-complete {
@@ -10889,25 +10907,16 @@ body {
 .comments-panel-complete.checked,
 .comments-panel-complete.checked:hover:not(:disabled),
 .comments-panel-complete.checked:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
   color: var(--ui-status-success-icon);
-}
-
-.comments-panel-expand {
-  color: var(--ui-icon-muted);
-}
-
-.comments-panel-delete {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  color: var(--ui-icon-muted);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s ease, color 0.15s ease;
 }
 
 .comments-panel-item:hover .comments-panel-delete,
 .comments-panel-item:focus-within .comments-panel-delete,
+.comments-panel-item:hover .comments-panel-complete,
+.comments-panel-item:focus-within .comments-panel-complete,
+.comments-panel-complete:focus-visible,
 .comments-panel-delete:focus-visible {
   opacity: 1;
   pointer-events: auto;
@@ -10918,16 +10927,26 @@ body {
   color: var(--ui-color-danger);
 }
 
+.comments-panel-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  min-height: var(--type-label-sm-line-height);
+}
+
 .comments-panel-item-meta {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
+  min-width: 0;
   margin-top: 0;
 }
 
 .comments-panel-author {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--ui-color-muted);
 }
 
@@ -10937,34 +10956,34 @@ body {
 }
 
 .comments-panel-text {
-  font-size: var(--type-body-md-size);
-  line-height: var(--type-body-md-line-height);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
   color: var(--ui-color-text);
+  word-break: break-word;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.comments-panel-text.is-expanded {
-  display: block;
-  -webkit-line-clamp: unset;
-  -webkit-box-orient: initial;
-  overflow: visible;
-}
-
-.comments-panel-item-footer {
-  display: flex;
-  justify-content: flex-end;
-  min-height: 16px;
-  padding-right: 24px;
-}
-
 .comments-panel-completed-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
   font-size: 12px;
-  line-height: 1.4;
+  line-height: var(--type-label-sm-line-height);
   color: var(--ui-status-success-icon);
   text-align: right;
+  white-space: nowrap;
+}
+
+.comments-panel-completed-author {
+  font-weight: 600;
+}
+
+.comments-panel-completed-time {
+  font-weight: 400;
 }
 
 .comments-panel-empty {

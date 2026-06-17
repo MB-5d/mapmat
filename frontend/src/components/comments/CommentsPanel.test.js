@@ -182,7 +182,7 @@ describe('CommentsPanel', () => {
     });
 
     const deleteButton = container.querySelector('button[aria-label="Delete comment"]');
-    expect(deleteButton.className).toContain('ui-icon-btn--xxs');
+    expect(deleteButton.className).toContain('ui-icon-btn--xs');
 
     act(() => {
       deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -192,7 +192,7 @@ describe('CommentsPanel', () => {
     expect(onCommentClick).not.toHaveBeenCalled();
   });
 
-  test('toggles completed state directly from the drawer and shows completed details in the footer', () => {
+  test('toggles completed state directly from the drawer and shows resolved details in the meta row', () => {
     const onToggleCompleted = jest.fn();
 
     act(() => {
@@ -216,12 +216,15 @@ describe('CommentsPanel', () => {
     });
 
     expect(onToggleCompleted).toHaveBeenCalledWith('root', 'c1');
-    expect(container.textContent).toContain('Completed by Sam');
+    const resolved = Array.from(container.querySelectorAll('.comments-panel-item'))
+      .find((item) => item.textContent.includes('Done already'));
+    expect(resolved).not.toBeNull();
+    expect(resolved.className).toContain('is-resolved');
+    expect(resolved.querySelector('.comments-panel-complete.checked')).not.toBeNull();
+    expect(resolved.querySelector('.comments-panel-completed-info')?.textContent).toContain('Sam');
   });
 
-  test('expands a drawer comment without navigating', () => {
-    const onCommentClick = jest.fn();
-
+  test('uses the new drawer card actions without the legacy expand control', () => {
     act(() => {
       root.render(
         <CommentsPanel
@@ -229,23 +232,21 @@ describe('CommentsPanel', () => {
           root={rootNode}
           orphans={[]}
           onClose={jest.fn()}
-          onCommentClick={onCommentClick}
+          onCommentClick={jest.fn()}
+          onDeleteComment={jest.fn()}
+          onToggleCompleted={jest.fn()}
           onNavigateToNode={jest.fn()}
         />
       );
     });
 
-    const expandButton = container.querySelector('button[aria-label="Expand comment"]');
-
-    act(() => {
-      expandButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onCommentClick).not.toHaveBeenCalled();
-    expect(container.querySelector('.comments-panel-text.is-expanded')).not.toBeNull();
+    expect(container.querySelector('.comments-panel-expand')).toBeNull();
+    expect(container.querySelector('button[aria-label="Expand comment"]')).toBeNull();
+    expect(container.querySelector('.comments-panel-actions')).not.toBeNull();
+    expect(container.querySelector('.comments-panel-text')).not.toBeNull();
   });
 
-  test('applies expanded comment overrides for capture states', () => {
+  test('ignores legacy expanded comment overrides in the drawer card layout', () => {
     act(() => {
       root.render(
         <CommentsPanel
@@ -260,7 +261,8 @@ describe('CommentsPanel', () => {
       );
     });
 
-    expect(container.querySelector('.comments-panel-text.is-expanded')).not.toBeNull();
+    expect(container.querySelector('.comments-panel-text.is-expanded')).toBeNull();
+    expect(container.querySelector('.comments-panel-text')).not.toBeNull();
   });
 
   test('marks selected comments even when id types differ', () => {

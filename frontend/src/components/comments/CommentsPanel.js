@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { CheckCircle2, Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import CheckboxField from '../ui/CheckboxField';
@@ -13,7 +13,6 @@ const CommentsPanel = ({
   root,
   orphans,
   selectedCommentId,
-  expandedCommentIdsOverride,
   onClose,
   onCommentClick,
   onDeleteComment,
@@ -22,12 +21,6 @@ const CommentsPanel = ({
 }) => {
   const [filter, setFilter] = useState('');
   const [showCompleted, setShowCompleted] = useState(true);
-  const [expandedCommentIds, setExpandedCommentIds] = useState(() => new Set());
-
-  useEffect(() => {
-    if (!Array.isArray(expandedCommentIdsOverride)) return;
-    setExpandedCommentIds(new Set(expandedCommentIdsOverride.map((commentId) => String(commentId))));
-  }, [expandedCommentIdsOverride]);
 
   // Collect all comments from tree and orphans
   const getAllComments = () => {
@@ -76,19 +69,6 @@ const CommentsPanel = ({
     onNavigateToNode?.(comment.nodeId);
   };
 
-  const toggleExpanded = (commentId) => {
-    setExpandedCommentIds((prev) => {
-      const next = new Set(prev);
-      const key = String(commentId);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
   const filteredComments = allComments.filter(comment => {
     // Filter by completed status
     if (!showCompleted && comment.completed) return false;
@@ -135,79 +115,72 @@ const CommentsPanel = ({
           <div className="comments-panel-list">
             {filteredComments.map(comment => {
               const isSelected = sameCommentId(selectedCommentId, comment.id);
-              const isExpanded = expandedCommentIds.has(String(comment.id));
+              const completedTime = comment.completedAt ? formatTimeAgo(comment.completedAt) : '';
               return (
-              <div
-                key={comment.id}
-                className={`comments-panel-item${isSelected ? ' is-selected' : ''}`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={isSelected}
-                onClick={() => navigateToComment(comment)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    navigateToComment(comment);
-                  }
-                }}
-              >
-                <div className="comments-panel-item-header">
-                  {onToggleCompleted ? (
-                    <IconButton
-                      size="xs"
-                      variant="ghost"
-                      className={`comments-panel-complete${comment.completed ? ' checked' : ''}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onToggleCompleted(comment.nodeId, comment.id);
-                      }}
-                      aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
-                    >
-                      <CheckCircle2 />
-                    </IconButton>
-                  ) : null}
-                  <span className="comments-panel-node-title">{comment.nodeTitle}</span>
-                  <IconButton
-                    size="xs"
-                    variant="ghost"
-                    className="comments-panel-expand"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleExpanded(comment.id);
-                    }}
-                    aria-label={isExpanded ? 'Collapse comment' : 'Expand comment'}
-                    aria-expanded={isExpanded}
-                  >
-                    {isExpanded ? <ChevronUp /> : <ChevronDown />}
-                  </IconButton>
-                </div>
-                <div className={`comments-panel-text${isExpanded ? ' is-expanded' : ''}`}>{comment.text}</div>
-                <div className="comments-panel-item-meta">
-                  <span className="comments-panel-author">{comment.author}</span>
-                  <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
-                </div>
-                <div className="comments-panel-item-footer">
-                  {comment.completed && comment.completedBy ? (
-                    <div className="comments-panel-completed-info">
-                      Completed by {comment.completedBy} · {formatTimeAgo(comment.completedAt)}
+                <div
+                  key={comment.id}
+                  className={`comments-panel-item${isSelected ? ' is-selected' : ''}${comment.completed ? ' is-resolved' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  onClick={() => navigateToComment(comment)}
+                  onKeyDown={(event) => {
+                    if (event.currentTarget !== event.target) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigateToComment(comment);
+                    }
+                  }}
+                >
+                  <div className="comments-panel-item-header">
+                    <span className="comments-panel-node-title">{comment.nodeTitle}</span>
+                    <div className="comments-panel-actions">
+                      {onDeleteComment ? (
+                        <IconButton
+                          size="xs"
+                          variant="ghost"
+                          className="comments-panel-delete"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDeleteComment(comment.nodeId, comment.id);
+                          }}
+                          aria-label="Delete comment"
+                        >
+                          <Trash2 />
+                        </IconButton>
+                      ) : null}
+                      {onToggleCompleted ? (
+                        <IconButton
+                          size="xs"
+                          variant="ghost"
+                          className={`comments-panel-complete${comment.completed ? ' checked' : ''}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleCompleted(comment.nodeId, comment.id);
+                          }}
+                          aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
+                        >
+                          <CheckCircle2 />
+                        </IconButton>
+                      ) : null}
                     </div>
-                  ) : null}
+                  </div>
+                  <div className="comments-panel-text">{comment.text}</div>
+                  <div className="comments-panel-meta-row">
+                    <div className="comments-panel-item-meta">
+                      <span className="comments-panel-author">{comment.author}</span>
+                      <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
+                    </div>
+                    {comment.completed && comment.completedBy ? (
+                      <div className="comments-panel-completed-info">
+                        <span className="comments-panel-completed-author">{comment.completedBy}</span>
+                        {completedTime ? (
+                          <span className="comments-panel-completed-time">{completedTime}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                {onDeleteComment ? (
-                  <IconButton
-                    size="xxs"
-                    variant="ghost"
-                    className="comments-panel-delete"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDeleteComment(comment.nodeId, comment.id);
-                    }}
-                    aria-label="Delete comment"
-                  >
-                    <Trash2 />
-                  </IconButton>
-                ) : null}
-              </div>
               );
             })}
           </div>
