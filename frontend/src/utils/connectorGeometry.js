@@ -9,6 +9,7 @@ export const CONNECTOR_GEOMETRY = Object.freeze({
   curveRatio: 0.5,
   minCurveDistance: 24,
   maxCurveDistance: 100,
+  terminalStraightDistance: 24,
 });
 
 export const USER_FLOW_ARROWHEAD = Object.freeze({
@@ -91,13 +92,24 @@ export const buildConnectorBezier = ({
   });
   const sourceNormal = getAnchorNormal(resolvedAnchors.sourceAnchor);
   const targetNormal = getAnchorNormal(resolvedAnchors.targetAnchor);
+  const terminalStraightDistance = Number(
+    curveConfig?.terminalStraightDistance ?? CONNECTOR_GEOMETRY.terminalStraightDistance
+  );
+  const curveStart = {
+    x: startPos.x + sourceNormal.x * terminalStraightDistance,
+    y: startPos.y + sourceNormal.y * terminalStraightDistance,
+  };
+  const curveEnd = {
+    x: endPos.x + targetNormal.x * terminalStraightDistance,
+    y: endPos.y + targetNormal.y * terminalStraightDistance,
+  };
   const ctrl1 = {
-    x: startPos.x + sourceNormal.x * curveDistance,
-    y: startPos.y + sourceNormal.y * curveDistance,
+    x: curveStart.x + sourceNormal.x * curveDistance,
+    y: curveStart.y + sourceNormal.y * curveDistance,
   };
   const ctrl2 = {
-    x: endPos.x + targetNormal.x * curveDistance,
-    y: endPos.y + targetNormal.y * curveDistance,
+    x: curveEnd.x + targetNormal.x * curveDistance,
+    y: curveEnd.y + targetNormal.y * curveDistance,
   };
 
   return {
@@ -105,9 +117,12 @@ export const buildConnectorBezier = ({
     targetAnchor: resolvedAnchors.targetAnchor,
     startPos,
     endPos,
+    curveStart,
+    curveEnd,
     ctrl1,
     ctrl2,
     curveDistance,
-    path: `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`,
+    terminalStraightDistance,
+    path: `M ${startPos.x} ${startPos.y} L ${curveStart.x} ${curveStart.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${curveEnd.x} ${curveEnd.y} L ${endPos.x} ${endPos.y}`,
   };
 };

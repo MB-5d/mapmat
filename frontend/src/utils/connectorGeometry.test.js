@@ -22,7 +22,7 @@ describe('connectorGeometry', () => {
     expect(flow).toEqual(crosslink);
   });
 
-  test('applies the same curve distance from both anchors', () => {
+  test('applies the same curve distance from both terminal segments', () => {
     const geometry = buildConnectorBezier({
       start: { x: 40, y: 180 },
       end: { x: 280, y: 320 },
@@ -31,16 +31,33 @@ describe('connectorGeometry', () => {
     });
 
     const startCurveDistance = Math.hypot(
-      geometry.ctrl1.x - geometry.startPos.x,
-      geometry.ctrl1.y - geometry.startPos.y,
+      geometry.ctrl1.x - geometry.curveStart.x,
+      geometry.ctrl1.y - geometry.curveStart.y,
     );
     const endCurveDistance = Math.hypot(
-      geometry.ctrl2.x - geometry.endPos.x,
-      geometry.ctrl2.y - geometry.endPos.y,
+      geometry.ctrl2.x - geometry.curveEnd.x,
+      geometry.ctrl2.y - geometry.curveEnd.y,
     );
 
     expect(startCurveDistance).toBeCloseTo(geometry.curveDistance, 5);
     expect(endCurveDistance).toBeCloseTo(geometry.curveDistance, 5);
+  });
+
+  test('adds tangent-aligned straight segments at both anchors', () => {
+    const geometry = buildConnectorBezier({
+      start: { x: 100, y: 100 },
+      end: { x: 320, y: 240 },
+      sourceAnchor: 'right',
+      targetAnchor: 'top',
+    });
+
+    expect(geometry.path).toBe(
+      'M 100 100 L 124 100 C 224 100, 320 116, 320 216 L 320 240'
+    );
+    expect(geometry.curveStart).toEqual({ x: 124, y: 100 });
+    expect(geometry.curveEnd).toEqual({ x: 320, y: 216 });
+    expect(geometry.ctrl1.y).toBe(geometry.curveStart.y);
+    expect(geometry.ctrl2.x).toBe(geometry.curveEnd.x);
   });
 
   test('clamps curve distance for short and long connectors', () => {
