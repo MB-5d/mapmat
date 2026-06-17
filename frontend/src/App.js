@@ -208,6 +208,48 @@ const ADD_ON_QUANTITY_MAX = 100;
 const COMMENT_POPOVER_WIDTH = 384;
 const COMMENT_POPOVER_EDGE_GAP = 8;
 const COMMENT_POPOVER_DRAWER_GAP = 32;
+const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
+
+function getAnchorReservationKey(nodeId, anchor) {
+  return `${nodeId || ''}:${anchor || ''}`;
+}
+
+function getLayoutConnectorEndpointAnchorReservation(nodeData, point) {
+  if (!nodeData || !point) return null;
+
+  const nodeX = Number(nodeData.x);
+  const nodeY = Number(nodeData.y);
+  const nodeW = Number(nodeData.w);
+  const nodeH = Number(nodeData.h);
+  const pointX = Number(point.x);
+  const pointY = Number(point.y);
+
+  if (![nodeX, nodeY, nodeW, nodeH, pointX, pointY].every(Number.isFinite)) return null;
+
+  const nodeRight = nodeX + nodeW;
+  const nodeBottom = nodeY + nodeH;
+  const nodeCenterX = nodeX + nodeW / 2;
+  const nodeCenterY = nodeY + nodeH / 2;
+  const withinX = pointX >= nodeX - LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+    && pointX <= nodeRight + LAYOUT_CONNECTOR_ENDPOINT_EPSILON;
+  const withinY = pointY >= nodeY - LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+    && pointY <= nodeBottom + LAYOUT_CONNECTOR_ENDPOINT_EPSILON;
+
+  if (withinX && Math.abs(pointY - nodeY) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'top', offset: pointX - nodeCenterX };
+  }
+  if (withinX && Math.abs(pointY - nodeBottom) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'bottom', offset: pointX - nodeCenterX };
+  }
+  if (withinY && Math.abs(pointX - nodeRight) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'right', offset: pointY - nodeCenterY };
+  }
+  if (withinY && Math.abs(pointX - nodeX) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'left', offset: pointY - nodeCenterY };
+  }
+
+  return null;
+}
 
 function escapeCssSelectorValue(value) {
   const raw = String(value || '');
@@ -4346,6 +4388,36 @@ export default function App({ currentRoute, navigateToRoute }) {
       orientation: mapOrientation,
     });
   }, [expandedStacks, mapOrientation, renderRoot, showThumbnails, useLargeMapSurface, visibleOrphans]);
+
+  const layoutConnectorEndpointReservations = useMemo(() => {
+    const reservations = new Map();
+    if (!mapLayout?.nodes || !Array.isArray(mapLayout.connectors)) return reservations;
+
+    const addReservation = (nodeId, reservation, connectorIndex, endpoint) => {
+      const key = getAnchorReservationKey(nodeId, reservation.anchor);
+      const list = reservations.get(key) || [];
+      list.push({
+        id: `layout-${connectorIndex}-${endpoint}`,
+        kind: 'layout',
+        offset: reservation.offset,
+      });
+      reservations.set(key, list);
+    };
+
+    mapLayout.connectors.forEach((connector, connectorIndex) => {
+      [
+        { endpoint: 'source', x: connector.x1, y: connector.y1 },
+        { endpoint: 'target', x: connector.x2, y: connector.y2 },
+      ].forEach((point) => {
+        mapLayout.nodes.forEach((nodeData, nodeId) => {
+          const reservation = getLayoutConnectorEndpointAnchorReservation(nodeData, point);
+          if (reservation) addReservation(nodeId, reservation, connectorIndex, point.endpoint);
+        });
+      });
+    });
+
+    return reservations;
+  }, [mapLayout]);
 
   useLayoutEffect(() => {
     layoutRef.current = mapLayout;
@@ -14804,6 +14876,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     }, []);
   };
 
+  const getLayoutConnectorEndpointsAtAnchor = (nodeId, anchor) => (
+    layoutConnectorEndpointReservations.get(getAnchorReservationKey(nodeId, anchor)) || []
+  );
+
   const getAnchorSpacing = useCallback((count, anchor) => {
     if (count <= 1) return 0;
     const axisLength = (anchor === 'top' || anchor === 'bottom')
@@ -14817,15 +14893,28 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const getAnchorOffset = (conn, nodeId, anchor, endpoint) => {
     const shared = getConnectionEndpointsAtAnchor(nodeId, anchor);
+    const layoutEndpointReservations = getLayoutConnectorEndpointsAtAnchor(nodeId, anchor);
     const storedIndex = shared.findIndex((entry) => (
       entry.connectionId === conn.id && entry.endpoint === endpoint
     ));
-    const connectionCount = shared.length + (storedIndex >= 0 ? 0 : 1);
+    const relationshipCount = shared.length + (storedIndex >= 0 ? 0 : 1);
+    const connectionCount = relationshipCount + layoutEndpointReservations.length;
     if (connectionCount <= 1) return { x: 0, y: 0 };
 
     const index = storedIndex >= 0 ? storedIndex : shared.length;
     const spacing = getAnchorSpacing(connectionCount, anchor);
-    const offset = (index - (connectionCount - 1) / 2) * spacing;
+    const reservedOffsets = layoutEndpointReservations.map((entry) => Number(entry.offset || 0));
+    const availableOffsets = Array.from({ length: connectionCount }, (_, slotIndex) => (
+      (slotIndex - (connectionCount - 1) / 2) * spacing
+    )).filter((slotOffset) => (
+      reservedOffsets.every((reservedOffset) => (
+        Math.abs(slotOffset - reservedOffset) > LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+      ))
+    ));
+    const fallbackEdgeIndex = Math.max(0, index - availableOffsets.length);
+    const fallbackDirection = fallbackEdgeIndex % 2 === 0 ? -1 : 1;
+    const fallbackMagnitude = ((connectionCount - 1) / 2 + Math.ceil((fallbackEdgeIndex + 1) / 2)) * spacing;
+    const offset = availableOffsets[index] ?? (fallbackDirection * fallbackMagnitude);
 
     return (anchor === 'top' || anchor === 'bottom')
       ? { x: offset, y: 0 }

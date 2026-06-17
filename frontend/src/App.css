@@ -10820,18 +10820,6 @@ body {
   display: inline-flex;
 }
 
-.comments-panel-control-button.ui-icon-btn {
-  border-color: var(--ui-input-mono-border);
-  color: var(--ui-input-icon);
-}
-
-.comments-panel-control-button.ui-icon-btn:hover:not(:disabled),
-.comments-panel-control-button.ui-icon-btn:focus-visible,
-.comments-panel-control-button.ui-icon-btn--active {
-  border-color: var(--ui-input-mono-border-hover);
-  color: var(--ui-color-text);
-}
-
 .comments-panel-menu {
   position: absolute;
   top: calc(100% + 6px);

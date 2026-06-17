@@ -52,40 +52,7 @@ describe('CommentsPanel', () => {
     root = null;
   });
 
-  test('filters resolved comments from the compact filter menu', () => {
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onNavigateToNode={jest.fn()}
-        />
-      );
-    });
-
-    expect(container.textContent).toContain('Done already');
-
-    const filterButton = container.querySelector('button[aria-label="Filter comments"]');
-
-    act(() => {
-      filterButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const resolvedOption = Array.from(container.querySelectorAll('.comments-panel-menu-item'))
-      .find((button) => button.textContent.includes('Resolved'));
-
-    act(() => {
-      resolvedOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(container.textContent).not.toContain('Done already');
-    expect(container.textContent).toContain('Keep this open');
-  });
-
-  test('uses comments drawer search without the legacy type dropdown', () => {
+  test('uses comments drawer search and sort without legacy filter controls', () => {
     act(() => {
       root.render(
         <CommentsPanel
@@ -104,7 +71,7 @@ describe('CommentsPanel', () => {
     expect(container.textContent).not.toContain('Show completed');
     expect(container.querySelector('input[placeholder="Search comments"]')).not.toBeNull();
     expect(container.querySelector('.comments-filter-input.ui-input-shell--sm')).not.toBeNull();
-    expect(container.querySelector('button[aria-label="Filter comments"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Filter comments"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Sort comments: Newest"]')).not.toBeNull();
     expect(container.querySelector('.comments-filter-toggle')).toBeNull();
     expect(container.querySelector('select')).toBeNull();
@@ -128,11 +95,14 @@ describe('CommentsPanel', () => {
     expect(container.querySelector('.comments-panel-item')?.textContent).toContain('Keep this open');
 
     const sortButton = container.querySelector('button[aria-label="Sort comments: Newest"]');
+    expect(sortButton.className).toContain('ui-icon-btn--type-secondary');
+    expect(sortButton.className).toContain('ui-icon-btn--style-mono');
 
     act(() => {
       sortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
+    expect(sortButton.className).not.toContain('ui-icon-btn--active');
     expect(container.textContent).toContain('Newest');
     expect(container.textContent).toContain('My mentions');
     expect(container.querySelector('.comments-panel-menu-dot')).not.toBeNull();

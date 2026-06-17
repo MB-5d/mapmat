@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, CheckCircle2, ListFilter, Trash2 } from 'lucide-react';
+import { ArrowUpDown, CheckCircle2, Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import IconButton from '../ui/IconButton';
@@ -11,11 +11,6 @@ const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 const COMMENT_SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
   { value: 'mentions', label: 'My mentions' },
-  { value: 'resolved', label: 'Resolved' },
-];
-
-const COMMENT_STATUS_OPTIONS = [
-  { value: 'open', label: 'Open' },
   { value: 'resolved', label: 'Resolved' },
 ];
 
@@ -60,7 +55,6 @@ const CommentsPanel = ({
 }) => {
   const [filter, setFilter] = useState('');
   const [sortMode, setSortMode] = useState('newest');
-  const [statusFilters, setStatusFilters] = useState({ open: true, resolved: true });
   const [openMenu, setOpenMenu] = useState(null);
   const controlsRef = useRef(null);
 
@@ -142,21 +136,7 @@ const CommentsPanel = ({
     onNavigateToNode?.(comment.nodeId);
   };
 
-  const toggleStatusFilter = (value) => {
-    setStatusFilters((prev) => {
-      const activeCount = Object.values(prev).filter(Boolean).length;
-      if (prev[value] && activeCount === 1) return prev;
-      return {
-        ...prev,
-        [value]: !prev[value],
-      };
-    });
-  };
-
   const filteredComments = allComments.filter(comment => {
-    const statusKey = comment.completed ? 'resolved' : 'open';
-    if (!statusFilters[statusKey]) return false;
-
     if (!filter) return true;
     const searchLower = filter.toLowerCase();
 
@@ -206,8 +186,6 @@ const CommentsPanel = ({
                 size="sm"
                 type="secondary"
                 buttonStyle="mono"
-                className="comments-panel-control-button"
-                active={openMenu === 'sort'}
                 onClick={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))}
                 aria-label={`Sort comments: ${sortLabel}`}
                 aria-expanded={openMenu === 'sort'}
@@ -232,42 +210,6 @@ const CommentsPanel = ({
                             setSortMode(option.value);
                             setOpenMenu(null);
                           }}
-                          endSlot={isActive ? <span className="comments-panel-menu-dot" /> : null}
-                        />
-                      );
-                    })}
-                  </MenuSection>
-                </MenuPanel>
-              ) : null}
-            </div>
-            <div className="comments-panel-menu-wrapper">
-              <IconButton
-                size="sm"
-                type="secondary"
-                buttonStyle="mono"
-                className="comments-panel-control-button"
-                active={openMenu === 'filter'}
-                onClick={() => setOpenMenu((current) => (current === 'filter' ? null : 'filter'))}
-                aria-label="Filter comments"
-                aria-expanded={openMenu === 'filter'}
-                aria-haspopup="menu"
-                title="Filter comments"
-              >
-                <ListFilter />
-              </IconButton>
-              {openMenu === 'filter' ? (
-                <MenuPanel className="comments-panel-menu" role="menu" aria-label="Filter comments">
-                  <MenuSection>
-                    {COMMENT_STATUS_OPTIONS.map((option) => {
-                      const isActive = Boolean(statusFilters[option.value]);
-                      return (
-                        <MenuItem
-                          key={option.value}
-                          className="comments-panel-menu-item"
-                          role="menuitemcheckbox"
-                          aria-checked={isActive}
-                          label={option.label}
-                          onClick={() => toggleStatusFilter(option.value)}
                           endSlot={isActive ? <span className="comments-panel-menu-dot" /> : null}
                         />
                       );

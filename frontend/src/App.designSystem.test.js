@@ -214,9 +214,15 @@ describe('UI design-system contract', () => {
     expect(appJs).toContain('className="connector-overlay connector-overlay--map"');
     expect(appJs).toContain('className="connections-layer connections-layer--relationship"');
     expect(appJs).toContain('getRenderedConnectionAnchors');
+    expect(appJs).toContain('layoutConnectorEndpointReservations');
+    expect(appJs).toContain('getLayoutConnectorEndpointAnchorReservation');
+    expect(appJs).toContain('getLayoutConnectorEndpointsAtAnchor');
+    expect(appJs).toContain("kind: 'layout'");
     expect(appJs).toContain('getConnectionEndpointsAtAnchor');
     expect(appJs).toContain("matches.push({ connectionId: conn.id, endpoint: 'source' });");
     expect(appJs).toContain("matches.push({ connectionId: conn.id, endpoint: 'target' });");
+    expect(appJs).toContain('const reservedOffsets = layoutEndpointReservations.map');
+    expect(appJs).toContain('availableOffsets[index]');
     expect(appJs).toContain('visibleManualCrosslinkConnections');
     expect(appJs).toContain('visibleUserFlowConnections');
     expect(appJs.indexOf('data-connector-layer="crosslinks"')).toBeLessThan(
@@ -461,6 +467,9 @@ describe('comment popover positioning', () => {
     expect(appCss).toMatch(/\.comments-panel-menu-item\.ui-menu-item \{[\s\S]*min-height: 24px;/);
     expect(appCss).not.toMatch(/\.comments-filter-select/);
     expect(appCss).not.toMatch(/\.comments-filter-toggle/);
+    expect(appCss).not.toMatch(/\.comments-panel-control-button/);
+    expect(appJs).not.toContain('Filter comments');
+    expect(appJs).not.toContain('ListFilter');
   });
 
   test('shared search and dark input tokens stay consistent', () => {
