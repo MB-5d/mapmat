@@ -245,6 +245,24 @@ describe('CommentsPanel', () => {
     expect(container.querySelector('.comments-panel-text.is-expanded')).not.toBeNull();
   });
 
+  test('applies expanded comment overrides for capture states', () => {
+    act(() => {
+      root.render(
+        <CommentsPanel
+          isOpen
+          root={rootNode}
+          orphans={[]}
+          expandedCommentIdsOverride={['c1']}
+          onClose={jest.fn()}
+          onCommentClick={jest.fn()}
+          onNavigateToNode={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.comments-panel-text.is-expanded')).not.toBeNull();
+  });
+
   test('marks selected comments even when id types differ', () => {
     act(() => {
       root.render(

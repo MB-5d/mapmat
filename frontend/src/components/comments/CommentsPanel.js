@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
@@ -13,6 +13,7 @@ const CommentsPanel = ({
   root,
   orphans,
   selectedCommentId,
+  expandedCommentIdsOverride,
   onClose,
   onCommentClick,
   onDeleteComment,
@@ -22,6 +23,11 @@ const CommentsPanel = ({
   const [filter, setFilter] = useState('');
   const [showCompleted, setShowCompleted] = useState(true);
   const [expandedCommentIds, setExpandedCommentIds] = useState(() => new Set());
+
+  useEffect(() => {
+    if (!Array.isArray(expandedCommentIdsOverride)) return;
+    setExpandedCommentIds(new Set(expandedCommentIdsOverride.map((commentId) => String(commentId))));
+  }, [expandedCommentIdsOverride]);
 
   // Collect all comments from tree and orphans
   const getAllComments = () => {

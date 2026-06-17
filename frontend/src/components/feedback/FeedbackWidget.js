@@ -72,6 +72,20 @@ export default function FeedbackWidget({
   const widgetRootRef = useRef(null);
   const selectedElementRef = useRef(null);
   const isVisible = currentRoute?.surface === ROUTE_SURFACES.APP;
+  const figmaFeedbackAppliedRef = useRef('');
+  const isLocalFigmaCaptureHost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+    || window.location.hostname === '0.0.0.0'
+    || window.location.hostname === '[::1]'
+    || window.location.hostname === '::1'
+  );
+  const figmaState = isLocalFigmaCaptureHost
+    ? String(new URLSearchParams(window.location.search || '').get('figmaState') || '').trim().toLowerCase()
+    : '';
+  const figmaCaptureKey = isLocalFigmaCaptureHost
+    ? `${window.location.pathname}|${window.location.search}|${figmaState}`
+    : '';
 
   const routeContext = useMemo(() => ({
     surface: currentRoute?.surface || ROUTE_SURFACES.APP,
@@ -87,6 +101,19 @@ export default function FeedbackWidget({
       setIsSelectingTarget(false);
     }
   }, [isVisible]);
+
+  useEffect(() => {
+    if (!isVisible || !isLocalFigmaCaptureHost || figmaState !== 'feedback-modal') return;
+    if (figmaFeedbackAppliedRef.current === figmaCaptureKey) return;
+    figmaFeedbackAppliedRef.current = figmaCaptureKey;
+    setIntent('idea');
+    setScope('whole_app');
+    setRating(4);
+    setMessage('Feedback capture state');
+    setAllowFollowUp(Boolean(currentUser?.id));
+    setIsSelectingTarget(false);
+    setIsOpen(true);
+  }, [currentUser?.id, figmaCaptureKey, figmaState, isLocalFigmaCaptureHost, isVisible]);
 
   useEffect(() => {
     if (!isSelectingTarget) return undefined;

@@ -206,6 +206,17 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('transform: translate(5px, 5px);');
   });
 
+  test('connector layers and arrowheads use one shared geometry contract', () => {
+    expect(appCss).toMatch(/\.connector-overlay \{[\s\S]*z-index: 0;/);
+    expect(appCss).toMatch(/\.connector-overlay--map \{[\s\S]*z-index: 0;/);
+    expect(appCss).toMatch(/\.connections-layer \{[\s\S]*z-index: 1;/);
+    expect(appCss).toMatch(/\.connections-layer--relationship \{[\s\S]*z-index: 1;/);
+    expect(appJs).toContain('className="connector-overlay connector-overlay--map"');
+    expect(appJs).toContain('className="connections-layer connections-layer--relationship"');
+    expect(appJs).toContain('buildConnectorBezier({');
+    expect(appJs).toContain('USER_FLOW_ARROWHEAD.path');
+  });
+
   test('canvas wheel zooms while press-drag remains the pan control', () => {
     const wheelStart = appJs.indexOf('// Smooth wheel handling for canvas zoom. Press-drag remains the pan control.');
     const wheelEnd = appJs.indexOf('const exportJson', wheelStart);

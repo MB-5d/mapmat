@@ -2530,17 +2530,22 @@ body {
   -webkit-user-select: none;
 }
 
-.canvas-map-pill {
+.canvas-map-pill,
+.topbar-account-trigger,
+.topbar-login-btn {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
   min-height: 40px;
+  border: var(--border-width-subtle) solid var(--ui-color-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-color-surface);
+  box-shadow: var(--shadow-canvas-control);
+}
+
+.canvas-map-pill {
+  gap: 12px;
   max-width: 100%;
   padding: 7px 12px;
-  background: var(--ui-color-surface);
-  border: 1px solid var(--ui-color-border);
-  border-radius: var(--ui-radius-lg);
-  box-shadow: var(--shadow-canvas-control);
 }
 
 .canvas-map-brand-mark {
@@ -3510,7 +3515,11 @@ body {
   height: 100%;
   pointer-events: none;
   overflow: visible;
-  z-index: 1;
+  z-index: 0;
+}
+
+.connector-overlay--map {
+  z-index: 0;
 }
 
 .vertical-connector {
@@ -3935,6 +3944,20 @@ body {
 }
 
 /* Connections layer */
+.connections-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+  overflow: visible;
+  z-index: 1;
+}
+
+.connections-layer--relationship {
+  z-index: 1;
+}
+
 .connections-layer {
   pointer-events: auto;
 }
@@ -5569,7 +5592,7 @@ body {
 .report-drawer {
   position: fixed;
   right: 0;
-  top: 60px;
+  top: 0;
   bottom: 0;
   width: 50vw;
   min-width: 360px;
@@ -5577,7 +5600,7 @@ body {
   background: var(--modal-bg);
   border-left: 1px solid var(--color-border);
   box-shadow: var(--shadow-drawer);
-  z-index: 1900;
+  z-index: 2000;
   display: flex;
   flex-direction: column;
   gap: var(--unit-12);
@@ -6438,7 +6461,7 @@ body {
 .account-drawer {
   position: fixed;
   right: 0;
-  top: 60px;
+  top: 0;
   bottom: 0;
   width: min(440px, 100vw);
   max-width: 520px;
@@ -6446,7 +6469,7 @@ body {
   background: var(--modal-bg);
   border-left: 1px solid var(--color-border);
   box-shadow: var(--shadow-drawer);
-  z-index: 1900;
+  z-index: 2000;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -10233,12 +10256,8 @@ body {
 .topbar-account-trigger {
   min-width: 0;
   height: 40px;
-  min-height: 40px;
   padding: 0 12px;
-  border-radius: var(--ui-radius-lg);
-  border: 1px solid var(--ui-color-border);
-  background: var(--ui-color-surface);
-  box-shadow: var(--shadow-canvas-control);
+  color: var(--ui-color-text);
 }
 
 .topbar-account-trigger .ui-btn__content {
@@ -10307,17 +10326,16 @@ body {
   align-items: center;
   gap: 8px;
   height: 40px;
-  min-height: 40px;
   padding: 0 12px;
-  border-radius: var(--ui-radius-lg);
-  border: 1px solid var(--ui-color-border);
-  background: var(--ui-color-surface);
-  box-shadow: var(--shadow-canvas-control);
+  color: var(--ui-color-text);
 }
 
 .topbar-account-trigger:hover,
 .topbar-login-btn:hover {
-  box-shadow: var(--shadow-raised);
+  background: var(--ui-color-surface);
+  border-color: var(--ui-color-border);
+  color: var(--ui-color-text);
+  box-shadow: var(--shadow-canvas-control);
 }
 
 .export-options {

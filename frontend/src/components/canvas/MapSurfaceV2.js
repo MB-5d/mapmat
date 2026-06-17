@@ -278,7 +278,7 @@ const MapSurfaceV2 = ({
         data-rendered-node-count={sceneNodes.length}
         data-rendered-connector-count={scene?.visibleConnectorCount || 0}
       >
-        <svg className="connector-overlay" aria-hidden="true">
+        <svg className="connector-overlay connector-overlay--map" aria-hidden="true">
           <g ref={connectorGroupRef} transform={connectorTransform}>
             {connectorPaths.map((path, index) => (
               <path

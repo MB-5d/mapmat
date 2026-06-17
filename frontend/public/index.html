@@ -29,8 +29,34 @@
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+    <script>
+      (function () {
+        var host = window.location.hostname;
+        var isLocalHost = host === 'localhost'
+          || host === '127.0.0.1'
+          || host === '0.0.0.0'
+          || host === '[::1]'
+          || host === '::1';
+        if (!isLocalHost) return;
+
+        var params = new URLSearchParams(window.location.search || '');
+        if (params.get('figmaForceLoggedOut') === '1') {
+          window.localStorage.removeItem('vellic_auth_token');
+          window.localStorage.removeItem('mapmat_auth_token');
+        }
+        var authToken = params.get('figmaAuthToken');
+        if (authToken) {
+          window.localStorage.setItem('vellic_auth_token', authToken);
+          window.localStorage.removeItem('mapmat_auth_token');
+        }
+        if (params.get('figmaWelcomeHidden') === '1') {
+          window.localStorage.setItem('vellic:welcome-modal-hidden:v1', 'true');
+          window.localStorage.removeItem('mapmat:welcome-modal-hidden:v1');
+        }
+      }());
+    </script>
     <div id="root"></div>
-    <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+    <script src="%PUBLIC_URL%/figma-capture.js" async></script>
     <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.

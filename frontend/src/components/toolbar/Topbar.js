@@ -62,6 +62,20 @@ const Topbar = ({
   const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onLogout, onLogin } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
+  const figmaAccountMenuAppliedRef = useRef('');
+  const isLocalFigmaCaptureHost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+    || window.location.hostname === '0.0.0.0'
+    || window.location.hostname === '[::1]'
+    || window.location.hostname === '::1'
+  );
+  const figmaState = isLocalFigmaCaptureHost
+    ? String(new URLSearchParams(window.location.search || '').get('figmaState') || '').trim().toLowerCase()
+    : '';
+  const figmaCaptureKey = isLocalFigmaCaptureHost
+    ? `${window.location.pathname}|${window.location.search}|${figmaState}`
+    : '';
 
   useEffect(() => {
     if (!showAccountMenu) return;
@@ -73,6 +87,13 @@ const Topbar = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showAccountMenu]);
+
+  useEffect(() => {
+    if (!isLocalFigmaCaptureHost || figmaState !== 'account-menu' || !isLoggedIn) return;
+    if (figmaAccountMenuAppliedRef.current === figmaCaptureKey) return;
+    figmaAccountMenuAppliedRef.current = figmaCaptureKey;
+    setShowAccountMenu(true);
+  }, [figmaCaptureKey, figmaState, isLocalFigmaCaptureHost, isLoggedIn]);
 
   const handleAccountToggle = () => setShowAccountMenu((prev) => !prev);
   const closeMenu = () => setShowAccountMenu(false);

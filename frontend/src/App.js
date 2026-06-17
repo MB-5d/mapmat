@@ -191,6 +191,10 @@ import {
   buildPlanCardsFromBillingCatalog,
   buildScreenshotCreditPackCards,
 } from './utils/billingPlans';
+import {
+  buildConnectorBezier,
+  USER_FLOW_ARROWHEAD,
+} from './utils/connectorGeometry';
 
 const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
@@ -933,6 +937,24 @@ const THEME_STORAGE_KEY = 'vellic-theme';
 const LEGACY_THEME_STORAGE_KEY = 'mapmat-theme';
 export const WELCOME_MODAL_STORAGE_KEY = 'vellic:welcome-modal-hidden:v1';
 const LEGACY_WELCOME_MODAL_STORAGE_KEY = 'mapmat:welcome-modal-hidden:v1';
+const FIGMA_CAPTURE_THEME_OPTIONS = new Set(['light', 'dark']);
+
+const normalizeFigmaCaptureTheme = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return FIGMA_CAPTURE_THEME_OPTIONS.has(normalized) ? normalized : '';
+};
+
+const readInitialFigmaCaptureTheme = (route) => {
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname;
+  const isLocalHost = host === 'localhost'
+    || host === '127.0.0.1'
+    || host === '0.0.0.0'
+    || host === '[::1]'
+    || host === '::1';
+  if (!isLocalHost) return '';
+  return normalizeFigmaCaptureTheme(route?.searchParams?.get('figmaTheme'));
+};
 
 export const readWelcomeModalHidden = (
   storage = typeof window !== 'undefined' ? window.localStorage : null
@@ -1032,6 +1054,54 @@ const attachCommentsToNodeTree = (node, commentsByNode) => {
     children: Array.isArray(node.children)
       ? node.children.map((child) => attachCommentsToNodeTree(child, commentsByNode))
       : [],
+  };
+};
+
+const DEFAULT_CAPTURE_LAYERS = Object.freeze({
+  userFlows: true,
+  crossLinks: true,
+  brokenLinks: true,
+  pageNumbers: true,
+});
+
+const buildFigmaCaptureCommentsByNode = ({ focusNode, secondaryNode }) => {
+  const primaryNodeId = String(focusNode?.id || '');
+  const secondaryNodeId = String(
+    secondaryNode?.id && secondaryNode.id !== focusNode?.id
+      ? secondaryNode.id
+      : focusNode?.id || ''
+  );
+  if (!primaryNodeId) return {};
+
+  return {
+    [primaryNodeId]: [
+      {
+        id: 'figma-comment-collapsed',
+        author: 'Frank S.',
+        text: 'Keep the status chip and tag row visible even when the node title wraps to a second line so the canvas stays scannable.',
+        createdAt: '2026-06-15T20:45:00.000Z',
+        completed: false,
+        completedBy: null,
+        completedAt: null,
+        mentions: [],
+        replies: [],
+      },
+    ],
+    ...(secondaryNodeId ? {
+      [secondaryNodeId]: [
+        {
+          id: 'figma-comment-completed',
+          author: 'Matthew Braun',
+          text: 'Archive this branch after the pricing review wraps.',
+          createdAt: '2026-06-15T18:10:00.000Z',
+          completed: true,
+          completedBy: 'Frank S.',
+          completedAt: '2026-06-15T19:20:00.000Z',
+          mentions: [],
+          replies: [],
+        },
+      ],
+    } : {}),
   };
 };
 
@@ -1680,7 +1750,7 @@ const SitemapTree = ({
     >
       {/* Single SVG overlay for all connectors */}
       <svg
-        className="connector-overlay"
+        className="connector-overlay connector-overlay--map"
         aria-hidden="true"
       >
         {connectorPaths.map((d, i) => (
@@ -2667,6 +2737,23 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handledBillingIntentKeyRef = useRef('');
   const handledTrialIntentKeyRef = useRef('');
   const handledSignupIntentKeyRef = useRef('');
+  const appliedFigmaCaptureStateRef = useRef('');
+  const isLocalFigmaCaptureHost = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost'
+    || window.location.hostname === '127.0.0.1'
+    || window.location.hostname === '0.0.0.0'
+    || window.location.hostname === '[::1]'
+    || window.location.hostname === '::1'
+  );
+  const figmaCaptureState = isLocalFigmaCaptureHost
+    ? String(currentRoute?.searchParams?.get('figmaState') || '').trim().toLowerCase()
+    : '';
+  const figmaCaptureTheme = isLocalFigmaCaptureHost
+    ? normalizeFigmaCaptureTheme(currentRoute?.searchParams?.get('figmaTheme'))
+    : '';
+  const figmaCaptureKey = isLocalFigmaCaptureHost
+    ? `${currentRoute?.pathname || ''}|${currentRoute?.search || ''}|${figmaCaptureState}`
+    : '';
 
   useEffect(() => {
     largeMapNodeCacheRef.current = new Map();
@@ -2824,6 +2911,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [commentPopoverAnchor, setCommentPopoverAnchor] = useState({ mode: 'node' });
   const [selectedCommentId, setSelectedCommentId] = useState(null);
   const [savedMapCommentsByNode, setSavedMapCommentsByNode] = useState({});
+  const [figmaCaptureCommentsByNode, setFigmaCaptureCommentsByNode] = useState(null);
+  const [figmaCaptureExpandedCommentIds, setFigmaCaptureExpandedCommentIds] = useState(null);
   const [collaborators] = useState(['matt', 'sarah', 'alex']); // For @ mentions
   const [readMentionCommentIds, setReadMentionCommentIds] = useState(() => new Set());
   const [undoStack, setUndoStack] = useState([]);
@@ -2834,12 +2923,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [mapOrientation, setMapOrientation] = useState(() => (
     currentRoute?.orientation || normalizeMapOrientation(currentRoute?.searchParams?.get('orientation'))
   ));
-  const [layers, setLayers] = useState({
-    userFlows: true,    // User journey connections
-    crossLinks: true,   // Non-hierarchical links
-    brokenLinks: true,  // Broken link connections
-    pageNumbers: true,
-  });
+  const [layers, setLayers] = useState(() => ({ ...DEFAULT_CAPTURE_LAYERS }));
   const [changeFilters, setChangeFilters] = useState(() => ({
     statuses: ANNOTATION_STATUS_OPTIONS.reduce((acc, option) => {
       acc[option.value] = true;
@@ -2859,7 +2943,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [nodeMenu, setNodeMenu] = useState(null); // { nodeId, x, y, targetIds }
 
   // Theme: 'light', 'dark', or 'auto'
-  const [theme, setTheme] = useState('auto');
+  const [theme, setTheme] = useState(() => readInitialFigmaCaptureTheme(currentRoute) || 'auto');
 
   // Drag & Drop state (dnd-kit)
   const [activeId, setActiveId] = useState(null);
@@ -3080,6 +3164,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showScanOptions]);
+
+  useEffect(() => {
+    if (!isLocalFigmaCaptureHost || !figmaCaptureState) return;
+    const nextTheme = figmaCaptureTheme || 'auto';
+    setTheme((current) => (current === nextTheme ? current : nextTheme));
+  }, [figmaCaptureState, figmaCaptureTheme, isLocalFigmaCaptureHost]);
 
   // Apply theme to document and listen for system changes
   useEffect(() => {
@@ -4094,7 +4184,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   const isVersionLoading = currentMap?.id ? isLoadingVersions : false;
   const activityForDrawer = currentMap?.id ? mapActivity : [];
   const isActivityDrawerLoading = currentMap?.id ? isLoadingActivity : false;
-  const useBackendComments = !!(isLoggedIn && currentMap?.id);
+  const hasFigmaCaptureComments = !!figmaCaptureCommentsByNode;
+  const useBackendComments = !!(isLoggedIn && currentMap?.id) && !hasFigmaCaptureComments;
+  const effectiveCommentsByNode = hasFigmaCaptureComments
+    ? figmaCaptureCommentsByNode
+    : savedMapCommentsByNode;
+  const shouldAttachComments = useBackendComments || hasFigmaCaptureComments;
 
   const loadSavedMapComments = useCallback(async (mapId = currentMap?.id) => {
     if (!mapId || !isLoggedIn) {
@@ -4198,14 +4293,14 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const visibleOrphans = useMemo(() => {
     const nextOrphans = (orphans || []).filter(Boolean);
-    if (!useBackendComments) return nextOrphans;
-    return nextOrphans.map((orphan) => attachCommentsToNodeTree(orphan, savedMapCommentsByNode));
-  }, [orphans, savedMapCommentsByNode, useBackendComments]);
+    if (!shouldAttachComments) return nextOrphans;
+    return nextOrphans.map((orphan) => attachCommentsToNodeTree(orphan, effectiveCommentsByNode));
+  }, [effectiveCommentsByNode, orphans, shouldAttachComments]);
 
   const renderRoot = useMemo(() => {
-    if (!useBackendComments) return root;
-    return attachCommentsToNodeTree(root, savedMapCommentsByNode);
-  }, [root, savedMapCommentsByNode, useBackendComments]);
+    if (!shouldAttachComments) return root;
+    return attachCommentsToNodeTree(root, effectiveCommentsByNode);
+  }, [effectiveCommentsByNode, root, shouldAttachComments]);
 
   const largeMapNodeCount = useMemo(() => (
     currentMap?.largeMapShell
@@ -11981,6 +12076,46 @@ export default function App({ currentRoute, navigateToRoute }) {
     return true;
   }, [applyTransform]);
 
+  const fitNodeIdsToView = useCallback((nodeIds, options = {}) => {
+    const ids = [...new Set((nodeIds || []).filter(Boolean))];
+    const canvas = canvasRef.current;
+    const layout = layoutRef.current;
+    const nodes = layout?.nodes;
+    if (!canvas || !nodes || ids.length === 0) return false;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    ids.forEach((nodeId) => {
+      const node = nodes.get(nodeId);
+      if (!node) return;
+      minX = Math.min(minX, Number(node.x || 0));
+      minY = Math.min(minY, Number(node.y || 0));
+      maxX = Math.max(maxX, Number(node.x || 0) + Number(node.w || 0));
+      maxY = Math.max(maxY, Number(node.y || 0) + Number(node.h || 0));
+    });
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      return false;
+    }
+
+    const nextTransform = getFitBoundsTransform(
+      { minX, minY, maxX, maxY },
+      {
+        canvasWidth: canvas.clientWidth,
+        canvasHeight: canvas.clientHeight,
+        padding: options.padding ?? 144,
+        minScale: MIN_SCALE,
+        maxScale: options.maxScale ?? 1,
+      }
+    );
+    if (!nextTransform) return false;
+    applyTransform(nextTransform, { skipPanClamp: true });
+    return true;
+  }, [applyTransform]);
+
   useLayoutEffect(() => {
     if (!pendingInitialCenterRef.current || useLargeMapSurface) return;
     if (!mapLayout?.nodes?.size || !canvasRef.current) return;
@@ -13926,6 +14061,442 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   };
 
+  useEffect(() => {
+    if (!isLocalFigmaCaptureHost || !figmaCaptureState || authLoading) return;
+    if (appliedFigmaCaptureStateRef.current === figmaCaptureKey) return;
+    if (!isLoggedIn) return;
+
+    const clearCaptureModals = () => {
+      setShowCreateMapModal(false);
+      setShowImportModal(false);
+      setShowAuthModal(false);
+      setShowProfileDrawer(false);
+      setShowSettingsDrawer(false);
+      setShowVersionHistoryDrawer(false);
+      setShowReportDrawer(false);
+      setShowImageReportDrawer(false);
+      setShowCommentsPanel(false);
+      setShowViewDropdown(false);
+      setShowColorKey(false);
+      setShowOrientationMenu(false);
+      setShowImageMenu(false);
+      setConnectionMenu(null);
+      setNodeMenu(null);
+      setEditModalNode(null);
+      setDeleteConfirmNode(null);
+      setShowVersionEditPrompt(false);
+      setConfirmModal(null);
+      setPromptModal(null);
+      setPlansModal(null);
+      setScanAuthPrompt(null);
+      setScanLimitPrompt(null);
+      setEntitlementLockModal(null);
+      setScreenshotDownloadUpsell(null);
+      setShowCancelConfirm(false);
+      setShowStopConfirm(false);
+      setIsStoppingScan(false);
+      setScanErrorMessage('');
+      setShowMinimap(false);
+      setSelectedNodeIds(new Set());
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS });
+      setCommentingNodeId(null);
+      setCommentingNodeSnapshot(null);
+      setCommentPopoverPos({ x: 0, y: 0, side: 'right' });
+      setCommentPopoverAnchor({ mode: 'node' });
+      setSelectedCommentId(null);
+      setFigmaCaptureCommentsByNode(null);
+      setFigmaCaptureExpandedCommentIds(null);
+      setToast(null);
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+        toastTimeoutRef.current = null;
+      }
+    };
+
+    const applyScanProgressState = ({
+      cancelConfirm = false,
+      stopConfirm = false,
+      errorMessage = '',
+    } = {}) => {
+      clearCaptureModals();
+      setUrlInput(currentMap?.url || root?.url || 'https://example.com');
+      setLoading(!errorMessage);
+      setScanErrorMessage(errorMessage);
+      setScanMessage('Scanning site structure...');
+      setScanProgress({ scanned: 9, queued: 14 });
+      setScanElapsed(92);
+      setShowCancelConfirm(cancelConfirm);
+      setShowStopConfirm(stopConfirm);
+      setIsStoppingScan(false);
+    };
+
+    if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'home') {
+      if (figmaCaptureState === 'home-start') {
+        appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+        setWelcomeModalDismissedForSession(true);
+        setWelcomeDontShowAgain(false);
+        return;
+      }
+
+      if (figmaCaptureState === 'create-map') {
+        appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+        openCreateMapFlow();
+        return;
+      }
+
+      if (figmaCaptureState === 'add-home-page') {
+        appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+        startBlankMapCreation(null, 'Figma Capture Map', '');
+        return;
+      }
+    }
+
+    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'map' || !currentMap?.id || !root) {
+      return;
+    }
+
+    const closeCompetingPanels = () => {
+      clearCaptureModals();
+    };
+
+    const canvasNodes = collectAllNodesWithOrphans(root, orphans);
+    const focusNode = canvasNodes.find((node) => node?.id && node.id !== root.id) || root;
+    const secondaryNode = canvasNodes.find((node) => node?.id && node.id !== root.id && node.id !== focusNode?.id) || focusNode;
+    const layoutNode = mapLayout?.nodes?.get(focusNode?.id);
+    const targetConnection = Array.isArray(connections) ? connections.find(Boolean) : null;
+    const userFlowConnection = Array.isArray(connections)
+      ? connections.find((connection) => connection?.type === 'userflow')
+      : null;
+    const crosslinkConnection = Array.isArray(connections)
+      ? connections.find((connection) => connection?.type === 'crosslink' && !connection.autoRoute)
+        || connections.find((connection) => connection?.type === 'crosslink')
+      : null;
+    const fitConnectionNodes = (connection, options = {}) => {
+      if (!connection) return false;
+      return fitNodeIdsToView([connection.sourceNodeId, connection.targetNodeId], options);
+    };
+    const fitWorkspaceNodes = (nodeIds, options = {}) => {
+      if (!Array.isArray(nodeIds) || nodeIds.length === 0) return false;
+      return fitNodeIdsToView(nodeIds, options);
+    };
+    const captureCommentsByNode = buildFigmaCaptureCommentsByNode({ focusNode, secondaryNode });
+
+    if (figmaCaptureState === 'comments') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowCommentsPanel(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'comments-drawer-collapsed') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setFigmaCaptureCommentsByNode(captureCommentsByNode);
+      setFigmaCaptureExpandedCommentIds([]);
+      setSelectedCommentId('figma-comment-collapsed');
+      setShowCommentsPanel(true);
+      fitWorkspaceNodes([focusNode?.id, secondaryNode?.id], { padding: 160, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'comments-drawer-expanded') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setFigmaCaptureCommentsByNode(captureCommentsByNode);
+      setFigmaCaptureExpandedCommentIds(['figma-comment-collapsed']);
+      setSelectedCommentId('figma-comment-collapsed');
+      setShowCommentsPanel(true);
+      fitWorkspaceNodes([focusNode?.id, secondaryNode?.id], { padding: 160, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'page-details') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setEditModalMode('edit');
+      setEditModalNode(root);
+      return;
+    }
+
+    if (figmaCaptureState === 'add-page') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setEditModalMode('add');
+      setEditModalNode({ id: '', url: '', title: '', parentId: ORPHAN_PARENT_ID, children: [] });
+      return;
+    }
+
+    if (figmaCaptureState === 'comment-popover' && focusNode) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      window.setTimeout(() => openCommentPopover(focusNode), 250);
+      return;
+    }
+
+    if (figmaCaptureState === 'profile-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowProfileDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'settings-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowSettingsDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'version-history-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowVersionHistoryDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'report-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowReportDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'image-report-drawer') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowImageReportDrawer(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'image-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowImageMenu(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'layers-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowViewDropdown(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'legend-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowColorKey(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'orientation-menu') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowOrientationMenu(true);
+      return;
+    }
+
+    if (figmaCaptureState === 'node-menu' && focusNode) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setSelectedNodeIds(new Set([focusNode.id]));
+      setNodeMenu({
+        nodeId: focusNode.id,
+        targetIds: [focusNode.id],
+        x: (layoutNode?.x || 420) + 220,
+        y: (layoutNode?.y || 180) + 72,
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'connection-menu' && targetConnection) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      const sourcePos = getAnchorPosition(targetConnection.sourceNodeId, targetConnection.sourceAnchor || 'right');
+      const targetPos = getAnchorPosition(targetConnection.targetNodeId, targetConnection.targetAnchor || 'left');
+      setConnectionMenu({
+        connectionId: targetConnection.id,
+        x: sourcePos && targetPos ? (sourcePos.x + targetPos.x) / 2 : 760,
+        y: sourcePos && targetPos ? (sourcePos.y + targetPos.y) / 2 : 320,
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'connectors-map' && secondaryNode) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: true, crossLinks: true, brokenLinks: false });
+      setSelectedNodeIds(new Set([
+        userFlowConnection?.sourceNodeId,
+        userFlowConnection?.targetNodeId,
+        crosslinkConnection?.sourceNodeId,
+        crosslinkConnection?.targetNodeId,
+      ].filter(Boolean)));
+      fitWorkspaceNodes([
+        userFlowConnection?.sourceNodeId,
+        userFlowConnection?.targetNodeId,
+        crosslinkConnection?.sourceNodeId,
+        crosslinkConnection?.targetNodeId,
+      ].filter(Boolean), { padding: 176, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'flow-connector' && userFlowConnection) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: true, crossLinks: false, brokenLinks: false });
+      setSelectedNodeIds(new Set([userFlowConnection.sourceNodeId, userFlowConnection.targetNodeId].filter(Boolean)));
+      fitConnectionNodes(userFlowConnection, { padding: 176, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'crosslink-connector' && crosslinkConnection) {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: false, crossLinks: true, brokenLinks: false });
+      setSelectedNodeIds(new Set([crosslinkConnection.sourceNodeId, crosslinkConnection.targetNodeId].filter(Boolean)));
+      fitConnectionNodes(crosslinkConnection, { padding: 176, maxScale: 1 });
+      return;
+    }
+
+    if (figmaCaptureState === 'viewfinder') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setShowMinimap(true);
+      setLayers({ ...DEFAULT_CAPTURE_LAYERS, userFlows: true, crossLinks: true, brokenLinks: false });
+      fitCurrentMapToView();
+      return;
+    }
+
+    if (figmaCaptureState === 'plans-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setPlansModal({ context: 'figma-capture' });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-progress') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState();
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-cancel-confirm') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState({ cancelConfirm: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-stop-confirm') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState({ stopConfirm: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-error') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      applyScanProgressState({ errorMessage: 'The scan could not continue because the site blocked the request.' });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-limit-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setScanLimitPrompt({
+        mode: 'guest',
+        requestedPages: 60,
+        allowedPages: 15,
+        remaining: 15,
+        capped: true,
+        capReason: 'guest_limit',
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'entitlement-lock-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setEntitlementLockModal({
+        title: 'Plan limit reached',
+        message: 'This workspace action is locked on the current plan. Upgrade to continue.',
+        actionLabel: 'View plan options',
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'scan-auth-modal') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setScanAuthPrompt({
+        loading: false,
+        interactiveLoginSupported: false,
+        authCount: 3,
+        url: currentMap?.url || root?.url || 'https://example.com',
+        sampleUrls: [
+          'https://example.com/account',
+          'https://example.com/billing',
+          'https://example.com/settings',
+        ],
+        authBrowser: null,
+        error: '',
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'screenshot-download-upsell') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setScreenshotDownloadUpsell({
+        scope: 'selected',
+        count: 12,
+      });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-success') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Map synced to Figma', type: 'success', persistent: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-warning') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Scan stopped. Showing current results.', type: 'warning', persistent: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-error') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Failed to capture thumbnails', type: 'error', persistent: true });
+      return;
+    }
+
+    if (figmaCaptureState === 'toast-loading') {
+      appliedFigmaCaptureStateRef.current = figmaCaptureKey;
+      closeCompetingPanels();
+      setToast({ message: 'Preparing image download...', type: 'loading', persistent: true });
+    }
+  }, [
+    authLoading,
+    connections,
+    currentMap?.id,
+    currentRoute?.search,
+    currentRoute?.section,
+    currentRoute?.surface,
+    figmaCaptureKey,
+    figmaCaptureState,
+    fitCurrentMapToView,
+    fitNodeIdsToView,
+    isLocalFigmaCaptureHost,
+    isLoggedIn,
+    mapLayout,
+    orphans,
+    root,
+  ]);
+
   // Start dragging a connection endpoint to reconnect
   const handleEndpointDragMoveDoc = useRef(null);
   const handleEndpointDragEndDoc = useRef(null);
@@ -14217,34 +14788,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     const srcOffset = getAnchorOffset(conn, conn.sourceNodeId, conn.sourceAnchor, true);
     const tgtOffset = getAnchorOffset(conn, conn.targetNodeId, conn.targetAnchor, false);
 
-    const startPos = { x: baseStart.x + srcOffset.x, y: baseStart.y + srcOffset.y };
-    const endPos = { x: baseEnd.x + tgtOffset.x, y: baseEnd.y + tgtOffset.y };
+    const geometry = buildConnectorBezier({
+      start: baseStart,
+      end: baseEnd,
+      sourceAnchor: conn.sourceAnchor,
+      targetAnchor: conn.targetAnchor,
+      sourceOffset: srcOffset,
+      targetOffset: tgtOffset,
+    });
 
-    // Calculate control points for smooth bezier curve
-    const dx = Math.abs(endPos.x - startPos.x);
-    const dy = Math.abs(endPos.y - startPos.y);
-    const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
-
-    let ctrl1 = { ...startPos };
-    let ctrl2 = { ...endPos };
-
-    // Offset control points based on anchor direction
-    switch (conn.sourceAnchor) {
-      case 'top': ctrl1.y -= offset; break;
-      case 'right': ctrl1.x += offset; break;
-      case 'bottom': ctrl1.y += offset; break;
-      case 'left': ctrl1.x -= offset; break;
-      default: break;
-    }
-    switch (conn.targetAnchor) {
-      case 'top': ctrl2.y -= offset; break;
-      case 'right': ctrl2.x += offset; break;
-      case 'bottom': ctrl2.y += offset; break;
-      case 'left': ctrl2.x -= offset; break;
-      default: break;
-    }
-
-    return `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`;
+    return geometry?.path || '';
   };
 
   const getBestAnchorPair = useCallback((sourceId, targetId) => {
@@ -16249,38 +16802,28 @@ export default function App({ currentRoute, navigateToRoute }) {
                 >
                   {/* SVG Connections Layer */}
                   <svg
-                    className="connections-layer"
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      pointerEvents: 'auto',
-                      overflow: 'visible',
-                      zIndex: 0,
-                    }}
+                    className="connections-layer connections-layer--relationship"
                   >
                   {/* Arrowhead marker definition */}
                   <defs>
                     <marker
                       id="arrowhead-userflow"
-                      markerWidth="10"
-                      markerHeight="12.5"
-                    refX="9"
-                    refY="6.25"
-                    orient="auto"
-                    markerUnits="strokeWidth"
-                  >
-                    <path
-                      d="M 1 0 L 9 6.25 L 1 12.5"
-                      fill="none"
-                      stroke="context-stroke"
-                      strokeWidth="1"
-                      strokeLinecap="square"
-                      strokeLinejoin="miter"
-                    />
-                  </marker>
+                      markerWidth={USER_FLOW_ARROWHEAD.markerWidth}
+                      markerHeight={USER_FLOW_ARROWHEAD.markerHeight}
+                      refX={USER_FLOW_ARROWHEAD.refX}
+                      refY={USER_FLOW_ARROWHEAD.refY}
+                      orient="auto"
+                      markerUnits="strokeWidth"
+                    >
+                      <path
+                        d={USER_FLOW_ARROWHEAD.path}
+                        fill="none"
+                        stroke="context-stroke"
+                        strokeWidth={USER_FLOW_ARROWHEAD.strokeWidth}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </marker>
                   <filter
                     id="connection-glow"
                     x="-50%"
@@ -16524,25 +17067,12 @@ export default function App({ currentRoute, navigateToRoute }) {
                   const color = isUserFlow
                     ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
                     : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
-
-                  // Calculate curved path based on source anchor direction
-                  const dx = Math.abs(currentX - startX);
-                  const dy = Math.abs(currentY - startY);
-                  const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
-
-                  let ctrl1 = { x: startX, y: startY };
-                  switch (sourceAnchor) {
-                    case 'top': ctrl1.y -= offset; break;
-                    case 'right': ctrl1.x += offset; break;
-                    case 'bottom': ctrl1.y += offset; break;
-                    case 'left': ctrl1.x -= offset; break;
-                    default: break;
-                  }
-
-                  // Control point for target curves toward cursor
-                  const ctrl2 = { x: currentX, y: currentY };
-
-                  const pathD = `M ${startX} ${startY} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${currentX} ${currentY}`;
+                  const pathD = buildConnectorBezier({
+                    start: { x: startX, y: startY },
+                    end: { x: currentX, y: currentY },
+                    sourceAnchor,
+                    targetAnchor: drawingConnection.snapTarget?.anchor,
+                  })?.path || '';
 
                   return (
                     <path
@@ -16571,35 +17101,12 @@ export default function App({ currentRoute, navigateToRoute }) {
                   const startY = endpoint === 'source' ? currentY : fixedY;
                   const endX = endpoint === 'source' ? fixedX : currentX;
                   const endY = endpoint === 'source' ? fixedY : currentY;
-
-                  // Calculate curved path
-                  const dx = Math.abs(endX - startX);
-                  const dy = Math.abs(endY - startY);
-                  const offset = Math.min(Math.max(dx, dy) * 0.5, 100);
-
-                  let ctrl1 = { x: startX, y: startY };
-                  let ctrl2 = { x: endX, y: endY };
-
-                  // Use fixed anchor direction for the fixed end
-                  if (endpoint === 'source') {
-                    switch (fixedAnchor) {
-                      case 'top': ctrl2.y -= offset; break;
-                      case 'right': ctrl2.x += offset; break;
-                      case 'bottom': ctrl2.y += offset; break;
-                      case 'left': ctrl2.x -= offset; break;
-                      default: break;
-                    }
-                  } else {
-                    switch (fixedAnchor) {
-                      case 'top': ctrl1.y -= offset; break;
-                      case 'right': ctrl1.x += offset; break;
-                      case 'bottom': ctrl1.y += offset; break;
-                      case 'left': ctrl1.x -= offset; break;
-                      default: break;
-                    }
-                  }
-
-                  const pathD = `M ${startX} ${startY} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endX} ${endY}`;
+                  const pathD = buildConnectorBezier({
+                    start: { x: startX, y: startY },
+                    end: { x: endX, y: endY },
+                    sourceAnchor: endpoint === 'source' ? draggingEndpoint.snapTarget?.anchor : fixedAnchor,
+                    targetAnchor: endpoint === 'source' ? fixedAnchor : draggingEndpoint.snapTarget?.anchor,
+                  })?.path || '';
 
                   return (
                     <path
@@ -16610,7 +17117,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       strokeDasharray={isUserFlow ? 'none' : '8 6'}
                       strokeOpacity={0.8}
                       strokeLinecap="round"
-                      markerEnd={isUserFlow && endpoint === 'target' ? 'url(#arrowhead-userflow)' : 'none'}
+                      markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
                     />
                   );
                 })()}
@@ -17287,6 +17794,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         root={renderRoot}
         orphans={visibleOrphans}
         selectedCommentId={selectedCommentId}
+        expandedCommentIdsOverride={figmaCaptureExpandedCommentIds}
         onClose={() => {
           setShowCommentsPanel(false);
           setCommentingNodeId(null);
