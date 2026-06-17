@@ -6,9 +6,9 @@ const ANCHOR_NORMALS = Object.freeze({
 });
 
 export const CONNECTOR_GEOMETRY = Object.freeze({
-  curveRatio: 0.65,
-  minCurveDistance: 48,
-  maxCurveDistance: 220,
+  endpointLeadDistance: 24,
+  cornerRadius: 64,
+  cornerRadiusUnit: 8,
 });
 
 export const USER_FLOW_ARROWHEAD = Object.freeze({
@@ -23,6 +23,118 @@ export const USER_FLOW_ARROWHEAD = Object.freeze({
 const clampNumber = (value, min, max) => (
   Math.max(min, Math.min(max, value))
 );
+
+const formatPathNumber = (value) => {
+  const rounded = Math.round(Number(value || 0) * 1000) / 1000;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+};
+
+const pointsEqual = (a, b) => (
+  Math.abs(Number(a?.x || 0) - Number(b?.x || 0)) < 0.001
+  && Math.abs(Number(a?.y || 0) - Number(b?.y || 0)) < 0.001
+);
+
+const uniqueSequentialPoints = (points) => points.reduce((unique, point) => {
+  if (!unique.length || !pointsEqual(unique[unique.length - 1], point)) {
+    unique.push(point);
+  }
+  return unique;
+}, []);
+
+const getDistance = (a, b) => Math.hypot(
+  Number(b?.x || 0) - Number(a?.x || 0),
+  Number(b?.y || 0) - Number(a?.y || 0),
+);
+
+const getUnitVector = (from, to) => {
+  const distance = getDistance(from, to);
+  if (!distance) return { x: 0, y: 0 };
+  return {
+    x: (Number(to?.x || 0) - Number(from?.x || 0)) / distance,
+    y: (Number(to?.y || 0) - Number(from?.y || 0)) / distance,
+  };
+};
+
+const areCollinear = (previous, current, next) => {
+  const incoming = getUnitVector(previous, current);
+  const outgoing = getUnitVector(current, next);
+  return Math.abs(incoming.x - outgoing.x) < 0.001
+    && Math.abs(incoming.y - outgoing.y) < 0.001;
+};
+
+const snapRadius = (value, unit) => {
+  if (value <= 0) return 0;
+  const snapped = Math.floor(value / unit) * unit;
+  return snapped >= unit ? snapped : 0;
+};
+
+const getRoundedCornerRadius = ({
+  previous,
+  current,
+  next,
+  cornerRadius,
+  cornerRadiusUnit,
+}) => snapRadius(
+  Math.min(cornerRadius, getDistance(previous, current) / 2, getDistance(current, next) / 2),
+  cornerRadiusUnit,
+);
+
+const toPathPoint = (command, point) => `${command} ${formatPathNumber(point.x)} ${formatPathNumber(point.y)}`;
+
+const buildRoundedOrthogonalPath = ({
+  points,
+  cornerRadius,
+  cornerRadiusUnit,
+}) => {
+  const route = uniqueSequentialPoints(points);
+  if (!route.length) return '';
+  if (route.length === 1) return toPathPoint('M', route[0]);
+
+  const commands = [toPathPoint('M', route[0])];
+
+  for (let index = 1; index < route.length - 1; index += 1) {
+    const previous = route[index - 1];
+    const current = route[index];
+    const next = route[index + 1];
+
+    if (areCollinear(previous, current, next)) {
+      commands.push(toPathPoint('L', current));
+      continue;
+    }
+
+    const radius = getRoundedCornerRadius({
+      previous,
+      current,
+      next,
+      cornerRadius,
+      cornerRadiusUnit,
+    });
+
+    if (!radius) {
+      commands.push(toPathPoint('L', current));
+      continue;
+    }
+
+    const incoming = getUnitVector(previous, current);
+    const outgoing = getUnitVector(current, next);
+    const cornerStart = {
+      x: current.x - incoming.x * radius,
+      y: current.y - incoming.y * radius,
+    };
+    const cornerEnd = {
+      x: current.x + outgoing.x * radius,
+      y: current.y + outgoing.y * radius,
+    };
+
+    commands.push(toPathPoint('L', cornerStart));
+    commands.push(
+      `Q ${formatPathNumber(current.x)} ${formatPathNumber(current.y)} ${formatPathNumber(cornerEnd.x)} ${formatPathNumber(cornerEnd.y)}`
+    );
+  }
+
+  commands.push(toPathPoint('L', route[route.length - 1]));
+  return commands.join(' ');
+};
 
 export const getAnchorNormal = (anchor) => ANCHOR_NORMALS[anchor] || { x: 0, y: 0 };
 
@@ -46,17 +158,11 @@ export const resolveConnectorAnchors = ({
   targetAnchor: targetAnchor || inferFacingAnchor(end, start),
 });
 
-export const getConnectorCurveDistance = ({
+export const getConnectorLeadDistance = ({
   start,
   end,
-  curveRatio = CONNECTOR_GEOMETRY.curveRatio,
-  minCurveDistance = CONNECTOR_GEOMETRY.minCurveDistance,
-  maxCurveDistance = CONNECTOR_GEOMETRY.maxCurveDistance,
-}) => {
-  const dx = Math.abs(Number(end?.x || 0) - Number(start?.x || 0));
-  const dy = Math.abs(Number(end?.y || 0) - Number(start?.y || 0));
-  return clampNumber(Math.max(dx, dy) * curveRatio, minCurveDistance, maxCurveDistance);
-};
+  endpointLeadDistance = CONNECTOR_GEOMETRY.endpointLeadDistance,
+}) => clampNumber(endpointLeadDistance, 0, Math.max(getDistance(start, end) / 3, 0));
 
 export const buildConnectorBezier = ({
   start,
@@ -84,30 +190,80 @@ export const buildConnectorBezier = ({
     sourceAnchor,
     targetAnchor,
   });
-  const curveDistance = getConnectorCurveDistance({
+  const endpointLeadDistance = getConnectorLeadDistance({
     start: startPos,
     end: endPos,
     ...(curveConfig || CONNECTOR_GEOMETRY),
   });
   const sourceNormal = getAnchorNormal(resolvedAnchors.sourceAnchor);
   const targetNormal = getAnchorNormal(resolvedAnchors.targetAnchor);
-  const ctrl1 = {
-    x: startPos.x + sourceNormal.x * curveDistance,
-    y: startPos.y + sourceNormal.y * curveDistance,
+  const sourceHorizontal = Math.abs(sourceNormal.x) > 0;
+  const targetHorizontal = Math.abs(targetNormal.x) > 0;
+  const startLead = {
+    x: startPos.x + sourceNormal.x * endpointLeadDistance,
+    y: startPos.y + sourceNormal.y * endpointLeadDistance,
   };
-  const ctrl2 = {
-    x: endPos.x + targetNormal.x * curveDistance,
-    y: endPos.y + targetNormal.y * curveDistance,
+  const endLead = {
+    x: endPos.x + targetNormal.x * endpointLeadDistance,
+    y: endPos.y + targetNormal.y * endpointLeadDistance,
   };
+  let routePoints;
+
+  if (sourceHorizontal && targetHorizontal) {
+    const midX = (startLead.x + endLead.x) / 2;
+    routePoints = [
+      startPos,
+      startLead,
+      { x: midX, y: startLead.y },
+      { x: midX, y: endLead.y },
+      endLead,
+      endPos,
+    ];
+  } else if (!sourceHorizontal && !targetHorizontal) {
+    const midY = (startLead.y + endLead.y) / 2;
+    routePoints = [
+      startPos,
+      startLead,
+      { x: startLead.x, y: midY },
+      { x: endLead.x, y: midY },
+      endLead,
+      endPos,
+    ];
+  } else if (sourceHorizontal) {
+    routePoints = [
+      startPos,
+      startLead,
+      { x: endLead.x, y: startLead.y },
+      endLead,
+      endPos,
+    ];
+  } else {
+    routePoints = [
+      startPos,
+      startLead,
+      { x: startLead.x, y: endLead.y },
+      endLead,
+      endPos,
+    ];
+  }
+
+  const cornerRadius = Number(curveConfig?.cornerRadius ?? CONNECTOR_GEOMETRY.cornerRadius);
+  const cornerRadiusUnit = Number(curveConfig?.cornerRadiusUnit ?? CONNECTOR_GEOMETRY.cornerRadiusUnit);
 
   return {
     sourceAnchor: resolvedAnchors.sourceAnchor,
     targetAnchor: resolvedAnchors.targetAnchor,
     startPos,
     endPos,
-    ctrl1,
-    ctrl2,
-    curveDistance,
-    path: `M ${startPos.x} ${startPos.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${endPos.x} ${endPos.y}`,
+    startLead,
+    endLead,
+    routePoints,
+    endpointLeadDistance,
+    cornerRadius,
+    path: buildRoundedOrthogonalPath({
+      points: routePoints,
+      cornerRadius,
+      cornerRadiusUnit,
+    }),
   };
 };

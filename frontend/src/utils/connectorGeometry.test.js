@@ -1,7 +1,7 @@
 import {
   buildConnectorBezier,
   CONNECTOR_GEOMETRY,
-  getConnectorCurveDistance,
+  getConnectorLeadDistance,
 } from './connectorGeometry';
 
 describe('connectorGeometry', () => {
@@ -22,7 +22,7 @@ describe('connectorGeometry', () => {
     expect(flow).toEqual(crosslink);
   });
 
-  test('applies the same curve distance from both anchors', () => {
+  test('applies the same lead distance from both anchors', () => {
     const geometry = buildConnectorBezier({
       start: { x: 40, y: 180 },
       end: { x: 280, y: 320 },
@@ -30,44 +30,52 @@ describe('connectorGeometry', () => {
       targetAnchor: 'left',
     });
 
-    const startCurveDistance = Math.hypot(
-      geometry.ctrl1.x - geometry.startPos.x,
-      geometry.ctrl1.y - geometry.startPos.y,
+    const startLeadDistance = Math.hypot(
+      geometry.startLead.x - geometry.startPos.x,
+      geometry.startLead.y - geometry.startPos.y,
     );
-    const endCurveDistance = Math.hypot(
-      geometry.ctrl2.x - geometry.endPos.x,
-      geometry.ctrl2.y - geometry.endPos.y,
+    const endLeadDistance = Math.hypot(
+      geometry.endLead.x - geometry.endPos.x,
+      geometry.endLead.y - geometry.endPos.y,
     );
 
-    expect(startCurveDistance).toBeCloseTo(geometry.curveDistance, 5);
-    expect(endCurveDistance).toBeCloseTo(geometry.curveDistance, 5);
+    expect(startLeadDistance).toBeCloseTo(geometry.endpointLeadDistance, 5);
+    expect(endLeadDistance).toBeCloseTo(geometry.endpointLeadDistance, 5);
   });
 
-  test('builds one continuous cubic with larger tangent handles at both anchors', () => {
+  test('builds a rounded orthogonal route with straight endpoint leads', () => {
     const geometry = buildConnectorBezier({
       start: { x: 100, y: 100 },
-      end: { x: 320, y: 240 },
+      end: { x: 380, y: 260 },
       sourceAnchor: 'right',
-      targetAnchor: 'top',
+      targetAnchor: 'left',
     });
 
     expect(geometry.path).toBe(
-      'M 100 100 C 243 100, 320 97, 320 240'
+      'M 100 100 L 124 100 L 184 100 Q 240 100 240 156 L 240 204 Q 240 260 296 260 L 356 260 L 380 260'
     );
-    expect(geometry.ctrl1.y).toBe(geometry.startPos.y);
-    expect(geometry.ctrl2.x).toBe(geometry.endPos.x);
+    expect(geometry.startLead).toEqual({ x: 124, y: 100 });
+    expect(geometry.endLead).toEqual({ x: 356, y: 260 });
+    expect(geometry.routePoints).toEqual([
+      { x: 100, y: 100 },
+      { x: 124, y: 100 },
+      { x: 240, y: 100 },
+      { x: 240, y: 260 },
+      { x: 356, y: 260 },
+      { x: 380, y: 260 },
+    ]);
   });
 
-  test('clamps curve distance for short and long connectors', () => {
-    expect(getConnectorCurveDistance({
+  test('caps lead distance for short connectors', () => {
+    expect(getConnectorLeadDistance({
       start: { x: 0, y: 0 },
-      end: { x: 8, y: 4 },
-    })).toBe(CONNECTOR_GEOMETRY.minCurveDistance);
+      end: { x: 24, y: 0 },
+    })).toBe(8);
 
-    expect(getConnectorCurveDistance({
+    expect(getConnectorLeadDistance({
       start: { x: 0, y: 0 },
       end: { x: 1200, y: 40 },
-    })).toBe(CONNECTOR_GEOMETRY.maxCurveDistance);
+    })).toBe(CONNECTOR_GEOMETRY.endpointLeadDistance);
   });
 
   test('infers stable target anchors for provisional endpoints', () => {
