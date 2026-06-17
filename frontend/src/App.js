@@ -14795,6 +14795,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       targetAnchor: conn.targetAnchor,
       sourceOffset: srcOffset,
       targetOffset: tgtOffset,
+      useTerminalSegment: conn.type === 'userflow',
     });
 
     return geometry?.path || '';
@@ -17072,6 +17073,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     end: { x: currentX, y: currentY },
                     sourceAnchor,
                     targetAnchor: drawingConnection.snapTarget?.anchor,
+                    useTerminalSegment: isUserFlow,
                   })?.path || '';
 
                   return (
@@ -17106,6 +17108,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     end: { x: endX, y: endY },
                     sourceAnchor: endpoint === 'source' ? draggingEndpoint.snapTarget?.anchor : fixedAnchor,
                     targetAnchor: endpoint === 'source' ? fixedAnchor : draggingEndpoint.snapTarget?.anchor,
+                    useTerminalSegment: isUserFlow,
                   })?.path || '';
 
                   return (

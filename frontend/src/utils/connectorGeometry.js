@@ -9,6 +9,7 @@ export const CONNECTOR_GEOMETRY = Object.freeze({
   curveRatio: 0.55,
   minCurveDistance: 32,
   maxCurveDistance: 112,
+  terminalSegmentDistance: 16,
 });
 
 export const USER_FLOW_ARROWHEAD = Object.freeze({
@@ -69,6 +70,18 @@ export const getConnectorCurveDistance = ({
   return clampNumber(rawDistance, minCurveDistance, Math.min(maxCurveDistance, spanLimit));
 };
 
+export const getConnectorTerminalDistance = ({
+  start,
+  end,
+  terminalSegmentDistance = CONNECTOR_GEOMETRY.terminalSegmentDistance,
+}) => {
+  const span = Math.hypot(
+    Number(end?.x || 0) - Number(start?.x || 0),
+    Number(end?.y || 0) - Number(start?.y || 0),
+  );
+  return clampNumber(terminalSegmentDistance, 0, span * 0.2);
+};
+
 export const buildConnectorBezier = ({
   start,
   end,
@@ -77,6 +90,7 @@ export const buildConnectorBezier = ({
   sourceOffset,
   targetOffset,
   curveConfig,
+  useTerminalSegment = false,
 }) => {
   if (!start || !end) return null;
 
@@ -97,14 +111,27 @@ export const buildConnectorBezier = ({
   });
   const sourceNormal = getAnchorNormal(resolvedAnchors.sourceAnchor);
   const targetNormal = getAnchorNormal(resolvedAnchors.targetAnchor);
+  const terminalDistance = useTerminalSegment
+    ? getConnectorTerminalDistance({
+      start: startPos,
+      end: endPos,
+      ...(curveConfig || CONNECTOR_GEOMETRY),
+    })
+    : 0;
+  const pathEnd = terminalDistance
+    ? {
+      x: endPos.x + targetNormal.x * terminalDistance,
+      y: endPos.y + targetNormal.y * terminalDistance,
+    }
+    : endPos;
   const sourceCurveDistance = getConnectorCurveDistance({
     from: startPos,
-    toward: endPos,
+    toward: pathEnd,
     normal: sourceNormal,
     ...(curveConfig || CONNECTOR_GEOMETRY),
   });
   const targetCurveDistance = getConnectorCurveDistance({
-    from: endPos,
+    from: pathEnd,
     toward: startPos,
     normal: targetNormal,
     ...(curveConfig || CONNECTOR_GEOMETRY),
@@ -114,19 +141,25 @@ export const buildConnectorBezier = ({
     y: startPos.y + sourceNormal.y * sourceCurveDistance,
   };
   const ctrl2 = {
-    x: endPos.x + targetNormal.x * targetCurveDistance,
-    y: endPos.y + targetNormal.y * targetCurveDistance,
+    x: pathEnd.x + targetNormal.x * targetCurveDistance,
+    y: pathEnd.y + targetNormal.y * targetCurveDistance,
   };
+  const curvePath = `M ${formatPathNumber(startPos.x)} ${formatPathNumber(startPos.y)} C ${formatPathNumber(ctrl1.x)} ${formatPathNumber(ctrl1.y)}, ${formatPathNumber(ctrl2.x)} ${formatPathNumber(ctrl2.y)}, ${formatPathNumber(pathEnd.x)} ${formatPathNumber(pathEnd.y)}`;
+  const terminalPath = terminalDistance
+    ? ` L ${formatPathNumber(endPos.x)} ${formatPathNumber(endPos.y)}`
+    : '';
 
   return {
     sourceAnchor: resolvedAnchors.sourceAnchor,
     targetAnchor: resolvedAnchors.targetAnchor,
     startPos,
     endPos,
+    pathEnd,
     ctrl1,
     ctrl2,
     sourceCurveDistance,
     targetCurveDistance,
-    path: `M ${formatPathNumber(startPos.x)} ${formatPathNumber(startPos.y)} C ${formatPathNumber(ctrl1.x)} ${formatPathNumber(ctrl1.y)}, ${formatPathNumber(ctrl2.x)} ${formatPathNumber(ctrl2.y)}, ${formatPathNumber(endPos.x)} ${formatPathNumber(endPos.y)}`,
+    terminalDistance,
+    path: `${curvePath}${terminalPath}`,
   };
 };

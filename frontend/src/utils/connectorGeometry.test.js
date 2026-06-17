@@ -2,6 +2,7 @@ import {
   buildConnectorBezier,
   CONNECTOR_GEOMETRY,
   getConnectorCurveDistance,
+  getConnectorTerminalDistance,
 } from './connectorGeometry';
 
 describe('connectorGeometry', () => {
@@ -45,7 +46,7 @@ describe('connectorGeometry', () => {
     expect(geometry.ctrl2.y).toBe(geometry.endPos.y);
   });
 
-  test('builds one flowing cubic without inserted straight or orthogonal segments', () => {
+  test('keeps crosslinks as one flowing cubic without inserted straight or orthogonal segments', () => {
     const geometry = buildConnectorBezier({
       start: { x: 100, y: 100 },
       end: { x: 380, y: 260 },
@@ -62,6 +63,23 @@ describe('connectorGeometry', () => {
     expect(geometry.ctrl2.y).toBe(geometry.endPos.y);
   });
 
+  test('adds a short tangent-aligned terminal segment only for arrowed user flows', () => {
+    const geometry = buildConnectorBezier({
+      start: { x: 100, y: 100 },
+      end: { x: 380, y: 260 },
+      sourceAnchor: 'right',
+      targetAnchor: 'left',
+      useTerminalSegment: true,
+    });
+
+    expect(geometry.path).toBe(
+      'M 100 100 C 212 100, 252 260, 364 260 L 380 260'
+    );
+    expect(geometry.pathEnd).toEqual({ x: 364, y: 260 });
+    expect(geometry.terminalDistance).toBe(16);
+    expect(geometry.ctrl2.y).toBe(geometry.pathEnd.y);
+  });
+
   test('uses anchor-axis distance so handles do not overpull on tall narrow curves', () => {
     const distance = getConnectorCurveDistance({
       from: { x: 100, y: 100 },
@@ -71,6 +89,13 @@ describe('connectorGeometry', () => {
 
     expect(distance).toBe(66);
     expect(distance).toBeLessThan(CONNECTOR_GEOMETRY.maxCurveDistance);
+  });
+
+  test('caps terminal segment distance for very short arrowed paths', () => {
+    expect(getConnectorTerminalDistance({
+      start: { x: 0, y: 0 },
+      end: { x: 40, y: 0 },
+    })).toBe(8);
   });
 
   test('infers stable target anchors for provisional endpoints', () => {
