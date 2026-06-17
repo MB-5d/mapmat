@@ -102,7 +102,7 @@ describe('CommentsPanel', () => {
       sortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(sortButton.className).not.toContain('ui-icon-btn--active');
+    expect(sortButton.className).toContain('ui-icon-btn--active');
     expect(container.textContent).toContain('Newest');
     expect(container.textContent).toContain('My mentions');
     expect(container.querySelector('.comments-panel-menu-dot')).not.toBeNull();

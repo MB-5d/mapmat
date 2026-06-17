@@ -186,6 +186,7 @@ const CommentsPanel = ({
                 size="sm"
                 type="secondary"
                 buttonStyle="mono"
+                active={openMenu === 'sort'}
                 onClick={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))}
                 aria-label={`Sort comments: ${sortLabel}`}
                 aria-expanded={openMenu === 'sort'}

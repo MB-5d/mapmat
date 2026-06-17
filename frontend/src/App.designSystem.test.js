@@ -270,6 +270,8 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active {');
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {');
     expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-icon-button-active-bg\);[\s\S]*color: var\(--ui-icon-button-active-fg\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet\);[\s\S]*color: var\(--ui-button-mono-quiet\);[\s\S]*box-shadow: inset 0 0 0 1px var\(--ui-button-mono-quiet\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet-hover\);[\s\S]*color: var\(--ui-button-mono-quiet-hover\);[\s\S]*box-shadow: inset 0 0 0 1px var\(--ui-button-mono-quiet-hover\);[\s\S]*\}/);
     expect(appCss).toMatch(/\.ui-icon-btn--xxs \{[\s\S]*border-radius: var\(--ui-icon-button-radius-sm\);[\s\S]*\}/);
     expect(generatedCss).toContain('--ui-icon-button-size-xxs: 16px;');
     expect(generatedCss).toContain('--ui-icon-button-size-xs: 24px;');

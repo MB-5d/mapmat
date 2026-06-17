@@ -517,6 +517,20 @@ body {
   color: var(--ui-button-mono-quiet-hover);
 }
 
+.ui-icon-btn.ui-icon-btn--type-secondary.ui-icon-btn--style-mono.ui-icon-btn--active {
+  background: var(--ui-color-surface-muted);
+  border-color: var(--ui-button-mono-quiet);
+  color: var(--ui-button-mono-quiet);
+  box-shadow: inset 0 0 0 1px var(--ui-button-mono-quiet);
+}
+
+.ui-icon-btn.ui-icon-btn--type-secondary.ui-icon-btn--style-mono.ui-icon-btn--active:hover:not(:disabled) {
+  background: var(--ui-color-surface-muted);
+  border-color: var(--ui-button-mono-quiet-hover);
+  color: var(--ui-button-mono-quiet-hover);
+  box-shadow: inset 0 0 0 1px var(--ui-button-mono-quiet-hover);
+}
+
 .ui-icon-btn--type-secondary.ui-icon-btn--style-danger {
   background: transparent;
   border-color: var(--ui-button-danger-quiet);
