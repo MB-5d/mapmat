@@ -273,13 +273,13 @@ const CommentPopover = ({
       </div>
 
       <div className="comment-popover-footer modal-footer">
-        <Button variant="secondary" size="md" onClick={handleCancel}>
+        <Button variant="secondary" size="sm" onClick={handleCancel}>
           {canComment ? 'Cancel' : 'Close'}
         </Button>
         {canComment && (
           <Button
             variant="primary"
-            size="md"
+            size="sm"
             onClick={handleSubmit}
             disabled={!newComment.trim() && !replyDraft.trim()}
           >

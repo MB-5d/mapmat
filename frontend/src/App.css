@@ -10544,7 +10544,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--modal-header-padding);
+  height: 48px;
+  padding: 0 var(--modal-padding);
   border-bottom: var(--border-width-subtle) solid var(--ui-color-border);
 }
 
@@ -10713,9 +10714,11 @@ body {
 }
 
 .comment-popover-footer.modal-footer {
-  padding: var(--modal-footer-padding);
+  height: 56px;
+  padding: 0 var(--modal-padding);
   border-top: var(--border-width-subtle) solid var(--ui-color-border);
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--modal-gap);
 }

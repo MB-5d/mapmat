@@ -5062,6 +5062,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     ))
   ), [connections, visibleCanvasNodeIds]);
 
+  const visibleManualCrosslinkConnections = useMemo(() => (
+    visibleCanvasConnections.filter((conn) => conn.type === 'crosslink' && !conn.autoRoute)
+  ), [visibleCanvasConnections]);
+
+  const visibleUserFlowConnections = useMemo(() => (
+    visibleCanvasConnections.filter((conn) => conn.type === 'userflow')
+  ), [visibleCanvasConnections]);
+
   useEffect(() => {
     if (typeof PerformanceObserver === 'undefined') return undefined;
     const observers = [];
@@ -14781,14 +14789,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     return null;
   }, [getBestAnchorPair]);
 
-  const getConnectionsAtAnchor = (nodeId, anchor, asSource) => {
-    return connections.filter((conn) => {
+  const getConnectionEndpointsAtAnchor = (nodeId, anchor) => {
+    return connections.reduce((matches, conn) => {
+      if (conn.type !== 'userflow' && conn.type !== 'crosslink') return matches;
       const anchors = getRenderedConnectionAnchors(conn);
-      if (!anchors) return false;
-      return asSource
-        ? (conn.sourceNodeId === nodeId && anchors.sourceAnchor === anchor)
-        : (conn.targetNodeId === nodeId && anchors.targetAnchor === anchor);
-    });
+      if (!anchors) return matches;
+      if (conn.sourceNodeId === nodeId && anchors.sourceAnchor === anchor) {
+        matches.push({ connectionId: conn.id, endpoint: 'source' });
+      }
+      if (conn.targetNodeId === nodeId && anchors.targetAnchor === anchor) {
+        matches.push({ connectionId: conn.id, endpoint: 'target' });
+      }
+      return matches;
+    }, []);
   };
 
   const getAnchorSpacing = useCallback((count, anchor) => {
@@ -14802,9 +14815,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     return Math.max(minSpacing, Math.min(maxSpacing, computed));
   }, [showThumbnails]);
 
-  const getAnchorOffset = (conn, nodeId, anchor, isSource) => {
-    const shared = getConnectionsAtAnchor(nodeId, anchor, isSource);
-    const storedIndex = shared.findIndex(c => c.id === conn.id);
+  const getAnchorOffset = (conn, nodeId, anchor, endpoint) => {
+    const shared = getConnectionEndpointsAtAnchor(nodeId, anchor);
+    const storedIndex = shared.findIndex((entry) => (
+      entry.connectionId === conn.id && entry.endpoint === endpoint
+    ));
     const connectionCount = shared.length + (storedIndex >= 0 ? 0 : 1);
     if (connectionCount <= 1) return { x: 0, y: 0 };
 
@@ -14824,8 +14839,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     if (!baseStart || !baseEnd) return '';
 
-    const srcOffset = getAnchorOffset(conn, conn.sourceNodeId, conn.sourceAnchor, true);
-    const tgtOffset = getAnchorOffset(conn, conn.targetNodeId, conn.targetAnchor, false);
+    const srcOffset = getAnchorOffset(conn, conn.sourceNodeId, conn.sourceAnchor, 'source');
+    const tgtOffset = getAnchorOffset(conn, conn.targetNodeId, conn.targetAnchor, 'target');
 
     const geometry = buildConnectorBezier({
       start: baseStart,
@@ -16335,6 +16350,163 @@ export default function App({ currentRoute, navigateToRoute }) {
   const currentBillingPlanKey = currentBillingPlan?.key || (isLoggedIn ? 'free' : 'guest');
   const currentBillingPlanName = currentBillingPlan?.name || (isLoggedIn ? 'Free' : 'Not signed in');
 
+  const renderCompletedConnection = (conn) => {
+    const path = generateConnectionPath(conn);
+    if (!path) return null;
+    const isUserFlow = conn.type === 'userflow';
+    const isCrosslink = conn.type === 'crosslink';
+    const crosslinkGhosted = isCrosslink && isCrosslinkGhosted(conn);
+    const color = isUserFlow
+      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
+    const isHovered = hoveredConnection === conn.id;
+    const baseWidth = 2;
+    const lineWidth = isHovered ? baseWidth + 1 : baseWidth;
+    const baseOpacity = isCrosslink && crosslinkGhosted ? 0.4 : 1;
+    const lineOpacity = isHovered
+      ? (isCrosslink && crosslinkGhosted ? 0.4 : 1)
+      : baseOpacity;
+    const glowOpacity = isHovered
+      ? (isCrosslink && crosslinkGhosted ? 0.24 : 0.6)
+      : 0;
+
+    return (
+      <g key={conn.id}>
+        <path
+          className="connection-hit"
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth={16}
+          strokeOpacity={0}
+          strokeLinecap="round"
+          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+          onMouseEnter={() => setHoveredConnection(conn.id)}
+          onMouseLeave={(e) => {
+            setHoveredConnection(null);
+            e.currentTarget.style.cursor = 'pointer';
+          }}
+          onMouseMove={(e) => {
+            if (!contentRef.current) return;
+            const contentRect = contentRef.current.getBoundingClientRect();
+            const mouseX = (e.clientX - contentRect.left) / scale;
+            const mouseY = (e.clientY - contentRect.top) / scale;
+            const nearEndpoint = isNearEndpoint(mouseX, mouseY, conn, 32);
+            e.currentTarget.style.cursor = nearEndpoint ? 'grab' : 'pointer';
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!contentRef.current) return;
+            const contentRect = contentRef.current.getBoundingClientRect();
+            const clickX = (e.clientX - contentRect.left) / scale;
+            const clickY = (e.clientY - contentRect.top) / scale;
+            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
+            if (nearEndpoint) {
+              handleEndpointDragStart(e, conn, nearEndpoint);
+            }
+          }}
+          onClick={(e) => {
+            if (!contentRef.current) return;
+            const contentRect = contentRef.current.getBoundingClientRect();
+            const clickX = (e.clientX - contentRect.left) / scale;
+            const clickY = (e.clientY - contentRect.top) / scale;
+            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
+            if (!nearEndpoint) {
+              handleConnectionClick(e, conn);
+            }
+          }}
+        />
+        <path
+          className="connection-glow"
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth={lineWidth + 2}
+          strokeOpacity={glowOpacity}
+          strokeLinecap="round"
+          strokeDasharray={isUserFlow ? 'none' : '8 6'}
+          filter="url(#connection-glow)"
+          style={{ pointerEvents: 'none' }}
+        />
+        <path
+          className="connection-line"
+          d={path}
+          fill="none"
+          stroke={color}
+          strokeWidth={lineWidth}
+          strokeLinecap="round"
+          strokeDasharray={isUserFlow ? 'none' : '8 6'}
+          markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+          strokeOpacity={lineOpacity}
+          style={{ pointerEvents: 'none' }}
+        />
+      </g>
+    );
+  };
+
+  const renderDrawingConnectionPreview = () => {
+    if (!drawingConnection) return null;
+    const { startX, startY, currentX, currentY, sourceAnchor, type } = drawingConnection;
+    const isUserFlow = type === 'userflow';
+    const color = isUserFlow
+      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
+    const pathD = buildConnectorBezier({
+      start: { x: startX, y: startY },
+      end: { x: currentX, y: currentY },
+      sourceAnchor,
+      targetAnchor: drawingConnection.snapTarget?.anchor,
+      useTerminalSegment: isUserFlow,
+    })?.path || '';
+
+    return (
+      <path
+        d={pathD}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeDasharray={isUserFlow ? 'none' : '8 6'}
+        strokeOpacity={0.8}
+        strokeLinecap="round"
+        markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+      />
+    );
+  };
+
+  const renderDraggingEndpointPreview = () => {
+    if (!draggingEndpoint) return null;
+    const { fixedX, fixedY, fixedAnchor, currentX, currentY, endpoint, type } = draggingEndpoint;
+    const isUserFlow = type === 'userflow';
+    const color = isUserFlow
+      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
+      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
+    const startX = endpoint === 'source' ? currentX : fixedX;
+    const startY = endpoint === 'source' ? currentY : fixedY;
+    const endX = endpoint === 'source' ? fixedX : currentX;
+    const endY = endpoint === 'source' ? fixedY : currentY;
+    const pathD = buildConnectorBezier({
+      start: { x: startX, y: startY },
+      end: { x: endX, y: endY },
+      sourceAnchor: endpoint === 'source' ? draggingEndpoint.snapTarget?.anchor : fixedAnchor,
+      targetAnchor: endpoint === 'source' ? fixedAnchor : draggingEndpoint.snapTarget?.anchor,
+      useTerminalSegment: isUserFlow,
+    })?.path || '';
+
+    return (
+      <path
+        d={pathD}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeDasharray={isUserFlow ? 'none' : '8 6'}
+        strokeOpacity={0.8}
+        strokeLinecap="round"
+        markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
+      />
+    );
+  };
+
   if (isBillingReturnFromBillingWindow) {
     return (
       <div className="app">
@@ -16862,6 +17034,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   </filter>
                 </defs>
 
+                <g className="connections-layer__crosslinks" data-connector-layer="crosslinks">
                 {layers.crossLinks && visibleAutoCrosslinkConnections.map((conn) => {
                   const path = conn.sourceAnchor && conn.targetAnchor
                     ? generateConnectionPath(conn)
@@ -16920,6 +17093,12 @@ export default function App({ currentRoute, navigateToRoute }) {
                     </g>
                   );
                 })}
+                {layers.crossLinks && visibleManualCrosslinkConnections
+                  .filter((conn) => draggingEndpoint?.connectionId !== conn.id)
+                  .map(renderCompletedConnection)}
+                {drawingConnection?.type === 'crosslink' && renderDrawingConnectionPreview()}
+                {draggingEndpoint?.type === 'crosslink' && renderDraggingEndpointPreview()}
+                </g>
 
                 {layers.brokenLinks && visibleBrokenConnections.map((conn) => {
                   const path = getBrokenLinkPathForConnection(conn);
@@ -16971,180 +17150,13 @@ export default function App({ currentRoute, navigateToRoute }) {
                   );
                 })}
 
-                {/* Render completed connections */}
-                {visibleCanvasConnections
-                  .filter(conn => {
-                    if (conn.type === 'userflow' && !layers.userFlows) return false;
-                    if (conn.type === 'crosslink' && !layers.crossLinks) return false;
-                    if (conn.type === 'crosslink' && conn.autoRoute) return false;
-                    // Hide connection being dragged
-                    if (draggingEndpoint?.connectionId === conn.id) return false;
-                    return true;
-                  })
-                  .sort((a, b) => (
-                    (a.type === 'userflow' ? 1 : 0) - (b.type === 'userflow' ? 1 : 0)
-                  ))
-                  .map(conn => {
-                    const path = generateConnectionPath(conn);
-                    if (!path) return null;
-                    const isUserFlow = conn.type === 'userflow';
-                    const isCrosslink = conn.type === 'crosslink';
-                    const crosslinkGhosted = isCrosslink && isCrosslinkGhosted(conn);
-                    const color = isUserFlow
-                      ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
-                      : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
-                    const isHovered = hoveredConnection === conn.id;
-                    const baseWidth = 2;
-                    const lineWidth = isHovered ? baseWidth + 1 : baseWidth;
-                    const baseOpacity = isCrosslink && crosslinkGhosted ? 0.4 : 1;
-                    const lineOpacity = isHovered
-                      ? (isCrosslink && crosslinkGhosted ? 0.4 : 1)
-                      : baseOpacity;
-                    const glowOpacity = isHovered
-                      ? (isCrosslink && crosslinkGhosted ? 0.24 : 0.6)
-                      : 0;
-
-                    return (
-                      <g key={conn.id}>
-                        {/* Invisible hit area for easier hovering */}
-                        <path
-                          className="connection-hit"
-                          d={path}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={16}
-                          strokeOpacity={0}
-                          strokeLinecap="round"
-                          style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                          onMouseEnter={() => setHoveredConnection(conn.id)}
-                          onMouseLeave={(e) => {
-                            setHoveredConnection(null);
-                            e.currentTarget.style.cursor = 'pointer';
-                          }}
-                          onMouseMove={(e) => {
-                            if (!contentRef.current) return;
-                            const contentRect = contentRef.current.getBoundingClientRect();
-                            const mouseX = (e.clientX - contentRect.left) / scale;
-                            const mouseY = (e.clientY - contentRect.top) / scale;
-                            const nearEndpoint = isNearEndpoint(mouseX, mouseY, conn, 32);
-                            e.currentTarget.style.cursor = nearEndpoint ? 'grab' : 'pointer';
-                          }}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (!contentRef.current) return;
-                            const contentRect = contentRef.current.getBoundingClientRect();
-                            const clickX = (e.clientX - contentRect.left) / scale;
-                            const clickY = (e.clientY - contentRect.top) / scale;
-                            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
-                            if (nearEndpoint) {
-                              handleEndpointDragStart(e, conn, nearEndpoint);
-                            }
-                          }}
-                          onClick={(e) => {
-                            if (!contentRef.current) return;
-                            const contentRect = contentRef.current.getBoundingClientRect();
-                            const clickX = (e.clientX - contentRect.left) / scale;
-                            const clickY = (e.clientY - contentRect.top) / scale;
-                            const nearEndpoint = isNearEndpoint(clickX, clickY, conn, 32);
-                            if (!nearEndpoint) {
-                              handleConnectionClick(e, conn);
-                            }
-                          }}
-                        />
-                        {/* Glow effect on hover */}
-                        <path
-                          className="connection-glow"
-                          d={path}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={lineWidth + 2}
-                          strokeOpacity={glowOpacity}
-                          strokeLinecap="round"
-                          strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                          filter="url(#connection-glow)"
-                          style={{ pointerEvents: 'none' }}
-                        />
-                        {/* Main line */}
-                        <path
-                          className="connection-line"
-                          d={path}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={lineWidth}
-                          strokeLinecap="round"
-                          strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                          markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                          strokeOpacity={lineOpacity}
-                          style={{ pointerEvents: 'none' }}
-                        />
-                      </g>
-                    );
-                  })}
-
-                {/* Temporary line while drawing */}
-                {drawingConnection && (() => {
-                  const { startX, startY, currentX, currentY, sourceAnchor, type } = drawingConnection;
-                  const isUserFlow = type === 'userflow';
-                  const color = isUserFlow
-                    ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
-                    : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
-                  const pathD = buildConnectorBezier({
-                    start: { x: startX, y: startY },
-                    end: { x: currentX, y: currentY },
-                    sourceAnchor,
-                    targetAnchor: drawingConnection.snapTarget?.anchor,
-                    useTerminalSegment: isUserFlow,
-                  })?.path || '';
-
-                  return (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={2}
-                      strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                      strokeOpacity={0.8}
-                      strokeLinecap="round"
-                      markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                    />
-                  );
-                })()}
-
-                {/* Temporary line while dragging endpoint */}
-                {draggingEndpoint && (() => {
-                  const { fixedX, fixedY, fixedAnchor, currentX, currentY, endpoint, type } = draggingEndpoint;
-                  const isUserFlow = type === 'userflow';
-                  const color = isUserFlow
-                    ? (connectionColors.userFlows || DEFAULT_CONNECTION_COLORS.userFlows)
-                    : (connectionColors.crossLinks || DEFAULT_CONNECTION_COLORS.crossLinks);
-
-                  // Determine start/end based on which endpoint is being dragged
-                  const startX = endpoint === 'source' ? currentX : fixedX;
-                  const startY = endpoint === 'source' ? currentY : fixedY;
-                  const endX = endpoint === 'source' ? fixedX : currentX;
-                  const endY = endpoint === 'source' ? fixedY : currentY;
-                  const pathD = buildConnectorBezier({
-                    start: { x: startX, y: startY },
-                    end: { x: endX, y: endY },
-                    sourceAnchor: endpoint === 'source' ? draggingEndpoint.snapTarget?.anchor : fixedAnchor,
-                    targetAnchor: endpoint === 'source' ? fixedAnchor : draggingEndpoint.snapTarget?.anchor,
-                    useTerminalSegment: isUserFlow,
-                  })?.path || '';
-
-                  return (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={2}
-                      strokeDasharray={isUserFlow ? 'none' : '8 6'}
-                      strokeOpacity={0.8}
-                      strokeLinecap="round"
-                      markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}
-                    />
-                  );
-                })()}
+                <g className="connections-layer__userflows" data-connector-layer="userflows">
+                {layers.userFlows && visibleUserFlowConnections
+                  .filter((conn) => draggingEndpoint?.connectionId !== conn.id)
+                  .map(renderCompletedConnection)}
+                {drawingConnection?.type === 'userflow' && renderDrawingConnectionPreview()}
+                {draggingEndpoint?.type === 'userflow' && renderDraggingEndpointPreview()}
+                </g>
               </svg>
                 </SitemapTree>
                 )}

@@ -214,9 +214,18 @@ describe('UI design-system contract', () => {
     expect(appJs).toContain('className="connector-overlay connector-overlay--map"');
     expect(appJs).toContain('className="connections-layer connections-layer--relationship"');
     expect(appJs).toContain('getRenderedConnectionAnchors');
-    expect(appJs).toContain("(a.type === 'userflow' ? 1 : 0) - (b.type === 'userflow' ? 1 : 0)");
+    expect(appJs).toContain('getConnectionEndpointsAtAnchor');
+    expect(appJs).toContain("matches.push({ connectionId: conn.id, endpoint: 'source' });");
+    expect(appJs).toContain("matches.push({ connectionId: conn.id, endpoint: 'target' });");
+    expect(appJs).toContain('visibleManualCrosslinkConnections');
+    expect(appJs).toContain('visibleUserFlowConnections');
+    expect(appJs.indexOf('data-connector-layer="crosslinks"')).toBeLessThan(
+      appJs.indexOf('data-connector-layer="userflows"')
+    );
     expect(appJs).toContain('buildConnectorBezier({');
     expect(appJs).toContain('USER_FLOW_ARROWHEAD.path');
+    expect(appJs).toContain("markerEnd={isUserFlow ? 'url(#arrowhead-userflow)' : 'none'}");
+    expect(appJs).not.toContain('getConnectionsAtAnchor');
     expect(appJs).not.toContain('relationship-map-connector-gap-mask');
   });
 
