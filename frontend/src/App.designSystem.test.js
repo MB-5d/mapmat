@@ -209,9 +209,13 @@ describe('UI design-system contract', () => {
   test('connector layers and arrowheads use one shared geometry contract', () => {
     expect(appCss).toMatch(/\.connector-overlay \{[\s\S]*z-index: 0;/);
     expect(appCss).toMatch(/\.connector-overlay--map \{[\s\S]*z-index: 0;/);
+    expect(appCss).toMatch(/\.connector-overlay--map-bridge \{[\s\S]*z-index: 1;/);
+    expect(appCss).toMatch(/\.connector-overlay-map-gap \{[\s\S]*stroke: var\(--ui-canvas-bg\);[\s\S]*stroke-width: var\(--unit-8\);/);
+    expect(appCss).toMatch(/\.connector-overlay-map-line \{[\s\S]*stroke: var\(--ui-connection-map-default\);[\s\S]*stroke-width: var\(--ui-connection-map-stroke-width\);/);
     expect(appCss).toMatch(/\.connections-layer \{[\s\S]*z-index: 1;/);
     expect(appCss).toMatch(/\.connections-layer--relationship \{[\s\S]*z-index: 1;/);
     expect(appJs).toContain('className="connector-overlay connector-overlay--map"');
+    expect(appJs).toContain('className="connector-overlay connector-overlay--map-bridge"');
     expect(appJs).toContain('className="connections-layer connections-layer--relationship"');
     expect(appJs).toContain('buildConnectorBezier({');
     expect(appJs).toContain('USER_FLOW_ARROWHEAD.path');

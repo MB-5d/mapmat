@@ -1766,6 +1766,28 @@ const SitemapTree = ({
 
       {children}
 
+      {connectorPaths.length > 0 && (
+        <svg
+          className="connector-overlay connector-overlay--map-bridge"
+          aria-hidden="true"
+        >
+          {connectorPaths.map((d, i) => (
+            <g key={i}>
+              <path
+                className="connector-overlay-map-gap"
+                d={d}
+                fill="none"
+              />
+              <path
+                className="connector-overlay-map-line"
+                d={d}
+                fill="none"
+              />
+            </g>
+          ))}
+        </svg>
+      )}
+
       {/* Render all nodes with absolute positioning */}
       {visibleNodeData.map(nodeData => {
         const color = getDepthColor(colors, nodeData.depth);
