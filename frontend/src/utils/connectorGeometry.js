@@ -10,6 +10,7 @@ export const CONNECTOR_GEOMETRY = Object.freeze({
   minCurveDistance: 32,
   maxCurveDistance: 112,
   terminalSegmentDistance: 16,
+  mapConnectorGapStrokeWidth: 10,
 });
 
 export const USER_FLOW_ARROWHEAD = Object.freeze({
@@ -80,6 +81,26 @@ export const getConnectorTerminalDistance = ({
     Number(end?.y || 0) - Number(start?.y || 0),
   );
   return clampNumber(terminalSegmentDistance, 0, span * 0.2);
+};
+
+export const getReservedAnchorOffsetDistance = ({
+  connectionIndex,
+  connectionCount,
+  spacing,
+  hasReservedAnchor = false,
+}) => {
+  const count = Math.max(0, Number(connectionCount || 0));
+  if (count <= 0) return 0;
+  const totalCount = count + (hasReservedAnchor ? 1 : 0);
+  if (totalCount <= 1) return 0;
+
+  const reservedIndex = hasReservedAnchor ? Math.floor(totalCount / 2) : -1;
+  let slotIndex = Math.max(0, Number(connectionIndex || 0));
+  if (hasReservedAnchor && slotIndex >= reservedIndex) {
+    slotIndex += 1;
+  }
+
+  return (slotIndex - (totalCount - 1) / 2) * Number(spacing || 0);
 };
 
 export const buildConnectorBezier = ({

@@ -3,6 +3,7 @@ import {
   CONNECTOR_GEOMETRY,
   getConnectorCurveDistance,
   getConnectorTerminalDistance,
+  getReservedAnchorOffsetDistance,
 } from './connectorGeometry';
 
 describe('connectorGeometry', () => {
@@ -96,6 +97,34 @@ describe('connectorGeometry', () => {
       start: { x: 0, y: 0 },
       end: { x: 40, y: 0 },
     })).toBe(8);
+  });
+
+  test('defines one shared gap size for relationship lines crossing map connectors', () => {
+    expect(CONNECTOR_GEOMETRY.mapConnectorGapStrokeWidth).toBe(10);
+  });
+
+  test('reserved map connector anchor shifts one relationship line off center', () => {
+    expect(getReservedAnchorOffsetDistance({
+      connectionIndex: 0,
+      connectionCount: 1,
+      spacing: 16,
+      hasReservedAnchor: true,
+    })).toBe(-8);
+  });
+
+  test('reserved map connector anchor leaves two relationship lines on either side', () => {
+    expect(getReservedAnchorOffsetDistance({
+      connectionIndex: 0,
+      connectionCount: 2,
+      spacing: 16,
+      hasReservedAnchor: true,
+    })).toBe(-16);
+    expect(getReservedAnchorOffsetDistance({
+      connectionIndex: 1,
+      connectionCount: 2,
+      spacing: 16,
+      hasReservedAnchor: true,
+    })).toBe(16);
   });
 
   test('infers stable target anchors for provisional endpoints', () => {

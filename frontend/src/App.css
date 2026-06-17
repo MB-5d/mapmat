@@ -2508,8 +2508,7 @@ body {
   flex: 1;
   overflow: hidden;
   touch-action: none;
-  --ui-canvas-bg: #f8fafc;
-  background-color: var(--ui-canvas-bg);
+  background-color: #f8fafc;
 }
 
 .canvas.has-map::before {
@@ -3521,26 +3520,6 @@ body {
 
 .connector-overlay--map {
   z-index: 0;
-}
-
-.connector-overlay--map-bridge {
-  z-index: 1;
-}
-
-.connector-overlay-map-gap {
-  stroke: var(--ui-canvas-bg);
-  stroke-width: var(--unit-8);
-  stroke-linecap: butt;
-  stroke-linejoin: round;
-  pointer-events: none;
-}
-
-.connector-overlay-map-line {
-  stroke: var(--ui-connection-map-default);
-  stroke-width: var(--ui-connection-map-stroke-width);
-  stroke-linecap: butt;
-  stroke-linejoin: round;
-  pointer-events: none;
 }
 
 .vertical-connector {
@@ -12329,8 +12308,7 @@ body {
 }
 
 [data-theme="dark"] .canvas {
-  --ui-canvas-bg: #0d0812;
-  background-color: var(--ui-canvas-bg);
+  background-color: #0d0812;
 }
 
 [data-theme="dark"] .canvas.has-map::before {
@@ -13344,8 +13322,7 @@ body {
 }
 
 [data-theme="light"] .canvas {
-  --ui-canvas-bg: #f8fafc;
-  background-color: var(--ui-canvas-bg);
+  background-color: #f8fafc;
 }
 
 [data-theme="light"] .canvas.has-map::before {
