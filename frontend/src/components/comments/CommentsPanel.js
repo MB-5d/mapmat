@@ -9,10 +9,12 @@ import SearchInput from '../ui/SearchInput';
 
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 
-const COMMENT_SORT_OPTIONS = [
+const BASE_COMMENT_SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
   { value: 'mentions', label: 'My mentions' },
 ];
+
+const RESOLVED_COMMENT_SORT_OPTION = { value: 'resolved', label: 'Resolved' };
 
 const buildUserMentionKeys = (user) => {
   const tokens = new Set();
@@ -88,6 +90,12 @@ const CommentsPanel = ({
     };
   }, [openMenu]);
 
+  useEffect(() => {
+    if (!showResolved && sortMode === 'resolved') {
+      setSortMode('newest');
+    }
+  }, [showResolved, sortMode]);
+
   // Collect all comments from tree and orphans
   const getAllComments = () => {
     const comments = [];
@@ -153,6 +161,11 @@ const CommentsPanel = ({
       comment.nodeTitle.toLowerCase().includes(searchLower)
     );
   }).sort((a, b) => {
+    if (sortMode === 'resolved') {
+      const resolvedDelta = Number(b.completed) - Number(a.completed);
+      if (resolvedDelta !== 0) return resolvedDelta;
+    }
+
     if (sortMode === 'mentions') {
       const mentionDelta = Number(isUserMentioned(b)) - Number(isUserMentioned(a));
       if (mentionDelta !== 0) return mentionDelta;
@@ -161,7 +174,10 @@ const CommentsPanel = ({
     return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
-  const sortLabel = COMMENT_SORT_OPTIONS.find((option) => option.value === sortMode)?.label || 'Newest';
+  const sortOptions = showResolved
+    ? [...BASE_COMMENT_SORT_OPTIONS, RESOLVED_COMMENT_SORT_OPTION]
+    : BASE_COMMENT_SORT_OPTIONS;
+  const sortLabel = sortOptions.find((option) => option.value === sortMode)?.label || 'Newest';
 
   return (
     <AccountDrawer
@@ -176,6 +192,7 @@ const CommentsPanel = ({
         <div className="comments-filter-row">
           <SearchInput
             size="sm"
+            inputStyle="mono"
             placeholder="Search comments"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -183,18 +200,11 @@ const CommentsPanel = ({
             className="comments-filter-input"
           />
           <div className="comments-panel-controls" ref={controlsRef}>
-            <CheckboxField
-              checked={showResolved}
-              onChange={(event) => setShowResolved(event.target.checked)}
-              label="Show resolved"
-              className="comments-panel-show-resolved"
-            />
             <div className="comments-panel-menu-wrapper">
               <IconButton
                 size="sm"
-                type="secondary"
+                variant="ghost"
                 buttonStyle="mono"
-                active={openMenu === 'sort'}
                 onClick={() => setOpenMenu((current) => (current === 'sort' ? null : 'sort'))}
                 aria-label={`Sort comments: ${sortLabel}`}
                 aria-expanded={openMenu === 'sort'}
@@ -206,7 +216,7 @@ const CommentsPanel = ({
               {openMenu === 'sort' ? (
                 <MenuPanel className="comments-panel-menu" role="menu" aria-label="Sort comments">
                   <MenuSection>
-                    {COMMENT_SORT_OPTIONS.map((option) => {
+                    {sortOptions.map((option) => {
                       const isActive = sortMode === option.value;
                       return (
                         <MenuItem
@@ -229,6 +239,12 @@ const CommentsPanel = ({
             </div>
           </div>
         </div>
+        <CheckboxField
+          checked={showResolved}
+          onChange={(event) => setShowResolved(event.target.checked)}
+          label="Show resolved"
+          className="comments-panel-show-resolved"
+        />
       </div>
 
       <div className="comments-panel-body">

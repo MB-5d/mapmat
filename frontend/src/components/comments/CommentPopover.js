@@ -144,7 +144,6 @@ function CommentComposer({
   onCancel,
   onEscapeMentions,
   onToggleEmoji,
-  onInsertEmoji,
   onInsertMention,
 }) {
   const canSubmit = value.trim().length > 0;
@@ -180,6 +179,7 @@ function CommentComposer({
           className="comment-emoji-toggle"
           onClick={onToggleEmoji}
           aria-label="Insert emoji"
+          aria-expanded={showEmojiPicker ? 'true' : 'false'}
           title="Insert emoji"
         >
           <Smile />
@@ -209,9 +209,6 @@ function CommentComposer({
           </IconButton>
         ) : null}
       </div>
-      {showEmojiPicker ? (
-        <EmojiPickerPopover onSelect={onInsertEmoji} />
-      ) : null}
       {showMentions && collaborators.length > 0 ? (
         <div className="mention-dropdown">
           {collaborators.map((name) => (
@@ -607,6 +604,29 @@ const CommentPopover = ({
     }
   }, [editingCommentId]);
 
+  useEffect(() => {
+    if (!showEmojiPicker) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (event.target.closest('.comment-emoji-popover')) return;
+      if (event.target.closest('.comment-emoji-toggle')) return;
+      setShowEmojiPicker(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowEmojiPicker(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showEmojiPicker]);
+
   const resetInlineState = () => {
     setReplyingTo(null);
     setReplyDraft('');
@@ -692,6 +712,7 @@ const CommentPopover = ({
   };
 
   return (
+    <>
     <div
       className={classNames(
         'comment-popover modal-card',
@@ -738,7 +759,7 @@ const CommentPopover = ({
           {showNewComposer ? (
             <div className="comment-input-section">
               <CommentComposer
-                placeholder="Add a comment...\n(use @ to mention)"
+                placeholder="Add a comment... (use @ to mention)"
                 value={newComment}
                 composerId="new"
                 inputRef={newInputRef}
@@ -824,7 +845,7 @@ const CommentPopover = ({
         <IconButton
           className="comment-add-toggle"
           size="sm"
-          type="secondary"
+          type="primary"
           buttonStyle="mono"
           active={isAddingComment}
           onClick={() => {
@@ -840,6 +861,10 @@ const CommentPopover = ({
         </IconButton>
       ) : null}
     </div>
+    {showEmojiPicker ? (
+      <EmojiPickerPopover onSelect={insertEmoji} />
+    ) : null}
+    </>
   );
 };
 

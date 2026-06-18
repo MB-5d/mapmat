@@ -83,28 +83,41 @@ describe('CommentsPanel', () => {
     expect(container.textContent).toContain('Show resolved');
     expect(container.querySelector('input[placeholder="Search comments"]')).not.toBeNull();
     expect(container.querySelector('.comments-filter-input.ui-input-shell--sm')).not.toBeNull();
+    expect(container.querySelector('.comments-filter-row .comments-panel-show-resolved')).toBeNull();
     expect(container.querySelector('button[aria-label="Filter comments"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Sort comments: Newest"]')).not.toBeNull();
     expect(container.querySelector('.comments-filter-toggle')).toBeNull();
     expect(container.querySelector('select')).toBeNull();
   });
 
-  test('uses the compact sort menu without the old Resolved sort option', () => {
+  test('uses the compact ghost sort menu and only shows Resolved when resolved comments are visible', () => {
     renderPanel();
 
     const sortButton = container.querySelector('button[aria-label="Sort comments: Newest"]');
-    expect(sortButton.className).toContain('ui-icon-btn--type-secondary');
+    expect(sortButton.className).toContain('ui-icon-btn--type-ghost');
     expect(sortButton.className).toContain('ui-icon-btn--style-mono');
 
     act(() => {
       sortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(sortButton.className).toContain('ui-icon-btn--active');
     expect(container.textContent).toContain('Newest');
     expect(container.textContent).toContain('My mentions');
     expect(container.textContent).not.toContain('Resolved');
     expect(container.querySelector('.comments-panel-menu-dot')).not.toBeNull();
+
+    act(() => {
+      sortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const showResolved = container.querySelector('.comments-panel-show-resolved input[type="checkbox"]');
+    act(() => {
+      showResolved.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    act(() => {
+      sortButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Resolved');
   });
 
   test('hides resolved comments by default and shows them when Show resolved is checked', () => {

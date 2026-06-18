@@ -127,6 +127,9 @@ describe('CommentPopover', () => {
 
     const section = container.querySelector('.comment-input-section');
     const textarea = section.querySelector('textarea');
+    expect(textarea.placeholder).toBe('Add a comment... (use @ to mention)');
+    expect(textarea.placeholder).not.toContain('\\n');
+    expect(textarea.placeholder).not.toContain('\n');
     expect(section.querySelector('button[aria-label="Share comment"]')).toBeNull();
 
     act(() => {
@@ -191,6 +194,41 @@ describe('CommentPopover', () => {
     });
 
     expect(container.querySelector('.comment-input-section textarea').value).toContain('🎯');
+  });
+
+  test('closes the emoji picker from toggle, Escape, and outside click', () => {
+    renderPopover();
+
+    act(() => {
+      container.querySelector('button[aria-label="Add comment"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const emojiButton = container.querySelector('.comment-input-section button[aria-label="Insert emoji"]');
+    act(() => {
+      emojiButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('.comment-emoji-popover')).not.toBeNull();
+
+    act(() => {
+      emojiButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('.comment-emoji-popover')).toBeNull();
+
+    act(() => {
+      emojiButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(container.querySelector('.comment-emoji-popover')).toBeNull();
+
+    act(() => {
+      emojiButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    act(() => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(container.querySelector('.comment-emoji-popover')).toBeNull();
   });
 
   test('reply composer keeps the same textarea while typing and includes cancel', () => {
