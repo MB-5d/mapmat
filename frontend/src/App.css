@@ -10798,8 +10798,8 @@ body {
 
 .comment-add-toggle.ui-icon-btn {
   position: absolute;
-  right: var(--unit-24);
-  bottom: var(--unit-24);
+  right: var(--unit-16);
+  bottom: var(--unit-16);
   z-index: 2;
   box-shadow: var(--shadow-raised);
 }
