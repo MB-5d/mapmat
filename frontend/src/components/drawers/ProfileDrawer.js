@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ImagePlus, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ExternalLink, ImagePlus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
@@ -23,11 +23,24 @@ function formatUsageValue(value) {
   return Number(value || 0).toLocaleString();
 }
 
+function getRemainingUsageValue(item) {
+  if (!item) return 0;
+  if (item.remaining !== null && item.remaining !== undefined) {
+    return Math.max(0, Number(item.remaining || 0));
+  }
+  const included = Number(item.included ?? item.limit ?? 0);
+  const extra = Number(item.grantRemaining ?? item.grantExtra ?? 0);
+  return Math.max(0, included + extra - Number(item.used || 0));
+}
+
 function getUsagePercent(meter) {
   if (!meter || meter.unlimited) return 0;
-  const limit = Number(meter.included ?? meter.limit ?? 0);
-  if (!limit) return 0;
-  return Math.min(100, Math.max(0, Math.round((Number(meter.used || 0) / limit) * 100)));
+  const used = Number(meter.used || 0);
+  const remaining = getRemainingUsageValue(meter);
+  const baseLimit = Number(meter.included ?? meter.limit ?? 0);
+  const total = Math.max(baseLimit, used + remaining);
+  if (!total) return 0;
+  return Math.min(100, Math.max(0, Math.round((used / total) * 100)));
 }
 
 function isTrialEnded(entitlements) {
@@ -39,12 +52,8 @@ function isTrialEnded(entitlements) {
 
 function formatUsageSummary(item) {
   if (!item) return '';
-  if (item.unlimited) return `${formatUsageValue(item.used)} used`;
-  const included = item.included ?? item.limit;
-  const extra = Number(item.grantRemaining ?? item.grantExtra ?? 0);
-  const remaining = item.remaining ?? Math.max(0, Number(included || 0) + extra - Number(item.used || 0));
-  const suffix = extra > 0 ? ` + ${formatUsageValue(extra)} extra` : '';
-  return `${formatUsageValue(remaining)} left / ${formatUsageValue(included)} included${suffix}`;
+  const available = item.unlimited ? 'Unlimited' : formatUsageValue(getRemainingUsageValue(item));
+  return `${available} available · ${formatUsageValue(item.used)} used`;
 }
 
 function formatStatusLabel(value) {
@@ -473,6 +482,7 @@ const ProfileDrawer = ({
                   onClick={onOpenBilling}
                   disabled={!user || !onOpenBilling}
                   loading={billingLoading}
+                  endIcon={<ExternalLink size={14} />}
                 >
                   Manage billing
                 </Button>

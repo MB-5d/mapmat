@@ -630,8 +630,8 @@ async function createPlanCheckoutSessionAsync({ user, account, planKey, billingC
   return session;
 }
 
-async function createAddOnCheckoutSessionAsync({ user, account, addonKey, quantity = 1, returnPath = '/app' }) {
-  const stripe = getStripeClient();
+async function createAddOnCheckoutSessionAsync({ user, account, addonKey, quantity = 1, returnPath = '/app', stripeClient: providedStripeClient = null }) {
+  const stripe = providedStripeClient || getStripeClient();
   const addOn = getAddOnPriceConfig(addonKey);
   const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
   const safeQuantity = Math.min(Math.max(1, Math.floor(Number(quantity || 1))), 100);
@@ -654,6 +654,12 @@ async function createAddOnCheckoutSessionAsync({ user, account, addonKey, quanti
   if (sessionPayload.mode === 'payment') {
     sessionPayload.payment_intent_data = {
       metadata: sessionPayload.metadata,
+    };
+    sessionPayload.invoice_creation = {
+      enabled: true,
+      invoice_data: {
+        metadata: sessionPayload.metadata,
+      },
     };
   }
   const session = await stripe.checkout.sessions.create(sessionPayload);

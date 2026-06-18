@@ -205,6 +205,7 @@ describe('ProfileDrawer', () => {
     expect(billingButton.className).toContain('ui-btn--type-ghost');
     expect(billingButton.className).toContain('ui-btn--style-mono');
     expect(billingButton.className).not.toContain('ui-btn--style-brand');
+    expect(billingButton.querySelector('.ui-btn__icon--end')).not.toBeNull();
 
     act(() => {
       planButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -213,6 +214,69 @@ describe('ProfileDrawer', () => {
 
     expect(onOpenPlans).toHaveBeenCalledTimes(1);
     expect(onOpenBilling).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows available amounts before used amounts in the plan overview', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={{
+            ...baseUser,
+            entitlements: {
+              account: { state: 'active' },
+              plan: { name: 'Test Unlimited' },
+              meters: {
+                crawlPages: {
+                  meter: 'crawl_pages',
+                  included: 100,
+                  remaining: 88,
+                  used: 12,
+                  unlimited: false,
+                },
+                screenshotCredits: {
+                  meter: 'screenshot_credits',
+                  included: null,
+                  remaining: null,
+                  used: 1035,
+                  unlimited: true,
+                },
+              },
+              limits: {
+                activeProjects: {
+                  limit: null,
+                  remaining: null,
+                  used: 3,
+                  unlimited: true,
+                },
+                seats: {
+                  limit: 5,
+                  remaining: 4,
+                  used: 1,
+                  unlimited: false,
+                },
+              },
+            },
+          }}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          onOpenPlans={jest.fn()}
+          onOpenBilling={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const summaryButton = container.querySelector('button[aria-controls="account-plan-details"]');
+    act(() => {
+      summaryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('88 available · 12 used');
+    expect(container.textContent).toContain('Unlimited available · 1,035 used');
+    expect(container.textContent).toContain('Unlimited available · 3 used');
+    expect(container.textContent).toContain('4 available · 1 used');
   });
 
   test('keeps only one profile accordion open at a time', () => {

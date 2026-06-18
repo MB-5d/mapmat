@@ -29,6 +29,7 @@ const {
   getAddOnPriceConfig,
   getAddOnPriceConfigByStripePrice,
   applyStripeSubscriptionToAccountAsync,
+  createAddOnCheckoutSessionAsync,
   refreshBillingAccountFromStripeAsync,
 } = require('../utils/stripeBilling');
 
@@ -108,6 +109,36 @@ async function main() {
   assert.equal(addOnPrice.quantity, 100);
   const legacyAddOnAlias = getAddOnPriceConfig('screenshot_credits_100');
   assert.equal(legacyAddOnAlias.key, 'screenshot_pack_4');
+
+  const checkoutUser = await createTestUser('checkout-invoice');
+  const checkoutAccount = await billingStore.getOrCreateBillingAccountForUserAsync(checkoutUser);
+  await billingStore.updateBillingAccountStripeCustomerAsync({
+    accountId: checkoutAccount.id,
+    stripeCustomerId: 'cus_checkout_invoice',
+  });
+  const checkoutAccountWithCustomer = await billingStore.getBillingAccountByIdAsync(checkoutAccount.id);
+  let checkoutPayload = null;
+  await createAddOnCheckoutSessionAsync({
+    user: checkoutUser,
+    account: checkoutAccountWithCustomer,
+    addonKey: 'screenshot_pack_1',
+    quantity: 2,
+    returnPath: '/app/profile',
+    stripeClient: {
+      checkout: {
+        sessions: {
+          create: async (payload) => {
+            checkoutPayload = payload;
+            return { id: 'cs_checkout_invoice', url: 'https://checkout.stripe.test/session' };
+          },
+        },
+      },
+    },
+  });
+  assert.equal(checkoutPayload.mode, 'payment');
+  assert.equal(checkoutPayload.line_items[0].quantity, 2);
+  assert.equal(checkoutPayload.invoice_creation.enabled, true);
+  assert.deepEqual(checkoutPayload.invoice_creation.invoice_data.metadata, checkoutPayload.metadata);
 
   const subscriber = await createTestUser('subscriber');
   await billingStore.startTrialAsync({
