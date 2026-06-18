@@ -3243,6 +3243,16 @@ router.patch('/maps/:id/comments/:commentId', requireAuth, async (req, res) => {
       resourceOwnerUserId: map.user_id || null,
       membershipRole: map.membership_role || map.membershipRole || null,
     });
+    const isCommentAuthor = !!normalizeIdKey(existingComment.author_user_id)
+      && normalizeIdKey(existingComment.author_user_id) === normalizeIdKey(req.user?.id);
+    const canResolveComments = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, actorRole);
+
+    if (hasText && !isCommentAuthor) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    if (hasCompleted && !canResolveComments) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
 
     if (hasText) {
       const trimmedText = String(req.body?.text || '').trim();
@@ -3326,16 +3336,24 @@ router.delete('/maps/:id/comments/:commentId', requireAuth, async (req, res) => 
       return res.status(404).json({ error: 'Comment not found' });
     }
 
-    const deleted = await mapCommentStore.deleteCommentThreadAsync(commentId, id);
-    if (!deleted) {
-      return res.status(404).json({ error: 'Comment not found' });
-    }
-
     const actorRole = permissionPolicy.resolveResourceRole({
       actorUserId: req.user?.id || null,
       resourceOwnerUserId: map.user_id || null,
       membershipRole: map.membership_role || map.membershipRole || null,
     });
+    const isCommentAuthor = !!normalizeIdKey(existingComment.author_user_id)
+      && normalizeIdKey(existingComment.author_user_id) === normalizeIdKey(req.user?.id);
+    const canManageComments = permissionPolicy.can(permissionPolicy.ACTIONS.MAP_UPDATE, actorRole);
+
+    if (!isCommentAuthor && !canManageComments) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    const deleted = await mapCommentStore.deleteCommentThreadAsync(commentId, id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
     await recordMapActivityBestEffortAsync({
       mapId: id,
       actorUserId: req.user.id,

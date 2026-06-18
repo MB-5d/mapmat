@@ -709,7 +709,35 @@ async function main() {
       expectedStatus: 404,
     });
 
-    const { data: commenterResolvedComment } = await commenter.request(
+    await owner.request(
+      `/api/maps/${mapId}/comments/${commenterCreatedComment.comment.id}`,
+      {
+        method: 'PATCH',
+        body: { text: 'owner should not edit another author comment' },
+        expectedStatus: 404,
+      }
+    );
+
+    const { data: commenterEditedComment } = await commenter.request(
+      `/api/maps/${mapId}/comments/${commenterCreatedComment.comment.id}`,
+      {
+        method: 'PATCH',
+        body: { text: `Edited by author ${runId} @owner` },
+        expectedStatus: 200,
+      }
+    );
+    assert.strictEqual(commenterEditedComment.comment.text, `Edited by author ${runId} @owner`);
+
+    await commenter.request(
+      `/api/maps/${mapId}/comments/${commenterCreatedComment.comment.id}`,
+      {
+        method: 'PATCH',
+        body: { completed: true },
+        expectedStatus: 404,
+      }
+    );
+
+    const { data: ownerResolvedComment } = await owner.request(
       `/api/maps/${mapId}/comments/${commenterCreatedComment.comment.id}`,
       {
         method: 'PATCH',
@@ -717,13 +745,26 @@ async function main() {
         expectedStatus: 200,
       }
     );
-    assert.strictEqual(commenterResolvedComment.comment.completed, true);
+    assert.strictEqual(ownerResolvedComment.comment.completed, true);
+
+    const { data: commenterDeleteCandidate } = await commenter.request(`/api/maps/${mapId}/comments`, {
+      method: 'POST',
+      body: {
+        node_id: commentNodeId,
+        text: `Comment deletion candidate ${runId}`,
+      },
+      expectedStatus: 201,
+    });
+    await commenter.request(`/api/maps/${mapId}/comments/${commenterDeleteCandidate.comment.id}`, {
+      method: 'DELETE',
+      expectedStatus: 200,
+    });
 
     await owner.request(`/api/maps/${mapId}/comments/${commenterCreatedComment.comment.id}`, {
       method: 'DELETE',
       expectedStatus: 200,
     });
-    logStep('Verified commenter comment create/update and viewer read-only access');
+    logStep('Verified comment author edits/deletes, owner resolves/deletes, and viewer/commenter limits');
 
     const { data: ownerActivityInitial } = await owner.request(`/api/maps/${mapId}/activity?limit=100`, {
       expectedStatus: 200,

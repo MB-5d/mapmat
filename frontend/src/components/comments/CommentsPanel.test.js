@@ -7,6 +7,8 @@ describe('CommentsPanel', () => {
   let container;
   let root;
 
+  const currentUser = { id: 'user-1', name: 'Alex', email: 'alex@example.com' };
+
   const setInputValue = (element, value) => {
     const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
     descriptor.set.call(element, value);
@@ -19,6 +21,7 @@ describe('CommentsPanel', () => {
       {
         id: 'c1',
         author: 'Alex',
+        authorUserId: 'user-1',
         text: 'Keep this open',
         createdAt: '2026-04-15T12:00:00.000Z',
         completed: false,
@@ -26,6 +29,7 @@ describe('CommentsPanel', () => {
       {
         id: 'c2',
         author: 'Sam',
+        authorUserId: 'user-2',
         text: 'Done already',
         createdAt: '2026-04-15T11:00:00.000Z',
         completed: true,
@@ -35,6 +39,23 @@ describe('CommentsPanel', () => {
       },
     ],
     children: [],
+  };
+
+  const renderPanel = (props = {}) => {
+    const defaults = {
+      isOpen: true,
+      root: rootNode,
+      orphans: [],
+      currentUser,
+      onClose: jest.fn(),
+      onCommentClick: jest.fn(),
+      onNavigateToNode: jest.fn(),
+    };
+    const merged = { ...defaults, ...props };
+    act(() => {
+      root.render(<CommentsPanel {...merged} />);
+    });
+    return merged;
   };
 
   beforeEach(() => {
@@ -50,25 +71,16 @@ describe('CommentsPanel', () => {
     container.remove();
     container = null;
     root = null;
+    jest.clearAllMocks();
   });
 
-  test('uses comments drawer search and sort without legacy filter controls', () => {
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onNavigateToNode={jest.fn()}
-        />
-      );
-    });
+  test('uses comments drawer search, sort, and Show resolved without legacy filter controls', () => {
+    renderPanel();
 
     expect(container.textContent).toContain('Comments');
     expect(container.textContent).not.toContain('All Comments');
     expect(container.textContent).not.toContain('Show completed');
+    expect(container.textContent).toContain('Show resolved');
     expect(container.querySelector('input[placeholder="Search comments"]')).not.toBeNull();
     expect(container.querySelector('.comments-filter-input.ui-input-shell--sm')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Filter comments"]')).toBeNull();
@@ -77,22 +89,8 @@ describe('CommentsPanel', () => {
     expect(container.querySelector('select')).toBeNull();
   });
 
-  test('uses the compact sort menu and marks the active option with a dot', () => {
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          currentUser={{ name: 'Alex', email: 'alex@example.com' }}
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onNavigateToNode={jest.fn()}
-        />
-      );
-    });
-
-    expect(container.querySelector('.comments-panel-item')?.textContent).toContain('Keep this open');
+  test('uses the compact sort menu without the old Resolved sort option', () => {
+    renderPanel();
 
     const sortButton = container.querySelector('button[aria-label="Sort comments: Newest"]');
     expect(sortButton.className).toContain('ui-icon-btn--type-secondary');
@@ -105,32 +103,31 @@ describe('CommentsPanel', () => {
     expect(sortButton.className).toContain('ui-icon-btn--active');
     expect(container.textContent).toContain('Newest');
     expect(container.textContent).toContain('My mentions');
+    expect(container.textContent).not.toContain('Resolved');
     expect(container.querySelector('.comments-panel-menu-dot')).not.toBeNull();
+  });
 
-    const mentionsOption = Array.from(container.querySelectorAll('.comments-panel-menu-item'))
-      .find((button) => button.textContent.includes('My mentions'));
+  test('hides resolved comments by default and shows them when Show resolved is checked', () => {
+    renderPanel({ canResolveComments: true, onToggleCompleted: jest.fn() });
 
+    expect(container.textContent).toContain('Keep this open');
+    expect(container.textContent).not.toContain('Done already');
+
+    const showResolved = container.querySelector('.comments-panel-show-resolved input[type="checkbox"]');
     act(() => {
-      mentionsOption.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      showResolved.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.querySelector('button[aria-label="Sort comments: My mentions"]')).not.toBeNull();
-    expect(container.querySelector('.comments-panel-item')?.textContent).toContain('Done already');
+    expect(container.textContent).toContain('Done already');
+    const resolved = Array.from(container.querySelectorAll('.comments-panel-item'))
+      .find((item) => item.textContent.includes('Done already'));
+    expect(resolved.className).toContain('is-resolved');
+    expect(resolved.querySelector('.comments-panel-complete.checked')).not.toBeNull();
+    expect(resolved.querySelector('.comments-panel-completed-info')?.textContent).toContain('Sam');
   });
 
   test('clears comment search from the shared search input', () => {
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onNavigateToNode={jest.fn()}
-        />
-      );
-    });
+    renderPanel();
 
     const input = container.querySelector('input[placeholder="Search comments"]');
 
@@ -150,25 +147,16 @@ describe('CommentsPanel', () => {
 
     expect(input.value).toBe('');
     expect(container.textContent).toContain('Keep this open');
-    expect(container.textContent).toContain('Done already');
   });
 
   test('marks the selected comment and reports node/comment ids in one click', () => {
     const onCommentClick = jest.fn();
     const onNavigateToNode = jest.fn();
 
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          selectedCommentId="c1"
-          onClose={jest.fn()}
-          onCommentClick={onCommentClick}
-          onNavigateToNode={onNavigateToNode}
-        />
-      );
+    renderPanel({
+      selectedCommentId: 'c1',
+      onCommentClick,
+      onNavigateToNode,
     });
 
     const selected = container.querySelector('.comments-panel-item.is-selected');
@@ -183,23 +171,14 @@ describe('CommentsPanel', () => {
     expect(onCommentClick).toHaveBeenCalledWith('root', 'c1');
   });
 
-  test('deletes from the drawer without opening the comment popover', () => {
+  test('deletes from the drawer only for the comment author', () => {
     const onCommentClick = jest.fn();
     const onDeleteComment = jest.fn();
 
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          selectedCommentId="c1"
-          onClose={jest.fn()}
-          onCommentClick={onCommentClick}
-          onDeleteComment={onDeleteComment}
-          onNavigateToNode={jest.fn()}
-        />
-      );
+    renderPanel({
+      selectedCommentId: 'c1',
+      onCommentClick,
+      onDeleteComment,
     });
 
     const deleteButton = container.querySelector('button[aria-label="Delete comment"]');
@@ -211,54 +190,41 @@ describe('CommentsPanel', () => {
 
     expect(onDeleteComment).toHaveBeenCalledWith('root', 'c1');
     expect(onCommentClick).not.toHaveBeenCalled();
+
+    renderPanel({
+      currentUser: { id: 'user-3', name: 'Other' },
+      onDeleteComment,
+    });
+    expect(container.querySelector('button[aria-label="Delete comment"]')).toBeNull();
   });
 
-  test('toggles completed state directly from the drawer and shows resolved details in the meta row', () => {
+  test('toggles completed state directly from the drawer only for resolvers', () => {
     const onToggleCompleted = jest.fn();
 
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onToggleCompleted={onToggleCompleted}
-          onNavigateToNode={jest.fn()}
-        />
-      );
+    renderPanel({
+      onToggleCompleted,
+      canResolveComments: true,
     });
 
     const toggleButton = container.querySelector('button[aria-label="Mark comment as complete"]');
-
     act(() => {
       toggleButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onToggleCompleted).toHaveBeenCalledWith('root', 'c1');
-    const resolved = Array.from(container.querySelectorAll('.comments-panel-item'))
-      .find((item) => item.textContent.includes('Done already'));
-    expect(resolved).not.toBeNull();
-    expect(resolved.className).toContain('is-resolved');
-    expect(resolved.querySelector('.comments-panel-complete.checked')).not.toBeNull();
-    expect(resolved.querySelector('.comments-panel-completed-info')?.textContent).toContain('Sam');
+
+    renderPanel({
+      onToggleCompleted,
+      canResolveComments: false,
+    });
+    expect(container.querySelector('button[aria-label="Mark comment as complete"]')).toBeNull();
   });
 
-  test('uses the new drawer card actions without the legacy expand control', () => {
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onDeleteComment={jest.fn()}
-          onToggleCompleted={jest.fn()}
-          onNavigateToNode={jest.fn()}
-        />
-      );
+  test('uses the drawer card layout without the legacy expand control', () => {
+    renderPanel({
+      onDeleteComment: jest.fn(),
+      onToggleCompleted: jest.fn(),
+      canResolveComments: true,
     });
 
     expect(container.querySelector('.comments-panel-expand')).toBeNull();
@@ -267,51 +233,24 @@ describe('CommentsPanel', () => {
     expect(container.querySelector('.comments-panel-text')).not.toBeNull();
   });
 
-  test('ignores legacy expanded comment overrides in the drawer card layout', () => {
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={rootNode}
-          orphans={[]}
-          expandedCommentIdsOverride={['c1']}
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onNavigateToNode={jest.fn()}
-        />
-      );
-    });
-
-    expect(container.querySelector('.comments-panel-text.is-expanded')).toBeNull();
-    expect(container.querySelector('.comments-panel-text')).not.toBeNull();
-  });
-
   test('marks selected comments even when id types differ', () => {
-    act(() => {
-      root.render(
-        <CommentsPanel
-          isOpen
-          root={{
-            id: 'root',
-            title: 'Home',
-            comments: [
-              {
-                id: 12,
-                author: 'Alex',
-                text: 'Numeric id',
-                createdAt: '2026-04-15T12:00:00.000Z',
-                completed: false,
-              },
-            ],
-            children: [],
-          }}
-          orphans={[]}
-          selectedCommentId="12"
-          onClose={jest.fn()}
-          onCommentClick={jest.fn()}
-          onNavigateToNode={jest.fn()}
-        />
-      );
+    renderPanel({
+      root: {
+        id: 'root',
+        title: 'Home',
+        comments: [
+          {
+            id: 12,
+            author: 'Alex',
+            authorUserId: 'user-1',
+            text: 'Numeric id',
+            createdAt: '2026-04-15T12:00:00.000Z',
+            completed: false,
+          },
+        ],
+        children: [],
+      },
+      selectedCommentId: '12',
     });
 
     const selected = container.querySelector('.comments-panel-item.is-selected');

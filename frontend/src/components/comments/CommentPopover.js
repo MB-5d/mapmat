@@ -4,7 +4,8 @@ import {
   MessageSquarePlus,
   PencilLine,
   Reply,
-  Send,
+  Share,
+  Smile,
   Trash2,
   X,
 } from 'lucide-react';
@@ -13,6 +14,8 @@ import classNames from '../../utils/classNames';
 import Avatar from '../ui/Avatar';
 import IconButton from '../ui/IconButton';
 import TextareaInput from '../ui/TextareaInput';
+
+const COMMENT_EMOJIS = ['👍', '🙌', '✅', '💡', '👀', '🔥', '❤️', '🎯', '🙂', '🚀', '❗', '👏'];
 
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 
@@ -59,6 +62,16 @@ const flattenComments = (comments = [], list = []) => {
   return list;
 };
 
+const hasCommentInThread = (comment, commentId) => {
+  if (sameCommentId(comment?.id, commentId)) return true;
+  return (comment?.replies || []).some((reply) => hasCommentInThread(reply, commentId));
+};
+
+const isCommentAuthor = (comment, currentUser) => {
+  if (!comment || !currentUser?.id) return false;
+  return sameCommentId(comment.authorUserId, currentUser.id);
+};
+
 const getCommentInitial = (comment) => (
   String(comment?.author || '?').trim().slice(0, 1).toUpperCase() || '?'
 );
@@ -81,6 +94,338 @@ const renderCommentText = (text) => {
   ));
 };
 
+function CommentComposer({
+  className,
+  placeholder,
+  value,
+  composerId,
+  inputRef,
+  showCancel = false,
+  showMentions = false,
+  showEmojiPicker = false,
+  collaborators = [],
+  onFocus,
+  onChange,
+  onSubmit,
+  onCancel,
+  onEscapeMentions,
+  onToggleEmoji,
+  onInsertEmoji,
+  onInsertMention,
+}) {
+  const canSubmit = value.trim().length > 0;
+
+  return (
+    <div className={classNames('comment-input-wrapper', className)}>
+      <TextareaInput
+        ref={inputRef}
+        className="comment-input"
+        placeholder={placeholder}
+        value={value}
+        onFocus={onFocus}
+        onChange={onChange}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && (event.shiftKey || event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            onSubmit();
+            return;
+          }
+          if (event.key === 'Escape') {
+            if (showMentions) {
+              onEscapeMentions();
+              return;
+            }
+            onCancel?.();
+          }
+        }}
+      />
+      <div className="comment-input-actions">
+        <IconButton
+          size="xs"
+          variant="ghost"
+          className="comment-emoji-toggle"
+          onClick={onToggleEmoji}
+          aria-label="Insert emoji"
+          title="Insert emoji"
+        >
+          <Smile />
+        </IconButton>
+        {showCancel ? (
+          <IconButton
+            size="xs"
+            variant="ghost"
+            className="comment-input-cancel"
+            onClick={onCancel}
+            aria-label="Cancel reply"
+            title="Cancel"
+          >
+            <MessageSquareOffIcon />
+          </IconButton>
+        ) : null}
+        {canSubmit ? (
+          <IconButton
+            size="xs"
+            type="ghost"
+            buttonStyle="brand"
+            onClick={onSubmit}
+            aria-label="Share comment"
+            title="Share comment"
+          >
+            <Share />
+          </IconButton>
+        ) : null}
+      </div>
+      {showEmojiPicker ? (
+        <div className="comment-emoji-picker" role="menu" aria-label="Emoji picker">
+          {COMMENT_EMOJIS.map((emoji) => (
+            <button
+              type="button"
+              key={`${composerId}-${emoji}`}
+              className="comment-emoji-option"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onInsertEmoji(emoji)}
+              aria-label={`Insert ${emoji}`}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {showMentions && collaborators.length > 0 ? (
+        <div className="mention-dropdown">
+          {collaborators.map((name) => (
+            <button
+              type="button"
+              key={name}
+              className="mention-option"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onInsertMention(name)}
+            >
+              @{name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CommentItem({
+  comment,
+  depth = 0,
+  nodeId,
+  activeCommentId,
+  currentUser,
+  canComment,
+  canResolveComments,
+  replyingTo,
+  editingCommentId,
+  replyDraft,
+  editDraft,
+  replyInputRef,
+  editInputRef,
+  activeComposer,
+  showMentions,
+  showEmojiPicker,
+  filteredCollaborators,
+  formatTimeAgo,
+  onBeginReply,
+  onBeginEdit,
+  onReplyChange,
+  onEditChange,
+  onReplySubmit,
+  onEditSubmit,
+  onReplyCancel,
+  onEditCancel,
+  onDeleteComment,
+  onSetCommentCompleted,
+  onSetActiveComposer,
+  onClearMentions,
+  onToggleEmoji,
+  onInsertEmoji,
+  onInsertMention,
+}) {
+  const isReplyTarget = sameCommentId(replyingTo, comment.id);
+  const isEditing = sameCommentId(editingCommentId, comment.id);
+  const isReply = depth > 0;
+  const canEditThisComment = isCommentAuthor(comment, currentUser);
+  const completedTime = comment.completedAt ? formatTimeAgo(comment.completedAt) : '';
+  const composerId = isReplyTarget ? `reply:${comment.id}` : `edit:${comment.id}`;
+
+  return (
+    <div
+      className={classNames(
+        'comment-item',
+        isReply && 'is-reply',
+        comment.completed && 'completed',
+        sameCommentId(activeCommentId, comment.id) && 'is-active',
+        isReplyTarget && 'is-replying',
+        isEditing && 'is-editing'
+      )}
+      style={{ '--comment-depth': depth }}
+    >
+      <div className="comment-row">
+        <Avatar
+          className="comment-avatar"
+          label={getCommentInitial(comment)}
+          size="lg"
+          tone={getCommentTone(comment)}
+          aria-hidden="true"
+        />
+        <div className="comment-content">
+          <div className="comment-meta">
+            <span className="comment-author">{comment.author}</span>
+            <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
+            {canComment ? (
+              <div className="comment-actions" aria-label="Comment actions">
+                {canEditThisComment ? (
+                  <IconButton
+                    size="xxs"
+                    variant="ghost"
+                    className="comment-action-btn"
+                    onClick={() => onBeginEdit(comment)}
+                    aria-label="Edit comment"
+                    title="Edit comment"
+                  >
+                    <PencilLine />
+                  </IconButton>
+                ) : null}
+                {canEditThisComment ? (
+                  <IconButton
+                    size="xxs"
+                    variant="ghost"
+                    className="comment-action-btn"
+                    onClick={() => onDeleteComment?.(nodeId, comment.id)}
+                    aria-label="Delete comment"
+                    title="Delete comment"
+                  >
+                    <Trash2 />
+                  </IconButton>
+                ) : null}
+                <IconButton
+                  size="xxs"
+                  variant="ghost"
+                  className="comment-action-btn"
+                  onClick={() => onBeginReply(comment.id)}
+                  aria-label="Reply to comment"
+                  title="Reply"
+                >
+                  <Reply />
+                </IconButton>
+                {!isReply && canResolveComments ? (
+                  <IconButton
+                    size="xxs"
+                    variant="ghost"
+                    className={classNames('comment-action-btn comment-complete-btn', comment.completed && 'checked')}
+                    onClick={() => onSetCommentCompleted(comment)}
+                    aria-label={comment.completed ? 'Reopen comment thread' : 'Resolve comment thread'}
+                    title={comment.completed ? 'Reopen thread' : 'Resolve thread'}
+                  >
+                    <CheckCircle2 />
+                  </IconButton>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          {isEditing ? (
+            <CommentComposer
+              className="comment-edit-composer"
+              placeholder="Edit comment..."
+              value={editDraft}
+              composerId={`edit:${comment.id}`}
+              inputRef={editInputRef}
+              showMentions={showMentions && activeComposer === `edit:${comment.id}`}
+              showEmojiPicker={showEmojiPicker === `edit:${comment.id}`}
+              collaborators={filteredCollaborators}
+              onFocus={() => onSetActiveComposer(`edit:${comment.id}`)}
+              onChange={onEditChange(`edit:${comment.id}`)}
+              onSubmit={() => onEditSubmit(comment.id)}
+              onCancel={onEditCancel}
+              onEscapeMentions={onClearMentions}
+              onToggleEmoji={() => onToggleEmoji(`edit:${comment.id}`)}
+              onInsertEmoji={onInsertEmoji}
+              onInsertMention={onInsertMention}
+            />
+          ) : (
+            <div className="comment-text">{renderCommentText(comment.text)}</div>
+          )}
+          {comment.completed ? (
+            <div className="comment-completed-info">
+              <span className="comment-completed-label">Resolved -</span>
+              {completedTime ? <span>{completedTime}</span> : null}
+              {comment.completedBy ? <span>@{comment.completedBy}</span> : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      {isReplyTarget ? (
+        <div className="comment-reply-composer">
+          <CommentComposer
+            placeholder="Write a reply..."
+            value={replyDraft}
+            composerId={composerId}
+            inputRef={replyInputRef}
+            showCancel
+            showMentions={showMentions && activeComposer === composerId}
+            showEmojiPicker={showEmojiPicker === composerId}
+            collaborators={filteredCollaborators}
+            onFocus={() => onSetActiveComposer(composerId)}
+            onChange={onReplyChange(composerId)}
+            onSubmit={() => onReplySubmit(comment.id)}
+            onCancel={onReplyCancel}
+            onEscapeMentions={onClearMentions}
+            onToggleEmoji={() => onToggleEmoji(composerId)}
+            onInsertEmoji={onInsertEmoji}
+            onInsertMention={onInsertMention}
+          />
+        </div>
+      ) : null}
+      {comment.replies?.length > 0 ? (
+        <div className="comment-replies">
+          {comment.replies.map((reply) => (
+            <CommentItem
+              key={reply.id}
+              comment={reply}
+              depth={depth + 1}
+              nodeId={nodeId}
+              activeCommentId={activeCommentId}
+              currentUser={currentUser}
+              canComment={canComment}
+              canResolveComments={canResolveComments}
+              replyingTo={replyingTo}
+              editingCommentId={editingCommentId}
+              replyDraft={replyDraft}
+              editDraft={editDraft}
+              replyInputRef={replyInputRef}
+              editInputRef={editInputRef}
+              activeComposer={activeComposer}
+              showMentions={showMentions}
+              showEmojiPicker={showEmojiPicker}
+              filteredCollaborators={filteredCollaborators}
+              formatTimeAgo={formatTimeAgo}
+              onBeginReply={onBeginReply}
+              onBeginEdit={onBeginEdit}
+              onReplyChange={onReplyChange}
+              onEditChange={onEditChange}
+              onReplySubmit={onReplySubmit}
+              onEditSubmit={onEditSubmit}
+              onReplyCancel={onReplyCancel}
+              onEditCancel={onEditCancel}
+              onDeleteComment={onDeleteComment}
+              onSetCommentCompleted={onSetCommentCompleted}
+              onSetActiveComposer={onSetActiveComposer}
+              onClearMentions={onClearMentions}
+              onToggleEmoji={onToggleEmoji}
+              onInsertEmoji={onInsertEmoji}
+              onInsertMention={onInsertMention}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const CommentPopover = ({
   node,
   onClose,
@@ -92,6 +437,8 @@ const CommentPopover = ({
   onDeleteAllComments,
   collaborators = [],
   canComment,
+  canResolveComments = false,
+  currentUser = null,
   readOnlyMessage = '',
   activeCommentId = null,
 }) => {
@@ -103,6 +450,7 @@ const CommentPopover = ({
   const [replyingTo, setReplyingTo] = useState(null);
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [activeComposer, setActiveComposer] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(null);
   const [isAddingComment, setIsAddingComment] = useState(false);
   const newInputRef = useRef(null);
   const replyInputRef = useRef(null);
@@ -112,10 +460,14 @@ const CommentPopover = ({
     () => sortCommentsNewestFirst(Array.isArray(node?.comments) ? node.comments : []),
     [node?.comments]
   );
-  const allComments = useMemo(() => flattenComments(comments), [comments]);
+  const visibleComments = useMemo(
+    () => comments.filter((comment) => !comment.completed || hasCommentInThread(comment, activeCommentId)),
+    [activeCommentId, comments]
+  );
+  const allComments = useMemo(() => flattenComments(visibleComments), [visibleComments]);
   const allCommentIds = useMemo(() => allComments.map((comment) => comment.id), [allComments]);
   const allCommentsResolved = allComments.length > 0 && allComments.every((comment) => comment.completed);
-  const showNewComposer = canComment && (comments.length === 0 || isAddingComment);
+  const showNewComposer = canComment && (visibleComments.length === 0 || isAddingComment);
 
   const formatTimeAgo = (dateString) => {
     const date = new Date(dateString);
@@ -153,6 +505,16 @@ const CommentPopover = ({
     }
   };
 
+  const focusActiveComposer = () => {
+    if (activeComposer === 'new') {
+      newInputRef.current?.focus();
+    } else if (activeComposer === `reply:${replyingTo}`) {
+      replyInputRef.current?.focus();
+    } else if (activeComposer === `edit:${editingCommentId}`) {
+      editInputRef.current?.focus();
+    }
+  };
+
   const updateMentionState = (value) => {
     const lastAtIndex = value.lastIndexOf('@');
     if (lastAtIndex !== -1) {
@@ -160,6 +522,7 @@ const CommentPopover = ({
       if (!textAfterAt.includes(' ')) {
         setShowMentions(true);
         setMentionFilter(textAfterAt.toLowerCase());
+        setShowEmojiPicker(null);
         return;
       }
     }
@@ -178,14 +541,27 @@ const CommentPopover = ({
     const lastAtIndex = currentValue.lastIndexOf('@');
     const nextValue = currentValue.slice(0, lastAtIndex) + '@' + name + ' ';
     setActiveComposerValue(nextValue);
-    if (activeComposer === 'new') {
-      newInputRef.current?.focus();
-    } else if (activeComposer === `reply:${replyingTo}`) {
-      replyInputRef.current?.focus();
-    } else {
-      editInputRef.current?.focus();
-    }
+    focusActiveComposer();
     setShowMentions(false);
+  };
+
+  const insertEmoji = (emoji) => {
+    const activeInput = activeComposer === 'new'
+      ? newInputRef.current
+      : activeComposer === `reply:${replyingTo}`
+        ? replyInputRef.current
+        : editInputRef.current;
+    const currentValue = getActiveComposerValue();
+    const start = activeInput?.selectionStart ?? currentValue.length;
+    const end = activeInput?.selectionEnd ?? currentValue.length;
+    const nextValue = `${currentValue.slice(0, start)}${emoji}${currentValue.slice(end)}`;
+    setActiveComposerValue(nextValue);
+    setShowEmojiPicker(null);
+    requestAnimationFrame(() => {
+      focusActiveComposer();
+      const nextCursor = start + emoji.length;
+      activeInput?.setSelectionRange(nextCursor, nextCursor);
+    });
   };
 
   const filteredCollaborators = (collaborators || []).filter((name) =>
@@ -216,6 +592,7 @@ const CommentPopover = ({
     setEditingCommentId(null);
     setEditDraft('');
     setShowMentions(false);
+    setShowEmojiPicker(null);
   };
 
   const handleClose = () => {
@@ -231,6 +608,7 @@ const CommentPopover = ({
     setNewComment('');
     setIsAddingComment(false);
     setShowMentions(false);
+    setShowEmojiPicker(null);
   };
 
   const handleReplySubmit = (commentId) => {
@@ -239,6 +617,7 @@ const CommentPopover = ({
     setReplyDraft('');
     setReplyingTo(null);
     setShowMentions(false);
+    setShowEmojiPicker(null);
   };
 
   const handleEditSubmit = (commentId) => {
@@ -247,6 +626,7 @@ const CommentPopover = ({
     setEditDraft('');
     setEditingCommentId(null);
     setShowMentions(false);
+    setShowEmojiPicker(null);
   };
 
   const beginReply = (commentId) => {
@@ -257,6 +637,7 @@ const CommentPopover = ({
     setReplyDraft('');
     setActiveComposer(`reply:${commentId}`);
     setShowMentions(false);
+    setShowEmojiPicker(null);
   };
 
   const beginEdit = (comment) => {
@@ -267,6 +648,7 @@ const CommentPopover = ({
     setEditDraft(comment.text || '');
     setActiveComposer(`edit:${comment.id}`);
     setShowMentions(false);
+    setShowEmojiPicker(null);
   };
 
   const handleSetCommentCompleted = (comment) => {
@@ -274,211 +656,25 @@ const CommentPopover = ({
     const completed = !comment.completed;
     if (onSetCommentsCompleted) {
       onSetCommentsCompleted(node.id, ids, completed);
+      if (completed) handleClose();
       return;
     }
     onToggleCompleted?.(node.id, comment.id);
+    if (completed) handleClose();
   };
 
   const handleSetAllCompleted = () => {
     if (allCommentIds.length === 0) return;
-    onSetCommentsCompleted?.(node.id, allCommentIds, !allCommentsResolved);
-  };
-
-  const renderComposer = ({
-    className,
-    placeholder,
-    value,
-    composerId,
-    inputRef,
-    onChange,
-    onSubmit,
-    onCancel,
-  }) => (
-    <div className={classNames('comment-input-wrapper', className)}>
-      <TextareaInput
-        ref={inputRef}
-        className="comment-input"
-        placeholder={placeholder}
-        value={value}
-        onFocus={() => setActiveComposer(composerId)}
-        onChange={onChange}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.shiftKey && event.metaKey) {
-            event.preventDefault();
-            onSubmit();
-          }
-          if (event.key === 'Escape') {
-            if (showMentions) {
-              setShowMentions(false);
-              return;
-            }
-            onCancel();
-          }
-        }}
-      />
-      <div className="comment-input-actions">
-        <IconButton
-          size="xs"
-          type="ghost"
-          buttonStyle="brand"
-          onClick={onSubmit}
-          disabled={!value.trim()}
-          aria-label="Send comment"
-          title="Send comment"
-        >
-          <Send />
-        </IconButton>
-      </div>
-      {showMentions && activeComposer === composerId && filteredCollaborators.length > 0 ? (
-        <div className="mention-dropdown">
-          {filteredCollaborators.map((name) => (
-            <button
-              type="button"
-              key={name}
-              className="mention-option"
-              onClick={() => insertMention(name)}
-            >
-              @{name}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-
-  const CommentItem = ({ comment, depth = 0 }) => {
-    const isReplyTarget = sameCommentId(replyingTo, comment.id);
-    const isEditing = sameCommentId(editingCommentId, comment.id);
-    const completedTime = comment.completedAt ? formatTimeAgo(comment.completedAt) : '';
-
-    return (
-      <div
-        className={classNames(
-          'comment-item',
-          comment.completed && 'completed',
-          sameCommentId(activeCommentId, comment.id) && 'is-active',
-          isReplyTarget && 'is-replying',
-          isEditing && 'is-editing'
-        )}
-        style={{ '--comment-depth': depth }}
-      >
-        <div className="comment-row">
-          <Avatar
-            className="comment-avatar"
-            label={getCommentInitial(comment)}
-            size="lg"
-            tone={getCommentTone(comment)}
-            aria-hidden="true"
-          />
-          <div className="comment-content">
-            <div className="comment-meta">
-              <span className="comment-author">{comment.author}</span>
-              <span className="comment-time">{formatTimeAgo(comment.createdAt)}</span>
-              {canComment ? (
-                <div className="comment-actions" aria-label="Comment actions">
-                  <IconButton
-                    size="xxs"
-                    variant="ghost"
-                    className="comment-action-btn"
-                    onClick={() => beginEdit(comment)}
-                    aria-label="Edit comment"
-                    title="Edit comment"
-                  >
-                    <PencilLine />
-                  </IconButton>
-                  <IconButton
-                    size="xxs"
-                    variant="ghost"
-                    className="comment-action-btn"
-                    onClick={() => onDeleteComment?.(node.id, comment.id)}
-                    aria-label="Delete comment"
-                    title="Delete comment"
-                  >
-                    <Trash2 />
-                  </IconButton>
-                  <IconButton
-                    size="xxs"
-                    variant="ghost"
-                    className="comment-action-btn"
-                    onClick={() => beginReply(comment.id)}
-                    aria-label="Reply to comment"
-                    title="Reply to comment"
-                  >
-                    <Reply />
-                  </IconButton>
-                  <IconButton
-                    size="xxs"
-                    variant="ghost"
-                    className={classNames('comment-action-btn comment-complete-btn', comment.completed && 'checked')}
-                    onClick={() => handleSetCommentCompleted(comment)}
-                    aria-label={comment.completed ? 'Mark comment as incomplete' : 'Mark comment as complete'}
-                    title={comment.completed ? 'Mark incomplete' : 'Resolve comment'}
-                  >
-                    <CheckCircle2 />
-                  </IconButton>
-                </div>
-              ) : null}
-            </div>
-            {isEditing ? (
-              renderComposer({
-                className: 'comment-edit-composer',
-                placeholder: 'Edit comment...',
-                value: editDraft,
-                composerId: `edit:${comment.id}`,
-                inputRef: editInputRef,
-                onChange: handleInputChange(`edit:${comment.id}`, setEditDraft),
-                onSubmit: () => handleEditSubmit(comment.id),
-                onCancel: () => {
-                  setEditingCommentId(null);
-                  setEditDraft('');
-                  setShowMentions(false);
-                },
-              })
-            ) : (
-              <div className="comment-text">{renderCommentText(comment.text)}</div>
-            )}
-            {comment.completed ? (
-              <div className="comment-completed-info">
-                <span className="comment-completed-label">Resolved -</span>
-                {completedTime ? <span>{completedTime}</span> : null}
-                {comment.completedBy ? <span>@{comment.completedBy}</span> : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {isReplyTarget ? (
-          <div className="comment-reply-composer">
-            {renderComposer({
-              placeholder: 'Write a reply...',
-              value: replyDraft,
-              composerId: `reply:${comment.id}`,
-              inputRef: replyInputRef,
-              onChange: handleInputChange(`reply:${comment.id}`, setReplyDraft),
-              onSubmit: () => handleReplySubmit(comment.id),
-              onCancel: () => {
-                setReplyingTo(null);
-                setReplyDraft('');
-                setShowMentions(false);
-              },
-            })}
-          </div>
-        ) : null}
-        {comment.replies?.length > 0 ? (
-          <div className="comment-replies">
-            {comment.replies.map((reply) => (
-              <CommentItem key={reply.id} comment={reply} depth={depth + 1} />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
+    const completed = !allCommentsResolved;
+    onSetCommentsCompleted?.(node.id, allCommentIds, completed);
+    if (completed) handleClose();
   };
 
   return (
     <div
       className={classNames(
         'comment-popover modal-card',
-        canComment && comments.length > 0 && 'has-add-toggle'
+        canComment && visibleComments.length > 0 && 'has-add-toggle'
       )}
       role="dialog"
       aria-label={`Comments on ${node.title || 'Untitled'}`}
@@ -487,7 +683,7 @@ const CommentPopover = ({
       <div className="comment-popover-header modal-header">
         <div className="comment-popover-heading">
           <h3>Comments on "{node.title || 'Untitled'}"</h3>
-          {canComment && comments.length > 0 ? (
+          {canResolveComments && visibleComments.length > 0 ? (
             <div className="comment-popover-thread-actions" aria-label="Thread actions">
               <IconButton
                 size="xs"
@@ -503,8 +699,8 @@ const CommentPopover = ({
                 variant="ghost"
                 className={classNames('comment-popover-resolve-all', allCommentsResolved && 'checked')}
                 onClick={handleSetAllCompleted}
-                aria-label={allCommentsResolved ? 'Mark all comments as incomplete' : 'Resolve all comments'}
-                title={allCommentsResolved ? 'Mark all incomplete' : 'Resolve all comments'}
+                aria-label={allCommentsResolved ? 'Reopen all comments' : 'Resolve all comments'}
+                title={allCommentsResolved ? 'Reopen all comments' : 'Resolve all comments'}
               >
                 <CheckCircle2 />
               </IconButton>
@@ -520,26 +716,79 @@ const CommentPopover = ({
         <div className="comment-thread-scroll">
           {showNewComposer ? (
             <div className="comment-input-section">
-              {renderComposer({
-                placeholder: "Add a comment...\n(use @ to mention)",
-                value: newComment,
-                composerId: 'new',
-                inputRef: newInputRef,
-                onChange: handleInputChange('new', setNewComment),
-                onSubmit: handleAddSubmit,
-                onCancel: () => {
+              <CommentComposer
+                placeholder="Add a comment...\n(use @ to mention)"
+                value={newComment}
+                composerId="new"
+                inputRef={newInputRef}
+                showMentions={showMentions && activeComposer === 'new'}
+                showEmojiPicker={showEmojiPicker === 'new'}
+                collaborators={filteredCollaborators}
+                onFocus={() => setActiveComposer('new')}
+                onChange={handleInputChange('new', setNewComment)}
+                onSubmit={handleAddSubmit}
+                onCancel={() => {
                   setNewComment('');
                   setIsAddingComment(false);
                   setShowMentions(false);
-                },
-              })}
+                  setShowEmojiPicker(null);
+                }}
+                onEscapeMentions={() => setShowMentions(false)}
+                onToggleEmoji={() => setShowEmojiPicker((current) => (current === 'new' ? null : 'new'))}
+                onInsertEmoji={insertEmoji}
+                onInsertMention={insertMention}
+              />
             </div>
           ) : null}
 
-          {comments.length > 0 ? (
+          {visibleComments.length > 0 ? (
             <div className="comment-list">
-              {comments.map((comment) => (
-                <CommentItem key={comment.id} comment={comment} />
+              {visibleComments.map((comment) => (
+                <CommentItem
+                  key={comment.id}
+                  comment={comment}
+                  nodeId={node.id}
+                  activeCommentId={activeCommentId}
+                  currentUser={currentUser}
+                  canComment={canComment}
+                  canResolveComments={canResolveComments}
+                  replyingTo={replyingTo}
+                  editingCommentId={editingCommentId}
+                  replyDraft={replyDraft}
+                  editDraft={editDraft}
+                  replyInputRef={replyInputRef}
+                  editInputRef={editInputRef}
+                  activeComposer={activeComposer}
+                  showMentions={showMentions}
+                  showEmojiPicker={showEmojiPicker}
+                  filteredCollaborators={filteredCollaborators}
+                  formatTimeAgo={formatTimeAgo}
+                  onBeginReply={beginReply}
+                  onBeginEdit={beginEdit}
+                  onReplyChange={(composerId) => handleInputChange(composerId, setReplyDraft)}
+                  onEditChange={(composerId) => handleInputChange(composerId, setEditDraft)}
+                  onReplySubmit={handleReplySubmit}
+                  onEditSubmit={handleEditSubmit}
+                  onReplyCancel={() => {
+                    setReplyingTo(null);
+                    setReplyDraft('');
+                    setShowMentions(false);
+                    setShowEmojiPicker(null);
+                  }}
+                  onEditCancel={() => {
+                    setEditingCommentId(null);
+                    setEditDraft('');
+                    setShowMentions(false);
+                    setShowEmojiPicker(null);
+                  }}
+                  onDeleteComment={onDeleteComment}
+                  onSetCommentCompleted={handleSetCommentCompleted}
+                  onSetActiveComposer={setActiveComposer}
+                  onClearMentions={() => setShowMentions(false)}
+                  onToggleEmoji={(composerId) => setShowEmojiPicker((current) => (current === composerId ? null : composerId))}
+                  onInsertEmoji={insertEmoji}
+                  onInsertMention={insertMention}
+                />
               ))}
             </div>
           ) : null}
@@ -550,12 +799,12 @@ const CommentPopover = ({
         </div>
       </div>
 
-      {canComment && comments.length > 0 ? (
+      {canComment && visibleComments.length > 0 ? (
         <IconButton
           className="comment-add-toggle"
           size="sm"
-          type="secondary"
-          buttonStyle="mono"
+          type="primary"
+          buttonStyle="brand"
           active={isAddingComment}
           onClick={() => {
             resetInlineState();

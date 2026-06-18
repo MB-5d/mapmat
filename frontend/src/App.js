@@ -206,6 +206,7 @@ const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
 const ADD_ON_QUANTITY_MAX = 100;
 const COMMENT_POPOVER_WIDTH = 384;
+const COMMENT_POPOVER_MAX_HEIGHT = 400;
 const COMMENT_POPOVER_EDGE_GAP = 8;
 const COMMENT_POPOVER_NODE_GAP = 4;
 const COMMENT_POPOVER_DRAWER_GAP = 32;
@@ -332,6 +333,7 @@ function getCommentDrawerNodeFocusTarget({
   canvasRect,
   drawerRect,
   popoverWidth = COMMENT_POPOVER_WIDTH,
+  popoverHeight = COMMENT_POPOVER_MAX_HEIGHT,
   drawerGap = COMMENT_POPOVER_DRAWER_GAP,
   nodeGap = COMMENT_POPOVER_EDGE_GAP,
 }) {
@@ -346,6 +348,7 @@ function getCommentDrawerNodeFocusTarget({
   return {
     screenRight: Math.round(popoverPosition.x - nodeGap),
     screenCenterY: popoverPosition.y,
+    screenTop: Math.round(popoverPosition.y - popoverHeight / 2),
   };
 }
 
@@ -1095,6 +1098,35 @@ const attachCommentsToNodeTree = (node, commentsByNode) => {
     comments: Array.isArray(commentsByNode?.[node.id]) ? commentsByNode[node.id] : [],
     children: Array.isArray(node.children)
       ? node.children.map((child) => attachCommentsToNodeTree(child, commentsByNode))
+      : [],
+  };
+};
+
+const filterVisibleCommentThread = (comments = []) => (
+  (comments || [])
+    .filter((comment) => !comment?.completed)
+    .map((comment) => ({
+      ...comment,
+      replies: filterVisibleCommentThread(comment.replies || []),
+    }))
+);
+
+const filterVisibleCommentsByNode = (commentsByNode = {}) => (
+  Object.fromEntries(
+    Object.entries(commentsByNode || {}).map(([nodeId, comments]) => [
+      nodeId,
+      filterVisibleCommentThread(Array.isArray(comments) ? comments : []),
+    ])
+  )
+);
+
+const filterVisibleCommentsInNodeTree = (node) => {
+  if (!node) return node;
+  return {
+    ...node,
+    comments: filterVisibleCommentThread(node.comments || []),
+    children: Array.isArray(node.children)
+      ? node.children.map(filterVisibleCommentsInNodeTree)
       : [],
   };
 };
@@ -4231,6 +4263,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   const effectiveCommentsByNode = hasFigmaCaptureComments
     ? figmaCaptureCommentsByNode
     : savedMapCommentsByNode;
+  const effectiveVisibleCommentsByNode = useMemo(
+    () => filterVisibleCommentsByNode(effectiveCommentsByNode),
+    [effectiveCommentsByNode]
+  );
   const shouldAttachComments = useBackendComments || hasFigmaCaptureComments;
 
   const loadSavedMapComments = useCallback(async (mapId = currentMap?.id) => {
@@ -4335,11 +4371,22 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const visibleOrphans = useMemo(() => {
     const nextOrphans = (orphans || []).filter(Boolean);
+    if (!shouldAttachComments) return nextOrphans.map(filterVisibleCommentsInNodeTree);
+    return nextOrphans.map((orphan) => attachCommentsToNodeTree(orphan, effectiveVisibleCommentsByNode));
+  }, [effectiveVisibleCommentsByNode, orphans, shouldAttachComments]);
+
+  const renderRoot = useMemo(() => {
+    if (!shouldAttachComments) return filterVisibleCommentsInNodeTree(root);
+    return attachCommentsToNodeTree(root, effectiveVisibleCommentsByNode);
+  }, [effectiveVisibleCommentsByNode, root, shouldAttachComments]);
+
+  const commentsPanelOrphans = useMemo(() => {
+    const nextOrphans = (orphans || []).filter(Boolean);
     if (!shouldAttachComments) return nextOrphans;
     return nextOrphans.map((orphan) => attachCommentsToNodeTree(orphan, effectiveCommentsByNode));
   }, [effectiveCommentsByNode, orphans, shouldAttachComments]);
 
-  const renderRoot = useMemo(() => {
+  const commentsPanelRoot = useMemo(() => {
     if (!shouldAttachComments) return root;
     return attachCommentsToNodeTree(root, effectiveCommentsByNode);
   }, [effectiveCommentsByNode, root, shouldAttachComments]);
@@ -5549,7 +5596,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         });
       }
 
-      const hasScreenTarget = Number.isFinite(options.screenRight) && Number.isFinite(options.screenCenterY);
+      const hasScreenTarget = Number.isFinite(options.screenRight)
+        && (Number.isFinite(options.screenCenterY) || Number.isFinite(options.screenTop));
       const leftShift = Math.min(240, canvas.clientWidth * 0.25);
       const nodeCenterX = targetNode.x + targetNode.w / 2;
       const nodeCenterY = targetNode.y + targetNode.h / 2;
@@ -5559,7 +5607,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           ? options.screenRight - (targetNode.x + targetNode.w) * scaleValue
           : (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scaleValue,
         y: hasScreenTarget
-          ? options.screenCenterY - nodeCenterY * scaleValue
+          ? (Number.isFinite(options.screenTop)
+            ? options.screenTop - targetNode.y * scaleValue
+            : options.screenCenterY - nodeCenterY * scaleValue)
           : canvas.clientHeight / 2 - nodeCenterY * scaleValue,
       }, { skipPanClamp: true });
       return true;
@@ -5635,7 +5685,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
 
       const canvas = canvasRef.current;
-      const hasScreenTarget = Number.isFinite(options.screenRight) && Number.isFinite(options.screenCenterY);
+      const hasScreenTarget = Number.isFinite(options.screenRight)
+        && (Number.isFinite(options.screenCenterY) || Number.isFinite(options.screenTop));
       const leftShift = Math.min(240, canvas.clientWidth * 0.25);
       const scale = scaleRef.current;
       const nodeCenterX = nodeData.x + nodeData.w / 2;
@@ -5645,7 +5696,9 @@ export default function App({ currentRoute, navigateToRoute }) {
           ? options.screenRight - (nodeData.x + nodeData.w) * scale
           : (canvas.clientWidth / 2 - leftShift) - nodeCenterX * scale,
         y: hasScreenTarget
-          ? options.screenCenterY - nodeCenterY * scale
+          ? (Number.isFinite(options.screenTop)
+            ? options.screenTop - nodeData.y * scale
+            : options.screenCenterY - nodeCenterY * scale)
           : canvas.clientHeight / 2 - nodeCenterY * scale,
       };
       animatePanTo(targetPan, { skipPanClamp: true });
@@ -13379,6 +13432,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       id: `comment-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       text: commentText.trim(),
       author: currentUser?.name || 'Anonymous',
+      authorUserId: currentUser?.id || null,
+      authorEmail: currentUser?.email || null,
       createdAt: new Date().toISOString(),
       mentions: extractCommentMentions(commentText),
       completed: false,
@@ -17122,7 +17177,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onSceneLoaded={handleLargeMapSceneLoaded}
                     getNodeSnapshot={getLargeMapNodeSnapshot}
                     nodeSnapshotVersion={largeMapNodeCacheVersion}
-                    commentsByNode={savedMapCommentsByNode}
+                    commentsByNode={effectiveVisibleCommentsByNode}
                     sceneRefreshKey={largeMapSceneRefreshKey}
                     activeBranchNodeIds={activeBranchNodeIds}
                     expandedStacks={expandedStacks}
@@ -17471,6 +17526,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onDeleteAllComments={deleteAllCommentsForNode}
                     collaborators={collaborators}
                     canComment={canComment()}
+                    canResolveComments={canEdit()}
+                    currentUser={currentUser}
                     readOnlyMessage={commentPopoverReadOnlyMessage}
                     activeCommentId={selectedCommentId}
                   />
@@ -18031,8 +18088,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       {/* Comments Panel - Right Rail */}
       <CommentsPanel
         isOpen={showCommentsPanel}
-        root={renderRoot}
-        orphans={visibleOrphans}
+        root={commentsPanelRoot}
+        orphans={commentsPanelOrphans}
         currentUser={currentUser}
         selectedCommentId={selectedCommentId}
         expandedCommentIdsOverride={figmaCaptureExpandedCommentIds}
@@ -18048,6 +18105,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onDeleteComment={deleteComment}
         onToggleCompleted={toggleCommentCompleted}
         onNavigateToNode={focusNodeById}
+        canResolveComments={canEdit()}
       />
 
       <EditColorModal

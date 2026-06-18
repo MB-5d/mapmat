@@ -6,6 +6,7 @@ import { __testing } from './App';
 const appCss = fs.readFileSync(path.join(__dirname, 'App.css'), 'utf8');
 const generatedCss = fs.readFileSync(path.join(__dirname, 'design-system.generated.css'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, 'App.js'), 'utf8');
+const commentPopoverJs = fs.readFileSync(path.join(__dirname, 'components/comments/CommentPopover.js'), 'utf8');
 const landingCss = fs.readFileSync(path.join(__dirname, 'LandingPage.css'), 'utf8');
 const minimapCss = fs.readFileSync(path.join(__dirname, 'components/minimap/minimapNavigator.css'), 'utf8');
 const adminCss = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.css'), 'utf8');
@@ -439,10 +440,12 @@ describe('comment popover positioning', () => {
     })).toEqual({
       screenRight: 376,
       screenCenterY: 400,
+      screenTop: 200,
     });
 
     expect(appJs).toContain('const openCommentPopoverFromDrawer = (nodeId, commentId) => {');
     expect(appJs).toContain('focusNodeById(nodeId, focusTarget);');
+    expect(appJs).toContain('options.screenTop - nodeData.y * scale');
     expect(appJs).toContain('setSelectedCommentId(commentId || null);');
     expect(appJs).toContain('openCommentPopoverFromDrawer(nodeId, commentId);');
     expect(appJs).not.toContain('setTimeout(() => openCommentPopover(nodeId, { forceSide:');
@@ -454,11 +457,17 @@ describe('comment popover positioning', () => {
     expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
     expect(appJs).toContain("commentPopoverAnchor.mode === 'drawer' ? ' is-drawer-anchor' : ''");
     expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*max-height: 400px;[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);[\s\S]*border-radius: 16px;[\s\S]*\}/);
-    expect(appCss).toMatch(/\.comment-popover-container\.right:not\(\.is-drawer-anchor\) \.comment-popover\.modal-card \{[\s\S]*border-top-left-radius: 0;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right \.comment-popover\.modal-card \{[\s\S]*border-top-left-radius: 0;[\s\S]*\}/);
     expect(appCss).toMatch(/\.comment-popover-container\.left:not\(\.is-drawer-anchor\) \.comment-popover\.modal-card \{[\s\S]*border-top-right-radius: 0;[\s\S]*\}/);
     expect(appCss).not.toMatch(/\.comment-popover-container\.right::before/);
     expect(appCss).not.toMatch(/\.comment-popover-container\.right::after/);
     expect(appCss).not.toMatch(/\.comment-popover-footer\.modal-footer/);
+    expect(appCss).toMatch(/\.comment-thread-scroll \{[\s\S]*padding-bottom: var\(--unit-56\);[\s\S]*scroll-padding: var\(--unit-16\) var\(--unit-16\) var\(--unit-56\);/);
+    expect(appCss).toMatch(/\.comment-input-actions \{[\s\S]*gap: var\(--space-xs\);[\s\S]*\}/);
+    const inputActionsBlock = appCss.match(/\.comment-input-actions \{[\s\S]*?\}/)?.[0] || '';
+    expect(inputActionsBlock).not.toContain('border-top');
+    expect(commentPopoverJs).toContain('type="primary"');
+    expect(commentPopoverJs).toContain('buttonStyle="brand"');
     expect(appCss).toMatch(/\.comment-complete-btn\.checked,[\s\S]*\.comment-complete-btn\.checked:hover:not\(:disabled\),[\s\S]*\.comment-complete-btn\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
   });
 
@@ -469,6 +478,7 @@ describe('comment popover positioning', () => {
     const selectedCommentBlock = appCss.match(/\.comments-panel-item\.is-selected \{[\s\S]*?\}/)?.[0] || '';
     expect(selectedCommentBlock).not.toContain('var(--ui-color-primary)');
     expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: var\(--type-body-sm-size\);/);
+    expect(appCss).toMatch(/\.comments-panel-show-resolved\.ui-checkbox-field \{[\s\S]*min-height: var\(--unit-32\);/);
     expect(appCss).toMatch(/\.comments-panel-menu \{[\s\S]*width: 128px;[\s\S]*min-width: 128px;/);
     expect(appCss).toMatch(/\.comments-panel-menu-item\.ui-menu-item \{[\s\S]*min-height: 24px;/);
     expect(appCss).not.toMatch(/\.comments-filter-select/);

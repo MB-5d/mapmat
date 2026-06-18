@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, CheckCircle2, Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
+import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import { MenuItem, MenuPanel, MenuSection } from '../ui/Menu';
 import SearchInput from '../ui/SearchInput';
@@ -11,7 +12,6 @@ const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 const COMMENT_SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
   { value: 'mentions', label: 'My mentions' },
-  { value: 'resolved', label: 'Resolved' },
 ];
 
 const buildUserMentionKeys = (user) => {
@@ -41,6 +41,10 @@ const getCommentMentionTokens = (comment) => {
   return [...savedMentions, ...textMentions.map((mention) => mention.slice(1))];
 };
 
+const isCommentAuthor = (comment, currentUser) => (
+  !!comment?.authorUserId && sameCommentId(comment.authorUserId, currentUser?.id)
+);
+
 const CommentsPanel = ({
   isOpen,
   root,
@@ -52,9 +56,11 @@ const CommentsPanel = ({
   onDeleteComment,
   onToggleCompleted,
   onNavigateToNode,
+  canResolveComments = false,
 }) => {
   const [filter, setFilter] = useState('');
   const [sortMode, setSortMode] = useState('newest');
+  const [showResolved, setShowResolved] = useState(false);
   const [openMenu, setOpenMenu] = useState(null);
   const controlsRef = useRef(null);
 
@@ -137,6 +143,7 @@ const CommentsPanel = ({
   };
 
   const filteredComments = allComments.filter(comment => {
+    if (comment.completed && !showResolved) return false;
     if (!filter) return true;
     const searchLower = filter.toLowerCase();
 
@@ -149,11 +156,6 @@ const CommentsPanel = ({
     if (sortMode === 'mentions') {
       const mentionDelta = Number(isUserMentioned(b)) - Number(isUserMentioned(a));
       if (mentionDelta !== 0) return mentionDelta;
-    }
-
-    if (sortMode === 'resolved') {
-      const resolvedDelta = Number(b.completed) - Number(a.completed);
-      if (resolvedDelta !== 0) return resolvedDelta;
     }
 
     return new Date(b.createdAt) - new Date(a.createdAt);
@@ -181,6 +183,12 @@ const CommentsPanel = ({
             className="comments-filter-input"
           />
           <div className="comments-panel-controls" ref={controlsRef}>
+            <CheckboxField
+              checked={showResolved}
+              onChange={(event) => setShowResolved(event.target.checked)}
+              label="Show resolved"
+              className="comments-panel-show-resolved"
+            />
             <div className="comments-panel-menu-wrapper">
               <IconButton
                 size="sm"
@@ -229,6 +237,7 @@ const CommentsPanel = ({
             {filteredComments.map(comment => {
               const isSelected = sameCommentId(selectedCommentId, comment.id);
               const completedTime = comment.completedAt ? formatTimeAgo(comment.completedAt) : '';
+              const canDeleteComment = onDeleteComment && isCommentAuthor(comment, currentUser);
               return (
                 <div
                   key={comment.id}
@@ -248,7 +257,7 @@ const CommentsPanel = ({
                   <div className="comments-panel-item-header">
                     <span className="comments-panel-node-title">{comment.nodeTitle}</span>
                     <div className="comments-panel-actions">
-                      {onDeleteComment ? (
+                      {canDeleteComment ? (
                         <IconButton
                           size="xs"
                           variant="ghost"
@@ -262,7 +271,7 @@ const CommentsPanel = ({
                           <Trash2 />
                         </IconButton>
                       ) : null}
-                      {onToggleCompleted ? (
+                      {onToggleCompleted && canResolveComments ? (
                         <IconButton
                           size="xs"
                           variant="ghost"
