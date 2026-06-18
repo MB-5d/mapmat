@@ -10119,49 +10119,44 @@ body {
 }
 
 .account-usage-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.account-usage-row {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.account-usage-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--ui-color-muted);
-}
-
-.account-usage-copy span:first-child {
-  color: var(--ui-color-text);
-  font-weight: 500;
-}
-
-.account-usage-copy span:last-child {
-  color: var(--ui-color-text);
-  font-weight: 500;
-  text-align: right;
-}
-
-.account-usage-track {
   width: 100%;
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--ui-color-border-subtle);
 }
 
-.account-usage-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--ui-color-accent);
+.account-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  color: var(--ui-color-text);
+}
+
+.account-usage-table th,
+.account-usage-table td {
+  padding: 0 8px 8px 0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.account-usage-table th:first-child,
+.account-usage-table td:first-child {
+  width: 48%;
+}
+
+.account-usage-table thead th {
+  color: var(--ui-color-muted);
+  font-weight: 500;
+}
+
+.account-usage-table tbody th,
+.account-usage-table tbody td {
+  color: var(--ui-color-text);
+  font-weight: 500;
+}
+
+.account-usage-infinity {
+  display: inline-flex;
+  align-items: center;
+  color: currentColor;
 }
 
 .form-section.danger-zone {

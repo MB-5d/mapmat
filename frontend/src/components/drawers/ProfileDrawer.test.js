@@ -183,18 +183,17 @@ describe('ProfileDrawer', () => {
     expect(summaryButton.textContent).toContain('Plan:');
     expect(summaryButton.textContent).toContain('Studio');
     expect(container.querySelector('.account-plan-status-badge')?.textContent).toContain('Active');
-    expect(container.textContent).not.toContain('Switch plan');
-    expect(container.textContent).not.toContain('Manage billing');
+    expect(container.querySelector('.account-plan-actions')).toBeNull();
 
     act(() => {
       summaryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     const planButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Switch plan')
+      button.textContent.trim() === 'Switch'
     );
     const billingButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Manage billing')
+      button.textContent.trim() === 'Manage'
     );
 
     expect(planButton).not.toBeNull();
@@ -273,10 +272,23 @@ describe('ProfileDrawer', () => {
       summaryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('88 available · 12 used');
-    expect(container.textContent).toContain('Unlimited available · 1,035 used');
-    expect(container.textContent).toContain('Unlimited available · 3 used');
-    expect(container.textContent).toContain('4 available · 1 used');
+    const table = container.querySelector('.account-usage-table');
+    expect(table).not.toBeNull();
+    expect(table.querySelector('thead')?.textContent).toContain('Available');
+    expect(table.querySelector('thead')?.textContent).toContain('Used');
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    const rowFor = (label) => rows.find((row) => row.querySelector('th')?.textContent === label);
+    const cellText = (row, index) => row.querySelectorAll('td')[index]?.textContent;
+
+    expect(cellText(rowFor('Crawl pages'), 0)).toBe('88');
+    expect(cellText(rowFor('Crawl pages'), 1)).toBe('12');
+    expect(rowFor('Screenshot credits').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
+    expect(cellText(rowFor('Screenshot credits'), 1)).toBe('1,035');
+    expect(rowFor('Active projects').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
+    expect(cellText(rowFor('Active projects'), 1)).toBe('3');
+    expect(cellText(rowFor('Seats'), 0)).toBe('4');
+    expect(cellText(rowFor('Seats'), 1)).toBe('1');
   });
 
   test('keeps only one profile accordion open at a time', () => {

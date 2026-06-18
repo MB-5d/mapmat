@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ExternalLink, ImagePlus, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ExternalLink, ImagePlus, Infinity as InfinityIcon, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
@@ -18,8 +18,12 @@ import classNames from '../../utils/classNames';
 
 const AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 
-function formatUsageValue(value) {
-  if (value === null || value === undefined) return 'Unlimited';
+function hasUsageValue(value) {
+  return value !== null && value !== undefined && Number.isFinite(Number(value));
+}
+
+function formatUsageNumber(value) {
+  if (!hasUsageValue(value)) return '--';
   return Number(value || 0).toLocaleString();
 }
 
@@ -33,16 +37,6 @@ function getRemainingUsageValue(item) {
   return Math.max(0, included + extra - Number(item.used || 0));
 }
 
-function getUsagePercent(meter) {
-  if (!meter || meter.unlimited) return 0;
-  const used = Number(meter.used || 0);
-  const remaining = getRemainingUsageValue(meter);
-  const baseLimit = Number(meter.included ?? meter.limit ?? 0);
-  const total = Math.max(baseLimit, used + remaining);
-  if (!total) return 0;
-  return Math.min(100, Math.max(0, Math.round((used / total) * 100)));
-}
-
 function isTrialEnded(entitlements) {
   const trial = entitlements?.trial;
   if (!trial || trial.active || trial.state !== 'active' || !trial.endsAt) return false;
@@ -50,10 +44,27 @@ function isTrialEnded(entitlements) {
   return Number.isFinite(endsAt.getTime()) && endsAt.getTime() <= Date.now();
 }
 
-function formatUsageSummary(item) {
-  if (!item) return '';
-  const available = item.unlimited ? 'Unlimited' : formatUsageValue(getRemainingUsageValue(item));
-  return `${available} available · ${formatUsageValue(item.used)} used`;
+function getAvailableUsageValue(item) {
+  if (!item) return null;
+  if (item.unlimited) return 'unlimited';
+  const canDeriveRemaining = hasUsageValue(item.remaining)
+    || hasUsageValue(item.included)
+    || hasUsageValue(item.limit)
+    || hasUsageValue(item.grantRemaining)
+    || hasUsageValue(item.grantExtra)
+    || hasUsageValue(item.used);
+  return canDeriveRemaining ? getRemainingUsageValue(item) : null;
+}
+
+function UsageAmount({ value }) {
+  if (value === 'unlimited') {
+    return (
+      <span className="account-usage-infinity" aria-label="Unlimited" title="Unlimited">
+        <InfinityIcon size={14} aria-hidden="true" />
+      </span>
+    );
+  }
+  return <span>{formatUsageNumber(value)}</span>;
 }
 
 function formatStatusLabel(value) {
@@ -447,22 +458,24 @@ const ProfileDrawer = ({
                 </div>
               ) : null}
               <div className="account-usage-list">
-                {usageRows.map(({ label, item }) => (
-                  <div className="account-usage-row" key={item.meter || label}>
-                    <div className="account-usage-copy">
-                      <span>{label}</span>
-                      <span>{formatUsageSummary(item)}</span>
-                    </div>
-                    {!item.unlimited ? (
-                      <div className="account-usage-track" aria-hidden="true">
-                        <div
-                          className="account-usage-fill"
-                          style={{ width: `${getUsagePercent(item)}%` }}
-                        />
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
+                <table className="account-usage-table">
+                  <thead>
+                    <tr>
+                      <th scope="col"> </th>
+                      <th scope="col">Available</th>
+                      <th scope="col">Used</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usageRows.map(({ label, item }) => (
+                      <tr key={item.meter || label}>
+                        <th scope="row">{label}</th>
+                        <td><UsageAmount value={getAvailableUsageValue(item)} /></td>
+                        <td><UsageAmount value={hasUsageValue(item.used) ? item.used : null} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
               <div className="account-plan-actions">
                 <Button
@@ -473,7 +486,7 @@ const ProfileDrawer = ({
                   onClick={onOpenPlans}
                   disabled={!user}
                 >
-                  Switch plan
+                  Switch
                 </Button>
                 <Button
                   type="button"
@@ -484,7 +497,7 @@ const ProfileDrawer = ({
                   loading={billingLoading}
                   endIcon={<ExternalLink size={14} />}
                 >
-                  Manage billing
+                  Manage
                 </Button>
               </div>
             </Accordion>
