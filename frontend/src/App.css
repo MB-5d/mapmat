@@ -10469,7 +10469,7 @@ body {
 }
 
 .comment-popover-container.is-drawer-anchor {
-  transform: translateY(-50%);
+  transform: none;
 }
 
 .comment-popover.modal-card {
@@ -10557,22 +10557,23 @@ body {
 .comment-popover-body.modal-body {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--unit-24);
+  scroll-padding: var(--unit-24) var(--unit-24) calc(var(--unit-40) + var(--unit-32));
   display: flex;
   flex-direction: column;
 }
 
 .comment-thread-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  flex: 0 0 auto;
+  min-height: 100%;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  padding-bottom: var(--unit-56);
-  scroll-padding: var(--unit-16) var(--unit-16) var(--unit-56);
+  padding-bottom: calc(var(--unit-40) + var(--unit-32));
+  scroll-padding: var(--unit-24) var(--unit-24) calc(var(--unit-40) + var(--unit-32));
 }
 
 .comment-list {
@@ -10771,18 +10772,19 @@ body {
   border: var(--border-width-subtle) solid var(--ui-input-mono-border);
   border-radius: 12px;
   background: var(--ui-color-input-bg);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .comment-input {
   width: 100%;
-  min-height: 58px;
-  height: 58px;
+  min-height: 104px;
+  height: auto;
   resize: none;
   border: none;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  padding: var(--space-sm) var(--unit-12) var(--unit-48);
 }
 
 .comment-input:focus {
@@ -10790,11 +10792,17 @@ body {
 }
 
 .comment-input-actions {
+  position: absolute;
+  left: var(--space-sm);
+  right: var(--space-sm);
+  bottom: var(--space-xs);
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: var(--space-xs) var(--space-sm);
+  padding: 0;
   gap: var(--space-xs);
+  background: transparent;
+  border: 0;
 }
 
 .comment-add-toggle.ui-icon-btn {
@@ -10809,39 +10817,37 @@ body {
   margin-right: auto;
 }
 
-.comment-emoji-picker {
-  position: absolute;
-  left: var(--space-sm);
-  bottom: calc(var(--unit-32) + var(--space-sm));
+.comment-emoji-popover {
   z-index: 6;
-  width: 156px;
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: var(--space-xxs);
-  padding: var(--space-xs);
+  width: calc(100% - (var(--space-sm) * 2));
+  height: 280px;
+  margin: var(--space-xs) var(--space-sm) var(--space-sm);
   background: var(--ui-color-surface);
   border: var(--border-width-subtle) solid var(--ui-color-border);
-  border-radius: 8px;
+  border-radius: 12px;
   box-shadow: var(--ui-overlay-shadow);
+  overflow: hidden;
 }
 
-.comment-emoji-option {
-  appearance: none;
-  width: var(--unit-24);
-  height: var(--unit-24);
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 15px;
-  line-height: var(--unit-24);
-  text-align: center;
-}
-
-.comment-emoji-option:hover,
-.comment-emoji-option:focus-visible {
-  outline: none;
-  background: var(--ui-color-icon-hover);
+.comment-emoji-popover emoji-picker {
+  width: 100%;
+  height: 100%;
+  --background: var(--ui-color-surface);
+  --border-color: transparent;
+  --border-size: 0;
+  --border-radius: 12px;
+  --button-active-background: var(--ui-color-icon-hover);
+  --button-hover-background: var(--ui-color-icon-hover);
+  --category-font-color: var(--ui-color-text);
+  --emoji-padding: 0.35rem;
+  --emoji-size: 1.375rem;
+  --indicator-color: var(--ui-button-mono-quiet);
+  --input-border-color: var(--ui-input-mono-border);
+  --input-border-radius: var(--ui-radius-sm);
+  --input-font-color: var(--ui-color-text);
+  --input-placeholder-color: var(--ui-color-input-placeholder);
+  --outline-color: var(--ui-input-mono-border-focus);
+  --num-columns: 8;
 }
 
 .mention-dropdown {

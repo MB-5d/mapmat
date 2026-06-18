@@ -318,14 +318,19 @@ function getCommentPopoverDrawerPosition({
   canvasRect,
   drawerRect,
   popoverWidth = COMMENT_POPOVER_WIDTH,
+  popoverHeight = COMMENT_POPOVER_MAX_HEIGHT,
   drawerGap = COMMENT_POPOVER_DRAWER_GAP,
+  edgeGap = COMMENT_POPOVER_EDGE_GAP,
 }) {
   if (!canvasRect || !drawerRect) return null;
+
+  const centeredTop = (canvasRect.height - popoverHeight) / 2;
+  const maxTop = Math.max(edgeGap, canvasRect.height - popoverHeight - edgeGap);
 
   return {
     side: 'right',
     x: Math.round(drawerRect.left - canvasRect.left - popoverWidth - drawerGap),
-    y: Math.round(canvasRect.height / 2),
+    y: Math.round(Math.min(Math.max(edgeGap, centeredTop), maxTop)),
   };
 }
 
@@ -335,20 +340,20 @@ function getCommentDrawerNodeFocusTarget({
   popoverWidth = COMMENT_POPOVER_WIDTH,
   popoverHeight = COMMENT_POPOVER_MAX_HEIGHT,
   drawerGap = COMMENT_POPOVER_DRAWER_GAP,
-  nodeGap = COMMENT_POPOVER_EDGE_GAP,
+  nodeGap = COMMENT_POPOVER_NODE_GAP,
 }) {
   const popoverPosition = getCommentPopoverDrawerPosition({
     canvasRect,
     drawerRect,
     popoverWidth,
+    popoverHeight,
     drawerGap,
   });
   if (!popoverPosition) return null;
 
   return {
     screenRight: Math.round(popoverPosition.x - nodeGap),
-    screenCenterY: popoverPosition.y,
-    screenTop: Math.round(popoverPosition.y - popoverHeight / 2),
+    screenTop: popoverPosition.y,
   };
 }
 

@@ -15,8 +15,6 @@ import Avatar from '../ui/Avatar';
 import IconButton from '../ui/IconButton';
 import TextareaInput from '../ui/TextareaInput';
 
-const COMMENT_EMOJIS = ['👍', '🙌', '✅', '💡', '👀', '🔥', '❤️', '🎯', '🙂', '🚀', '❗', '👏'];
-
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 
 const MessageSquareOffIcon = ({ size = 24, color = 'currentColor', ...props }) => (
@@ -94,6 +92,42 @@ const renderCommentText = (text) => {
   ));
 };
 
+function EmojiPickerPopover({ onSelect }) {
+  const pickerRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.customElements?.get('emoji-picker')) return undefined;
+    let canceled = false;
+    import('emoji-picker-element').catch(() => {
+      if (!canceled) {
+        // The picker shell still renders; build/test environments may not upgrade the custom element.
+      }
+    });
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const picker = pickerRef.current;
+    if (!picker) return undefined;
+
+    const handleEmojiClick = (event) => {
+      const unicode = event.detail?.unicode || event.detail?.emoji?.unicode;
+      if (unicode) onSelect(unicode);
+    };
+
+    picker.addEventListener('emoji-click', handleEmojiClick);
+    return () => picker.removeEventListener('emoji-click', handleEmojiClick);
+  }, [onSelect]);
+
+  return (
+    <div className="comment-emoji-popover" role="dialog" aria-label="Emoji picker">
+      <emoji-picker ref={pickerRef} className="comment-emoji-picker-element" />
+    </div>
+  );
+}
+
 function CommentComposer({
   className,
   placeholder,
@@ -165,8 +199,8 @@ function CommentComposer({
         {canSubmit ? (
           <IconButton
             size="xs"
-            type="ghost"
-            buttonStyle="brand"
+            variant="ghost"
+            buttonStyle="mono"
             onClick={onSubmit}
             aria-label="Share comment"
             title="Share comment"
@@ -176,20 +210,7 @@ function CommentComposer({
         ) : null}
       </div>
       {showEmojiPicker ? (
-        <div className="comment-emoji-picker" role="menu" aria-label="Emoji picker">
-          {COMMENT_EMOJIS.map((emoji) => (
-            <button
-              type="button"
-              key={`${composerId}-${emoji}`}
-              className="comment-emoji-option"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onInsertEmoji(emoji)}
-              aria-label={`Insert ${emoji}`}
-            >
-              {emoji}
-            </button>
-          ))}
-        </div>
+        <EmojiPickerPopover onSelect={onInsertEmoji} />
       ) : null}
       {showMentions && collaborators.length > 0 ? (
         <div className="mention-dropdown">
@@ -803,8 +824,8 @@ const CommentPopover = ({
         <IconButton
           className="comment-add-toggle"
           size="sm"
-          type="primary"
-          buttonStyle="brand"
+          type="secondary"
+          buttonStyle="mono"
           active={isAddingComment}
           onClick={() => {
             resetInlineState();

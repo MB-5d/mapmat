@@ -429,7 +429,7 @@ describe('comment popover positioning', () => {
     })).toEqual({
       side: 'right',
       x: 384,
-      y: 400,
+      y: 200,
     });
 
     expect(getCommentDrawerNodeFocusTarget({
@@ -438,8 +438,7 @@ describe('comment popover positioning', () => {
         left: 900,
       },
     })).toEqual({
-      screenRight: 376,
-      screenCenterY: 400,
+      screenRight: 380,
       screenTop: 200,
     });
 
@@ -453,7 +452,7 @@ describe('comment popover positioning', () => {
 
   test('popover container stays fixed-size outside the zoomed canvas content', () => {
     expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 384px;[\s\S]*transform: none;[\s\S]*\}/);
-    expect(appCss).toMatch(/\.comment-popover-container\.is-drawer-anchor \{[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.is-drawer-anchor \{[\s\S]*transform: none;[\s\S]*\}/);
     expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
     expect(appJs).toContain("commentPopoverAnchor.mode === 'drawer' ? ' is-drawer-anchor' : ''");
     expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*max-height: 400px;[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);[\s\S]*border-radius: 16px;[\s\S]*\}/);
@@ -462,12 +461,16 @@ describe('comment popover positioning', () => {
     expect(appCss).not.toMatch(/\.comment-popover-container\.right::before/);
     expect(appCss).not.toMatch(/\.comment-popover-container\.right::after/);
     expect(appCss).not.toMatch(/\.comment-popover-footer\.modal-footer/);
-    expect(appCss).toMatch(/\.comment-thread-scroll \{[\s\S]*padding-bottom: var\(--unit-56\);[\s\S]*scroll-padding: var\(--unit-16\) var\(--unit-16\) var\(--unit-56\);/);
+    expect(appCss).toMatch(/\.comment-popover-body\.modal-body \{[\s\S]*overflow-y: auto;[\s\S]*scroll-padding: var\(--unit-24\) var\(--unit-24\) calc\(var\(--unit-40\) \+ var\(--unit-32\)\);/);
+    expect(appCss).toMatch(/\.comment-thread-scroll \{[\s\S]*overflow: visible;[\s\S]*padding-bottom: calc\(var\(--unit-40\) \+ var\(--unit-32\)\);/);
     expect(appCss).toMatch(/\.comment-input-actions \{[\s\S]*gap: var\(--space-xs\);[\s\S]*\}/);
     const inputActionsBlock = appCss.match(/\.comment-input-actions \{[\s\S]*?\}/)?.[0] || '';
     expect(inputActionsBlock).not.toContain('border-top');
-    expect(commentPopoverJs).toContain('type="primary"');
-    expect(commentPopoverJs).toContain('buttonStyle="brand"');
+    expect(commentPopoverJs).not.toContain('buttonStyle="brand"');
+    expect(commentPopoverJs).toContain('type="secondary"');
+    expect(commentPopoverJs).toContain('buttonStyle="mono"');
+    expect(commentPopoverJs).toContain('emoji-picker-element');
+    expect(appCss).toMatch(/\.comment-emoji-popover emoji-picker \{[\s\S]*--background: var\(--ui-color-surface\);[\s\S]*--indicator-color: var\(--ui-button-mono-quiet\);/);
     expect(appCss).toMatch(/\.comment-complete-btn\.checked,[\s\S]*\.comment-complete-btn\.checked:hover:not\(:disabled\),[\s\S]*\.comment-complete-btn\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
   });
 

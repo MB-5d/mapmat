@@ -169,7 +169,7 @@ describe('CommentPopover', () => {
     expect(onAddComment).toHaveBeenCalledWith('node-1', 'Keyboard submit', null);
   });
 
-  test('inserts emoji into the active composer without adding a dependency', () => {
+  test('inserts emoji from the picker into the active composer', () => {
     renderPopover();
 
     act(() => {
@@ -181,13 +181,16 @@ describe('CommentPopover', () => {
       emojiButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    const firstEmoji = container.querySelector('.comment-emoji-option');
-    expect(firstEmoji).not.toBeNull();
+    const picker = container.querySelector('.comment-emoji-popover emoji-picker');
+    expect(picker).not.toBeNull();
     act(() => {
-      firstEmoji.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      picker.dispatchEvent(new CustomEvent('emoji-click', {
+        bubbles: true,
+        detail: { unicode: '🎯' },
+      }));
     });
 
-    expect(container.querySelector('.comment-input-section textarea').value).toContain('👍');
+    expect(container.querySelector('.comment-input-section textarea').value).toContain('🎯');
   });
 
   test('reply composer keeps the same textarea while typing and includes cancel', () => {
