@@ -396,8 +396,8 @@ describe('comment popover positioning', () => {
       },
     })).toEqual({
       side: 'right',
-      x: 396,
-      y: 239,
+      x: 392,
+      y: 100,
     });
   });
 
@@ -414,8 +414,8 @@ describe('comment popover positioning', () => {
       },
     })).toEqual({
       side: 'left',
-      x: 408,
-      y: 239,
+      x: 412,
+      y: 100,
     });
   });
 
@@ -449,12 +449,16 @@ describe('comment popover positioning', () => {
   });
 
   test('popover container stays fixed-size outside the zoomed canvas content', () => {
-    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 384px;[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container \{[\s\S]*width: 384px;[\s\S]*transform: none;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.is-drawer-anchor \{[\s\S]*transform: translateY\(-50%\);[\s\S]*\}/);
     expect(appJs).toContain('querySelector(`[data-node-card="1"][data-node-id="${safeNodeId}"]`)');
-    expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
-    expect(appCss).toMatch(/\.comment-popover-container\.right::before \{[\s\S]*background: var\(--modal-card-border\);[\s\S]*clip-path: polygon\(0 50%, 100% 0, 100% 100%\);/);
-    expect(appCss).toMatch(/\.comment-popover-container\.right::after \{[\s\S]*background: var\(--modal-bg\);[\s\S]*clip-path: polygon\(0 50%, 100% 0, 100% 100%\);/);
-    expect(appCss).toMatch(/\.comment-popover-container\.right \.comment-popover\.modal-card::before \{[\s\S]*left: calc\(-1 \* var\(--border-width-subtle\)\);/);
+    expect(appJs).toContain("commentPopoverAnchor.mode === 'drawer' ? ' is-drawer-anchor' : ''");
+    expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*max-height: 400px;[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);[\s\S]*border-radius: 16px;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.right:not\(\.is-drawer-anchor\) \.comment-popover\.modal-card \{[\s\S]*border-top-left-radius: 0;[\s\S]*\}/);
+    expect(appCss).toMatch(/\.comment-popover-container\.left:not\(\.is-drawer-anchor\) \.comment-popover\.modal-card \{[\s\S]*border-top-right-radius: 0;[\s\S]*\}/);
+    expect(appCss).not.toMatch(/\.comment-popover-container\.right::before/);
+    expect(appCss).not.toMatch(/\.comment-popover-container\.right::after/);
+    expect(appCss).not.toMatch(/\.comment-popover-footer\.modal-footer/);
     expect(appCss).toMatch(/\.comment-complete-btn\.checked,[\s\S]*\.comment-complete-btn\.checked:hover:not\(:disabled\),[\s\S]*\.comment-complete-btn\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);
   });
 

@@ -207,6 +207,7 @@ const TRIAL_PLAN_KEYS = new Set(['pro']);
 const ADD_ON_QUANTITY_MAX = 100;
 const COMMENT_POPOVER_WIDTH = 384;
 const COMMENT_POPOVER_EDGE_GAP = 8;
+const COMMENT_POPOVER_NODE_GAP = 4;
 const COMMENT_POPOVER_DRAWER_GAP = 32;
 const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
 
@@ -292,16 +293,15 @@ function getCommentPopoverPosition({
   canvasRect,
   forceSide = null,
   popoverWidth = COMMENT_POPOVER_WIDTH,
-  edgeGap = COMMENT_POPOVER_EDGE_GAP,
+  edgeGap = COMMENT_POPOVER_NODE_GAP,
 }) {
   if (!nodeRect || !canvasRect) return null;
 
   const nodeWidth = nodeRect.width ?? (nodeRect.right - nodeRect.left);
-  const nodeHeight = nodeRect.height ?? (nodeRect.bottom - nodeRect.top);
   const relativeLeft = nodeRect.left - canvasRect.left;
   const relativeRight = nodeRect.right - canvasRect.left;
   const relativeCenterX = relativeLeft + nodeWidth / 2;
-  const relativeCenterY = (nodeRect.top - canvasRect.top) + nodeHeight / 2;
+  const relativeTop = nodeRect.top - canvasRect.top;
   const side = forceSide || (relativeCenterX <= canvasRect.width / 2 ? 'right' : 'left');
 
   return {
@@ -309,7 +309,7 @@ function getCommentPopoverPosition({
     x: Math.round(side === 'right'
       ? relativeRight + edgeGap
       : relativeLeft - popoverWidth - edgeGap),
-    y: Math.round(relativeCenterY),
+    y: Math.round(relativeTop),
   };
 }
 
@@ -13410,6 +13410,93 @@ export default function App({ currentRoute, navigateToRoute }) {
     updateCommentsForNode(nodeId, (comments) => [...comments, newComment]);
   };
 
+  const updateCommentText = async (nodeId, commentId, commentText) => {
+    const trimmedText = String(commentText || '').trim();
+    if (!trimmedText) return;
+
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await api.updateMapComment(currentMap.id, commentId, {
+          text: trimmedText,
+        });
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Update map comment text error:', error);
+        showToast(error.message || 'Failed to update comment', 'error');
+      }
+      return;
+    }
+
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment edits are not live-synced yet.');
+      return;
+    }
+
+    const updateTextInComments = (comments) => comments.map((comment) => {
+      if (sameId(comment.id, commentId)) {
+        return {
+          ...comment,
+          text: trimmedText,
+          mentions: extractCommentMentions(trimmedText),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      if (comment.replies?.length > 0) {
+        return { ...comment, replies: updateTextInComments(comment.replies) };
+      }
+      return comment;
+    });
+
+    saveStateForUndo();
+    updateCommentsForNode(nodeId, updateTextInComments);
+  };
+
+  const setCommentsCompleted = async (nodeId, commentIds, completed) => {
+    const targetIds = Array.from(new Set((commentIds || []).map((id) => String(id))));
+    if (targetIds.length === 0) return;
+
+    if (useBackendComments && currentMap?.id) {
+      try {
+        await Promise.all(targetIds.map((commentId) => (
+          api.updateMapComment(currentMap.id, commentId, {
+            completed: !!completed,
+          })
+        )));
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Set map comments completed error:', error);
+        showToast(error.message || 'Failed to update comments', 'error');
+      }
+      return;
+    }
+
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment state changes are not live-synced yet.');
+      return;
+    }
+
+    const targetIdSet = new Set(targetIds);
+    const completedAt = completed ? new Date().toISOString() : null;
+    const completedBy = completed ? (currentUser?.name || 'Anonymous') : null;
+    const setCompletedInComments = (comments) => comments.map((comment) => {
+      const nextComment = targetIdSet.has(String(comment.id))
+        ? {
+          ...comment,
+          completed: !!completed,
+          completedBy,
+          completedAt,
+        }
+        : comment;
+      if (nextComment.replies?.length > 0) {
+        return { ...nextComment, replies: setCompletedInComments(nextComment.replies) };
+      }
+      return nextComment;
+    });
+
+    saveStateForUndo();
+    updateCommentsForNode(nodeId, setCompletedInComments);
+  };
+
   // Toggle completed state on a comment
   const toggleCommentCompleted = async (nodeId, commentId) => {
     if (useBackendComments && currentMap?.id) {
@@ -13487,6 +13574,30 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     saveStateForUndo();
     updateCommentsForNode(nodeId, deleteFromComments);
+  };
+
+  const deleteAllCommentsForNode = async (nodeId) => {
+    if (useBackendComments && currentMap?.id) {
+      const topLevelComments = savedMapCommentsByNode[nodeId] || getNodeById(nodeId)?.comments || [];
+      const topLevelIds = topLevelComments.map((comment) => comment?.id).filter(Boolean);
+      if (topLevelIds.length === 0) return;
+      try {
+        await Promise.all(topLevelIds.map((commentId) => api.deleteMapComment(currentMap.id, commentId)));
+        await loadSavedMapComments(currentMap.id);
+      } catch (error) {
+        console.error('Delete all map comments error:', error);
+        showToast(error.message || 'Failed to delete comments', 'error');
+      }
+      return;
+    }
+
+    if (isLiveActive) {
+      warnLiveModeUnsupported('Comment deletion is not live-synced yet.');
+      return;
+    }
+
+    saveStateForUndo();
+    updateCommentsForNode(nodeId, () => []);
   };
 
   const applyAnnotationsInTree = (tree, idSet, updater) => {
@@ -17337,7 +17448,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               if (!commentingNodeId || !activeNode) return null;
               return (
                 <div
-                  className={`comment-popover-container ${commentPopoverPos.side}`}
+                  className={`comment-popover-container ${commentPopoverPos.side}${commentPopoverAnchor.mode === 'drawer' ? ' is-drawer-anchor' : ''}`}
                   style={{
                     position: 'absolute',
                     left: commentPopoverPos.x,
@@ -17353,7 +17464,11 @@ export default function App({ currentRoute, navigateToRoute }) {
                       setSelectedCommentId(null);
                     }}
                     onAddComment={addCommentToNode}
+                    onUpdateComment={updateCommentText}
+                    onDeleteComment={deleteComment}
                     onToggleCompleted={toggleCommentCompleted}
+                    onSetCommentsCompleted={setCommentsCompleted}
+                    onDeleteAllComments={deleteAllCommentsForNode}
                     collaborators={collaborators}
                     canComment={canComment()}
                     readOnlyMessage={commentPopoverReadOnlyMessage}
