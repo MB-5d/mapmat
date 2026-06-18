@@ -16,6 +16,7 @@ import IconButton from '../ui/IconButton';
 import TextareaInput from '../ui/TextareaInput';
 
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
+const COMMENT_EMOJI_PICKER_WIDTH = 320;
 
 const MessageSquareOffIcon = ({ size = 24, color = 'currentColor', ...props }) => (
   <svg
@@ -92,7 +93,7 @@ const renderCommentText = (text) => {
   ));
 };
 
-function EmojiPickerPopover({ onSelect }) {
+function EmojiPickerPopover({ anchor, onSelect }) {
   const pickerRef = useRef(null);
 
   useEffect(() => {
@@ -122,7 +123,14 @@ function EmojiPickerPopover({ onSelect }) {
   }, [onSelect]);
 
   return (
-    <div className="comment-emoji-popover" role="dialog" aria-label="Emoji picker">
+    <div
+      className="comment-emoji-popover"
+      role="dialog"
+      aria-label="Emoji picker"
+      style={{ left: `${anchor.left}px`, top: `${anchor.top}px` }}
+      onWheel={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
       <emoji-picker ref={pickerRef} className="comment-emoji-picker-element" />
     </div>
   );
@@ -177,7 +185,7 @@ function CommentComposer({
           size="xs"
           variant="ghost"
           className="comment-emoji-toggle"
-          onClick={onToggleEmoji}
+          onClick={(event) => onToggleEmoji?.(event)}
           aria-label="Insert emoji"
           aria-expanded={showEmojiPicker ? 'true' : 'false'}
           title="Insert emoji"
@@ -360,7 +368,7 @@ function CommentItem({
               onSubmit={() => onEditSubmit(comment.id)}
               onCancel={onEditCancel}
               onEscapeMentions={onClearMentions}
-              onToggleEmoji={() => onToggleEmoji(`edit:${comment.id}`)}
+              onToggleEmoji={(event) => onToggleEmoji(`edit:${comment.id}`, event)}
               onInsertEmoji={onInsertEmoji}
               onInsertMention={onInsertMention}
             />
@@ -392,7 +400,7 @@ function CommentItem({
             onSubmit={() => onReplySubmit(comment.id)}
             onCancel={onReplyCancel}
             onEscapeMentions={onClearMentions}
-            onToggleEmoji={() => onToggleEmoji(composerId)}
+            onToggleEmoji={(event) => onToggleEmoji(composerId, event)}
             onInsertEmoji={onInsertEmoji}
             onInsertMention={onInsertMention}
           />
@@ -469,7 +477,9 @@ const CommentPopover = ({
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [activeComposer, setActiveComposer] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(null);
+  const [emojiAnchor, setEmojiAnchor] = useState({ left: 0, top: 0 });
   const [isAddingComment, setIsAddingComment] = useState(false);
+  const popoverRef = useRef(null);
   const newInputRef = useRef(null);
   const replyInputRef = useRef(null);
   const editInputRef = useRef(null);
@@ -585,6 +595,20 @@ const CommentPopover = ({
   const filteredCollaborators = (collaborators || []).filter((name) =>
     String(name || '').toLowerCase().includes(mentionFilter)
   );
+
+  const toggleEmojiPicker = (composerId, event) => {
+    setActiveComposer(composerId);
+    const buttonRect = event?.currentTarget?.getBoundingClientRect?.();
+    const popoverRect = popoverRef.current?.getBoundingClientRect?.();
+    if (buttonRect && popoverRect) {
+      const maxLeft = Math.max(0, popoverRect.width - COMMENT_EMOJI_PICKER_WIDTH);
+      setEmojiAnchor({
+        left: Math.min(Math.max(0, buttonRect.left - popoverRect.left), maxLeft),
+        top: Math.max(0, buttonRect.bottom - popoverRect.top + 4),
+      });
+    }
+    setShowEmojiPicker((current) => (current === composerId ? null : composerId));
+  };
 
   useEffect(() => {
     if (showNewComposer) {
@@ -714,6 +738,7 @@ const CommentPopover = ({
   return (
     <>
     <div
+      ref={popoverRef}
       className={classNames(
         'comment-popover modal-card',
         canComment && visibleComments.length > 0 && 'has-add-toggle'
@@ -776,7 +801,7 @@ const CommentPopover = ({
                   setShowEmojiPicker(null);
                 }}
                 onEscapeMentions={() => setShowMentions(false)}
-                onToggleEmoji={() => setShowEmojiPicker((current) => (current === 'new' ? null : 'new'))}
+                onToggleEmoji={(event) => toggleEmojiPicker('new', event)}
                 onInsertEmoji={insertEmoji}
                 onInsertMention={insertMention}
               />
@@ -827,7 +852,7 @@ const CommentPopover = ({
                   onSetCommentCompleted={handleSetCommentCompleted}
                   onSetActiveComposer={setActiveComposer}
                   onClearMentions={() => setShowMentions(false)}
-                  onToggleEmoji={(composerId) => setShowEmojiPicker((current) => (current === composerId ? null : composerId))}
+                  onToggleEmoji={toggleEmojiPicker}
                   onInsertEmoji={insertEmoji}
                   onInsertMention={insertMention}
                 />
@@ -847,7 +872,6 @@ const CommentPopover = ({
           size="sm"
           type="primary"
           buttonStyle="mono"
-          active={isAddingComment}
           onClick={() => {
             resetInlineState();
             setNewComment('');
@@ -862,7 +886,7 @@ const CommentPopover = ({
       ) : null}
     </div>
     {showEmojiPicker ? (
-      <EmojiPickerPopover onSelect={insertEmoji} />
+      <EmojiPickerPopover anchor={emojiAnchor} onSelect={insertEmoji} />
     ) : null}
     </>
   );

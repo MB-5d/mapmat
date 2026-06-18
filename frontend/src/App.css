@@ -10775,20 +10775,7 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  border: var(--border-width-subtle) solid var(--ui-input-mono-border);
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-color-input-bg);
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   overflow: visible;
-}
-
-.comment-input-wrapper:hover {
-  border-color: var(--ui-input-mono-border-hover);
-}
-
-.comment-input-wrapper:focus-within {
-  border-color: var(--ui-input-mono-border-focus);
-  box-shadow: var(--ui-focus-ring);
 }
 
 .comment-input {
@@ -10796,15 +10783,7 @@ body {
   min-height: 96px;
   height: auto;
   resize: none;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
   padding: var(--space-sm) var(--unit-12) var(--unit-48);
-}
-
-.comment-input:focus {
-  box-shadow: none;
 }
 
 .comment-input-actions {
@@ -10835,10 +10814,8 @@ body {
 
 .comment-emoji-popover {
   position: absolute;
-  left: 0;
-  bottom: calc(100% + var(--space-sm));
   z-index: 6;
-  width: 384px;
+  width: 320px;
   height: 280px;
   background: var(--ui-color-surface);
   border: var(--border-width-subtle) solid var(--ui-color-border);

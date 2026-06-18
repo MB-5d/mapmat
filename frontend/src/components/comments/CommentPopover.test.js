@@ -125,8 +125,15 @@ describe('CommentPopover', () => {
       container.querySelector('button[aria-label="Add comment"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
+    const cancelToggle = container.querySelector('button[aria-label="Cancel comment"]');
+    expect(cancelToggle.className).toContain('ui-icon-btn--type-primary');
+    expect(cancelToggle.className).toContain('ui-icon-btn--style-mono');
+    expect(cancelToggle.className).not.toContain('ui-icon-btn--active');
+
     const section = container.querySelector('.comment-input-section');
     const textarea = section.querySelector('textarea');
+    expect(textarea.className).toContain('ui-textarea');
+    expect(textarea.className).toContain('comment-input');
     expect(textarea.placeholder).toBe('Add a comment... (use @ to mention)');
     expect(textarea.placeholder).not.toContain('\\n');
     expect(textarea.placeholder).not.toContain('\n');
@@ -186,6 +193,7 @@ describe('CommentPopover', () => {
 
     const picker = container.querySelector('.comment-emoji-popover emoji-picker');
     expect(picker).not.toBeNull();
+    expect(container.querySelector('.comment-emoji-popover').style.top).toBe('4px');
     act(() => {
       picker.dispatchEvent(new CustomEvent('emoji-click', {
         bubbles: true,
@@ -194,6 +202,29 @@ describe('CommentPopover', () => {
     });
 
     expect(container.querySelector('.comment-input-section textarea').value).toContain('🎯');
+  });
+
+  test('keeps emoji picker wheel events from reaching the map layer', () => {
+    renderPopover();
+
+    act(() => {
+      container.querySelector('button[aria-label="Add comment"]').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const emojiButton = container.querySelector('.comment-input-section button[aria-label="Insert emoji"]');
+    act(() => {
+      emojiButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const wheelSpy = jest.fn();
+    document.addEventListener('wheel', wheelSpy);
+    act(() => {
+      container.querySelector('.comment-emoji-popover')
+        .dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+    });
+    document.removeEventListener('wheel', wheelSpy);
+
+    expect(wheelSpy).not.toHaveBeenCalled();
   });
 
   test('closes the emoji picker from toggle, Escape, and outside click', () => {

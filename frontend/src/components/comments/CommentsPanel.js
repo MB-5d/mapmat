@@ -190,15 +190,16 @@ const CommentsPanel = ({
     >
       <div className="comments-panel-filter">
         <div className="comments-filter-row">
-          <SearchInput
-            size="sm"
-            inputStyle="mono"
-            placeholder="Search comments"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            onClear={() => setFilter('')}
-            className="comments-filter-input"
-          />
+          <div className="comments-filter-input">
+            <SearchInput
+              size="sm"
+              inputStyle="mono"
+              placeholder="Search comments"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              onClear={() => setFilter('')}
+            />
+          </div>
           <div className="comments-panel-controls" ref={controlsRef}>
             <div className="comments-panel-menu-wrapper">
               <IconButton

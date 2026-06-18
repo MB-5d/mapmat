@@ -82,7 +82,7 @@ describe('CommentsPanel', () => {
     expect(container.textContent).not.toContain('Show completed');
     expect(container.textContent).toContain('Show resolved');
     expect(container.querySelector('input[placeholder="Search comments"]')).not.toBeNull();
-    expect(container.querySelector('.comments-filter-input.ui-input-shell--sm')).not.toBeNull();
+    expect(container.querySelector('.comments-filter-input .ui-search-input.ui-input-shell--sm')).not.toBeNull();
     expect(container.querySelector('.comments-filter-row .comments-panel-show-resolved')).toBeNull();
     expect(container.querySelector('button[aria-label="Filter comments"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Sort comments: Newest"]')).not.toBeNull();
