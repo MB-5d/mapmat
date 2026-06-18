@@ -94,6 +94,7 @@ const renderCommentText = (text) => {
 };
 
 function EmojiPickerPopover({ anchor, onSelect }) {
+  const popoverRef = useRef(null);
   const pickerRef = useRef(null);
 
   useEffect(() => {
@@ -122,8 +123,21 @@ function EmojiPickerPopover({ anchor, onSelect }) {
     return () => picker.removeEventListener('emoji-click', handleEmojiClick);
   }, [onSelect]);
 
+  useEffect(() => {
+    const popover = popoverRef.current;
+    if (!popover) return undefined;
+
+    const containWheel = (event) => {
+      event.stopPropagation();
+    };
+
+    popover.addEventListener('wheel', containWheel);
+    return () => popover.removeEventListener('wheel', containWheel);
+  }, []);
+
   return (
     <div
+      ref={popoverRef}
       className="comment-emoji-popover"
       role="dialog"
       aria-label="Emoji picker"

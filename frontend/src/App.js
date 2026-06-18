@@ -12664,7 +12664,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const wheelTarget = e.target;
       if (
         wheelTarget instanceof Element
-        && wheelTarget.closest('.comment-popover, .comments-drawer, .mention-dropdown, .canvas-toolbar, .canvas-tool-menu, .zoom-controls, .color-key, .layers-panel, .report-drawer, .account-drawer, .settings-drawer, .minimap-navigator')
+        && wheelTarget.closest('.comment-popover, .comment-emoji-popover, .comments-drawer, .mention-dropdown, .canvas-toolbar, .canvas-tool-menu, .zoom-controls, .color-key, .layers-panel, .report-drawer, .account-drawer, .settings-drawer, .minimap-navigator')
       ) {
         return;
       }

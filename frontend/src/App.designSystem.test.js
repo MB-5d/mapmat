@@ -464,7 +464,7 @@ describe('comment popover positioning', () => {
     expect(appCss).toMatch(/\.comment-popover\.modal-card \{[\s\S]*max-height: 400px;[\s\S]*height: auto;[\s\S]*\}/);
     expect(appCss).toMatch(/\.comment-popover-body\.modal-body \{[\s\S]*flex: 0 1 auto;[\s\S]*max-height: calc\(400px - 48px\);[\s\S]*overflow-y: auto;[\s\S]*scroll-padding: var\(--unit-24\);/);
     expect(appCss).toMatch(/\.comment-thread-scroll \{[\s\S]*overflow: visible;[\s\S]*padding-bottom: 0;/);
-    expect(appCss).toMatch(/\.comment-popover\.has-add-toggle \.comment-thread-scroll \{[\s\S]*padding-bottom: var\(--unit-40\);/);
+    expect(appCss).not.toMatch(/\.comment-popover\.has-add-toggle \.comment-thread-scroll/);
     expect(appCss).toMatch(/\.comment-input-actions \{[\s\S]*gap: var\(--space-xs\);[\s\S]*\}/);
     const inputActionsBlock = appCss.match(/\.comment-input-actions \{[\s\S]*?\}/)?.[0] || '';
     expect(inputActionsBlock).not.toContain('border-top');
@@ -487,7 +487,9 @@ describe('comment popover positioning', () => {
     expect(commentPopoverJs).not.toContain('Add a comment...\\n');
     expect(commentPopoverJs).toContain('emoji-picker-element');
     expect(commentPopoverJs).toContain('onWheel={(event) => event.stopPropagation()}');
+    expect(appJs).toContain('.comment-popover, .comment-emoji-popover, .comments-drawer');
     expect(appCss).toMatch(/\.comment-emoji-popover \{[\s\S]*position: absolute;[\s\S]*width: 320px;/);
+    expect(appCss).toMatch(/\.comment-emoji-popover \{[\s\S]*overscroll-behavior: contain;/);
     expect(appCss).not.toContain('bottom: calc(100% + var(--space-sm));');
     expect(appCss).toMatch(/\.comment-emoji-popover emoji-picker \{[\s\S]*--background: var\(--ui-color-surface\);[\s\S]*--indicator-color: var\(--ui-button-mono-quiet\);/);
     expect(appCss).toMatch(/\.comment-complete-btn\.checked,[\s\S]*\.comment-complete-btn\.checked:hover:not\(:disabled\),[\s\S]*\.comment-complete-btn\.checked:focus-visible \{[\s\S]*color: var\(--ui-status-success-icon\);/);

@@ -218,13 +218,15 @@ describe('CommentPopover', () => {
 
     const wheelSpy = jest.fn();
     document.addEventListener('wheel', wheelSpy);
+    const wheelEvent = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 });
     act(() => {
       container.querySelector('.comment-emoji-popover')
-        .dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
+        .dispatchEvent(wheelEvent);
     });
     document.removeEventListener('wheel', wheelSpy);
 
     expect(wheelSpy).not.toHaveBeenCalled();
+    expect(wheelEvent.defaultPrevented).toBe(false);
   });
 
   test('closes the emoji picker from toggle, Escape, and outside click', () => {

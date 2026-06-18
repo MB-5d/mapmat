@@ -10578,10 +10578,6 @@ body {
   scroll-padding: var(--unit-24);
 }
 
-.comment-popover.has-add-toggle .comment-thread-scroll {
-  padding-bottom: var(--unit-40);
-}
-
 .comment-list {
   display: flex;
   flex-direction: column;
@@ -10822,11 +10818,13 @@ body {
   border-radius: 12px;
   box-shadow: var(--ui-overlay-shadow);
   overflow: hidden;
+  overscroll-behavior: contain;
 }
 
 .comment-emoji-popover emoji-picker {
   width: 100%;
   height: 100%;
+  overscroll-behavior: contain;
   --background: var(--ui-color-surface);
   --border-color: transparent;
   --border-size: 0;
