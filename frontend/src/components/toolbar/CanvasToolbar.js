@@ -29,6 +29,7 @@ import {
 import IconButton from '../ui/IconButton';
 import Button from '../ui/Button';
 import {
+  MenuDivider,
   MenuItem,
   MenuPanel,
   MenuRadioItem,
@@ -452,12 +453,13 @@ const CanvasToolbar = ({
                 {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
               </div>
             )}
-            {imageMenuSections.map((section, index) => (
+            {imageMenuSections.map((section) => (
               <React.Fragment key={section.key}>
                 {section.content}
               </React.Fragment>
             ))}
           </div>
+          <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />
           <div className="canvas-tool-menu-credits" role="note">
             <span className="canvas-tool-menu-credits-copy">
               Screenshot credits remaining: <strong>{screenshotCreditsLabel}</strong>

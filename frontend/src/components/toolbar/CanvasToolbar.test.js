@@ -439,6 +439,8 @@ describe('CanvasToolbar', () => {
     expect(addCredits).not.toBeNull();
     expect(scrollArea.contains(addCredits)).toBe(false);
     expect(imageMenu.lastElementChild.className).toContain('canvas-tool-menu-credits');
+    expect(container.querySelectorAll('.canvas-tool-menu-images .canvas-tool-menu-divider')).toHaveLength(1);
+    expect(container.querySelector('.canvas-tool-menu-credits-divider')).not.toBeNull();
     expect(creditsCopy.textContent).toBe('Screenshot credits remaining: 24');
     expect(creditsCopy.querySelector('strong')?.textContent).toBe('24');
     expect(creditsCopy.querySelector('span')).toBeNull();
@@ -448,8 +450,9 @@ describe('CanvasToolbar', () => {
     expect(sectionHeaders).toContain('Capture full page');
     expect(sectionHeaders).not.toContain('Thumbnails (visible area)');
     expect(sectionHeaders).not.toContain('Full page');
+    expect(sectionHeaders).not.toContain('Review');
     expect(container.textContent).not.toContain('Image report');
-    expect(container.querySelector('.canvas-tool-menu-images .canvas-tool-menu-divider')).toBeNull();
+    expect(container.querySelector('.canvas-tool-menu-download-divider')).toBeNull();
     expect(buttons.some((button) => button.textContent.includes('Download thumbnails'))).toBe(false);
     expect(buttons.some((button) => button.textContent.includes('Download full screenshots'))).toBe(false);
 
@@ -467,7 +470,7 @@ describe('CanvasToolbar', () => {
   test('keeps the images menu 40px narrower with a pinned credits footer', () => {
     expect(appCss).toMatch(/\.canvas-tool-menu-images\s*{[^}]*width:\s*232px;[^}]*min-width:\s*232px;[^}]*max-width:\s*232px;[^}]*overflow:\s*hidden;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-images-scroll\s*{[^}]*overflow-y:\s*auto;/s);
-    expect(appCss).toMatch(/\.canvas-tool-menu-images \.ui-menu-title\s*{[^}]*border-bottom:\s*0;/s);
+    expect(appCss).not.toMatch(/\.canvas-tool-menu-images \.ui-menu-title\s*{/);
     expect(appCss).toMatch(/\.canvas-tool-menu-credits\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-direction:\s*column;[^}]*align-items:\s*flex-start;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-credits-copy\s*{[^}]*display:\s*block;/s);
   });
