@@ -208,38 +208,32 @@ describe('large map viewport behavior', () => {
     expect(result.orphans).toHaveLength(0);
   });
 
-  test('scan limit prompt uses paid account allowance copy', () => {
-    expect(__testing.getScanLimitPromptTitle({
+  test('scan limit progress note uses non-blocking allowance copy', () => {
+    expect(__testing.getScanLimitProgressNote({
       mode: 'guest',
       planName: 'Guest',
       allowedPages: 25,
-    })).toBe('Free scan preview');
-    expect(__testing.getScanLimitPromptSubtitle({
-      mode: 'guest',
-      planName: 'Guest',
-      allowedPages: 25,
-    })).toContain('Free and logged-out scans are limited to 25 pages');
-    expect(__testing.getScanLimitContinueLabel({
-      mode: 'guest',
-      planName: 'Guest',
-      allowedPages: 25,
-    })).toBe('Continue');
-    expect(__testing.getScanLimitPromptSubtitle({
+      capped: true,
+    })).toContain('Guest scans can include up to 25 pages');
+    expect(__testing.getScanLimitProgressNote({
       mode: 'account',
       planName: 'Solo',
       requestedPages: 5000,
       allowedPages: 739,
       remaining: 739,
+      capped: true,
       capReason: 'monthly_remaining',
-    })).toContain('739 pages');
-    expect(__testing.getScanLimitPromptSubtitle({
+    })).toContain('up to 739 pages from your current billing period');
+    expect(__testing.getScanLimitProgressNote({
       mode: 'account',
       planName: 'Solo',
       requestedPages: 5000,
       allowedPages: 739,
       remaining: 739,
+      capped: true,
       capReason: 'monthly_remaining',
-    })).not.toContain('first 25 pages');
+    })).not.toContain('limit reached');
+    expect(__testing.getScanLimitProgressNote({ capped: false })).toBe('');
   });
 
   test('capped scans can be rerun after the current account has a higher allowance', () => {

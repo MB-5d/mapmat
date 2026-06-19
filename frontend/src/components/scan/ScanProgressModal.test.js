@@ -62,6 +62,20 @@ describe('ScanProgressModal', () => {
     expect(baseProps.onRequestCancel).not.toHaveBeenCalled();
   });
 
+  test('shows scan allowance context while scanning', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanLimitNote="This scan can include up to 1,050 pages from your current billing period."
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('This scan can include up to 1,050 pages');
+    expect(container.querySelector('.scan-limit-note')).not.toBeNull();
+  });
+
   test('shows the existing cancel confirmation flow', () => {
     act(() => {
       root.render(<ScanProgressModal {...baseProps} showCancelConfirm />);

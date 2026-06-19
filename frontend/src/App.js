@@ -390,40 +390,23 @@ function getScanLimitGhostCounts(entitlement = null, visibleNodeCount = 0) {
   };
 }
 
-function getScanLimitPromptSubtitle(prompt = null) {
-  if (!prompt) return '';
+function getScanLimitProgressNote(prompt = null) {
+  if (!prompt?.capped) return '';
   const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
   const planName = prompt.planName || 'Free';
   if (prompt.mode === 'guest') {
-    return `Free and logged-out scans are limited to ${allowed} pages. Sign in, upgrade, or continue before scanning.`;
+    return `Guest scans can include up to ${allowed} pages. If Vellic finds more, it will show a partial map.`;
   }
   if (String(planName).toLowerCase() === 'free') {
-    return `Free plan scans are limited to ${allowed} pages. Upgrade for larger maps, or continue before scanning.`;
+    return `Free scans can include up to ${allowed} pages. If Vellic finds more, it will show a partial map.`;
   }
   if (prompt.capReason === 'monthly_remaining') {
-    return `Your current billing period has ${allowed} pages available. Upgrade for more pages, or continue with that limit.`;
+    return `This scan can include up to ${allowed} pages from your current billing period. If Vellic finds more, it will show a partial map.`;
   }
   if (prompt.capReason === 'per_scan_limit') {
-    return `${planName} scans are limited to ${allowed} pages per run. Upgrade for larger maps, or continue with that limit.`;
+    return `${planName} scans can include up to ${allowed} pages. If Vellic finds more, it will show a partial map.`;
   }
-  return `Your current plan can scan up to ${allowed} pages for this run. Upgrade for more pages, or continue with that limit.`;
-}
-
-function getScanLimitPromptActionCopy(prompt = null) {
-  const allowed = formatEntitlementCount(prompt?.allowedPages || prompt?.remaining || 0);
-  return `Vellic will start scanning after you continue and stop when the ${allowed}-page limit is reached.`;
-}
-
-function getScanLimitPromptTitle(prompt = null) {
-  if (!prompt) return 'Scan limit reached';
-  if (prompt.mode === 'guest' || String(prompt.planName || '').toLowerCase() === 'free') {
-    return 'Free scan preview';
-  }
-  return 'Scan limit reached';
-}
-
-function getScanLimitContinueLabel() {
-  return 'Continue';
+  return `This scan can include up to ${allowed} pages on your current plan. If Vellic finds more, it will show a partial map.`;
 }
 
 function shouldShowScanLimitPreview(entitlement = null) {
@@ -2600,9 +2583,7 @@ export const __testing = {
   scanConfigsHaveOptionChanges,
   addScanLimitGhosts,
   getScanLimitGhostCounts,
-  getScanLimitPromptSubtitle,
-  getScanLimitPromptTitle,
-  getScanLimitContinueLabel,
+  getScanLimitProgressNote,
   shouldShowScanLimitPreview,
   canRescanEntitlementLimitedMap,
   getVisibleScanAllowanceForEntitlements,
@@ -2766,6 +2747,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
   const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
+  const [scanLimitProgressNote, setScanLimitProgressNote] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [isStoppingScan, setIsStoppingScan] = useState(false);
@@ -2896,7 +2878,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
   const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
   const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
-  const [scanLimitPrompt, setScanLimitPrompt] = useState(null);
   const [entitlementLockModal, setEntitlementLockModal] = useState(null);
   const [plansModal, setPlansModal] = useState(null);
   const [billingCatalog, setBillingCatalog] = useState(null);
@@ -3049,7 +3030,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const pendingAuthScanRef = useRef(null);
   const handledScanIntentKeyRef = useRef('');
   const scanRef = useRef(null);
-  const scanLimitPromptResolveRef = useRef(null);
   const scanTimerRef = useRef(null);
   const messageTimerRef = useRef(null);
   const contentRef = useRef(null);
@@ -4216,18 +4196,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       meter,
     };
   }, [currentUser, isLoggedIn]);
-
-  const resolveScanLimitPrompt = useCallback((choice) => {
-    const resolver = scanLimitPromptResolveRef.current;
-    scanLimitPromptResolveRef.current = null;
-    setScanLimitPrompt(null);
-    if (resolver) resolver(choice);
-  }, []);
-
-  const showScanLimitChoice = useCallback((preview) => new Promise((resolve) => {
-    scanLimitPromptResolveRef.current = resolve;
-    setScanLimitPrompt(preview);
-  }), []);
 
   const getScreenshotCreditCostForType = useCallback((captureType) => {
     const costs = currentUser?.entitlements?.screenshotCreditCosts || {};
@@ -11141,6 +11109,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (clearProgress) {
       setScanProgress({ scanned: 0, queued: 0 });
     }
+    setScanLimitProgressNote('');
     if (clearError) {
       setScanErrorMessage('');
     }
@@ -11156,6 +11125,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowStopConfirm(false);
     setIsStoppingScan(false);
     setScanProgress({ scanned: 0, queued: 0 });
+    setScanLimitProgressNote('');
     setScanErrorMessage(message || 'Scan failed');
   };
 
@@ -11261,35 +11231,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     const maxPagesForRequest = requestedPages;
-    if (scanEntitlementPreview.capped) {
-      if (!authFlow.skipScanLimitPrompt) {
-        const choice = await showScanLimitChoice(scanEntitlementPreview);
-        if (choice === 'sign-up' || choice === 'sign-in') {
-          setUrlInput(url);
-          pendingAuthScanRef.current = {
-            url,
-            preserveName,
-            authFlow,
-          };
-          openAuthModal({
-            contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
-            postSuccessAction: 'start-scan',
-            initialView: choice === 'sign-up' ? 'signup' : 'login',
-          });
-          return;
-        }
-        if (choice === 'view-plan' || choice === 'buy-pack') {
-          openPlansModal(choice);
-          return;
-        }
-        if (choice === 'reduce-scope') {
-          setShowScanOptions(true);
-          showToast('Adjust scan options, then run the scan again.', 'info');
-          return;
-        }
-        if (choice !== 'continue') return;
-      }
-    }
 
     if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
       try {
@@ -11318,6 +11259,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowStopConfirm(false);
     setIsStoppingScan(false);
     setScanErrorMessage('');
+    setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
     setShowScanOptions(false);
     setMapInsights(null);
     setInsightsError('');
@@ -14341,13 +14283,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       setPromptModal(null);
       setPlansModal(null);
       setScanAuthPrompt(null);
-      setScanLimitPrompt(null);
       setEntitlementLockModal(null);
       setScreenshotDownloadUpsell(null);
       setShowCancelConfirm(false);
       setShowStopConfirm(false);
       setIsStoppingScan(false);
       setScanErrorMessage('');
+      setScanLimitProgressNote('');
       setShowMinimap(false);
       setSelectedNodeIds(new Set());
       setLayers({ ...DEFAULT_CAPTURE_LAYERS });
@@ -14369,11 +14311,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       cancelConfirm = false,
       stopConfirm = false,
       errorMessage = '',
+      limitNote = '',
     } = {}) => {
       clearCaptureModals();
       setUrlInput(currentMap?.url || root?.url || 'https://example.com');
       setLoading(!errorMessage);
       setScanErrorMessage(errorMessage);
+      setScanLimitProgressNote(limitNote);
       setScanMessage('Scanning site structure...');
       setScanProgress({ scanned: 9, queued: 14 });
       setScanElapsed(92);
@@ -14653,14 +14597,15 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     if (figmaCaptureState === 'scan-limit-modal') {
       appliedFigmaCaptureStateRef.current = figmaCaptureKey;
-      closeCompetingPanels();
-      setScanLimitPrompt({
-        mode: 'guest',
-        requestedPages: 60,
-        allowedPages: 15,
-        remaining: 15,
-        capped: true,
-        capReason: 'guest_limit',
+      applyScanProgressState({
+        limitNote: getScanLimitProgressNote({
+          mode: 'guest',
+          requestedPages: 60,
+          allowedPages: 15,
+          remaining: 15,
+          capped: true,
+          capReason: 'guest_limit',
+        }),
       });
       return;
     }
@@ -18361,6 +18306,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanErrorMessage={scanErrorMessage}
         scanMessage={scanMessage}
         scanProgress={scanProgress}
+        scanLimitNote={scanLimitProgressNote}
         scanElapsed={scanElapsed}
         urlInput={urlInput}
         onRequestCancel={requestCancelScan}
@@ -18370,53 +18316,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         onContinueScan={dismissScanConfirm}
         onDismissScanError={dismissScanError}
       />
-
-      {scanLimitPrompt && (
-        <Modal
-          show
-          onClose={() => resolveScanLimitPrompt('cancel')}
-          title={getScanLimitPromptTitle(scanLimitPrompt)}
-          subtitle={getScanLimitPromptSubtitle(scanLimitPrompt)}
-          className="scan-limit-modal"
-          footer={(
-            <>
-              <Button
-                variant="ghost"
-                onClick={() => resolveScanLimitPrompt('cancel')}
-              >
-                Cancel
-              </Button>
-              {scanLimitPrompt.mode === 'guest' ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => resolveScanLimitPrompt('sign-in')}
-                >
-                  Sign in
-                </Button>
-              ) : null}
-              <Button
-                variant="secondary"
-                onClick={() => resolveScanLimitPrompt('view-plan')}
-              >
-                Upgrade
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => resolveScanLimitPrompt('continue')}
-              >
-                {getScanLimitContinueLabel(scanLimitPrompt)}
-              </Button>
-            </>
-          )}
-        >
-          <div className="scan-limit-modal-body">
-            <div className="scan-limit-action-copy">
-              <span>Before scanning</span>
-              <p>{getScanLimitPromptActionCopy(scanLimitPrompt)}</p>
-            </div>
-          </div>
-        </Modal>
-      )}
 
       {entitlementLockModal && (
         <Modal

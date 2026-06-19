@@ -12,6 +12,7 @@ const ScanProgressModal = ({
   scanErrorMessage,
   scanMessage,
   scanProgress,
+  scanLimitNote,
   scanElapsed,
   urlInput,
   onRequestStop,
@@ -88,6 +89,9 @@ const ScanProgressModal = ({
               </div>
             )}
           </div>
+          {scanLimitNote ? (
+            <p className="scan-limit-note">{scanLimitNote}</p>
+          ) : null}
         </div>
       </>
     );

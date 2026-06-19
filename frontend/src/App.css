@@ -12156,7 +12156,7 @@ body {
   font-size: 12px;
   line-height: 1.45;
   color: var(--color-text-secondary);
-  margin: -6px 0 12px;
+  margin: 14px 0 0;
 }
 
 .scan-actions {
