@@ -79,6 +79,7 @@ describe('App blank home and welcome modal', () => {
   const getProjectsDrawer = () => container.querySelector('.projects-drawer');
   const getSaveMapModal = () => container.querySelector('.save-map-modal');
   const getDontShowAgainCheckbox = () => container.querySelector('.welcome-modal-checkbox input[type="checkbox"]');
+  const getWelcomeCloseButton = () => container.querySelector('.welcome-modal button[aria-label="Close welcome modal"]');
   const getButton = (label) => Array.from(container.querySelectorAll('button')).find(
     (button) => button.textContent.trim() === label
   );
@@ -195,7 +196,7 @@ describe('App blank home and welcome modal', () => {
     await renderApp();
 
     expect(getWelcomeModal()).not.toBeNull();
-    expect(container.textContent).toContain('Welcome to Vellic');
+    expect(container.textContent).not.toContain('Welcome to Vellic');
     expect(container.textContent).toContain('planning and auditing');
     expect(container.textContent).toContain('IA, content, UX, product, and development');
     expect(container.textContent).not.toContain('development work');
@@ -203,7 +204,11 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).toContain('Import or create');
     expect(container.textContent).toContain('build a map from scratch');
     expect(container.textContent).toContain('Review and share');
-    expect(container.querySelector('.welcome-modal .modal-header h3')?.textContent).toBe('Welcome to Vellic');
+    expect(container.querySelector('.welcome-modal .modal-header h3 .welcome-modal-logo[aria-label="Vellic"]')).not.toBeNull();
+    expect(container.querySelector('.welcome-modal .modal-body .welcome-modal-logo')).toBeNull();
+    expect(container.querySelector('.welcome-modal .modal-subtitle')).toBeNull();
+    expect(getWelcomeCloseButton()).not.toBeNull();
+    expect(getButton('Close')).toBeUndefined();
     expect(container.querySelector('.welcome-modal-copy h2')).toBeNull();
   });
 
@@ -212,7 +217,7 @@ describe('App blank home and welcome modal', () => {
 
     await renderApp();
 
-    expect(container.textContent).toContain('Map a site from one of these');
+    expect(container.textContent).toContain('Start from one of these');
     expect(container.querySelector('.canvas.app-home')).not.toBeNull();
     expect(container.querySelector('.topbar.topbar--floating.topbar--app-home')).not.toBeNull();
     expect(container.querySelector('.blank-title')?.tagName).toBe('H1');
@@ -309,12 +314,12 @@ describe('App blank home and welcome modal', () => {
     expect(getDontShowAgainCheckbox().disabled).toBe(true);
   });
 
-  test('checking the box and clicking Close persists dismissal for logged-in users', async () => {
+  test('checking the box and clicking the header close icon persists dismissal for logged-in users', async () => {
     api.getMe.mockResolvedValue({ user: defaultUser });
     await renderApp();
 
     await click(getDontShowAgainCheckbox());
-    await click(getButton('Close'));
+    await click(getWelcomeCloseButton());
 
     expect(window.localStorage.getItem(WELCOME_MODAL_STORAGE_KEY)).toBe('true');
     expect(getWelcomeModal()).toBeNull();
@@ -334,7 +339,7 @@ describe('App blank home and welcome modal', () => {
   test('leaving the box unchecked does not persist dismissal', async () => {
     await renderApp();
 
-    await click(getButton('Close'));
+    await click(getWelcomeCloseButton());
 
     expect(window.localStorage.getItem(WELCOME_MODAL_STORAGE_KEY)).toBeNull();
     expect(getWelcomeModal()).toBeNull();
@@ -381,10 +386,10 @@ describe('App blank home and welcome modal', () => {
     await renderApp();
 
     await click(getDontShowAgainCheckbox());
-    await click(getButton('Close'));
+    await click(getWelcomeCloseButton());
 
     expect(setItemSpy).toHaveBeenCalled();
     expect(getWelcomeModal()).toBeNull();
-    expect(container.textContent).toContain('Map a site from one of these');
+    expect(container.textContent).toContain('Start from one of these');
   });
 });

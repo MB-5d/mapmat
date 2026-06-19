@@ -52,8 +52,9 @@ const WelcomeModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title={`Welcome to ${APP_BRAND_NAME}`}
-      subtitle="Start with a URL, import a sitemap, or build a map from scratch."
+      title={<VellicLogo className="welcome-modal-logo" title={APP_BRAND_NAME} />}
+      titleId="welcome-modal-title"
+      closeLabel="Close welcome modal"
       size="md"
       scrollable
       className="welcome-modal"
@@ -67,9 +68,6 @@ const WelcomeModal = ({
             label="Don't show this again on this browser"
           />
           <div className="welcome-modal-actions">
-            <Button variant="secondary" onClick={onClose}>
-              Close
-            </Button>
             <Button variant="primary" onClick={onConfirm}>
               Okay
             </Button>
@@ -77,10 +75,6 @@ const WelcomeModal = ({
         </div>
       )}
     >
-      <div className="welcome-modal-logo-wrap">
-        <VellicLogo className="welcome-modal-logo" title={APP_BRAND_NAME} />
-      </div>
-
       <div className="welcome-modal-copy">
         <p className="welcome-modal-lead">
           Vellic turns site structure into a shared map for planning and auditing

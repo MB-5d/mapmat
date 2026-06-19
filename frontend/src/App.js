@@ -16959,7 +16959,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           <div className={`blank ${isDefaultWorkspaceScanModalVisible ? 'blank--scan-active' : ''}`}>
             <div className="blank-shell" aria-hidden={isDefaultWorkspaceScanModalVisible ? 'true' : undefined}>
               <div className="blank-heading">
-                <h1 className="blank-title">Map a site from one of these</h1>
+                <h1 className="blank-title">Start from one of these</h1>
               </div>
               <div className="blank-scan-primary">
                 <div className="search-container scan-bar-shell blank-scan-shell">

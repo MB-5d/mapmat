@@ -19,11 +19,11 @@
 - If a merge, rebase, commit, or push could affect another chat's progress, ask the user first.
 
 ## MapMat Publish Workflow
-- For `push to staging` tasks, inspect scope first with `git status --short --branch`, `git rev-list --left-right --count HEAD...origin/staging`, and `git log --oneline origin/staging..HEAD`.
+- For `push to staging` tasks, inspect scope first with `git status --short --branch`, `git fetch origin staging`, `git rev-list --left-right --count HEAD...origin/staging`, and `git log --oneline origin/staging..HEAD`.
 - Treat `push everything to staging` as publish-all-pending-work. Treat a terse follow-up `push to staging` after a validated fix as ship-the-scoped-fix only.
 - If the main checkout is dirty and only a scoped subset should ship, use a clean worktree based on `origin/staging` instead of forcing a mixed-worktree push.
 - Before committing, use `git diff --name-only` for scope checks and `git diff --cached --check` before the final push.
-- Final publish check: confirm divergence is resolved and re-run `git status --short --branch`.
+- Final publish check: `git rev-list --left-right --count HEAD...origin/staging` should return `0 0`, then re-run `git status --short --branch`.
 
 ## Validation Commands
 - Backend syntax and boundary checks: `npm run check:backend`
@@ -33,16 +33,18 @@
 - Staging runtime verification: `npm run verify:runtime:staging`
 - Production runtime verification: `npm run verify:runtime:production`
 - Full runtime verification across staging and production: `npm run verify:runtime:all`
-- Staging realtime verification: `npm run verify:realtime:staging:preflight`
-- Production realtime verification: `npm run verify:realtime:production:preflight`
+- Staging realtime health verification: `npm run verify:realtime:staging`
+- Production realtime health verification: `npm run verify:realtime:production`
 
 ## Realtime Rollout Checks
 - `npm run verify:realtime:rollout-state` requires `COEDITING_STAGING_ADMIN_KEY` and `COEDITING_PRODUCTION_ADMIN_KEY` in the local terminal.
 - `npm run verify:realtime:*:preflight` requires `COEDITING_ADMIN_KEY` plus the exact target rollout variables, including `COEDITING_PREFLIGHT_CHANGE_TYPE`.
 - Before scope or broad-rollout changes, compare staging vs production policy with `npm run verify:realtime:rollout-state`.
 - For staged canary rollout checks, run `npm run verify:realtime:staging:canary` and `npm run verify:realtime:staging:canary:window`.
+- For production canary rollout checks, run `npm run verify:realtime:production:canary` and `npm run verify:realtime:production:canary:window`.
 - For cross-environment canary checks, run `npm run verify:realtime:all:canary` and `npm run verify:realtime:all:canary:window`.
 - Only when a broad rollout is explicitly intended, run `npm run verify:realtime:staging:broad` and `npm run verify:realtime:staging:broad:window`.
+- Only when a broad rollout is explicitly intended, run `npm run verify:realtime:production:broad` and `npm run verify:realtime:production:broad:window`.
 - For cross-environment broad rollout checks, run `npm run verify:realtime:all:broad` and `npm run verify:realtime:all:broad:window`.
 
 ## Automation Worktrees

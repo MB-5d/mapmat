@@ -2610,8 +2610,7 @@ body {
 }
 
 .canvas-map-pill,
-.topbar-account-trigger,
-.topbar-login-btn {
+.topbar-account-trigger {
   display: inline-flex;
   align-items: center;
   min-height: 40px;
@@ -8011,10 +8010,10 @@ body {
   gap: var(--unit-20);
 }
 
-.welcome-modal-logo-wrap {
+.welcome-modal .modal-header h3 {
   display: flex;
-  justify-content: flex-start;
-  margin-bottom: calc(var(--space-xs) * -1);
+  align-items: center;
+  line-height: 0;
 }
 
 .welcome-modal-logo {
@@ -10495,17 +10494,7 @@ body {
   color: var(--ui-color-muted);
 }
 
-.topbar-login-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 12px;
-  color: var(--ui-color-text);
-}
-
-.topbar-account-trigger:hover,
-.topbar-login-btn:hover {
+.topbar-account-trigger:hover {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);
@@ -12532,8 +12521,7 @@ body {
 
 [data-theme="dark"] .canvas-map-pill,
 [data-theme="dark"] .topbar--app-home .brand,
-[data-theme="dark"] .topbar-account-trigger,
-[data-theme="dark"] .topbar-login-btn {
+[data-theme="dark"] .topbar-account-trigger {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);
@@ -12551,8 +12539,7 @@ body {
   border-color: var(--color-brand-300);
 }
 
-[data-theme="dark"] .topbar-account-trigger:hover,
-[data-theme="dark"] .topbar-login-btn:hover {
+[data-theme="dark"] .topbar-account-trigger:hover {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);
@@ -13495,12 +13482,6 @@ body {
 
 [data-theme="dark"] .account-menu-logout {
   color: inherit;
-}
-
-[data-theme="dark"] .topbar-login-btn {
-  background: var(--ui-color-surface);
-  border-color: var(--ui-color-border);
-  color: var(--ui-color-text);
 }
 
 [data-theme="dark"] .history-select-all {

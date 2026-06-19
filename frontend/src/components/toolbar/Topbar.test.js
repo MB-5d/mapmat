@@ -110,6 +110,31 @@ describe('Topbar', () => {
     expect(container.querySelectorAll('.account-menu-item-badge')).toHaveLength(2);
   });
 
+  test('uses a primary brand login button when logged out', () => {
+    const auth = renderTopbar({ isLoggedIn: false });
+
+    const loginButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Log In')
+    );
+
+    expect(loginButton).not.toBeNull();
+    expect(loginButton.className).toContain('ui-btn');
+    expect(loginButton.className).toContain('ui-btn--type-primary');
+    expect(loginButton.className).toContain('ui-btn--style-brand');
+    expect(loginButton.className).toContain('ui-btn--md');
+    expect(loginButton.className).toContain('topbar-login-btn');
+    expect(loginButton.className).not.toContain('ui-btn--type-ghost');
+    expect(loginButton.className).not.toContain('ui-btn--style-mono');
+    expect(container.querySelector('.topbar-account-trigger')).toBeNull();
+    expect(appCss).not.toContain('.topbar-login-btn');
+
+    act(() => {
+      loginButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(auth.onLogin).toHaveBeenCalledTimes(1);
+  });
+
   test('keeps the account trigger bubble filled instead of transparent', () => {
     const baseRule = appCss.match(/\.topbar-account-trigger\.ui-btn\s*{([^}]+)}/)?.[1] || '';
     const hoverRule = appCss.match(/\.topbar-account-trigger\.ui-btn:hover:not\(:disabled\),\s*\.topbar-account-trigger\.ui-btn\[aria-expanded="true"\]\s*{([^}]+)}/)?.[1] || '';

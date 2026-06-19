@@ -294,8 +294,8 @@ const Topbar = ({
         ) : (
           <Button
             className="topbar-login-btn"
-            type="ghost"
-            buttonStyle="mono"
+            type="primary"
+            buttonStyle="brand"
             size="md"
             title="Log In"
             onClick={onLogin}
