@@ -146,6 +146,11 @@ async function waitForScanJob(jobId, accessToken) {
   throw new Error('Timed out waiting for scan job to complete');
 }
 
+async function assertScanJobRequiresAccessToken(jobId) {
+  const response = await fetch(`${API_BASE}/scan-jobs/${jobId}`);
+  assert.strictEqual(response.status, 403, 'anonymous scan job should require its access token');
+}
+
 async function runScanJob(payload) {
   const created = await fetchJson(`${API_BASE}/scan-jobs`, {
     method: 'POST',
@@ -154,6 +159,7 @@ async function runScanJob(payload) {
   if (!created?.jobId || !created?.jobAccessToken) {
     throw new Error('Scan job creation did not return jobId and access token');
   }
+  await assertScanJobRequiresAccessToken(created.jobId);
   return waitForScanJob(created.jobId, created.jobAccessToken);
 }
 

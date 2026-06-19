@@ -22,6 +22,8 @@ import {
 } from '../../utils/feedback';
 import { ROUTE_SURFACES } from '../../utils/appRoutes';
 
+const FIGMA_CAPTURE_TOOLS_ENABLED = process.env.NODE_ENV !== 'production';
+
 const INTENT_OPTIONS = [
   { value: 'broken', label: 'Broken' },
   { value: 'confusing', label: 'Confusing' },
@@ -73,7 +75,7 @@ export default function FeedbackWidget({
   const selectedElementRef = useRef(null);
   const isVisible = currentRoute?.surface === ROUTE_SURFACES.APP;
   const figmaFeedbackAppliedRef = useRef('');
-  const isLocalFigmaCaptureHost = typeof window !== 'undefined' && (
+  const isLocalFigmaCaptureHost = FIGMA_CAPTURE_TOOLS_ENABLED && typeof window !== 'undefined' && (
     window.location.hostname === 'localhost'
     || window.location.hostname === '127.0.0.1'
     || window.location.hostname === '0.0.0.0'

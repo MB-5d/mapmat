@@ -981,6 +981,7 @@ const THEME_STORAGE_KEY = 'vellic-theme';
 const LEGACY_THEME_STORAGE_KEY = 'mapmat-theme';
 export const WELCOME_MODAL_STORAGE_KEY = 'vellic:welcome-modal-hidden:v1';
 const LEGACY_WELCOME_MODAL_STORAGE_KEY = 'mapmat:welcome-modal-hidden:v1';
+const FIGMA_CAPTURE_TOOLS_ENABLED = process.env.NODE_ENV !== 'production';
 const FIGMA_CAPTURE_THEME_OPTIONS = new Set(['light', 'dark']);
 
 const normalizeFigmaCaptureTheme = (value) => {
@@ -989,6 +990,7 @@ const normalizeFigmaCaptureTheme = (value) => {
 };
 
 const readInitialFigmaCaptureTheme = (route) => {
+  if (!FIGMA_CAPTURE_TOOLS_ENABLED) return '';
   if (typeof window === 'undefined') return '';
   const host = window.location.hostname;
   const isLocalHost = host === 'localhost'
@@ -2812,7 +2814,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handledTrialIntentKeyRef = useRef('');
   const handledSignupIntentKeyRef = useRef('');
   const appliedFigmaCaptureStateRef = useRef('');
-  const isLocalFigmaCaptureHost = typeof window !== 'undefined' && (
+  const isLocalFigmaCaptureHost = FIGMA_CAPTURE_TOOLS_ENABLED && typeof window !== 'undefined' && (
     window.location.hostname === 'localhost'
     || window.location.hostname === '127.0.0.1'
     || window.location.hostname === '0.0.0.0'
@@ -4885,17 +4887,26 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canOpenShareModalValue = canEditValue || canSelfServeCollaborationValue;
 
   // Permission helper functions
-  const canEdit = () => canEditValue;
-  const canComment = () => canCommentValue;
-  const canViewComments = () => canViewCommentsValue;
-  const canViewVersionHistory = () => canViewVersionHistoryValue;
-  const canSaveVersion = () => canSaveVersionValue;
-  const canViewActivity = () => canViewActivityValue;
-  const canManageShares = () => canManageSharesValue;
-  const canViewCollaborationPanel = () => canViewCollaborationPanelValue;
-  const canSendCollaborationInvites = () => canSendCollaborationInvitesResolvedValue;
-  const canManageCollaborationSettings = () => canManageCollaborationSettingsResolvedValue;
-  const canViewAccessRequests = () => canViewAccessRequestsResolvedValue;
+  const canEdit = useCallback(() => canEditValue, [canEditValue]);
+  const canComment = useCallback(() => canCommentValue, [canCommentValue]);
+  const canViewComments = useCallback(() => canViewCommentsValue, [canViewCommentsValue]);
+  const canViewVersionHistory = useCallback(() => canViewVersionHistoryValue, [canViewVersionHistoryValue]);
+  const canSaveVersion = useCallback(() => canSaveVersionValue, [canSaveVersionValue]);
+  const canViewActivity = useCallback(() => canViewActivityValue, [canViewActivityValue]);
+  const canManageShares = useCallback(() => canManageSharesValue, [canManageSharesValue]);
+  const canViewCollaborationPanel = useCallback(() => canViewCollaborationPanelValue, [canViewCollaborationPanelValue]);
+  const canSendCollaborationInvites = useCallback(
+    () => canSendCollaborationInvitesResolvedValue,
+    [canSendCollaborationInvitesResolvedValue],
+  );
+  const canManageCollaborationSettings = useCallback(
+    () => canManageCollaborationSettingsResolvedValue,
+    [canManageCollaborationSettingsResolvedValue],
+  );
+  const canViewAccessRequests = useCallback(
+    () => canViewAccessRequestsResolvedValue,
+    [canViewAccessRequestsResolvedValue],
+  );
 
   useEffect(() => {
     if (!collaborationInviteRoleOptionsValue.length) return;
@@ -12429,7 +12440,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     submitLiveDraft,
   ]);
 
-  const handleUndo = () => {
+  const handleUndo = useCallback(() => {
     if (isCollaborativeLiveEditingRestricted) {
       warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
@@ -12464,9 +12475,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (parsed.connectionColors !== undefined) {
       setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
     }
-  };
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    isCollaborativeLiveEditingRestricted,
+    liveUndoRedoDisabledReason,
+    orphans,
+    root,
+    undoStack,
+    warnLiveModeUnsupported,
+  ]);
 
-  const handleRedo = () => {
+  const handleRedo = useCallback(() => {
     if (isCollaborativeLiveEditingRestricted) {
       warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
@@ -12501,7 +12522,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (parsed.connectionColors !== undefined) {
       setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
     }
-  };
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    isCollaborativeLiveEditingRestricted,
+    liveUndoRedoDisabledReason,
+    orphans,
+    redoStack,
+    root,
+    warnLiveModeUnsupported,
+  ]);
 
   const canUndo = undoStack.length > 0;
   const canRedo = redoStack.length > 0;
@@ -14782,6 +14813,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       closeCompetingPanels();
       setToast({ message: 'Preparing image download...', type: 'loading', persistent: true });
     }
+  // Local-only Figma capture states are guarded by figmaCaptureKey; action
+  // callbacks are intentionally read only when a new capture state is applied.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     authLoading,
     connections,

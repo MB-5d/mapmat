@@ -22,6 +22,8 @@ import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from '../ui/Menu'
 import { useAuth } from '../../contexts/AuthContext';
 import { APP_BRAND_NAME } from '../../utils/constants';
 
+const FIGMA_CAPTURE_TOOLS_ENABLED = process.env.NODE_ENV !== 'production';
+
 const Topbar = ({
   canEdit,
   urlInput,
@@ -66,7 +68,7 @@ const Topbar = ({
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
   const figmaAccountMenuAppliedRef = useRef('');
-  const isLocalFigmaCaptureHost = typeof window !== 'undefined' && (
+  const isLocalFigmaCaptureHost = FIGMA_CAPTURE_TOOLS_ENABLED && typeof window !== 'undefined' && (
     window.location.hostname === 'localhost'
     || window.location.hostname === '127.0.0.1'
     || window.location.hostname === '0.0.0.0'

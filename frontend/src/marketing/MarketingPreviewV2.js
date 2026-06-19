@@ -731,6 +731,7 @@ const defaultOpenApp = (url) => {
 
 const MARKETING_V2_HEADER_FALLBACK_BOTTOM = 84;
 const MARKETING_V2_SECTION_GAP = 80;
+const FIGMA_CAPTURE_TOOLS_ENABLED = process.env.NODE_ENV !== 'production';
 
 function isPlainLeftClick(event) {
   return event.button === 0 && !event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey;
@@ -1430,7 +1431,7 @@ function ContactFormModal({
 function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp }) {
   const activeSection = getMarketingPreviewV2SectionById(route.marketingPageId || route.section || 'home');
   const isFigmaCaptureMode = useMemo(() => (
-    typeof window !== 'undefined' && window.location.hash.includes('figmacapture=')
+    FIGMA_CAPTURE_TOOLS_ENABLED && typeof window !== 'undefined' && window.location.hash.includes('figmacapture=')
   ), []);
   const [activeNavSectionId, setActiveNavSectionId] = useState(activeSection.id);
   const [activeComparisonGroupId, setActiveComparisonGroupId] = useState(comparisonGroups[0].id);
