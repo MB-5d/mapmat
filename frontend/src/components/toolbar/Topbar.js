@@ -39,6 +39,7 @@ const Topbar = ({
   scanLabel,
   scanDisabled,
   scanTitle,
+  scanControlsDisabled,
   optionsDisabled,
   onClearUrl,
   showClearUrl,
@@ -150,6 +151,7 @@ const Topbar = ({
               scanLabel={scanLabel}
               scanDisabled={scanDisabled}
               scanTitle={scanTitle}
+              controlsDisabled={scanControlsDisabled}
               optionsDisabled={optionsDisabled}
               onClearUrl={onClearUrl}
               showClearUrl={showClearUrl}

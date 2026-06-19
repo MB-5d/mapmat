@@ -3038,6 +3038,13 @@ body {
   gap: 0;
   transform: translateY(-32px);
   pointer-events: auto;
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+
+.blank--scan-active .blank-shell {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .blank-heading {
@@ -3295,6 +3302,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .blank-shell,
   .blank-card {
     transition: none;
   }

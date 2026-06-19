@@ -183,7 +183,9 @@ describe('UI design-system contract', () => {
   });
 
   test('top scan bar is limited to unsaved scans and supports clear/update states', () => {
-    expect(appJs).toContain('showScanBar={isUnsavedScannedMap');
+    expect(appJs).toContain('const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);');
+    expect(appJs).toContain('isDefaultWorkspaceScanModalVisible');
+    expect(appJs).toContain('|| (isUnsavedScannedMap && !!root?.url)');
     expect(appJs).toContain("scanLabel={canTopbarRescan ? 'Update' : 'Scan'}");
     expect(appJs).toContain('showClearUrl={!!urlInput.trim()}');
     expect(appJs).toContain('scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig)');

@@ -139,4 +139,26 @@ describe('ScanBar', () => {
     scanButton.click();
     expect(onScan).not.toHaveBeenCalled();
   });
+
+  test('disables all controls when the scan bar is displayed behind progress', () => {
+    renderScanBar({
+      controlsDisabled: true,
+      showClearUrl: true,
+      showOptions: false,
+    });
+
+    const urlInput = container.querySelector('.search-container input:not([type="checkbox"])');
+    const scanButton = getScanButton();
+    const optionsButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Options')
+    );
+    const clearButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.getAttribute('aria-label') === 'Clear URL'
+    );
+
+    expect(urlInput.disabled).toBe(true);
+    expect(scanButton.disabled).toBe(true);
+    expect(optionsButton.disabled).toBe(true);
+    expect(clearButton.disabled).toBe(true);
+  });
 });

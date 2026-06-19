@@ -11318,6 +11318,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowStopConfirm(false);
     setIsStoppingScan(false);
     setScanErrorMessage('');
+    setShowScanOptions(false);
     setMapInsights(null);
     setInsightsError('');
     setLastHistoryId(null);
@@ -16616,6 +16617,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const showAppHomeGrid = !hasMap
     && currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'home';
+  const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);
+  const showTopbarScanBar = !showInviteAcceptGate
+    && !showMapAccessGate
+    && (
+      isDefaultWorkspaceScanModalVisible
+      || (isUnsavedScannedMap && !!root?.url)
+    );
 
   const renderCompletedConnection = (conn) => {
     const path = generateConnectionPath(conn);
@@ -16793,7 +16801,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
-        showScanBar={isUnsavedScannedMap && !!root?.url && !showInviteAcceptGate && !showMapAccessGate}
+        showScanBar={showTopbarScanBar}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
         scanOptionsRef={scanOptionsRef}
@@ -16804,9 +16812,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
         onScan={scan}
         scanLabel={canTopbarRescan ? 'Update' : 'Scan'}
-        scanDisabled={loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !canTopbarRescan)}
-        scanTitle={scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasEntitlementRescanUpgrade ? "Rescan with current plan limits" : hasTopbarRescanChanges ? "Update scan with changed options" : "Change scan options to update"}
-        optionsDisabled={isImportedMap || (hasMap && !!currentMap?.id)}
+        scanDisabled={isDefaultWorkspaceScanModalVisible || loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput) || (isUnsavedScannedMap && !canTopbarRescan)}
+        scanTitle={isDefaultWorkspaceScanModalVisible ? 'Scan in progress' : scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : hasEntitlementRescanUpgrade ? "Rescan with current plan limits" : hasTopbarRescanChanges ? "Update scan with changed options" : "Change scan options to update"}
+        scanControlsDisabled={isDefaultWorkspaceScanModalVisible || loading}
+        optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap || (hasMap && !!currentMap?.id)}
         onClearUrl={() => setUrlInput('')}
         showClearUrl={!!urlInput.trim()}
         mapName={mapName}
@@ -16946,8 +16955,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         )}
 
         {!hasMap && (
-          <div className="blank">
-            <div className="blank-shell">
+          <div className={`blank ${isDefaultWorkspaceScanModalVisible ? 'blank--scan-active' : ''}`}>
+            <div className="blank-shell" aria-hidden={isDefaultWorkspaceScanModalVisible ? 'true' : undefined}>
               <div className="blank-heading">
                 <h1 className="blank-title">Map a site from one of these</h1>
               </div>
@@ -16968,9 +16977,10 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onToggleScanLayer={(key) => setScanLayerVisibility(prev => ({ ...prev, [key]: !prev[key] }))}
                     onScan={scan}
                     scanLabel="Scan"
-                    scanDisabled={loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput)}
-                    scanTitle={scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
-                    optionsDisabled={isImportedMap}
+                    scanDisabled={isDefaultWorkspaceScanModalVisible || loading || scanLockedByArchive || isImportedMap || !sanitizeUrl(urlInput)}
+                    scanTitle={isDefaultWorkspaceScanModalVisible ? 'Scan in progress' : scanLockedByArchive ? archiveScanTitle : isImportedMap ? "Cannot scan imported maps" : !sanitizeUrl(urlInput) ? "Enter a valid URL to scan" : "Scan URL"}
+                    controlsDisabled={isDefaultWorkspaceScanModalVisible || loading}
+                    optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap}
                     onClearUrl={() => setUrlInput('')}
                     showClearUrl={!!urlInput.trim()}
                     sharedTitle={root?.title || 'Shared Sitemap'}
@@ -16984,6 +16994,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   type="button"
                   className="blank-card"
                   onClick={() => openCreateMapFlow()}
+                  disabled={isDefaultWorkspaceScanModalVisible}
                 >
                   <div className="blank-card-illustration blank-card-illustration-create" aria-hidden="true">
                     <img src={createIllustration} alt="" className="blank-card-art blank-card-art-light" />
@@ -17002,7 +17013,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   onDrop={handleImportDrop}
                   onDragOver={handleImportDragOver}
                   onDragLeave={handleImportDragLeave}
-                  disabled={importLoading}
+                  disabled={isDefaultWorkspaceScanModalVisible || importLoading}
                 >
                   <div className="blank-card-illustration blank-card-illustration-upload" aria-hidden="true">
                     {importLoading ? (
@@ -17032,6 +17043,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 <button
                   type="button"
                   className="blank-card"
+                  disabled={isDefaultWorkspaceScanModalVisible}
                   onClick={() => {
                     if (currentUser) {
                       openProjectsPanel();
@@ -17059,7 +17071,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 type="file"
                 accept=".xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
                 onChange={handleFileImport}
-                disabled={importLoading}
+                disabled={isDefaultWorkspaceScanModalVisible || importLoading}
               />
             </div>
           </div>

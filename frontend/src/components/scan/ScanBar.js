@@ -26,6 +26,7 @@ const ScanBar = ({
   scanLabel = 'Scan',
   scanDisabled,
   scanTitle,
+  controlsDisabled = false,
   placeholder = 'https://example.com',
   sharedTitle,
   optionsDisabled,
@@ -55,6 +56,7 @@ const ScanBar = ({
         onBlur={(e) => { if (!urlInput) e.target.placeholder = inputPlaceholder; }}
         placeholder={inputPlaceholder}
         spellCheck={false}
+        disabled={controlsDisabled}
       />
       {showClearUrl && (
         <IconButton
@@ -66,6 +68,7 @@ const ScanBar = ({
           type="button"
           onClick={onClearUrl}
           title="Clear URL"
+          disabled={controlsDisabled}
         />
       )}
 
@@ -78,6 +81,7 @@ const ScanBar = ({
           onClick={onToggleOptions}
           title="Scan options"
           type="button"
+          disabled={controlsDisabled}
         >
           Options
         </Button>
@@ -90,14 +94,14 @@ const ScanBar = ({
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.subdomains}
                   onChange={() => onOptionChange('subdomains')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Subdomains"
                 />
                 <CheckboxField
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.orphanPages}
                   onChange={() => onOptionChange('orphanPages')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Orphan Pages"
                 />
               </div>
@@ -107,21 +111,21 @@ const ScanBar = ({
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.inactivePages}
                   onChange={() => onOptionChange('inactivePages')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Inactive pages"
                 />
                 <CheckboxField
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.errorPages}
                   onChange={() => onOptionChange('errorPages')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Error pages"
                 />
                 <CheckboxField
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.duplicates}
                   onChange={() => onOptionChange('duplicates')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Duplicates"
                 />
                 {AUTHENTICATED_SCAN_ENABLED ? (
@@ -129,7 +133,7 @@ const ScanBar = ({
                     className="layers-panel-item scan-options-checkbox"
                     checked={options.authenticatedPages}
                     onChange={() => onOptionChange('authenticatedPages')}
-                    disabled={optionsDisabled}
+                    disabled={controlsDisabled || optionsDisabled}
                     label="Authenticated Pages"
                   />
                 ) : null}
@@ -140,7 +144,7 @@ const ScanBar = ({
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.files}
                   onChange={() => onOptionChange('files')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Files / Downloads"
                 />
               </div>
@@ -150,14 +154,14 @@ const ScanBar = ({
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.brokenLinks}
                   onChange={() => onOptionChange('brokenLinks')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Broken links"
                 />
                 <CheckboxField
                   className="layers-panel-item scan-options-checkbox"
                   checked={options.crosslinks}
                   onChange={() => onOptionChange('crosslinks')}
-                  disabled={optionsDisabled}
+                  disabled={controlsDisabled || optionsDisabled}
                   label="Crosslinks"
                 />
               </div>
@@ -169,7 +173,7 @@ const ScanBar = ({
       <Button
         className="scan-btn"
         onClick={onScan}
-        disabled={scanDisabled}
+        disabled={scanDisabled || controlsDisabled}
         title={scanTitle}
         variant="primary"
         size="sm"
