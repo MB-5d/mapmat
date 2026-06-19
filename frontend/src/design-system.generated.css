@@ -673,12 +673,12 @@
   --ui-inline-badge-text: var(--color-brand-200);
   --ui-overlay-shadow: var(--shadow-overlay);
   --ui-focus-ring: var(--shadow-focus);
-  --shadow-card: 0 1px 3px rgba(180, 180, 180, 0.12), 0 1px 2px rgba(160, 160, 160, 0.08);
-  --shadow-raised: 0 4px 12px rgba(180, 180, 180, 0.12);
-  --shadow-canvas-control: 0 4px 12px rgba(180, 180, 180, 0.12);
-  --shadow-overlay: 0 12px 24px rgba(160, 160, 160, 0.18);
-  --shadow-modal: 0 20px 25px rgba(180, 180, 180, 0.12);
-  --shadow-drawer: -12px 0 24px rgba(180, 180, 180, 0.12);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-raised: 0 8px 20px rgba(0, 0, 0, 0.46), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-canvas-control: 0 8px 18px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --shadow-overlay: 0 18px 42px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --shadow-drawer: -16px 0 36px rgba(0, 0, 0, 0.56), -1px 0 0 rgba(255, 255, 255, 0.05);
   --shadow-soft: var(--shadow-raised);
   --shadow-strong: var(--shadow-overlay);
   --shadow-rgb: 180, 180, 180;

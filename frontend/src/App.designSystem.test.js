@@ -79,8 +79,8 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--type-home-title-lg-line-height: 40px;');
     expect(generatedCss).toContain('--type-home-title-lg-weight: 500;');
     expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(0, 0, 0, 0.1);');
-    expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(180, 180, 180, 0.12);');
-    expect(generatedCss).toContain('--shadow-card: 0 1px 3px rgba(180, 180, 180, 0.12), 0 1px 2px rgba(160, 160, 160, 0.08);');
+    expect(generatedCss).toContain('--shadow-canvas-control: 0 8px 18px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.05);');
+    expect(generatedCss).toContain('--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.04);');
     expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.25px;');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
@@ -128,7 +128,7 @@ describe('UI design-system contract', () => {
       /\.color-key-item\.editing \{[\s\S]*background: var\(--ui-color-icon-hover\);[\s\S]*color: var\(--ui-color-text\);[\s\S]*\}/
     );
     expect(appCss).toMatch(
-      /\.color-swatch\.editing \{[\s\S]*box-shadow: 0 0 0 2px var\(--ui-color-border-strong\);[\s\S]*\}/
+      /\.color-swatch\.editing \{[\s\S]*outline: 2px solid var\(--ui-color-border-strong\);[\s\S]*\}/
     );
     expect(appCss).toMatch(/\.color-edit-icon \{[\s\S]*color: inherit;[\s\S]*\}/);
     expect(appCss).not.toContain('[data-theme="dark"] .color-edit-icon');
@@ -271,8 +271,8 @@ describe('UI design-system contract', () => {
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active {');
     expect(appCss).toContain('.ui-icon-btn.ui-icon-btn--active:hover:not(:disabled) {');
     expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-icon-button-active-bg\);[\s\S]*color: var\(--ui-icon-button-active-fg\);[\s\S]*\}/);
-    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet\);[\s\S]*color: var\(--ui-button-mono-quiet\);[\s\S]*box-shadow: inset 0 0 0 1px var\(--ui-button-mono-quiet\);[\s\S]*\}/);
-    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet-hover\);[\s\S]*color: var\(--ui-button-mono-quiet-hover\);[\s\S]*box-shadow: inset 0 0 0 1px var\(--ui-button-mono-quiet-hover\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet\);[\s\S]*color: var\(--ui-button-mono-quiet\);[\s\S]*outline: 1px solid var\(--ui-button-mono-quiet\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn\.ui-icon-btn--type-secondary\.ui-icon-btn--style-mono\.ui-icon-btn--active:hover:not\(:disabled\) \{[\s\S]*background: var\(--ui-color-surface-muted\);[\s\S]*border-color: var\(--ui-button-mono-quiet-hover\);[\s\S]*color: var\(--ui-button-mono-quiet-hover\);[\s\S]*outline-color: var\(--ui-button-mono-quiet-hover\);[\s\S]*\}/);
     expect(appCss).toMatch(/\.ui-icon-btn--xxs \{[\s\S]*border-radius: var\(--ui-icon-button-radius-sm\);[\s\S]*\}/);
     expect(generatedCss).toContain('--ui-icon-button-size-xxs: 16px;');
     expect(generatedCss).toContain('--ui-icon-button-size-xs: 24px;');
@@ -498,7 +498,7 @@ describe('comment popover positioning', () => {
   test('comments drawer items use mono text styles and compact menu controls', () => {
     expect(appCss).toMatch(/\.comments-panel-node-title \{[\s\S]*color: var\(--ui-color-text\);[\s\S]*overflow: hidden;[\s\S]*text-overflow: ellipsis;[\s\S]*white-space: nowrap;/);
     expect(appCss).toMatch(/\.comments-panel-item \{[\s\S]*border: var\(--border-width-subtle\) solid var\(--modal-card-border\);/);
-    expect(appCss).toMatch(/\.comments-panel-item\.is-selected \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*box-shadow: inset 0 0 0 1px var\(--ui-color-border-strong\);/);
+    expect(appCss).toMatch(/\.comments-panel-item\.is-selected \{[\s\S]*border-color: var\(--ui-color-border-strong\);[\s\S]*outline: 1px solid var\(--ui-color-border-strong\);/);
     const selectedCommentBlock = appCss.match(/\.comments-panel-item\.is-selected \{[\s\S]*?\}/)?.[0] || '';
     expect(selectedCommentBlock).not.toContain('var(--ui-color-primary)');
     expect(appCss).toMatch(/\.comments-panel-text \{[\s\S]*font-size: var\(--type-body-sm-size\);/);
