@@ -1,8 +1,12 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import Topbar from './Topbar';
 import { AuthProvider } from '../../contexts/AuthContext';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('Topbar', () => {
   let container;
@@ -88,6 +92,7 @@ describe('Topbar', () => {
     expect(trigger.className).toContain('ui-btn');
     expect(trigger.className).toContain('ui-btn--type-ghost');
     expect(trigger.className).toContain('ui-btn--style-mono');
+    expect(trigger.className).toContain('topbar-account-trigger');
     const avatar = trigger.querySelector('.user-btn-avatar');
     expect(avatar).not.toBeNull();
     expect(avatar.className).toContain('ui-avatar');
@@ -103,6 +108,17 @@ describe('Topbar', () => {
       'Account',
     ]);
     expect(container.querySelectorAll('.account-menu-item-badge')).toHaveLength(2);
+  });
+
+  test('keeps the account trigger bubble filled instead of transparent', () => {
+    const baseRule = appCss.match(/\.topbar-account-trigger\.ui-btn\s*{([^}]+)}/)?.[1] || '';
+    const hoverRule = appCss.match(/\.topbar-account-trigger\.ui-btn:hover:not\(:disabled\),\s*\.topbar-account-trigger\.ui-btn\[aria-expanded="true"\]\s*{([^}]+)}/)?.[1] || '';
+
+    expect(baseRule).toContain('background: var(--ui-color-surface);');
+    expect(baseRule).toContain('border-color: var(--ui-color-border);');
+    expect(baseRule).not.toContain('transparent');
+    expect(hoverRule).toContain('background: var(--ui-color-surface-muted);');
+    expect(hoverRule).not.toContain('transparent');
   });
 
   test('opens billing from the account menu', () => {

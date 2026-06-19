@@ -10345,6 +10345,24 @@ body {
   color: var(--ui-color-text);
 }
 
+.topbar-account-trigger.ui-btn {
+  background: var(--ui-color-surface);
+  border-color: var(--ui-color-border);
+  color: var(--ui-color-text);
+  box-shadow: var(--shadow-card);
+}
+
+.topbar-account-trigger.ui-btn:hover:not(:disabled),
+.topbar-account-trigger.ui-btn[aria-expanded="true"] {
+  background: var(--ui-color-surface-muted);
+  border-color: var(--ui-color-border-strong);
+  color: var(--ui-color-text);
+}
+
+.topbar-account-trigger.ui-btn:focus-visible {
+  box-shadow: var(--shadow-card), var(--ui-focus-ring);
+}
+
 .topbar-account-trigger .ui-btn__content {
   min-width: 0;
   overflow: hidden;
