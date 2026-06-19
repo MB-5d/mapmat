@@ -864,8 +864,9 @@ const isJobVisibleToRequest = (row, req) => {
   const ip = getClientIp(req);
   const ipHash = hashIp(ip);
 
-  if (rowAccessToken && jobAccessToken) {
-    return rowAccessToken === jobAccessToken;
+  if (rowAccessToken) {
+    if (jobAccessToken) return rowAccessToken === jobAccessToken;
+    if (!row.user_id) return false;
   }
   if (row.user_id && userId) {
     return row.user_id === userId;
