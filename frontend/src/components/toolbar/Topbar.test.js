@@ -121,6 +121,60 @@ describe('Topbar', () => {
     expect(hoverRule).not.toContain('transparent');
   });
 
+  test('uses floating bubbles on the default workspace without showing the top scan bar', () => {
+    act(() => {
+      root.render(
+        <AuthProvider
+          value={{
+            isLoggedIn: true,
+            currentUser: {
+              name: 'Matthew',
+              avatarUrl: 'https://example.com/avatar.png',
+            },
+            onShowProfile: jest.fn(),
+            onShowBilling: jest.fn(),
+            onShowSettings: jest.fn(),
+            onLogout: jest.fn(),
+            onLogin: jest.fn(),
+          }}
+        >
+          <Topbar
+            canEdit
+            appHome
+            showScanBar={false}
+            urlInput="https://example.com"
+            onUrlInputChange={jest.fn()}
+            onUrlKeyDown={jest.fn()}
+            scanOptions={{}}
+            showScanOptions={false}
+            scanOptionsRef={{ current: null }}
+            onToggleScanOptions={jest.fn()}
+            onScanOptionChange={jest.fn()}
+            scanLayerAvailability={{}}
+            scanLayerVisibility={{}}
+            onToggleScanLayer={jest.fn()}
+            onScan={jest.fn()}
+            scanDisabled={false}
+            scanTitle="Run scan"
+            optionsDisabled={false}
+            onClearUrl={jest.fn()}
+            showClearUrl={false}
+            sharedTitle=""
+            onShowProjects={jest.fn()}
+            onShowHistory={jest.fn()}
+            onShowInvites={jest.fn()}
+            onShowAccessRequests={jest.fn()}
+          />
+        </AuthProvider>
+      );
+    });
+
+    expect(container.querySelector('.topbar.topbar--floating.topbar--app-home')).not.toBeNull();
+    expect(container.querySelector('.topbar .brand')).not.toBeNull();
+    expect(container.querySelector('.topbar-account-trigger')).not.toBeNull();
+    expect(container.querySelector('.topbar .scan-bar-shell')).toBeNull();
+  });
+
   test('opens billing from the account menu', () => {
     const auth = renderTopbar();
 

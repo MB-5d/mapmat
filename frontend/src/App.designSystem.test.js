@@ -79,8 +79,8 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--type-home-title-lg-line-height: 40px;');
     expect(generatedCss).toContain('--type-home-title-lg-weight: 500;');
     expect(generatedCss).toContain('--shadow-canvas-control: 0 4px 12px rgba(0, 0, 0, 0.1);');
-    expect(generatedCss).toContain('--shadow-canvas-control: 0 8px 18px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.05);');
-    expect(generatedCss).toContain('--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.04);');
+    expect(generatedCss).toContain('--shadow-canvas-control: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 18px rgba(167, 139, 250, 0.14), 0 0 28px rgba(255, 255, 255, 0.07);');
+    expect(generatedCss).toContain('--shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 12px rgba(255, 255, 255, 0.06);');
     expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.25px;');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
@@ -186,9 +186,12 @@ describe('UI design-system contract', () => {
     expect(appJs).toContain('const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);');
     expect(appJs).toContain('isDefaultWorkspaceScanModalVisible');
     expect(appJs).toContain('|| (isUnsavedScannedMap && !!root?.url)');
+    expect(appJs).toContain('appHome={showAppHomeGrid}');
     expect(appJs).toContain("scanLabel={canTopbarRescan ? 'Update' : 'Scan'}");
     expect(appJs).toContain('showClearUrl={!!urlInput.trim()}');
     expect(appJs).toContain('scanConfigsHaveOptionChanges(currentScanConfig, lastCompletedScanConfig)');
+    expect(appCss).toContain('.topbar--app-home .brand');
+    expect(appCss).toContain('.topbar--app-home .topbar-center .scan-bar-shell');
   });
 
   test('canvas grid and stacked cards use shared visual rules', () => {

@@ -16801,6 +16801,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUrlInputChange={(e) => setUrlInput(e.target.value)}
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
+        appHome={showAppHomeGrid}
         showScanBar={showTopbarScanBar}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}

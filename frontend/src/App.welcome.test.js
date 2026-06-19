@@ -214,9 +214,12 @@ describe('App blank home and welcome modal', () => {
 
     expect(container.textContent).toContain('Map a site from one of these');
     expect(container.querySelector('.canvas.app-home')).not.toBeNull();
+    expect(container.querySelector('.topbar.topbar--floating.topbar--app-home')).not.toBeNull();
     expect(container.querySelector('.blank-title')?.tagName).toBe('H1');
     expect(container.querySelector('.blank-scan-label')).toBeNull();
     expect(container.querySelector('.blank-scan-shell input')?.getAttribute('placeholder')).toBe('Enter a URL to start');
+    expect(container.querySelector('.topbar .scan-bar-shell')).toBeNull();
+    expect(container.querySelector('.topbar .brand')).not.toBeNull();
     expect(container.textContent).toContain('Or choose another starting point');
     expect(container.textContent).toContain('Start from scratch');
     expect(container.textContent).toContain('Open saved maps and shared work');

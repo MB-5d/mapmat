@@ -53,6 +53,8 @@ const Topbar = ({
   collaborators = [],
   sharedTitle,
   showScanBar = true,
+  scanPlaceholder,
+  appHome = false,
   onShowProjects,
   onShowHistory,
   onShowInvites,
@@ -109,8 +111,15 @@ const Topbar = ({
     />
   );
 
+  const isFloatingTopbar = hasMap || appHome;
+  const topbarClassName = [
+    'topbar',
+    isFloatingTopbar ? 'topbar--floating' : '',
+    appHome ? 'topbar--app-home' : '',
+  ].filter(Boolean).join(' ');
+
   return (
-    <div className={`topbar${hasMap ? ' topbar--floating' : ''}`} data-feedback-id="topbar" data-feedback-label="Top navigation">
+    <div className={topbarClassName} data-feedback-id="topbar" data-feedback-label="Top navigation">
       <div className="topbar-left">
         {hasMap ? (
           <CanvasMapHeader
@@ -156,6 +165,7 @@ const Topbar = ({
               onClearUrl={onClearUrl}
               showClearUrl={showClearUrl}
               sharedTitle={sharedTitle}
+              placeholder={scanPlaceholder}
             />
           </div>
         ) : (
