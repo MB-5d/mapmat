@@ -57,18 +57,32 @@ assert.strictEqual(
   'collapsed scan should preserve total queued estimate for entitlement metadata'
 );
 
-const onePageCommonPathProbe = makeRootOnlyResult();
-hardenCollapsedScanResult(onePageCommonPathProbe, {
+const guestLimitCollapse = makeRootOnlyResult();
+hardenCollapsedScanResult(guestLimitCollapse, {
   entitlementCapped: false,
   progress: {
-    scanned: 16,
-    queued: 11,
+    scanned: 1,
+    queued: 356,
   },
 });
 assert.strictEqual(
-  onePageCommonPathProbe.partialReason,
+  guestLimitCollapse.partialReason,
+  'scan_collapsed',
+  'guest root-only scan with queued pages should be marked collapsed'
+);
+
+const trueOnePageScan = makeRootOnlyResult();
+hardenCollapsedScanResult(trueOnePageScan, {
+  entitlementCapped: false,
+  progress: {
+    scanned: 1,
+    queued: 0,
+  },
+});
+assert.strictEqual(
+  trueOnePageScan.partialReason,
   undefined,
-  'uncapped progress alone should not mark a true one-page site collapsed'
+  'uncapped one-page scan with no queued pages should stay complete'
 );
 
 const diagnosticCollapse = makeRootOnlyResult();

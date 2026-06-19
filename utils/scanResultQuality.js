@@ -43,11 +43,7 @@ function getRootOnlyCollapseReasons(result, context = {}) {
   if (toNonNegativeInteger(diagnostics.renderedLinksQueued) > 0) reasons.push('rendered_links_queued');
   if (toNonNegativeInteger(diagnostics.pageMapCount) > 1) reasons.push('page_map_has_pages');
 
-  const canTrustProgressQueue = Boolean(
-    context.entitlementCapped
-    || diagnostics.commonPathSkippedForEntitlementCap
-  );
-  if (canTrustProgressQueue && progress.scanned > rootTreeNodeCount && progress.queued > 0) {
+  if (progress.scanned >= rootTreeNodeCount && progress.queued > 0) {
     reasons.push('progress_had_discovered_pages');
   }
 
