@@ -449,8 +449,7 @@ describe('CanvasToolbar', () => {
     expect(sectionHeaders).not.toContain('Thumbnails (visible area)');
     expect(sectionHeaders).not.toContain('Full page');
     expect(container.textContent).not.toContain('Image report');
-    expect(container.querySelector('.canvas-tool-menu-download-divider')).not.toBeNull();
-    expect(container.querySelector('.canvas-tool-menu-credits-divider')).not.toBeNull();
+    expect(container.querySelector('.canvas-tool-menu-images .canvas-tool-menu-divider')).toBeNull();
     expect(buttons.some((button) => button.textContent.includes('Download thumbnails'))).toBe(false);
     expect(buttons.some((button) => button.textContent.includes('Download full screenshots'))).toBe(false);
 
@@ -468,6 +467,7 @@ describe('CanvasToolbar', () => {
   test('keeps the images menu 40px narrower with a pinned credits footer', () => {
     expect(appCss).toMatch(/\.canvas-tool-menu-images\s*{[^}]*width:\s*232px;[^}]*min-width:\s*232px;[^}]*max-width:\s*232px;[^}]*overflow:\s*hidden;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-images-scroll\s*{[^}]*overflow-y:\s*auto;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-images \.ui-menu-title\s*{[^}]*border-bottom:\s*0;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-credits\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-direction:\s*column;[^}]*align-items:\s*flex-start;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-credits-copy\s*{[^}]*display:\s*block;/s);
   });

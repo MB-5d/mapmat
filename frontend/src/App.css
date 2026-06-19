@@ -5135,6 +5135,10 @@ body {
   scrollbar-gutter: stable;
 }
 
+.canvas-tool-menu-images .ui-menu-title {
+  border-bottom: 0;
+}
+
 .canvas-tool-menu-images .ui-menu-item {
   min-height: 32px;
   font-size: var(--type-body-xs-size);

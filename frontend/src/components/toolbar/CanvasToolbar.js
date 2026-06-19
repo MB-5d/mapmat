@@ -29,7 +29,6 @@ import {
 import IconButton from '../ui/IconButton';
 import Button from '../ui/Button';
 import {
-  MenuDivider,
   MenuItem,
   MenuPanel,
   MenuRadioItem,
@@ -280,7 +279,6 @@ const CanvasToolbar = ({
     } : null,
     showDownloadSection ? {
       key: 'download',
-      dividerClassName: 'canvas-tool-menu-download-divider',
       content: (
         <MenuSection className="canvas-tool-menu-section canvas-tool-menu-download-section">
           <MenuSectionHeader className="canvas-tool-menu-label">Download</MenuSectionHeader>
@@ -456,14 +454,10 @@ const CanvasToolbar = ({
             )}
             {imageMenuSections.map((section, index) => (
               <React.Fragment key={section.key}>
-                {index > 0 ? (
-                  <MenuDivider className={`canvas-tool-menu-divider ${section.dividerClassName || ''}`.trim()} />
-                ) : null}
                 {section.content}
               </React.Fragment>
             ))}
           </div>
-          <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />
           <div className="canvas-tool-menu-credits" role="note">
             <span className="canvas-tool-menu-credits-copy">
               Screenshot credits remaining: <strong>{screenshotCreditsLabel}</strong>
