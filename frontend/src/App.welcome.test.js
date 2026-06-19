@@ -213,6 +213,7 @@ describe('App blank home and welcome modal', () => {
     await renderApp();
 
     expect(container.textContent).toContain('Map a site from one of these');
+    expect(container.querySelector('.canvas.app-home')).not.toBeNull();
     expect(container.querySelector('.blank-title')?.tagName).toBe('H1');
     expect(container.querySelector('.blank-scan-label')).toBeNull();
     expect(container.querySelector('.blank-scan-shell input')?.getAttribute('placeholder')).toBe('Enter a URL to start');

@@ -38,6 +38,15 @@ describe('ProfileDrawer', () => {
     authMode: 'password',
   };
 
+  const openProfileDetails = () => {
+    const summary = container.querySelector('button[aria-controls="profile-fields-details"]');
+    expect(summary).not.toBeNull();
+    act(() => {
+      summary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    return summary;
+  };
+
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -73,7 +82,11 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('.account-hero-avatar-edit-icon')).not.toBeNull();
     expect(avatar.textContent).toContain('M');
     expect(avatar.className).toContain('ui-avatar--circle');
-    expect(container.textContent).toContain('Username');
+    const profileSummary = container.querySelector('button[aria-controls="profile-fields-details"]');
+    expect(profileSummary).not.toBeNull();
+    expect(profileSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(profileSummary.textContent).toContain('Profile details');
+    expect(container.querySelector('input[placeholder="Your username"]')).toBeNull();
     expect(container.querySelector('.account-hero-email')).toBeNull();
     expect(container.querySelector('.account-hero-badge')).toBeNull();
     expect(container.querySelector('button[aria-label="Upload avatar"]')).not.toBeNull();
@@ -150,7 +163,7 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('[data-testid="avatar-cropper"]')).toBeNull();
   });
 
-  test('shows collapsed plan summary and expands plan actions', () => {
+  test('opens plan summary by default and shows plan actions', () => {
     const onOpenPlans = jest.fn();
     const onOpenBilling = jest.fn();
 
@@ -179,15 +192,11 @@ describe('ProfileDrawer', () => {
 
     const summaryButton = container.querySelector('button[aria-controls="account-plan-details"]');
     expect(summaryButton).not.toBeNull();
-    expect(summaryButton.getAttribute('aria-expanded')).toBe('false');
+    expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
     expect(summaryButton.textContent).toContain('Plan:');
     expect(summaryButton.textContent).toContain('Studio');
     expect(container.querySelector('.account-plan-status-badge')?.textContent).toContain('Active');
-    expect(container.querySelector('.account-plan-actions')).toBeNull();
-
-    act(() => {
-      summaryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    expect(container.querySelector('.account-plan-actions')).not.toBeNull();
 
     const planButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.trim() === 'Switch'
@@ -268,9 +277,7 @@ describe('ProfileDrawer', () => {
     });
 
     const summaryButton = container.querySelector('button[aria-controls="account-plan-details"]');
-    act(() => {
-      summaryButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    expect(summaryButton.getAttribute('aria-expanded')).toBe('true');
 
     const table = container.querySelector('.account-usage-table');
     expect(table).not.toBeNull();
@@ -314,14 +321,21 @@ describe('ProfileDrawer', () => {
     });
 
     const planSummary = container.querySelector('button[aria-controls="account-plan-details"]');
+    const profileSummary = container.querySelector('button[aria-controls="profile-fields-details"]');
     const passwordSummary = container.querySelector('button[aria-controls="profile-password-details"]');
     const deleteSummary = container.querySelector('button[aria-controls="profile-delete-details"]');
 
+    expect(planSummary.getAttribute('aria-expanded')).toBe('true');
+    expect(profileSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
+
     act(() => {
-      planSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      profileSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(planSummary.getAttribute('aria-expanded')).toBe('true');
+    expect(planSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(profileSummary.getAttribute('aria-expanded')).toBe('true');
     expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
     expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
 
@@ -330,6 +344,7 @@ describe('ProfileDrawer', () => {
     });
 
     expect(planSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(profileSummary.getAttribute('aria-expanded')).toBe('false');
     expect(passwordSummary.getAttribute('aria-expanded')).toBe('true');
     expect(deleteSummary.getAttribute('aria-expanded')).toBe('false');
 
@@ -338,6 +353,7 @@ describe('ProfileDrawer', () => {
     });
 
     expect(planSummary.getAttribute('aria-expanded')).toBe('false');
+    expect(profileSummary.getAttribute('aria-expanded')).toBe('false');
     expect(passwordSummary.getAttribute('aria-expanded')).toBe('false');
     expect(deleteSummary.getAttribute('aria-expanded')).toBe('true');
   });
@@ -355,6 +371,9 @@ describe('ProfileDrawer', () => {
         />
       );
     });
+
+    const profileSummary = openProfileDetails();
+    expect(profileSummary.getAttribute('aria-expanded')).toBe('true');
 
     const usernameInput = container.querySelector('input[placeholder="Your username"]');
     const emailInput = container.querySelector('input[placeholder="Email address"]');
@@ -420,6 +439,8 @@ describe('ProfileDrawer', () => {
       );
     });
 
+    openProfileDetails();
+
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Save Changes')
     );
@@ -468,6 +489,8 @@ describe('ProfileDrawer', () => {
       );
     });
 
+    openProfileDetails();
+
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Save Changes')
     );
@@ -494,6 +517,8 @@ describe('ProfileDrawer', () => {
         />
       );
     });
+
+    openProfileDetails();
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Save Changes')

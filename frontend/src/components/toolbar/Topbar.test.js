@@ -88,7 +88,9 @@ describe('Topbar', () => {
     expect(trigger.className).toContain('ui-btn');
     expect(trigger.className).toContain('ui-btn--type-ghost');
     expect(trigger.className).toContain('ui-btn--style-mono');
-    expect(trigger.querySelector('.user-btn-avatar')).not.toBeNull();
+    const avatar = trigger.querySelector('.user-btn-avatar');
+    expect(avatar).not.toBeNull();
+    expect(avatar.className).toContain('ui-avatar');
     expect(container.querySelector('.account-menu-badge')).toBeNull();
 
     act(() => {

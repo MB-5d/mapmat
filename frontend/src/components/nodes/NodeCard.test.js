@@ -67,6 +67,39 @@ describe('NodeCard', () => {
     const deleteAction = container.querySelector('.node-card-action[aria-label="Delete"]');
     expect(deleteAction?.className).toContain('ui-icon-btn--style-mono');
     expect(deleteAction?.className).not.toContain('ui-icon-btn--style-danger');
+    const commentAction = container.querySelector('.node-card-action[aria-label="Comments"]');
+    expect(commentAction?.querySelector('.ui-icon__svg')).not.toBeNull();
+    expect(commentAction?.querySelectorAll('line')).toHaveLength(0);
+  });
+
+  test('uses the add-comment icon when a node has no comments', () => {
+    act(() => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'node-1',
+            title: 'No comments yet',
+            url: 'https://example.com',
+            comments: [],
+          }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails={false}
+          canEdit
+          canComment
+          showCommentAction
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onAddNote={jest.fn()}
+        />
+      );
+    });
+
+    const commentAction = container.querySelector('.node-card-action[aria-label="Comments"]');
+    expect(commentAction).not.toBeNull();
+    expect(commentAction.querySelector('.ui-icon__svg')).not.toBeNull();
+    expect(commentAction.querySelectorAll('line')).toHaveLength(2);
   });
 
   test('can hide direct delete action while keeping edit action available', () => {

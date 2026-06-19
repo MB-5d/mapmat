@@ -9,6 +9,7 @@ import {
   GanttChartSquare,
   History,
   Image,
+  ImagePlus,
   Eye,
   EyeOff,
   Layers,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 
 import IconButton from '../ui/IconButton';
+import Button from '../ui/Button';
 import {
   MenuDivider,
   MenuItem,
@@ -127,6 +129,8 @@ const CanvasToolbar = ({
   fullScreenshotsSelectedLabel = 'Get Full page (Selected)',
   captureIssues = [],
   onOpenImageReport,
+  screenshotCreditsLabel = '0',
+  onAddScreenshotCredits,
   showImageMenu,
   imageMenuRef,
   hasSelection,
@@ -387,6 +391,22 @@ const CanvasToolbar = ({
               title={!hasSavedMap ? imageCaptureDisabledReason : (!hasSelection ? 'Select pages first' : undefined)}
             />
           </MenuSection>
+          <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />
+          <div className="canvas-tool-menu-credits" role="note">
+            <div className="canvas-tool-menu-credits-copy">
+              <span>Screenshot credits</span>
+              <strong>{screenshotCreditsLabel} remaining</strong>
+            </div>
+            <Button
+              type="link"
+              size="sm"
+              className="canvas-tool-menu-credits-button"
+              startIcon={<ImagePlus />}
+              onClick={() => onAddScreenshotCredits?.()}
+            >
+              Add credits
+            </Button>
+          </div>
         </MenuPanel>
       )}
     </div>

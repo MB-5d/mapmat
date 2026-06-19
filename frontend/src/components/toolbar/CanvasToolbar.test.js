@@ -362,6 +362,7 @@ describe('CanvasToolbar', () => {
   test('uses combined image download actions', () => {
     const onDownloadImagesAll = jest.fn();
     const onDownloadImagesSelected = jest.fn();
+    const onAddScreenshotCredits = jest.fn();
 
     act(() => {
       root.render(
@@ -394,6 +395,8 @@ describe('CanvasToolbar', () => {
           onGetFullScreenshotsSelected={jest.fn()}
           onDownloadImagesAll={onDownloadImagesAll}
           onDownloadImagesSelected={onDownloadImagesSelected}
+          screenshotCreditsLabel="24"
+          onAddScreenshotCredits={onAddScreenshotCredits}
           showImageMenu
           imageMenuRef={{ current: null }}
           hasSelection
@@ -420,22 +423,30 @@ describe('CanvasToolbar', () => {
     const downloadAll = buttons.find((button) => button.textContent.includes('Download All'));
     const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
     const imageReport = buttons.find((button) => button.textContent.includes('Image report'));
+    const addCredits = buttons.find((button) => button.textContent.includes('Add credits'));
     expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
     expect(downloadAll).not.toBeNull();
     expect(downloadSelected).not.toBeNull();
     expect(imageReport).not.toBeNull();
+    expect(addCredits).not.toBeNull();
+    expect(container.querySelector('.canvas-tool-menu-credits')?.textContent).toContain('24 remaining');
+    expect(addCredits.className).toContain('ui-btn--type-link');
+    expect(addCredits.querySelector('.ui-icon__svg')).not.toBeNull();
     expect(buttons.indexOf(downloadAll)).toBeGreaterThan(buttons.indexOf(imageReport));
     expect(container.querySelector('.canvas-tool-menu-download-divider')).not.toBeNull();
+    expect(container.querySelector('.canvas-tool-menu-credits-divider')).not.toBeNull();
     expect(buttons.some((button) => button.textContent.includes('Download thumbnails'))).toBe(false);
     expect(buttons.some((button) => button.textContent.includes('Download full screenshots'))).toBe(false);
 
     act(() => {
       downloadAll.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       downloadSelected.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      addCredits.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onDownloadImagesAll).toHaveBeenCalledTimes(1);
     expect(onDownloadImagesSelected).toHaveBeenCalledTimes(1);
+    expect(onAddScreenshotCredits).toHaveBeenCalledTimes(1);
   });
 
   test('requires a saved map before image capture actions are available', () => {

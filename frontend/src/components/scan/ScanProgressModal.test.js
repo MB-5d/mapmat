@@ -41,24 +41,25 @@ describe('ScanProgressModal', () => {
     jest.clearAllMocks();
   });
 
-  test('shows separate cancel and stop actions while scanning', () => {
+  test('shows the live stop action without a cancel action while scanning', () => {
     act(() => {
       root.render(<ScanProgressModal {...baseProps} />);
     });
 
-    expect(container.textContent).toContain('Cancel');
     expect(container.textContent).toContain('Stop');
+    expect(container.textContent).not.toContain('Cancel');
     expect(container.querySelector('.modal-footer')).not.toBeNull();
 
     const buttons = Array.from(container.querySelectorAll('button'));
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].className).toContain('ui-btn--style-danger');
 
     act(() => {
       buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      buttons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(baseProps.onRequestCancel).toHaveBeenCalledTimes(1);
     expect(baseProps.onRequestStop).toHaveBeenCalledTimes(1);
+    expect(baseProps.onRequestCancel).not.toHaveBeenCalled();
   });
 
   test('shows the existing cancel confirmation flow', () => {
@@ -104,17 +105,17 @@ describe('ScanProgressModal', () => {
     expect(baseProps.onStopScan).toHaveBeenCalledTimes(1);
   });
 
-  test('shows the stopping state and keeps cancel available', () => {
+  test('shows the stopping state on the single danger stop button', () => {
     act(() => {
       root.render(<ScanProgressModal {...baseProps} isStoppingScan />);
     });
 
     expect(container.textContent).toContain('Stopping scan and preparing current results...');
     const buttons = Array.from(container.querySelectorAll('button'));
-    expect(buttons).toHaveLength(2);
-    expect(buttons[0].disabled).toBe(false);
-    expect(buttons[1].disabled).toBe(true);
-    expect(buttons[1].textContent).toBe('Stopping...');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].disabled).toBe(true);
+    expect(buttons[0].className).toContain('ui-btn--style-danger');
+    expect(buttons[0].textContent).toBe('Stopping...');
   });
 
   test('shows the scan error state and lets the user dismiss it', () => {

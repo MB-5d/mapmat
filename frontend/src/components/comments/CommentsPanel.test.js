@@ -139,6 +139,35 @@ describe('CommentsPanel', () => {
     expect(resolved.querySelector('.comments-panel-completed-info')?.textContent).toContain('Sam');
   });
 
+  test('shows back to top after drawer body scroll and smooth-scrolls to the top', () => {
+    renderPanel();
+
+    const body = container.querySelector('.comments-panel-body');
+    expect(body).not.toBeNull();
+    expect(container.querySelector('.drawer-back-to-top')).toBeNull();
+
+    body.scrollTo = jest.fn();
+    Object.defineProperty(body, 'scrollTop', {
+      configurable: true,
+      value: 300,
+    });
+
+    act(() => {
+      body.dispatchEvent(new Event('scroll', { bubbles: true }));
+    });
+
+    const button = container.querySelector('.drawer-back-to-top');
+    expect(button).not.toBeNull();
+    expect(button.textContent).toContain('Back to top');
+    expect(button.querySelector('.ui-icon__svg')).not.toBeNull();
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(body.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+  });
+
   test('clears comment search from the shared search input', () => {
     renderPanel();
 

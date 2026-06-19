@@ -107,7 +107,7 @@ const ProfileDrawer = ({
   const [avatarCropPixels, setAvatarCropPixels] = useState(null);
   const [pendingAvatarDataUrl, setPendingAvatarDataUrl] = useState('');
   const [pendingAvatarRemoved, setPendingAvatarRemoved] = useState(false);
-  const [openProfileAccordion, setOpenProfileAccordion] = useState(null);
+  const [openProfileAccordion, setOpenProfileAccordion] = useState('plan');
   const [activeProfileField, setActiveProfileField] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -138,7 +138,7 @@ const ProfileDrawer = ({
       setAvatarCropPixels(null);
       setPendingAvatarDataUrl('');
       setPendingAvatarRemoved(false);
-      setOpenProfileAccordion(null);
+      setOpenProfileAccordion('plan');
       setActiveProfileField(null);
       initializedUserIdRef.current = userId;
     }
@@ -166,6 +166,7 @@ const ProfileDrawer = ({
   const trialEnded = isTrialEnded(entitlements);
   const planStatus = getPlanStatusBadge({ accountState, entitlements, isArchived, trialEnded });
   const planDetailsOpen = openProfileAccordion === 'plan';
+  const profileDetailsOpen = openProfileAccordion === 'profile';
   const passwordDetailsOpen = openProfileAccordion === 'password';
   const deleteDetailsOpen = openProfileAccordion === 'delete';
   const usageRows = [
@@ -323,14 +324,24 @@ const ProfileDrawer = ({
 
   const handlePlanDetailsOpenChange = (open) => {
     setOpenProfileAccordion(open ? 'plan' : null);
+    setActiveProfileField(null);
+  };
+
+  const handleProfileDetailsOpenChange = (open) => {
+    setOpenProfileAccordion(open ? 'profile' : null);
+    if (!open) {
+      setActiveProfileField(null);
+    }
   };
 
   const handlePasswordDetailsOpenChange = (open) => {
     setOpenProfileAccordion(open ? 'password' : null);
+    setActiveProfileField(null);
   };
 
   const handleDeleteDetailsOpenChange = (open) => {
     setOpenProfileAccordion(open ? 'delete' : null);
+    setActiveProfileField(null);
     if (!open) {
       setShowDeleteConfirm(false);
       setDeletePassword('');
@@ -503,14 +514,21 @@ const ProfileDrawer = ({
             </Accordion>
           ) : null}
 
-          <div className="form-section profile-fields-section">
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/jpg,image/webp"
-              className="hidden-file-input"
-              onChange={handleAvatarFile}
-            />
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/jpg,image/webp"
+            className="hidden-file-input"
+            onChange={handleAvatarFile}
+          />
+
+          <Accordion
+            id="profile-fields-details"
+            open={profileDetailsOpen}
+            onOpenChange={handleProfileDetailsOpenChange}
+            title={<strong>Profile details</strong>}
+            contentClassName="profile-fields-section"
+          >
             <Field label="Username">
               <TextInput
                 ref={nameInputRef}
@@ -563,7 +581,7 @@ const ProfileDrawer = ({
                 )}
               />
             </Field>
-          </div>
+          </Accordion>
 
           <Accordion
             id="profile-password-details"

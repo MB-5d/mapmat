@@ -2525,7 +2525,8 @@ body {
   background-color: #f8fafc;
 }
 
-.canvas.has-map::before {
+.canvas.has-map::before,
+.canvas.app-home::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -4539,13 +4540,26 @@ body {
   gap: 8px;
 }
 
-.node-card:hover .card-actions {
+.node-card:hover .card-actions,
+.node-card:focus-within .card-actions {
   opacity: 1;
 }
 
 .node-card.has-action-bar:hover .page-number,
-.node-card.has-action-bar:hover .node-badges {
+.node-card.has-action-bar:hover .node-badges,
+.node-card.has-action-bar:focus-within .page-number,
+.node-card.has-action-bar:focus-within .node-badges {
   opacity: 0;
+}
+
+.node-card-action.ui-icon-btn {
+  color: var(--ui-button-mono-quiet);
+}
+
+.node-card-action.ui-icon-btn:hover:not(:disabled),
+.node-card-action.ui-icon-btn:focus-visible {
+  background: var(--ui-color-icon-hover);
+  color: var(--ui-button-brand-quiet-hover);
 }
 
 .btn-icon {
@@ -4598,8 +4612,11 @@ body {
   text-decoration: none;
 }
 
-.node-card-link-action:hover {
+.node-card-link-action:hover,
+.node-card-link-action:focus-visible {
+  background: var(--ui-color-icon-hover);
   color: var(--ui-button-brand-quiet-hover);
+  outline: none;
 }
 
 .color-key {
@@ -5093,7 +5110,7 @@ body {
 
 .canvas-tool-menu-images {
   width: max-content;
-  min-width: 272px;
+  min-width: 232px;
   max-height: min(520px, calc(100vh - 128px));
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -5128,6 +5145,42 @@ body {
 .canvas-tool-menu-images .canvas-tool-menu-item:disabled:hover {
   color: var(--ui-control-disabled-content);
   background: transparent;
+}
+
+.canvas-tool-menu-credits {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: 4px 10px 2px;
+}
+
+.canvas-tool-menu-credits-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvas-tool-menu-credits-copy span {
+  color: var(--ui-color-input-placeholder);
+  font-size: var(--type-caption-md-size);
+  line-height: var(--type-caption-md-line-height);
+}
+
+.canvas-tool-menu-credits-copy strong {
+  color: var(--ui-color-text);
+  font-size: var(--type-body-xs-size);
+  line-height: var(--type-body-xs-line-height);
+  font-weight: 600;
+}
+
+.canvas-tool-menu-credits-button.ui-btn {
+  flex: 0 0 auto;
+  gap: 5px;
+  min-height: 24px;
+  font-size: var(--type-body-xs-size);
+  line-height: var(--type-body-xs-line-height);
 }
 
 .canvas-tool-menu.canvas-tool-menu-panel {
@@ -10262,7 +10315,8 @@ body {
 
 /* User Button in Topbar */
 .user-btn-avatar {
-  color: inherit;
+  background: var(--ui-color-primary);
+  color: var(--ui-icon-inverse);
   width: 24px;
   height: 24px;
   font-size: 11px;
@@ -10544,6 +10598,15 @@ body {
   transition: opacity 0.12s ease;
 }
 
+.comment-popover-thread-actions .ui-icon-btn {
+  color: var(--ui-button-mono-quiet);
+}
+
+.comment-popover-thread-actions .ui-icon-btn:hover:not(:disabled),
+.comment-popover-thread-actions .ui-icon-btn:focus-visible {
+  color: var(--ui-button-mono-quiet);
+}
+
 .comment-popover-header:hover .comment-popover-thread-actions,
 .comment-popover-header:focus-within .comment-popover-thread-actions {
   opacity: 1;
@@ -10706,12 +10769,12 @@ body {
 }
 
 .comment-action-btn.ui-icon-btn {
-  color: var(--ui-icon-muted);
+  color: var(--ui-button-mono-quiet);
 }
 
 .comment-action-btn.ui-icon-btn:hover:not(:disabled),
 .comment-action-btn.ui-icon-btn:focus-visible {
-  color: var(--ui-button-mono-quiet-hover);
+  color: var(--ui-button-mono-quiet);
 }
 
 .comment-complete-btn.checked,
@@ -10973,6 +11036,8 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px;
+  display: flex;
+  flex-direction: column;
 }
 
 .comments-panel-list {
@@ -12464,7 +12529,8 @@ body {
   background-color: #0d0812;
 }
 
-[data-theme="dark"] .canvas.has-map::before {
+[data-theme="dark"] .canvas.has-map::before,
+[data-theme="dark"] .canvas.app-home::before {
   background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0, var(--ui-canvas-grid-dot) var(--canvas-grid-dot-radius, 0.75px), transparent calc(var(--canvas-grid-dot-radius, 0.75px) + 0.5px));
 }
 
@@ -13478,7 +13544,8 @@ body {
   background-color: #f8fafc;
 }
 
-[data-theme="light"] .canvas.has-map::before {
+[data-theme="light"] .canvas.has-map::before,
+[data-theme="light"] .canvas.app-home::before {
   background-image: radial-gradient(circle, var(--ui-canvas-grid-dot) 0, var(--ui-canvas-grid-dot) var(--canvas-grid-dot-radius, 0.75px), transparent calc(var(--canvas-grid-dot-radius, 0.75px) + 0.5px));
 }
 

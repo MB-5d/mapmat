@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, CheckCircle2, Trash2 } from 'lucide-react';
+import { ArrowUpDown, ArrowUpToLine, CheckCircle2, Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
+import Button from '../ui/Button';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import { MenuItem, MenuPanel, MenuSection } from '../ui/Menu';
@@ -64,7 +65,9 @@ const CommentsPanel = ({
   const [sortMode, setSortMode] = useState('newest');
   const [showResolved, setShowResolved] = useState(false);
   const [openMenu, setOpenMenu] = useState(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const controlsRef = useRef(null);
+  const bodyRef = useRef(null);
 
   const mentionKeys = useMemo(() => buildUserMentionKeys(currentUser), [currentUser]);
 
@@ -95,6 +98,12 @@ const CommentsPanel = ({
       setSortMode('newest');
     }
   }, [showResolved, sortMode]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setShowBackToTop(false);
+    }
+  }, [isOpen]);
 
   // Collect all comments from tree and orphans
   const getAllComments = () => {
@@ -179,6 +188,14 @@ const CommentsPanel = ({
     : BASE_COMMENT_SORT_OPTIONS;
   const sortLabel = sortOptions.find((option) => option.value === sortMode)?.label || 'Newest';
 
+  const handleBodyScroll = (event) => {
+    setShowBackToTop(event.currentTarget.scrollTop > 240);
+  };
+
+  const scrollToTop = () => {
+    bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <AccountDrawer
       isOpen={isOpen}
@@ -248,7 +265,7 @@ const CommentsPanel = ({
         />
       </div>
 
-      <div className="comments-panel-body">
+      <div className="comments-panel-body" ref={bodyRef} onScroll={handleBodyScroll}>
         {filteredComments.length > 0 ? (
           <div className="comments-panel-list">
             {filteredComments.map(comment => {
@@ -328,6 +345,18 @@ const CommentsPanel = ({
             {filter ? 'No matching comments' : 'No comments yet'}
           </div>
         )}
+        {showBackToTop ? (
+          <Button
+            type="primary"
+            buttonStyle="mono"
+            size="sm"
+            className="drawer-back-to-top"
+            onClick={scrollToTop}
+            startIcon={<ArrowUpToLine />}
+          >
+            Back to top
+          </Button>
+        ) : null}
       </div>
     </AccountDrawer>
   );

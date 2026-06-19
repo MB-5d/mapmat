@@ -16609,6 +16609,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const currentBillingPlan = currentUser?.entitlements?.plan || null;
   const currentBillingPlanKey = currentBillingPlan?.key || (isLoggedIn ? 'free' : 'guest');
   const currentBillingPlanName = currentBillingPlan?.name || (isLoggedIn ? 'Free' : 'Not signed in');
+  const screenshotCreditMeter = currentUser?.entitlements?.meters?.screenshotCredits || null;
+  const screenshotCreditsLabel = screenshotCreditMeter?.unlimited
+    ? 'Unlimited'
+    : formatEntitlementCount(Math.max(0, Number(screenshotCreditMeter?.remaining || 0)));
+  const showAppHomeGrid = !hasMap
+    && currentRoute?.surface === ROUTE_SURFACES.APP
+    && currentRoute?.section === 'home';
 
   const renderCompletedConnection = (conn) => {
     const path = generateConnectionPath(conn);
@@ -16828,7 +16835,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       />
 
       <div
-        className={`canvas ${hasMap ? 'has-map' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
+        className={`canvas ${hasMap ? 'has-map' : ''} ${showAppHomeGrid ? 'app-home' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
         style={{
           '--canvas-pan-x': `${canvasRenderPan.x || 0}px`,
@@ -17851,6 +17858,11 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowVersionHistoryDrawer(false);
                   setShowProjectsModal(false);
                   setShowHistoryModal(false);
+                },
+                screenshotCreditsLabel,
+                onAddScreenshotCredits: () => {
+                  setShowImageMenu(false);
+                  openPlansModal('screenshot-credits');
                 },
                 showImageMenu,
                 imageMenuRef,

@@ -108,6 +108,11 @@ describe('CommentPopover', () => {
     const comments = Array.from(container.querySelectorAll('.comment-list > .comment-item > .comment-row .comment-text'));
     expect(comments[0].textContent).toContain('Newest comment');
     expect(comments[comments.length - 1].textContent).toContain('Older follow-up');
+
+    const action = container.querySelector('.comment-action-btn.ui-icon-btn');
+    expect(action).not.toBeNull();
+    expect(action.className).toContain('ui-icon-btn--type-ghost');
+    expect(action.className).toContain('ui-icon-btn--style-mono');
   });
 
   test('shows selected resolved comments when opened from the panel', () => {

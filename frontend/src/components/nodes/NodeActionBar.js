@@ -1,5 +1,5 @@
 import React from 'react';
-import { Copy, ExternalLink, Info, MessageSquare, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, Info, MessageSquare, MessageSquarePlus, Trash2 } from 'lucide-react';
 
 import classNames from '../../utils/classNames';
 import Icon from '../ui/Icon';
@@ -27,6 +27,7 @@ const NodeActionBar = ({
       : 'Viewer';
   const resolvedPermission = permission || fallbackPermission;
   const hasLink = showExternalLinkAction && !!node?.url;
+  const hasComments = Array.isArray(node?.comments) && node.comments.length > 0;
   const showOwnerEditorActions = resolvedPermission === 'Owner / Editor';
   const showCommenterAction = resolvedPermission === 'Commenter';
   const hasActions = showOwnerEditorActions || showCommenterAction || hasLink;
@@ -83,7 +84,7 @@ const NodeActionBar = ({
             type="link"
             buttonStyle="mono"
             size="xs"
-            icon={<MessageSquare />}
+            icon={hasComments ? <MessageSquare /> : <MessageSquarePlus />}
             label={commentActionLabel}
             title={commentActionLabel}
             onClick={() => onAddNote?.(node)}
