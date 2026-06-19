@@ -1,7 +1,11 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import CanvasToolbar from './CanvasToolbar';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('CanvasToolbar', () => {
   let container;
@@ -424,11 +428,16 @@ describe('CanvasToolbar', () => {
     const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
     const imageReport = buttons.find((button) => button.textContent.includes('Image report'));
     const addCredits = buttons.find((button) => button.textContent.includes('Add credits'));
+    const imageMenu = container.querySelector('.canvas-tool-menu-images');
+    const scrollArea = imageMenu.querySelector('.canvas-tool-menu-images-scroll');
     expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
+    expect(scrollArea).not.toBeNull();
     expect(downloadAll).not.toBeNull();
     expect(downloadSelected).not.toBeNull();
     expect(imageReport).not.toBeNull();
     expect(addCredits).not.toBeNull();
+    expect(scrollArea.contains(addCredits)).toBe(false);
+    expect(imageMenu.lastElementChild.className).toContain('canvas-tool-menu-credits');
     expect(container.querySelector('.canvas-tool-menu-credits')?.textContent).toContain('24 remaining');
     expect(addCredits.className).toContain('ui-btn--type-link');
     expect(addCredits.querySelector('.ui-icon__svg')).not.toBeNull();
@@ -447,6 +456,12 @@ describe('CanvasToolbar', () => {
     expect(onDownloadImagesAll).toHaveBeenCalledTimes(1);
     expect(onDownloadImagesSelected).toHaveBeenCalledTimes(1);
     expect(onAddScreenshotCredits).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps the images menu 40px narrower with a pinned credits footer', () => {
+    expect(appCss).toMatch(/\.canvas-tool-menu-images\s*{[^}]*width:\s*232px;[^}]*min-width:\s*232px;[^}]*max-width:\s*232px;[^}]*overflow:\s*hidden;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-images-scroll\s*{[^}]*overflow-y:\s*auto;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-credits\s*{[^}]*flex:\s*0 0 auto;/s);
   });
 
   test('requires a saved map before image capture actions are available', () => {

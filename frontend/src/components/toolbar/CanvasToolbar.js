@@ -298,99 +298,107 @@ const CanvasToolbar = ({
           onTouchMove={containMenuScroll}
           onTouchMoveCapture={containMenuScroll}
         >
-          <MenuTitle>Images</MenuTitle>
-          {imageCaptureRequiresSave && (
-            <div className="canvas-tool-menu-hint" role="note">
-              {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
-            </div>
-          )}
-          {hasAnyThumbnails && (
-            <MenuSection>
-              <MenuSectionHeader className="canvas-tool-menu-label">View</MenuSectionHeader>
+          <div
+            className="canvas-tool-menu-images-scroll"
+            onWheel={containMenuScroll}
+            onWheelCapture={containMenuScroll}
+            onTouchMove={containMenuScroll}
+            onTouchMoveCapture={containMenuScroll}
+          >
+            <MenuTitle>Images</MenuTitle>
+            {imageCaptureRequiresSave && (
+              <div className="canvas-tool-menu-hint" role="note">
+                {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
+              </div>
+            )}
+            {hasAnyThumbnails && (
+              <MenuSection>
+                <MenuSectionHeader className="canvas-tool-menu-label">View</MenuSectionHeader>
+                <MenuItem
+                  className="canvas-tool-menu-toggle"
+                  label="View screenshots"
+                  endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
+                  onClick={onToggleThumbnails}
+                />
+              </MenuSection>
+            )}
+            <MenuSection className="canvas-tool-menu-section">
+              <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails (visible area)</MenuSectionHeader>
               <MenuItem
-                className="canvas-tool-menu-toggle"
-                label="View screenshots"
-                endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
-                onClick={onToggleThumbnails}
+                className="canvas-tool-menu-item"
+                label={thumbnailsAllLabel}
+                onClick={onGetThumbnailsAll}
+                disabled={imageCaptureDisabled}
+                title={imageCaptureDisabledReason}
+              />
+              <MenuItem
+                className="canvas-tool-menu-item"
+                label={thumbnailsSelectedLabel}
+                onClick={onGetThumbnailsSelected}
+                disabled={imageCaptureDisabled || !hasSelection}
+                title={selectionRequiredReason}
+              />
+              <MenuItem
+                className="canvas-tool-menu-item"
+                label="Update Captured Thumbnails"
+                onClick={onUpdateCapturedThumbnails}
+                disabled={imageCaptureDisabled || !hasDownloadableThumbnails}
+                title={imageCaptureDisabledReason}
               />
             </MenuSection>
-          )}
-          <MenuSection className="canvas-tool-menu-section">
-            <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails (visible area)</MenuSectionHeader>
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label={thumbnailsAllLabel}
-              onClick={onGetThumbnailsAll}
-              disabled={imageCaptureDisabled}
-              title={imageCaptureDisabledReason}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label={thumbnailsSelectedLabel}
-              onClick={onGetThumbnailsSelected}
-              disabled={imageCaptureDisabled || !hasSelection}
-              title={selectionRequiredReason}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label="Update Captured Thumbnails"
-              onClick={onUpdateCapturedThumbnails}
-              disabled={imageCaptureDisabled || !hasDownloadableThumbnails}
-              title={imageCaptureDisabledReason}
-            />
-          </MenuSection>
-          <MenuDivider className="canvas-tool-menu-divider" />
-          <MenuSection className="canvas-tool-menu-section">
-            <MenuSectionHeader className="canvas-tool-menu-label">Full page</MenuSectionHeader>
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label={fullScreenshotsAllLabel}
-              onClick={onGetFullScreenshotsAll}
-              disabled={imageCaptureDisabled}
-              title={imageCaptureDisabledReason}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label={fullScreenshotsSelectedLabel}
-              onClick={onGetFullScreenshotsSelected}
-              disabled={imageCaptureDisabled || !hasSelection}
-              title={selectionRequiredReason}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label="Update Captured Full page"
-              onClick={onUpdateCapturedFullScreenshots}
-              disabled={imageCaptureDisabled || !hasFullScreenshotAssets}
-              title={imageCaptureDisabledReason}
-            />
-          </MenuSection>
-          <MenuDivider className="canvas-tool-menu-divider" />
-          <MenuSection className="canvas-tool-menu-section">
-            <MenuSectionHeader className="canvas-tool-menu-label">Review</MenuSectionHeader>
-            <MenuItem
-              className="canvas-tool-menu-item canvas-tool-menu-report-item"
-              label="Image report"
-              badge={captureIssues.length > 0 ? `${captureIssues.length}` : null}
-              onClick={onOpenImageReport}
-            />
-          </MenuSection>
-          <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-download-divider" />
-          <MenuSection className="canvas-tool-menu-section canvas-tool-menu-download-section">
-            <MenuSectionHeader className="canvas-tool-menu-label">Download</MenuSectionHeader>
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label="Download All"
-              onClick={onDownloadImagesAll}
-              disabled={!hasSavedMap || !hasMap || !hasDownloadableImages}
-            />
-            <MenuItem
-              className="canvas-tool-menu-item"
-              label="Download Selected"
-              onClick={onDownloadImagesSelected}
-              disabled={!hasSavedMap || !hasSelection || !hasDownloadableSelectedImages}
-              title={!hasSavedMap ? imageCaptureDisabledReason : (!hasSelection ? 'Select pages first' : undefined)}
-            />
-          </MenuSection>
+            <MenuDivider className="canvas-tool-menu-divider" />
+            <MenuSection className="canvas-tool-menu-section">
+              <MenuSectionHeader className="canvas-tool-menu-label">Full page</MenuSectionHeader>
+              <MenuItem
+                className="canvas-tool-menu-item"
+                label={fullScreenshotsAllLabel}
+                onClick={onGetFullScreenshotsAll}
+                disabled={imageCaptureDisabled}
+                title={imageCaptureDisabledReason}
+              />
+              <MenuItem
+                className="canvas-tool-menu-item"
+                label={fullScreenshotsSelectedLabel}
+                onClick={onGetFullScreenshotsSelected}
+                disabled={imageCaptureDisabled || !hasSelection}
+                title={selectionRequiredReason}
+              />
+              <MenuItem
+                className="canvas-tool-menu-item"
+                label="Update Captured Full page"
+                onClick={onUpdateCapturedFullScreenshots}
+                disabled={imageCaptureDisabled || !hasFullScreenshotAssets}
+                title={imageCaptureDisabledReason}
+              />
+            </MenuSection>
+            <MenuDivider className="canvas-tool-menu-divider" />
+            <MenuSection className="canvas-tool-menu-section">
+              <MenuSectionHeader className="canvas-tool-menu-label">Review</MenuSectionHeader>
+              <MenuItem
+                className="canvas-tool-menu-item canvas-tool-menu-report-item"
+                label="Image report"
+                badge={captureIssues.length > 0 ? `${captureIssues.length}` : null}
+                onClick={onOpenImageReport}
+              />
+            </MenuSection>
+            <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-download-divider" />
+            <MenuSection className="canvas-tool-menu-section canvas-tool-menu-download-section">
+              <MenuSectionHeader className="canvas-tool-menu-label">Download</MenuSectionHeader>
+              <MenuItem
+                className="canvas-tool-menu-item"
+                label="Download All"
+                onClick={onDownloadImagesAll}
+                disabled={!hasSavedMap || !hasMap || !hasDownloadableImages}
+              />
+              <MenuItem
+                className="canvas-tool-menu-item"
+                label="Download Selected"
+                onClick={onDownloadImagesSelected}
+                disabled={!hasSavedMap || !hasSelection || !hasDownloadableSelectedImages}
+                title={!hasSavedMap ? imageCaptureDisabledReason : (!hasSelection ? 'Select pages first' : undefined)}
+              />
+            </MenuSection>
+          </div>
           <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />
           <div className="canvas-tool-menu-credits" role="note">
             <div className="canvas-tool-menu-credits-copy">

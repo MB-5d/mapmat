@@ -5109,9 +5109,19 @@ body {
 }
 
 .canvas-tool-menu-images {
-  width: max-content;
+  width: 232px;
   min-width: 232px;
+  max-width: 232px;
   max-height: min(520px, calc(100vh - 128px));
+  overflow: hidden;
+}
+
+.canvas-tool-menu-images-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -5149,10 +5159,11 @@ body {
 
 .canvas-tool-menu-credits {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
-  padding: 4px 10px 2px;
+  padding: 0 10px 2px;
 }
 
 .canvas-tool-menu-credits-copy {
