@@ -39,17 +39,20 @@ test('preserves an existing multi-node map when root discovery failed to one nod
   })).toBe(true);
 });
 
-test('rejects a fresh degraded root-only scan instead of showing it as success', () => {
+test('rejects a fresh root discovery failure instead of showing it as success', () => {
   expect(shouldRejectFreshRootOnlyScan({
     result: { partial: true, partialReason: 'root_discovery_failed' },
     nextRoot: rootOnly,
     existingRoot: rootOnly,
   })).toBe(true);
+});
+
+test('allows a fresh collapsed scan to render as partial', () => {
   expect(shouldRejectFreshRootOnlyScan({
     result: { partial: true, partialReason: 'scan_collapsed' },
     nextRoot: rootOnly,
     existingRoot: rootOnly,
-  })).toBe(true);
+  })).toBe(false);
 });
 
 test('allows true one-node scans when there is no existing multi-node map to protect', () => {
