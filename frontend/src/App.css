@@ -9257,18 +9257,24 @@ body {
 }
 
 .entitlement-modal-body,
-.scan-limit-modal-body {
+.scan-limit-modal-body,
+.guest-scan-modal-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .entitlement-modal-body p,
-.scan-limit-modal-body p {
+.scan-limit-modal-body p,
+.guest-scan-modal-body p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.5;
+}
+
+.guest-scan-modal .modal-footer {
+  flex-wrap: wrap;
 }
 
 .scan-limit-summary {
@@ -9449,7 +9455,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .scan-limit-modal .modal-footer > * {
+  .scan-limit-modal .modal-footer > *,
+  .guest-scan-modal .modal-footer > * {
     flex: 1 1 100%;
   }
 
@@ -9602,18 +9609,24 @@ body {
 }
 
 .entitlement-modal-body,
-.scan-limit-modal-body {
+.scan-limit-modal-body,
+.guest-scan-modal-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .entitlement-modal-body p,
-.scan-limit-modal-body p {
+.scan-limit-modal-body p,
+.guest-scan-modal-body p {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 14px;
   line-height: 1.5;
+}
+
+.guest-scan-modal .modal-footer {
+  flex-wrap: wrap;
 }
 
 .scan-limit-summary {
@@ -9762,7 +9775,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .scan-limit-modal .modal-footer > * {
+  .scan-limit-modal .modal-footer > *,
+  .guest-scan-modal .modal-footer > * {
     flex: 1 1 100%;
   }
 

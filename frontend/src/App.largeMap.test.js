@@ -236,6 +236,13 @@ describe('large map viewport behavior', () => {
     expect(__testing.getScanLimitProgressNote({ capped: false })).toBe('');
   });
 
+  test('guest scan prompt asks for auth or upgrade before scanning', () => {
+    expect(__testing.getGuestScanPromptSubtitle()).toContain('Continue as a guest');
+    expect(__testing.getGuestScanPromptSubtitle()).toContain('sign in');
+    expect(__testing.getGuestScanPromptBody()).toContain('select a plan');
+    expect(__testing.getGuestScanPromptBody()).not.toContain('limit reached');
+  });
+
   test('capped scans can be rerun after the current account has a higher allowance', () => {
     const scanMeta = {
       entitlement: {

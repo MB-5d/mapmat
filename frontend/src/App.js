@@ -409,6 +409,17 @@ function getScanLimitProgressNote(prompt = null) {
   return `This scan can include up to ${allowed} pages on your current plan. If Vellic finds more, it will show a partial map.`;
 }
 
+function getGuestScanPromptSubtitle() {
+  return `Continue as a guest for up to ${formatEntitlementCount(GUEST_SCAN_PAGE_LIMIT)} pages, or sign in to save the scan.`;
+}
+
+function getGuestScanPromptBody() {
+  return 'Sign up or choose Upgrade to select a plan before scanning larger maps.';
+}
+
+const GUEST_SCAN_SIGNIN_CONTEXT_MESSAGE = 'Sign in to save this scan to your account. Vellic will start it after you sign in.';
+const GUEST_SCAN_SIGNUP_CONTEXT_MESSAGE = 'Create an account to choose a plan before Vellic starts this scan.';
+
 function shouldShowScanLimitPreview(entitlement = null) {
   return Boolean(entitlement?.capped && entitlement.limitReached !== false);
 }
@@ -2584,6 +2595,8 @@ export const __testing = {
   addScanLimitGhosts,
   getScanLimitGhostCounts,
   getScanLimitProgressNote,
+  getGuestScanPromptSubtitle,
+  getGuestScanPromptBody,
   shouldShowScanLimitPreview,
   canRescanEntitlementLimitedMap,
   getVisibleScanAllowanceForEntitlements,
@@ -2876,6 +2889,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [authContextMessage, setAuthContextMessage] = useState('');
   const [authInitialView, setAuthInitialView] = useState('login');
   const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
+  const [guestScanPrompt, setGuestScanPrompt] = useState(null);
   const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
   const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
   const [entitlementLockModal, setEntitlementLockModal] = useState(null);
@@ -3028,6 +3042,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const scanJobAccessTokenRef = useRef(null);
   const eventSourceRef = useRef(null);
   const pendingAuthScanRef = useRef(null);
+  const pendingPlanScanRef = useRef(null);
   const handledScanIntentKeyRef = useRef('');
   const scanRef = useRef(null);
   const scanTimerRef = useRef(null);
@@ -3966,9 +3981,29 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [isLoggedIn]);
 
+  const startPendingPlanScan = useCallback((user = null) => {
+    const pendingScan = pendingPlanScanRef.current;
+    if (!pendingScan?.url) return false;
+    pendingPlanScanRef.current = null;
+    setPlansModal(null);
+    window.setTimeout(() => {
+      scanRef.current?.(
+        pendingScan.url,
+        pendingScan.preserveName,
+        {
+          ...(pendingScan.authFlow || {}),
+          ...(user ? { currentUser: user } : {}),
+          skipGuestScanPrompt: true,
+        }
+      );
+    }, 0);
+    return true;
+  }, []);
+
   const handleBillingReturnResult = useCallback(async ({ billingResult, checkoutSessionId } = {}) => {
     if (!billingResult) return;
     if (billingResult === 'success' || billingResult === 'portal_return') {
+      let refreshedUser = null;
       if (isLoggedIn) {
         try {
           await api.refreshBillingAccount({
@@ -3977,16 +4012,22 @@ export default function App({ currentRoute, navigateToRoute }) {
         } catch (error) {
           console.warn('Failed to refresh billing account from Stripe', error);
         }
-        await refreshCurrentUser();
+        refreshedUser = await refreshCurrentUser();
       }
+      const resumedScan = billingResult === 'success'
+        ? startPendingPlanScan(refreshedUser)
+        : false;
       showToast(
-        billingResult === 'portal_return' ? 'Billing settings updated' : 'Plan updated',
+        billingResult === 'portal_return'
+          ? 'Billing settings updated'
+          : resumedScan ? 'Plan updated. Starting scan...' : 'Plan updated',
         'success'
       );
     } else if (billingResult === 'cancelled') {
+      pendingPlanScanRef.current = null;
       showToast('Checkout cancelled', 'info');
     }
-  }, [isLoggedIn, refreshCurrentUser, showToast]);
+  }, [isLoggedIn, refreshCurrentUser, showToast, startPendingPlanScan]);
 
   useLayoutEffect(() => {
     if (!isBillingReturnFromBillingWindow) return;
@@ -4043,9 +4084,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     }) : current);
   }, []);
 
-  const openPlansModal = useCallback((context = 'upgrade') => {
-    setPlansModal({ context });
+  const openPlansModal = useCallback((context = 'upgrade', options = {}) => {
+    setPlansModal({ context, ...options });
   }, []);
+
+  const dismissPlansModal = useCallback(() => {
+    if (plansModal?.resumeScanAfterPlan) {
+      pendingPlanScanRef.current = null;
+    }
+    setPlansModal(null);
+  }, [plansModal]);
 
   useEffect(() => {
     if (!plansModal) return undefined;
@@ -6799,6 +6847,38 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowAuthModal(true);
   }, []);
 
+  const continueGuestScan = useCallback(() => {
+    const pendingScan = guestScanPrompt;
+    if (!pendingScan?.url) return;
+    setGuestScanPrompt(null);
+    window.setTimeout(() => {
+      scanRef.current?.(
+        pendingScan.url,
+        pendingScan.preserveName,
+        {
+          ...(pendingScan.authFlow || {}),
+          skipGuestScanPrompt: true,
+        }
+      );
+    }, 0);
+  }, [guestScanPrompt]);
+
+  const openGuestScanAuthFlow = useCallback(({
+    contextMessage,
+    initialView = 'login',
+    postSuccessAction = 'start-scan',
+  } = {}) => {
+    const pendingScan = guestScanPrompt;
+    if (!pendingScan?.url) return;
+    pendingAuthScanRef.current = pendingScan;
+    setGuestScanPrompt(null);
+    openAuthModal({
+      contextMessage,
+      initialView,
+      postSuccessAction,
+    });
+  }, [guestScanPrompt, openAuthModal]);
+
   const openProjectsPanel = useCallback(() => {
     setShowProjectsModal(true);
     setShowHistoryModal(false);
@@ -7066,12 +7146,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       app_mode: APP_ONLY_MODE ? 'app_only' : 'full',
     });
 
-    const pendingScan = pendingAuthPostSuccessAction === 'start-scan'
+    const postSuccessAction = pendingAuthPostSuccessAction;
+    const pendingScan = postSuccessAction === 'start-scan' || postSuccessAction === 'select-plan-before-scan'
       ? pendingAuthScanRef.current
       : null;
     if (pendingScan) {
       pendingAuthScanRef.current = null;
     }
+    setPendingAuthPostSuccessAction(null);
 
     // Load user's projects, maps, and history
     try {
@@ -7083,10 +7165,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     } catch (e) {
       console.error('Failed to load user data:', e);
     }
-    if (pendingAuthPostSuccessAction === 'open-projects') {
+    if (postSuccessAction === 'open-projects') {
       openProjectsPanel();
     }
-    if (pendingScan) {
+    if (pendingScan && postSuccessAction === 'select-plan-before-scan') {
+      pendingPlanScanRef.current = {
+        ...pendingScan,
+        authFlow: {
+          ...(pendingScan.authFlow || {}),
+          currentUser: user,
+          skipGuestScanPrompt: true,
+        },
+      };
+      openPlansModal('guest-scan-signup', { resumeScanAfterPlan: true });
+    } else if (pendingScan) {
       window.setTimeout(() => {
         scanRef.current?.(
           pendingScan.url,
@@ -7094,6 +7186,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           {
             ...(pendingScan.authFlow || {}),
             currentUser: user,
+            skipGuestScanPrompt: true,
           }
         );
       }, 0);
@@ -11204,6 +11297,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     const activeScanOptions = authFlow.scanOptionsOverride
       ? { ...scanOptions, ...authFlow.scanOptionsOverride }
       : scanOptions;
+    if (!effectiveIsLoggedIn && !authFlow.skipGuestScanPrompt) {
+      setUrlInput(url);
+      setGuestScanPrompt({
+        url,
+        preserveName,
+        authFlow: {
+          ...authFlow,
+          scanOptionsOverride: activeScanOptions,
+        },
+      });
+      return;
+    }
     const requestedScanConfig = normalizeScanConfig({
       url,
       options: activeScanOptions,
@@ -14282,6 +14387,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setConfirmModal(null);
       setPromptModal(null);
       setPlansModal(null);
+      setGuestScanPrompt(null);
       setScanAuthPrompt(null);
       setEntitlementLockModal(null);
       setScreenshotDownloadUpsell(null);
@@ -18317,6 +18423,60 @@ export default function App({ currentRoute, navigateToRoute }) {
         onDismissScanError={dismissScanError}
       />
 
+      {guestScanPrompt && (
+        <Modal
+          show
+          onClose={() => setGuestScanPrompt(null)}
+          title="Scan this URL"
+          subtitle={getGuestScanPromptSubtitle()}
+          className="guest-scan-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={continueGuestScan}
+              >
+                Continue as guest
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => openGuestScanAuthFlow({
+                  contextMessage: GUEST_SCAN_SIGNIN_CONTEXT_MESSAGE,
+                  initialView: 'login',
+                  postSuccessAction: 'start-scan',
+                })}
+              >
+                Sign in
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => openGuestScanAuthFlow({
+                  contextMessage: GUEST_SCAN_SIGNUP_CONTEXT_MESSAGE,
+                  initialView: 'signup',
+                  postSuccessAction: 'select-plan-before-scan',
+                })}
+              >
+                Sign up
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => openGuestScanAuthFlow({
+                  contextMessage: GUEST_SCAN_SIGNUP_CONTEXT_MESSAGE,
+                  initialView: 'signup',
+                  postSuccessAction: 'select-plan-before-scan',
+                })}
+              >
+                Upgrade
+              </Button>
+            </>
+          )}
+        >
+          <div className="guest-scan-modal-body">
+            <p>{getGuestScanPromptBody()}</p>
+          </div>
+        </Modal>
+      )}
+
       {entitlementLockModal && (
         <Modal
           show
@@ -18352,13 +18512,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       {plansModal && (
         <Modal
           show
-          onClose={() => setPlansModal(null)}
+          onClose={dismissPlansModal}
           title="Upgrade"
           subtitle="Choose a plan to open Stripe Checkout in a new tab."
           className="plans-modal"
           scrollable
           footer={(
-            <Button variant="secondary" onClick={() => setPlansModal(null)}>
+            <Button variant="secondary" onClick={dismissPlansModal}>
               Close
             </Button>
           )}
