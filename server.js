@@ -5200,6 +5200,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     || scanDiagnostics.sitemapUrlsQueued > 0
     || scanDiagnostics.commonPathActive > 0
     || scanDiagnostics.renderedLinksQueued > 0
+    || scanDiagnostics.queueRemaining > 0
     || pageMap.size > 1;
   if (!partialReason && scanDiagnostics.treeNodeCount <= 1 && hasRootOnlyCollapseSignal) {
     partialReason = 'scan_collapsed';
@@ -5208,6 +5209,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (scanDiagnostics.sitemapUrlsQueued > 0) reasons.push('sitemap_urls_queued');
     if (scanDiagnostics.commonPathActive > 0) reasons.push('common_paths_active');
     if (scanDiagnostics.renderedLinksQueued > 0) reasons.push('rendered_links_queued');
+    if (scanDiagnostics.queueRemaining > 0) reasons.push('queue_had_discovered_pages');
     if (pageMap.size > 1) reasons.push('page_map_has_pages');
     scanDiagnostics.collapseReason = reasons.join(',') || 'root_only_with_discovery_signals';
     console.warn('[scan] Root-only scan collapse detected:', {

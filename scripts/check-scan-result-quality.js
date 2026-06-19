@@ -71,6 +71,24 @@ assert.strictEqual(
   'guest root-only scan with queued pages should be marked collapsed'
 );
 
+const diagnosticsQueueCollapse = makeRootOnlyResult();
+diagnosticsQueueCollapse.scanDiagnostics = {
+  visitedCount: 1,
+  queueRemaining: 356,
+  queuedCount: 357,
+};
+hardenCollapsedScanResult(diagnosticsQueueCollapse);
+assert.strictEqual(
+  diagnosticsQueueCollapse.partialReason,
+  'scan_collapsed',
+  'root-only scan with queued diagnostics should be marked collapsed'
+);
+assert.strictEqual(
+  diagnosticsQueueCollapse.scanDiagnostics?.collapseReason,
+  'queue_had_discovered_pages',
+  'queued diagnostics should explain the collapse signal'
+);
+
 const trueOnePageScan = makeRootOnlyResult();
 hardenCollapsedScanResult(trueOnePageScan, {
   entitlementCapped: false,
