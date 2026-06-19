@@ -1169,6 +1169,15 @@ const getJobPayload = (row) => parseJsonSafe(row?.payload) || {};
 const serializeJobRow = (row, includeResult = true) => {
   if (!row) return null;
   const payload = getJobPayload(row);
+  const progress = parseJsonSafe(row.progress);
+  const result = includeResult ? parseJsonSafe(row.result) : null;
+  if (includeResult && row.type === JOB_TYPES.scan && row.status === JOB_STATUS.complete && result?.root) {
+    hardenCollapsedScanResult(result, {
+      progress,
+      entitlementCapped: Boolean(payload.entitlement?.capped),
+    });
+    applyScanEntitlementMetadata(result, payload.entitlement || null);
+  }
   return {
     id: row.id,
     type: row.type,
@@ -1177,8 +1186,8 @@ const serializeJobRow = (row, includeResult = true) => {
     startedAt: row.started_at,
     finishedAt: row.finished_at,
     payload: sanitizeJobPayload(payload),
-    progress: parseJsonSafe(row.progress),
-    result: includeResult ? parseJsonSafe(row.result) : null,
+    progress,
+    result,
     error: row.error || null,
   };
 };
