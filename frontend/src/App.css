@@ -2529,11 +2529,13 @@ body {
 .topbar--app-home .topbar-center .scan-bar-shell:hover {
   background: var(--color-neutral-white);
   border-color: var(--color-brand-400);
+  box-shadow: var(--shadow-canvas-control);
 }
 
 .topbar--app-home .topbar-center .scan-bar-shell:focus-within {
   background: var(--color-neutral-white);
   border-color: var(--color-brand-500);
+  box-shadow: var(--shadow-canvas-control), var(--ui-focus-ring);
 }
 
 .icon-btn {
@@ -10418,7 +10420,7 @@ body {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--shadow-canvas-control);
 }
 
 .topbar-account-trigger.ui-btn:hover:not(:disabled),
@@ -10429,7 +10431,7 @@ body {
 }
 
 .topbar-account-trigger.ui-btn:focus-visible {
-  box-shadow: var(--shadow-card), var(--ui-focus-ring);
+  box-shadow: var(--shadow-canvas-control), var(--ui-focus-ring);
 }
 
 .topbar-account-trigger .ui-btn__content {

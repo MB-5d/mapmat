@@ -116,9 +116,20 @@ describe('Topbar', () => {
 
     expect(baseRule).toContain('background: var(--ui-color-surface);');
     expect(baseRule).toContain('border-color: var(--ui-color-border);');
+    expect(baseRule).toContain('box-shadow: var(--shadow-canvas-control);');
     expect(baseRule).not.toContain('transparent');
     expect(hoverRule).toContain('background: var(--ui-color-surface-muted);');
     expect(hoverRule).not.toContain('transparent');
+  });
+
+  test('uses the canvas control shadow for app-home topbar bubbles', () => {
+    const scanHoverRule = appCss.match(/\.topbar--app-home \.topbar-center \.scan-bar-shell:hover\s*{([^}]+)}/)?.[1] || '';
+    const scanFocusRule = appCss.match(/\.topbar--app-home \.topbar-center \.scan-bar-shell:focus-within\s*{([^}]+)}/)?.[1] || '';
+    const accountFocusRule = appCss.match(/\.topbar-account-trigger\.ui-btn:focus-visible\s*{([^}]+)}/)?.[1] || '';
+
+    expect(scanHoverRule).toContain('box-shadow: var(--shadow-canvas-control);');
+    expect(scanFocusRule).toContain('box-shadow: var(--shadow-canvas-control), var(--ui-focus-ring);');
+    expect(accountFocusRule).toContain('box-shadow: var(--shadow-canvas-control), var(--ui-focus-ring);');
   });
 
   test('uses floating bubbles on the default workspace without showing the top scan bar', () => {
