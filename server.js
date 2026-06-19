@@ -62,6 +62,9 @@ const {
   getUrlFallbackTitle,
 } = require('./utils/scanPageClassification');
 const {
+  hardenCollapsedScanResult,
+} = require('./utils/scanResultQuality');
+const {
   IMAGE_CAPTURE_SCALE_TIERS,
   collectImageCaptureRecords,
   buildImageCapturePhases,
@@ -5944,7 +5947,7 @@ async function processJob(job) {
   const payload = parseJsonSafe(job.payload) || {};
   try {
     if (jobType === JOB_TYPES.scan) {
-      const progressState = { lastUpdate: 0, lastScanned: 0 };
+      const progressState = { lastUpdate: 0, lastScanned: 0, lastProgress: null };
       const readJobStatus = createJobStatusReader(jobId);
       const authSessionStorageState = payload.options?.authSessionId
         ? getReadyScanAuthStorageStateForJob({
@@ -5957,6 +5960,7 @@ async function processJob(job) {
         throw new Error('Authenticated scan session expired before the scan started');
       }
       const progressCb = (progress) => {
+        progressState.lastProgress = progress;
         const now = Date.now();
         if (progress.scanned - progressState.lastScanned < 5 && now - progressState.lastUpdate < 500) {
           return;
@@ -5983,6 +5987,10 @@ async function processJob(job) {
 
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
 
+      hardenCollapsedScanResult(result, {
+        progress: progressState.lastProgress,
+        entitlementCapped: Boolean(payload.entitlement?.capped),
+      });
       applyScanEntitlementMetadata(result, payload.entitlement || null);
       await debitScanPagesForJobAsync({
         jobId,
@@ -6444,6 +6452,9 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
         _entitlementCappedScan: Boolean(scanEntitlement.capped),
       }
     );
+    hardenCollapsedScanResult(result, {
+      entitlementCapped: Boolean(scanEntitlement.capped),
+    });
     await recordMeterDebitAsync({
       user: req.user,
       accountSummary: scanEntitlement.summary,
@@ -6542,6 +6553,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
 
   try {
     const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || parsedOptions?.authSessionId, safeUrl);
+    let lastScanProgress = null;
 
     recordUsage(req, 'scan_stream', 1, {
       host: new URL(safeUrl).hostname,
@@ -6559,9 +6571,16 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
         ...(authSessionStorageState ? { authSessionStorageState } : {}),
         _entitlementCappedScan: Boolean(scanEntitlement.capped),
       },
-      (progress) => sendEvent('progress', progress),
+      (progress) => {
+        lastScanProgress = progress;
+        sendEvent('progress', progress);
+      },
       () => aborted
     );
+    hardenCollapsedScanResult(result, {
+      progress: lastScanProgress,
+      entitlementCapped: Boolean(scanEntitlement.capped),
+    });
     await recordMeterDebitAsync({
       user: req.user,
       accountSummary: scanEntitlement.summary,

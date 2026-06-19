@@ -132,6 +132,31 @@ async function waitForHealth() {
   throw new Error('Timed out waiting for local backend health');
 }
 
+async function waitForScanJob(jobId, accessToken) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 90000) {
+    const data = await fetchJson(`${API_BASE}/scan-jobs/${jobId}?access_token=${accessToken}`);
+    const job = data?.job;
+    if (job?.status === 'complete') return job.result || {};
+    if (job?.status === 'failed' || job?.status === 'canceled') {
+      throw new Error(`Scan job ended with ${job.status}: ${job.error || 'no error'}`);
+    }
+    await sleep(500);
+  }
+  throw new Error('Timed out waiting for scan job to complete');
+}
+
+async function runScanJob(payload) {
+  const created = await fetchJson(`${API_BASE}/scan-jobs`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!created?.jobId || !created?.jobAccessToken) {
+    throw new Error('Scan job creation did not return jobId and access token');
+  }
+  return waitForScanJob(created.jobId, created.jobAccessToken);
+}
+
 function flattenTree(node, list = []) {
   if (!node) return list;
   list.push(node);
@@ -152,46 +177,37 @@ function allArtifactUrls(result) {
 }
 
 async function runScan(fixtureBase, files = true) {
-  return fetchJson(`${API_BASE}/scan`, {
-    method: 'POST',
-    body: JSON.stringify({
-      url: `${fixtureBase}/`,
-      maxPages: 80,
-      options: {
-        errorPages: true,
-        inactivePages: true,
-        brokenLinks: true,
-        orphanPages: true,
-        authenticatedPages: true,
-        files,
-      },
-    }),
+  return runScanJob({
+    url: `${fixtureBase}/`,
+    maxPages: 80,
+    options: {
+      errorPages: true,
+      inactivePages: true,
+      brokenLinks: true,
+      orphanPages: true,
+      authenticatedPages: true,
+      files,
+    },
   });
 }
 
 async function runDefaultScan(fixtureBase) {
-  return fetchJson(`${API_BASE}/scan`, {
-    method: 'POST',
-    body: JSON.stringify({
-      url: `${fixtureBase}/`,
-      maxPages: 80,
-      options: {},
-    }),
+  return runScanJob({
+    url: `${fixtureBase}/`,
+    maxPages: 80,
+    options: {},
   });
 }
 
 async function runStatusOptionsOffScan(fixtureBase) {
-  return fetchJson(`${API_BASE}/scan`, {
-    method: 'POST',
-    body: JSON.stringify({
-      url: `${fixtureBase}/`,
-      maxPages: 80,
-      options: {
-        errorPages: false,
-        inactivePages: false,
-        duplicates: false,
-      },
-    }),
+  return runScanJob({
+    url: `${fixtureBase}/`,
+    maxPages: 80,
+    options: {
+      errorPages: false,
+      inactivePages: false,
+      duplicates: false,
+    },
   });
 }
 
