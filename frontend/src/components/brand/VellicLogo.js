@@ -54,7 +54,7 @@ const Wordmark = () => (
 const VellicLogo = ({ className = '', title = 'Vellic', decorative = false }) => (
   <svg
     className={className}
-    viewBox="0 0 248 64"
+    viewBox="0 0 214 64"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     role={decorative ? undefined : 'img'}

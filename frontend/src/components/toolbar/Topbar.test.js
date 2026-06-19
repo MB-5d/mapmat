@@ -207,6 +207,7 @@ describe('Topbar', () => {
 
     expect(container.querySelector('.topbar.topbar--floating.topbar--app-home')).not.toBeNull();
     expect(container.querySelector('.topbar .brand')).not.toBeNull();
+    expect(container.querySelector('.topbar .brand-logo')?.getAttribute('viewBox')).toBe('0 0 214 64');
     expect(container.querySelector('.topbar-account-trigger')).not.toBeNull();
     expect(container.querySelector('.topbar .scan-bar-shell')).toBeNull();
   });
