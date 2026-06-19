@@ -162,6 +162,149 @@ const CanvasToolbar = ({
   const imageCaptureDisabled = !hasMap || imageCaptureRequiresSave;
   const imageCaptureDisabledReason = imageCaptureRequiresSave ? IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE : undefined;
   const selectionRequiredReason = imageCaptureDisabledReason || (!hasSelection ? 'Select pages first' : undefined);
+  const showVisibilitySection = hasAnyThumbnails && !!onToggleThumbnails;
+  const showVisibleAreaAllAction = !!onGetThumbnailsAll;
+  const showVisibleAreaSelectedAction = !!onGetThumbnailsSelected;
+  const showVisibleAreaUpdateAction = hasDownloadableThumbnails && !!onUpdateCapturedThumbnails;
+  const showVisibleAreaSection = showVisibleAreaAllAction
+    || showVisibleAreaSelectedAction
+    || showVisibleAreaUpdateAction;
+  const showFullPageAllAction = !!onGetFullScreenshotsAll;
+  const showFullPageSelectedAction = !!onGetFullScreenshotsSelected;
+  const showFullPageUpdateAction = hasFullScreenshotAssets && !!onUpdateCapturedFullScreenshots;
+  const showFullPageSection = showFullPageAllAction
+    || showFullPageSelectedAction
+    || showFullPageUpdateAction;
+  const showImageReportSection = captureIssues.length > 0 && !!onOpenImageReport;
+  const showDownloadAllAction = hasDownloadableImages && !!onDownloadImagesAll;
+  const showDownloadSelectedAction = hasSelection && hasDownloadableSelectedImages && !!onDownloadImagesSelected;
+  const showDownloadSection = showDownloadAllAction || showDownloadSelectedAction;
+  const imageMenuSections = [
+    showVisibilitySection ? {
+      key: 'visibility',
+      content: (
+        <MenuSection>
+          <MenuSectionHeader className="canvas-tool-menu-label">Visibility</MenuSectionHeader>
+          <MenuItem
+            className="canvas-tool-menu-toggle"
+            label="View screenshots"
+            endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
+            onClick={onToggleThumbnails}
+          />
+        </MenuSection>
+      ),
+    } : null,
+    showVisibleAreaSection ? {
+      key: 'visible-area',
+      content: (
+        <MenuSection className="canvas-tool-menu-section">
+          <MenuSectionHeader className="canvas-tool-menu-label">Capture visible area</MenuSectionHeader>
+          {showVisibleAreaAllAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label={thumbnailsAllLabel}
+              onClick={onGetThumbnailsAll}
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
+            />
+          ) : null}
+          {showVisibleAreaSelectedAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label={thumbnailsSelectedLabel}
+              onClick={onGetThumbnailsSelected}
+              disabled={imageCaptureDisabled || !hasSelection}
+              title={selectionRequiredReason}
+            />
+          ) : null}
+          {showVisibleAreaUpdateAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Update Captured Thumbnails"
+              onClick={onUpdateCapturedThumbnails}
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
+            />
+          ) : null}
+        </MenuSection>
+      ),
+    } : null,
+    showFullPageSection ? {
+      key: 'full-page',
+      content: (
+        <MenuSection className="canvas-tool-menu-section">
+          <MenuSectionHeader className="canvas-tool-menu-label">Capture full page</MenuSectionHeader>
+          {showFullPageAllAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label={fullScreenshotsAllLabel}
+              onClick={onGetFullScreenshotsAll}
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
+            />
+          ) : null}
+          {showFullPageSelectedAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label={fullScreenshotsSelectedLabel}
+              onClick={onGetFullScreenshotsSelected}
+              disabled={imageCaptureDisabled || !hasSelection}
+              title={selectionRequiredReason}
+            />
+          ) : null}
+          {showFullPageUpdateAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Update Captured Full page"
+              onClick={onUpdateCapturedFullScreenshots}
+              disabled={imageCaptureDisabled}
+              title={imageCaptureDisabledReason}
+            />
+          ) : null}
+        </MenuSection>
+      ),
+    } : null,
+    showImageReportSection ? {
+      key: 'review',
+      content: (
+        <MenuSection className="canvas-tool-menu-section">
+          <MenuSectionHeader className="canvas-tool-menu-label">Review</MenuSectionHeader>
+          <MenuItem
+            className="canvas-tool-menu-item canvas-tool-menu-report-item"
+            label="Image report"
+            badge={`${captureIssues.length}`}
+            onClick={onOpenImageReport}
+          />
+        </MenuSection>
+      ),
+    } : null,
+    showDownloadSection ? {
+      key: 'download',
+      dividerClassName: 'canvas-tool-menu-download-divider',
+      content: (
+        <MenuSection className="canvas-tool-menu-section canvas-tool-menu-download-section">
+          <MenuSectionHeader className="canvas-tool-menu-label">Download</MenuSectionHeader>
+          {showDownloadAllAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Download All"
+              onClick={onDownloadImagesAll}
+              disabled={!hasSavedMap || !hasMap}
+            />
+          ) : null}
+          {showDownloadSelectedAction ? (
+            <MenuItem
+              className="canvas-tool-menu-item"
+              label="Download Selected"
+              onClick={onDownloadImagesSelected}
+              disabled={!hasSavedMap}
+              title={!hasSavedMap ? imageCaptureDisabledReason : undefined}
+            />
+          ) : null}
+        </MenuSection>
+      ),
+    } : null,
+  ].filter(Boolean);
 
   const selectButton = (
     <ToolButton
@@ -311,100 +454,20 @@ const CanvasToolbar = ({
                 {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
               </div>
             )}
-            {hasAnyThumbnails && (
-              <MenuSection>
-                <MenuSectionHeader className="canvas-tool-menu-label">View</MenuSectionHeader>
-                <MenuItem
-                  className="canvas-tool-menu-toggle"
-                  label="View screenshots"
-                  endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
-                  onClick={onToggleThumbnails}
-                />
-              </MenuSection>
-            )}
-            <MenuSection className="canvas-tool-menu-section">
-              <MenuSectionHeader className="canvas-tool-menu-label">Thumbnails (visible area)</MenuSectionHeader>
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label={thumbnailsAllLabel}
-                onClick={onGetThumbnailsAll}
-                disabled={imageCaptureDisabled}
-                title={imageCaptureDisabledReason}
-              />
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label={thumbnailsSelectedLabel}
-                onClick={onGetThumbnailsSelected}
-                disabled={imageCaptureDisabled || !hasSelection}
-                title={selectionRequiredReason}
-              />
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label="Update Captured Thumbnails"
-                onClick={onUpdateCapturedThumbnails}
-                disabled={imageCaptureDisabled || !hasDownloadableThumbnails}
-                title={imageCaptureDisabledReason}
-              />
-            </MenuSection>
-            <MenuDivider className="canvas-tool-menu-divider" />
-            <MenuSection className="canvas-tool-menu-section">
-              <MenuSectionHeader className="canvas-tool-menu-label">Full page</MenuSectionHeader>
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label={fullScreenshotsAllLabel}
-                onClick={onGetFullScreenshotsAll}
-                disabled={imageCaptureDisabled}
-                title={imageCaptureDisabledReason}
-              />
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label={fullScreenshotsSelectedLabel}
-                onClick={onGetFullScreenshotsSelected}
-                disabled={imageCaptureDisabled || !hasSelection}
-                title={selectionRequiredReason}
-              />
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label="Update Captured Full page"
-                onClick={onUpdateCapturedFullScreenshots}
-                disabled={imageCaptureDisabled || !hasFullScreenshotAssets}
-                title={imageCaptureDisabledReason}
-              />
-            </MenuSection>
-            <MenuDivider className="canvas-tool-menu-divider" />
-            <MenuSection className="canvas-tool-menu-section">
-              <MenuSectionHeader className="canvas-tool-menu-label">Review</MenuSectionHeader>
-              <MenuItem
-                className="canvas-tool-menu-item canvas-tool-menu-report-item"
-                label="Image report"
-                badge={captureIssues.length > 0 ? `${captureIssues.length}` : null}
-                onClick={onOpenImageReport}
-              />
-            </MenuSection>
-            <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-download-divider" />
-            <MenuSection className="canvas-tool-menu-section canvas-tool-menu-download-section">
-              <MenuSectionHeader className="canvas-tool-menu-label">Download</MenuSectionHeader>
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label="Download All"
-                onClick={onDownloadImagesAll}
-                disabled={!hasSavedMap || !hasMap || !hasDownloadableImages}
-              />
-              <MenuItem
-                className="canvas-tool-menu-item"
-                label="Download Selected"
-                onClick={onDownloadImagesSelected}
-                disabled={!hasSavedMap || !hasSelection || !hasDownloadableSelectedImages}
-                title={!hasSavedMap ? imageCaptureDisabledReason : (!hasSelection ? 'Select pages first' : undefined)}
-              />
-            </MenuSection>
+            {imageMenuSections.map((section, index) => (
+              <React.Fragment key={section.key}>
+                {index > 0 ? (
+                  <MenuDivider className={`canvas-tool-menu-divider ${section.dividerClassName || ''}`.trim()} />
+                ) : null}
+                {section.content}
+              </React.Fragment>
+            ))}
           </div>
           <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />
           <div className="canvas-tool-menu-credits" role="note">
-            <div className="canvas-tool-menu-credits-copy">
-              <span>Screenshot credits</span>
-              <strong>{screenshotCreditsLabel} remaining</strong>
-            </div>
+            <span className="canvas-tool-menu-credits-copy">
+              Screenshot credits remaining: <strong>{screenshotCreditsLabel}</strong>
+            </span>
             <Button
               type="link"
               size="sm"

@@ -426,22 +426,29 @@ describe('CanvasToolbar', () => {
     const buttons = Array.from(container.querySelectorAll('button'));
     const downloadAll = buttons.find((button) => button.textContent.includes('Download All'));
     const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
-    const imageReport = buttons.find((button) => button.textContent.includes('Image report'));
     const addCredits = buttons.find((button) => button.textContent.includes('Add credits'));
     const imageMenu = container.querySelector('.canvas-tool-menu-images');
     const scrollArea = imageMenu.querySelector('.canvas-tool-menu-images-scroll');
+    const creditsCopy = container.querySelector('.canvas-tool-menu-credits-copy');
+    const sectionHeaders = Array.from(container.querySelectorAll('.ui-menu-section-header'))
+      .map((header) => header.textContent);
     expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
     expect(scrollArea).not.toBeNull();
     expect(downloadAll).not.toBeNull();
     expect(downloadSelected).not.toBeNull();
-    expect(imageReport).not.toBeNull();
     expect(addCredits).not.toBeNull();
     expect(scrollArea.contains(addCredits)).toBe(false);
     expect(imageMenu.lastElementChild.className).toContain('canvas-tool-menu-credits');
-    expect(container.querySelector('.canvas-tool-menu-credits')?.textContent).toContain('24 remaining');
+    expect(creditsCopy.textContent).toBe('Screenshot credits remaining: 24');
+    expect(creditsCopy.querySelector('strong')?.textContent).toBe('24');
+    expect(creditsCopy.querySelector('span')).toBeNull();
     expect(addCredits.className).toContain('ui-btn--type-link');
     expect(addCredits.querySelector('.ui-icon__svg')).not.toBeNull();
-    expect(buttons.indexOf(downloadAll)).toBeGreaterThan(buttons.indexOf(imageReport));
+    expect(sectionHeaders).toContain('Capture visible area');
+    expect(sectionHeaders).toContain('Capture full page');
+    expect(sectionHeaders).not.toContain('Thumbnails (visible area)');
+    expect(sectionHeaders).not.toContain('Full page');
+    expect(container.textContent).not.toContain('Image report');
     expect(container.querySelector('.canvas-tool-menu-download-divider')).not.toBeNull();
     expect(container.querySelector('.canvas-tool-menu-credits-divider')).not.toBeNull();
     expect(buttons.some((button) => button.textContent.includes('Download thumbnails'))).toBe(false);
@@ -461,7 +468,64 @@ describe('CanvasToolbar', () => {
   test('keeps the images menu 40px narrower with a pinned credits footer', () => {
     expect(appCss).toMatch(/\.canvas-tool-menu-images\s*{[^}]*width:\s*232px;[^}]*min-width:\s*232px;[^}]*max-width:\s*232px;[^}]*overflow:\s*hidden;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-images-scroll\s*{[^}]*overflow-y:\s*auto;/s);
-    expect(appCss).toMatch(/\.canvas-tool-menu-credits\s*{[^}]*flex:\s*0 0 auto;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-credits\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-direction:\s*column;[^}]*align-items:\s*flex-start;/s);
+    expect(appCss).toMatch(/\.canvas-tool-menu-credits-copy\s*{[^}]*display:\s*block;/s);
+  });
+
+  test('does not render empty image menu sections', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
+    expect(container.querySelectorAll('.ui-menu-section')).toHaveLength(0);
+    expect(container.textContent).not.toContain('Visibility');
+    expect(container.textContent).not.toContain('Capture visible area');
+    expect(container.textContent).not.toContain('Capture full page');
+    expect(container.textContent).not.toContain('Review');
+    expect(container.textContent).not.toContain('Download');
+    expect(container.querySelector('.canvas-tool-menu-credits-copy')?.textContent).toBe('Screenshot credits remaining: 0');
   });
 
   test('requires a saved map before image capture actions are available', () => {
@@ -624,7 +688,6 @@ describe('CanvasToolbar', () => {
     const selectedActions = [
       buttons.find((button) => button.textContent.includes('Get Thumbnails (Selected)')),
       buttons.find((button) => button.textContent.includes('Get Full page (Selected)')),
-      buttons.find((button) => button.textContent.includes('Download Selected')),
     ];
 
     selectedActions.forEach((button) => {
@@ -695,8 +758,8 @@ describe('CanvasToolbar', () => {
       .find((button) => button.textContent.includes('Update Captured Thumbnails'));
     let updateScreenshotButton = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent.includes('Update Captured Full page'));
-    expect(updateThumbnailButton.disabled).toBe(true);
-    expect(updateScreenshotButton.disabled).toBe(true);
+    expect(updateThumbnailButton).toBeUndefined();
+    expect(updateScreenshotButton).toBeUndefined();
 
     act(() => {
       root.render(
@@ -1024,10 +1087,12 @@ describe('CanvasToolbar', () => {
     expect(container.textContent).toContain('Image report');
     expect(container.textContent).toContain('Image report1');
     expect(container.textContent).toContain('View screenshots');
-    expect(container.textContent).toContain('Thumbnails (visible area)');
-    expect(container.textContent).toContain('Full page');
+    expect(container.textContent).toContain('Visibility');
+    expect(container.textContent).toContain('Review');
+    expect(container.textContent).not.toContain('Thumbnails (visible area)');
+    expect(container.textContent).not.toContain('Full page');
     expect(container.textContent).not.toContain('Saves a full-page asset per page');
-    expect(container.textContent).toContain('Thumbnails');
+    expect(container.textContent).not.toContain('Thumbnails');
     expect(container.textContent).not.toContain('Screenshots');
     expect(container.textContent).not.toContain('Capture issues');
     expect(container.textContent).not.toContain('PDF/file');

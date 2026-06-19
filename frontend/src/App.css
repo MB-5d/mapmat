@@ -5168,29 +5168,23 @@ body {
 .canvas-tool-menu-credits {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
   padding: 0 10px 2px;
 }
 
 .canvas-tool-menu-credits-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.canvas-tool-menu-credits-copy span {
-  color: var(--ui-color-input-placeholder);
-  font-size: var(--type-caption-md-size);
-  line-height: var(--type-caption-md-line-height);
-}
-
-.canvas-tool-menu-credits-copy strong {
+  display: block;
   color: var(--ui-color-text);
   font-size: var(--type-body-xs-size);
   line-height: var(--type-body-xs-line-height);
+  min-width: 0;
+}
+
+.canvas-tool-menu-credits-copy strong {
+  display: inline;
+  color: inherit;
   font-weight: 600;
 }
 
@@ -5198,6 +5192,7 @@ body {
   flex: 0 0 auto;
   gap: 5px;
   min-height: 24px;
+  padding: 0;
   font-size: var(--type-body-xs-size);
   line-height: var(--type-body-xs-line-height);
 }
