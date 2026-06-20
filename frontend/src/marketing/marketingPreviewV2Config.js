@@ -29,7 +29,7 @@ export const MARKETING_PREVIEW_V2_SECTIONS = [
   section({
     id: 'use-cases',
     slug: 'use-cases',
-    navLabel: 'Use Cases',
+    navLabel: 'Use cases',
     metaTitle: 'Use Cases | Vellic Marketing Preview V2',
     metaDescription: 'Use Vellic for content strategy, UX and IA, engineering cleanup, SEO review, and website planning.',
   }),

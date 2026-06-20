@@ -27,7 +27,7 @@ class ErrorBoundary extends React.Component {
           <h1 className="error-boundary__title">Something went wrong</h1>
           <p className="error-boundary__body">An unexpected error occurred. Please refresh the page.</p>
           <Button onClick={this.handleRefresh}>
-            Refresh Page
+            Refresh page
           </Button>
           {process.env.NODE_ENV === 'development' && this.state.error && (
             <pre className="error-boundary__stack">

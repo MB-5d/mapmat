@@ -42,7 +42,7 @@ const SaveVersionModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Save Version"
+      title="Save version"
       className="save-version-modal"
       footer={(
         <>
@@ -50,7 +50,7 @@ const SaveVersionModal = ({
             Cancel
           </Button>
           <Button variant="primary" onClick={handleSave}>
-            Save Version
+            Save version
           </Button>
         </>
       )}

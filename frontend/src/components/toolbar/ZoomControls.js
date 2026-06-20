@@ -22,8 +22,8 @@ const ZoomControls = ({
         variant="ghost"
         buttonStyle="mono"
         onClick={onZoomOut}
-        title="Zoom Out"
-        aria-label="Zoom Out"
+        title="Zoom out"
+        aria-label="Zoom out"
         disabled={safeScale <= minScale + 0.001}
       >
         <ZoomOut size={18} />
@@ -34,8 +34,8 @@ const ZoomControls = ({
         variant="ghost"
         buttonStyle="mono"
         onClick={onZoomIn}
-        title="Zoom In"
-        aria-label="Zoom In"
+        title="Zoom in"
+        aria-label="Zoom in"
         disabled={safeScale >= maxScale - 0.001}
       >
         <ZoomIn size={18} />
@@ -59,8 +59,8 @@ const ZoomControls = ({
         buttonStyle="mono"
         className="zoom-reset-button"
         onClick={onResetView}
-        title="Reset View (100%)"
-        aria-label="Reset View"
+        title="Reset view (100%)"
+        aria-label="Reset view"
       >
         <Locate size={18} />
       </IconButton>

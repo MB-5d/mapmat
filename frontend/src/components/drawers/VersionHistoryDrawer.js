@@ -541,7 +541,7 @@ const VersionHistoryDrawer = ({
     <AccountDrawer
       isOpen={isOpen}
       onClose={onClose}
-      title="Map Timeline"
+      title="Map timeline"
       subtitle={canViewActivity ? 'Versions and recent activity' : 'Version history'}
       className="version-history-drawer"
       bodyRef={bodyRef}

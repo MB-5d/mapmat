@@ -14,17 +14,17 @@ const VersionEditPromptModal = ({
     <Modal
       show={show}
       onClose={onOverride}
-      title="Edit Older Version?"
+      title="Edit older version?"
       size="md"
       className="version-edit-modal"
       hideCloseButton
       footer={(
         <>
           <Button variant="secondary" onClick={onOverride}>
-            Override Latest
+            Override latest
           </Button>
           <Button variant="primary" onClick={onSaveCopy}>
-            Save as Copy
+            Save as copy
           </Button>
         </>
       )}

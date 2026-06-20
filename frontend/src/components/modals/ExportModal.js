@@ -28,42 +28,42 @@ const ExportModal = ({
         <OptionCard
           className="export-btn"
           icon={<Sparkles size={24} />}
-          title="AI Site Brief"
+          title="AI site brief"
           description="Site-building brief for AI code tools"
           onClick={onExportAiSiteBrief}
         />
         <OptionCard
           className="export-btn"
           icon={<FileImage size={24} />}
-          title="PNG Image"
+          title="PNG image"
           description="Visual sitemap for presentations"
           onClick={onExportPng}
         />
         <OptionCard
           className="export-btn"
           icon={<FileText size={24} />}
-          title="PDF Document"
+          title="PDF document"
           description="Printable report with page list"
           onClick={onExportPdf}
         />
         <OptionCard
           className="export-btn"
           icon={<FileSpreadsheet size={24} />}
-          title="CSV Spreadsheet"
+          title="CSV spreadsheet"
           description="Page data for Excel or Google Sheets"
           onClick={onExportCsv}
         />
         <OptionCard
           className="export-btn"
           icon={<FileJson size={24} />}
-          title="JSON Data"
+          title="JSON data"
           description="Raw data for import or backup"
           onClick={onExportJson}
         />
         <OptionCard
           className="export-btn"
           icon={<List size={24} />}
-          title="Site Index"
+          title="Site index"
           description="Page list document for Word or Google Docs"
           onClick={onExportSiteIndex}
         />

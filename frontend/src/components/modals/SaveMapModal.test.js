@@ -65,7 +65,7 @@ describe('SaveMapModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Map')
+      button.textContent.includes('Save map')
     );
 
     await act(async () => {
@@ -138,7 +138,7 @@ describe('SaveMapModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Map')
+      button.textContent.includes('Save map')
     );
 
     await act(async () => {
@@ -177,7 +177,7 @@ describe('SaveMapModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Map')
+      button.textContent.includes('Save map')
     );
 
     act(() => {
@@ -221,7 +221,7 @@ describe('SaveMapModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Map')
+      button.textContent.includes('Save map')
     );
 
     await act(async () => {

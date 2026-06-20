@@ -17,7 +17,7 @@ const CreateMapModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Create New Map"
+      title="Create new map"
       scrollable
       className="create-map-modal"
     >
@@ -25,7 +25,7 @@ const CreateMapModal = ({
         <OptionCard
           className="create-map-option"
           icon={<FileText size={24} />}
-          title="Start from Scratch"
+          title="Start from scratch"
           description="Begin with a blank canvas"
           onClick={() => {
             onClose();
@@ -36,16 +36,16 @@ const CreateMapModal = ({
         <OptionCard
           className="create-map-option disabled"
           icon={<LayoutTemplate size={24} />}
-          title="Start from Template"
+          title="Start from template"
           description="Product, Ecommerce, Blog..."
-          badge={<Badge className="coming-soon-badge" label="Coming Soon" />}
+          badge={<Badge className="coming-soon-badge" label="Coming soon" />}
           disabled
         />
 
         <OptionCard
           className="create-map-option"
           icon={<Upload size={24} />}
-          title="Import from File"
+          title="Import from file"
           description="XML sitemap, CSV, JSON"
           onClick={() => {
             onClose();

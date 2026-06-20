@@ -68,7 +68,7 @@ describe('ZoomControls', () => {
     expect(viewfinderButton.getAttribute('aria-pressed')).toBe('true');
     expect(viewfinderButton.className).toContain('ui-icon-btn--active');
 
-    const resetButton = container.querySelector('button[aria-label="Reset View"]');
+    const resetButton = container.querySelector('button[aria-label="Reset view"]');
     expect(resetButton.className).toContain('zoom-reset-button');
   });
 });

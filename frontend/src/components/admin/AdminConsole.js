@@ -1363,7 +1363,7 @@ function AdminConsole({ route, navigateToRoute }) {
                 onClick={handleShowUsage}
               >
                 <DollarSign size={16} />
-                Usage & Costs
+                Usage and costs
               </button>
               <button
                 type="button"

@@ -145,6 +145,12 @@ function primitiveCssEntries() {
   for (const [name, value] of Object.entries(componentTokens.iconButton.size)) {
     entries[`ui-icon-button-size-${name}`] = value;
   }
+  entries['ui-button-text-transform'] = componentTokens.textCase.action;
+  entries['ui-shell-title-text-transform'] = componentTokens.textCase.shellTitle;
+  entries['ui-text-box-edge'] = componentTokens.textMetrics.boxEdge;
+  entries['ui-text-box-trim'] = componentTokens.textMetrics.boxTrim;
+  entries['ui-text-edge'] = componentTokens.textMetrics.legacyEdge;
+  entries['ui-leading-trim'] = componentTokens.textMetrics.legacyTrim;
   entries['ui-icon-button-radius-sm'] = componentTokens.iconButton.radius.sm;
   entries['ui-icon-button-active-bg'] = componentTokens.iconButton.color.activeBg;
   entries['ui-icon-button-active-bg-hover'] = componentTokens.iconButton.color.activeBgHover;

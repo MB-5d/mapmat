@@ -98,9 +98,9 @@ describe('ScanProgressModal', () => {
       root.render(<ScanProgressModal {...baseProps} showCancelConfirm />);
     });
 
-    expect(container.textContent).toContain('Cancel Scan?');
-    expect(container.textContent).toContain('Yes, Cancel Scan');
-    expect(container.textContent).toContain('No, Continue Scanning');
+    expect(container.textContent).toContain('Cancel scan?');
+    expect(container.textContent).toContain('Yes, cancel scan');
+    expect(container.textContent).toContain('No, continue scanning');
 
     const buttons = Array.from(container.querySelectorAll('button'));
     expect(buttons[0].className).toContain('ui-btn--style-mono');
@@ -120,7 +120,7 @@ describe('ScanProgressModal', () => {
       root.render(<ScanProgressModal {...baseProps} showStopConfirm />);
     });
 
-    expect(container.textContent).toContain('Stop Scanning?');
+    expect(container.textContent).toContain('Stop scanning?');
     expect(container.textContent).toContain('Stop scanning and show the pages found so far?');
     expect(container.textContent).toContain('Stop');
     expect(container.textContent).toContain('Cancel');
@@ -155,7 +155,7 @@ describe('ScanProgressModal', () => {
       root.render(<ScanProgressModal {...baseProps} loading={false} scanErrorMessage="This scan is no longer available in this browser session" />);
     });
 
-    expect(container.textContent).toContain('Scan Failed');
+    expect(container.textContent).toContain('Scan failed');
     expect(container.textContent).toContain('This scan is no longer available in this browser session');
     const button = container.querySelector('button');
     expect(button).not.toBeNull();

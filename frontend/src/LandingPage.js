@@ -257,7 +257,7 @@ const faqs = [
 
 const legalContent = {
   terms: {
-    title: 'Terms of Service',
+    title: 'Terms of service',
     content: `Last updated: January 2025
 
 1. Acceptance of Terms
@@ -289,7 +289,7 @@ We reserve the right to modify these terms at any time. Continued use constitute
 Questions about these terms should be directed to hello@vellic.com`,
   },
   privacy: {
-    title: 'Privacy Policy',
+    title: 'Privacy policy',
     content: `Last updated: April 27, 2026
 
 1. Information We Collect
@@ -333,7 +333,7 @@ You can change your choices in Privacy Settings inside the app settings.
 Privacy questions should be directed to privacy@vellic.com`,
   },
   cookies: {
-    title: 'Cookie Policy',
+    title: 'Cookie policy',
     content: `Last updated: April 27, 2026
 
 1. Necessary Storage
@@ -352,7 +352,7 @@ Vellic does not use advertising cookies, retargeting pixels, personalized ads, m
 You can change your choices in Privacy Settings inside the app settings.`,
   },
   legal: {
-    title: 'Legal Notice',
+    title: 'Legal notice',
     content: `Vellic Legal Notice
 
 Copyright
@@ -480,13 +480,13 @@ const LandingPage = ({ onLaunchApp }) => {
           </button>
 
           <div className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            <button type="button" onClick={() => scrollToSection('audience')}>Who It&apos;s For</button>
+            <button type="button" onClick={() => scrollToSection('audience')}>Who it&apos;s for</button>
             <button type="button" onClick={() => scrollToSection('features')}>Features</button>
             <button type="button" onClick={() => scrollToSection('compare')}>Compare</button>
             <button type="button" onClick={() => scrollToSection('faq')}>FAQ</button>
             <button type="button" onClick={() => scrollToSection('contact')}>Contact</button>
             <button type="button" className="nav-cta" onClick={handleLaunchApp}>
-              Launch App
+              Launch app
               <ArrowRight size={16} />
             </button>
           </div>
@@ -515,11 +515,11 @@ const LandingPage = ({ onLaunchApp }) => {
               </p>
               <div className="hero-actions">
                 <button type="button" className="btn-primary" onClick={handleLaunchApp}>
-                  Launch App
+                  Launch app
                   <ArrowRight size={18} />
                 </button>
                 <button type="button" className="btn-secondary" onClick={() => scrollToSection('compare')}>
-                  See Comparison
+                  See comparison
                 </button>
               </div>
               <div className="hero-proof-list" aria-label="Core proof points">
@@ -817,7 +817,7 @@ const LandingPage = ({ onLaunchApp }) => {
                   and test the workflow on a real project.
                 </p>
                 <button type="button" className="btn-primary btn-primary-large" onClick={handleLaunchApp}>
-                  Launch App
+                  Launch app
                   <ArrowRight size={18} />
                 </button>
               </article>
@@ -858,16 +858,16 @@ const LandingPage = ({ onLaunchApp }) => {
 
             <div className="footer-column">
               <h4>Legal</h4>
-              <button type="button" onClick={() => setActiveModal('terms')}>Terms of Service</button>
-              <button type="button" onClick={() => setActiveModal('privacy')}>Privacy Policy</button>
-              <button type="button" onClick={() => setActiveModal('cookies')}>Cookie Policy</button>
-              <button type="button" onClick={() => setActiveModal('legal')}>Legal Notice</button>
+              <button type="button" onClick={() => setActiveModal('terms')}>Terms of service</button>
+              <button type="button" onClick={() => setActiveModal('privacy')}>Privacy policy</button>
+              <button type="button" onClick={() => setActiveModal('cookies')}>Cookie policy</button>
+              <button type="button" onClick={() => setActiveModal('legal')}>Legal notice</button>
             </div>
 
             <div className="footer-column">
               <h4>Contact</h4>
               <a href="mailto:hello@vellic.com">hello@vellic.com</a>
-              <button type="button" onClick={handleLaunchApp}>Launch App</button>
+              <button type="button" onClick={handleLaunchApp}>Launch app</button>
             </div>
           </div>
         </div>

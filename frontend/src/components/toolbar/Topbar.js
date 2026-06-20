@@ -184,7 +184,7 @@ const Topbar = ({
               buttonStyle="mono"
               size="md"
               onClick={handleAccountToggle}
-              title="Account Menu"
+              title="Account menu"
               aria-expanded={showAccountMenu}
               aria-haspopup="menu"
               startIcon={accountTriggerIcon}
@@ -299,11 +299,11 @@ const Topbar = ({
             type="primary"
             buttonStyle="brand"
             size="md"
-            title="Log In"
+            title="Log in"
             onClick={onLogin}
             startIcon={<LogIn size={18} />}
           >
-            Log In
+            Log in
           </Button>
         )}
       </div>

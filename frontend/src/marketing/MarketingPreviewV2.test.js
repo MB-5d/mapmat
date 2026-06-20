@@ -134,7 +134,7 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('The map is the workspace.');
     expect(container.textContent).toContain('Bulk screenshots');
     expect(container.textContent).toContain('Flows & crosslinks');
-    expect(container.textContent).toContain('Exports & Handoff');
+    expect(container.textContent).toContain('Exports and handoff');
     expect(container.textContent).toContain('Sitemap tools');
     expect(container.textContent).toContain('FlowMapp');
     expect(container.textContent).toContain('Slickplan');
@@ -531,7 +531,7 @@ describe('MarketingPreviewV2', () => {
 
     expect(container.textContent).toContain('Need help? Want a demo? Have some feedback? Or just want to say Hello👋?');
     expect(container.textContent).toContain('Send a note to the right inbox and we will follow up ASAP.');
-    expect(container.textContent).toContain('Inquiries & Feedback');
+    expect(container.textContent).toContain('Inquiries and feedback');
     expect(container.textContent).toContain('Product support');
     expect(container.textContent).not.toContain('Best fit');
     expect(container.textContent).not.toContain('hello@vellic.io');

@@ -49,8 +49,8 @@ const NodeActionBar = ({
             buttonStyle="mono"
             size="xs"
             icon={<Info />}
-            label="Node Details"
-            title="Node Details"
+            label="Node details"
+            title="Node details"
             onClick={() => onEdit?.(node)}
           />
         ) : null}

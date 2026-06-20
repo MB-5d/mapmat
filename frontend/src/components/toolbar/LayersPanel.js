@@ -33,10 +33,10 @@ const LayersPanel = ({
   const statusLayers = [
     { key: 'statusMissing', label: 'Missing' },
     { key: 'statusDuplicate', label: 'Duplicate' },
-    { key: 'statusBroken', label: 'Broken Link' },
+    { key: 'statusBroken', label: 'Broken link' },
     { key: 'statusError', label: 'Error' },
     { key: 'statusInactive', label: 'Inactive' },
-    { key: 'statusAuth', label: 'Auth Required' },
+    { key: 'statusAuth', label: 'Auth required' },
   ].filter((option) => !!scanLayerAvailability?.[option.key]);
   const hasPlacementLayers = placementLayers.length > 0;
   const hasStatusLayers = statusLayers.length > 0;
@@ -112,7 +112,7 @@ const LayersPanel = ({
           <MenuSectionHeader className="layers-panel-section">Connections</MenuSectionHeader>
           {connectionAvailability?.userFlows && (
             <LayerToggle
-              label="User Flows"
+              label="User flows"
               active={layers.userFlows}
               onToggle={() => onToggleUserFlows(connectionTool)}
             />
@@ -126,7 +126,7 @@ const LayersPanel = ({
           )}
           {connectionAvailability?.brokenLinks && (
             <LayerToggle
-              label="Broken Links"
+              label="Broken links"
               active={layers.brokenLinks}
               onToggle={onToggleBrokenLinks}
             />

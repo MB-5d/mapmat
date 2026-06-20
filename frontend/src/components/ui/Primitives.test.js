@@ -226,7 +226,7 @@ describe('ui primitives', () => {
     act(() => {
       root.render(
         <div>
-          <MenuTitle>Map Orientation</MenuTitle>
+          <MenuTitle>Map orientation</MenuTitle>
           <MenuRadioItem
             name="orientation"
             value="horizontal"
@@ -238,7 +238,7 @@ describe('ui primitives', () => {
       );
     });
 
-    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Map Orientation');
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Map orientation');
 
     const radio = container.querySelector('input[type="radio"][value="horizontal"]');
     const radioRow = container.querySelector('.ui-menu-radio-item');

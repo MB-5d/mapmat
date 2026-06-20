@@ -33,7 +33,7 @@ const InviteInboxModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Pending Invites"
+      title="Pending invites"
       size="md"
       scrollable
       className="invite-inbox-modal"

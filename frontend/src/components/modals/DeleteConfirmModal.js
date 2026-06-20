@@ -10,7 +10,7 @@ const DeleteConfirmModal = ({ node, onCancel, onConfirm }) => {
     <Modal
       show={!!node}
       onClose={onCancel}
-      title="Delete Page"
+      title="Delete page"
       size="sm"
       className="confirm-modal"
       footer={(

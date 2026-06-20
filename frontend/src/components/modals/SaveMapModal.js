@@ -90,7 +90,7 @@ const SaveMapForm = ({
 
   return (
     <div className="save-map-form">
-      <Field label="Map Name" required error={nameError}>
+      <Field label="Map name" required error={nameError}>
         <TextInput
           type="text"
           value={mapName}
@@ -103,7 +103,7 @@ const SaveMapForm = ({
           invalid={Boolean(nameError)}
         />
       </Field>
-      <Field label="Save to Project (optional)">
+      <Field label="Save to project (optional)">
         <SelectInput
           value={selectedProject}
           onChange={(e) => setSelectedProject(e.target.value)}
@@ -174,8 +174,8 @@ const SaveMapModal = ({
   defaultNotes,
   onSave,
   onCreateProject,
-  title = 'Save Map',
-  submitLabel = 'Save Map',
+  title = 'Save map',
+  submitLabel = 'Save map',
   submitLoadingLabel = 'Saving',
   saving = false,
 }) => {
@@ -187,7 +187,7 @@ const SaveMapModal = ({
         <div className="login-prompt">
           <p>Please sign in to save your maps</p>
           <Button variant="primary" onClick={onRequireLogin}>
-                Sign In
+                Sign in
           </Button>
         </div>
       ) : (

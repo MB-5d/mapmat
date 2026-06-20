@@ -89,8 +89,11 @@ body {
   line-height: var(--type-button-md-line-height);
   font-weight: var(--type-button-md-weight);
   letter-spacing: var(--type-button-md-letter-spacing);
-  text-edge: cap alphabetic;
-  leading-trim: both;
+  text-transform: var(--ui-button-text-transform);
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
@@ -109,6 +112,11 @@ body {
 .ui-btn__content {
   gap: var(--space-sm);
   white-space: nowrap;
+  line-height: inherit;
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
 }
 
 .ui-btn__spinner {
@@ -405,6 +413,7 @@ body {
   border: 1px solid transparent;
   background: transparent;
   font-family: var(--font-sans);
+  text-transform: var(--ui-button-text-transform);
   color: var(--ui-color-muted);
   cursor: pointer;
   flex-shrink: 0;
@@ -1092,6 +1101,10 @@ body {
   font-size: var(--type-label-sm-size);
   line-height: var(--type-label-sm-line-height);
   font-weight: var(--type-label-sm-weight);
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
   color: var(--ui-color-text);
 }
 
@@ -1590,6 +1603,10 @@ body {
   font-weight: var(--type-badge-md-weight);
   letter-spacing: var(--type-badge-md-letter-spacing);
   text-transform: uppercase;
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
   text-align: center;
   white-space: nowrap;
   max-width: 100%;
@@ -1621,8 +1638,10 @@ body {
   text-overflow: ellipsis;
   line-height: inherit;
   text-align: center;
-  text-box-edge: cap alphabetic;
-  text-box-trim: trim-both;
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
 }
 
 .ui-badge--type-fill.ui-badge--style-brand {
@@ -1725,6 +1744,10 @@ body {
   color: var(--ui-tag-text-current);
   font-weight: var(--type-label-md-weight);
   letter-spacing: var(--type-label-md-letter-spacing);
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
   white-space: nowrap;
   max-width: 100%;
 }
@@ -1816,9 +1839,17 @@ body {
 }
 
 .ui-tag__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: inherit;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
 }
 
 .node-badge {
@@ -5179,7 +5210,7 @@ body {
 
 .canvas-tool-menu {
   position: absolute;
-  bottom: 48px;
+  bottom: calc(48px + 4px);
   left: 50%;
   transform: translateX(-50%);
   min-width: 220px;
@@ -6697,6 +6728,7 @@ body {
 .account-drawer-heading-title {
   font-size: 18px;
   font-weight: 600;
+  text-transform: var(--ui-shell-title-text-transform);
   color: var(--color-text-primary);
 }
 
@@ -7590,8 +7622,8 @@ body {
 }
 
 .toast-success {
-  background: var(--ui-status-success-icon);
-  border-color: var(--ui-status-success-icon);
+  background: var(--ui-toast-success-bg);
+  border-color: var(--ui-toast-success-border);
   color: var(--color-neutral-white);
 }
 
@@ -7704,6 +7736,7 @@ body {
   margin: 0;
   font-size: var(--modal-title-size);
   font-weight: var(--modal-title-weight);
+  text-transform: var(--ui-shell-title-text-transform);
   color: var(--color-text-primary);
 }
 
@@ -12535,7 +12568,8 @@ body {
 
 [data-theme="dark"] .canvas-map-pill,
 [data-theme="dark"] .topbar--app-home .brand,
-[data-theme="dark"] .topbar-account-trigger {
+[data-theme="dark"] .topbar-account-trigger,
+[data-theme="dark"] .topbar-login-btn {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);
@@ -12553,7 +12587,8 @@ body {
   border-color: var(--color-brand-300);
 }
 
-[data-theme="dark"] .topbar-account-trigger:hover {
+[data-theme="dark"] .topbar-account-trigger:hover,
+[data-theme="dark"] .topbar-login-btn:hover {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);

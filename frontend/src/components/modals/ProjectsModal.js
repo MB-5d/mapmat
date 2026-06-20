@@ -66,7 +66,7 @@ const ProjectsModal = ({
       isOpen={show}
       onClose={onClose}
       title="Projects"
-      subtitle="Projects & Maps"
+      subtitle="Projects & maps"
       className="projects-drawer"
     >
       <div className="projects-modal">
@@ -226,7 +226,7 @@ const ProjectsModal = ({
                                           <div className="map-actions" onClick={(event) => event.stopPropagation()}>
                                             <button
                                               className="map-move"
-                                              title="Move Map"
+                                              title="Move map"
                                               onClick={() => {
                                                 setMovingMapId(map.id);
                                                 setMoveTarget(map.project_id || '');
@@ -236,7 +236,7 @@ const ProjectsModal = ({
                                             </button>
                                             <button
                                               className="map-delete"
-                                              title="Delete Map"
+                                              title="Delete map"
                                               onClick={(event) => {
                                                 event.stopPropagation();
                                                 onDeleteMap(project.id, map.id);
@@ -319,7 +319,7 @@ const ProjectsModal = ({
                 startIcon={<FolderPlus />}
                 onClick={onAddProject}
               >
-                Add Project
+                Add project
               </Button>
             </>
           )}

@@ -147,25 +147,25 @@ describe('CanvasToolbar', () => {
 
     expect(toolbarLabels).toEqual([
       'Select',
-      'User Flow',
+      'User flow',
       'Crosslink',
-      'Add Page',
-      'Duplicate Map',
+      'Add page',
+      'Duplicate map',
       'Undo',
       'Redo',
       'Comments',
       'Report',
-      'Version History',
+      'Version history',
       'Images',
       'Layers',
       'Legend',
       'Orientation',
-      'Clear Canvas',
+      'Clear canvas',
       'Download',
       'Share',
     ]);
 
-    const duplicateButton = container.querySelector('button[aria-label="Duplicate Map"]');
+    const duplicateButton = container.querySelector('button[aria-label="Duplicate map"]');
     expect(duplicateButton).not.toBeNull();
     expect(duplicateButton.querySelector('svg')).not.toBeNull();
     expect(container.querySelector('.lucide-copy-plus')).toBeNull();
@@ -227,20 +227,20 @@ describe('CanvasToolbar', () => {
 
     expect(toolbarLabels).toEqual([
       'Select',
-      'User Flow',
+      'User flow',
       'Crosslink',
-      'Add Page',
+      'Add page',
       'Undo',
       'Redo',
       'Comments',
       'Report',
-      'Version History',
+      'Version history',
       'Images',
       'Layers',
       'Legend',
       'Orientation',
-      'Save Map',
-      'Clear Canvas',
+      'Save map',
+      'Clear canvas',
       'Download',
       'Share',
     ]);
@@ -347,8 +347,8 @@ describe('CanvasToolbar', () => {
     expect(orientationButton.className).toContain('active');
     expect(orientationButton.getAttribute('aria-expanded')).toBe('true');
     expect(buttons.indexOf(orientationButton)).toBe(buttons.indexOf(legendButton) + 1);
-    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Map Orientation');
-    expect(radioGroup?.getAttribute('aria-label')).toBe('Map Orientation');
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Map orientation');
+    expect(radioGroup?.getAttribute('aria-label')).toBe('Map orientation');
     expect(verticalRadio).not.toBeNull();
     expect(horizontalRadio).not.toBeNull();
     expect(verticalRadio.checked).toBe(false);
@@ -424,8 +424,8 @@ describe('CanvasToolbar', () => {
     });
 
     const buttons = Array.from(container.querySelectorAll('button'));
-    const downloadAll = buttons.find((button) => button.textContent.includes('Download All'));
-    const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
+    const downloadAll = buttons.find((button) => button.textContent.includes('Download all'));
+    const downloadSelected = buttons.find((button) => button.textContent.includes('Download selected'));
     const addCredits = buttons.find((button) => button.textContent.includes('Add credits'));
     const imageMenu = container.querySelector('.canvas-tool-menu-images');
     const scrollArea = imageMenu.querySelector('.canvas-tool-menu-images-scroll');
@@ -468,6 +468,7 @@ describe('CanvasToolbar', () => {
   });
 
   test('keeps the images menu 40px narrower with a pinned credits footer', () => {
+    expect(appCss).toMatch(/\.canvas-tool-menu\s*{[^}]*bottom:\s*calc\(48px \+ 4px\);/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-images\s*{[^}]*width:\s*232px;[^}]*min-width:\s*232px;[^}]*max-width:\s*232px;[^}]*overflow:\s*hidden;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-images-scroll\s*{[^}]*overflow-y:\s*auto;/s);
     expect(appCss).not.toMatch(/\.canvas-tool-menu-images \.ui-menu-title\s*{/);
@@ -602,12 +603,12 @@ describe('CanvasToolbar', () => {
 
     const buttons = Array.from(container.querySelectorAll('button'));
     const captureButtons = [
-      'Get Thumbnails (All)',
-      'Get Thumbnails (Selected)',
-      'Update Captured Thumbnails',
-      'Get Full page (All)',
-      'Get Full page (Selected)',
-      'Update Captured Full page',
+      'Get thumbnails (all)',
+      'Get thumbnails (selected)',
+      'Update captured thumbnails',
+      'Get full page (all)',
+      'Get full page (selected)',
+      'Update captured full page',
     ].map((label) => buttons.find((button) => button.textContent.includes(label)));
 
     captureButtons.forEach((button) => {
@@ -616,8 +617,8 @@ describe('CanvasToolbar', () => {
       expect(button.title).toBe('Save this map before capturing screenshots.');
     });
 
-    const downloadAll = buttons.find((button) => button.textContent.includes('Download All'));
-    const downloadSelected = buttons.find((button) => button.textContent.includes('Download Selected'));
+    const downloadAll = buttons.find((button) => button.textContent.includes('Download all'));
+    const downloadSelected = buttons.find((button) => button.textContent.includes('Download selected'));
     expect(downloadAll.disabled).toBe(true);
     expect(downloadSelected.disabled).toBe(true);
 
@@ -689,8 +690,8 @@ describe('CanvasToolbar', () => {
 
     const buttons = Array.from(container.querySelectorAll('button'));
     const selectedActions = [
-      buttons.find((button) => button.textContent.includes('Get Thumbnails (Selected)')),
-      buttons.find((button) => button.textContent.includes('Get Full page (Selected)')),
+      buttons.find((button) => button.textContent.includes('Get thumbnails (selected)')),
+      buttons.find((button) => button.textContent.includes('Get full page (selected)')),
     ];
 
     selectedActions.forEach((button) => {
@@ -758,9 +759,9 @@ describe('CanvasToolbar', () => {
     });
 
     let updateThumbnailButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Thumbnails'));
+      .find((button) => button.textContent.includes('Update captured thumbnails'));
     let updateScreenshotButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Full page'));
+      .find((button) => button.textContent.includes('Update captured full page'));
     expect(updateThumbnailButton).toBeUndefined();
     expect(updateScreenshotButton).toBeUndefined();
 
@@ -818,9 +819,9 @@ describe('CanvasToolbar', () => {
     });
 
     updateThumbnailButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Thumbnails'));
+      .find((button) => button.textContent.includes('Update captured thumbnails'));
     updateScreenshotButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Update Captured Full page'));
+      .find((button) => button.textContent.includes('Update captured full page'));
     expect(updateThumbnailButton.disabled).toBe(false);
     expect(updateScreenshotButton.disabled).toBe(false);
 
@@ -879,13 +880,13 @@ describe('CanvasToolbar', () => {
           hasMap
           hasSavedMap
           showVersionHistory={false}
-          fullScreenshotsAllLabel="Get Full page (Remaining)"
+          fullScreenshotsAllLabel="Get full page (remaining)"
         />
       );
     });
 
     const remainingButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Get Full page (Remaining)'));
+      .find((button) => button.textContent.includes('Get full page (remaining)'));
     expect(remainingButton).not.toBeNull();
     expect(remainingButton.disabled).toBe(false);
 
@@ -942,13 +943,13 @@ describe('CanvasToolbar', () => {
           hasMap
           hasSavedMap
           showVersionHistory={false}
-          thumbnailsAllLabel="Get Thumbnails (Remaining)"
+          thumbnailsAllLabel="Get thumbnails (remaining)"
         />
       );
     });
 
     const remainingButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent.includes('Get Thumbnails (Remaining)'));
+      .find((button) => button.textContent.includes('Get thumbnails (remaining)'));
     expect(remainingButton).not.toBeNull();
     expect(remainingButton.disabled).toBe(false);
 
@@ -1015,8 +1016,8 @@ describe('CanvasToolbar', () => {
     const recaptureButtons = Array.from(container.querySelectorAll('button'))
       .filter((button) => button.textContent.includes('Recapture'));
     expect(recaptureButtons).toHaveLength(2);
-    expect(container.textContent).not.toContain('Get Thumbnails (Selected)');
-    expect(container.textContent).not.toContain('Get Full page (Selected)');
+    expect(container.textContent).not.toContain('Get thumbnails (selected)');
+    expect(container.textContent).not.toContain('Get full page (selected)');
 
     act(() => {
       recaptureButtons.forEach((button) => {

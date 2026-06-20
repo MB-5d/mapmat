@@ -139,7 +139,7 @@ describe('AuthModal', () => {
       );
     });
 
-    expect(container.textContent).toContain('Email or Username');
+    expect(container.textContent).toContain('Email or username');
 
     const inputs = container.querySelectorAll('input');
     const form = container.querySelector('form');
@@ -253,7 +253,7 @@ describe('AuthModal', () => {
       );
     });
 
-    await clickButton('Sign Up');
+    await clickButton('Sign up');
 
     expect(container.textContent).toContain('Username');
     expect(container.textContent).toContain('Must be at least 8 characters');
@@ -280,7 +280,7 @@ describe('AuthModal', () => {
     expect(api.signup).toHaveBeenCalledWith('alex@example.com', 'secret123', 'Alex');
     expect(container.textContent).toContain('Verify your email');
     expect(container.textContent).toContain('We sent a 6-digit code to alex@example.com.');
-    expect(container.textContent).toContain('Verification Code');
+    expect(container.textContent).toContain('Verification code');
   });
 
   test('completes signup immediately when verification is skipped', async () => {
@@ -310,7 +310,7 @@ describe('AuthModal', () => {
       );
     });
 
-    await clickButton('Sign Up');
+    await clickButton('Sign up');
 
     const inputs = container.querySelectorAll('input');
     const form = container.querySelector('form');
@@ -406,7 +406,7 @@ describe('AuthModal', () => {
     expect(api.forgotPassword).toHaveBeenCalledWith('alex@example.com');
     expect(container.textContent).toContain('Reset password');
     expect(container.textContent).toContain('If that account exists, we sent a reset code.');
-    expect(container.textContent).toContain('Verification Code');
+    expect(container.textContent).toContain('Verification code');
   });
 
   test('resends the verification code from the verify screen', async () => {
@@ -433,7 +433,7 @@ describe('AuthModal', () => {
       );
     });
 
-    await clickButton('Sign Up');
+    await clickButton('Sign up');
     const form = container.querySelector('form');
     const inputs = container.querySelectorAll('input');
 

@@ -59,13 +59,13 @@ const SettingsDrawer = ({
       </section>
 
       <section className="drawer-card">
-        <div className="drawer-card-title">Cookie Consent</div>
+        <div className="drawer-card-title">Cookie consent</div>
         <div className="drawer-helper">
           {optionalConsentLabel}
         </div>
         <div className="drawer-card-actions">
           <Button variant="secondary" type="secondary" buttonStyle="mono" onClick={onOpenPrivacySettings}>
-            Cookie Consent Settings
+            Cookie consent settings
           </Button>
         </div>
       </section>

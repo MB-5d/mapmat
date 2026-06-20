@@ -73,6 +73,176 @@ const findDisabledOverridesForSharedButtonClasses = () => {
   return overrides;
 };
 
+const SENTENCE_CASE_ALLOWED_WORDS = new Set([
+  'AI',
+  'API',
+  'Atom',
+  'CSV',
+  'CSS',
+  'FAQ',
+  'Figma',
+  'Google',
+  'Graph',
+  'HTML',
+  'ID',
+  'JSON',
+  'Markdown',
+  'OAuth',
+  'Open',
+  'PDF',
+  'PNG',
+  'RSS',
+  'SEO',
+  'Stripe',
+  'Twitter',
+  'URL',
+  'URLs',
+  'UX',
+  'Vellic',
+  'XML',
+]);
+
+const SENTENCE_CASE_COMPONENT_PROPS = new Map([
+  ['AccountDrawer', ['title']],
+  ['Button', ['aria-label', 'label', 'title']],
+  ['IconButton', ['aria-label', 'label', 'title']],
+  ['MarketingButtonLink', ['aria-label', 'label', 'title']],
+  ['MenuItem', ['aria-label', 'label', 'title']],
+  ['MenuRadioItem', ['aria-label', 'label', 'title']],
+  ['Modal', ['title']],
+  ['OptionCard', ['aria-label', 'label', 'title']],
+  ['ScanBar', ['scanLabel', 'scanTitle', 'sharedTitle']],
+]);
+
+const SENTENCE_CASE_TEXT_CHILDREN = ['Button', 'MarketingButtonLink'];
+
+const decodeUiText = (value) => String(value || '')
+  .replace(/&apos;/g, "'")
+  .replace(/&amp;/g, '&')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const isSentenceCaseText = (value) => {
+  const text = decodeUiText(value);
+  if (!text) return true;
+
+  let startsSentence = true;
+  const wordPattern = /[A-Za-z][A-Za-z0-9'.-]*/g;
+  let match;
+  let previousEnd = 0;
+
+  while ((match = wordPattern.exec(text)) !== null) {
+    const word = match[0].replace(/^['.]+|['.]+$/g, '');
+    const separator = text.slice(previousEnd, match.index);
+    const isFirstWord = startsSentence || /[.!?]\s*$/.test(separator);
+    previousEnd = match.index + match[0].length;
+    startsSentence = false;
+
+    if (isFirstWord) continue;
+    if (SENTENCE_CASE_ALLOWED_WORDS.has(word)) continue;
+    if (/^[A-Z]{2,}$/.test(word)) continue;
+    if (/^[A-Z][a-z]/.test(word)) return false;
+  }
+
+  return true;
+};
+
+const findOpeningTags = (source, componentNames) => {
+  const tags = [];
+  let index = 0;
+
+  while (index < source.length) {
+    const start = source.indexOf('<', index);
+    if (start === -1) break;
+    const nameMatch = source.slice(start + 1).match(/^([A-Z][A-Za-z0-9]*)\b/);
+    if (!nameMatch) {
+      index = start + 1;
+      continue;
+    }
+
+    const name = nameMatch[1];
+    let cursor = start + 1 + name.length;
+    let braceDepth = 0;
+    let quote = '';
+
+    while (cursor < source.length) {
+      const char = source[cursor];
+      const previous = source[cursor - 1];
+      if (quote) {
+        if (char === quote && previous !== '\\') quote = '';
+      } else if (char === '"' || char === "'" || char === '`') {
+        quote = char;
+      } else if (char === '{') {
+        braceDepth += 1;
+      } else if (char === '}') {
+        braceDepth = Math.max(0, braceDepth - 1);
+      } else if (char === '>' && braceDepth === 0) {
+        cursor += 1;
+        break;
+      }
+      cursor += 1;
+    }
+
+    if (componentNames.has(name)) {
+      tags.push({ name, index: start, text: source.slice(start, cursor) });
+    }
+    index = cursor;
+  }
+
+  return tags;
+};
+
+const getLineNumber = (source, index) => source.slice(0, index).split('\n').length;
+
+const findSentenceCaseViolations = () => {
+  const componentNames = new Set(SENTENCE_CASE_COMPONENT_PROPS.keys());
+  const sourceFiles = listFiles(__dirname, ['.js', '.jsx', '.ts', '.tsx'])
+    .filter((filePath) => !/\.test\.[jt]sx?$/.test(filePath))
+    .filter((filePath) => !filePath.endsWith('setupTests.js'));
+  const violations = [];
+
+  sourceFiles.forEach((filePath) => {
+    const source = fs.readFileSync(filePath, 'utf8');
+    const relativePath = path.relative(__dirname, filePath);
+
+    findOpeningTags(source, componentNames).forEach((tag) => {
+      const propNames = SENTENCE_CASE_COMPONENT_PROPS.get(tag.name) || [];
+      propNames.forEach((propName) => {
+        const propPattern = new RegExp(`\\b${propName}\\s*=\\s*([\"'])((?:\\\\.|(?!\\1).)*?)\\1`, 'g');
+        let propMatch;
+        while ((propMatch = propPattern.exec(tag.text)) !== null) {
+          const value = propMatch[2];
+          if (!isSentenceCaseText(value)) {
+            violations.push(`${relativePath}:${getLineNumber(source, tag.index)} ${tag.name}.${propName}="${value}"`);
+          }
+        }
+      });
+    });
+
+    SENTENCE_CASE_TEXT_CHILDREN.forEach((componentName) => {
+      const textChildPattern = new RegExp(`<${componentName}\\b[^>]*>\\s*([^<>{}\\n][^<>{}]*)\\s*<\\/${componentName}>`, 'g');
+      let textChildMatch;
+      while ((textChildMatch = textChildPattern.exec(source)) !== null) {
+        const value = decodeUiText(textChildMatch[1]);
+        if (value && !isSentenceCaseText(value)) {
+          violations.push(`${relativePath}:${getLineNumber(source, textChildMatch.index)} ${componentName} text "${value}"`);
+        }
+      }
+    });
+
+    const rawButtonPattern = /<button\b[^>]*>\s*([^<>{}\n][^<>{}]*)\s*<\/button>/g;
+    let rawButtonMatch;
+    while ((rawButtonMatch = rawButtonPattern.exec(source)) !== null) {
+      const value = decodeUiText(rawButtonMatch[1]);
+      if (value && !isSentenceCaseText(value)) {
+        violations.push(`${relativePath}:${getLineNumber(source, rawButtonMatch.index)} button text "${value}"`);
+      }
+    }
+  });
+
+  return violations;
+};
+
 describe('UI design-system contract', () => {
   test('home title, canvas elevation, connection stroke, and disabled state use shared tokens', () => {
     expect(generatedCss).toContain('--type-home-title-lg-size: 32px;');
@@ -110,6 +280,16 @@ describe('UI design-system contract', () => {
 
   test('shared Button and IconButton disabled states are not overridden by local classes', () => {
     expect(findDisabledOverridesForSharedButtonClasses()).toEqual([]);
+  });
+
+  test('buttons, modal titles, and drawer titles use sentence case', () => {
+    expect(generatedCss).toContain('--ui-button-text-transform: none;');
+    expect(generatedCss).toContain('--ui-shell-title-text-transform: none;');
+    expect(appCss).toMatch(/\.ui-btn \{[\s\S]*text-transform: var\(--ui-button-text-transform\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.ui-icon-btn \{[\s\S]*text-transform: var\(--ui-button-text-transform\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.modal-header h2,[\s\S]*\.modal-header h3 \{[\s\S]*text-transform: var\(--ui-shell-title-text-transform\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.account-drawer-heading-title \{[\s\S]*text-transform: var\(--ui-shell-title-text-transform\);[\s\S]*\}/);
+    expect(findSentenceCaseViolations()).toEqual([]);
   });
 
   test('danger confirm modal uses mono companion action', () => {
@@ -169,6 +349,7 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--type-label-sm-weight: 500;');
     expect(appCss).toMatch(/\.field \{[\s\S]*gap: var\(--space-xs\);/);
     expect(appCss).toMatch(/\.field-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).toMatch(/\.field-label \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
     expect(appCss).toMatch(/\.scan-options-depth-field \{[\s\S]*gap: var\(--space-xs\);/);
     expect(appCss).toMatch(/\.scan-options-depth-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
     expect(appCss).toMatch(/\.share-collab-setting \{[\s\S]*gap: var\(--space-xs\);/);
@@ -267,9 +448,21 @@ describe('UI design-system contract', () => {
   test('button size typography tokens match the shared scale', () => {
     expect(generatedCss).toContain('--type-button-lg-size: 16px;');
     expect(generatedCss).toContain('--type-button-lg-weight: 700;');
+    expect(generatedCss).toContain('--ui-text-box-edge: cap alphabetic;');
+    expect(generatedCss).toContain('--ui-text-box-trim: trim-both;');
+    expect(generatedCss).toContain('--ui-leading-trim: both;');
+    expect(appCss).toMatch(/\.ui-btn \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-btn__content \{[\s\S]*line-height: inherit;[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
     expect(appCss).toMatch(/\.ui-btn--sm \{[\s\S]*height: var\(--unit-32\);[\s\S]*min-height: var\(--unit-32\);[\s\S]*font-size: var\(--type-button-sm-size\);[\s\S]*font-weight: var\(--type-button-sm-weight\);[\s\S]*\}/);
     expect(appCss).toMatch(/\.ui-btn--md \{[\s\S]*height: var\(--unit-40\);[\s\S]*min-height: var\(--unit-40\);[\s\S]*font-size: var\(--type-button-md-size\);[\s\S]*font-weight: var\(--type-button-md-weight\);[\s\S]*\}/);
     expect(appCss).toMatch(/\.ui-btn--lg \{[\s\S]*height: var\(--unit-48\);[\s\S]*min-height: var\(--unit-48\);[\s\S]*font-size: var\(--type-button-lg-size\);[\s\S]*font-weight: var\(--type-button-lg-weight\);[\s\S]*\}/);
+  });
+
+  test('tags and badges use the shared text trim contract', () => {
+    expect(appCss).toMatch(/\.ui-badge \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-badge__content \{[\s\S]*line-height: inherit;[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-tag \{[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(appCss).toMatch(/\.ui-tag__content \{[\s\S]*line-height: inherit;[\s\S]*text-box-edge: var\(--ui-text-box-edge\);[\s\S]*text-box-trim: var\(--ui-text-box-trim\);[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
   });
 
   test('icon button active state has enough specificity for styled icon buttons', () => {
@@ -296,6 +489,7 @@ describe('scan config and differential rescan behavior', () => {
   const {
     normalizeScanConfig,
     scanConfigsHaveOptionChanges,
+    applyScanArtifacts,
     mergeRescanResults,
   } = __testing;
 
@@ -373,6 +567,40 @@ describe('scan config and differential rescan behavior', () => {
     expect(merged.root.children[0].id).toBe('about-old');
     expect(merged.root.children[0].comments).toHaveLength(1);
     expect(merged.orphans.some((node) => node.id === 'deep-old')).toBe(true);
+  });
+
+  test('applyScanArtifacts applies error artifacts by normalized URL', () => {
+    const root = {
+      id: 'home',
+      title: 'Home',
+      url: 'https://example.com/',
+      children: [
+        {
+          id: 'missing-node',
+          title: 'Missing',
+          url: 'https://example.com/missing/',
+          children: [],
+        },
+      ],
+    };
+
+    const merged = applyScanArtifacts(
+      root,
+      [],
+      {
+        errors: [
+          {
+            url: 'https://example.com/missing',
+            status: 404,
+            httpErrorLabel: 'HTTP 404 / Not Found',
+          },
+        ],
+      }
+    );
+
+    expect(merged.root.children[0].isError).toBe(true);
+    expect(merged.root.children[0].httpStatus).toBe(404);
+    expect(merged.root.children[0].httpErrorLabel).toBe('HTTP 404 / Not Found');
   });
 });
 
@@ -522,6 +750,13 @@ describe('comment popover positioning', () => {
     expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-color-input-bg: var\(--color-plum-950\);/);
     expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-input-mono-border: var\(--color-plum-600\);[\s\S]*--ui-input-mono-border-hover: var\(--color-plum-500\);[\s\S]*--ui-input-mono-border-focus: var\(--color-plum-400\);/);
     expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-status-success-icon: var\(--color-green-300\);/);
+    expect(generatedCss).toContain('--ui-toast-success-bg: var(--color-green-800);');
+    expect(generatedCss).toMatch(/\[data-theme="dark"\] \{[\s\S]*--ui-toast-success-bg: var\(--color-green-800\);/);
+    const toastSuccessBlock = appCss.match(/\.toast-success \{[\s\S]*?\}/)?.[0] || '';
+    expect(toastSuccessBlock).toContain('background: var(--ui-toast-success-bg);');
+    expect(toastSuccessBlock).toContain('border-color: var(--ui-toast-success-border);');
+    expect(toastSuccessBlock).toContain('color: var(--color-neutral-white);');
+    expect(toastSuccessBlock).not.toContain('var(--ui-status-success-icon)');
     expect(appCss).toMatch(/\.ui-search-input \{[\s\S]*width: 100%;/);
     expect(appCss).toMatch(/\[data-theme="dark"\] \.modal-card input,[\s\S]*background-color: var\(--ui-color-input-bg\);/);
     expect(appCss).toMatch(/\[data-theme="dark"\] \.blank-scan-shell\.search-container:hover,[\s\S]*background: var\(--ui-color-input-bg\);/);

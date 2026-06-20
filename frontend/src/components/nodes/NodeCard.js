@@ -17,7 +17,7 @@ import Badge from '../ui/Badge';
 
 import { getHostname, getUrlExtension, isRenderableTextUrl } from '../../utils/url';
 import { ANNOTATION_STATUS_LABELS, DEFAULT_CONNECTION_COLORS, getDepthColor } from '../../utils/constants';
-import { getNodeHttpErrorLabel } from '../../utils/scanStatus';
+import { getNodeHttpErrorLabel, isRealHttpErrorNode, isScanLimitedNode } from '../../utils/scanStatus';
 
 const NODE_STATUS_BADGE_STYLE = {
   new: 'info',
@@ -140,6 +140,14 @@ const NodeCard = ({
       };
     }
     const statusCode = Number(node?.httpStatus ?? node?.statusCode);
+    if (isScanLimitedNode(node)) {
+      return {
+        icon: AlertTriangle,
+        label: statusCode >= 400 ? `Scan limited (${getNodeHttpErrorLabel(node) || `HTTP ${statusCode}`})` : 'Scan limited',
+        text: 'Preview unavailable',
+        variant: 'blocked',
+      };
+    }
     const isViewableError = Boolean(node?.isViewableError && Number.isFinite(statusCode) && statusCode >= 400);
     if (isViewableError) return null;
     if (
@@ -147,7 +155,7 @@ const NodeCard = ({
       || orphanType === 'broken'
       || scanStatus === 'error'
       || scanStatus === 'failed'
-      || (Number.isFinite(statusCode) && statusCode >= 400)
+      || isRealHttpErrorNode(node)
     ) {
       return {
         icon: AlertTriangle,

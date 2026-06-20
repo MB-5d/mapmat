@@ -218,7 +218,7 @@ describe('ReportDrawer', () => {
 
     expect(container.textContent).toContain('Map Insights have not been run yet.');
     const runButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Run Insights')
+      button.textContent.includes('Run insights')
     );
     act(() => {
       runButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -243,6 +243,17 @@ describe('ReportDrawer', () => {
             title: 'Missing meta description',
             description: 'Pricing is missing a description.',
             recommendation: 'Add a clear description.',
+          },
+          {
+            id: 'technical-1',
+            pageId: '3',
+            url: 'https://example.com/contact',
+            category: 'technical',
+            severity: 'high',
+            title: '4xx page',
+            description: 'contact returned HTTP 404 / Not Found.',
+            recommendation: 'Fix the page, redirect it, or remove stale links to it.',
+            evidence: { statusCode: 404, statusLabel: 'HTTP 404 / Not Found' },
           },
         ],
         pageInsights: [
@@ -270,6 +281,7 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('84');
     expect(container.textContent).toContain('Missing meta description');
     expect(container.textContent).toContain('Add a clear description.');
+    expect(container.textContent).toContain('HTTP 404 / Not Found');
   });
 
   test('shows scan collapse diagnostics in the report', () => {

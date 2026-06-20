@@ -123,10 +123,10 @@ const CanvasToolbar = ({
   hasSelectedFullScreenshotAssets,
   hasDownloadableImages,
   hasDownloadableSelectedImages,
-  thumbnailsAllLabel = 'Get Thumbnails (All)',
-  thumbnailsSelectedLabel = 'Get Thumbnails (Selected)',
-  fullScreenshotsAllLabel = 'Get Full page (All)',
-  fullScreenshotsSelectedLabel = 'Get Full page (Selected)',
+  thumbnailsAllLabel = 'Get thumbnails (all)',
+  thumbnailsSelectedLabel = 'Get thumbnails (selected)',
+  fullScreenshotsAllLabel = 'Get full page (all)',
+  fullScreenshotsSelectedLabel = 'Get full page (selected)',
   captureIssues = [],
   onOpenImageReport,
   screenshotCreditsLabel = '0',
@@ -157,7 +157,7 @@ const CanvasToolbar = ({
   const redoBlockedByLive = !canRedo && !!undoRedoDisabledReason;
   const shareUnavailable = !hasSavedMap;
   const isHorizontalOrientation = mapOrientation === 'horizontal';
-  const orientationLabel = `Orientation: ${isHorizontalOrientation ? 'Horizontal' : 'Vertical'}`;
+  const orientationLabel = `Orientation: ${isHorizontalOrientation ? 'horizontal' : 'vertical'}`;
   const imageCaptureRequiresSave = hasMap && !hasSavedMap;
   const imageCaptureDisabled = !hasMap || imageCaptureRequiresSave;
   const imageCaptureDisabledReason = imageCaptureRequiresSave ? IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE : undefined;
@@ -220,7 +220,7 @@ const CanvasToolbar = ({
           {showVisibleAreaUpdateAction ? (
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Update Captured Thumbnails"
+              label="Update captured thumbnails"
               onClick={onUpdateCapturedThumbnails}
               disabled={imageCaptureDisabled}
               title={imageCaptureDisabledReason}
@@ -255,7 +255,7 @@ const CanvasToolbar = ({
           {showFullPageUpdateAction ? (
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Update Captured Full page"
+              label="Update captured full page"
               onClick={onUpdateCapturedFullScreenshots}
               disabled={imageCaptureDisabled}
               title={imageCaptureDisabledReason}
@@ -286,7 +286,7 @@ const CanvasToolbar = ({
           {showDownloadAllAction ? (
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Download All"
+              label="Download all"
               onClick={onDownloadImagesAll}
               disabled={!hasSavedMap || !hasMap}
             />
@@ -294,7 +294,7 @@ const CanvasToolbar = ({
           {showDownloadSelectedAction ? (
             <MenuItem
               className="canvas-tool-menu-item"
-              label="Download Selected"
+              label="Download selected"
               onClick={onDownloadImagesSelected}
               disabled={!hasSavedMap}
               title={!hasSavedMap ? imageCaptureDisabledReason : undefined}
@@ -322,8 +322,8 @@ const CanvasToolbar = ({
       active={connectionTool === 'userflow'}
       onClick={onToggleUserFlow}
       icon={<Workflow />}
-      label="User Flow"
-      title="User Flow (F)"
+      label="User flow"
+      title="User flow (F)"
     />
   ) : null;
 
@@ -341,10 +341,10 @@ const CanvasToolbar = ({
   const addPageButton = canEdit ? (
     <ToolButton
       key="add-page"
-      title="Add Page"
+      title="Add page"
       onClick={onAddPage}
       icon={<FilePlus />}
-      label="Add Page"
+      label="Add page"
     />
   ) : null;
 
@@ -354,8 +354,8 @@ const CanvasToolbar = ({
       onClick={onDuplicateMap}
       disabled={!hasMap}
       icon={<Copy />}
-      label="Duplicate Map"
-      title="Duplicate Map"
+      label="Duplicate map"
+      title="Duplicate map"
     />
   ) : null;
 
@@ -416,8 +416,8 @@ const CanvasToolbar = ({
       active={showVersionHistory}
       onClick={onShowVersionHistory}
       icon={<History />}
-      label="Version History"
-      title={hasSavedMap ? 'Version History (H)' : 'Version History'}
+      label="Version history"
+      title={hasSavedMap ? 'Version history (H)' : 'Version history'}
     />
   ) : null;
 
@@ -529,8 +529,8 @@ const CanvasToolbar = ({
       />
       {showOrientationMenu && (
         <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
-          <MenuTitle>Map Orientation</MenuTitle>
-          <MenuSection role="radiogroup" aria-label="Map Orientation">
+          <MenuTitle>Map orientation</MenuTitle>
+          <MenuSection role="radiogroup" aria-label="Map orientation">
             <MenuRadioItem
               className="canvas-tool-menu-radio-item"
               name="map-orientation"
@@ -562,8 +562,8 @@ const CanvasToolbar = ({
       onClick={onSaveMap}
       disabled={!hasMap || isSavingMap}
       icon={isSavingMap ? <Loader2 className="spin" /> : <Bookmark />}
-      label={isSavingMap ? 'Saving' : 'Save Map'}
-      title={isSavingMap ? 'Saving' : 'Save Map'}
+      label={isSavingMap ? 'Saving' : 'Save map'}
+      title={isSavingMap ? 'Saving' : 'Save map'}
     >
       {isSavingMap ? 'Saving' : null}
     </ToolButton>
@@ -575,8 +575,8 @@ const CanvasToolbar = ({
       onClick={onClearCanvas}
       disabled={!hasMap}
       icon={<RefreshCcw />}
-      label="Clear Canvas"
-      title="Clear Canvas"
+      label="Clear canvas"
+      title="Clear canvas"
     />
   ) : null;
 

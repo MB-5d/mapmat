@@ -102,7 +102,7 @@ const ScanBar = ({
                   checked={options.orphanPages}
                   onChange={() => onOptionChange('orphanPages')}
                   disabled={controlsDisabled || optionsDisabled}
-                  label="Orphan Pages"
+          label="Orphan pages"
                 />
               </div>
               <div className="scan-options-group">
@@ -134,7 +134,7 @@ const ScanBar = ({
                     checked={options.authenticatedPages}
                     onChange={() => onOptionChange('authenticatedPages')}
                     disabled={controlsDisabled || optionsDisabled}
-                    label="Authenticated Pages"
+                    label="Authenticated pages"
                   />
                 ) : null}
               </div>
@@ -145,7 +145,7 @@ const ScanBar = ({
                   checked={options.files}
                   onChange={() => onOptionChange('files')}
                   disabled={controlsDisabled || optionsDisabled}
-                  label="Files / Downloads"
+                  label="Files / downloads"
                 />
               </div>
               <div className="scan-options-group">

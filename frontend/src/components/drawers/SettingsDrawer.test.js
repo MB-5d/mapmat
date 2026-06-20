@@ -73,11 +73,11 @@ describe('SettingsDrawer', () => {
       );
     });
 
-    expect(container.textContent).toContain('Cookie Consent');
+    expect(container.textContent).toContain('Cookie consent');
     expect(container.textContent).toContain('Some optional research tools are allowed.');
 
     const button = Array.from(container.querySelectorAll('button')).find((candidate) =>
-      candidate.textContent.includes('Cookie Consent Settings')
+      candidate.textContent.includes('Cookie consent settings')
     );
 
     act(() => {

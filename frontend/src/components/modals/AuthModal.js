@@ -83,8 +83,8 @@ const AuthModal = ({
   const googleButtonRef = useRef(null);
 
   const authTabs = useMemo(() => ([
-    { value: AUTH_VIEWS.LOGIN, label: 'Log In' },
-    { value: AUTH_VIEWS.SIGNUP, label: 'Sign Up' },
+    { value: AUTH_VIEWS.LOGIN, label: 'Log in' },
+    { value: AUTH_VIEWS.SIGNUP, label: 'Sign up' },
   ]), []);
 
   useEffect(() => {
@@ -322,20 +322,20 @@ const AuthModal = ({
   };
 
   const submitLabel = (() => {
-    if (view === AUTH_VIEWS.LOGIN) return 'Log In';
-    if (view === AUTH_VIEWS.SIGNUP) return 'Create Account';
-    if (view === AUTH_VIEWS.VERIFY) return 'Verify Email';
-    if (view === AUTH_VIEWS.FORGOT) return 'Send Reset Code';
-    return 'Reset Password';
+    if (view === AUTH_VIEWS.LOGIN) return 'Log in';
+    if (view === AUTH_VIEWS.SIGNUP) return 'Create account';
+    if (view === AUTH_VIEWS.VERIFY) return 'Verify email';
+    if (view === AUTH_VIEWS.FORGOT) return 'Send reset code';
+    return 'Reset password';
   })();
 
   const showAuthTabs = view === AUTH_VIEWS.LOGIN || view === AUTH_VIEWS.SIGNUP;
   const requiresNewPassword = view === AUTH_VIEWS.SIGNUP || view === AUTH_VIEWS.RESET;
-  const emailFieldLabel = view === AUTH_VIEWS.LOGIN ? 'Email or Username' : 'Email';
+  const emailFieldLabel = view === AUTH_VIEWS.LOGIN ? 'Email or username' : 'Email';
   const emailFieldType = view === AUTH_VIEWS.LOGIN ? 'text' : 'email';
   const emailFieldPlaceholder = view === AUTH_VIEWS.LOGIN ? 'you@example.com or username' : 'you@example.com';
   const emailFieldAutoComplete = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
-  const passwordLabel = view === AUTH_VIEWS.RESET ? 'New Password' : 'Password';
+  const passwordLabel = view === AUTH_VIEWS.RESET ? 'New password' : 'Password';
   const passwordPlaceholder = view === AUTH_VIEWS.RESET ? 'New password' : 'Your password';
   const passwordAutoComplete = view === AUTH_VIEWS.LOGIN ? 'current-password' : 'new-password';
   const passwordHelperText = requiresNewPassword ? 'Must be at least 8 characters' : '';
@@ -407,7 +407,7 @@ const AuthModal = ({
         </Field>
 
         {view === AUTH_VIEWS.VERIFY || view === AUTH_VIEWS.RESET ? (
-          <Field label="Verification Code">
+          <Field label="Verification code">
             <TextInput
               type="text"
               inputMode="numeric"

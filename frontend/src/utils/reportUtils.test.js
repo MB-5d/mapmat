@@ -14,4 +14,30 @@ describe('reportUtils', () => {
     expect(getReportTypesForNode(node)).toContain('standard');
     expect(getReportTypesForNode(node)).not.toContain('files');
   });
+
+  test('treats status-only HTTP errors as report error pages', () => {
+    const node = {
+      id: 'missing-1',
+      title: 'Missing page',
+      url: 'https://example.com/missing',
+      statusCode: 404,
+    };
+
+    expect(getReportTypesForNode(node)).toContain('errorPages');
+    expect(getReportTypesForNode(node)).not.toContain('standard');
+  });
+
+  test('does not count scan-limited 403 pages as report error pages', () => {
+    const node = {
+      id: 'blocked-1',
+      title: 'Just a moment...',
+      url: 'https://example.com/protected',
+      statusCode: 403,
+      scanStatus: 'scan_limited',
+      blockedReason: 'challenge_page',
+      isChallengePage: true,
+    };
+
+    expect(getReportTypesForNode(node)).not.toContain('errorPages');
+  });
 });

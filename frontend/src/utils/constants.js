@@ -73,13 +73,13 @@ export const REPORT_TYPE_OPTIONS = [
   { key: 'standard', label: 'Standard' },
   { key: 'missing', label: 'Missing' },
   { key: 'duplicates', label: 'Duplicate' },
-  { key: 'brokenLinks', label: 'Broken Links' },
-  { key: 'inactivePages', label: 'Inactive Pages' },
-  { key: 'errorPages', label: 'Error Pages' },
-  { key: 'orphanPages', label: 'Orphan Pages' },
+  { key: 'brokenLinks', label: 'Broken links' },
+  { key: 'inactivePages', label: 'Inactive pages' },
+  { key: 'errorPages', label: 'Error pages' },
+  { key: 'orphanPages', label: 'Orphan pages' },
   { key: 'subdomains', label: 'Subdomains' },
-  { key: 'files', label: 'Files / Downloads' },
-  { key: 'authenticatedPages', label: 'Authenticated Pages' },
+  { key: 'files', label: 'Files / downloads' },
+  { key: 'authenticatedPages', label: 'Authenticated pages' },
 ];
 
 export const ANNOTATION_STATUS_OPTIONS = [

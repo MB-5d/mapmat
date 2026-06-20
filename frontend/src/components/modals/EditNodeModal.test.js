@@ -67,7 +67,7 @@ describe('EditNodeModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Changes')
+      button.textContent.includes('Save changes')
     );
 
     act(() => {
@@ -125,7 +125,7 @@ describe('EditNodeModal', () => {
     const textareas = container.querySelectorAll('textarea');
     expect(textareas[0].value).toBe('Scanned description');
     expect(textareas[1].value).toBe('seo, marketing');
-    expect(container.textContent).toContain('SEO Metadata');
+    expect(container.textContent).toContain('SEO metadata');
     expect(container.querySelector('input[value="Scanned H1"]')).not.toBeNull();
 
     act(() => {
@@ -134,7 +134,7 @@ describe('EditNodeModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Changes')
+      button.textContent.includes('Save changes')
     );
 
     act(() => {
@@ -194,13 +194,13 @@ describe('EditNodeModal', () => {
       );
     });
 
-    expect(container.textContent).toContain('Page Insights');
+    expect(container.textContent).toContain('Page insights');
     expect(container.textContent).toContain('82/100');
     expect(container.textContent).toContain('2 findings');
     expect(container.textContent).toContain('Missing meta description');
   });
 
-  test('uses Page Details title and does not repeat HTTP status label', () => {
+  test('uses Page details title and does not repeat HTTP status label', () => {
     act(() => {
       root.render(
         <EditNodeModal
@@ -220,8 +220,8 @@ describe('EditNodeModal', () => {
       );
     });
 
-    expect(container.textContent).toContain('Page Details');
-    expect(container.textContent).toContain('Scan Status');
+    expect(container.textContent).toContain('Page details');
+    expect(container.textContent).toContain('Scan status');
     expect(container.textContent).toContain('HTTP 404 / Not Found');
     expect(container.textContent).not.toMatch(/HTTP status/i);
   });
@@ -291,7 +291,7 @@ describe('EditNodeModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Changes')
+      button.textContent.includes('Save changes')
     );
 
     await act(async () => {
@@ -364,7 +364,7 @@ describe('EditNodeModal', () => {
       );
     });
 
-    expect(container.textContent).toContain('Duplicate Page');
+    expect(container.textContent).toContain('Duplicate page');
     expect(container.textContent).toContain('Duplicate of');
     expect(container.textContent).toContain('example.com/page');
     expect(container.textContent).toContain('Open page');
@@ -400,7 +400,7 @@ describe('EditNodeModal', () => {
       );
     });
 
-    expect(container.textContent).not.toContain('Duplicate Page');
+    expect(container.textContent).not.toContain('Duplicate page');
     expect(container.textContent).not.toContain('Show on map');
   });
 
@@ -429,7 +429,7 @@ describe('EditNodeModal', () => {
       );
     });
 
-    expect(container.textContent).toContain('Move Details');
+    expect(container.textContent).toContain('Move details');
     expect(container.textContent).toContain('Moved from position');
     expect(container.textContent).toContain('1.2');
   });
@@ -496,8 +496,8 @@ describe('EditNodeModal', () => {
       );
     });
 
-    expect(container.textContent).toContain('Add Home Page');
-    expect(container.textContent).not.toContain('Parent Page');
+    expect(container.textContent).toContain('Add home page');
+    expect(container.textContent).not.toContain('Parent page');
 
     const disabledHomeInput = Array.from(container.querySelectorAll('input')).find((input) =>
       input.value === 'Home'
@@ -512,7 +512,7 @@ describe('EditNodeModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Add Home Page')
+      button.textContent.includes('Add home page')
     );
     act(() => {
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

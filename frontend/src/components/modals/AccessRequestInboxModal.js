@@ -50,7 +50,7 @@ const AccessRequestInboxModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Access Requests"
+      title="Access requests"
       size="md"
       scrollable
       className="invite-inbox-modal"

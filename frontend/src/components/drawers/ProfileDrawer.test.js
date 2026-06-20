@@ -91,7 +91,7 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('.account-hero-badge')).toBeNull();
     expect(container.querySelector('button[aria-label="Upload avatar"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Upload Avatar');
-    expect(container.textContent).not.toContain('Remove Avatar');
+    expect(container.textContent).not.toContain('Remove avatar');
     expect(container.textContent).not.toContain('ProfileUpload Avatar');
   });
 
@@ -114,15 +114,15 @@ describe('ProfileDrawer', () => {
       editButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('Edit Avatar');
-    expect(container.textContent).toContain('Change Avatar');
+    expect(container.textContent).toContain('Edit avatar');
+    expect(container.textContent).toContain('Change avatar');
     const changeButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Change Avatar')
+      button.textContent.includes('Change avatar')
     );
     expect(changeButton.className).toContain('ui-btn--type-secondary');
     expect(changeButton.className).toContain('ui-btn--style-mono');
     const removeButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Remove Avatar')
+      button.textContent.includes('Remove avatar')
     );
     expect(removeButton.className).toContain('ui-btn--type-ghost');
     expect(removeButton.className).toContain('ui-btn--style-danger');
@@ -152,8 +152,8 @@ describe('ProfileDrawer', () => {
       'https://lh3.googleusercontent.com/a/avatar'
     );
     expect(container.querySelector('button[aria-label="Change avatar"]')).not.toBeNull();
-    expect(container.textContent).not.toContain('Change Avatar');
-    expect(container.textContent).not.toContain('Remove Avatar');
+    expect(container.textContent).not.toContain('Change avatar');
+    expect(container.textContent).not.toContain('Remove avatar');
 
     const editButton = container.querySelector('button[aria-label="Change avatar"]');
     await act(async () => {
@@ -442,7 +442,7 @@ describe('ProfileDrawer', () => {
     openProfileDetails();
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Changes')
+      button.textContent.includes('Save changes')
     );
     const usernameInput = container.querySelector('input[placeholder="Your username"]');
     expect(saveButton.disabled).toBe(true);
@@ -492,7 +492,7 @@ describe('ProfileDrawer', () => {
     openProfileDetails();
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Changes')
+      button.textContent.includes('Save changes')
     );
     expect(container.querySelector('input[placeholder="Your username"]').value).toBe(baseUser.name);
     expect(container.querySelector('input[placeholder="Email address"]').value).toBe(baseUser.email);
@@ -521,7 +521,7 @@ describe('ProfileDrawer', () => {
     openProfileDetails();
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Changes')
+      button.textContent.includes('Save changes')
     );
     const emailInput = container.querySelector('input[placeholder="Email address"]');
     expect(saveButton.disabled).toBe(true);
@@ -573,8 +573,8 @@ describe('ProfileDrawer', () => {
     expect(deleteSummary.getAttribute('aria-expanded')).toBe('true');
     expect(container.textContent).toContain('Deleting your account will permanently remove');
 
-    const deleteButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Delete Account')
+    const deleteButton = Array.from(container.querySelectorAll('.profile-delete-details button')).find((button) =>
+      button.textContent.includes('Delete account')
     );
     act(() => {
       deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -610,20 +610,20 @@ describe('ProfileDrawer', () => {
       editButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(container.textContent).toContain('Edit Avatar');
-    expect(container.textContent).not.toContain('Crop Avatar');
+    expect(container.textContent).toContain('Edit avatar');
+    expect(container.textContent).not.toContain('Crop avatar');
     expect(container.textContent).toContain('Position your image inside the circle.');
-    expect(container.textContent).toContain('Change Avatar');
-    expect(container.textContent).toContain('Remove Avatar');
+    expect(container.textContent).toContain('Change avatar');
+    expect(container.textContent).toContain('Remove avatar');
     expect(container.querySelector('[data-testid="avatar-cropper"]')).not.toBeNull();
 
     const profileSaveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Changes')
+      button.textContent.includes('Save changes')
     );
     expect(profileSaveButton.disabled).toBe(true);
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Avatar')
+      button.textContent.includes('Save avatar')
     );
     await act(async () => {
       saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

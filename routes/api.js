@@ -32,7 +32,7 @@ const { getCoeditingHealthSnapshotAsync } = require('../utils/coeditingObservabi
 const { buildHealthSnapshot: getEmailHealthSnapshot, sendEmailAsync } = require('../utils/emailProvider');
 const { EMAIL_TEMPLATE_KEYS, renderTemplatedEmail } = require('../utils/emailTemplates');
 const { saveFeedbackImageFromDataUrl } = require('../utils/feedbackStorage');
-const { analyzeMapInsights } = require('../utils/mapInsights');
+const { MAP_INSIGHTS_VERSION, analyzeMapInsights } = require('../utils/mapInsights');
 const { recordUsageEvent } = require('../utils/usageMetering');
 const {
   ACTIONS: ENTITLEMENT_ACTIONS,
@@ -369,6 +369,16 @@ function safeParse(raw, fieldName, fallback = undefined) {
   }
 }
 
+function parseStoredInsights(raw) {
+  const parsed = safeParse(raw, 'insights_data', null);
+  if (!parsed) return { insights: null, stale: false };
+  const stale = parsed.version !== MAP_INSIGHTS_VERSION;
+  return {
+    insights: stale ? null : parsed,
+    stale,
+  };
+}
+
 function stripNodeForStorage(node) {
   if (!node || typeof node !== 'object') return node;
   const next = { ...node };
@@ -391,14 +401,16 @@ function sanitizeMapTreeForStorage({ root, orphans } = {}) {
 
 // Shared parser for map/history/share rows that store JSON in *_data columns.
 function parseMapFields(row) {
+  const storedInsights = parseStoredInsights(row.insights_data);
   return {
     root: safeParse(row.root_data, 'root_data'),
     orphans: safeParse(row.orphans_data, 'orphans_data', []),
     connections: safeParse(row.connections_data, 'connections_data', []),
     colors: safeParse(row.colors, 'colors', null),
     connectionColors: safeParse(row.connection_colors, 'connection_colors', null),
-    insights: safeParse(row.insights_data, 'insights_data', null),
-    insights_generated_at: row.insights_generated_at || null,
+    insights: storedInsights.insights,
+    insights_generated_at: storedInsights.insights ? (row.insights_generated_at || null) : null,
+    insights_stale: storedInsights.stale,
     root_data: undefined,
     orphans_data: undefined,
     connections_data: undefined,
@@ -2478,9 +2490,11 @@ router.get('/maps/:id/insights', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Map not found' });
     }
 
+    const storedInsights = parseStoredInsights(map.insights_data);
     res.json({
-      insights: safeParse(map.insights_data, 'insights_data', null),
-      insights_generated_at: map.insights_generated_at || null,
+      insights: storedInsights.insights,
+      insights_generated_at: storedInsights.insights ? (map.insights_generated_at || null) : null,
+      insights_stale: storedInsights.stale,
     });
   } catch (error) {
     console.error('Get map insights error:', error);
@@ -3389,15 +3403,19 @@ router.get('/history', requireAuth, async (req, res) => {
     const total = await historyStore.countHistoryByUserAsync(req.user.id);
 
     // Parse JSON fields
-    const parsed = history.map(h => ({
-      ...h,
-      ...parseMapFields(h),
-      scan_options: safeParse(h.scan_options, 'scan_options', null),
-      insights: safeParse(h.insights_data, 'insights_data', null),
-      insights_generated_at: h.insights_generated_at || null,
-      scan_depth: h.scan_depth ?? null,
-      map_id: h.map_id || null,
-    }));
+    const parsed = history.map((h) => {
+      const storedInsights = parseStoredInsights(h.insights_data);
+      return {
+        ...h,
+        ...parseMapFields(h),
+        scan_options: safeParse(h.scan_options, 'scan_options', null),
+        insights: storedInsights.insights,
+        insights_generated_at: storedInsights.insights ? (h.insights_generated_at || null) : null,
+        insights_stale: storedInsights.stale,
+        scan_depth: h.scan_depth ?? null,
+        map_id: h.map_id || null,
+      };
+    });
 
     res.json({ history: parsed, pagination: { limit, offset, total } });
   } catch (error) {
@@ -3483,9 +3501,11 @@ router.get('/history/:id/insights', requireAuth, async (req, res) => {
       failureError: 'History item not found',
     })) return;
 
+    const storedInsights = parseStoredInsights(historyItem.insights_data);
     res.json({
-      insights: safeParse(historyItem.insights_data, 'insights_data', null),
-      insights_generated_at: historyItem.insights_generated_at || null,
+      insights: storedInsights.insights,
+      insights_generated_at: storedInsights.insights ? (historyItem.insights_generated_at || null) : null,
+      insights_stale: storedInsights.stale,
     });
   } catch (error) {
     console.error('Get insights error:', error);

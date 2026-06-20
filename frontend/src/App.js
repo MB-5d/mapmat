@@ -66,7 +66,7 @@ import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
 import Topbar from './components/toolbar/Topbar';
 import { getHostname, isRenderableTextUrl } from './utils/url';
-import { getNodeHttpErrorLabel, isVirtualMissingNode } from './utils/scanStatus';
+import { getNodeHttpErrorLabel, isRealHttpErrorNode, isVirtualMissingNode } from './utils/scanStatus';
 import {
   APP_ONLY_MODE,
   API_BASE,
@@ -1793,7 +1793,7 @@ const SitemapTree = ({
     }
     if (node.authRequired && badgeVisibility?.authenticatedPages) {
       badges.push('Auth');
-    } else if (node.isError && badgeVisibility?.errorPages) {
+    } else if (isRealHttpErrorNode(node) && badgeVisibility?.errorPages) {
       badges.push(getNodeHttpErrorLabel(node) || 'Error');
     } else if ((node.isInactive || orphanType === 'inactive') && badgeVisibility?.inactivePages && !badges.includes('Inactive')) {
       badges.push('Inactive');
@@ -2116,6 +2116,37 @@ const buildForestIndex = (rootNode, orphanNodes = []) => {
   return index;
 };
 
+function getDisplayScanLayerAvailability(rootNode, orphanNodes = []) {
+  const nodesForCounts = collectAllNodesWithOrphans(rootNode, orphanNodes)
+    .filter((node) => !isEntitlementLockedNode(node));
+  const forestIndex = buildForestIndex(rootNode, orphanNodes);
+  const realOrphans = (orphanNodes || []).filter((orphan) => !isEntitlementLockedNode(orphan));
+  const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
+
+  return {
+    placementPrimary: nodesForCounts.some((node) => forestIndex.nodes.get(node.id)?.treeType === 'root'),
+    placementSubdomain: realOrphans.some((orphan) => !!orphan.subdomainRoot),
+    placementOrphan: realOrphans.some((orphan) => !orphan.subdomainRoot),
+    typePages: false,
+    typeFiles: false,
+    statusMissing: nodesForCounts.some((node) => isVirtualMissingNode(node)),
+    statusBroken: nodesForCounts.some((node) => {
+      const meta = forestIndex.nodes.get(node.id);
+      if (isTopLevelOrphanRootMeta(meta)) return false;
+      return !!node.isBroken || node.orphanType === 'broken';
+    }),
+    statusError: nodesForCounts.some((node) => isRealHttpErrorNode(node)),
+    statusInactive: nodesForCounts.some((node) => (
+      node.scanStatus !== 'scan_limited'
+      && !isRealHttpErrorNode(node)
+      && !node.authRequired
+      && (!!node.isInactive || node.orphanType === 'inactive')
+    )),
+    statusAuth: nodesForCounts.filter((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired).length > 0,
+    statusDuplicate: nodesForCounts.filter((node) => node.isDuplicate).length > 0,
+  };
+}
+
 const makeNodeIdFromUrl = (url) => `url_${url.replace(/[^a-z0-9]/gi, '_')}`;
 
 const getUrlLabel = (url) => {
@@ -2382,7 +2413,10 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
   (scanResult.errors || []).forEach((error) => {
     if (!error?.url) return;
     if (!isArtifactInScope(error.url)) return;
-    const node = urlNodeMap.get(error.url);
+    let node = urlNodeMap.get(error.url);
+    if (!node) {
+      node = normalizedUrlNodeMap.get(normalizeUrlForCompare(error.url));
+    }
     if (!node) return;
     if (node.isFile || node.orphanType === 'file') return;
     if (node.scanStatus === 'scan_limited') return;
@@ -2419,7 +2453,7 @@ const applyScanArtifacts = (rootNode, orphanNodes, scanResult) => {
     if (inactiveStatus >= 400) return;
     const existing = urlNodeMap.get(inactive.url);
     if (existing) {
-      if (existing.scanStatus === 'scan_limited' || existing.isError || existing.authRequired) return;
+      if (existing.scanStatus === 'scan_limited' || isRealHttpErrorNode(existing) || existing.authRequired) return;
       if (existing.isFile || existing.orphanType === 'file') return;
       existing.isInactive = true;
       existing.scanStatus = 'inactive';
@@ -2602,6 +2636,8 @@ export const __testing = {
   shouldShowScanLimitPreview,
   canRescanEntitlementLimitedMap,
   getVisibleScanAllowanceForEntitlements,
+  getDisplayScanLayerAvailability,
+  applyScanArtifacts,
   mergeRescanResults,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
@@ -5008,9 +5044,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const clearCanvas = async () => {
     if (hasMap && !currentMap?.id) {
       const wantsSave = await showConfirm({
-        title: 'Save Map?',
+        title: 'Save map?',
         message: 'You have an unsaved map. Save it before clearing?',
-        confirmText: 'Save Map',
+        confirmText: 'Save map',
         cancelText: 'Clear',
       });
       if (wantsSave) {
@@ -5033,7 +5069,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       return true;
     }
     const confirmed = await showConfirm({
-      title: 'Clear Canvas',
+      title: 'Clear canvas',
       message: 'Clear the canvas? This cannot be undone.',
       confirmText: 'Clear',
       danger: true
@@ -7390,7 +7426,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const wantsSave = await showConfirm({
         title: 'Save before logout?',
         message: 'You have an unsaved map. Save it before logging out?',
-        confirmText: 'Save Map',
+        confirmText: 'Save map',
         cancelText: 'Log Out',
       });
       if (wantsSave) {
@@ -10790,7 +10826,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           showConfirm({
             title: 'Save current map?',
             message: 'You have an unsaved map. Save it before leaving?',
-            confirmText: 'Save Map',
+            confirmText: 'Save map',
             cancelText: "Don't Save",
           }).then((wantsSave) => {
             if (pendingUnsavedRoutePromptRef.current !== promptKey) return;
@@ -11315,7 +11351,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         showConfirm({
           title: 'Save current map?',
           message: 'You have an unsaved map. Save it before leaving?',
-          confirmText: 'Save Map',
+          confirmText: 'Save map',
           cancelText: "Don't Save",
         }).then((wantsSave) => {
           if (pendingUnsavedRoutePromptRef.current !== promptKey) return;
@@ -11612,7 +11648,6 @@ export default function App({ currentRoute, navigateToRoute }) {
         return;
       }
 
-      const isTopLevelOrphanRootMeta = (meta) => meta?.treeType === 'orphan' && meta.parentId === null;
       const seenCrosslinks = new Set();
       const scannedCrosslinks = (data.crosslinks || [])
         .map((link, index) => {
@@ -11644,22 +11679,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
       const realPageCount = countNodes(merged.root);
       const displayMerged = addScanLimitGhosts(merged.root, merged.orphans, data.entitlement || null);
-      const displayNodesForCounts = collectAllNodesWithOrphans(displayMerged.root, displayMerged.orphans);
-      const displayForestIndexForCounts = buildForestIndex(displayMerged.root, displayMerged.orphans);
-      const displayHasSubdomains = (displayMerged.orphans || []).some((orphan) => !!orphan.subdomainRoot);
-      const displayHasOrphans = (displayMerged.orphans || []).some((orphan) => !orphan.subdomainRoot);
-      const displayHasMissing = displayNodesForCounts.some((node) => isVirtualMissingNode(node));
-      const displayHasBroken = displayNodesForCounts.some((node) => {
-        const meta = displayForestIndexForCounts.nodes.get(node.id);
-        if (isTopLevelOrphanRootMeta(meta)) return false;
-        return !!node.isBroken || node.orphanType === 'broken';
-      });
-      const displayHasInactive = displayNodesForCounts.some((node) => (
-        node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (!!node.isInactive || node.orphanType === 'inactive')
-      ));
-      const displayHasErrors = displayNodesForCounts.some((node) => !!node.isError);
-      const displayAuthCount = displayNodesForCounts.filter((node) => !node.isBlocked && !node.isChallengePage && !!node.authRequired).length;
-      const displayDuplicateCount = displayNodesForCounts.filter((node) => node.isDuplicate).length;
+      const displayScanLayerAvailability = getDisplayScanLayerAvailability(displayMerged.root, displayMerged.orphans);
       const nextConnections = shouldMergeScanResult
         ? [...manualConnections, ...scannedCrosslinks]
         : scannedCrosslinks;
@@ -11676,32 +11696,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         scanDiagnostics: data.scanDiagnostics || null,
         entitlement: data.entitlement || null,
       });
-      setScanLayerAvailability({
-        placementPrimary: true,
-        placementSubdomain: displayHasSubdomains,
-        placementOrphan: displayHasOrphans,
-        typePages: false,
-        typeFiles: false,
-        statusMissing: displayHasMissing,
-        statusBroken: displayHasBroken,
-        statusError: displayHasErrors,
-        statusInactive: displayHasInactive,
-        statusAuth: displayAuthCount > 0,
-        statusDuplicate: displayDuplicateCount > 0,
-      });
-      setScanLayerVisibility({
-        placementPrimary: true,
-        placementSubdomain: displayHasSubdomains,
-        placementOrphan: displayHasOrphans,
-        typePages: false,
-        typeFiles: false,
-        statusMissing: displayHasMissing,
-        statusBroken: displayHasBroken,
-        statusError: displayHasErrors,
-        statusInactive: displayHasInactive,
-        statusAuth: displayAuthCount > 0,
-        statusDuplicate: displayDuplicateCount > 0,
-      });
+      setScanLayerAvailability(displayScanLayerAvailability);
+      setScanLayerVisibility(displayScanLayerAvailability);
       setCurrentMap(null);
       navigateToRoute(createAppHomeRoute(), { replace: true });
       try {
@@ -12729,7 +12725,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setActiveTool('select');
         setConnectionTool(null);
       }
-      // User Flow tool with "F"
+      // User flow tool with "F"
       if (e.key === 'f' || e.key === 'F') {
         if (canEdit()) {
           setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
@@ -14428,12 +14424,12 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (!result.ok) {
           showToast(result.error || 'Failed to queue connection', 'error');
         } else {
-          showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} queued`, 'success');
+          showToast(`${drawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} queued`, 'success');
         }
       } else {
         saveStateForUndo();
         setConnections(prev => [...prev, newConnection]);
-        showToast(`${drawingConnection.type === 'userflow' ? 'User Flow' : 'Crosslink'} created`, 'success');
+        showToast(`${drawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} created`, 'success');
       }
     }
 
@@ -17007,7 +17003,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         }}
         onMapNameClick={startMapNameEdit}
         collaborators={titleCollaborators}
-        sharedTitle={root?.title || 'Shared Sitemap'}
+        sharedTitle={root?.title || 'Shared sitemap'}
         onCreateMap={() => openCreateMapFlow()}
         onImportFile={() => setShowImportModal(true)}
         onShowInvites={handleShowInviteInbox}
@@ -17077,7 +17073,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             actions={(
               <div className="map-conflict-actions">
                 <Button type="secondary" buttonStyle="danger" size="sm" onClick={reloadMapAfterConflict}>
-                  Reload Latest
+                  Reload latest
                 </Button>
                 <Button type="ghost" buttonStyle="danger" size="sm" onClick={dismissMapConflict}>
                   Dismiss
@@ -17158,7 +17154,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     optionsDisabled={isDefaultWorkspaceScanModalVisible || isImportedMap}
                     onClearUrl={() => setUrlInput('')}
                     showClearUrl={!!urlInput.trim()}
-                    sharedTitle={root?.title || 'Shared Sitemap'}
+                    sharedTitle={root?.title || 'Shared sitemap'}
                     placeholder="Enter a URL to start"
                   />
                 </div>
@@ -17629,7 +17625,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   <MenuItem
                     className="connection-menu-item"
                     icon={<MessageSquare size={14} />}
-                    label="Add Comment"
+                    label="Add comment"
                     title={APP_ONLY_MODE ? `${TESTER_NOT_READY_MESSAGE}: connection comments` : 'Add comment'}
                     onClick={() => {
                       showToast(
@@ -18018,20 +18014,20 @@ export default function App({ currentRoute, navigateToRoute }) {
                 thumbnailsAllLabel: invalidThumbnailAssetIds.size > 0
                   ? 'Retry Missing Thumbnails'
                   : thumbnailCaptureStats.hasPartial
-                  ? 'Get Thumbnails (Remaining)'
-                  : 'Get Thumbnails (All)',
+                  ? 'Get thumbnails (remaining)'
+                  : 'Get thumbnails (all)',
                 thumbnailsSelectedLabel: hasSelectedDownloadableThumbnails
                   ? 'Recapture'
-                  : 'Get Thumbnails (Selected)',
+                  : 'Get thumbnails (selected)',
                 allFullScreenshotsCaptured: fullScreenshotCaptureStats.allCaptured,
                 fullScreenshotsAllLabel: invalidFullScreenshotAssetIds.size > 0
                   ? 'Retry Missing Full page'
                   : fullScreenshotCaptureStats.hasPartial
-                  ? 'Get Full page (Remaining)'
-                  : 'Get Full page (All)',
+                  ? 'Get full page (remaining)'
+                  : 'Get full page (all)',
                 fullScreenshotsSelectedLabel: hasSelectedFullScreenshotAssets
                   ? 'Recapture'
-                  : 'Get Full page (Selected)',
+                  : 'Get full page (selected)',
                 captureIssues: visibleCaptureIssues,
                 onOpenImageReport: () => {
                   setShowImageMenu(false);
@@ -18464,8 +18460,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         defaultNotes={saveMapModalNotes}
         onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
-        title={createMapMode ? 'Create Map' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
-        submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate Map' : 'Save Map')}
+        title={createMapMode ? 'Create map' : (duplicateMapConfig ? 'Duplicate map' : 'Save map')}
+        submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate map' : 'Save map')}
         submitLoadingLabel={createMapMode ? 'Creating' : (duplicateMapConfig ? 'Duplicating' : 'Saving')}
         saving={isSavingMap}
       />
@@ -18637,7 +18633,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           show
           onClose={dismissPlansModal}
           title="Upgrade"
-          subtitle="Choose a plan to open Stripe Checkout in a new tab."
+          subtitle="Choose a plan to open Stripe checkout in a new tab."
           className="plans-modal"
           scrollable
           footer={(

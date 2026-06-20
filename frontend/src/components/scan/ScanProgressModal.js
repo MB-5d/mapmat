@@ -42,7 +42,7 @@ const ScanProgressModal = ({
     body = (
       <div className="cancel-confirm scan-error-state">
         <AlertTriangle size={48} className="cancel-warning-icon scan-error-icon" />
-        <h3>Scan Failed</h3>
+        <h3>Scan failed</h3>
         <p>{scanErrorMessage}</p>
       </div>
     );
@@ -125,7 +125,7 @@ const ScanProgressModal = ({
     body = (
       <div className="cancel-confirm">
         <AlertTriangle size={48} className="cancel-warning-icon" />
-        <h3>Cancel Scan?</h3>
+        <h3>Cancel scan?</h3>
         <p>Are you sure you want to cancel the current scan?</p>
       </div>
     );
@@ -137,10 +137,10 @@ const ScanProgressModal = ({
           onClick={onContinueScan}
           disabled={isStoppingScan}
         >
-          No, Continue Scanning
+          No, continue scanning
         </Button>
         <Button variant="danger" onClick={onCancelScan}>
-          Yes, Cancel Scan
+          Yes, cancel scan
         </Button>
       </>
     );
@@ -148,7 +148,7 @@ const ScanProgressModal = ({
     body = (
       <div className="cancel-confirm">
         <AlertTriangle size={48} className="cancel-warning-icon" />
-        <h3>Stop Scanning?</h3>
+        <h3>Stop scanning?</h3>
         <p>Stop scanning and show the pages found so far?</p>
       </div>
     );

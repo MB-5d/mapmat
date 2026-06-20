@@ -51,7 +51,7 @@ describe('HistoryModal', () => {
     });
 
     const deleteButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Delete Selected')
+      button.textContent.includes('Delete selected')
     );
     const sortSelect = container.querySelector('select');
 

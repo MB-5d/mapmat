@@ -262,7 +262,7 @@ const ReportDrawer = ({
     { key: 'inactivePages', label: 'Inactive pages' },
     { key: 'errorPages', label: 'Error pages' },
     { key: 'brokenLinks', label: 'Broken links' },
-    { key: 'files', label: 'Files / Downloads' },
+    { key: 'files', label: 'Files / downloads' },
     { key: 'subdomains', label: 'Subdomains' },
     { key: 'missing', label: 'Missing' },
     { key: 'duplicates', label: 'Duplicate' },
@@ -610,7 +610,7 @@ const ReportDrawer = ({
                 <div className="insights-empty-title">Map Insights have not been run yet.</div>
                 <div className="insights-empty-copy">Run deterministic checks against the current scan data.</div>
                 <Button type="button" variant="primary" onClick={onRunInsights}>
-                  Run Insights
+                  Run insights
                 </Button>
               </div>
             )}
@@ -653,7 +653,7 @@ const ReportDrawer = ({
 
                 <section className="insights-actions">
                   <Button type="button" variant="secondary" size="sm" onClick={onRunInsights}>
-                    Rerun Insights
+                    Rerun insights
                   </Button>
                   <SelectInput
                     size="sm"

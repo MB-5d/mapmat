@@ -106,6 +106,12 @@
   --ui-icon-button-size-sm: 32px;
   --ui-icon-button-size-md: 40px;
   --ui-icon-button-size-lg: 48px;
+  --ui-button-text-transform: none;
+  --ui-shell-title-text-transform: none;
+  --ui-text-box-edge: cap alphabetic;
+  --ui-text-box-trim: trim-both;
+  --ui-text-edge: cap alphabetic;
+  --ui-leading-trim: both;
   --ui-icon-button-radius-sm: var(--radius-xs);
   --ui-icon-button-active-bg: var(--ui-color-primary);
   --ui-icon-button-active-bg-hover: var(--ui-color-primary-hover);
@@ -459,6 +465,8 @@
   --ui-status-success-border: var(--color-green-300);
   --ui-status-success-text: var(--color-green-800);
   --ui-status-success-icon: var(--color-green-600);
+  --ui-toast-success-bg: var(--color-green-800);
+  --ui-toast-success-border: var(--color-green-800);
   --ui-status-danger-bg: var(--color-red-100);
   --ui-status-danger-border: var(--color-red-300);
   --ui-status-danger-text: var(--color-red-800);
@@ -621,6 +629,8 @@
   --ui-status-success-border: var(--color-green-800);
   --ui-status-success-text: var(--color-green-300);
   --ui-status-success-icon: var(--color-green-300);
+  --ui-toast-success-bg: var(--color-green-800);
+  --ui-toast-success-border: var(--color-green-800);
   --ui-status-danger-bg: #2d1313;
   --ui-status-danger-border: var(--color-red-900);
   --ui-status-danger-text: var(--color-red-200);

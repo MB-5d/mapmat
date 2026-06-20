@@ -153,7 +153,7 @@ describe('ProjectsModal', () => {
       button.textContent.replace(/\s+/g, ' ').trim() === 'Add map'
     );
     const addProjectButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.replace(/\s+/g, ' ').trim() === 'Add Project'
+      button.textContent.replace(/\s+/g, ' ').trim() === 'Add project'
     );
     const projectInput = container.querySelector('input.project-name-input');
     const mapInput = container.querySelector('input.project-map-name-input');

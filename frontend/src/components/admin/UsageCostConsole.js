@@ -99,7 +99,7 @@ export default function UsageCostConsole({ onSessionExpired }) {
     <section className="admin-console-panel admin-usage-panel">
       <div className="admin-usage-header">
         <div>
-          <h2>Usage & Costs</h2>
+          <h2>Usage and costs</h2>
           <p>{usage?.range?.since || 'Loading'} to {usage?.range?.until || ''}</p>
         </div>
         <button

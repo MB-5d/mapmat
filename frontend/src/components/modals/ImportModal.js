@@ -18,7 +18,7 @@ const ImportModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Import Sitemap"
+      title="Import sitemap"
       scrollable
       className="import-modal"
     >

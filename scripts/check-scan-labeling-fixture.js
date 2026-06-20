@@ -52,6 +52,9 @@ function createFixtureServer() {
           '<h1>Fixture Home</h1>',
           '<a href="/server-error">Server error</a>',
           '<a href="/gone">Gone page</a>',
+          '<a href="/cloudflare-once">Cloudflare retry page</a>',
+          '<a href="/cloudflare-blocked">Cloudflare blocked page</a>',
+          '<a href="/cdn-cgi/l/email-protection">Email protection utility</a>',
           '<a href="/duplicate-a">Duplicate A</a>',
           '<a href="/duplicate-b">Duplicate B</a>',
           '<a href="/docs/deep/page">Deep page</a>',
@@ -71,6 +74,34 @@ function createFixtureServer() {
         status: 404,
         title: 'Page not found',
         body: '<h1>Not found</h1>',
+      });
+    } else if (url.pathname === '/cloudflare-once') {
+      const userAgent = String(req.headers['user-agent'] || '');
+      if (userAgent.includes('VellicBot')) {
+        response = html({
+          status: 403,
+          title: 'Just a moment...',
+          body: '<h1>Checking your browser</h1><p>Cloudflare Ray ID fixture.</p>',
+        });
+        response.headers['cf-mitigated'] = 'challenge';
+      } else {
+        response = html({
+          title: 'Cloudflare Retry Success',
+          body: '<h1>Cloudflare Retry Success</h1><p>Browser retry reached the page.</p>',
+        });
+      }
+    } else if (url.pathname === '/cloudflare-blocked') {
+      response = html({
+        status: 403,
+        title: 'Just a moment...',
+        body: '<h1>Checking your browser</h1><p>Cloudflare Ray ID fixture.</p>',
+      });
+      response.headers['cf-mitigated'] = 'challenge';
+    } else if (url.pathname === '/cdn-cgi/l/email-protection') {
+      response = html({
+        status: 404,
+        title: 'Email protection utility',
+        body: '<h1>Email protection utility</h1>',
       });
     } else if (url.pathname === '/duplicate-a') {
       response = html({
@@ -241,6 +272,25 @@ function assertLabeling(result, fixtureBase, { expectFiles = true } = {}) {
   assert.strictEqual(Boolean(notFound.isMissing), false);
   assert.strictEqual(Boolean(notFound.isVirtualMissing), false);
 
+  const retryPage = byUrl.get(`${fixtureBase}/cloudflare-once`);
+  assert.ok(retryPage, 'Cloudflare challenge should be retried and included');
+  assert.strictEqual(retryPage.isError, false);
+  assert.strictEqual(retryPage.httpStatus, 200);
+  assert.strictEqual(retryPage.title, 'Cloudflare Retry Success');
+  assert.strictEqual(retryPage.scanStatus, 'active');
+
+  const blockedPage = byUrl.get(`${fixtureBase}/cloudflare-blocked`);
+  assert.ok(blockedPage, 'persistent Cloudflare challenge should be included as scan-limited');
+  assert.strictEqual(blockedPage.isError, false);
+  assert.strictEqual(blockedPage.httpStatus, 403);
+  assert.strictEqual(blockedPage.scanStatus, 'scan_limited');
+  assert.strictEqual(blockedPage.blockedReason, 'challenge_page');
+  assert.strictEqual(blockedPage.isChallengePage, true);
+  assert.ok(
+    !(result.errors || []).some((entry) => entry.url === `${fixtureBase}/cloudflare-blocked`),
+    'persistent Cloudflare challenge should not be counted as an error page'
+  );
+
   const duplicate = byUrl.get(`${fixtureBase}/duplicate-b`);
   assert.ok(duplicate, 'duplicate page should be included');
   assert.strictEqual(duplicate.isDuplicate, true);
@@ -262,6 +312,15 @@ function assertLabeling(result, fixtureBase, { expectFiles = true } = {}) {
   const urls = allArtifactUrls(result);
   assert.ok(!urls.some((url) => url.includes('external.example')), 'external page should be excluded');
   assert.ok(!urls.some((url) => url.includes('cdn.example')), 'external file should be excluded');
+  assert.ok(!urls.some((url) => url.includes('/cdn-cgi/l/email-protection')), 'Cloudflare email utility should be ignored');
+  assert.ok(
+    (result.scanDiagnostics?.cloudflareBrowserRetryCount || 0) >= 1,
+    'Cloudflare challenge should trigger a browser retry'
+  );
+  assert.ok(
+    (result.scanDiagnostics?.cloudflareBrowserRetrySuccessCount || 0) >= 1,
+    'Cloudflare browser retry should record success'
+  );
 
   assert.strictEqual(result.scanScope?.baseHost, '127.0.0.1');
   assert.strictEqual(result.scanScope?.exactOnly, true);
@@ -320,12 +379,12 @@ async function main() {
     console.log('[scan-labeling-fixture] Passed.');
   } finally {
     if (fixture) await new Promise((resolve) => fixture.close(resolve));
-    if (backend) backend.kill('SIGTERM');
+    if (backend) backend.kill('SIGINT');
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
 main().catch((error) => {
-  console.error(`[scan-labeling-fixture] Failed: ${error.message}`);
+  console.error(`[scan-labeling-fixture] Failed: ${error.stack || error.message}`);
   process.exit(1);
 });

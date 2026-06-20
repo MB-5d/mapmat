@@ -40,13 +40,13 @@ export default function InviteAcceptGate({
         <div className="route-gate-actions">
           <Button type="button" variant="secondary" onClick={onGoHome}>
             <ArrowLeft size={16} />
-            <span>Back to App</span>
+            <span>Back to app</span>
           </Button>
 
           {status === 'auth_required' ? (
             <Button type="button" variant="primary" onClick={onLogin}>
               <LogIn size={16} />
-              <span>Sign In</span>
+              <span>Sign in</span>
             </Button>
           ) : status === 'processing' ? (
             <Button type="button" variant="primary" loading disabled>
@@ -55,7 +55,7 @@ export default function InviteAcceptGate({
           ) : (
             <Button type="button" variant="primary" onClick={onShowInvites}>
               <MailCheck size={16} />
-              <span>Open Invite Inbox</span>
+              <span>Open invite inbox</span>
             </Button>
           )}
         </div>

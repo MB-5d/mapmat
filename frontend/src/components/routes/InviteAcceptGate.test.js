@@ -38,7 +38,7 @@ describe('InviteAcceptGate', () => {
     });
 
     const signInButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Sign In')
+      button.textContent.includes('Sign in')
     );
 
     act(() => {

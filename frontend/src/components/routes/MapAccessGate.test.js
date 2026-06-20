@@ -47,7 +47,7 @@ describe('MapAccessGate', () => {
 
     const textarea = container.querySelector('textarea');
     const requestButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Request Viewer Access')
+      button.textContent.includes('Request viewer access')
     );
 
     act(() => {

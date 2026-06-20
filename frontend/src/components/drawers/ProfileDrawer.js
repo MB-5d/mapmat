@@ -587,14 +587,14 @@ const ProfileDrawer = ({
             id="profile-password-details"
             open={passwordDetailsOpen}
             onOpenChange={handlePasswordDetailsOpenChange}
-            title={<strong>{hasPassword ? 'Change Password' : 'Set Password'}</strong>}
+            title={<strong>{hasPassword ? 'Change password' : 'Set password'}</strong>}
             contentClassName="profile-password-details"
           >
             {!hasPassword ? (
               <p className="field-hint">You signed in without a password. Set one here if you want email/password login too.</p>
             ) : null}
             {hasPassword ? (
-              <Field label="Current Password">
+              <Field label="Current password">
                 <TextInput
                   type="password"
                   value={currentPassword}
@@ -604,7 +604,7 @@ const ProfileDrawer = ({
                 />
               </Field>
             ) : null}
-            <Field label="New Password">
+            <Field label="New password">
               <TextInput
                 type="password"
                 value={newPassword}
@@ -614,7 +614,7 @@ const ProfileDrawer = ({
                 disabled={!user || loading}
               />
             </Field>
-            <Field label="Confirm New Password">
+            <Field label="Confirm new password">
               <TextInput
                 type="password"
                 value={confirmPassword}
@@ -641,7 +641,7 @@ const ProfileDrawer = ({
                   onClick={() => setShowDeleteConfirm(true)}
                   disabled={loading || !user}
                 >
-                  Delete Account
+                  Delete account
                 </Button>
               </>
             ) : (
@@ -649,7 +649,7 @@ const ProfileDrawer = ({
                 <div className="account-danger-header">
                   <AlertTriangle size={36} />
                   <div>
-                    <div className="account-danger-title">Delete Account?</div>
+                    <div className="account-danger-title">Delete account?</div>
                     <div className="account-danger-subtitle">
                       This action cannot be undone. All projects, maps, and scan history will be deleted.
                     </div>
@@ -677,7 +677,7 @@ const ProfileDrawer = ({
                     disabled={loading || (hasPassword && !deletePassword)}
                     loading={loading}
                   >
-                    Yes, Delete My Account
+                    Yes, delete my account
                   </Button>
                   <Button
                     type="button"
@@ -705,14 +705,14 @@ const ProfileDrawer = ({
               disabled={!canSaveChanges}
               loading={loading && hasProfileChanges}
             >
-              Save Changes
+              Save changes
             </Button>
           </div>
         </form>
       <Modal
         show={!!avatarCropSrc}
         onClose={() => !avatarLoading && setAvatarCropSrc('')}
-        title="Edit Avatar"
+        title="Edit avatar"
         size="sm"
         className="avatar-crop-modal"
         bodyClassName="avatar-crop-modal-body"
@@ -733,7 +733,7 @@ const ProfileDrawer = ({
               disabled={!avatarCropPixels || avatarLoading}
               loading={avatarLoading}
             >
-              Save Avatar
+              Save avatar
             </Button>
           </>
         )}
@@ -775,7 +775,7 @@ const ProfileDrawer = ({
             disabled={!user || avatarLoading}
           >
             {!avatarLoading ? <ImagePlus size={16} /> : null}
-            {hasDisplayAvatar ? 'Change Avatar' : 'Upload Avatar'}
+            {hasDisplayAvatar ? 'Change avatar' : 'Upload avatar'}
           </Button>
           <Button
             type="button"
@@ -787,7 +787,7 @@ const ProfileDrawer = ({
             loading={avatarLoading}
           >
             {!avatarLoading ? <Trash2 size={16} /> : null}
-            Remove Avatar
+            Remove avatar
           </Button>
         </div>
       </Modal>

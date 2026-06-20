@@ -246,7 +246,7 @@ describe('App blank home and welcome modal', () => {
     await click(getBlankCardButton('Create'));
 
     expect(getSaveMapModal()).not.toBeNull();
-    expect(container.textContent).toContain('Create Map');
+    expect(container.textContent).toContain('Create map');
   });
 
   test('logged-in modify opens the projects panel', async () => {
@@ -257,7 +257,7 @@ describe('App blank home and welcome modal', () => {
     await click(getBlankCardButton('Modify'));
 
     expect(getProjectsDrawer()).not.toBeNull();
-    expect(container.textContent).toContain('Projects & Maps');
+    expect(container.textContent).toContain('Projects & maps');
   });
 
   test('logged-out modify opens auth with contextual supporting copy', async () => {
@@ -282,7 +282,7 @@ describe('App blank home and welcome modal', () => {
 
     expect(api.login).toHaveBeenCalledWith(defaultUser.email, 'password123');
     expect(getProjectsDrawer()).not.toBeNull();
-    expect(container.textContent).toContain('Projects & Maps');
+    expect(container.textContent).toContain('Projects & maps');
     expect(container.textContent).not.toContain('Log in or sign up to select and modify maps.');
   });
 

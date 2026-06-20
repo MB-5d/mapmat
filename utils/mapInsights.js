@@ -32,6 +32,12 @@ const CATEGORY_WEIGHTS = Object.freeze({
   [CATEGORIES.content]: 0.15,
   [CATEGORIES.accessibility]: 0.10,
 });
+const MAP_INSIGHTS_VERSION = 2;
+const SCAN_LIMITED_REASONS = new Set([
+  'challenge_page',
+  'crawler_limited',
+  'scan_limited',
+]);
 
 function normalizeText(value) {
   if (value === undefined || value === null) return '';
@@ -85,6 +91,30 @@ function readNumber(...values) {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+function getHttpStatusLabel(statusCode) {
+  const status = Number(statusCode);
+  if (!Number.isFinite(status) || status < 100) return '';
+  if (status === 404) return 'HTTP 404 / Not Found';
+  return `HTTP ${status}`;
+}
+
+function isScanLimitedNode(node) {
+  const blockedReason = normalizeText(node?.blockedReason).toLowerCase();
+  return Boolean(
+    node?.scanStatus === 'scan_limited'
+    || node?.isBlocked
+    || node?.isChallengePage
+    || SCAN_LIMITED_REASONS.has(blockedReason)
+  );
+}
+
+function isRealHttpErrorPage(node, statusCode = null) {
+  const status = statusCode ?? readNumber(node?.statusCode, node?.httpStatus, node?.errorStatus);
+  if (status === null || status < 400) return false;
+  if (node?.authRequired || isScanLimitedNode(node)) return false;
+  return true;
 }
 
 function collectPages(root, orphans = []) {
@@ -222,8 +252,8 @@ function looksPlaceholder(value) {
 
 function hasReliableContentMetadata(page, statusCode = null) {
   const node = page?.node || {};
-  const blocked = Boolean(node.blockedReason || node.isChallengePage || node.authRequired);
-  const errorStatus = statusCode !== null && statusCode >= 400;
+  const blocked = Boolean(node.authRequired || isScanLimitedNode(node));
+  const errorStatus = isRealHttpErrorPage(node, statusCode);
   if (blocked || (errorStatus && !node.isViewableError)) return false;
   if (node.metadataAvailable === false) return false;
   if (detectChallengePage('', page?.title || node.title || '').isChallengePage) return false;
@@ -311,25 +341,37 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
       }
     }
 
-    if (statusCode >= 500) {
+    const statusLabel = getHttpStatusLabel(statusCode);
+    const isRealError = isRealHttpErrorPage(node, statusCode);
+    if (isScanLimitedNode(node)) {
+      findings.push(createFinding({
+        category: CATEGORIES.technical,
+        severity: SEVERITIES.medium,
+        title: 'Scan limited by site protection',
+        description: `${title || page.url} could not be fully scanned${statusLabel ? ` (${statusLabel})` : ''}.`,
+        recommendation: 'If you control this site, allow Vellic in Cloudflare or add a WAF skip rule for trusted Vellic scan traffic.',
+        page,
+        evidence: { statusCode, statusLabel, blockedReason: node.blockedReason || node.scanStatus || 'scan_limited' },
+      }));
+    } else if (isRealError && statusCode >= 500) {
       findings.push(createFinding({
         category: CATEGORIES.technical,
         severity: SEVERITIES.critical,
         title: '5xx page',
-        description: `${title || page.url} returned a server error.`,
+        description: `${title || page.url} returned ${statusLabel || 'a server error'}.`,
         recommendation: 'Fix the server error or remove this page from the sitemap.',
         page,
-        evidence: { statusCode },
+        evidence: { statusCode, statusLabel },
       }));
-    } else if (statusCode >= 400) {
+    } else if (isRealError && statusCode >= 400) {
       findings.push(createFinding({
         category: CATEGORIES.technical,
         severity: SEVERITIES.high,
         title: '4xx page',
-        description: `${title || page.url} returned an error status.`,
+        description: `${title || page.url} returned ${statusLabel || 'an error status'}.`,
         recommendation: 'Fix the page, redirect it, or remove stale links to it.',
         page,
-        evidence: { statusCode },
+        evidence: { statusCode, statusLabel },
       }));
     }
 
@@ -493,7 +535,7 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
     redirectedPages: pages.filter((page) => page.node?.wasRedirect).length,
     errorPages: pages.filter((page) => {
       const statusCode = readNumber(page.node?.statusCode, page.node?.httpStatus);
-      return statusCode !== null && statusCode >= 400;
+      return isRealHttpErrorPage(page.node, statusCode);
     }).length,
     orphanPages: findings.filter((finding) => finding.category === CATEGORIES.ia && finding.title === 'Orphan page').length,
     duplicateTitles: findings.filter((finding) => finding.title === 'Duplicate title').length,
@@ -553,6 +595,7 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
   const now = new Date().toISOString();
   return {
     id: `analysis-${scanId || historyId || uuidv4()}`,
+    version: MAP_INSIGHTS_VERSION,
     scanId: scanId || historyId || null,
     overallScore,
     scores,
@@ -566,7 +609,11 @@ function analyzeMapInsights({ root, orphans = [], scanMeta = {}, scanId = null, 
 
 module.exports = {
   CATEGORIES,
+  MAP_INSIGHTS_VERSION,
   SEVERITIES,
   analyzeMapInsights,
   collectPages,
+  getHttpStatusLabel,
+  isRealHttpErrorPage,
+  isScanLimitedNode,
 };

@@ -51,11 +51,11 @@ describe('ConsentDrawer', () => {
     renderConsentUi();
 
     expect(container.textContent).toContain('Help us improve Vellic');
-    expect(container.textContent).toContain('Accept Cookies');
+    expect(container.textContent).toContain('Accept cookies');
     expect(container.textContent).toContain('Cookie settings');
     expect(container.querySelector('.consent-drawer').textContent).not.toContain('Reject all optional');
 
-    clickButton('Accept Cookies');
+    clickButton('Accept cookies');
 
     const saved = JSON.parse(window.localStorage.getItem(CONSENT_STORAGE_KEY));
     expect(saved).toMatchObject({
@@ -72,7 +72,7 @@ describe('ConsentDrawer', () => {
     renderConsentUi();
 
     clickButton('Cookie settings');
-    expect(container.textContent).toContain('Privacy Settings');
+    expect(container.textContent).toContain('Privacy settings');
     expect(container.textContent).toContain('Reject all optional');
     expect(container.textContent).not.toContain('Accept research cookies');
 

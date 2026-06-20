@@ -77,12 +77,12 @@ const useCaseCards = [
     accent: 'brand',
   },
   {
-    title: 'Content Strategy',
+    title: 'Content strategy',
     text: 'Find gaps, duplicate pages, and content that is hard to reach.',
     accent: 'brand',
   },
   {
-    title: 'Dev & Engineering',
+    title: 'Dev and engineering',
     text: 'Turn audit decisions into exports, redirects, migration notes, and handoff data.',
     accent: 'brand',
   },
@@ -131,7 +131,7 @@ const featureCards = [
   },
   {
     icon: PackageCheck,
-    title: 'Exports & Handoff',
+    title: 'Exports and handoff',
     text: 'Download XML, JSON, CSV, PDF, PNG, text, and AI-ready packages',
     accent: 'brand',
   },
@@ -626,7 +626,7 @@ const exampleCards = [
 const contactCards = [
   {
     key: 'inquiries',
-    title: 'Inquiries & Feedback',
+    title: 'Inquiries and feedback',
     text: 'Questions, demo requests, ideas, partnerships, and early product feedback.',
     cta: 'Contact us',
     email: 'hello@vellic.io',

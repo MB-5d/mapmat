@@ -28,6 +28,7 @@ const root = {
           id: 'primary-1-1',
           title: 'Deep',
           isError: true,
+          statusCode: 500,
           children: [
             { id: 'primary-1-1-1', title: 'Deepest' },
           ],

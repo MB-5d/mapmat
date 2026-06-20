@@ -75,7 +75,26 @@ function extractHtmlTitle(html) {
   }
 }
 
-function detectChallengePage(html, title = '') {
+function getHeaderValue(headers, name) {
+  if (!headers || !name) return '';
+  const target = String(name).toLowerCase();
+  if (typeof headers.get === 'function') {
+    return normalizeText(headers.get(name) || headers.get(target));
+  }
+  const direct = headers[name] ?? headers[target];
+  if (direct !== undefined && direct !== null) return normalizeText(direct);
+  const match = Object.keys(headers).find((key) => key.toLowerCase() === target);
+  return match ? normalizeText(headers[match]) : '';
+}
+
+function isCloudflareChallengeResponse(headers = {}) {
+  return getHeaderValue(headers, 'cf-mitigated').toLowerCase() === 'challenge';
+}
+
+function detectChallengePage(html, title = '', headers = {}) {
+  if (isCloudflareChallengeResponse(headers)) {
+    return { isChallengePage: true, blockedReason: 'challenge_page' };
+  }
   const extracted = extractHtmlTitle(html);
   const titleText = normalizeText(title || extracted.title || extracted.h1);
   if (titleText && CHALLENGE_TITLE_PATTERNS.some((pattern) => pattern.test(titleText))) {
@@ -87,10 +106,10 @@ function detectChallengePage(html, title = '') {
   return { isChallengePage: false, blockedReason: null };
 }
 
-function classifyScanResponse({ html = '', status = 0, url = '', finalUrl = '' } = {}) {
+function classifyScanResponse({ html = '', status = 0, url = '', finalUrl = '', headers = {} } = {}) {
   const normalizedStatus = Number(status) || 0;
   const { title, bodyText } = extractHtmlTitle(html);
-  const challenge = detectChallengePage(html, title);
+  const challenge = detectChallengePage(html, title, headers);
   const looksAuthRequired = AUTH_BODY_PATTERNS.some((pattern) => pattern.test(`${title} ${bodyText}`));
   const isAuthStatus = normalizedStatus === 401 || (normalizedStatus === 403 && looksAuthRequired);
   const isBlockedStatus = challenge.isChallengePage || normalizedStatus === 403 || normalizedStatus === 429;
@@ -142,4 +161,5 @@ module.exports = {
   classifyScanResponse,
   detectChallengePage,
   getUrlFallbackTitle,
+  isCloudflareChallengeResponse,
 };

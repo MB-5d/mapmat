@@ -88,10 +88,10 @@ describe('LayersPanel', () => {
     expect(container.textContent).toContain('Status');
     expect(container.textContent).toContain('Missing');
     expect(container.textContent).toContain('Duplicate');
-    expect(container.textContent).toContain('Broken Link');
+    expect(container.textContent).toContain('Broken link');
     expect(container.textContent).toContain('Error');
     expect(container.textContent).toContain('Inactive');
-    expect(container.textContent).toContain('Auth Required');
+    expect(container.textContent).toContain('Auth required');
     expect(container.querySelector('.ui-menu-item--selected')).toBeNull();
 
     act(() => {

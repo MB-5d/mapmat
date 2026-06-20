@@ -1,5 +1,5 @@
 import { isRenderableTextUrl } from './url';
-import { isVirtualMissingNode } from './scanStatus';
+import { isRealHttpErrorNode, isVirtualMissingNode } from './scanStatus';
 
 export const DEFAULT_SCAN_LAYER_AVAILABILITY = Object.freeze({
   placementPrimary: false,
@@ -35,6 +35,8 @@ const toBooleanAvailability = (value = {}) => (
     return next;
   }, {})
 );
+
+export const isEntitlementLockedDisplayNode = (node) => Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
 
 export const normalizeMapDisplaySummary = (summary = {}) => ({
   maxDepth: Math.max(0, Number(summary?.maxDepth || 0)),
@@ -75,10 +77,10 @@ export const getNodeStatusFlags = (node, nodeMeta) => {
   return {
     missing: isVirtualMissingNode(node),
     broken: !isOrphanRoot && (node?.isBroken || nodeMeta?.orphanType === 'broken'),
-    error: Boolean(node?.isError),
+    error: isRealHttpErrorNode(node),
     inactive: Boolean(
       node?.scanStatus !== 'scan_limited'
-      && !node?.isError
+      && !isRealHttpErrorNode(node)
       && !node?.authRequired
       && (node?.isInactive || nodeMeta?.orphanType === 'inactive')
     ),
@@ -89,6 +91,7 @@ export const getNodeStatusFlags = (node, nodeMeta) => {
 
 export const isNodeGhostedByLayers = (node, nodeMeta, visibility) => {
   if (!visibility) return false;
+  if (isEntitlementLockedDisplayNode(node)) return false;
   const placement = getNodePlacement(nodeMeta);
   const type = getNodeType(node, nodeMeta);
   const status = getNodeStatusFlags(node, nodeMeta);
@@ -156,6 +159,8 @@ export const buildMapDisplaySummary = (rootNode, orphanNodes = []) => {
 
   records.forEach(({ node, meta }) => {
     maxDepth = Math.max(maxDepth, Number(meta.depth || 0));
+    if (isEntitlementLockedDisplayNode(node)) return;
+
     const placement = getNodePlacement(meta);
     const status = getNodeStatusFlags(node, meta);
     const annotationStatus = String(node?.annotations?.status || 'none').trim();

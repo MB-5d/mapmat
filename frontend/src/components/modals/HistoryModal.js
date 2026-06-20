@@ -38,7 +38,7 @@ const HistoryModal = ({
       isOpen={show}
       onClose={onClose}
       title="History"
-      subtitle="Scan History"
+      subtitle="Scan history"
       className="history-drawer"
     >
       <div className="history-modal">
@@ -63,7 +63,7 @@ const HistoryModal = ({
                   {selectedHistoryItems.size > 0 && (
                     <Button variant="danger" size="sm" onClick={onDeleteSelected}>
                       <Trash2 size={16} />
-                      Delete Selected ({selectedHistoryItems.size})
+                      Delete selected ({selectedHistoryItems.size})
                     </Button>
                   )}
                 </div>

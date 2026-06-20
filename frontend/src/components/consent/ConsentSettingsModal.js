@@ -75,7 +75,7 @@ const ConsentSettingsModal = () => {
     <Modal
       show={isSettingsOpen}
       onClose={closeSettings}
-      title="Privacy Settings"
+      title="Privacy settings"
       subtitle="Choose optional product research tools for Vellic."
       size="md"
       scrollable
@@ -97,7 +97,7 @@ const ConsentSettingsModal = () => {
           className="consent-toggle-row"
           checked
           disabled
-          label="Necessary Storage"
+          label="Necessary storage"
           description="Required. Used for login, security, preferences, core app functionality, and remembering your privacy choices. Always on."
         />
         <ToggleSwitch

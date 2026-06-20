@@ -192,7 +192,7 @@ const ShareModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Share Sitemap"
+      title="Share sitemap"
       size="md"
       scrollable
       className="share-modal"
@@ -200,7 +200,7 @@ const ShareModal = ({
           {canShareLinks ? (
             <>
               <div className="share-section">
-                <div className="share-section-title">Permission Level</div>
+                <div className="share-section-title">Permission level</div>
                 <RadioCardGroup
                   className="share-permission-options"
                   name="sharePermission"
@@ -218,12 +218,12 @@ const ShareModal = ({
                   disabled={!canShareLinks}
                 >
                   {linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                  <span>{linkCopied ? 'Link Copied!' : 'Copy Share Link'}</span>
+                  <span>{linkCopied ? 'Link copied' : 'Copy share link'}</span>
                 </Button>
               </div>
 
               <div className="share-section">
-                <div className="share-section-title">Send via Email</div>
+                <div className="share-section-title">Send via email</div>
                 <div className="share-email-section">
                   <div className="share-email-input">
                     <Mail size={18} />
@@ -254,7 +254,7 @@ const ShareModal = ({
                     <div className="share-collab-settings">
                       <div className="share-collab-subtitle">
                         <Users size={14} />
-                        <span>Access Policy</span>
+                        <span>Access policy</span>
                       </div>
                       <div className="share-collab-settings-grid">
                         <label className="share-collab-setting">
@@ -306,7 +306,7 @@ const ShareModal = ({
                     <div className="share-collab-settings">
                       <div className="share-collab-subtitle">
                         <Users size={14} />
-                        <span>Access Summary</span>
+                        <span>Access summary</span>
                       </div>
                       <div className="share-collab-empty">
                         {viewerInvitesOpen
@@ -388,7 +388,7 @@ const ShareModal = ({
                         <div>
                           <div className="share-collab-subtitle">
                             <Mail size={14} />
-                            <span>Pending Invites</span>
+                            <span>Pending invites</span>
                           </div>
                           <div className="share-collab-list">
                             {collaborationInvites.length === 0 ? (
@@ -421,7 +421,7 @@ const ShareModal = ({
                     <div className="share-collab-access-requests">
                       <div className="share-collab-subtitle">
                         <Mail size={14} />
-                        <span>Access Requests</span>
+                        <span>Access requests</span>
                       </div>
                       <div className="share-collab-list">
                         {collaborationAccessRequests.length === 0 ? (

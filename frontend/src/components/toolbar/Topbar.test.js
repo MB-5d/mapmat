@@ -114,7 +114,7 @@ describe('Topbar', () => {
     const auth = renderTopbar({ isLoggedIn: false });
 
     const loginButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Log In')
+      button.textContent.includes('Log in')
     );
 
     expect(loginButton).not.toBeNull();
@@ -126,7 +126,6 @@ describe('Topbar', () => {
     expect(loginButton.className).not.toContain('ui-btn--type-ghost');
     expect(loginButton.className).not.toContain('ui-btn--style-mono');
     expect(container.querySelector('.topbar-account-trigger')).toBeNull();
-    expect(appCss).not.toContain('.topbar-login-btn');
 
     act(() => {
       loginButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

@@ -1,7 +1,12 @@
 import { getSeoValue } from './seoMetadata';
 import { getDepthColor } from './constants';
 import { isRenderableTextUrl } from './url';
-import { getNodeHttpErrorLabel, getNodeStatusCode, isVirtualMissingNode } from './scanStatus';
+import {
+  getNodeHttpErrorLabel,
+  getNodeStatusCode,
+  isRealHttpErrorNode,
+  isVirtualMissingNode,
+} from './scanStatus';
 
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
@@ -10,11 +15,12 @@ export const getReportTypesForNode = (node, overrides = {}) => {
   const orphanType = overrides.orphanType ?? node.orphanType;
   const isSubdomain = overrides.isSubdomain ?? node.subdomainRoot;
   const isRenderableText = isRenderableTextUrl(node.url);
+  const isRealError = isRealHttpErrorNode(node);
   if (!isVirtualMissingNode(node)
     && !node.isDuplicate
     && !node.isBroken
     && !node.isInactive
-    && !node.isError
+    && !isRealError
     && (!node.isFile || isRenderableText)
     && !node.authRequired
     && orphanType !== 'broken'
@@ -27,8 +33,8 @@ export const getReportTypesForNode = (node, overrides = {}) => {
   if (isVirtualMissingNode(node)) types.add('missing');
   if (node.isDuplicate) types.add('duplicates');
   if (node.isBroken || orphanType === 'broken') types.add('brokenLinks');
-  if (node.scanStatus !== 'scan_limited' && !node.isError && !node.authRequired && (node.isInactive || orphanType === 'inactive')) types.add('inactivePages');
-  if (node.isError) types.add('errorPages');
+  if (node.scanStatus !== 'scan_limited' && !isRealError && !node.authRequired && (node.isInactive || orphanType === 'inactive')) types.add('inactivePages');
+  if (isRealError) types.add('errorPages');
   if (orphanType === 'orphan') types.add('orphanPages');
   if (isSubdomain) types.add('subdomains');
   if (!isRenderableText && (node.isFile || orphanType === 'file')) types.add('files');

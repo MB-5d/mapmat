@@ -242,8 +242,8 @@ const EditNodeModal = ({
   };
 
   const modalTitle = isHomePageCreation
-    ? 'Add Home Page'
-    : mode === 'edit' ? 'Page Details' : mode === 'duplicate' ? 'Duplicate Page' : 'Add Page';
+    ? 'Add home page'
+    : mode === 'edit' ? 'Page details' : mode === 'duplicate' ? 'Duplicate page' : 'Add page';
   const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
 
   const getExcludeIds = () => {
@@ -312,7 +312,7 @@ const EditNodeModal = ({
             >
               {isSubmitting
                 ? 'Saving...'
-                : isHomePageCreation ? 'Add Home Page' : mode === 'edit' ? 'Save Changes' : mode === 'duplicate' ? 'Create Copy' : 'Add Page'}
+                : isHomePageCreation ? 'Add home page' : mode === 'edit' ? 'Save changes' : mode === 'duplicate' ? 'Create copy' : 'Add page'}
             </Button>
           </div>
         </>
@@ -320,7 +320,7 @@ const EditNodeModal = ({
     >
       <form onSubmit={handleSubmit} className="edit-node-form" id="edit-node-form">
         {submitError ? <div className="form-error">{submitError}</div> : null}
-        <Field label="Page Title" required>
+        <Field label="Page title" required>
           <TextInput
             type="text"
             value={title}
@@ -341,7 +341,7 @@ const EditNodeModal = ({
 
         {scanStatusRows.length ? (
           <div className="edit-node-duplicate-section">
-            <div className="edit-node-section-title">Scan Status</div>
+            <div className="edit-node-section-title">Scan status</div>
             {scanStatusRows.map(([label, value], index) => (
               <div className="edit-node-duplicate-row" key={`${label || 'status'}-${index}`}>
                 {label ? <span>{label}</span> : null}
@@ -353,7 +353,7 @@ const EditNodeModal = ({
 
         {movedFromPosition ? (
           <div className="edit-node-duplicate-section">
-            <div className="edit-node-section-title">Move Details</div>
+            <div className="edit-node-section-title">Move details</div>
             <div className="edit-node-duplicate-row">
               <span>Moved from position</span>
               <strong>{movedFromPosition}</strong>
@@ -363,7 +363,7 @@ const EditNodeModal = ({
 
         {duplicateSourceUrl ? (
           <div className="edit-node-duplicate-section">
-            <div className="edit-node-section-title">Duplicate Page</div>
+            <div className="edit-node-section-title">Duplicate page</div>
             <div className="edit-node-duplicate-row">
               <span>Duplicate of</span>
               <strong title={duplicateSourceUrl}>{duplicateSourceLabel}</strong>
@@ -394,7 +394,7 @@ const EditNodeModal = ({
           </div>
         ) : null}
 
-        <Field label="Page Type" required>
+        <Field label="Page type" required>
           {isHomePageCreation ? (
             <TextInput type="text" value={PAGE_TYPE_HOME} disabled readOnly />
           ) : (
@@ -420,7 +420,7 @@ const EditNodeModal = ({
                     </option>
                   );
                 })}
-                <option value="__addnew__">Add New Type...</option>
+                <option value="__addnew__">Add new type...</option>
               </SelectInput>
               {showNewTypeInput ? (
                 <TextInput
@@ -445,7 +445,7 @@ const EditNodeModal = ({
 
         {!isHomePageCreation ? (
           <Field
-            label="Parent Page"
+            label="Parent page"
             hint={disableSubdomainOption ? 'Subdomain parent requires the URL to be blank.' : ''}
           >
             <SelectInput
@@ -474,7 +474,7 @@ const EditNodeModal = ({
           </Field>
         ) : null}
 
-        <Field label="Thumbnail / Image">
+        <Field label="Thumbnail / image">
           {previewImageUrl ? (
             <div className="thumbnail-preview">
               <img src={previewImageUrl} alt="Thumbnail preview" />
@@ -566,7 +566,7 @@ const EditNodeModal = ({
 
         {insightSummary && (
           <div className="edit-node-insights-section">
-            <div className="edit-node-section-title">Page Insights</div>
+            <div className="edit-node-section-title">Page insights</div>
             <div className="edit-node-insights-summary">
               <span className="edit-node-insights-score">{insightSummary.score}/100</span>
               <span>{insightSummary.findingCount} finding{insightSummary.findingCount === 1 ? '' : 's'}</span>
@@ -593,7 +593,7 @@ const EditNodeModal = ({
           />
         </Field>
 
-        <Field label="Meta Tags">
+        <Field label="Meta tags">
           <TextareaInput
             value={metaTags}
             onChange={(event) => setMetaTags(event.target.value)}
@@ -603,7 +603,7 @@ const EditNodeModal = ({
         </Field>
 
         <div className="edit-node-seo-section">
-          <div className="edit-node-section-title">SEO Metadata</div>
+          <div className="edit-node-section-title">SEO metadata</div>
           <Field label="Canonical URL">
             <TextInput
               type="url"
@@ -613,7 +613,7 @@ const EditNodeModal = ({
             />
           </Field>
           <div className="edit-node-form-grid">
-            <Field label="Meta Robots">
+            <Field label="Meta robots">
               <TextInput
                 type="text"
                 value={robots}
@@ -621,7 +621,7 @@ const EditNodeModal = ({
                 placeholder="index, follow"
               />
             </Field>
-            <Field label="HTML Language">
+            <Field label="HTML language">
               <TextInput
                 type="text"
                 value={language}
@@ -647,7 +647,7 @@ const EditNodeModal = ({
             />
           </Field>
           <div className="edit-node-form-grid">
-            <Field label="Open Graph Title">
+            <Field label="Open Graph title">
               <TextInput
                 type="text"
                 value={openGraphTitle}
@@ -655,7 +655,7 @@ const EditNodeModal = ({
                 placeholder="Social title"
               />
             </Field>
-            <Field label="Open Graph Type">
+            <Field label="Open Graph type">
               <TextInput
                 type="text"
                 value={openGraphType}
@@ -664,7 +664,7 @@ const EditNodeModal = ({
               />
             </Field>
           </div>
-          <Field label="Open Graph Description">
+          <Field label="Open Graph description">
             <TextareaInput
               value={openGraphDescription}
               onChange={(event) => setOpenGraphDescription(event.target.value)}
@@ -673,7 +673,7 @@ const EditNodeModal = ({
             />
           </Field>
           <div className="edit-node-form-grid">
-            <Field label="Open Graph Image">
+            <Field label="Open Graph image">
               <TextInput
                 type="url"
                 value={openGraphImage}
@@ -691,7 +691,7 @@ const EditNodeModal = ({
             </Field>
           </div>
           <div className="edit-node-form-grid">
-            <Field label="Twitter Card">
+            <Field label="Twitter card">
               <TextInput
                 type="text"
                 value={twitterCard}
@@ -699,7 +699,7 @@ const EditNodeModal = ({
                 placeholder="summary_large_image"
               />
             </Field>
-            <Field label="Twitter Title">
+            <Field label="Twitter title">
               <TextInput
                 type="text"
                 value={twitterTitle}
@@ -708,7 +708,7 @@ const EditNodeModal = ({
               />
             </Field>
           </div>
-          <Field label="Twitter Description">
+          <Field label="Twitter description">
             <TextareaInput
               value={twitterDescription}
               onChange={(event) => setTwitterDescription(event.target.value)}
@@ -716,7 +716,7 @@ const EditNodeModal = ({
               rows={2}
             />
           </Field>
-          <Field label="Twitter Image">
+          <Field label="Twitter image">
             <TextInput
               type="url"
               value={twitterImage}

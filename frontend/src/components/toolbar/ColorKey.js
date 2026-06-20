@@ -51,7 +51,7 @@ const ColorKey = ({
           as={canEdit ? 'button' : 'div'}
           className={`color-key-item ${editingConnectionKey === 'userFlows' ? 'editing' : ''}${!canEdit ? ' static' : ''}`}
           icon={<span className="legend-line legend-line-solid" style={{ '--legend-color': connectionColors?.userFlows || DEFAULT_CONNECTION_COLORS.userFlows }} />}
-          label="User Flows"
+          label="User flows"
           onClick={canEdit ? (e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             onEditConnectionColor?.('userFlows', {
@@ -87,7 +87,7 @@ const ColorKey = ({
           as={canEdit ? 'button' : 'div'}
           className={`color-key-item ${editingConnectionKey === 'brokenLinks' ? 'editing' : ''}${!canEdit ? ' static' : ''}`}
           icon={<span className="legend-line legend-line-broken" style={{ '--legend-color': connectionColors?.brokenLinks || DEFAULT_CONNECTION_COLORS.brokenLinks }} />}
-          label="Broken Links"
+          label="Broken links"
           onClick={canEdit ? (e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             onEditConnectionColor?.('brokenLinks', {

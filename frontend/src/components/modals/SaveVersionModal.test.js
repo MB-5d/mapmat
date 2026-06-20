@@ -55,7 +55,7 @@ describe('SaveVersionModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Version')
+      button.textContent.includes('Save version')
     );
 
     act(() => {
@@ -94,7 +94,7 @@ describe('SaveVersionModal', () => {
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Save Version')
+      button.textContent.includes('Save version')
     );
 
     act(() => {

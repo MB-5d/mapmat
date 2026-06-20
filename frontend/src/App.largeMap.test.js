@@ -184,6 +184,12 @@ describe('large map viewport behavior', () => {
       parentUrl: 'https://example.com/',
       scanStatus: 'scan_limited',
     });
+
+    expect(__testing.getDisplayScanLayerAvailability(result.root, result.orphans)).toMatchObject({
+      placementPrimary: true,
+      placementSubdomain: false,
+      placementOrphan: false,
+    });
   });
 
   test('capped scans do not add locked previews when the site finishes under the limit', () => {

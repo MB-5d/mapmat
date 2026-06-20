@@ -22,7 +22,7 @@ const ConsentDrawer = ({ show = true }) => {
       </div>
       <div className="consent-drawer__actions">
         <Button size="sm" onClick={acceptResearch}>
-          Accept Cookies
+          Accept cookies
         </Button>
         <Button size="sm" variant="secondary" type="secondary" buttonStyle="brand" onClick={openSettings}>
           Cookie settings

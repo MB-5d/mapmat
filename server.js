@@ -60,6 +60,7 @@ const {
 const {
   classifyScanResponse,
   getUrlFallbackTitle,
+  isCloudflareChallengeResponse,
 } = require('./utils/scanPageClassification');
 const {
   hardenCollapsedScanResult,
@@ -491,6 +492,9 @@ const SCREENSHOT_USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
 ];
+const CLOUDFLARE_UTILITY_PATHS = new Set([
+  '/cdn-cgi/l/email-protection',
+]);
 
 const DISCOVERY_SUBDOMAIN_PREFIXES = [
   'dev',
@@ -3164,6 +3168,15 @@ function getScanFileInfo(urlStr, contentType = '') {
   };
 }
 
+function isIgnoredCrawlUtilityUrl(urlStr) {
+  try {
+    const pathname = new URL(urlStr).pathname.replace(/\/+$/, '') || '/';
+    return CLOUDFLARE_UTILITY_PATHS.has(pathname);
+  } catch {
+    return false;
+  }
+}
+
 function sameDomain(a, b) {
   try {
     const ua = new URL(a);
@@ -3660,7 +3673,14 @@ async function fetchPage(url, extraHeaders = {}) {
   const responseTime = Date.now() - startedAt;
   const responseUrl = res.request?.res?.responseUrl;
   const finalUrl = normalizeUrl(responseUrl || url);
-  return { html: res.data, status: res.status, contentType: res.headers['content-type'], finalUrl, responseTime };
+  return {
+    html: res.data,
+    status: res.status,
+    contentType: res.headers['content-type'],
+    headers: res.headers || {},
+    finalUrl,
+    responseTime,
+  };
 }
 
 async function fetchPageWithBrowserContext(context, url) {
@@ -3681,6 +3701,7 @@ async function fetchPageWithBrowserContext(context, url) {
       html,
       status: response?.status?.() || 0,
       contentType: response?.headers?.()?.['content-type'] || 'text/html',
+      headers: response?.headers?.() || {},
       finalUrl,
       responseTime: Date.now() - startedAt,
     };
@@ -4121,6 +4142,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     treeRepairAdded: 0,
     rejectedByScope: 0,
     rejectedAsFile: 0,
+    ignoredUtilityUrls: 0,
+    cloudflareChallengeCount: 0,
+    cloudflareBrowserRetryCount: 0,
+    cloudflareBrowserRetrySuccessCount: 0,
+    cloudflareBrowserRetryFailedCount: 0,
     failedFetches: 0,
     errorCount: 0,
     authCount: 0,
@@ -4184,6 +4210,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const queued = new Set();
   let queueIndex = 0;
   const filesByUrl = new Map();
+  const crawlBrowserContextsByHost = new Map();
   const addFileArtifact = (url, sourceUrl = null, contentType = null, detectedInfo = null) => {
     const normalized = normalizeUrl(url);
     if (!normalized) return;
@@ -4198,9 +4225,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   };
   const isScanFileUrl = (url) => getScanFileInfo(url).isFile;
-  const allowPageUrl = (candidate) => allowUrl(candidate) && !isScanFileUrl(candidate);
+  const allowPageUrl = (candidate) => allowUrl(candidate) && !isIgnoredCrawlUtilityUrl(candidate) && !isScanFileUrl(candidate);
   const enqueue = (url, depth, source = 'crawl') => {
     if (!url) return;
+    if (isIgnoredCrawlUtilityUrl(url)) {
+      scanDiagnostics.ignoredUtilityUrls += 1;
+      return;
+    }
     if (isScanFileUrl(url)) {
       scanDiagnostics.rejectedAsFile += 1;
       addFileArtifact(url);
@@ -4251,6 +4282,27 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   let partialReason = null;
   let stopRequested = false;
 
+  const getCrawlBrowserContext = async (url) => {
+    const host = normalizeHost(new URL(url).hostname);
+    if (crawlBrowserContextsByHost.has(host)) return crawlBrowserContextsByHost.get(host);
+    const context = await createAuthenticatedBrowserContext(null);
+    crawlBrowserContextsByHost.set(host, context);
+    return context;
+  };
+
+  const shouldRetryWithBrowser = ({ classification, status, headers, source }) => (
+    !authContext
+    && source !== 'common_path'
+    && !classification?.isAuthStatus
+    && (
+      classification?.isBlockedStatus
+      || classification?.isChallengePage
+      || isCloudflareChallengeResponse(headers)
+      || status === 403
+      || status === 429
+    )
+  );
+
   const pollJobStatus = async () => {
     const status = await readJobStatus?.();
     if (status === JOB_STATUS.canceled) {
@@ -4292,6 +4344,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           const norm = normalizeUrl(u);
           if (!norm) continue;
           scanDiagnostics.sitemapUrlsFound += 1;
+          if (isIgnoredCrawlUtilityUrl(norm)) {
+            scanDiagnostics.ignoredUtilityUrls += 1;
+            continue;
+          }
           if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
             if (isScanFileUrl(norm)) {
               scanDiagnostics.rejectedAsFile += 1;
@@ -4315,6 +4371,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         const loc = $(el).text().trim();
         const norm = normalizeUrl(loc);
         if (norm) scanDiagnostics.sitemapUrlsFound += 1;
+        if (norm && isIgnoredCrawlUtilityUrl(norm)) {
+          scanDiagnostics.ignoredUtilityUrls += 1;
+          return;
+        }
         if (norm && allowUrl(norm) && isWithinScanDepth(norm)) {
           if (isScanFileUrl(norm)) {
             scanDiagnostics.rejectedAsFile += 1;
@@ -4444,6 +4504,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     if ((depthLimit !== null && depth > depthLimit) || !isWithinScanDepth(url)) return;
     if (!allowUrl(url)) return;
+    if (isIgnoredCrawlUtilityUrl(url)) {
+      scanDiagnostics.ignoredUtilityUrls += 1;
+      return;
+    }
     if (isScanFileUrl(url)) {
       addFileArtifact(url, getParentUrl(url) || null);
       return;
@@ -4454,6 +4518,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     let contentType = '';
     let finalUrl = url;
     let responseTime = null;
+    let headers = {};
     try {
       const res = authContext
         ? await fetchPageWithBrowserContext(authContext, url)
@@ -4461,6 +4526,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       html = res.html;
       status = res.status;
       contentType = res.contentType;
+      headers = res.headers || {};
       finalUrl = res.finalUrl || url;
       responseTime = res.responseTime;
       scanDiagnostics.fetchedPageCount += 1;
@@ -4493,6 +4559,49 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       return;
     }
 
+    let classification = classifyScanResponse({ html, status, url, finalUrl, headers });
+    if (classification.isChallengePage || isCloudflareChallengeResponse(headers)) {
+      scanDiagnostics.cloudflareChallengeCount += 1;
+    }
+
+    if (shouldRetryWithBrowser({ classification, status, headers, source })) {
+      scanDiagnostics.cloudflareBrowserRetryCount += 1;
+      try {
+        const retryContext = await getCrawlBrowserContext(url);
+        const retry = await fetchPageWithBrowserContext(retryContext, url);
+        const retryClassification = classifyScanResponse({
+          html: retry.html,
+          status: retry.status,
+          url,
+          finalUrl: retry.finalUrl || url,
+          headers: retry.headers || {},
+        });
+        html = retry.html;
+        status = retry.status;
+        contentType = retry.contentType;
+        headers = retry.headers || {};
+        finalUrl = retry.finalUrl || url;
+        responseTime = retry.responseTime;
+        classification = retryClassification;
+        if (retryClassification.isChallengePage || isCloudflareChallengeResponse(headers)) {
+          scanDiagnostics.cloudflareChallengeCount += 1;
+        }
+        if (!retryClassification.isBlockedStatus && !retryClassification.isChallengePage) {
+          scanDiagnostics.cloudflareBrowserRetrySuccessCount += 1;
+        } else {
+          scanDiagnostics.cloudflareBrowserRetryFailedCount += 1;
+        }
+      } catch (retryError) {
+        scanDiagnostics.cloudflareBrowserRetryFailedCount += 1;
+        recordDiscoveryError({
+          source: 'cloudflare_browser_retry',
+          url,
+          status,
+          message: retryError?.message || 'browser retry failed',
+        });
+      }
+    }
+
     const fetchedFileInfo = getScanFileInfo(finalUrl || url, contentType);
     const responseIsFile = fetchedFileInfo.isFile || !isHtmlContentType(contentType);
     if (responseIsFile) {
@@ -4500,7 +4609,6 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       return;
     }
 
-    const classification = classifyScanResponse({ html, status, url, finalUrl });
     if (url === seed) {
       scanDiagnostics.finalUrl = finalUrl || url;
       scanDiagnostics.rootStatus = status;
@@ -4530,7 +4638,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
         scanDiagnostics.inactiveCount += 1;
         inactivePages.push({ url, status, blockedReason: classification.blockedReason });
       }
-      if (scanOptions.brokenLinks) {
+      if (scanOptions.brokenLinks && classification.isErrorStatus) {
         brokenLinks.push({ url, status });
       }
       if (!shouldKeep) {
@@ -4574,8 +4682,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       responseTime,
       titleSource: classification.titleSource,
       blockedReason: classification.blockedReason,
-      isChallengePage: false,
-      isBlocked: false,
+      isChallengePage: classification.isChallengePage,
+      isBlocked: classification.isBlockedStatus,
       scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
     });
@@ -4596,6 +4704,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
     for (const link of links) {
       if (await pollJobStatus()) break;
+      if (isIgnoredCrawlUtilityUrl(link)) {
+        scanDiagnostics.ignoredUtilityUrls += 1;
+        continue;
+      }
       if (!allowUrl(link)) {
         scanDiagnostics.rejectedByScope += 1;
         continue;
@@ -4685,6 +4797,10 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     scanDiagnostics.rootAllowedLinks = Math.max(scanDiagnostics.rootAllowedLinks, allowedRenderedLinks.length);
     for (const link of normalizedRenderedLinks) {
       if (await pollJobStatus()) break;
+      if (isIgnoredCrawlUtilityUrl(link)) {
+        scanDiagnostics.ignoredUtilityUrls += 1;
+        continue;
+      }
       if (!allowUrl(link)) {
         scanDiagnostics.rejectedByScope += 1;
         continue;
@@ -4790,8 +4906,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       responseTime: Number.isFinite(meta.responseTime) ? meta.responseTime : null,
       titleSource: meta.titleSource || 'html',
       blockedReason: meta.blockedReason || null,
-      isChallengePage: false,
-      isBlocked: false,
+      isChallengePage: Boolean(meta.isChallengePage),
+      isBlocked: Boolean(meta.isBlocked),
       scanStatus: meta.scanStatus || null,
       metadataAvailable: meta.metadataAvailable !== false,
       isVirtualMissing: false,
@@ -5377,6 +5493,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   if (authContext) {
     await authContext.close().catch(() => {});
   }
+  await Promise.all(
+    Array.from(crawlBrowserContextsByHost.values()).map((context) => context.close().catch(() => {}))
+  );
 
   return result;
 }
@@ -6287,6 +6406,7 @@ app.post('/scan-auth/precheck', authMiddleware, requireAuth, scanLimiter, requir
         status: rootPage.status,
         url: safeUrl,
         finalUrl: rootPage.finalUrl || safeUrl,
+        headers: rootPage.headers || {},
       });
       const directAuthUrls = [];
       if (rootClassification.isAuthStatus) {
@@ -6305,6 +6425,7 @@ app.post('/scan-auth/precheck', authMiddleware, requireAuth, scanLimiter, requir
             status: page.status,
             url: link,
             finalUrl: page.finalUrl || link,
+            headers: page.headers || {},
           });
           if (classification.isAuthStatus) directAuthUrls.push(link);
         }

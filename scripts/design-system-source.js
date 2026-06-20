@@ -129,6 +129,16 @@ const radius = {
 };
 
 const componentTokens = {
+  textCase: {
+    action: 'none',
+    shellTitle: 'none',
+  },
+  textMetrics: {
+    boxEdge: 'cap alphabetic',
+    boxTrim: 'trim-both',
+    legacyEdge: 'cap alphabetic',
+    legacyTrim: 'both',
+  },
   iconButton: {
     size: {
       xxs: '16px',
@@ -550,6 +560,8 @@ const appSemantics = {
     'ui-status-success-border': 'var(--color-green-300)',
     'ui-status-success-text': 'var(--color-green-800)',
     'ui-status-success-icon': 'var(--color-green-600)',
+    'ui-toast-success-bg': 'var(--color-green-800)',
+    'ui-toast-success-border': 'var(--color-green-800)',
     'ui-status-danger-bg': 'var(--color-red-100)',
     'ui-status-danger-border': 'var(--color-red-300)',
     'ui-status-danger-text': 'var(--color-red-800)',
@@ -698,6 +710,8 @@ const appSemantics = {
     'ui-status-success-border': 'var(--color-green-800)',
     'ui-status-success-text': 'var(--color-green-300)',
     'ui-status-success-icon': 'var(--color-green-300)',
+    'ui-toast-success-bg': 'var(--color-green-800)',
+    'ui-toast-success-border': 'var(--color-green-800)',
     'ui-status-danger-bg': '#2d1313',
     'ui-status-danger-border': 'var(--color-red-900)',
     'ui-status-danger-text': 'var(--color-red-200)',
@@ -1016,6 +1030,8 @@ const semanticColorNames = {
   'ui-status-success-border': 'Status/Success/Border',
   'ui-status-success-text': 'Status/Success/Content',
   'ui-status-success-icon': 'Status/Success/Icon',
+  'ui-toast-success-bg': 'Toast/Success/Fill',
+  'ui-toast-success-border': 'Toast/Success/Border',
   'ui-status-danger-bg': 'Status/Danger/Surface',
   'ui-status-danger-border': 'Status/Danger/Border',
   'ui-status-danger-text': 'Status/Danger/Content',

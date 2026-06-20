@@ -165,15 +165,44 @@ function isVirtualMissingForSummary(node) {
   ));
 }
 
+const SCAN_LIMITED_REASONS_FOR_SUMMARY = new Set([
+  'challenge_page',
+  'crawler_limited',
+  'scan_limited',
+]);
+
+function getStatusCodeForSummary(node) {
+  const status = Number(node?.httpStatus ?? node?.statusCode ?? node?.errorStatus);
+  return Number.isFinite(status) ? status : null;
+}
+
+function isScanLimitedForSummary(node) {
+  const blockedReason = String(node?.blockedReason || '').trim().toLowerCase();
+  return Boolean(
+    node?.scanStatus === 'scan_limited'
+    || node?.isBlocked
+    || node?.isChallengePage
+    || SCAN_LIMITED_REASONS_FOR_SUMMARY.has(blockedReason)
+  );
+}
+
+function isRealHttpErrorForSummary(node) {
+  const status = getStatusCodeForSummary(node);
+  if (status === null || status < 400) return false;
+  if (node?.authRequired || isScanLimitedForSummary(node)) return false;
+  return true;
+}
+
 function getStatusFlagsForSummary(node, meta) {
   const isOrphanRoot = isTopLevelOrphanRootMeta(meta);
+  const isRealError = isRealHttpErrorForSummary(node);
   return {
     missing: isVirtualMissingForSummary(node),
     broken: !isOrphanRoot && (node?.isBroken || meta?.orphanType === 'broken'),
-    error: Boolean(node?.isError),
+    error: isRealError,
     inactive: Boolean(
       node?.scanStatus !== 'scan_limited'
-      && !node?.isError
+      && !isRealError
       && !node?.authRequired
       && (node?.isInactive || meta?.orphanType === 'inactive')
     ),

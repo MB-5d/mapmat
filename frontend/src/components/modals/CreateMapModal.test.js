@@ -40,8 +40,8 @@ describe('CreateMapModal', () => {
     });
 
     const optionCards = container.querySelectorAll('.ui-option-card');
-    const scratchCard = Array.from(optionCards).find((card) => card.textContent.includes('Start from Scratch'));
-    const importCard = Array.from(optionCards).find((card) => card.textContent.includes('Import from File'));
+    const scratchCard = Array.from(optionCards).find((card) => card.textContent.includes('Start from scratch'));
+    const importCard = Array.from(optionCards).find((card) => card.textContent.includes('Import from file'));
 
     expect(optionCards).toHaveLength(3);
 

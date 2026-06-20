@@ -117,7 +117,7 @@ export default function MapAccessGate({
         <div className="route-gate-actions">
           <Button type="button" variant="secondary" onClick={onGoHome}>
             <ArrowLeft size={16} />
-            <span>Back to App</span>
+            <span>Back to app</span>
           </Button>
 
           {!isLoggedIn ? (
@@ -128,7 +128,7 @@ export default function MapAccessGate({
               loading={authLoading}
             >
               {!authLoading ? <LogIn size={16} /> : null}
-              <span>Sign In</span>
+              <span>Sign in</span>
             </Button>
           ) : hasPendingInvite ? (
             <>
@@ -147,7 +147,7 @@ export default function MapAccessGate({
                 loading={loading}
               >
                 {!loading ? <Mail size={16} /> : null}
-                <span>Accept Invite</span>
+                <span>Accept invite</span>
               </Button>
             </>
           ) : (
@@ -159,7 +159,7 @@ export default function MapAccessGate({
               loading={requestPending}
             >
               {!requestPending ? <Send size={16} /> : null}
-              <span>{requestSubmitted ? 'Request Sent' : 'Request Viewer Access'}</span>
+              <span>{requestSubmitted ? 'Request sent' : 'Request viewer access'}</span>
             </Button>
           )}
         </div>

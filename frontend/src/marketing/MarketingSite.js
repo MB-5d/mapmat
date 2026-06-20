@@ -297,7 +297,7 @@ function MarketingHeader({ activePage, onNavigatePath }) {
           onClick={handleStartClick}
           endIcon={<ArrowRight />}
         >
-          Get Started
+          Get started
         </MarketingButtonLink>
       </nav>
     </header>

@@ -24,6 +24,18 @@ assert.strictEqual(challenge.shouldExtractLinks, false);
 assert.strictEqual(challenge.fallbackTitle, 'app');
 assert.strictEqual(challenge.scanStatus, 'scan_limited');
 
+const headerChallenge = classifyScanResponse({
+  url: 'https://example.com/header-challenge',
+  finalUrl: 'https://example.com/header-challenge',
+  status: 403,
+  headers: { 'cf-mitigated': 'challenge' },
+  html: '<html><head><title>Forbidden</title></head><body></body></html>',
+});
+assert.strictEqual(headerChallenge.isChallengePage, true);
+assert.strictEqual(headerChallenge.blockedReason, 'challenge_page');
+assert.strictEqual(headerChallenge.scanStatus, 'scan_limited');
+assert.strictEqual(headerChallenge.isErrorStatus, false);
+
 const error = classifyScanResponse({
   url: 'https://example.com/missing-page',
   finalUrl: 'https://example.com/missing-page',
@@ -117,8 +129,19 @@ const insights = analyzeMapInsights({
         url: 'https://example.com/b',
         title: 'Just a moment...',
         statusCode: 403,
-        authRequired: true,
-        blockedReason: 'auth_required',
+        scanStatus: 'scan_limited',
+        isChallengePage: true,
+        blockedReason: 'challenge_page',
+        metadataAvailable: false,
+        children: [],
+      },
+      {
+        id: 'missing-real',
+        url: 'https://example.com/missing-real',
+        title: 'Page not found',
+        statusCode: 404,
+        isError: true,
+        httpErrorLabel: 'HTTP 404 / Not Found',
         metadataAvailable: false,
         children: [],
       },
@@ -127,7 +150,22 @@ const insights = analyzeMapInsights({
   scanId: 'classification-fixture',
 });
 
-assert.ok(insights.findings.some((finding) => finding.title === '4xx page'));
+assert.strictEqual(insights.version, 2);
+assert.strictEqual(insights.totals.errorPages, 1);
+assert.ok(insights.findings.some((finding) => (
+  finding.title === '4xx page'
+    && finding.url === 'https://example.com/missing-real'
+    && finding.evidence?.statusLabel === 'HTTP 404 / Not Found'
+)));
+assert.ok(insights.findings.some((finding) => (
+  finding.title === 'Scan limited by site protection'
+    && finding.url === 'https://example.com/b'
+    && finding.evidence?.statusCode === 403
+)));
+assert.ok(!insights.findings.some((finding) => (
+  finding.title === '4xx page'
+    && finding.url === 'https://example.com/b'
+)));
 assert.ok(!insights.findings.some((finding) => (
   finding.title === 'Duplicate title'
     && finding.evidence?.value === 'just a moment...'
