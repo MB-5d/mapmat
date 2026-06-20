@@ -10774,7 +10774,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (hasMap && !currentMap?.id) {
         const promptKey = `${currentRoute.mapId}:${root?.id || 'draft'}`;
         navigateToRoute(createAppHomeRoute(), { replace: true });
-        if (pendingUnsavedRoutePromptRef.current !== promptKey) {
+        if (!pendingUnsavedRoutePromptRef.current) {
           pendingUnsavedRoutePromptRef.current = promptKey;
           showConfirm({
             title: 'Save current map?',
@@ -11293,6 +11293,47 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast('Scan cancelled', 'info');
   };
 
+  useEffect(() => {
+    if (!hasMap || currentMap?.id || loading) return undefined;
+
+    const handleUnsavedMapPopState = () => {
+      const promptKey = `browser-back:${root?.id || 'draft'}`;
+      if (pendingUnsavedRoutePromptRef.current) return;
+      pendingUnsavedRoutePromptRef.current = promptKey;
+      window.setTimeout(() => {
+        showConfirm({
+          title: 'Save current map?',
+          message: 'You have an unsaved map. Save it before leaving?',
+          confirmText: 'Save Map',
+          cancelText: "Don't Save",
+        }).then((wantsSave) => {
+          if (pendingUnsavedRoutePromptRef.current !== promptKey) return;
+          pendingUnsavedRoutePromptRef.current = '';
+          if (wantsSave) {
+            setCreateMapMode(false);
+            setDuplicateMapConfig(null);
+            setPendingLoadMap(null);
+            setShowSaveMapModal(true);
+            return;
+          }
+          clearLoadedMapView();
+          navigateToRoute(createAppHomeRoute(), { replace: true });
+        });
+      }, 0);
+    };
+
+    window.addEventListener('popstate', handleUnsavedMapPopState);
+    return () => window.removeEventListener('popstate', handleUnsavedMapPopState);
+  }, [
+    clearLoadedMapView,
+    currentMap?.id,
+    hasMap,
+    loading,
+    navigateToRoute,
+    root?.id,
+    showConfirm,
+  ]);
+
   const stopScan = async () => {
     const jobId = scanJobIdRef.current;
     const accessToken = scanJobAccessTokenRef.current;
@@ -11652,6 +11693,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       setCurrentMap(null);
       navigateToRoute(createAppHomeRoute(), { replace: true });
+      try {
+        window.history.pushState({ vellicUnsavedMap: true }, '', buildRouteUrl(createAppHomeRoute()));
+      } catch {}
       setDraftVersionFromSnapshot({
         root: displayMerged.root,
         orphans: displayMerged.orphans,
