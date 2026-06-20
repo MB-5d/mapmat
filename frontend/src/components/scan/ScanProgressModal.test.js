@@ -89,8 +89,69 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('384');
-    expect(container.textContent).toContain('Captured');
+    expect(container.textContent).toContain('Pages captured');
+    expect(container.textContent).toContain('384 of 407');
     expect(container.textContent).not.toContain('1357Scanned');
+  });
+
+  test('shows only found issue categories in the findings bar', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanProgress={{
+            scanned: 20,
+            mapped: 18,
+            queued: 2,
+            findings: {
+              brokenLinks: 3,
+              duplicates: 0,
+              errorPages: 2,
+              inactivePages: 1,
+            },
+            totalFindings: 6,
+          }}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('6 findings');
+    expect(container.textContent).toContain('Broken links');
+    expect(container.textContent).toContain('Error');
+    expect(container.textContent).toContain('Inactive');
+    expect(container.textContent).not.toContain('Duplicate');
+
+    const segments = Array.from(container.querySelectorAll('.scan-findings-segment'));
+    expect(segments).toHaveLength(3);
+    expect(segments[0].style.width).toBe('50%');
+  });
+
+  test('uses fallback estimate buckets when total time is not known', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanElapsed={34}
+          scanProgress={{ scanned: 1, mapped: 1, queued: 0 }}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('0:34');
+    expect(container.textContent).toContain('1:00');
+
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanElapsed={94}
+          scanProgress={{ scanned: 1, mapped: 1, queued: 0 }}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('1:34');
+    expect(container.textContent).toContain('5:00');
   });
 
   test('shows the existing cancel confirmation flow', () => {

@@ -4469,13 +4469,82 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const brokenLinkCandidates = [];
   const MAX_BROKEN_LINK_CHECKS = 500;
   let brokenChecks = 0;
-  const getScanProgressSnapshot = () => ({
+  let finalProgressSummary = null;
+  const countPageMapValues = (predicate) => {
+    let count = 0;
+    pageMap.forEach((meta) => {
+      if (predicate(meta)) count += 1;
+    });
+    return count;
+  };
+  const countCanonicalDuplicatesFromPageMap = () => {
+    const seen = new Set();
+    let duplicateCount = 0;
+    pageMap.forEach((meta) => {
+      const key = getCanonicalKey(meta.canonicalUrl || meta.finalUrl || meta.url);
+      if (!key) return;
+      if (seen.has(key)) {
+        duplicateCount += 1;
+        return;
+      }
+      seen.add(key);
+    });
+    return duplicateCount;
+  };
+  const collectProgressNodes = (roots = []) => {
+    const nodesForProgress = [];
+    const seen = new Set();
+    const visit = (node) => {
+      if (!node) return;
+      const key = node.id || node.url;
+      if (key && seen.has(key)) return;
+      if (key) seen.add(key);
+      nodesForProgress.push(node);
+      (node.children || []).forEach(visit);
+    };
+    roots.filter(Boolean).forEach(visit);
+    return nodesForProgress;
+  };
+  const getProgressSummary = (roots = null) => {
+    const nodesForProgress = Array.isArray(roots) ? collectProgressNodes(roots) : null;
+    const findings = {
+      brokenLinks: scanOptions.brokenLinks ? brokenLinks.length : 0,
+      duplicates: scanOptions.duplicates
+        ? (nodesForProgress
+          ? nodesForProgress.filter((node) => node.isDuplicate).length
+          : countCanonicalDuplicatesFromPageMap())
+        : 0,
+      missing: nodesForProgress
+        ? nodesForProgress.filter((node) => node.isVirtualMissing || node.isMissing || node.scanStatus === 'missing').length
+        : 0,
+      errorPages: scanOptions.errorPages ? errors.length : 0,
+      inactivePages: scanOptions.inactivePages ? inactivePages.length : 0,
+      redirects: nodesForProgress
+        ? nodesForProgress.filter((node) => node.wasRedirect).length
+        : countPageMapValues((meta) => meta.wasRedirect),
+      authenticatedPages: scanOptions.authenticatedPages
+        ? (nodesForProgress
+          ? nodesForProgress.filter((node) => node.authRequired).length
+          : countPageMapValues((meta) => meta.authRequired))
+        : 0,
+      scanLimited: nodesForProgress
+        ? nodesForProgress.filter((node) => node.scanStatus === 'scan_limited' || node.isBlocked || node.isChallengePage).length
+        : countPageMapValues((meta) => meta.scanStatus === 'scan_limited' || meta.isBlocked || meta.isChallengePage),
+    };
+    return {
+      findings,
+      totalFindings: Object.values(findings).reduce((sum, value) => sum + (Number(value) || 0), 0),
+    };
+  };
+  const getScanProgressSnapshot = ({ final = false } = {}) => ({
     scanned: visited.size,
     mapped: pageMap.size,
     queued: Math.max(0, queue.length - queueIndex),
+    ...(final && finalProgressSummary ? finalProgressSummary : getProgressSummary()),
+    ...(final ? { final: true } : {}),
   });
-  const reportScanProgress = () => {
-    if (onProgress) onProgress(getScanProgressSnapshot());
+  const reportScanProgress = (options = {}) => {
+    if (onProgress) onProgress(getScanProgressSnapshot(options));
   };
 
   const scheduleBrokenLinkCheck = (link, sourceUrl) => {
@@ -5473,6 +5542,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     });
   }
 
+  finalProgressSummary = getProgressSummary([root, ...prunedOrphanNodes, ...subdomainNodes]);
+  reportScanProgress({ final: true });
+
   const includePartialOrphans = Boolean(partialReason);
 
   const result = {
@@ -6127,7 +6199,8 @@ async function processJob(job) {
         const scanned = Math.max(0, Number(progress.scanned || 0) || 0);
         const mapped = Math.max(0, Number(progress.mapped || 0) || 0);
         const mappedChanged = mapped !== progressState.lastMapped;
-        if (scanned - progressState.lastScanned < 5 && !mappedChanged && now - progressState.lastUpdate < 500) {
+        const forceUpdate = progress?.final === true;
+        if (!forceUpdate && scanned - progressState.lastScanned < 5 && !mappedChanged && now - progressState.lastUpdate < 500) {
           return;
         }
         progressState.lastUpdate = now;
@@ -6153,6 +6226,9 @@ async function processJob(job) {
 
       if ((await jobStore.getJobStatusAsync(jobId)) === JOB_STATUS.canceled) return;
 
+      if (progressState.lastProgress) {
+        await updateJobProgress(jobId, progressState.lastProgress);
+      }
       hardenCollapsedScanResult(result, {
         progress: progressState.lastProgress,
         entitlementCapped: Boolean(payload.entitlement?.capped),
