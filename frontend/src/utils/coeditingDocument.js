@@ -19,26 +19,40 @@ function cloneDocument(document) {
     : JSON.parse(JSON.stringify(document || {}));
 }
 
+function getCrosslinkRelationshipKey(connection) {
+  if (String(connection?.type || '').trim().toLowerCase() !== 'crosslink') return null;
+  const sourceNodeId = connection.sourceNodeId || connection.sourceId || null;
+  const targetNodeId = connection.targetNodeId || connection.targetId || null;
+  if (!sourceNodeId || !targetNodeId) return null;
+  return [String(sourceNodeId), String(targetNodeId)].sort().join('::');
+}
+
 function normalizeConnections(connections) {
   if (!Array.isArray(connections)) return [];
-  return connections
-    .map((connection) => {
-      if (!isPlainObject(connection)) return null;
-      const sourceNodeId = connection.sourceNodeId || connection.sourceId || null;
-      const targetNodeId = connection.targetNodeId || connection.targetId || null;
-      const id = connection.id
-        || (sourceNodeId && targetNodeId
-          ? `link-${sourceNodeId}-${targetNodeId}-${connection.type || 'connection'}`
-          : null);
-      if (!id || !sourceNodeId || !targetNodeId) return null;
-      return {
-        ...connection,
-        id,
-        sourceNodeId,
-        targetNodeId,
-      };
-    })
-    .filter(Boolean);
+  const seenCrosslinks = new Set();
+  return connections.reduce((normalized, connection) => {
+    if (!isPlainObject(connection)) return normalized;
+    const sourceNodeId = connection.sourceNodeId || connection.sourceId || null;
+    const targetNodeId = connection.targetNodeId || connection.targetId || null;
+    const id = connection.id
+      || (sourceNodeId && targetNodeId
+        ? `link-${sourceNodeId}-${targetNodeId}-${connection.type || 'connection'}`
+        : null);
+    if (!id || !sourceNodeId || !targetNodeId) return normalized;
+    const nextConnection = {
+      ...connection,
+      id,
+      sourceNodeId,
+      targetNodeId,
+    };
+    const crosslinkKey = getCrosslinkRelationshipKey(nextConnection);
+    if (crosslinkKey) {
+      if (seenCrosslinks.has(crosslinkKey)) return normalized;
+      seenCrosslinks.add(crosslinkKey);
+    }
+    normalized.push(nextConnection);
+    return normalized;
+  }, []);
 }
 
 function normalizeLiveDocument(document = {}) {
@@ -342,12 +356,19 @@ function applyLinkAdd(document, operation) {
   }
 
   validateLinkEndpoints(document, operation.payload.sourceId, operation.payload.targetId);
-  document.connections.push({
+  const nextConnection = {
     ...(isPlainObject(operation.payload.link) ? operation.payload.link : {}),
     id: operation.payload.linkId,
     sourceNodeId: operation.payload.sourceId,
     targetNodeId: operation.payload.targetId,
-  });
+  };
+  const crosslinkKey = getCrosslinkRelationshipKey(nextConnection);
+  if (crosslinkKey && document.connections.some((connection) => (
+    getCrosslinkRelationshipKey(connection) === crosslinkKey
+  ))) {
+    return;
+  }
+  document.connections.push(nextConnection);
   document.connections = normalizeConnections(document.connections);
 }
 

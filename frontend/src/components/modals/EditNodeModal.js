@@ -1,8 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Eye, Upload, X } from 'lucide-react';
+import { Maximize2, Pencil, Upload, X } from 'lucide-react';
 
+import Accordion from '../ui/Accordion';
 import Button from '../ui/Button';
 import Field from '../ui/Field';
+import IconButton from '../ui/IconButton';
 import Modal from '../ui/Modal';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
@@ -105,6 +107,7 @@ const EditNodeModal = ({
   const [twitterTitle, setTwitterTitle] = useState(initialSeoMetadata.twitter?.title || '');
   const [twitterDescription, setTwitterDescription] = useState(initialSeoMetadata.twitter?.description || '');
   const [twitterImage, setTwitterImage] = useState(initialSeoMetadata.twitter?.image || '');
+  const [isSeoMetadataOpen, setIsSeoMetadataOpen] = useState(false);
   const [annotationStatus, setAnnotationStatus] = useState(node?.annotations?.status || 'none');
   const [annotationTags, setAnnotationTags] = useState((node?.annotations?.tags || []).join(', '));
   const [annotationNote, setAnnotationNote] = useState(node?.annotations?.note || '');
@@ -239,6 +242,10 @@ const EditNodeModal = ({
   const handleViewImage = () => {
     if (!canViewImage) return;
     onViewImage(viewableImageUrl, true, node?.id || null, viewableImageType);
+  };
+
+  const handleEditImage = () => {
+    fileInputRef.current?.click();
   };
 
   const modalTitle = isHomePageCreation
@@ -474,21 +481,38 @@ const EditNodeModal = ({
           </Field>
         ) : null}
 
-        <Field label="Thumbnail / image">
+        <Field label="Image">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".jpg,.jpeg,.png,.gif,.webp"
+            onChange={handleFileUpload}
+            className="edit-node-image-file-input"
+          />
           {previewImageUrl ? (
             <div className="thumbnail-preview">
               <img src={previewImageUrl} alt="Thumbnail preview" />
+              <IconButton
+                htmlType="button"
+                className="thumbnail-preview-icon thumbnail-preview-edit"
+                size="xxs"
+                type="secondary"
+                buttonStyle="mono"
+                icon={<Pencil />}
+                label="Edit image"
+                onClick={handleEditImage}
+              />
               {canViewImage ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="btn-view-thumb"
-                  startIcon={<Eye />}
+                <IconButton
+                  htmlType="button"
+                  className="thumbnail-preview-icon thumbnail-preview-fullsize"
+                  size="xxs"
+                  type="secondary"
+                  buttonStyle="mono"
+                  icon={<Maximize2 />}
+                  label="View fullsize image"
                   onClick={handleViewImage}
-                >
-                  View
-                </Button>
+                />
               ) : null}
               {currentThumbnailUrl ? (
                 <button
@@ -531,7 +555,7 @@ const EditNodeModal = ({
                 size="sm"
                 variant="secondary"
                 className="btn-browse"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={handleEditImage}
               >
                 Browse files
               </Button>
@@ -552,13 +576,6 @@ const EditNodeModal = ({
                   const urlValue = event.target.value.trim();
                   if (urlValue) setThumbnailUrl(urlValue);
                 }}
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".jpg,.jpeg,.png,.gif,.webp"
-                onChange={handleFileUpload}
-                style={{ display: 'none' }}
               />
             </div>
           )}
@@ -584,26 +601,14 @@ const EditNodeModal = ({
           </div>
         )}
 
-        <Field label="Description">
-          <TextareaInput
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="Page description (meta description)"
-            rows={3}
-          />
-        </Field>
-
-        <Field label="Meta tags">
-          <TextareaInput
-            value={metaTags}
-            onChange={(event) => setMetaTags(event.target.value)}
-            placeholder="Meta keywords"
-            rows={2}
-          />
-        </Field>
-
-        <div className="edit-node-seo-section">
-          <div className="edit-node-section-title">SEO metadata</div>
+        <Accordion
+          id="edit-node-seo-metadata"
+          className="edit-node-seo-section"
+          contentClassName="edit-node-seo-content"
+          open={isSeoMetadataOpen}
+          onOpenChange={setIsSeoMetadataOpen}
+          title="SEO metadata"
+        >
           <Field label="Canonical URL">
             <TextInput
               type="url"
@@ -724,7 +729,23 @@ const EditNodeModal = ({
               placeholder="https://example.com/image.jpg"
             />
           </Field>
-        </div>
+          <Field label="Meta tags">
+            <TextareaInput
+              value={metaTags}
+              onChange={(event) => setMetaTags(event.target.value)}
+              placeholder="Meta keywords"
+              rows={2}
+            />
+          </Field>
+          <Field label="Description">
+            <TextareaInput
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Page description (meta description)"
+              rows={3}
+            />
+          </Field>
+        </Accordion>
 
         <Field label="Marker">
           <SelectInput

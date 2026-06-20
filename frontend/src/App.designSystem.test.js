@@ -335,7 +335,7 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(/\.ui-accordion__trigger:focus-visible \{[\s\S]*box-shadow: inset var\(--ui-focus-ring\);[\s\S]*\}/);
     expect(appCss).toMatch(/\.ui-accordion__content \{[\s\S]*gap: var\(--unit-16\);[\s\S]*padding: var\(--unit-12\);[\s\S]*\}/);
     expect(appCss).toMatch(/\.profile-form \{[\s\S]*flex: 0 0 auto;[\s\S]*min-height: 100%;[\s\S]*\}/);
-    expect(appCss).toMatch(/\.profile-password-details \{[\s\S]*gap: var\(--unit-16\);[\s\S]*\}/);
+    expect(appCss).toMatch(/\.profile-password-details \{[\s\S]*gap: var\(--unit-24\);[\s\S]*\}/);
     expect(appCss).not.toContain('.account-plan-details {');
     expect(appCss).not.toContain('.account-plan-summary');
     expect(appCss).not.toContain('.profile-password-summary');
@@ -909,19 +909,19 @@ describe('map image asset persistence', () => {
     const formBlock = appCss.match(/\.edit-node-form \{([\s\S]*?)\}/)?.[1] || '';
     expect(formBlock).not.toContain('flex: 1;');
     expect(formBlock).not.toContain('min-height: 0;');
-    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-16\);/);
-    expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding-bottom: var\(--space-none\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.edit-node-form \{[\s\S]*gap: var\(--unit-24\);/);
+    expect(appCss).toMatch(/\.edit-node-form-content \{[\s\S]*padding: var\(--unit-24\);[\s\S]*scroll-padding-block: var\(--unit-20\) var\(--unit-24\);/);
     expect(generatedCss).toContain('--type-label-sm-weight: 500;');
     expect(appCss).toMatch(/\.field \{[\s\S]*gap: var\(--space-xs\);/);
     expect(appCss).toMatch(/\.field-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
-    expect(appCss).toMatch(/\.edit-node-form > \.field:last-child \{[\s\S]*margin-bottom: var\(--unit-16\);/);
+    expect(appCss).toMatch(/\.edit-node-form > \.field:last-child \{[\s\S]*margin-bottom: 0;/);
     expect(appCss).toMatch(/\.edit-node-modal__footer-actions \{[\s\S]*gap: var\(--unit-12\);/);
-    expect(appCss).toMatch(/\.edit-node-duplicate-section \{[\s\S]*gap: var\(--unit-10\);[\s\S]*padding: var\(--unit-14\);/);
+    expect(appCss).toMatch(/\.edit-node-duplicate-section \{[\s\S]*gap: var\(--unit-10\);[\s\S]*padding: var\(--unit-16\);/);
     expect(appCss).toMatch(/\.edit-node-duplicate-row \{[\s\S]*grid-template-columns: minmax\(120px, 0\.4fr\) minmax\(0, 1fr\);[\s\S]*gap: var\(--unit-8\);/);
-    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*gap: var\(--unit-12\);/);
-    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*background: var\(--ui-color-surface\);/);
-    expect(appCss).toMatch(/\.edit-node-seo-section \{[\s\S]*border-radius: var\(--ui-radius-lg\);/);
-    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*column-gap: var\(--unit-20\);[\s\S]*row-gap: var\(--unit-10\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section\.ui-accordion \{[\s\S]*background: var\(--ui-color-surface\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-section\.ui-accordion \{[\s\S]*border-radius: var\(--ui-radius-lg\);/);
+    expect(appCss).toMatch(/\.edit-node-seo-content \{[\s\S]*gap: var\(--unit-24\);[\s\S]*padding: 0 var\(--unit-16\) var\(--unit-16\);/);
+    expect(appCss).toMatch(/\.edit-node-form-grid \{[\s\S]*column-gap: var\(--unit-24\);[\s\S]*row-gap: var\(--unit-24\);/);
     expect(appCss).toMatch(/\.image-upload-zone \{[\s\S]*border: var\(--border-width-subtle\) dashed var\(--ui-color-border-strong\);/);
   });
 

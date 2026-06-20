@@ -38,7 +38,7 @@ const PromptModal = ({ title, message, placeholder, defaultValue, onConfirm, onC
         </>
       )}
     >
-      <form id="prompt-modal-form" onSubmit={handleSubmit}>
+      <form id="prompt-modal-form" className="prompt-modal-form" onSubmit={handleSubmit}>
         {message && <p>{message}</p>}
         <TextInput
           ref={inputRef}

@@ -122,15 +122,30 @@ describe('EditNodeModal', () => {
       );
     });
 
-    const textareas = container.querySelectorAll('textarea');
-    expect(textareas[0].value).toBe('Scanned description');
-    expect(textareas[1].value).toBe('seo, marketing');
     expect(container.textContent).toContain('SEO metadata');
-    expect(container.querySelector('input[value="Scanned H1"]')).not.toBeNull();
+    expect(container.querySelector('input[value="Scanned H1"]')).toBeNull();
+
+    const seoToggle = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('SEO metadata')
+    );
+    expect(seoToggle).not.toBeUndefined();
+    expect(seoToggle.getAttribute('aria-expanded')).toBe('false');
 
     act(() => {
-      setTextareaValue(textareas[0], 'Edited description');
-      textareas[0].dispatchEvent(new Event('input', { bubbles: true }));
+      seoToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(seoToggle.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelector('input[value="Scanned H1"]')).not.toBeNull();
+    const textareas = Array.from(container.querySelectorAll('textarea'));
+    const descriptionTextarea = textareas.find((textarea) => textarea.value === 'Scanned description');
+    const metaTagsTextarea = textareas.find((textarea) => textarea.value === 'seo, marketing');
+    expect(descriptionTextarea).not.toBeUndefined();
+    expect(metaTagsTextarea).not.toBeUndefined();
+
+    act(() => {
+      setTextareaValue(descriptionTextarea, 'Edited description');
+      descriptionTextarea.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
     const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
@@ -251,16 +266,40 @@ describe('EditNodeModal', () => {
       );
     });
 
-    const viewButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('View')
-    );
-    expect(viewButton).not.toBeUndefined();
+    const viewButton = container.querySelector('button[aria-label="View fullsize image"]');
+    const editButton = container.querySelector('button[aria-label="Edit image"]');
+    expect(viewButton).not.toBeNull();
+    expect(editButton).not.toBeNull();
 
     act(() => {
       viewButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onViewImage).toHaveBeenCalledWith('/screenshots/node_full_v1.jpg', true, 'node-1', 'full');
+  });
+
+  test('does not show image action buttons when no image is available', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Image page',
+            url: 'https://example.com/image',
+            pageType: 'Page',
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onViewImage={jest.fn()}
+          mode="edit"
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="View fullsize image"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Edit image"]')).toBeNull();
   });
 
   test('uploads inline thumbnail data before saving', async () => {

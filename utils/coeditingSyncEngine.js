@@ -129,11 +129,30 @@ function normalizeConnectionShape(connection) {
   };
 }
 
+function getCrosslinkRelationshipKey(connection) {
+  if (String(connection?.type || '').trim().toLowerCase() !== 'crosslink') return null;
+  const sourceNodeId = normalizeNullableString(connection.sourceNodeId || connection.sourceId);
+  const targetNodeId = normalizeNullableString(connection.targetNodeId || connection.targetId);
+  if (!sourceNodeId || !targetNodeId) return null;
+  return [sourceNodeId, targetNodeId].sort().join('::');
+}
+
 function normalizeConnections(connections) {
   if (!Array.isArray(connections)) return [];
-  return connections
-    .map((connection) => normalizeConnectionShape(connection))
-    .filter((connection) => connection.id && connection.sourceNodeId && connection.targetNodeId);
+  const seenCrosslinks = new Set();
+  return connections.reduce((normalized, connection) => {
+    const nextConnection = normalizeConnectionShape(connection);
+    if (!nextConnection.id || !nextConnection.sourceNodeId || !nextConnection.targetNodeId) {
+      return normalized;
+    }
+    const crosslinkKey = getCrosslinkRelationshipKey(nextConnection);
+    if (crosslinkKey) {
+      if (seenCrosslinks.has(crosslinkKey)) return normalized;
+      seenCrosslinks.add(crosslinkKey);
+    }
+    normalized.push(nextConnection);
+    return normalized;
+  }, []);
 }
 
 function serializeDocument(document) {
@@ -529,6 +548,12 @@ function applyLinkAdd(document, operation) {
     sourceNodeId: operation.payload.sourceId,
     targetNodeId: operation.payload.targetId,
   });
+  const crosslinkKey = getCrosslinkRelationshipKey(storedLink);
+  if (crosslinkKey && document.connections.some((connection) => (
+    getCrosslinkRelationshipKey(connection) === crosslinkKey
+  ))) {
+    return;
+  }
 
   document.connections.push(storedLink);
 }

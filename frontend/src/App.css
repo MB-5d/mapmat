@@ -7014,8 +7014,8 @@ body {
 .version-history-bookmark-editor {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 4px 12px 12px;
+  gap: var(--unit-24);
+  padding: var(--unit-24);
 }
 
 .version-history-bookmark-editor-footer {
@@ -8198,14 +8198,14 @@ body {
 .edit-node-form {
   display: flex;
   flex-direction: column;
-  gap: var(--unit-16);
+  gap: var(--unit-24);
 }
 
 .edit-node-form-content {
   display: flex;
   flex-direction: column;
   gap: var(--space-none);
-  padding-bottom: var(--space-none);
+  padding: var(--unit-24);
   scroll-padding-block: var(--unit-20) var(--unit-24);
   overscroll-behavior: contain;
 }
@@ -8215,7 +8215,7 @@ body {
 }
 
 .edit-node-form > .field:last-child {
-  margin-bottom: var(--unit-16);
+  margin-bottom: 0;
 }
 
 .edit-node-modal__footer-actions {
@@ -8225,21 +8225,28 @@ body {
   margin-left: auto;
 }
 
-.edit-node-seo-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--unit-12);
-  padding: var(--unit-16);
+.edit-node-seo-section.ui-accordion {
+  padding: 0;
   border: var(--border-width-subtle) solid var(--ui-color-border);
   border-radius: var(--ui-radius-lg);
   background: var(--ui-color-surface);
+  overflow: hidden;
+}
+
+.edit-node-seo-section .ui-accordion__trigger {
+  padding: var(--unit-16);
+}
+
+.edit-node-seo-content {
+  gap: var(--unit-24);
+  padding: 0 var(--unit-16) var(--unit-16);
 }
 
 .edit-node-insights-section {
   display: flex;
   flex-direction: column;
   gap: var(--unit-10);
-  padding: var(--unit-14);
+  padding: var(--unit-16);
   border: var(--border-width-subtle) solid var(--ui-input-brand-border);
   border-radius: var(--ui-radius-lg);
   background: var(--color-brand-50);
@@ -8249,7 +8256,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--unit-10);
-  padding: var(--unit-14);
+  padding: var(--unit-16);
   border: var(--border-width-subtle) solid var(--ui-status-warning-border);
   border-radius: var(--ui-radius-lg);
   background: var(--ui-status-warning-bg);
@@ -8330,8 +8337,8 @@ body {
 .edit-node-form-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  column-gap: var(--unit-20);
-  row-gap: var(--unit-10);
+  column-gap: var(--unit-24);
+  row-gap: var(--unit-24);
 }
 
 .edit-node-form-grid > .field {
@@ -8398,10 +8405,30 @@ body {
   display: block;
 }
 
-.btn-view-thumb {
+.thumbnail-preview-icon.ui-icon-btn {
   position: absolute;
-  left: 8px;
-  bottom: 8px;
+  bottom: var(--unit-8);
+  background: rgba(0, 0, 0, 0.62);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: var(--color-neutral-white);
+}
+
+.thumbnail-preview-icon.ui-icon-btn:hover:not(:disabled),
+.thumbnail-preview-icon.ui-icon-btn:focus-visible {
+  background: rgba(0, 0, 0, 0.82);
+  color: var(--color-neutral-white);
+}
+
+.thumbnail-preview-edit {
+  left: var(--unit-8);
+}
+
+.thumbnail-preview-fullsize {
+  right: var(--unit-8);
+}
+
+.edit-node-image-file-input {
+  display: none;
 }
 
 .btn-remove-thumb {
@@ -10006,10 +10033,10 @@ body {
 }
 
 .auth-form {
-  padding: 24px 24px 16px;
+  padding: var(--unit-24);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--unit-24);
 }
 
 .auth-error {
@@ -10191,7 +10218,7 @@ body {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  gap: 16px;
+  gap: var(--unit-24);
   min-height: 100%;
 }
 
@@ -10202,7 +10229,7 @@ body {
 }
 
 .profile-fields-section {
-  gap: 20px;
+  gap: var(--unit-24);
 }
 
 .profile-fields-section {
@@ -10210,7 +10237,7 @@ body {
 }
 
 .profile-password-details {
-  gap: var(--unit-16);
+  gap: var(--unit-24);
 }
 
 .profile-inline-edit-shell {
@@ -11357,11 +11384,17 @@ body {
   padding: var(--modal-padding);
   display: flex;
   flex-direction: column;
-  gap: var(--space-md);
+  gap: var(--unit-24);
 }
 
 .save-map-modal .modal-body {
   padding: 0;
+}
+
+.prompt-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-24);
 }
 
 .save-map-form .modal-footer {
@@ -14277,7 +14310,7 @@ body {
 .feedback-form {
   display: flex;
   flex-direction: column;
-  gap: var(--modal-gap);
+  gap: var(--unit-24);
 }
 
 .feedback-footer {

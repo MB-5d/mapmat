@@ -217,6 +217,31 @@ async function main() {
   assert.strictEqual(afterDelete.root.children[0].children.length, 0);
   assert.strictEqual(afterDelete.connections.length, 0);
 
+  const crosslinkDocument = {
+    ...baseDocument,
+    root: {
+      ...baseDocument.root,
+      children: [{ id: 'target', title: 'Target', children: [] }],
+    },
+    connections: [{
+      id: 'crosslink-a',
+      type: 'crosslink',
+      sourceNodeId: 'root',
+      targetNodeId: 'target',
+    }],
+  };
+  const duplicateCrosslink = applyOperationToDocument(crosslinkDocument, {
+    type: 'link.add',
+    payload: {
+      linkId: 'crosslink-b',
+      sourceId: 'target',
+      targetId: 'root',
+      link: { type: 'crosslink' },
+    },
+  });
+  assert.strictEqual(duplicateCrosslink.connections.length, 1);
+  assert.strictEqual(duplicateCrosslink.connections[0].id, 'crosslink-a');
+
   expectSyncError(() => applyOperationToDocument(baseDocument, {
     type: 'metadata.update',
     payload: {

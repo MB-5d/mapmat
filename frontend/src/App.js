@@ -14286,14 +14286,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     return nearest;
   };
 
-  // Validate if a connection can be created
-  const canCreateConnection = (type, sourceNodeId, targetNodeId) => {
+  const canCreateConnectionInList = (connectionList, type, sourceNodeId, targetNodeId) => {
     // No self-connections
     if (sourceNodeId === targetNodeId) return false;
 
     if (type === 'userflow') {
       // Only one line per direction between two nodes
-      return !connections.some(c =>
+      return !connectionList.some(c =>
         c.type === 'userflow' &&
         c.sourceNodeId === sourceNodeId &&
         c.targetNodeId === targetNodeId
@@ -14302,7 +14301,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     if (type === 'crosslink') {
       // Only one crosslink between any two nodes (either direction)
-      return !connections.some(c =>
+      return !connectionList.some(c =>
         c.type === 'crosslink' &&
         ((c.sourceNodeId === sourceNodeId && c.targetNodeId === targetNodeId) ||
           (c.sourceNodeId === targetNodeId && c.targetNodeId === sourceNodeId))
@@ -14311,6 +14310,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     return true;
   };
+
+  // Validate if a connection can be created
+  const canCreateConnection = (type, sourceNodeId, targetNodeId) => (
+    canCreateConnectionInList(connections, type, sourceNodeId, targetNodeId)
+  );
 
   // Handle mousedown on an anchor point - start drawing connection
   const handleAnchorMouseDown = (nodeId, anchor, e) => {
@@ -14419,7 +14423,16 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
       } else {
         saveStateForUndo();
-        setConnections(prev => [...prev, newConnection]);
+        setConnections(prev => (
+          canCreateConnectionInList(
+            prev,
+            newConnection.type,
+            newConnection.sourceNodeId,
+            newConnection.targetNodeId
+          )
+            ? [...prev, newConnection]
+            : prev
+        ));
         showToast(`${drawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} created`, 'success');
       }
     }
