@@ -116,6 +116,30 @@ assert.deepStrictEqual(
   'already-partial scans should not be reclassified'
 );
 
+const mappedProgressCollapse = makeRootOnlyResult();
+hardenCollapsedScanResult(mappedProgressCollapse, {
+  progress: {
+    scanned: 10,
+    mapped: 4,
+    queued: 0,
+  },
+});
+assert.strictEqual(
+  mappedProgressCollapse.partialReason,
+  'scan_collapsed',
+  'root-only scan with mapped progress should be marked collapsed'
+);
+assert.strictEqual(
+  mappedProgressCollapse.scanDiagnostics?.pageMapCount,
+  4,
+  'collapsed scan should preserve mapped progress for diagnostics'
+);
+assert.strictEqual(
+  mappedProgressCollapse.scanDiagnostics?.collapseReason,
+  'progress_mapped_pages',
+  'mapped progress should explain the collapse signal'
+);
+
 const existingPartial = makeRootOnlyResult();
 existingPartial.partial = true;
 existingPartial.partialReason = 'root_discovery_failed';

@@ -4406,6 +4406,14 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const brokenLinkCandidates = [];
   const MAX_BROKEN_LINK_CHECKS = 500;
   let brokenChecks = 0;
+  const getScanProgressSnapshot = () => ({
+    scanned: visited.size,
+    mapped: pageMap.size,
+    queued: Math.max(0, queue.length - queueIndex),
+  });
+  const reportScanProgress = () => {
+    if (onProgress) onProgress(getScanProgressSnapshot());
+  };
 
   const scheduleBrokenLinkCheck = (link, sourceUrl) => {
     if (!scanOptions.brokenLinks) return;
@@ -4431,9 +4439,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     const discoveryIndex = discoveryCounter++;
 
     // Send progress update
-    if (onProgress) {
-      onProgress({ scanned: visited.size, queued: Math.max(0, queue.length - queueIndex) });
-    }
+    reportScanProgress();
 
     if ((depthLimit !== null && depth > depthLimit) || !isWithinScanDepth(url)) return;
     if (!allowUrl(url)) return;
@@ -4481,6 +4487,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
           blockedReason: 'fetch_failed',
           metadataAvailable: false,
         });
+        reportScanProgress();
       }
       return;
     }
@@ -4571,6 +4578,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       scanStatus: classification.scanStatus,
       metadataAvailable: classification.metadataAvailable,
     });
+    reportScanProgress();
     if (source === 'common_path' && status >= 200 && status < 400) {
       scanDiagnostics.commonPathActive += 1;
     }
@@ -4736,6 +4744,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       httpStatus: null,
       wasRedirect: false,
     });
+    reportScanProgress();
   }
 
   const scannedKeys = new Set();
@@ -5966,7 +5975,12 @@ async function processJob(job) {
   const payload = parseJsonSafe(job.payload) || {};
   try {
     if (jobType === JOB_TYPES.scan) {
-      const progressState = { lastUpdate: 0, lastScanned: 0, lastProgress: null };
+      const progressState = {
+        lastUpdate: 0,
+        lastScanned: 0,
+        lastMapped: 0,
+        lastProgress: null,
+      };
       const readJobStatus = createJobStatusReader(jobId);
       const authSessionStorageState = payload.options?.authSessionId
         ? getReadyScanAuthStorageStateForJob({
@@ -5981,11 +5995,15 @@ async function processJob(job) {
       const progressCb = (progress) => {
         progressState.lastProgress = progress;
         const now = Date.now();
-        if (progress.scanned - progressState.lastScanned < 5 && now - progressState.lastUpdate < 500) {
+        const scanned = Math.max(0, Number(progress.scanned || 0) || 0);
+        const mapped = Math.max(0, Number(progress.mapped || 0) || 0);
+        const mappedChanged = mapped !== progressState.lastMapped;
+        if (scanned - progressState.lastScanned < 5 && !mappedChanged && now - progressState.lastUpdate < 500) {
           return;
         }
         progressState.lastUpdate = now;
-        progressState.lastScanned = progress.scanned;
+        progressState.lastScanned = scanned;
+        progressState.lastMapped = mapped;
         updateJobProgress(jobId, progress).catch((err) => {
           console.error('Job progress update error:', err);
         });

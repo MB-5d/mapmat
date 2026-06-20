@@ -24,10 +24,8 @@ export const shouldPreserveExistingMapForCollapsedScan = ({ result, nextRoot, ex
   && countScanResultNodes(nextRoot) <= 1
 );
 
-export const shouldRejectFreshRootOnlyScan = ({ result, nextRoot, existingRoot }) => (
-  result?.partial === true
-  && result?.partialReason === ROOT_DISCOVERY_FAILED_PARTIAL_REASON
-  && countScanResultNodes(existingRoot) <= 1
+export const shouldRejectFreshRootOnlyScan = ({ result, nextRoot }) => (
+  isRootOnlyDegradedScanResult(result)
   && countScanResultNodes(nextRoot) <= 1
 );
 

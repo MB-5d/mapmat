@@ -23,7 +23,14 @@ const ScanProgressModal = ({
   onDismissScanError,
 }) => {
   if (!loading && !scanErrorMessage) return null;
-  const hasQueue = scanProgress.queued > 0;
+  const scannedCount = Math.max(0, Number(scanProgress.scanned || 0) || 0);
+  const mappedCount = Number.isFinite(Number(scanProgress.mapped))
+    ? Math.max(0, Number(scanProgress.mapped || 0) || 0)
+    : null;
+  const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
+  const primaryCount = mappedCount === null ? scannedCount : mappedCount;
+  const primaryLabel = mappedCount === null ? 'Scanned' : 'On map';
+  const hasQueue = queuedCount > 0;
   const displayMessage = isStoppingScan
     ? 'Stopping scan and preparing current results...'
     : scanMessage;
@@ -56,12 +63,12 @@ const ScanProgressModal = ({
           <div className="scan-url">{urlInput}</div>
           <div className={`scan-stats${hasQueue ? '' : ' single'}`}>
             <div className="scan-pages">
-              <span className="scan-pages-count">{scanProgress.scanned}</span>
-              <span className="scan-pages-label">Scanned</span>
+              <span className="scan-pages-count">{primaryCount}</span>
+              <span className="scan-pages-label">{primaryLabel}</span>
             </div>
             {hasQueue && (
               <div className="scan-queued">
-                <span className="scan-queued-count">{scanProgress.queued}</span>
+                <span className="scan-queued-count">{queuedCount}</span>
                 <span className="scan-queued-label">In queue</span>
               </div>
             )}
@@ -75,13 +82,13 @@ const ScanProgressModal = ({
               </span>
             </div>
             <div className="scan-time-divider" aria-hidden="true" />
-            {scanProgress.scanned > 2 && hasQueue && (
+            {scannedCount > 2 && hasQueue && (
               <div className="scan-estimated">
                 <span className="scan-time-label">Remaining</span>
                 <span className="scan-time-value">
                   {(() => {
-                    const avgTimePerPage = scanElapsed / scanProgress.scanned;
-                    const estRemaining = Math.ceil(avgTimePerPage * scanProgress.queued);
+                    const avgTimePerPage = scanElapsed / scannedCount;
+                    const estRemaining = Math.ceil(avgTimePerPage * queuedCount);
                     const mins = Math.floor(estRemaining / 60);
                     const secs = estRemaining % 60;
                     return `~${mins}:${String(secs).padStart(2, '0')}`;

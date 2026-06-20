@@ -47,18 +47,34 @@ test('rejects a fresh root discovery failure instead of showing it as success', 
   })).toBe(true);
 });
 
-test('allows a fresh collapsed scan to render as partial', () => {
+test('rejects a fresh collapsed scan instead of showing one node as success', () => {
   expect(shouldRejectFreshRootOnlyScan({
     result: { partial: true, partialReason: 'scan_collapsed' },
+    nextRoot: rootOnly,
+    existingRoot: rootOnly,
+  })).toBe(true);
+});
+
+test('rejects degraded fresh one-node scans even when an old map is loaded', () => {
+  expect(countScanResultNodes(rootOnly)).toBe(1);
+  expect(shouldRejectFreshRootOnlyScan({
+    result: { partial: true, partialReason: 'scan_collapsed' },
+    nextRoot: rootOnly,
+    existingRoot: multiNode,
+  })).toBe(true);
+});
+
+test('allows true one-node scans when there is no degraded partial signal', () => {
+  expect(shouldRejectFreshRootOnlyScan({
+    result: { partial: false },
     nextRoot: rootOnly,
     existingRoot: rootOnly,
   })).toBe(false);
 });
 
-test('allows true one-node scans when there is no existing multi-node map to protect', () => {
-  expect(countScanResultNodes(rootOnly)).toBe(1);
-  expect(shouldPreserveExistingMapForCollapsedScan({
-    result: { partial: true, partialReason: 'scan_collapsed' },
+test('allows stopped scans to show current results', () => {
+  expect(shouldRejectFreshRootOnlyScan({
+    result: { partial: true, partialReason: 'stopped_by_user' },
     nextRoot: rootOnly,
     existingRoot: rootOnly,
   })).toBe(false);

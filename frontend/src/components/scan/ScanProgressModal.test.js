@@ -78,6 +78,21 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-limit-note')).not.toBeNull();
   });
 
+  test('shows mapped page count when scan progress includes it', () => {
+    act(() => {
+      root.render(
+        <ScanProgressModal
+          {...baseProps}
+          scanProgress={{ scanned: 1357, mapped: 384, queued: 23 }}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('384');
+    expect(container.textContent).toContain('On map');
+    expect(container.textContent).not.toContain('1357Scanned');
+  });
+
   test('shows the existing cancel confirmation flow', () => {
     act(() => {
       root.render(<ScanProgressModal {...baseProps} showCancelConfirm />);

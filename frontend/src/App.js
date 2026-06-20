@@ -2759,7 +2759,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [currentRoute]);
   const [scanMessage, setScanMessage] = useState('');
   const [scanElapsed, setScanElapsed] = useState(0);
-  const [scanProgress, setScanProgress] = useState({ scanned: 0, queued: 0 });
+  const [scanProgress, setScanProgress] = useState({ scanned: 0, mapped: 0, queued: 0 });
   const [scanLimitProgressNote, setScanLimitProgressNote] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
@@ -11233,7 +11233,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowStopConfirm(false);
     setIsStoppingScan(false);
     if (clearProgress) {
-      setScanProgress({ scanned: 0, queued: 0 });
+      setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
     }
     setScanLimitProgressNote('');
     if (clearError) {
@@ -11250,14 +11250,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowCancelConfirm(false);
     setShowStopConfirm(false);
     setIsStoppingScan(false);
-    setScanProgress({ scanned: 0, queued: 0 });
+    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
     setScanLimitProgressNote('');
     setScanErrorMessage(message || 'Scan failed');
   };
 
   const dismissScanError = () => {
     setScanErrorMessage('');
-    setScanProgress({ scanned: 0, queued: 0 });
+    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
   };
 
   const requestCancelScan = () => {
@@ -11451,7 +11451,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setLastHistoryId(null);
     setLastScanUrl('');
     setLoading(true);
-    setScanProgress({ scanned: 0, queued: 0 });
+    setScanProgress({ scanned: 0, mapped: 0, queued: 0 });
     startScanTimers();
     trackEvent('scan_started', {
       authenticated_pages: AUTHENTICATED_SCAN_ENABLED && scanOptions.authenticatedPages ? 'true' : 'false',
@@ -14514,7 +14514,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setScanErrorMessage(errorMessage);
       setScanLimitProgressNote(limitNote);
       setScanMessage('Scanning site structure...');
-      setScanProgress({ scanned: 9, queued: 14 });
+      setScanProgress({ scanned: 9, mapped: 3, queued: 14 });
       setScanElapsed(92);
       setShowCancelConfirm(cancelConfirm);
       setShowStopConfirm(stopConfirm);

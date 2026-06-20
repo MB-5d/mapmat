@@ -24,6 +24,7 @@ function countScanTreeNodes(node) {
 function normalizeProgress(progress = {}) {
   return {
     scanned: toNonNegativeInteger(progress.scanned),
+    mapped: toNonNegativeInteger(progress.mapped),
     queued: toNonNegativeInteger(progress.queued),
   };
 }
@@ -43,6 +44,7 @@ function getRootOnlyCollapseReasons(result, context = {}) {
   if (toNonNegativeInteger(diagnostics.renderedLinksQueued) > 0) reasons.push('rendered_links_queued');
   if (toNonNegativeInteger(diagnostics.pageMapCount) > 1) reasons.push('page_map_has_pages');
   if (toNonNegativeInteger(diagnostics.queueRemaining) > 0) reasons.push('queue_had_discovered_pages');
+  if (progress.mapped > rootTreeNodeCount) reasons.push('progress_mapped_pages');
 
   if (progress.scanned >= rootTreeNodeCount && progress.queued > 0) {
     reasons.push('progress_had_discovered_pages');
@@ -70,6 +72,9 @@ function hardenCollapsedScanResult(result, context = {}) {
 
   if (progress.scanned > 0 && !toNonNegativeInteger(nextDiagnostics.visitedCount)) {
     nextDiagnostics.visitedCount = progress.scanned;
+  }
+  if (progress.mapped > 0 && !toNonNegativeInteger(nextDiagnostics.pageMapCount)) {
+    nextDiagnostics.pageMapCount = progress.mapped;
   }
   if (progress.queued > 0 && !toNonNegativeInteger(nextDiagnostics.queueRemaining)) {
     nextDiagnostics.queueRemaining = progress.queued;
