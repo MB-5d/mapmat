@@ -49,7 +49,7 @@ function loadPlanConfig() {
           limits: {
             activeProjects: 1,
             crawlPages: 100,
-            scanPagesPerRun: 25,
+            scanPagesPerRun: 100,
             screenshotCredits: 0,
             organizedScreenshotExports: 0,
             seats: 1,

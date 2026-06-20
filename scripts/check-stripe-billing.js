@@ -84,7 +84,7 @@ async function main() {
   const billingCatalog = getBillingCatalogForClient();
   const freeCatalog = billingCatalog.plans.find((entry) => entry.key === 'free');
   assert.equal(freeCatalog.prices.monthly.formatted, '$0');
-  assert.equal(freeCatalog.featureHighlights.includes('25 pages per run'), true);
+  assert.equal(freeCatalog.featureHighlights.includes('100 pages per run'), true);
   const proCatalog = billingCatalog.plans.find((entry) => entry.key === 'pro');
   assert.equal(proCatalog.prices.monthly.configured, true);
   assert.equal(proCatalog.prices.yearly.configured, true);

@@ -37,13 +37,13 @@ async function main() {
   assert.equal(summary.meters.crawlPages.included, 100);
   assert.equal(summary.meters.screenshotCredits.included, 0);
   assert.equal(summary.limits.activeProjects.limit, 1);
-  assert.equal(summary.limits.scanPagesPerRun.limit, 25);
+  assert.equal(summary.limits.scanPagesPerRun.limit, 100);
   assert.equal(summary.screenshotCreditCosts.desktop_full_page, 3);
   assert.equal(getScreenshotCreditCost({ type: 'full' }), 3);
 
   const freeScanCheck = await checkAccountActionAsync(user, ACTIONS.scanStart, { requestedPages: 5000 });
   assert.equal(freeScanCheck.allowed, true);
-  assert.equal(freeScanCheck.allowedQuantity, 25);
+  assert.equal(freeScanCheck.allowedQuantity, 100);
   assert.equal(freeScanCheck.capped, true);
 
   const freeScreenshotCheck = await checkAccountActionAsync(user, ACTIONS.screenshotCapture, { credits: 1 });
@@ -58,7 +58,7 @@ async function main() {
   });
   const tierAccount = (await resolveAccountEntitlementsAsync(tierUser)).account;
   for (const [planKey, expectedAllowedQuantity, expectedResolvedPlanKey = planKey] of [
-    ['free', 25],
+    ['free', 100],
     ['pro', 1050],
     ['studio', 52500],
     ['agency', 210000],

@@ -18,7 +18,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For trying Vellic on a small site or one-off audit.',
     marketingCta: 'Get started',
     marketingAction: 'signup',
-    features: ['1 active project', '100 crawl pages', '25 pages per run', 'No screenshot credits', 'No organized exports', '1 editor'],
+    features: ['1 active project', '100 crawl pages', '100 pages per run', 'No screenshot credits', 'No organized exports', '1 editor'],
     prices: {
       monthly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
