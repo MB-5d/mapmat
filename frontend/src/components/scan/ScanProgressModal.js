@@ -16,6 +16,7 @@ const ScanProgressModal = ({
   scanElapsed,
   urlInput,
   onRequestStop,
+  onRequestCancel,
   onStopScan,
   onCancelScan,
   onContinueScan,
@@ -96,13 +97,22 @@ const ScanProgressModal = ({
       </>
     );
     footer = (
-      <Button
-        variant="danger"
-        onClick={onRequestStop}
-        loading={isStoppingScan}
-      >
-        {isStoppingScan ? 'Stopping...' : 'Stop'}
-      </Button>
+      <>
+        <Button
+          variant="secondary"
+          onClick={onRequestCancel}
+          disabled={isStoppingScan}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          onClick={onRequestStop}
+          loading={isStoppingScan}
+        >
+          {isStoppingScan ? 'Stopping...' : 'Stop'}
+        </Button>
+      </>
     );
   } else if (showCancelConfirm) {
     body = (
@@ -132,7 +142,7 @@ const ScanProgressModal = ({
       <div className="cancel-confirm">
         <AlertTriangle size={48} className="cancel-warning-icon" />
         <h3>Stop Scanning?</h3>
-        <p>Stop scanning and show current progress?</p>
+        <p>Stop scanning and show the pages found so far?</p>
       </div>
     );
     footer = (
@@ -145,7 +155,7 @@ const ScanProgressModal = ({
           Cancel
         </Button>
         <Button variant="primary" onClick={onStopScan} disabled={isStoppingScan}>
-          Yes
+          Stop
         </Button>
       </>
     );

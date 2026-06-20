@@ -77,12 +77,21 @@ function updateJobProgressAsync(id, progressJson) {
   return adapter.executeAsync('UPDATE jobs SET progress = ? WHERE id = ?', [progressJson, id]);
 }
 
-function markJobCompleteAsync(id, completeStatus, resultJson) {
+function markJobCompleteAsync(id, completeStatus, resultJson, ...activeStatuses) {
+  const statuses = normalizeStatuses(activeStatuses);
+  if (statuses.length === 0) {
+    return adapter.executeAsync(`
+      UPDATE jobs
+      SET status = ?, result = ?, finished_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [completeStatus, resultJson, id]);
+  }
+  const placeholders = adapter.placeholders(statuses.length);
   return adapter.executeAsync(`
     UPDATE jobs
     SET status = ?, result = ?, finished_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `, [completeStatus, resultJson, id]);
+    WHERE id = ? AND status IN (${placeholders})
+  `, [completeStatus, resultJson, id, ...statuses]);
 }
 
 function markJobFailedAsync(id, failedStatus, errorText) {

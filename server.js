@@ -1451,7 +1451,15 @@ const updateJobProgress = async (id, progress) => {
 };
 
 const markJobComplete = async (id, result) => {
-  await jobStore.markJobCompleteAsync(id, JOB_STATUS.complete, JSON.stringify(result || {}));
+  await jobStore.markJobCompleteAsync(
+    id,
+    JOB_STATUS.complete,
+    JSON.stringify(result || {}),
+    JOB_STATUS.queued,
+    JOB_STATUS.running,
+    JOB_STATUS.paused,
+    JOB_STATUS.stopping
+  );
 };
 
 function countScanResultPages(result) {

@@ -2794,6 +2794,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const centerKnownLargeMapHomeRef = useRef(null);
   const pendingInitialCenterRef = useRef(false);
   const pendingInitialLargeMapCenterRef = useRef(false);
+  const pendingUnsavedRoutePromptRef = useRef('');
   const largeMapHomeSceneKeyRef = useRef('');
   const largeMapHomeNodeRef = useRef(null);
   const largeMapVisibleNodesRef = useRef([]);
@@ -3040,6 +3041,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canvasRef = useRef(null);
   const scanJobIdRef = useRef(null);
   const scanJobAccessTokenRef = useRef(null);
+  const ignoredScanJobIdsRef = useRef(new Set());
   const eventSourceRef = useRef(null);
   const pendingAuthScanRef = useRef(null);
   const pendingPlanScanRef = useRef(null);
@@ -10557,6 +10559,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setColors(DEFAULT_COLORS);
     setConnectionColors(DEFAULT_CONNECTION_COLORS);
     setCurrentMap(null);
+    setIsImportedMap(false);
     setMapName('');
     setSavedMapCommentsByNode({});
     setExpandedStacks({});
@@ -10768,6 +10771,32 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (authLoading) return undefined;
 
     if (!isLoggedIn) {
+      if (hasMap && !currentMap?.id) {
+        const promptKey = `${currentRoute.mapId}:${root?.id || 'draft'}`;
+        navigateToRoute(createAppHomeRoute(), { replace: true });
+        if (pendingUnsavedRoutePromptRef.current !== promptKey) {
+          pendingUnsavedRoutePromptRef.current = promptKey;
+          showConfirm({
+            title: 'Save current map?',
+            message: 'You have an unsaved map. Save it before leaving?',
+            confirmText: 'Save Map',
+            cancelText: "Don't Save",
+          }).then((wantsSave) => {
+            if (pendingUnsavedRoutePromptRef.current !== promptKey) return;
+            pendingUnsavedRoutePromptRef.current = '';
+            if (wantsSave) {
+              setCreateMapMode(false);
+              setDuplicateMapConfig(null);
+              setPendingLoadMap(null);
+              setShowSaveMapModal(true);
+              return;
+            }
+            clearLoadedMapView();
+            navigateToRoute(createAppHomeRoute(), { replace: true });
+          });
+        }
+        return undefined;
+      }
       setRouteMapGateState({
         mapId: currentRoute.mapId,
         loading: false,
@@ -10825,9 +10854,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.surface,
     isBillingReturnRoute,
     isLoggedIn,
+    hasMap,
     loadPendingMapInvites,
     loadSavedMapById,
     openAuthModal,
+    root?.id,
+    navigateToRoute,
+    showConfirm,
     showToast,
   ]);
 
@@ -11247,6 +11280,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   const cancelScan = () => {
     const jobId = scanJobIdRef.current;
     const accessToken = scanJobAccessTokenRef.current;
+    if (jobId) {
+      ignoredScanJobIdsRef.current.add(jobId);
+      window.setTimeout(() => {
+        ignoredScanJobIdsRef.current.delete(jobId);
+      }, 60000);
+    }
     resetScanUi();
     if (jobId) {
       api.cancelScanJob(jobId, { accessToken }).catch(() => {});
@@ -11423,6 +11462,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     const handleCompletedJob = (job) => {
       if (streamHandled) return;
+      if (ignoredScanJobIdsRef.current.has(jobId)) return;
 
       if (job?.status === 'failed') {
         streamHandled = true;
@@ -11611,7 +11651,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         statusDuplicate: displayDuplicateCount > 0,
       });
       setCurrentMap(null);
-      navigateToRoute(createAppHomeRoute());
+      navigateToRoute(createAppHomeRoute(), { replace: true });
       setDraftVersionFromSnapshot({
         root: displayMerged.root,
         orphans: displayMerged.orphans,
@@ -11657,9 +11697,14 @@ export default function App({ currentRoute, navigateToRoute }) {
         showToast(`Scan complete${hostname ? `: ${hostname}` : ''}`, 'success');
       }
       refreshCurrentUser();
+      pendingInitialCenterRef.current = true;
       setTimeout(() => {
-        if (!shouldMergeScanResult && fitCurrentMapToView()) return;
-        resetView();
+        const didCenter = centerHomeRef.current?.(1, { skipPanClamp: true });
+        if (didCenter) {
+          pendingInitialCenterRef.current = false;
+          return;
+        }
+        scheduleResetViewRef.current?.(20);
       }, 100);
 
       streamHandled = true;
