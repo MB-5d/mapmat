@@ -29,7 +29,7 @@ const ScanProgressModal = ({
     : null;
   const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
   const primaryCount = mappedCount === null ? scannedCount : mappedCount;
-  const primaryLabel = mappedCount === null ? 'Scanned' : 'On map';
+  const primaryLabel = mappedCount === null ? 'Scanned' : 'Found';
   const hasQueue = queuedCount > 0;
   const displayMessage = isStoppingScan
     ? 'Stopping scan and preparing current results...'

@@ -78,7 +78,7 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-limit-note')).not.toBeNull();
   });
 
-  test('shows mapped page count when scan progress includes it', () => {
+  test('shows found page count when scan progress includes mapped pages', () => {
     act(() => {
       root.render(
         <ScanProgressModal
@@ -89,7 +89,7 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('384');
-    expect(container.textContent).toContain('On map');
+    expect(container.textContent).toContain('Found');
     expect(container.textContent).not.toContain('1357Scanned');
   });
 
