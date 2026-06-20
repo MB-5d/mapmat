@@ -120,6 +120,7 @@ import {
   checkLayoutInvariants,
 } from './utils/treeUtils';
 import {
+  buildReportStats,
   buildReportEntries,
   comparePageNumbers,
 } from './utils/reportUtils';
@@ -3588,19 +3589,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     [reportEntries]
   );
 
-  const reportStats = useMemo(() => {
-    const realEntries = reportEntries.filter((entry) => !entry.isEntitlementLocked);
-    const stats = { total: realEntries.length };
-    REPORT_TYPE_OPTIONS.forEach((option) => {
-      stats[option.key] = 0;
-    });
-    realEntries.forEach((entry) => {
-      entry.types.forEach((type) => {
-        stats[type] = (stats[type] || 0) + 1;
-      });
-    });
-    return stats;
-  }, [reportEntries]);
+  const reportStats = useMemo(
+    () => buildReportStats(reportEntries, REPORT_TYPE_OPTIONS, scanMeta),
+    [reportEntries, scanMeta]
+  );
 
   const pageInsightLookup = useMemo(() => {
     const map = new Map();
@@ -11644,7 +11636,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           partial_reason: data.partialReason || '',
         });
         showScanError(getRootOnlyScanFailureMessage(hostname));
-        resetScanUi();
         return;
       }
 

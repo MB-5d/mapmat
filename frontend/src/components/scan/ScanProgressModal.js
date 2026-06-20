@@ -29,7 +29,7 @@ const ScanProgressModal = ({
     : null;
   const queuedCount = Math.max(0, Number(scanProgress.queued || 0) || 0);
   const primaryCount = mappedCount === null ? scannedCount : mappedCount;
-  const primaryLabel = mappedCount === null ? 'Scanned' : 'Found';
+  const primaryLabel = mappedCount === null ? 'Scanned' : 'Captured';
   const hasQueue = queuedCount > 0;
   const displayMessage = isStoppingScan
     ? 'Stopping scan and preparing current results...'
@@ -149,7 +149,7 @@ const ScanProgressModal = ({
       <div className="cancel-confirm">
         <AlertTriangle size={48} className="cancel-warning-icon" />
         <h3>Stop scanning?</h3>
-        <p>Stop scanning and show the pages found so far?</p>
+        <p>Stop scanning and show the pages captured so far?</p>
       </div>
     );
     footer = (

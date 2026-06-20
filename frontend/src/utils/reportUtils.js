@@ -114,6 +114,31 @@ export const buildReportEntries = (rootNode, orphanNodes, reportNumberMap, repor
   return entries;
 };
 
+export const getReportEntitlementVisibleLimit = (scanMeta = null) => {
+  const entitlement = scanMeta?.entitlement || null;
+  if (!entitlement?.capped || entitlement.limitReached === false) return null;
+  const rawLimit = entitlement.visiblePageLimit || entitlement.allowedPages || entitlement.visiblePageCount || 0;
+  const limit = Math.floor(Number(rawLimit || 0));
+  return Number.isFinite(limit) && limit > 0 ? limit : null;
+};
+
+export const buildReportStats = (entries = [], typeOptions = [], scanMeta = null) => {
+  const realEntries = entries.filter((entry) => !entry.isEntitlementLocked);
+  const visibleLimit = getReportEntitlementVisibleLimit(scanMeta);
+  const stats = {
+    total: visibleLimit ? Math.min(realEntries.length, visibleLimit) : realEntries.length,
+  };
+  typeOptions.forEach((option) => {
+    stats[option.key] = 0;
+  });
+  realEntries.forEach((entry) => {
+    entry.types.forEach((type) => {
+      stats[type] = (stats[type] || 0) + 1;
+    });
+  });
+  return stats;
+};
+
 export const parsePageNumber = (raw) => {
   if (!raw) return [];
   const value = String(raw);

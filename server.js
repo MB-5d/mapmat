@@ -1476,10 +1476,12 @@ function countScanResultPages(result) {
   while (stack.length > 0) {
     const node = stack.pop();
     if (!node || typeof node !== 'object') continue;
-    const key = String(node.id || node.url || `${count}:${stack.length}`);
+    const key = String(node.id || node.url || `${seen.size}:${stack.length}`);
     if (seen.has(key)) continue;
     seen.add(key);
-    count += 1;
+    if (!node.isVirtualMissing && !node.isEntitlementLocked && !node.entitlementLocked) {
+      count += 1;
+    }
     if (Array.isArray(node.children)) stack.push(...node.children);
   }
   return count;
@@ -4968,10 +4970,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
-  for (const node of nodes.values()) {
-    if (node.url === rootUrl) continue;
-    if (!shouldInferPathParents(node)) continue;
-    ensureParentChain(node.url);
+  if (!entitlementCappedScan) {
+    for (const node of nodes.values()) {
+      if (node.url === rootUrl) continue;
+      if (!shouldInferPathParents(node)) continue;
+      ensureParentChain(node.url);
+    }
   }
 
   nodes.forEach((node) => {
@@ -5073,20 +5077,23 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   });
 
-  // Ensure path ancestors for visible nodes are also visible (for missing placeholders)
-  Array.from(visiblePrimaryUrls).forEach((url) => {
-    const linkedNode = nodes.get(url);
-    if (linkedNode && !shouldInferPathParents(linkedNode)) return;
-    let parentUrl = getParentUrl(url);
-    while (parentUrl) {
-      if (!nodes.has(parentUrl)) break;
-      const parentHost = new URL(parentUrl).hostname;
-      if (normalizeHost(parentHost) !== rootHostNormalized) break;
-      if (visiblePrimaryUrls.has(parentUrl)) break;
-      visiblePrimaryUrls.add(parentUrl);
-      parentUrl = getParentUrl(parentUrl);
-    }
-  });
+  // Ensure path ancestors for visible nodes are also visible (for missing placeholders).
+  // Capped scans should spend the visible allowance on captured pages, not generated placeholders.
+  if (!entitlementCappedScan) {
+    Array.from(visiblePrimaryUrls).forEach((url) => {
+      const linkedNode = nodes.get(url);
+      if (linkedNode && !shouldInferPathParents(linkedNode)) return;
+      let parentUrl = getParentUrl(url);
+      while (parentUrl) {
+        if (!nodes.has(parentUrl)) break;
+        const parentHost = new URL(parentUrl).hostname;
+        if (normalizeHost(parentHost) !== rootHostNormalized) break;
+        if (visiblePrimaryUrls.has(parentUrl)) break;
+        visiblePrimaryUrls.add(parentUrl);
+        parentUrl = getParentUrl(parentUrl);
+      }
+    });
+  }
 
   const orphanCandidates = [];
   const subdomainCandidates = [];
@@ -5188,10 +5195,12 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
-  Array.from(orphanMap.values()).forEach((node) => {
-    if (!shouldInferPathParents(node)) return;
-    ensureOrphanParentChain(node.url);
-  });
+  if (!entitlementCappedScan) {
+    Array.from(orphanMap.values()).forEach((node) => {
+      if (!shouldInferPathParents(node)) return;
+      ensureOrphanParentChain(node.url);
+    });
+  }
 
   const orphanNodes = [];
   orphanMap.forEach((node) => {

@@ -1,4 +1,8 @@
-import { getReportPageType, getReportTypesForNode } from './reportUtils';
+import {
+  buildReportStats,
+  getReportPageType,
+  getReportTypesForNode,
+} from './reportUtils';
 
 describe('reportUtils', () => {
   test('treats renderable text URLs as standard pages even with stale file metadata', () => {
@@ -39,5 +43,33 @@ describe('reportUtils', () => {
     };
 
     expect(getReportTypesForNode(node)).not.toContain('errorPages');
+  });
+
+  test('caps report total for entitlement-limited maps', () => {
+    const entries = Array.from({ length: 50 }, (_, index) => ({
+      id: `page-${index}`,
+      types: index % 3 === 0 ? ['missing'] : ['standard'],
+      isEntitlementLocked: false,
+    }));
+    entries.push({
+      id: 'locked-preview',
+      types: ['standard'],
+      isEntitlementLocked: true,
+    });
+
+    const stats = buildReportStats(entries, [
+      { key: 'standard' },
+      { key: 'missing' },
+    ], {
+      entitlement: {
+        capped: true,
+        limitReached: true,
+        visiblePageLimit: 25,
+      },
+    });
+
+    expect(stats.total).toBe(25);
+    expect(stats.standard).toBe(33);
+    expect(stats.missing).toBe(17);
   });
 });

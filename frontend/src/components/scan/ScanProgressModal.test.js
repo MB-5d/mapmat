@@ -78,7 +78,7 @@ describe('ScanProgressModal', () => {
     expect(container.querySelector('.scan-limit-note')).not.toBeNull();
   });
 
-  test('shows found page count when scan progress includes mapped pages', () => {
+  test('shows captured page count when scan progress includes mapped pages', () => {
     act(() => {
       root.render(
         <ScanProgressModal
@@ -89,7 +89,7 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('384');
-    expect(container.textContent).toContain('Found');
+    expect(container.textContent).toContain('Captured');
     expect(container.textContent).not.toContain('1357Scanned');
   });
 
@@ -121,7 +121,7 @@ describe('ScanProgressModal', () => {
     });
 
     expect(container.textContent).toContain('Stop scanning?');
-    expect(container.textContent).toContain('Stop scanning and show the pages found so far?');
+    expect(container.textContent).toContain('Stop scanning and show the pages captured so far?');
     expect(container.textContent).toContain('Stop');
     expect(container.textContent).toContain('Cancel');
 
