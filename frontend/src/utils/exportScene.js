@@ -1,19 +1,59 @@
 import { computeLayout } from '../layout/computeLayout';
-import { LAYOUT, getDepthColor } from './constants';
+import {
+  DEFAULT_CONNECTION_COLORS,
+  LAYOUT,
+  getDepthColor,
+} from './constants';
 import { buildExpandedStackMap } from './treeUtils';
 import { buildConnectorBezier } from './connectorGeometry';
 import { isRealHttpErrorNode, isVirtualMissingNode } from './scanStatus';
+import soraVariableFontUrl from '../assets/fonts/Sora-Variable.ttf';
+import {
+  VELLIC_LOGO_MARK_PATH,
+  VELLIC_LOGO_WORDMARK_PATHS,
+} from '../components/brand/VellicLogo';
 
 export const EXPORT_MAP_PADDING = 200;
+const HEADER_SIDE_MARGIN = 64;
 const HEADER_MIN_HEIGHT = 168;
-const FOOTER_HEIGHT = 84;
+const HEADER_STAT_ROW_HEIGHT = 24;
+const FOOTER_HEIGHT = 0;
 const NODE_RADIUS = 12;
-const NODE_TOP_BAR_HEIGHT = 12;
-const NODE_THUMB_HEIGHT = 150;
-const NODE_THUMB_TOP = 26;
+const NODE_TOP_BAR_HEIGHT = 10;
+const NODE_THUMB_HEIGHT = 152;
+const NODE_THUMB_TOP = NODE_TOP_BAR_HEIGHT;
 const NODE_INSET = 14;
+const NODE_TITLE_FONT_SIZE = 14;
+const NODE_TITLE_LINE_HEIGHT = 20;
+const NODE_TITLE_WEIGHT = 400;
+const NODE_NUMBER_FONT_SIZE = 14;
+const NODE_NUMBER_WEIGHT = 600;
+const CONNECTION_STROKE_WIDTH = 3;
+const TREE_CONNECTOR_STROKE_WIDTH = 1.25;
+const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
 const MAX_PNG_DIMENSION = 16000;
 const PDF_MAX_PAGE_SIDE = 14400;
+const EXPORT_PDF_FONT_FAMILY = 'Sora';
+const EXPORT_PDF_FONT_FILE = 'Sora-Variable.ttf';
+const EXPORT_SVG_FONT_STACK = "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+const DESIGN_COLORS = {
+  surface: '#ffffff',
+  surfaceMuted: '#f8fafc',
+  border: '#e2e8f0',
+  text: '#1e293b',
+  muted: '#64748b',
+  subtle: '#94a3b8',
+  brand: '#4f46e5',
+  brandSoft: '#eef2ff',
+  brandSoftBorder: '#c7d2fe',
+  warningBg: '#fef3c7',
+  warningBorder: '#fbbf24',
+  warningText: '#92400e',
+  dangerBg: '#fee2e2',
+  dangerBorder: '#fecaca',
+  dangerText: '#991b1b',
+};
 
 const STAT_LABELS = {
   total: 'Total pages',
@@ -26,12 +66,6 @@ const STAT_LABELS = {
   subdomains: 'Subdomains',
   files: 'Files / downloads',
   authenticatedPages: 'Authenticated pages',
-};
-
-const CONNECTION_COLOR_FALLBACKS = {
-  userflow: '#7C3AED',
-  crosslink: '#06B6D4',
-  broken: '#EF4444',
 };
 
 const numberOrZero = (value) => {
@@ -148,15 +182,165 @@ const offsetPoint = (point, offset) => ({
   y: point.y + offset.y,
 });
 
-const getConnectionColor = (connection, connectionColors) => {
-  const type = connection?.type || 'crosslink';
-  if (connectionColors?.[type]) return connectionColors[type];
-  return CONNECTION_COLOR_FALLBACKS[type] || CONNECTION_COLOR_FALLBACKS.crosslink;
+const getConnectionPaletteKey = (type) => {
+  if (type === 'userflow') return 'userFlows';
+  if (type === 'crosslink') return 'crossLinks';
+  if (type === 'broken') return 'brokenLinks';
+  return 'crossLinks';
 };
 
-const buildRelationshipConnectors = (layout, connections, connectionColors) => {
+const getConnectionColor = (connection, connectionColors) => {
+  const type = connection?.type || 'crosslink';
+  const paletteKey = getConnectionPaletteKey(type);
+  return connectionColors?.[paletteKey]
+    || DEFAULT_CONNECTION_COLORS[paletteKey]
+    || DEFAULT_CONNECTION_COLORS.crossLinks;
+};
+
+const getAnchorReservationKey = (nodeId, anchor) => `${nodeId || ''}:${anchor || ''}`;
+
+const getLayoutConnectorEndpointAnchorReservation = (nodeData, point) => {
+  if (!nodeData || !point) return null;
+
+  const nodeX = Number(nodeData.x);
+  const nodeY = Number(nodeData.y);
+  const nodeW = Number(nodeData.w);
+  const nodeH = Number(nodeData.h);
+  const pointX = Number(point.x);
+  const pointY = Number(point.y);
+
+  if (![nodeX, nodeY, nodeW, nodeH, pointX, pointY].every(Number.isFinite)) return null;
+
+  const nodeRight = nodeX + nodeW;
+  const nodeBottom = nodeY + nodeH;
+  const nodeCenterX = nodeX + nodeW / 2;
+  const nodeCenterY = nodeY + nodeH / 2;
+  const withinX = pointX >= nodeX - LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+    && pointX <= nodeRight + LAYOUT_CONNECTOR_ENDPOINT_EPSILON;
+  const withinY = pointY >= nodeY - LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+    && pointY <= nodeBottom + LAYOUT_CONNECTOR_ENDPOINT_EPSILON;
+
+  if (withinX && Math.abs(pointY - nodeY) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'top', offset: pointX - nodeCenterX };
+  }
+  if (withinX && Math.abs(pointY - nodeBottom) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'bottom', offset: pointX - nodeCenterX };
+  }
+  if (withinY && Math.abs(pointX - nodeRight) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'right', offset: pointY - nodeCenterY };
+  }
+  if (withinY && Math.abs(pointX - nodeX) <= LAYOUT_CONNECTOR_ENDPOINT_EPSILON) {
+    return { anchor: 'left', offset: pointY - nodeCenterY };
+  }
+
+  return null;
+};
+
+const buildLayoutConnectorEndpointReservations = (layout) => {
+  const reservations = new Map();
+  if (!layout?.nodes || !Array.isArray(layout.connectors)) return reservations;
+
+  const addReservation = (nodeId, reservation, connectorIndex, endpoint) => {
+    const key = getAnchorReservationKey(nodeId, reservation.anchor);
+    const list = reservations.get(key) || [];
+    list.push({
+      id: `layout-${connectorIndex}-${endpoint}`,
+      kind: 'layout',
+      offset: reservation.offset,
+    });
+    reservations.set(key, list);
+  };
+
+  layout.connectors.forEach((connector, connectorIndex) => {
+    [
+      { endpoint: 'source', x: connector.x1, y: connector.y1 },
+      { endpoint: 'target', x: connector.x2, y: connector.y2 },
+    ].forEach((point) => {
+      layout.nodes.forEach((nodeData, nodeId) => {
+        const reservation = getLayoutConnectorEndpointAnchorReservation(nodeData, point);
+        if (reservation) addReservation(nodeId, reservation, connectorIndex, point.endpoint);
+      });
+    });
+  });
+
+  return reservations;
+};
+
+const getAnchorSpacing = (count, anchor, showThumbnails = false) => {
+  if (count <= 1) return 0;
+  const axisLength = (anchor === 'top' || anchor === 'bottom')
+    ? (LAYOUT.NODE_W - 24)
+    : ((showThumbnails ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED) - 24);
+  const computed = axisLength / Math.max(count - 1, 1);
+  const maxSpacing = count > 12 ? 12 : 16;
+  const minSpacing = count > 12 ? 2 : 6;
+  return Math.max(minSpacing, Math.min(maxSpacing, computed));
+};
+
+const buildRelationshipEndpointMap = (relationshipCandidates) => {
+  const endpointMap = new Map();
+  const addEndpoint = (nodeId, anchor, entry) => {
+    const key = getAnchorReservationKey(nodeId, anchor);
+    const list = endpointMap.get(key) || [];
+    list.push(entry);
+    endpointMap.set(key, list);
+  };
+
+  relationshipCandidates.forEach((candidate) => {
+    addEndpoint(candidate.sourceId, candidate.sourceAnchor, {
+      connectionId: candidate.id,
+      endpoint: 'source',
+    });
+    addEndpoint(candidate.targetId, candidate.targetAnchor, {
+      connectionId: candidate.id,
+      endpoint: 'target',
+    });
+  });
+
+  return endpointMap;
+};
+
+const getAnchorOffset = ({
+  candidate,
+  nodeId,
+  anchor,
+  endpoint,
+  endpointMap,
+  layoutEndpointReservations,
+  showThumbnails,
+}) => {
+  const shared = endpointMap.get(getAnchorReservationKey(nodeId, anchor)) || [];
+  const layoutReservations = layoutEndpointReservations.get(getAnchorReservationKey(nodeId, anchor)) || [];
+  const storedIndex = shared.findIndex((entry) => (
+    entry.connectionId === candidate.id && entry.endpoint === endpoint
+  ));
+  const relationshipCount = shared.length + (storedIndex >= 0 ? 0 : 1);
+  const connectionCount = relationshipCount + layoutReservations.length;
+  if (connectionCount <= 1) return { x: 0, y: 0 };
+
+  const index = storedIndex >= 0 ? storedIndex : shared.length;
+  const spacing = getAnchorSpacing(connectionCount, anchor, showThumbnails);
+  const reservedOffsets = layoutReservations.map((entry) => Number(entry.offset || 0));
+  const availableOffsets = Array.from({ length: connectionCount }, (_, slotIndex) => (
+    (slotIndex - (connectionCount - 1) / 2) * spacing
+  )).filter((slotOffset) => (
+    reservedOffsets.every((reservedOffset) => (
+      Math.abs(slotOffset - reservedOffset) > LAYOUT_CONNECTOR_ENDPOINT_EPSILON
+    ))
+  ));
+  const fallbackEdgeIndex = Math.max(0, index - availableOffsets.length);
+  const fallbackDirection = fallbackEdgeIndex % 2 === 0 ? -1 : 1;
+  const fallbackMagnitude = ((connectionCount - 1) / 2 + Math.ceil((fallbackEdgeIndex + 1) / 2)) * spacing;
+  const offset = availableOffsets[index] ?? (fallbackDirection * fallbackMagnitude);
+
+  return (anchor === 'top' || anchor === 'bottom')
+    ? { x: offset, y: 0 }
+    : { x: 0, y: offset };
+};
+
+const buildRelationshipConnectors = (layout, connections, connectionColors, showThumbnails = false) => {
   const layoutNodes = layout?.nodes || new Map();
-  const items = [];
+  const candidates = [];
 
   (Array.isArray(connections) ? connections : []).forEach((connection, index) => {
     if (!connection || (connection.type !== 'userflow' && connection.type !== 'crosslink')) return;
@@ -177,26 +361,61 @@ const buildRelationshipConnectors = (layout, connections, connectionColors) => {
     const end = getAnchorPosition(targetLayout, anchors.targetAnchor);
     if (!start || !end) return;
 
-    const geometry = buildConnectorBezier({
-      start,
-      end,
-      sourceAnchor: anchors.sourceAnchor,
-      targetAnchor: anchors.targetAnchor,
-      useTerminalSegment: connection.type === 'userflow',
-    });
-    if (!geometry) return;
-
-    items.push({
+    candidates.push({
       id: connection.id || `export-connection-${index}`,
       type: connection.type,
-      color: getConnectionColor(connection, connectionColors),
-      dashed: connection.type === 'crosslink',
-      arrow: connection.type === 'userflow',
-      geometry,
+      sourceId,
+      targetId,
+      sourceAnchor: anchors.sourceAnchor,
+      targetAnchor: anchors.targetAnchor,
+      start,
+      end,
+      connection,
     });
   });
 
-  return items;
+  const endpointMap = buildRelationshipEndpointMap(candidates);
+  const layoutEndpointReservations = buildLayoutConnectorEndpointReservations(layout);
+
+  return candidates.map((candidate) => {
+    const sourceOffset = getAnchorOffset({
+      candidate,
+      nodeId: candidate.sourceId,
+      anchor: candidate.sourceAnchor,
+      endpoint: 'source',
+      endpointMap,
+      layoutEndpointReservations,
+      showThumbnails,
+    });
+    const targetOffset = getAnchorOffset({
+      candidate,
+      nodeId: candidate.targetId,
+      anchor: candidate.targetAnchor,
+      endpoint: 'target',
+      endpointMap,
+      layoutEndpointReservations,
+      showThumbnails,
+    });
+    const geometry = buildConnectorBezier({
+      start: candidate.start,
+      end: candidate.end,
+      sourceAnchor: candidate.sourceAnchor,
+      targetAnchor: candidate.targetAnchor,
+      sourceOffset,
+      targetOffset,
+      useTerminalSegment: candidate.type === 'userflow',
+    });
+
+    if (!geometry) return null;
+    return {
+      id: candidate.id,
+      type: candidate.type,
+      color: getConnectionColor(candidate.connection, connectionColors),
+      dashed: candidate.type === 'crosslink',
+      arrow: candidate.type === 'userflow',
+      geometry,
+    };
+  }).filter(Boolean);
 };
 
 const getPointBounds = (points, initial) => (
@@ -252,12 +471,46 @@ const getMapBounds = (layout, relationshipConnectors) => {
 
 const getNodeBadges = (node) => {
   const badges = [];
-  if (isVirtualMissingNode(node)) badges.push({ label: 'Missing', color: '#F97316' });
-  if (node?.isDuplicate) badges.push({ label: 'Duplicate', color: '#F59E0B' });
-  if (node?.isBroken) badges.push({ label: 'Broken', color: '#EF4444' });
-  if (isRealHttpErrorNode(node)) badges.push({ label: 'Error', color: '#EF4444' });
-  if (node?.isInactive) badges.push({ label: 'Inactive', color: '#64748B' });
-  if (node?.authRequired) badges.push({ label: 'Auth', color: '#7C3AED' });
+  if (isVirtualMissingNode(node)) {
+    badges.push({
+      label: 'Missing',
+      bg: DESIGN_COLORS.warningBg,
+      border: DESIGN_COLORS.warningBorder,
+      text: DESIGN_COLORS.warningText,
+    });
+  }
+  if (node?.isDuplicate) {
+    badges.push({
+      label: 'Duplicate',
+      bg: DESIGN_COLORS.warningBg,
+      border: DESIGN_COLORS.warningBorder,
+      text: DESIGN_COLORS.warningText,
+    });
+  }
+  if (node?.isBroken || isRealHttpErrorNode(node)) {
+    badges.push({
+      label: node?.isBroken ? 'Broken' : 'Error',
+      bg: DESIGN_COLORS.dangerBg,
+      border: DESIGN_COLORS.dangerBorder,
+      text: DESIGN_COLORS.dangerText,
+    });
+  }
+  if (node?.isInactive) {
+    badges.push({
+      label: 'Inactive',
+      bg: DESIGN_COLORS.surfaceMuted,
+      border: DESIGN_COLORS.border,
+      text: DESIGN_COLORS.muted,
+    });
+  }
+  if (node?.authRequired) {
+    badges.push({
+      label: 'Auth',
+      bg: DESIGN_COLORS.brandSoft,
+      border: DESIGN_COLORS.brandSoftBorder,
+      text: DESIGN_COLORS.brand,
+    });
+  }
   return badges.slice(0, 2);
 };
 
@@ -278,6 +531,25 @@ export const buildExportInsights = (reportStats = {}, reportTypeOptions = []) =>
   });
 
   return insights;
+};
+
+export const formatShareUrlForExport = (shareUrl = '') => {
+  const raw = textValue(shareUrl);
+  if (!raw) return '';
+
+  try {
+    const parsed = new URL(raw);
+    const shareMatch = parsed.pathname.match(/^\/share\/([^/]+)/);
+    if (!shareMatch) return raw;
+    const shareId = shareMatch[1];
+    const compactShareId = shareId.replace(/-/g, '');
+    const shortId = compactShareId.length > 14
+      ? `${compactShareId.slice(0, 8)}...${compactShareId.slice(-4)}`
+      : shareId;
+    return `${parsed.host}/share/${shortId}`;
+  } catch {
+    return raw;
+  }
 };
 
 export const getPdfSceneScale = (scene, maxPageSide = PDF_MAX_PAGE_SIDE) => {
@@ -307,15 +579,21 @@ export const buildExportScene = ({
     orientation,
     renderOrphanChildren: true,
   });
-  const relationshipConnectors = buildRelationshipConnectors(layout, connections, connectionColors);
+  const relationshipConnectors = buildRelationshipConnectors(
+    layout,
+    connections,
+    connectionColors,
+    showThumbnails,
+  );
   const mapBounds = getMapBounds(layout, relationshipConnectors);
   const mapWidth = Math.max(1, Math.ceil(mapBounds.maxX - mapBounds.minX));
   const mapHeight = Math.max(1, Math.ceil(mapBounds.maxY - mapBounds.minY));
   const insights = buildExportInsights(reportStats, reportTypeOptions);
   const width = Math.ceil(mapWidth + EXPORT_MAP_PADDING * 2);
-  const insightColumns = clamp(Math.floor((width - EXPORT_MAP_PADDING * 2 + 24) / 184), 1, 4);
+  const headerContentWidth = Math.max(1, width - HEADER_SIDE_MARGIN * 2);
+  const insightColumns = clamp(Math.floor((headerContentWidth + 24) / 184), 1, 4);
   const insightRows = Math.max(1, Math.ceil(insights.length / insightColumns));
-  const headerHeight = HEADER_MIN_HEIGHT + Math.max(0, insightRows - 1) * 34;
+  const headerHeight = HEADER_MIN_HEIGHT + Math.max(0, insightRows - 1) * HEADER_STAT_ROW_HEIGHT;
   const height = Math.ceil(headerHeight + mapHeight + EXPORT_MAP_PADDING * 2 + FOOTER_HEIGHT);
   const mapOffset = {
     x: EXPORT_MAP_PADDING - mapBounds.minX,
@@ -345,6 +623,7 @@ export const buildExportScene = ({
     header: {
       title: textValue(title, 'Untitled Map'),
       shareUrl: textValue(shareUrl),
+      displayShareUrl: formatShareUrlForExport(shareUrl),
       generatedAt: generatedAt instanceof Date ? generatedAt : new Date(generatedAt),
       insights,
       insightColumns,
@@ -359,51 +638,53 @@ const svgLine = ({ x1, y1, x2, y2, color = '#CBD5E1', width = 2, dash = '' }) =>
   `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${escapeAttr(color)}" stroke-width="${width}" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`
 );
 
-const renderVellicMarkSvg = (x, y, size) => {
-  const inner = size * 0.18;
+const renderVellicLogoSvg = (x, y, width) => {
+  const scale = width / 214;
   return [
-    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="${size * 0.22}" fill="#635BFF"/>`,
-    `<path d="M ${x + inner} ${y + inner} L ${x + size / 2} ${y + size - inner} L ${x + size - inner} ${y + inner} L ${x + size * 0.72} ${y + inner} L ${x + size / 2} ${y + size * 0.63} L ${x + size * 0.28} ${y + inner} Z" fill="#FFFFFF"/>`,
+    `<g transform="translate(${x} ${y}) scale(${scale})">`,
+    `<path d="${escapeAttr(VELLIC_LOGO_MARK_PATH)}" fill="${DESIGN_COLORS.brand}" transform="scale(0.410256)"/>`,
+    `<g fill="${DESIGN_COLORS.text}">`,
+    `<path d="${escapeAttr(VELLIC_LOGO_WORDMARK_PATHS.v)}" transform="translate(70.04 12.91)"/>`,
+    `<path d="${escapeAttr(VELLIC_LOGO_WORDMARK_PATHS.e)}" transform="translate(102.46 12.91)"/>`,
+    `<path d="${escapeAttr(VELLIC_LOGO_WORDMARK_PATHS.l)}" transform="translate(126.28 12.91)"/>`,
+    `<path d="${escapeAttr(VELLIC_LOGO_WORDMARK_PATHS.l)}" transform="translate(148.59 12.91)"/>`,
+    `<path d="${escapeAttr(VELLIC_LOGO_WORDMARK_PATHS.i)}" transform="translate(170.98 12.91)"/>`,
+    `<path d="${escapeAttr(VELLIC_LOGO_WORDMARK_PATHS.c)}" transform="translate(182.22 12)"/>`,
+    '</g>',
+    '</g>',
   ].join('');
 };
 
 const renderHeaderSvg = (scene) => {
-  const x = scene.padding;
+  const x = Math.min(scene.padding, HEADER_SIDE_MARGIN);
   const titleY = 54;
   const linkY = 88;
   const statsY = 118;
-  const maxLinkChars = Math.max(20, Math.floor((scene.width - scene.padding * 2) / 8));
+  const logoWidth = 126;
+  const createdWidth = 86;
+  const logoX = scene.width - x - logoWidth;
+  const createdX = Math.max(x, logoX - createdWidth - 12);
 
   const parts = [
-    `<text x="${x}" y="${titleY}" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="800">${escapeXml(scene.header.title)}</text>`,
+    `<text x="${x}" y="${titleY}" fill="${DESIGN_COLORS.text}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="28" font-weight="500">${escapeXml(scene.header.title)}</text>`,
+    `<text x="${createdX}" y="50" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="13" font-weight="500">Created with</text>`,
+    renderVellicLogoSvg(logoX, 28, logoWidth),
   ];
 
   if (scene.header.shareUrl) {
-    parts.push(`<text x="${x}" y="${linkY}" fill="#635BFF" font-family="Inter, Arial, sans-serif" font-size="15">${escapeXml(truncateText(scene.header.shareUrl, maxLinkChars))}</text>`);
+    parts.push(`<text x="${x}" y="${linkY}" fill="${DESIGN_COLORS.brand}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="13" font-weight="400">${escapeXml(scene.header.displayShareUrl || scene.header.shareUrl)}</text>`);
   }
 
   scene.header.insights.forEach((insight, index) => {
     const columns = scene.header.insightColumns || 4;
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const chipX = x + col * 184;
-    const chipY = statsY + row * 34;
-    parts.push(`<rect x="${chipX}" y="${chipY}" width="160" height="26" rx="13" fill="#F8FAFC" stroke="#E2E8F0"/>`);
-    parts.push(`<text x="${chipX + 12}" y="${chipY + 18}" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="700">${escapeXml(`${insight.label}: ${formatNumber(insight.value)}`)}</text>`);
+    const statX = x + col * 184;
+    const statY = statsY + row * HEADER_STAT_ROW_HEIGHT;
+    parts.push(`<text x="${statX}" y="${statY}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="12" font-weight="500">${escapeXml(`${insight.label}: ${formatNumber(insight.value)}`)}</text>`);
   });
 
   return parts.join('');
-};
-
-const renderFooterSvg = (scene) => {
-  const markSize = 28;
-  const x = scene.padding;
-  const y = scene.height - FOOTER_HEIGHT + 24;
-  return [
-    `<text x="${x}" y="${y + 19}" fill="#64748B" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="600">Created with</text>`,
-    renderVellicMarkSvg(x + 92, y, markSize),
-    `<text x="${x + 130}" y="${y + 20}" fill="#111827" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="800">Vellic</text>`,
-  ].join('');
 };
 
 const renderTreeConnectorsSvg = (scene) => scene.treeConnectors.map((connector) => svgLine({
@@ -411,9 +692,23 @@ const renderTreeConnectorsSvg = (scene) => scene.treeConnectors.map((connector) 
   y1: toSceneY(scene, connector.y1),
   x2: toSceneX(scene, connector.x2),
   y2: toSceneY(scene, connector.y2),
-  color: '#CBD5E1',
-  width: 2,
+  color: DESIGN_COLORS.subtle,
+  width: TREE_CONNECTOR_STROKE_WIDTH,
 })).join('');
+
+const getArrowHeadPoints = (end, previous, size) => {
+  const angle = Math.atan2(end.y - previous.y, end.x - previous.x);
+  return {
+    left: {
+      x: end.x - Math.cos(angle - Math.PI / 6) * size,
+      y: end.y - Math.sin(angle - Math.PI / 6) * size,
+    },
+    right: {
+      x: end.x - Math.cos(angle + Math.PI / 6) * size,
+      y: end.y - Math.sin(angle + Math.PI / 6) * size,
+    },
+  };
+};
 
 const renderRelationshipConnectorsSvg = (scene) => scene.relationshipConnectors.map((connector) => {
   const geometry = connector.geometry;
@@ -423,50 +718,63 @@ const renderRelationshipConnectorsSvg = (scene) => scene.relationshipConnectors.
   const pathEnd = offsetPoint(geometry.pathEnd, scene.mapOffset);
   const end = offsetPoint(geometry.endPos, scene.mapOffset);
   const path = `M ${start.x} ${start.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${pathEnd.x} ${pathEnd.y}${geometry.terminalDistance ? ` L ${end.x} ${end.y}` : ''}`;
-  return `<path d="${path}" fill="none" stroke="${escapeAttr(connector.color)}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"${connector.dashed ? ' stroke-dasharray="9 7"' : ''}${connector.arrow ? ' marker-end="url(#exportUserFlowArrow)"' : ''}/>`;
+  const parts = [
+    `<path d="${path}" fill="none" stroke="${escapeAttr(connector.color)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"${connector.dashed ? ' stroke-dasharray="9 7"' : ''}/>`,
+  ];
+  if (connector.arrow) {
+    const arrow = getArrowHeadPoints(end, geometry.terminalDistance ? pathEnd : ctrl2, 10);
+    parts.push(`<path d="M ${arrow.left.x} ${arrow.left.y} L ${end.x} ${end.y} L ${arrow.right.x} ${arrow.right.y}" fill="none" stroke="${escapeAttr(connector.color)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>`);
+  }
+  return parts.join('');
 }).join('');
 
-const renderNodeSvg = (scene, item, thumbnailDataUrls) => {
+const makeSvgId = (value) => String(value || 'node')
+  .replace(/[^a-zA-Z0-9_-]/g, '-')
+  .replace(/^-+/, 'node-');
+
+const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
   const { node } = item;
   const x = toSceneX(scene, item.x);
   const y = toSceneY(scene, item.y);
   const depthColor = normalizeHexColor(getDepthColor(scene.colors, item.depth), '#14B8A6');
-  const titleY = scene.showThumbnails ? y + 202 : y + 52;
-  const titleLines = wrapText(node?.title || node?.url || 'Untitled', 28, scene.showThumbnails ? 2 : 3);
+  const contentTop = y + (scene.showThumbnails ? NODE_THUMB_TOP + NODE_THUMB_HEIGHT : NODE_TOP_BAR_HEIGHT) + NODE_INSET;
+  const titleY = contentTop + NODE_TITLE_FONT_SIZE;
+  const titleLines = wrapText(node?.title || node?.url || 'Untitled', 32, 3);
   const number = textValue(item.number || node?.number || node?.pageNumber);
   const thumbDataUrl = scene.showThumbnails ? thumbnailDataUrls?.get(node?.id) : null;
   const badges = getNodeBadges(node);
+  const cardClipId = `export-card-${index}-${makeSvgId(node?.id)}`;
   const parts = [
     `<g data-export-node="${escapeAttr(node?.id || '')}">`,
-    `<rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" rx="${NODE_RADIUS}" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2"/>`,
-    `<path d="M ${x + NODE_RADIUS} ${y} H ${x + item.w - NODE_RADIUS} Q ${x + item.w} ${y} ${x + item.w} ${y + NODE_RADIUS} V ${y + NODE_TOP_BAR_HEIGHT} H ${x} V ${y + NODE_RADIUS} Q ${x} ${y} ${x + NODE_RADIUS} ${y} Z" fill="${escapeAttr(depthColor)}"/>`,
+    `<clipPath id="${cardClipId}"><rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" rx="${NODE_RADIUS}"/></clipPath>`,
+    `<g clip-path="url(#${cardClipId})">`,
+    `<rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" fill="${DESIGN_COLORS.surface}"/>`,
+    `<rect x="${x}" y="${y}" width="${item.w}" height="${NODE_TOP_BAR_HEIGHT}" fill="${escapeAttr(depthColor)}"/>`,
   ];
 
   if (thumbDataUrl) {
-    const thumbX = x + NODE_INSET;
-    const thumbY = y + NODE_THUMB_TOP;
-    const thumbW = item.w - NODE_INSET * 2;
-    const clipId = `thumb-${escapeAttr(node?.id || '')}`;
-    parts.push(`<clipPath id="${clipId}"><rect x="${thumbX}" y="${thumbY}" width="${thumbW}" height="${NODE_THUMB_HEIGHT}" rx="8"/></clipPath>`);
-    parts.push(`<image href="${escapeAttr(thumbDataUrl)}" x="${thumbX}" y="${thumbY}" width="${thumbW}" height="${NODE_THUMB_HEIGHT}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
+    parts.push(`<image href="${escapeAttr(thumbDataUrl)}" x="${x}" y="${y + NODE_THUMB_TOP}" width="${item.w}" height="${NODE_THUMB_HEIGHT}" preserveAspectRatio="xMidYMin slice"/>`);
   } else if (scene.showThumbnails) {
-    parts.push(`<rect x="${x + NODE_INSET}" y="${y + NODE_THUMB_TOP}" width="${item.w - NODE_INSET * 2}" height="${NODE_THUMB_HEIGHT}" rx="8" fill="#F8FAFC" stroke="#E2E8F0"/>`);
+    parts.push(`<rect x="${x}" y="${y + NODE_THUMB_TOP}" width="${item.w}" height="${NODE_THUMB_HEIGHT}" fill="${DESIGN_COLORS.surfaceMuted}"/>`);
   }
 
+  parts.push('</g>');
+  parts.push(`<rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" rx="${NODE_RADIUS}" fill="none" stroke="${DESIGN_COLORS.border}" stroke-width="1"/>`);
+
   titleLines.forEach((line, index) => {
-    parts.push(`<text x="${x + NODE_INSET}" y="${titleY + index * 22}" fill="#1F2937" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="800">${escapeXml(line)}</text>`);
+    parts.push(`<text x="${x + NODE_INSET}" y="${titleY + index * NODE_TITLE_LINE_HEIGHT}" fill="${DESIGN_COLORS.text}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_TITLE_FONT_SIZE}" font-weight="${NODE_TITLE_WEIGHT}" letter-spacing="-0.01em">${escapeXml(line)}</text>`);
   });
 
   if (number) {
-    parts.push(`<text x="${x + NODE_INSET}" y="${y + item.h - 20}" fill="#64748B" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="800">${escapeXml(number)}</text>`);
+    parts.push(`<text x="${x + NODE_INSET}" y="${y + item.h - 20}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_NUMBER_FONT_SIZE}" font-weight="${NODE_NUMBER_WEIGHT}">${escapeXml(number)}</text>`);
   }
 
   let badgeX = x + item.w - NODE_INSET;
   badges.reverse().forEach((badge) => {
     const badgeWidth = clamp(badge.label.length * 7 + 18, 58, 94);
     badgeX -= badgeWidth;
-    parts.push(`<rect x="${badgeX}" y="${y + item.h - 36}" width="${badgeWidth}" height="20" rx="10" fill="${escapeAttr(badge.color)}" opacity="0.12" stroke="${escapeAttr(badge.color)}" stroke-width="1"/>`);
-    parts.push(`<text x="${badgeX + badgeWidth / 2}" y="${y + item.h - 22}" text-anchor="middle" fill="${escapeAttr(badge.color)}" font-family="Inter, Arial, sans-serif" font-size="9" font-weight="900">${escapeXml(badge.label.toUpperCase())}</text>`);
+    parts.push(`<rect x="${badgeX}" y="${y + item.h - 36}" width="${badgeWidth}" height="20" rx="10" fill="${escapeAttr(badge.bg)}" stroke="${escapeAttr(badge.border)}" stroke-width="1"/>`);
+    parts.push(`<text x="${badgeX + badgeWidth / 2}" y="${y + item.h - 22}" text-anchor="middle" fill="${escapeAttr(badge.text)}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="9" font-weight="700" letter-spacing="0.04em">${escapeXml(badge.label.toUpperCase())}</text>`);
     badgeX -= 6;
   });
 
@@ -479,15 +787,12 @@ export const renderExportSvg = (scene, thumbnailDataUrls = new Map()) => {
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}">`,
     '<defs>',
-    '<marker id="exportUserFlowArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">',
-    '<path d="M 1 1 L 10 6 L 1 11" fill="none" stroke="#7C3AED" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
-    '</marker>',
+    `<style><![CDATA[text{font-family:${EXPORT_SVG_FONT_STACK};}]]></style>`,
     '</defs>',
     renderHeaderSvg(scene),
     renderTreeConnectorsSvg(scene),
     renderRelationshipConnectorsSvg(scene),
-    scene.nodes.map((node) => renderNodeSvg(scene, node, thumbnailDataUrls)).join(''),
-    renderFooterSvg(scene),
+    scene.nodes.map((node, index) => renderNodeSvg(scene, node, thumbnailDataUrls, index)).join(''),
     '</svg>',
   ].join('');
 };
@@ -498,21 +803,129 @@ const renderPdfTextLines = (pdf, lines, x, y, lineHeight, options = {}) => {
   });
 };
 
-const drawVellicMarkPdf = (pdf, x, y, size) => {
-  setPdfFill(pdf, '#635BFF');
-  pdf.roundedRect(x, y, size, size, size * 0.22, size * 0.22, 'F');
-  setPdfFill(pdf, '#FFFFFF');
-  const inner = size * 0.18;
-  const points = [
-    [x + inner, y + inner],
-    [x + size / 2, y + size - inner],
-    [x + size - inner, y + inner],
-    [x + size * 0.72, y + inner],
-    [x + size / 2, y + size * 0.63],
-    [x + size * 0.28, y + inner],
-  ];
-  pdf.triangle(points[0][0], points[0][1], points[1][0], points[1][1], points[5][0], points[5][1], 'F');
-  pdf.triangle(points[2][0], points[2][1], points[1][0], points[1][1], points[3][0], points[3][1], 'F');
+const arrayBufferToBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+};
+
+export const registerExportPdfFonts = async (pdf) => {
+  if (!pdf || typeof fetch !== 'function') return false;
+  try {
+    const fontList = pdf.getFontList?.() || {};
+    if (!fontList[EXPORT_PDF_FONT_FAMILY]) {
+      const response = await fetch(soraVariableFontUrl);
+      if (!response.ok) throw new Error(`Font request failed: ${response.status}`);
+      const base64 = arrayBufferToBase64(await response.arrayBuffer());
+      pdf.addFileToVFS(EXPORT_PDF_FONT_FILE, base64);
+      pdf.addFont(EXPORT_PDF_FONT_FILE, EXPORT_PDF_FONT_FAMILY, 'normal');
+      pdf.addFont(EXPORT_PDF_FONT_FILE, EXPORT_PDF_FONT_FAMILY, 'bold');
+    }
+    return true;
+  } catch (error) {
+    console.warn('PDF font registration failed:', error?.message || error);
+    return false;
+  }
+};
+
+const setPdfFont = (pdf, style = 'normal') => {
+  const fontList = pdf.getFontList?.() || {};
+  if (fontList[EXPORT_PDF_FONT_FAMILY]) {
+    pdf.setFont(EXPORT_PDF_FONT_FAMILY, style);
+    return;
+  }
+  pdf.setFont('helvetica', style === 'bold' ? 'bold' : 'normal');
+};
+
+const parseSimpleSvgPath = (pathData) => {
+  const tokens = String(pathData || '').match(/[MLHVCZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) || [];
+  const commands = [];
+  let index = 0;
+  let command = null;
+  let current = { x: 0, y: 0 };
+  let start = { x: 0, y: 0 };
+
+  const isCommand = (value) => /^[MLHVCZ]$/i.test(value || '');
+  const nextNumber = () => Number(tokens[index++]);
+
+  while (index < tokens.length) {
+    if (isCommand(tokens[index])) {
+      command = tokens[index++].toUpperCase();
+    }
+    if (!command) break;
+
+    if (command === 'M') {
+      const x = nextNumber();
+      const y = nextNumber();
+      commands.push({ op: 'm', c: [x, y] });
+      current = { x, y };
+      start = { x, y };
+      command = 'L';
+    } else if (command === 'L') {
+      const x = nextNumber();
+      const y = nextNumber();
+      commands.push({ op: 'l', c: [x, y] });
+      current = { x, y };
+    } else if (command === 'H') {
+      const x = nextNumber();
+      commands.push({ op: 'l', c: [x, current.y] });
+      current = { x, y: current.y };
+    } else if (command === 'V') {
+      const y = nextNumber();
+      commands.push({ op: 'l', c: [current.x, y] });
+      current = { x: current.x, y };
+    } else if (command === 'C') {
+      const c = [
+        nextNumber(),
+        nextNumber(),
+        nextNumber(),
+        nextNumber(),
+        nextNumber(),
+        nextNumber(),
+      ];
+      commands.push({ op: 'c', c });
+      current = { x: c[4], y: c[5] };
+    } else if (command === 'Z') {
+      commands.push({ op: 'h' });
+      current = start;
+      command = null;
+    }
+  }
+
+  return commands.filter((entry) => (
+    entry.op === 'h' || entry.c.every(Number.isFinite)
+  ));
+};
+
+const transformPdfPathCommands = (commands, x, y, scaleX, scaleY) => commands.map((entry) => {
+  if (entry.op === 'h') return entry;
+  return {
+    op: entry.op,
+    c: entry.c.map((value, index) => (index % 2 === 0 ? x + value * scaleX : y + value * scaleY)),
+  };
+});
+
+const drawSvgPathPdf = (pdf, pathData, x, y, scaleX, scaleY, color) => {
+  const commands = transformPdfPathCommands(parseSimpleSvgPath(pathData), x, y, scaleX, scaleY);
+  if (!commands.length) return;
+  setPdfFill(pdf, color);
+  pdf.path(commands);
+  pdf.fill();
+};
+
+const drawVellicLogoPdf = (pdf, x, y, width) => {
+  const scale = width / 214;
+  drawSvgPathPdf(pdf, VELLIC_LOGO_MARK_PATH, x, y, scale * 0.410256, scale * 0.410256, DESIGN_COLORS.brand);
+  drawSvgPathPdf(pdf, VELLIC_LOGO_WORDMARK_PATHS.v, x + 70.04 * scale, y + 12.91 * scale, scale, scale, DESIGN_COLORS.text);
+  drawSvgPathPdf(pdf, VELLIC_LOGO_WORDMARK_PATHS.e, x + 102.46 * scale, y + 12.91 * scale, scale, scale, DESIGN_COLORS.text);
+  drawSvgPathPdf(pdf, VELLIC_LOGO_WORDMARK_PATHS.l, x + 126.28 * scale, y + 12.91 * scale, scale, scale, DESIGN_COLORS.text);
+  drawSvgPathPdf(pdf, VELLIC_LOGO_WORDMARK_PATHS.l, x + 148.59 * scale, y + 12.91 * scale, scale, scale, DESIGN_COLORS.text);
+  drawSvgPathPdf(pdf, VELLIC_LOGO_WORDMARK_PATHS.i, x + 170.98 * scale, y + 12.91 * scale, scale, scale, DESIGN_COLORS.text);
+  drawSvgPathPdf(pdf, VELLIC_LOGO_WORDMARK_PATHS.c, x + 182.22 * scale, y + 12 * scale, scale, scale, DESIGN_COLORS.text);
 };
 
 const drawPdfLine = (pdf, scene, connector, scale) => {
@@ -537,7 +950,7 @@ const drawPdfRelationshipConnector = (pdf, scene, connector, scale) => {
   const end = transformPdfPoint(scene, geometry.endPos, scale);
 
   setPdfStroke(pdf, connector.color);
-  pdf.setLineWidth(3 * scale);
+  pdf.setLineWidth(CONNECTION_STROKE_WIDTH * scale);
   if (connector.dashed && pdf.setLineDashPattern) {
     pdf.setLineDashPattern([9 * scale, 7 * scale], 0);
   }
@@ -570,24 +983,77 @@ const drawPdfRelationshipConnector = (pdf, scene, connector, scale) => {
   }
 };
 
+const getPdfImageCoverRect = (pdf, imageDataUrl, x, y, w, h) => {
+  try {
+    const props = pdf.getImageProperties?.(imageDataUrl);
+    const imageWidth = Number(props?.width);
+    const imageHeight = Number(props?.height);
+    if (!imageWidth || !imageHeight) return { x, y, w, h };
+    const imageRatio = imageWidth / imageHeight;
+    const frameRatio = w / h;
+    if (imageRatio > frameRatio) {
+      const coverW = h * imageRatio;
+      return {
+        x: x - (coverW - w) / 2,
+        y,
+        w: coverW,
+        h,
+      };
+    }
+    const coverH = w / imageRatio;
+    return {
+      x,
+      y,
+      w,
+      h: coverH,
+    };
+  } catch {
+    return { x, y, w, h };
+  }
+};
+
+const drawPdfImageCover = (pdf, imageDataUrl, x, y, w, h) => {
+  const rect = getPdfImageCoverRect(pdf, imageDataUrl, x, y, w, h);
+  if (typeof pdf.saveGraphicsState === 'function' && typeof pdf.clip === 'function') {
+    pdf.saveGraphicsState();
+    pdf.rect(x, y, w, h);
+    pdf.clip();
+    pdf.discardPath?.();
+    pdf.addImage(imageDataUrl, 'PNG', rect.x, rect.y, rect.w, rect.h);
+    pdf.restoreGraphicsState();
+    return;
+  }
+  pdf.addImage(imageDataUrl, 'PNG', x, y, w, h);
+};
+
 const drawHeaderPdf = (pdf, scene, scale) => {
-  const x = scene.padding * scale;
+  const x = Math.min(scene.padding, HEADER_SIDE_MARGIN) * scale;
   const titleY = 54 * scale;
   const linkY = 88 * scale;
   const statsY = 118 * scale;
+  const logoWidth = 126 * scale;
+  const logoX = (scene.width - Math.min(scene.padding, HEADER_SIDE_MARGIN)) * scale - logoWidth;
+  const createdWidth = 86 * scale;
+  const createdX = Math.max(x, logoX - createdWidth - 12 * scale);
 
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(30 * scale);
-  setPdfFill(pdf, '#111827');
+  setPdfFont(pdf, 'normal');
+  pdf.setFontSize(28 * scale);
+  setPdfFill(pdf, DESIGN_COLORS.text);
   pdf.text(scene.header.title, x, titleY, {
     maxWidth: Math.max(100, (scene.width - scene.padding * 2) * scale),
   });
 
+  setPdfFont(pdf, 'normal');
+  pdf.setFontSize(13 * scale);
+  setPdfFill(pdf, DESIGN_COLORS.muted);
+  pdf.text('Created with', createdX, 50 * scale);
+  drawVellicLogoPdf(pdf, logoX, 28 * scale, logoWidth);
+
   if (scene.header.shareUrl) {
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(15 * scale);
-    setPdfFill(pdf, '#635BFF');
-    const linkText = truncateText(scene.header.shareUrl, Math.max(20, Math.floor((scene.width - scene.padding * 2) / 8)));
+    setPdfFont(pdf, 'normal');
+    pdf.setFontSize(13 * scale);
+    setPdfFill(pdf, DESIGN_COLORS.brand);
+    const linkText = scene.header.displayShareUrl || scene.header.shareUrl;
     if (typeof pdf.textWithLink === 'function') {
       pdf.textWithLink(linkText, x, linkY, { url: scene.header.shareUrl });
     } else {
@@ -599,29 +1065,13 @@ const drawHeaderPdf = (pdf, scene, scale) => {
     const columns = scene.header.insightColumns || 4;
     const col = index % columns;
     const row = Math.floor(index / columns);
-    const chipX = x + col * 184 * scale;
-    const chipY = statsY + row * 34 * scale;
-    setPdfFill(pdf, '#F8FAFC');
-    setPdfStroke(pdf, '#E2E8F0');
-    pdf.roundedRect(chipX, chipY, 160 * scale, 26 * scale, 13 * scale, 13 * scale, 'FD');
-    pdf.setFont('helvetica', 'bold');
+    const statX = x + col * 184 * scale;
+    const statY = statsY + row * HEADER_STAT_ROW_HEIGHT * scale;
+    setPdfFont(pdf, 'normal');
     pdf.setFontSize(12 * scale);
-    setPdfFill(pdf, '#475569');
-    pdf.text(`${insight.label}: ${formatNumber(insight.value)}`, chipX + 12 * scale, chipY + 18 * scale);
+    setPdfFill(pdf, DESIGN_COLORS.muted);
+    pdf.text(`${insight.label}: ${formatNumber(insight.value)}`, statX, statY);
   });
-};
-
-const drawFooterPdf = (pdf, scene, scale) => {
-  const x = scene.padding * scale;
-  const y = (scene.height - FOOTER_HEIGHT + 24) * scale;
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(13 * scale);
-  setPdfFill(pdf, '#64748B');
-  pdf.text('Created with', x, y + 19 * scale);
-  drawVellicMarkPdf(pdf, x + 92 * scale, y, 28 * scale);
-  pdf.setFontSize(18 * scale);
-  setPdfFill(pdf, '#111827');
-  pdf.text('Vellic', x + 130 * scale, y + 20 * scale);
 };
 
 const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
@@ -634,46 +1084,62 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   const inset = NODE_INSET * scale;
 
   setPdfFill(pdf, '#FFFFFF');
-  setPdfStroke(pdf, '#E2E8F0');
-  pdf.setLineWidth(2 * scale);
-  pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale, 'FD');
+  pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale, 'F');
+
+  const hasCardClip = typeof pdf.saveGraphicsState === 'function' && typeof pdf.clip === 'function';
+  if (hasCardClip) {
+    pdf.saveGraphicsState();
+    pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale);
+    pdf.clip();
+    pdf.discardPath?.();
+  }
 
   setPdfFill(pdf, depthColor);
-  pdf.roundedRect(x, y, w, NODE_TOP_BAR_HEIGHT * scale, NODE_RADIUS * scale, NODE_RADIUS * scale, 'F');
-  pdf.rect(x, y + NODE_TOP_BAR_HEIGHT * scale / 2, w, NODE_TOP_BAR_HEIGHT * scale / 2, 'F');
+  pdf.rect(x, y, w, NODE_TOP_BAR_HEIGHT * scale, 'F');
 
   const thumbDataUrl = scene.showThumbnails ? thumbnailDataUrls?.get(node?.id) : null;
   if (scene.showThumbnails) {
-    const thumbX = x + inset;
+    const thumbX = x;
     const thumbY = y + NODE_THUMB_TOP * scale;
-    const thumbW = w - inset * 2;
+    const thumbW = w;
     const thumbH = NODE_THUMB_HEIGHT * scale;
     if (thumbDataUrl) {
       try {
-        pdf.addImage(thumbDataUrl, 'PNG', thumbX, thumbY, thumbW, thumbH);
+        drawPdfImageCover(pdf, thumbDataUrl, thumbX, thumbY, thumbW, thumbH);
       } catch {
-        setPdfFill(pdf, '#F8FAFC');
-        setPdfStroke(pdf, '#E2E8F0');
-        pdf.roundedRect(thumbX, thumbY, thumbW, thumbH, 8 * scale, 8 * scale, 'FD');
+        setPdfFill(pdf, DESIGN_COLORS.surfaceMuted);
+        pdf.rect(thumbX, thumbY, thumbW, thumbH, 'F');
       }
     } else {
-      setPdfFill(pdf, '#F8FAFC');
-      setPdfStroke(pdf, '#E2E8F0');
-      pdf.roundedRect(thumbX, thumbY, thumbW, thumbH, 8 * scale, 8 * scale, 'FD');
+      setPdfFill(pdf, DESIGN_COLORS.surfaceMuted);
+      pdf.rect(thumbX, thumbY, thumbW, thumbH, 'F');
     }
   }
 
-  const titleY = (scene.showThumbnails ? y + 202 * scale : y + 52 * scale);
-  const titleLines = wrapText(node?.title || node?.url || 'Untitled', 28, scene.showThumbnails ? 2 : 3);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(17 * scale);
-  setPdfFill(pdf, '#1F2937');
-  renderPdfTextLines(pdf, titleLines, x + inset, titleY, 22 * scale, { maxWidth: w - inset * 2 });
+  if (hasCardClip) {
+    pdf.restoreGraphicsState();
+  }
+
+  setPdfStroke(pdf, DESIGN_COLORS.border);
+  pdf.setLineWidth(1 * scale);
+  pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale, 'S');
+
+  const titleY = y + (
+    (scene.showThumbnails ? NODE_THUMB_TOP + NODE_THUMB_HEIGHT : NODE_TOP_BAR_HEIGHT)
+    + NODE_INSET
+    + NODE_TITLE_FONT_SIZE
+  ) * scale;
+  const titleLines = wrapText(node?.title || node?.url || 'Untitled', 32, 3);
+  setPdfFont(pdf, 'normal');
+  pdf.setFontSize(NODE_TITLE_FONT_SIZE * scale);
+  setPdfFill(pdf, DESIGN_COLORS.text);
+  renderPdfTextLines(pdf, titleLines, x + inset, titleY, NODE_TITLE_LINE_HEIGHT * scale, { maxWidth: w - inset * 2 });
 
   const number = textValue(item.number || node?.number || node?.pageNumber);
   if (number) {
-    pdf.setFontSize(14 * scale);
-    setPdfFill(pdf, '#64748B');
+    setPdfFont(pdf, 'normal');
+    pdf.setFontSize(NODE_NUMBER_FONT_SIZE * scale);
+    setPdfFill(pdf, DESIGN_COLORS.muted);
     pdf.text(number, x + inset, y + h - 20 * scale);
   }
 
@@ -681,11 +1147,12 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   getNodeBadges(node).reverse().forEach((badge) => {
     const badgeWidth = clamp(badge.label.length * 7 + 18, 58, 94) * scale;
     badgeX -= badgeWidth;
-    setPdfFill(pdf, '#FFFFFF');
-    setPdfStroke(pdf, badge.color);
-    pdf.roundedRect(badgeX, y + h - 36 * scale, badgeWidth, 20 * scale, 10 * scale, 10 * scale, 'S');
+    setPdfFill(pdf, badge.bg);
+    setPdfStroke(pdf, badge.border);
+    pdf.roundedRect(badgeX, y + h - 36 * scale, badgeWidth, 20 * scale, 10 * scale, 10 * scale, 'FD');
+    setPdfFont(pdf, 'bold');
     pdf.setFontSize(9 * scale);
-    setPdfFill(pdf, badge.color);
+    setPdfFill(pdf, badge.text);
     pdf.text(badge.label.toUpperCase(), badgeX + badgeWidth / 2, y + h - 22 * scale, { align: 'center' });
     badgeX -= 6 * scale;
   });
@@ -695,13 +1162,11 @@ export const drawExportSceneToPdf = (pdf, scene, thumbnailDataUrls = new Map(), 
   if (!pdf || !scene) return;
   drawHeaderPdf(pdf, scene, scale);
 
-  setPdfStroke(pdf, '#CBD5E1');
-  pdf.setLineWidth(2 * scale);
+  setPdfStroke(pdf, DESIGN_COLORS.subtle);
+  pdf.setLineWidth(TREE_CONNECTOR_STROKE_WIDTH * scale);
   scene.treeConnectors.forEach((connector) => drawPdfLine(pdf, scene, connector, scale));
   scene.relationshipConnectors.forEach((connector) => drawPdfRelationshipConnector(pdf, scene, connector, scale));
   scene.nodes.forEach((node) => drawNodePdf(pdf, scene, node, thumbnailDataUrls, scale));
-
-  drawFooterPdf(pdf, scene, scale);
 };
 
 export const renderExportSceneToPngBlob = async (

@@ -202,6 +202,7 @@ import {
   drawExportSceneToPdf,
   getPdfSceneScale,
   loadExportThumbnailDataUrls,
+  registerExportPdfFonts,
   renderExportSceneToPngBlob,
 } from './utils/exportScene';
 
@@ -13104,6 +13105,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         precision: 12,
       });
 
+      await registerExportPdfFonts(pdf);
       drawExportSceneToPdf(pdf, scene, thumbnailDataUrls, pdfScale);
 
       const hostname = getHostname(root.url) || 'download';
