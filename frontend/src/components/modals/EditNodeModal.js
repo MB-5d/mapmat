@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Maximize2, Pencil, Upload, X } from 'lucide-react';
+import { Maximize2, Replace, Trash2, Upload, X } from 'lucide-react';
 
 import Accordion from '../ui/Accordion';
 import Button from '../ui/Button';
@@ -111,16 +111,20 @@ const EditNodeModal = ({
   const [annotationStatus, setAnnotationStatus] = useState(node?.annotations?.status || 'none');
   const [annotationTags, setAnnotationTags] = useState((node?.annotations?.tags || []).join(', '));
   const [annotationNote, setAnnotationNote] = useState(node?.annotations?.note || '');
+  const [imageOverlayMode, setImageOverlayMode] = useState('');
+  const [clearSavedImageAssets, setClearSavedImageAssets] = useState(false);
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
   const canDelete = allowDelete && mode === 'edit' && !isHomePageCreation && typeof onDelete === 'function' && node?.id;
-  const fullScreenshotUrl = String(node?.fullScreenshotUrl || '').trim();
-  const thumbnailFullUrl = String(node?.thumbnailFullUrl || '').trim();
+  const fullScreenshotUrl = clearSavedImageAssets ? '' : String(node?.fullScreenshotUrl || '').trim();
+  const thumbnailFullUrl = clearSavedImageAssets ? '' : String(node?.thumbnailFullUrl || '').trim();
   const currentThumbnailUrl = String(thumbnailUrl || '').trim();
   const previewImageUrl = currentThumbnailUrl || thumbnailFullUrl || fullScreenshotUrl;
   const viewableImageUrl = fullScreenshotUrl || thumbnailFullUrl || currentThumbnailUrl;
   const viewableImageType = fullScreenshotUrl ? 'full' : 'thumb';
   const canViewImage = !!viewableImageUrl && typeof onViewImage === 'function';
+  const isReplacingImage = imageOverlayMode === 'replace';
+  const isDeletingImage = imageOverlayMode === 'delete';
   const duplicateSourceUrl = node?.isDuplicate && node?.duplicateOf ? node.duplicateOf : '';
   const duplicateSourceLabel = duplicateSourceUrl
     ? duplicateSourceUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')
@@ -178,6 +182,8 @@ const EditNodeModal = ({
     });
 
     let savedThumbnailUrl = thumbnailUrl;
+    let savedThumbnailFullUrl = thumbnailFullUrl;
+    let savedFullScreenshotUrl = fullScreenshotUrl;
     try {
       setIsSubmitting(true);
       if (isDataImageUrl(thumbnailUrl)) {
@@ -189,6 +195,11 @@ const EditNodeModal = ({
           imageDataUrl: thumbnailUrl,
         });
         savedThumbnailUrl = result?.assetUrl || result?.thumbnailUrl || '';
+        savedThumbnailFullUrl = result?.thumbnailFullUrl || result?.previewUrl || result?.fullSizeUrl || '';
+        savedFullScreenshotUrl = result?.fullScreenshotUrl || '';
+      } else if (clearSavedImageAssets) {
+        savedThumbnailFullUrl = '';
+        savedFullScreenshotUrl = '';
       }
 
       onSave({
@@ -198,6 +209,8 @@ const EditNodeModal = ({
         pageType,
         parentId,
         thumbnailUrl: savedThumbnailUrl,
+        thumbnailFullUrl: savedThumbnailFullUrl,
+        fullScreenshotUrl: savedFullScreenshotUrl,
         description,
         metaTags,
         canonicalUrl,
@@ -227,16 +240,26 @@ const EditNodeModal = ({
     setShowNewTypeInput(false);
   };
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files?.[0];
+  const applyImageValue = (nextImageUrl) => {
+    setSubmitError('');
+    setThumbnailUrl(nextImageUrl);
+    setClearSavedImageAssets(true);
+    setImageOverlayMode('');
+  };
+
+  const handleImageFile = (file) => {
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (loadEvent) => {
-      setSubmitError('');
-      setThumbnailUrl(loadEvent.target.result);
+      applyImageValue(loadEvent.target.result);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleFileUpload = (event) => {
+    handleImageFile(event.target.files?.[0]);
+    event.target.value = '';
   };
 
   const handleViewImage = () => {
@@ -244,9 +267,67 @@ const EditNodeModal = ({
     onViewImage(viewableImageUrl, true, node?.id || null, viewableImageType);
   };
 
-  const handleEditImage = () => {
+  const handleBrowseImage = () => {
     fileInputRef.current?.click();
   };
+
+  const handleDeleteImage = () => {
+    setSubmitError('');
+    setThumbnailUrl('');
+    setClearSavedImageAssets(true);
+    setImageOverlayMode('');
+  };
+
+  const renderImageUploadZone = (className = 'image-upload-zone') => (
+    <div
+      className={className}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.currentTarget.classList.add('drag-over');
+      }}
+      onDragLeave={(event) => {
+        event.currentTarget.classList.remove('drag-over');
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.currentTarget.classList.remove('drag-over');
+        const file = event.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+          handleImageFile(file);
+        }
+      }}
+    >
+      <Upload size={24} className="upload-icon" />
+      <span className="upload-text">Drag image here or</span>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="btn-browse"
+        onClick={handleBrowseImage}
+      >
+        Browse files
+      </Button>
+      <span className="upload-text-small">or enter URL</span>
+      <TextInput
+        type="text"
+        size="sm"
+        className="url-input-small"
+        placeholder="https://example.com/image.jpg"
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            const urlValue = event.target.value.trim();
+            if (urlValue) applyImageValue(urlValue);
+          }
+        }}
+        onBlur={(event) => {
+          const urlValue = event.target.value.trim();
+          if (urlValue) applyImageValue(urlValue);
+        }}
+      />
+    </div>
+  );
 
   const modalTitle = isHomePageCreation
     ? 'Add home page'
@@ -482,18 +563,36 @@ const EditNodeModal = ({
             className="edit-node-image-file-input"
           />
           {previewImageUrl ? (
-            <div className="thumbnail-preview">
+            <div className={`thumbnail-preview${imageOverlayMode ? ` thumbnail-preview--${imageOverlayMode}` : ''}`}>
               <img src={previewImageUrl} alt="Thumbnail preview" />
-              <IconButton
-                htmlType="button"
-                className="thumbnail-preview-icon thumbnail-preview-edit"
-                size="xxs"
-                type="secondary"
-                buttonStyle="mono"
-                icon={<Pencil />}
-                label="Edit image"
-                onClick={handleEditImage}
-              />
+              <div className="thumbnail-preview-hover-actions">
+                <IconButton
+                  htmlType="button"
+                  className="thumbnail-preview-icon thumbnail-preview-replace"
+                  size="xxs"
+                  type="secondary"
+                  buttonStyle="mono"
+                  icon={<Replace />}
+                  label="Replace image"
+                  onClick={() => {
+                    setSubmitError('');
+                    setImageOverlayMode('replace');
+                  }}
+                />
+                <IconButton
+                  htmlType="button"
+                  className="thumbnail-preview-icon thumbnail-preview-delete"
+                  size="xxs"
+                  type="secondary"
+                  buttonStyle="mono"
+                  icon={<Trash2 />}
+                  label="Delete image"
+                  onClick={() => {
+                    setSubmitError('');
+                    setImageOverlayMode('delete');
+                  }}
+                />
+              </div>
               {canViewImage ? (
                 <IconButton
                   htmlType="button"
@@ -502,75 +601,67 @@ const EditNodeModal = ({
                   type="secondary"
                   buttonStyle="mono"
                   icon={<Maximize2 />}
-                  label="View fullsize image"
+                  label="View full size image"
                   onClick={handleViewImage}
                 />
               ) : null}
-              {currentThumbnailUrl ? (
-                <button
-                  type="button"
-                  className="btn-remove-thumb"
-                  onClick={() => setThumbnailUrl('')}
-                >
-                  <X size={14} />
-                </button>
+              {isReplacingImage ? (
+                <div className="thumbnail-preview-overlay thumbnail-preview-overlay--replace">
+                  <IconButton
+                    htmlType="button"
+                    className="thumbnail-preview-overlay-close"
+                    size="xxs"
+                    type="ghost"
+                    buttonStyle="mono"
+                    icon={<X />}
+                    label="Cancel image replacement"
+                    onClick={() => setImageOverlayMode('')}
+                  />
+                  {renderImageUploadZone('image-upload-zone image-upload-zone--overlay')}
+                </div>
+              ) : null}
+              {isDeletingImage ? (
+                <div className="thumbnail-preview-overlay thumbnail-preview-overlay--delete">
+                  <IconButton
+                    htmlType="button"
+                    className="thumbnail-preview-overlay-close"
+                    size="xxs"
+                    type="ghost"
+                    buttonStyle="mono"
+                    icon={<X />}
+                    label="Cancel image deletion"
+                    onClick={() => setImageOverlayMode('')}
+                  />
+                  <div className="thumbnail-preview-delete-confirm">
+                    <p>
+                      Deleting the image can't be undone.
+                      <br />
+                      You'll need to upload again.
+                    </p>
+                    <div className="thumbnail-preview-delete-actions">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setImageOverlayMode('')}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="primary"
+                        buttonStyle="danger"
+                        onClick={handleDeleteImage}
+                      >
+                        Delete image
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               ) : null}
             </div>
-          ) : (
-            <div
-              className="image-upload-zone"
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.currentTarget.classList.add('drag-over');
-              }}
-              onDragLeave={(event) => {
-                event.currentTarget.classList.remove('drag-over');
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.currentTarget.classList.remove('drag-over');
-                const file = event.dataTransfer.files[0];
-                if (file && file.type.startsWith('image/')) {
-                  const reader = new FileReader();
-                  reader.onload = (loadEvent) => {
-                    setSubmitError('');
-                    setThumbnailUrl(loadEvent.target.result);
-                  };
-                  reader.readAsDataURL(file);
-                }
-              }}
-            >
-              <Upload size={24} className="upload-icon" />
-              <span className="upload-text">Drag image here or</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                className="btn-browse"
-                onClick={handleEditImage}
-              >
-                Browse files
-              </Button>
-              <span className="upload-text-small">or enter URL</span>
-              <TextInput
-                type="text"
-                size="sm"
-                className="url-input-small"
-                placeholder="https://example.com/image.jpg"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    const urlValue = event.target.value.trim();
-                    if (urlValue) setThumbnailUrl(urlValue);
-                  }
-                }}
-                onBlur={(event) => {
-                  const urlValue = event.target.value.trim();
-                  if (urlValue) setThumbnailUrl(urlValue);
-                }}
-              />
-            </div>
-          )}
+          ) : renderImageUploadZone()}
         </Field>
 
         {insightSummary && (

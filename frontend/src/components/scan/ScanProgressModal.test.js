@@ -105,9 +105,25 @@ describe('ScanProgressModal', () => {
   test('uses the requested scan chart dimensions and spacing', () => {
     expect(appCss).toMatch(/\.scan-url \{[\s\S]*margin: 0 0 40px;/);
     expect(appCss).toMatch(/\.scan-time-chart \{[\s\S]*margin: 0 auto 32px;/);
-    expect(appCss).toMatch(/\.scan-time-donut::after \{[\s\S]*inset: 32px;/);
+    expect(appCss).toMatch(/\.scan-time-donut::after \{[\s\S]*inset: 16px;/);
     expect(appCss).toMatch(/\.scan-chart-section \+ \.scan-chart-section \{[\s\S]*margin-top: 32px;/);
     expect(appCss).toMatch(/\.scan-progress-track,\n\.scan-findings-bar \{[\s\S]*height: 32px;[\s\S]*border-radius: 6px;/);
+  });
+
+  test('places elapsed below the time value', () => {
+    act(() => {
+      root.render(<ScanProgressModal {...baseProps} />);
+    });
+
+    const centerItems = Array.from(container.querySelectorAll('.scan-time-center > span'))
+      .map((item) => item.textContent);
+    expect(centerItems.slice(0, 2)).toEqual(['1:35', 'Elapsed']);
+  });
+
+  test('uses map label token families for findings colors', () => {
+    expect(appCss).toMatch(/\.scan-findings-segment--brokenLinks,[\s\S]*\.scan-finding-dot--scanLimited \{[\s\S]*background: var\(--ui-status-danger-text\);/);
+    expect(appCss).toMatch(/\.scan-findings-segment--duplicates,[\s\S]*\.scan-finding-dot--authenticatedPages \{[\s\S]*background: var\(--ui-status-warning-text\);/);
+    expect(appCss).toMatch(/\.scan-findings-segment--inactivePages,[\s\S]*\.scan-finding-dot--inactivePages \{[\s\S]*background: var\(--ui-color-muted\);/);
   });
 
   test('shows only found issue categories in the findings bar', () => {

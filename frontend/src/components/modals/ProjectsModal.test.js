@@ -1,7 +1,15 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import ProjectsModal from './ProjectsModal';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
+const getCssRule = (selector) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return appCss.match(new RegExp(`${escapedSelector} \\{[^}]+\\}`))?.[0] || '';
+};
 
 describe('ProjectsModal', () => {
   let container;
@@ -87,6 +95,17 @@ describe('ProjectsModal', () => {
 
     renderModal({ expandedProjects: { 'project-1': true } });
     expect(container.textContent).toContain('Delete project');
+  });
+
+  test('uses plain project icons with tighter title spacing', () => {
+    const mainRule = getCssRule('.project-folder-main');
+    const iconRule = getCssRule('.project-folder-icon');
+
+    expect(mainRule).toContain('gap: 4px;');
+    expect(iconRule).toContain('width: 20px;');
+    expect(iconRule).toContain('height: 20px;');
+    expect(iconRule).toContain('background: transparent;');
+    expect(iconRule).not.toContain('border-radius:');
   });
 
   test('clicking project and map titles keeps expand and open behavior intact', () => {

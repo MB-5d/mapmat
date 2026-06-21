@@ -116,10 +116,10 @@ const ScanProgressModal = ({
               aria-hidden="true"
             />
             <div className="scan-time-center">
-              <span className="scan-time-label">Elapsed</span>
               <span className="scan-time-value">{formatDuration(elapsedSeconds)}</span>
+              <span className="scan-time-label scan-time-label--elapsed">Elapsed</span>
               <span className="scan-time-separator" aria-hidden="true" />
-              <span className="scan-time-label">Est. total</span>
+              <span className="scan-time-label scan-time-label--estimate">Est. total</span>
               <span className="scan-time-total">{formatDuration(estimatedTotalSeconds)}</span>
             </div>
           </div>

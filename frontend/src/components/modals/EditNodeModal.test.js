@@ -267,16 +267,109 @@ describe('EditNodeModal', () => {
       );
     });
 
-    const viewButton = container.querySelector('button[aria-label="View fullsize image"]');
-    const editButton = container.querySelector('button[aria-label="Edit image"]');
+    const viewButton = container.querySelector('button[aria-label="View full size image"]');
+    const replaceButton = container.querySelector('button[aria-label="Replace image"]');
+    const deleteImageButton = container.querySelector('button[aria-label="Delete image"]');
     expect(viewButton).not.toBeNull();
-    expect(editButton).not.toBeNull();
+    expect(replaceButton).not.toBeNull();
+    expect(deleteImageButton).not.toBeNull();
+    expect(container.querySelector('.btn-remove-thumb')).toBeNull();
 
     act(() => {
       viewButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onViewImage).toHaveBeenCalledWith('/screenshots/node_full_v1.jpg', true, 'node-1', 'full');
+  });
+
+  test('shows the replace image upload overlay from the thumbnail section', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Image page',
+            url: 'https://example.com/image',
+            pageType: 'Page',
+            thumbnailUrl: '/screenshots/node_thumb_v1.jpg',
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onViewImage={jest.fn()}
+          mode="edit"
+        />
+      );
+    });
+
+    act(() => {
+      container.querySelector('button[aria-label="Replace image"]')
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.thumbnail-preview-overlay--replace')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="Cancel image replacement"]')).not.toBeNull();
+    expect(container.textContent).toContain('Drag image here or');
+    expect(container.textContent).toContain('Browse files');
+  });
+
+  test('clears thumbnail image fields from the delete image overlay', () => {
+    const onSave = jest.fn();
+
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: 'node-1',
+            title: 'Image page',
+            url: 'https://example.com/image',
+            pageType: 'Page',
+            thumbnailUrl: '/screenshots/node_thumb_v1.jpg',
+            thumbnailFullUrl: '/screenshots/node_thumb_full_v1.jpg',
+            fullScreenshotUrl: '/screenshots/node_full_v1.jpg',
+          }}
+          allNodes={[]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={onSave}
+          onViewImage={jest.fn()}
+          mode="edit"
+        />
+      );
+    });
+
+    act(() => {
+      container.querySelector('button[aria-label="Delete image"]')
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.thumbnail-preview-overlay--delete')).not.toBeNull();
+    expect(container.textContent).toContain("Deleting the image can't be undone.");
+
+    const deleteButton = Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent.includes('Delete image'));
+
+    act(() => {
+      deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.thumbnail-preview')).toBeNull();
+    expect(container.querySelector('.image-upload-zone')).not.toBeNull();
+
+    const saveButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('Save changes')
+    );
+
+    act(() => {
+      saveButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      thumbnailUrl: '',
+      thumbnailFullUrl: '',
+      fullScreenshotUrl: '',
+    }));
   });
 
   test('does not show image action buttons when no image is available', () => {
@@ -299,8 +392,9 @@ describe('EditNodeModal', () => {
       );
     });
 
-    expect(container.querySelector('button[aria-label="View fullsize image"]')).toBeNull();
-    expect(container.querySelector('button[aria-label="Edit image"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="View full size image"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Replace image"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Delete image"]')).toBeNull();
   });
 
   test('uploads inline thumbnail data before saving', async () => {
