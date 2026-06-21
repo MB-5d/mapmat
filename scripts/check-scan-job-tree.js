@@ -131,7 +131,17 @@ async function main() {
     await runCheck();
   } finally {
     if (child) {
-      child.kill('SIGTERM');
+      await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          child.kill('SIGKILL');
+          resolve();
+        }, 3000);
+        child.once('exit', () => {
+          clearTimeout(timeout);
+          resolve();
+        });
+        child.kill('SIGINT');
+      });
     }
     if (tempDir) {
       fs.rmSync(tempDir, { recursive: true, force: true });

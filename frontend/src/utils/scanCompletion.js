@@ -1,5 +1,6 @@
 export const SCAN_COLLAPSED_PARTIAL_REASON = 'scan_collapsed';
 export const ROOT_DISCOVERY_FAILED_PARTIAL_REASON = 'root_discovery_failed';
+export const ENTITLEMENT_CAP_PARTIAL_REASON = 'entitlement_cap';
 
 export const countScanResultNodes = (node) => {
   if (!node) return 0;
@@ -18,6 +19,11 @@ export const isRootOnlyDegradedScanResult = (result) => (
   )
 );
 
+export const isEntitlementLimitedScanResult = (result) => (
+  result?.partialReason === ENTITLEMENT_CAP_PARTIAL_REASON
+  || Boolean(result?.entitlement?.capped && result.entitlement.limitReached !== false)
+);
+
 export const shouldPreserveExistingMapForCollapsedScan = ({ result, nextRoot, existingRoot }) => (
   isRootOnlyDegradedScanResult(result)
   && countScanResultNodes(existingRoot) > 1
@@ -26,6 +32,7 @@ export const shouldPreserveExistingMapForCollapsedScan = ({ result, nextRoot, ex
 
 export const shouldRejectFreshRootOnlyScan = ({ result, nextRoot }) => (
   isRootOnlyDegradedScanResult(result)
+  && !isEntitlementLimitedScanResult(result)
   && countScanResultNodes(nextRoot) <= 1
 );
 

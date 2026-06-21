@@ -215,7 +215,7 @@ describe('EditNodeModal', () => {
     expect(container.textContent).toContain('Missing meta description');
   });
 
-  test('uses Page details title and does not repeat HTTP status label', () => {
+  test('shows scan status as header metadata instead of a body section', () => {
     act(() => {
       root.render(
         <EditNodeModal
@@ -236,8 +236,9 @@ describe('EditNodeModal', () => {
     });
 
     expect(container.textContent).toContain('Page details');
-    expect(container.textContent).toContain('Scan status');
-    expect(container.textContent).toContain('HTTP 404 / Not Found');
+    const modalHeader = container.querySelector('.modal-header');
+    expect(modalHeader.textContent).toContain('Scan status: HTTP 404 / Not Found');
+    expect(container.querySelector('.edit-node-form').textContent).not.toContain('Scan status');
     expect(container.textContent).not.toMatch(/HTTP status/i);
   });
 

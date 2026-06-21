@@ -2,6 +2,7 @@ import {
   countScanResultNodes,
   getCollapsedScanMessage,
   getRootOnlyScanFailureMessage,
+  isEntitlementLimitedScanResult,
   isCollapsedScanResult,
   isRootOnlyDegradedScanResult,
   shouldPreserveExistingMapForCollapsedScan,
@@ -21,6 +22,16 @@ test('detects root-only degraded scan results', () => {
   expect(isRootOnlyDegradedScanResult({ partial: true, partialReason: 'scan_collapsed' })).toBe(true);
   expect(isRootOnlyDegradedScanResult({ partial: true, partialReason: 'root_discovery_failed' })).toBe(true);
   expect(isRootOnlyDegradedScanResult({ partial: true, partialReason: 'stopped_by_user' })).toBe(false);
+});
+
+test('detects entitlement-limited scan results', () => {
+  expect(isEntitlementLimitedScanResult({ partial: true, partialReason: 'entitlement_cap' })).toBe(true);
+  expect(isEntitlementLimitedScanResult({
+    partial: true,
+    partialReason: 'scan_collapsed',
+    entitlement: { capped: true, limitReached: true, lockedPageEstimate: 170 },
+  })).toBe(true);
+  expect(isEntitlementLimitedScanResult({ partial: true, partialReason: 'scan_collapsed' })).toBe(false);
 });
 
 test('preserves an existing multi-node map when the next result collapsed to one node', () => {
@@ -53,6 +64,23 @@ test('rejects a fresh collapsed scan instead of showing one node as success', ()
     nextRoot: rootOnly,
     existingRoot: rootOnly,
   })).toBe(true);
+});
+
+test('allows capped one-node scans to show a scan-limit preview', () => {
+  expect(shouldRejectFreshRootOnlyScan({
+    result: {
+      partial: true,
+      partialReason: 'scan_collapsed',
+      entitlement: { capped: true, limitReached: true, lockedPageEstimate: 170 },
+    },
+    nextRoot: rootOnly,
+    existingRoot: rootOnly,
+  })).toBe(false);
+  expect(shouldRejectFreshRootOnlyScan({
+    result: { partial: true, partialReason: 'entitlement_cap' },
+    nextRoot: rootOnly,
+    existingRoot: rootOnly,
+  })).toBe(false);
 });
 
 test('rejects degraded fresh one-node scans even when an old map is loaded', () => {

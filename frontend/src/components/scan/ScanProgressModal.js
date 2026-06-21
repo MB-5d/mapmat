@@ -124,7 +124,7 @@ const ScanProgressModal = ({
             </div>
           </div>
 
-          <div className="scan-chart-section">
+          <div className="scan-chart-section scan-chart-section--pages">
             <div className="scan-chart-heading">
               <span>Pages {primaryLabel.toLowerCase()}</span>
               <span>
@@ -139,9 +139,15 @@ const ScanProgressModal = ({
                 style={{ width: `${pagePercent}%` }}
               />
             </div>
+            {hasQueue ? (
+              <div className="scan-queue-note">
+                <span>{formatCount(queuedCount)}</span>
+                <span>in queue</span>
+              </div>
+            ) : null}
           </div>
 
-          <div className="scan-chart-section">
+          <div className="scan-chart-section scan-chart-section--findings">
             <div className="scan-chart-heading">
               <span>Findings</span>
               <span>
@@ -176,13 +182,6 @@ const ScanProgressModal = ({
               <div className="scan-findings-empty">No findings yet</div>
             )}
           </div>
-
-          {hasQueue ? (
-            <div className="scan-queue-note">
-              <span>{formatCount(queuedCount)}</span>
-              <span>in queue</span>
-            </div>
-          ) : null}
 
           {scanLimitNote ? (
             <p className="scan-limit-note">{scanLimitNote}</p>

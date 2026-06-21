@@ -152,6 +152,7 @@ import {
 import {
   getCollapsedScanMessage,
   getRootOnlyScanFailureMessage,
+  isEntitlementLimitedScanResult,
   shouldPreserveExistingMapForCollapsedScan,
   shouldRejectFreshRootOnlyScan,
 } from './utils/scanCompletion';
@@ -11573,7 +11574,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         return;
       }
 
-      const isStoppedPartial = data.partial === true && data.partialReason === 'stopped_by_user';
+      const normalizedPartialReason = data.partialReason === 'scan_collapsed' && isEntitlementLimitedScanResult(data)
+        ? 'entitlement_cap'
+        : (data.partialReason || null);
+      const isStoppedPartial = data.partial === true && normalizedPartialReason === 'stopped_by_user';
       const isPartialResult = data.partial === true;
       const hostname = (() => {
         try {
@@ -11600,7 +11604,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setScanMeta({
           brokenLinks: data.brokenLinks || [],
           partial: true,
-          partialReason: data.partialReason || null,
+          partialReason: normalizedPartialReason,
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
         });
@@ -11608,7 +11612,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           hostname,
           page_count: countNodes(root),
           partial: 'true',
-          partial_reason: data.partialReason || '',
+          partial_reason: normalizedPartialReason || '',
           preserved_existing_map: 'true',
         });
         showToast(getCollapsedScanMessage(hostname), 'warning');
@@ -11626,14 +11630,14 @@ export default function App({ currentRoute, navigateToRoute }) {
         setScanMeta({
           brokenLinks: data.brokenLinks || [],
           partial: true,
-          partialReason: data.partialReason || null,
+          partialReason: normalizedPartialReason,
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
         });
         trackEvent('scan_failed', {
           phase: 'quality_gate',
           hostname,
-          partial_reason: data.partialReason || '',
+          partial_reason: normalizedPartialReason || '',
         });
         showScanError(getRootOnlyScanFailureMessage(hostname));
         return;
@@ -11683,7 +11687,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setScanMeta({
         brokenLinks: data.brokenLinks || [],
         partial: isPartialResult,
-        partialReason: data.partialReason || null,
+        partialReason: normalizedPartialReason,
         scanDiagnostics: data.scanDiagnostics || null,
         entitlement: data.entitlement || null,
       });
@@ -11725,13 +11729,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         hostname,
         page_count: pageCount,
         partial: isPartialResult ? 'true' : 'false',
-        partial_reason: data.partialReason || '',
+        partial_reason: normalizedPartialReason || '',
       });
       if (isStoppedPartial) {
         showToast(`Scan stopped. Showing current results${hostname ? ` for ${hostname}` : ''}`, 'warning');
-      } else if (data.partialReason === 'entitlement_cap') {
+      } else if (normalizedPartialReason === 'entitlement_cap') {
         showToast('Scan reached the visible page limit. Upgrade to see the full map.', 'warning');
-      } else if (data.partialReason === 'scan_collapsed') {
+      } else if (normalizedPartialReason === 'scan_collapsed') {
         showToast(`Scan only confirmed the homepage${hostname ? ` for ${hostname}` : ''}`, 'warning');
       } else if (isPartialResult) {
         showToast(`Scan complete with partial data${hostname ? `: ${hostname}` : ''}`, 'warning');

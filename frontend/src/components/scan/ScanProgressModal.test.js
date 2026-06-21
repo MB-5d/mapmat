@@ -1,7 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import ScanProgressModal from './ScanProgressModal';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('ScanProgressModal', () => {
   let container;
@@ -91,7 +95,19 @@ describe('ScanProgressModal', () => {
     expect(container.textContent).toContain('384');
     expect(container.textContent).toContain('Pages captured');
     expect(container.textContent).toContain('384 of 407');
+    const pagesSection = container.querySelector('.scan-chart-section--pages');
+    const findingsSection = container.querySelector('.scan-chart-section--findings');
+    expect(pagesSection.querySelector('.scan-queue-note').textContent).toContain('23in queue');
+    expect(findingsSection.querySelector('.scan-queue-note')).toBeNull();
     expect(container.textContent).not.toContain('1357Scanned');
+  });
+
+  test('uses the requested scan chart dimensions and spacing', () => {
+    expect(appCss).toMatch(/\.scan-url \{[\s\S]*margin: 0 0 40px;/);
+    expect(appCss).toMatch(/\.scan-time-chart \{[\s\S]*margin: 0 auto 32px;/);
+    expect(appCss).toMatch(/\.scan-time-donut::after \{[\s\S]*inset: 32px;/);
+    expect(appCss).toMatch(/\.scan-chart-section \+ \.scan-chart-section \{[\s\S]*margin-top: 32px;/);
+    expect(appCss).toMatch(/\.scan-progress-track,\n\.scan-findings-bar \{[\s\S]*height: 32px;[\s\S]*border-radius: 6px;/);
   });
 
   test('shows only found issue categories in the findings bar', () => {

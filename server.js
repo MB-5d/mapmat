@@ -5039,7 +5039,11 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
-  if (!entitlementCappedScan) {
+  const shouldSuppressVirtualPlaceholders = entitlementCappedScan
+    && pageLimit !== null
+    && pageMap.size >= pageLimit;
+
+  if (!shouldSuppressVirtualPlaceholders) {
     for (const node of nodes.values()) {
       if (node.url === rootUrl) continue;
       if (!shouldInferPathParents(node)) continue;
@@ -5148,7 +5152,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
 
   // Ensure path ancestors for visible nodes are also visible (for missing placeholders).
   // Capped scans should spend the visible allowance on captured pages, not generated placeholders.
-  if (!entitlementCappedScan) {
+  if (!shouldSuppressVirtualPlaceholders) {
     Array.from(visiblePrimaryUrls).forEach((url) => {
       const linkedNode = nodes.get(url);
       if (linkedNode && !shouldInferPathParents(linkedNode)) return;
@@ -5264,7 +5268,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     }
   };
 
-  if (!entitlementCappedScan) {
+  if (!shouldSuppressVirtualPlaceholders) {
     Array.from(orphanMap.values()).forEach((node) => {
       if (!shouldInferPathParents(node)) return;
       ensureOrphanParentChain(node.url);

@@ -272,7 +272,7 @@ async function main() {
           clearTimeout(timeout);
           resolve();
         });
-        child.kill('SIGTERM');
+        child.kill('SIGINT');
       });
     }
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });

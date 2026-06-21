@@ -251,6 +251,9 @@ const EditNodeModal = ({
   const modalTitle = isHomePageCreation
     ? 'Add home page'
     : mode === 'edit' ? 'Page details' : mode === 'duplicate' ? 'Duplicate page' : 'Add page';
+  const scanStatusHeaderText = scanStatusRows.length
+    ? `Scan status: ${scanStatusRows.map(([label, value]) => (label ? `${label}: ${value}` : value)).join(' · ')}`
+    : '';
   const isFormValid = title.trim() !== '' && pageType !== '' && pageType !== '__addnew__';
 
   const getExcludeIds = () => {
@@ -290,6 +293,7 @@ const EditNodeModal = ({
       show={!!node}
       onClose={onClose}
       title={modalTitle}
+      subtitle={scanStatusHeaderText}
       size="lg"
       scrollable
       className="edit-node-modal"
@@ -345,18 +349,6 @@ const EditNodeModal = ({
             placeholder="https://example.com/page"
           />
         </Field>
-
-        {scanStatusRows.length ? (
-          <div className="edit-node-duplicate-section">
-            <div className="edit-node-section-title">Scan status</div>
-            {scanStatusRows.map(([label, value], index) => (
-              <div className="edit-node-duplicate-row" key={`${label || 'status'}-${index}`}>
-                {label ? <span>{label}</span> : null}
-                <strong>{value}</strong>
-              </div>
-            ))}
-          </div>
-        ) : null}
 
         {movedFromPosition ? (
           <div className="edit-node-duplicate-section">

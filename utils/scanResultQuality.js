@@ -84,7 +84,7 @@ function hardenCollapsedScanResult(result, context = {}) {
   }
 
   result.partial = true;
-  result.partialReason = 'scan_collapsed';
+  result.partialReason = context.entitlementCapped ? 'entitlement_cap' : 'scan_collapsed';
   result.scanDiagnostics = nextDiagnostics;
   return result;
 }
