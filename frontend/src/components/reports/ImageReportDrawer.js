@@ -435,16 +435,15 @@ const ImageReportDrawer = ({
             <>
               <div className="image-report-list-header">
                 <div className="image-report-select-heading">
-                  <input
-                    type="checkbox"
-                    className="image-report-select-checkbox"
+                  <CheckboxField
+                    className="image-report-select-label image-report-select-all"
+                    inputClassName="image-report-select-checkbox"
                     aria-label="Select all visible image issues"
                     checked={allVisibleSelected}
-                    ref={(element) => {
-                      if (element) element.indeterminate = someVisibleSelected;
-                    }}
+                    indeterminate={someVisibleSelected}
                     onChange={handleToggleAllVisible}
                     disabled={selectableVisibleNodeIds.length === 0}
+                    label="Select all"
                   />
                   {renderSortButton('number', 'Number')}
                 </div>
@@ -456,15 +455,15 @@ const ImageReportDrawer = ({
                 {sortedIssues.map((issue, index) => (
                   <div className="image-report-row" role="listitem" key={issue.id || `${issue.nodeId || 'issue'}-${index}`}>
                     <div className="image-report-cell image-report-number">
-                      <input
-                        type="checkbox"
-                        className="image-report-select-checkbox"
+                      <CheckboxField
+                        className="image-report-select-label"
+                        inputClassName="image-report-select-checkbox"
                         aria-label={`Select ${issue.title || 'image issue'}`}
                         checked={Boolean(issue.nodeId && selectedNodeIdSet.has(issue.nodeId))}
                         onChange={(event) => handleToggleIssue(issue, index, event)}
                         disabled={!issue.nodeId}
+                        label={issue.pageNumber || '--'}
                       />
-                      <span>{issue.pageNumber || '--'}</span>
                     </div>
                     <div className="image-report-cell image-report-type">
                       <span className={`capture-issue-label capture-issue-label-${issue.type || UNKNOWN_TYPE}`}>

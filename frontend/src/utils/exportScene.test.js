@@ -81,10 +81,28 @@ describe('export scene helpers', () => {
     expect(svg).toContain(VELLIC_LOGO_MARK_PATH);
   });
 
-  test('formatShareUrlForExport shortens the displayed share id without query params', () => {
+  test('renderExportSvg rounds level bars and centers badge labels', () => {
+    const scene = buildExportScene({
+      root: makeNode('home', [{ ...makeNode('missing'), isMissing: true }]),
+      title: 'Example Map',
+      shareUrl: 'https://app.vellic.io/share/example',
+      reportStats: { total: 2, missing: 1 },
+      reportTypeOptions: REPORT_TYPE_OPTIONS,
+    });
+    const svg = renderExportSvg(scene, new Map());
+
+    expect(svg).toMatch(/<path d="M [^"]+ C [^"]+" fill="#38bdf8"/);
+    expect(svg).toContain('dominant-baseline="middle"');
+    expect(svg).toContain('MISSING');
+  });
+
+  test('formatShareUrlForExport keeps displayed share URLs typeable without query params', () => {
     expect(formatShareUrlForExport(
       'https://staging.vellic.io/share/10cfa69-3268-4ce2-8f73-737498f7ae75?access=view&orientation=vertical',
-    )).toBe('staging.vellic.io/share/10cfa693...ae75');
+    )).toBe('staging.vellic.io/share/10cfa69-3268-4ce2-8f73-737498f7ae75');
+    expect(formatShareUrlForExport(
+      'https://staging.vellic.io/share/ab42x9?access=view&orientation=vertical',
+    )).toBe('staging.vellic.io/share/ab42x9');
   });
 
   test('relationship connectors use canonical palette keys and avoid reserved tree endpoints', () => {

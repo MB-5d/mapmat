@@ -12,6 +12,7 @@ const CanvasMapHeader = ({
   onMapNameBlur,
   onMapNameKeyDown,
   onMapNameClick,
+  onBrandMarkClick,
   collaborators = [],
   showBrandMark = false,
 }) => {
@@ -37,9 +38,21 @@ const CanvasMapHeader = ({
       <div className="canvas-map-pill">
         {showBrandMark && (
           <>
-            <span className="canvas-map-brand-mark" aria-hidden="true">
-              <VellicLogoMark className="canvas-map-brand-icon" decorative />
-            </span>
+            {onBrandMarkClick ? (
+              <button
+                type="button"
+                className="canvas-map-brand-mark canvas-map-brand-mark-button"
+                onClick={onBrandMarkClick}
+                title="Back to start"
+                aria-label="Back to start"
+              >
+                <VellicLogoMark className="canvas-map-brand-icon" decorative />
+              </button>
+            ) : (
+              <span className="canvas-map-brand-mark" aria-hidden="true">
+                <VellicLogoMark className="canvas-map-brand-icon" decorative />
+              </span>
+            )}
             <span className="canvas-map-pill-divider" aria-hidden="true" />
           </>
         )}

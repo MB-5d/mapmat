@@ -28,6 +28,9 @@ const NODE_TITLE_LINE_HEIGHT = 20;
 const NODE_TITLE_WEIGHT = 400;
 const NODE_NUMBER_FONT_SIZE = 14;
 const NODE_NUMBER_WEIGHT = 600;
+const NODE_BADGE_HEIGHT = 22;
+const NODE_BADGE_FONT_SIZE = 9;
+const NODE_BADGE_PAD_X = 12;
 const CONNECTION_STROKE_WIDTH = 3;
 const TREE_CONNECTOR_STROKE_WIDTH = 1.25;
 const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
@@ -541,12 +544,7 @@ export const formatShareUrlForExport = (shareUrl = '') => {
     const parsed = new URL(raw);
     const shareMatch = parsed.pathname.match(/^\/share\/([^/]+)/);
     if (!shareMatch) return raw;
-    const shareId = shareMatch[1];
-    const compactShareId = shareId.replace(/-/g, '');
-    const shortId = compactShareId.length > 14
-      ? `${compactShareId.slice(0, 8)}...${compactShareId.slice(-4)}`
-      : shareId;
-    return `${parsed.host}/share/${shortId}`;
+    return `${parsed.host}/share/${shareMatch[1]}`;
   } catch {
     return raw;
   }
@@ -696,6 +694,19 @@ const renderTreeConnectorsSvg = (scene) => scene.treeConnectors.map((connector) 
   width: TREE_CONNECTOR_STROKE_WIDTH,
 })).join('');
 
+const getTopBarPath = (x, y, width, height, radius) => {
+  const r = Math.min(radius, height, width / 2);
+  return [
+    `M ${x} ${y + height}`,
+    `L ${x} ${y + r}`,
+    `C ${x} ${y + r * 0.447715} ${x + r * 0.447715} ${y} ${x + r} ${y}`,
+    `H ${x + width - r}`,
+    `C ${x + width - r * 0.447715} ${y} ${x + width} ${y + r * 0.447715} ${x + width} ${y + r}`,
+    `L ${x + width} ${y + height}`,
+    'Z',
+  ].join(' ');
+};
+
 const getArrowHeadPoints = (end, previous, size) => {
   const angle = Math.atan2(end.y - previous.y, end.x - previous.x);
   return {
@@ -749,7 +760,7 @@ const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
     `<clipPath id="${cardClipId}"><rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" rx="${NODE_RADIUS}"/></clipPath>`,
     `<g clip-path="url(#${cardClipId})">`,
     `<rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" fill="${DESIGN_COLORS.surface}"/>`,
-    `<rect x="${x}" y="${y}" width="${item.w}" height="${NODE_TOP_BAR_HEIGHT}" fill="${escapeAttr(depthColor)}"/>`,
+    `<path d="${getTopBarPath(x, y, item.w, NODE_TOP_BAR_HEIGHT, NODE_RADIUS)}" fill="${escapeAttr(depthColor)}"/>`,
   ];
 
   if (thumbDataUrl) {
@@ -771,10 +782,11 @@ const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
 
   let badgeX = x + item.w - NODE_INSET;
   badges.reverse().forEach((badge) => {
-    const badgeWidth = clamp(badge.label.length * 7 + 18, 58, 94);
+    const badgeWidth = clamp(badge.label.length * 7 + NODE_BADGE_PAD_X * 2, 62, 98);
     badgeX -= badgeWidth;
-    parts.push(`<rect x="${badgeX}" y="${y + item.h - 36}" width="${badgeWidth}" height="20" rx="10" fill="${escapeAttr(badge.bg)}" stroke="${escapeAttr(badge.border)}" stroke-width="1"/>`);
-    parts.push(`<text x="${badgeX + badgeWidth / 2}" y="${y + item.h - 22}" text-anchor="middle" fill="${escapeAttr(badge.text)}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="9" font-weight="700" letter-spacing="0.04em">${escapeXml(badge.label.toUpperCase())}</text>`);
+    const badgeY = y + item.h - 36;
+    parts.push(`<rect x="${badgeX}" y="${badgeY}" width="${badgeWidth}" height="${NODE_BADGE_HEIGHT}" rx="${NODE_BADGE_HEIGHT / 2}" fill="${escapeAttr(badge.bg)}" stroke="${escapeAttr(badge.border)}" stroke-width="1"/>`);
+    parts.push(`<text x="${badgeX + badgeWidth / 2}" y="${badgeY + NODE_BADGE_HEIGHT / 2}" text-anchor="middle" dominant-baseline="middle" fill="${escapeAttr(badge.text)}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_BADGE_FONT_SIZE}" font-weight="700" letter-spacing="0.04em">${escapeXml(badge.label.toUpperCase())}</text>`);
     badgeX -= 6;
   });
 
@@ -911,6 +923,14 @@ const transformPdfPathCommands = (commands, x, y, scaleX, scaleY) => commands.ma
 
 const drawSvgPathPdf = (pdf, pathData, x, y, scaleX, scaleY, color) => {
   const commands = transformPdfPathCommands(parseSimpleSvgPath(pathData), x, y, scaleX, scaleY);
+  if (!commands.length) return;
+  setPdfFill(pdf, color);
+  pdf.path(commands);
+  pdf.fill();
+};
+
+const drawAbsoluteSvgPathPdf = (pdf, pathData, color) => {
+  const commands = parseSimpleSvgPath(pathData);
   if (!commands.length) return;
   setPdfFill(pdf, color);
   pdf.path(commands);
@@ -1095,7 +1115,11 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   }
 
   setPdfFill(pdf, depthColor);
-  pdf.rect(x, y, w, NODE_TOP_BAR_HEIGHT * scale, 'F');
+  drawAbsoluteSvgPathPdf(
+    pdf,
+    getTopBarPath(x, y, w, NODE_TOP_BAR_HEIGHT * scale, NODE_RADIUS * scale),
+    depthColor,
+  );
 
   const thumbDataUrl = scene.showThumbnails ? thumbnailDataUrls?.get(node?.id) : null;
   if (scene.showThumbnails) {
@@ -1145,15 +1169,20 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
 
   let badgeX = x + w - inset;
   getNodeBadges(node).reverse().forEach((badge) => {
-    const badgeWidth = clamp(badge.label.length * 7 + 18, 58, 94) * scale;
+    const badgeWidth = clamp(badge.label.length * 7 + NODE_BADGE_PAD_X * 2, 62, 98) * scale;
     badgeX -= badgeWidth;
+    const badgeY = y + h - 36 * scale;
+    const badgeHeight = NODE_BADGE_HEIGHT * scale;
     setPdfFill(pdf, badge.bg);
     setPdfStroke(pdf, badge.border);
-    pdf.roundedRect(badgeX, y + h - 36 * scale, badgeWidth, 20 * scale, 10 * scale, 10 * scale, 'FD');
+    pdf.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, badgeHeight / 2, badgeHeight / 2, 'FD');
     setPdfFont(pdf, 'bold');
-    pdf.setFontSize(9 * scale);
+    pdf.setFontSize(NODE_BADGE_FONT_SIZE * scale);
     setPdfFill(pdf, badge.text);
-    pdf.text(badge.label.toUpperCase(), badgeX + badgeWidth / 2, y + h - 22 * scale, { align: 'center' });
+    pdf.text(badge.label.toUpperCase(), badgeX + badgeWidth / 2, badgeY + badgeHeight / 2, {
+      align: 'center',
+      baseline: 'middle',
+    });
     badgeX -= 6 * scale;
   });
 };

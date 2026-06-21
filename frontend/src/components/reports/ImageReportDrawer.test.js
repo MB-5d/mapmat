@@ -122,9 +122,12 @@ describe('ImageReportDrawer', () => {
     const handbookCheckbox = container.querySelector('input[aria-label="Select Handbook"]');
     const portalCheckbox = container.querySelector('input[aria-label="Select Portal"]');
     const selectAllCheckbox = container.querySelector('input[aria-label="Select all visible image issues"]');
+    const handbookLabel = handbookCheckbox.closest('.image-report-select-label').querySelector('.ui-checkbox-field__label');
+
+    expect(handbookLabel.textContent).toBe('40');
 
     act(() => {
-      handbookCheckbox.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      handbookLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onSelectionChange).toHaveBeenLastCalledWith(['n1']);
 

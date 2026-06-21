@@ -66,6 +66,7 @@ describe('ui primitives', () => {
           onOpenChange={onOpenChange}
           title={<strong>Panel title</strong>}
           meta={<span className="accordion-meta-marker">Meta</span>}
+          headerActions={<button type="button" className="accordion-action-marker">Action</button>}
           className="custom-accordion"
           contentClassName="custom-accordion-content"
         >
@@ -80,6 +81,8 @@ describe('ui primitives', () => {
     expect(button.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelector('.custom-accordion.ui-accordion')).not.toBeNull();
     expect(container.querySelector('.accordion-meta-marker')?.textContent).toBe('Meta');
+    expect(container.querySelector('.ui-accordion__actions .accordion-action-marker')).not.toBeNull();
+    expect(button.querySelector('.accordion-action-marker')).toBeNull();
     expect(container.querySelector('#accordion-panel')).toBeNull();
 
     act(() => {
@@ -375,12 +378,12 @@ describe('ui primitives', () => {
       );
     });
 
-    const checkbox = container.querySelector('.ui-checkbox-field__input');
+    const checkboxLabel = container.querySelector('.ui-checkbox-field__label');
     const radio = container.querySelector('input[type="radio"][value="editor"]');
     const toggle = container.querySelector('.ui-toggle__input');
 
     act(() => {
-      checkbox.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      checkboxLabel.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       radio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

@@ -1,8 +1,16 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import * as api from '../../api';
 import AuthModal from './AuthModal';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
+const getCssRule = (selector) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return appCss.match(new RegExp(`${escapedSelector} \\{[^}]+\\}`))?.[0] || '';
+};
 
 jest.mock('../../api', () => ({
   login: jest.fn(),
@@ -190,6 +198,11 @@ describe('AuthModal', () => {
         width: 199,
       })
     );
+  });
+
+  test('keeps equal spacing around the provider divider', () => {
+    expect(getCssRule('.auth-form')).toContain('padding: var(--unit-24);');
+    expect(getCssRule('.auth-provider-section')).toContain('gap: var(--unit-24);');
   });
 
   test('completes Google sign-in from the official button credential callback', async () => {

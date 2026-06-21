@@ -211,6 +211,111 @@ describe('Topbar', () => {
     expect(container.querySelector('.topbar .scan-bar-shell')).toBeNull();
   });
 
+  test('makes the map logo clickable only when a saved-map clear handler is provided', () => {
+    const onMapLogoClick = jest.fn();
+
+    act(() => {
+      root.render(
+        <AuthProvider
+          value={{
+            isLoggedIn: true,
+            currentUser: { name: 'Matthew' },
+            onShowProfile: jest.fn(),
+            onShowBilling: jest.fn(),
+            onShowSettings: jest.fn(),
+            onLogout: jest.fn(),
+            onLogin: jest.fn(),
+          }}
+        >
+          <Topbar
+            canEdit
+            hasMap
+            mapName="Saved map"
+            onMapLogoClick={onMapLogoClick}
+            urlInput=""
+            onUrlInputChange={jest.fn()}
+            onUrlKeyDown={jest.fn()}
+            scanOptions={{}}
+            showScanOptions={false}
+            scanOptionsRef={{ current: null }}
+            onToggleScanOptions={jest.fn()}
+            onScanOptionChange={jest.fn()}
+            scanLayerAvailability={{}}
+            scanLayerVisibility={{}}
+            onToggleScanLayer={jest.fn()}
+            onScan={jest.fn()}
+            scanDisabled={false}
+            scanTitle="Run scan"
+            optionsDisabled={false}
+            onClearUrl={jest.fn()}
+            showClearUrl={false}
+            sharedTitle=""
+            onShowProjects={jest.fn()}
+            onShowHistory={jest.fn()}
+            onShowInvites={jest.fn()}
+            onShowAccessRequests={jest.fn()}
+          />
+        </AuthProvider>
+      );
+    });
+
+    const logoButton = container.querySelector('button.canvas-map-brand-mark');
+    expect(logoButton).not.toBeNull();
+
+    act(() => {
+      logoButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onMapLogoClick).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      root.render(
+        <AuthProvider
+          value={{
+            isLoggedIn: true,
+            currentUser: { name: 'Matthew' },
+            onShowProfile: jest.fn(),
+            onShowBilling: jest.fn(),
+            onShowSettings: jest.fn(),
+            onLogout: jest.fn(),
+            onLogin: jest.fn(),
+          }}
+        >
+          <Topbar
+            canEdit
+            hasMap
+            mapName="Unsaved map"
+            urlInput=""
+            onUrlInputChange={jest.fn()}
+            onUrlKeyDown={jest.fn()}
+            scanOptions={{}}
+            showScanOptions={false}
+            scanOptionsRef={{ current: null }}
+            onToggleScanOptions={jest.fn()}
+            onScanOptionChange={jest.fn()}
+            scanLayerAvailability={{}}
+            scanLayerVisibility={{}}
+            onToggleScanLayer={jest.fn()}
+            onScan={jest.fn()}
+            scanDisabled={false}
+            scanTitle="Run scan"
+            optionsDisabled={false}
+            onClearUrl={jest.fn()}
+            showClearUrl={false}
+            sharedTitle=""
+            onShowProjects={jest.fn()}
+            onShowHistory={jest.fn()}
+            onShowInvites={jest.fn()}
+            onShowAccessRequests={jest.fn()}
+          />
+        </AuthProvider>
+      );
+    });
+
+    expect(container.querySelector('button.canvas-map-brand-mark')).toBeNull();
+    expect(container.querySelector('span.canvas-map-brand-mark')).not.toBeNull();
+  });
+
   test('opens billing from the account menu', () => {
     const auth = renderTopbar();
 

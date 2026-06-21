@@ -80,6 +80,8 @@ describe('ProjectsModal', () => {
   test('shows add-map only for owned projects and keeps delete inside the expanded body', () => {
     renderModal();
 
+    expect(container.querySelector('.project-folder.ui-accordion')).not.toBeNull();
+
     const addMapButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent.replace(/\s+/g, ' ').trim() === 'Add map'
     );
@@ -180,7 +182,8 @@ describe('ProjectsModal', () => {
     expect(addMapButton.className).toContain('ui-btn');
     expect(addMapButton.className).toContain('ui-btn--type-link');
     expect(addProjectButton.className).toContain('ui-btn');
-    expect(addProjectButton.className).toContain('ui-btn--type-link');
+    expect(addProjectButton.className).toContain('ui-btn--type-primary');
+    expect(addProjectButton.className).toContain('ui-btn--style-brand');
     expect(projectInput.className).toContain('ui-input');
     expect(mapInput.className).toContain('ui-input');
 
@@ -196,5 +199,10 @@ describe('ProjectsModal', () => {
 
     expect(moveSelect.className).toContain('ui-select');
     expect(confirmMoveButton.className).toContain('ui-btn');
+  });
+
+  test('keeps drawer header strokes on shared drawer families', () => {
+    expect(getCssRule('.account-drawer-header')).toContain('border-bottom: var(--border-width-subtle) solid var(--ui-color-border);');
+    expect(getCssRule('.report-drawer-header')).toContain('border-bottom: var(--border-width-subtle) solid var(--ui-color-border);');
   });
 });

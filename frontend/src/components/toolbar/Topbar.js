@@ -52,6 +52,7 @@ const Topbar = ({
   onMapNameBlur,
   onMapNameKeyDown,
   onMapNameClick,
+  onMapLogoClick,
   collaborators = [],
   sharedTitle,
   showScanBar = true,
@@ -132,6 +133,7 @@ const Topbar = ({
             onMapNameBlur={onMapNameBlur}
             onMapNameKeyDown={onMapNameKeyDown}
             onMapNameClick={onMapNameClick}
+            onBrandMarkClick={onMapLogoClick}
             collaborators={collaborators}
             showBrandMark
           />

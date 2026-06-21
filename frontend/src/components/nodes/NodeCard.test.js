@@ -1,8 +1,16 @@
 import React from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import { NodeCard } from './NodeCard';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
+const getCssRule = (selector) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return appCss.match(new RegExp(`${escapedSelector} \\{[^}]+\\}`))?.[0] || '';
+};
 
 describe('NodeCard', () => {
   let container;
@@ -183,6 +191,7 @@ describe('NodeCard', () => {
 
     expect(container.querySelector('.thumb-img')).not.toBeNull();
     expect(container.querySelector('.thumb-placeholder')).toBeNull();
+    expect(container.querySelector('.card-thumb-with-image')).not.toBeNull();
   });
 
   test('renders only the thumbnail image on the node card', async () => {
@@ -214,6 +223,32 @@ describe('NodeCard', () => {
     expect(container.innerHTML).not.toContain('/screenshots/page_full_v8.jpg');
     expect(image?.getAttribute('decoding')).toBe('async');
     expect(image?.getAttribute('fetchpriority')).toBe('low');
+  });
+
+  test('adds the thumbnail divider to the image container, not the raster image', async () => {
+    await act(async () => {
+      root.render(
+        <NodeCard
+          node={{
+            id: 'node-1',
+            title: 'Captured page',
+            url: 'https://example.com/page',
+            thumbnailUrl: '/screenshots/page_thumb_small_v8.jpg',
+          }}
+          number="1"
+          color="#0ea5e9"
+          showThumbnails
+          onDelete={jest.fn()}
+          onEdit={jest.fn()}
+          onDuplicate={jest.fn()}
+          onViewImage={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('.card-thumb-with-image .thumb-img')).not.toBeNull();
+    expect(getCssRule('.card-thumb-with-image')).toContain('border-bottom: var(--border-width-subtle) solid var(--ui-color-border);');
+    expect(getCssRule('.thumb-img')).not.toContain('border-bottom');
   });
 
   test('opens an existing thumbnail asset without starting a new capture', async () => {

@@ -3,6 +3,7 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const projectStore = require('../stores/projectStore');
 const mapStore = require('../stores/mapStore');
@@ -3609,6 +3610,27 @@ router.delete('/history', requireAuth, async (req, res) => {
 // SHARES
 // ============================================
 
+const SHARE_ID_ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';
+const SHARE_ID_LENGTH = 6;
+const SHARE_ID_MAX_ATTEMPTS = 12;
+
+function createCompactShareId() {
+  let id = '';
+  for (let index = 0; index < SHARE_ID_LENGTH; index += 1) {
+    id += SHARE_ID_ALPHABET[crypto.randomInt(0, SHARE_ID_ALPHABET.length)];
+  }
+  return id;
+}
+
+async function createUniqueShareIdAsync() {
+  for (let attempt = 0; attempt < SHARE_ID_MAX_ATTEMPTS; attempt += 1) {
+    const id = createCompactShareId();
+    const existing = await shareStore.getShareWithUserByIdAsync(id);
+    if (!existing) return id;
+  }
+  return uuidv4();
+}
+
 // POST /api/shares - Create a share link
 router.post('/shares', requireAuth, async (req, res) => {
   try {
@@ -3637,7 +3659,7 @@ router.post('/shares', requireAuth, async (req, res) => {
       })) return;
     }
 
-    const shareId = uuidv4();
+    const shareId = await createUniqueShareIdAsync();
     const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
     const expiresAt = expires_in_days
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()

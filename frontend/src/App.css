@@ -1318,8 +1318,16 @@ body {
   box-shadow: var(--shadow-card);
 }
 
+.ui-accordion__header {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 .ui-accordion__trigger {
   width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 56px;
   display: flex;
   align-items: center;
@@ -1363,6 +1371,14 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--unit-8);
+}
+
+.ui-accordion__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--unit-8);
+  flex: 0 0 auto;
+  padding-right: var(--unit-12);
 }
 
 .ui-accordion__chevron {
@@ -2664,7 +2680,25 @@ body {
   width: 24px;
   height: 24px;
   flex: 0 0 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--ui-color-primary);
+}
+
+.canvas-map-brand-mark-button {
+  cursor: pointer;
+  border-radius: var(--ui-radius-sm);
+}
+
+.canvas-map-brand-mark-button:hover,
+.canvas-map-brand-mark-button:focus-visible {
+  background: var(--ui-color-icon-hover);
+}
+
+.canvas-map-brand-mark-button:focus-visible {
+  outline: none;
+  box-shadow: var(--ui-focus-ring);
 }
 
 .canvas-map-brand-icon {
@@ -4454,6 +4488,10 @@ body {
   overflow: hidden;
 }
 
+.card-thumb-with-image {
+  border-bottom: var(--border-width-subtle) solid var(--ui-color-border);
+}
+
 .thumb-loading {
   position: absolute;
   inset: 0;
@@ -5578,6 +5616,28 @@ body {
   cursor: pointer;
 }
 
+.image-report-select-label.ui-checkbox-field {
+  min-width: 0;
+  gap: 10px;
+  color: inherit;
+}
+
+.image-report-select-label .ui-checkbox-field__label {
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+}
+
+.image-report-select-all .ui-checkbox-field__content {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .image-report-select-checkbox:disabled {
   cursor: not-allowed;
 }
@@ -5805,6 +5865,8 @@ body {
   gap: 16px;
   flex-shrink: 0;
   min-width: 0;
+  padding-bottom: var(--unit-16);
+  border-bottom: var(--border-width-subtle) solid var(--ui-color-border);
 }
 
 .report-header-title {
@@ -6685,6 +6747,8 @@ body {
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
+  padding-bottom: var(--unit-16);
+  border-bottom: var(--border-width-subtle) solid var(--ui-color-border);
 }
 
 .account-drawer-title {
@@ -8776,7 +8840,16 @@ body {
   padding: 16px 0 0;
 }
 
+.projects-modal {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 .projects-modal .modal-body {
+  min-height: 0;
+  flex: 1;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -8810,31 +8883,8 @@ body {
   color: #9f8fb8;
 }
 
-.project-folder {
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  overflow: hidden;
-  flex: 0 0 auto;
-  background: var(--color-bg-primary);
-}
-
-.project-folder-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: var(--color-bg-secondary);
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.project-folder-header:hover {
-  background: var(--color-bg-hover);
-}
-
-.project-folder-header:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.45);
-  outline-offset: -2px;
+.project-folder.ui-accordion {
+  background: transparent;
 }
 
 .project-folder-main {
@@ -8903,18 +8953,18 @@ body {
   outline-offset: 2px;
 }
 
-.project-folder-header:hover .project-title-edit-button,
-.project-folder-header:focus-within .project-title-edit-button,
+.project-folder .ui-accordion__header:hover .project-title-edit-button,
+.project-folder .ui-accordion__header:focus-within .project-title-edit-button,
 .map-item:hover .map-title-edit-button,
 .map-item:focus-within .map-title-edit-button {
   opacity: 1;
   transform: translateX(0);
 }
 
-.project-folder-meta {
+.project-folder-header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--unit-8);
   flex-shrink: 0;
 }
 
@@ -8924,23 +8974,18 @@ body {
   white-space: nowrap;
 }
 
-.project-add-map-btn {
-  flex-shrink: 0;
-}
-
-.project-chevron {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-}
-
-.project-folder-body {
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg-primary);
+.project-folder-body.ui-accordion__content {
+  padding: 0;
+  gap: 0;
 }
 
 .project-maps {
+  background: var(--color-bg-primary);
+}
+
+.project-rename-row {
+  padding: var(--unit-12);
+  border-top: var(--border-width-subtle) solid var(--ui-color-border);
   background: var(--color-bg-primary);
 }
 
@@ -9084,8 +9129,17 @@ body {
 }
 
 .projects-modal .add-project-btn {
-  align-self: flex-start;
-  margin: 0 0 20px;
+  width: 100%;
+}
+
+.projects-modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding-top: 12px;
+  padding-bottom: 20px;
+  background: var(--modal-bg);
 }
 
 /* Save Map Modal */
@@ -10224,7 +10278,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--unit-24);
 }
 
 .auth-provider-divider {
@@ -13104,31 +13158,6 @@ body {
   color: var(--color-neutral-white);
 }
 
-[data-theme="dark"] .project-folder {
-  border-color: #301E3F;
-  background: #0d0812;
-}
-
-[data-theme="dark"] .project-folder-header {
-  background: #1a1022;
-}
-
-[data-theme="dark"] .project-folder-header:hover {
-  background: #251530;
-}
-
-[data-theme="dark"] .project-folder-icon {
-  color: #c4b5fd;
-}
-
-[data-theme="dark"] .project-folder-name {
-  color: #e2e0e8;
-}
-
-[data-theme="dark"] .project-map-count {
-  color: #6b5a80;
-}
-
 [data-theme="dark"] .inline-title-edit-button {
   color: #9f8fb8;
 }
@@ -13138,15 +13167,6 @@ body {
   color: #d8b4fe;
 }
 
-[data-theme="dark"] .project-chevron {
-  color: #6b5a80;
-}
-
-[data-theme="dark"] .project-folder-header:hover .project-chevron {
-  color: #9f8fb8;
-}
-
-[data-theme="dark"] .project-folder-body,
 [data-theme="dark"] .project-maps {
   background: #0d0812;
   border-color: #301E3F;

@@ -966,6 +966,18 @@ const downloadBlob = (filename, blob) => {
   setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 };
 
+const slugifyExportFilenameTitle = (value) => {
+  const slug = String(value || '')
+    .trim()
+    .replace(/['"]/g, '')
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return slug || 'Untitled-Map';
+};
+
+const getSitemapExportFilenameBase = (title) => `Sitemap_${slugifyExportFilenameTitle(title)}`;
+
 const COLLABORATION_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COLLABORATION_UI_ENABLED,
   false
@@ -2837,6 +2849,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const centerHomeRef = useRef(null);
   const centerKnownLargeMapHomeRef = useRef(null);
   const pendingInitialCenterRef = useRef(false);
+  const loadedShareRouteKeyRef = useRef('');
   const pendingInitialLargeMapCenterRef = useRef(false);
   const pendingUnsavedRoutePromptRef = useRef('');
   const largeMapHomeSceneKeyRef = useRef('');
@@ -5903,10 +5916,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     setIsImportedMap(false);
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
-    showToast('Shared map loaded!', 'success');
     pendingInitialCenterRef.current = true;
     scheduleResetViewRef.current?.();
-  }, [applyTransform, resetScanLayers, showToast]);
+  }, [applyTransform, resetScanLayers]);
 
   // Check auth and load data on mount
   React.useEffect(() => {
@@ -5940,7 +5952,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [loadAuthenticatedWorkspace, loadPendingAccessRequests, loadPendingMapInvites]);
 
   useEffect(() => {
-    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) return undefined;
+    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) {
+      loadedShareRouteKeyRef.current = '';
+      return undefined;
+    }
+
+    const shareRouteKey = `${currentRoute.shareId}:${currentRoute.search || ''}`;
+    if (loadedShareRouteKeyRef.current === shareRouteKey) return undefined;
 
     let cancelled = false;
     api.getShare(currentRoute.shareId)
@@ -5951,6 +5969,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           navigateToRoute(createMapRoute(share.map_id), { replace: true });
           return;
         }
+        loadedShareRouteKeyRef.current = shareRouteKey;
         applySharedMapPayload(share);
       })
       .catch((error) => {
@@ -5964,6 +5983,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (sharedData) {
           try {
             const parsed = JSON.parse(sharedData);
+            loadedShareRouteKeyRef.current = shareRouteKey;
             applySharedMapPayload({
               ...parsed,
               name: parsed?.name || null,
@@ -5984,6 +6004,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [
     applySharedMapPayload,
     currentRoute?.shareId,
+    currentRoute?.search,
     currentRoute?.surface,
     navigateToRoute,
     showToast,
@@ -12943,6 +12964,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast('Downloaded JSON');
   };
 
+  const exportXml = () => {
+    if (!root) return;
+    if (!guardAccountCanCreateWork('Exporting')) return;
+    const rows = buildAiExportRows(root, orphans);
+    const content = buildAiSiteMapXml(rows);
+    downloadText('sitemap.xml', content);
+    recordExportUsage('export_xml', {
+      format: 'xml',
+      bytes: new Blob([content]).size,
+      rows: rows.length,
+    });
+    showToast('Downloaded XML');
+  };
+
   const exportAiSiteBrief = () => {
     if (!root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
@@ -13108,8 +13143,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       await registerExportPdfFonts(pdf);
       drawExportSceneToPdf(pdf, scene, thumbnailDataUrls, pdfScale);
 
-      const hostname = getHostname(root.url) || 'download';
-      pdf.save(`sitemap-${hostname}.pdf`);
+      const filenameBase = getSitemapExportFilenameBase(exportTitle);
+      pdf.save(`${filenameBase}.pdf`);
       recordExportUsage('export_pdf', {
         format: 'pdf',
         width: scene.width,
@@ -13378,9 +13413,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
       const pngExport = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
-        pixelRatio: 3,
+        pixelRatio: 4,
       });
-      downloadBlob(`sitemap-${getHostname(root.url) || 'download'}-${Date.now()}.png`, pngExport.blob);
+      const filenameBase = getSitemapExportFilenameBase(exportTitle);
+      downloadBlob(`${filenameBase}.png`, pngExport.blob);
 
       recordExportUsage('export_png', {
         format: 'png',
@@ -16663,6 +16699,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);
   const showTopbarScanBar = !showInviteAcceptGate
     && !showMapAccessGate
+    && currentRoute?.surface !== ROUTE_SURFACES.SHARE
     && (
       isDefaultWorkspaceScanModalVisible
       || (isUnsavedScannedMap && !!root?.url)
@@ -16875,6 +16912,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
         }}
         onMapNameClick={startMapNameEdit}
+        onMapLogoClick={currentMap?.id ? clearCanvas : undefined}
         collaborators={titleCollaborators}
         sharedTitle={root?.title || 'Shared sitemap'}
         onCreateMap={() => openCreateMapFlow()}
@@ -16931,7 +16969,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         )}
 
         {/* Permission banner for shared links with limited access */}
-        {accessLevel !== ACCESS_LEVELS.EDIT && hasMap && !showCoeditingReadOnlyBanner && (
+        {accessLevel !== ACCESS_LEVELS.EDIT
+          && hasMap
+          && !showCoeditingReadOnlyBanner
+          && currentRoute?.surface !== ROUTE_SURFACES.SHARE && (
           <StatusAlert tone="warning" className="permission-banner">
             {accessLevel === ACCESS_LEVELS.VIEW
               ? "You're viewing this sitemap in read-only mode"
@@ -18212,6 +18253,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onExportPdf={() => { setShowExportModal(false); exportPdf(); }}
         onExportCsv={() => { exportCsv(); setShowExportModal(false); }}
         onExportJson={() => { exportJson(); setShowExportModal(false); }}
+        onExportXml={() => { exportXml(); setShowExportModal(false); }}
         onExportSiteIndex={() => { exportSiteIndex(); setShowExportModal(false); }}
       />
 

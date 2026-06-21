@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileImage, FileJson, FileSpreadsheet, FileText, List, Sparkles } from 'lucide-react';
+import { FileCode, FileImage, FileJson, FileSpreadsheet, FileText, List, Sparkles } from 'lucide-react';
 
 import Modal from '../ui/Modal';
 import OptionCard from '../ui/OptionCard';
@@ -11,6 +11,7 @@ const ExportModal = ({
   onExportPdf,
   onExportCsv,
   onExportJson,
+  onExportXml,
   onExportSiteIndex,
   onExportAiSiteBrief,
 }) => {
@@ -28,42 +29,49 @@ const ExportModal = ({
         <OptionCard
           className="export-btn"
           icon={<Sparkles size={24} />}
-          title="AI site brief"
+          title="AI brief"
           description="Site-building brief for AI code tools"
           onClick={onExportAiSiteBrief}
         />
         <OptionCard
           className="export-btn"
-          icon={<FileImage size={24} />}
-          title="PNG image"
-          description="Visual sitemap for presentations"
-          onClick={onExportPng}
-        />
-        <OptionCard
-          className="export-btn"
           icon={<FileText size={24} />}
-          title="PDF document"
+          title="PDF"
           description="Printable report with page list"
           onClick={onExportPdf}
         />
         <OptionCard
           className="export-btn"
+          icon={<FileImage size={24} />}
+          title="Image"
+          description="Visual sitemap for presentations"
+          onClick={onExportPng}
+        />
+        <OptionCard
+          className="export-btn"
           icon={<FileSpreadsheet size={24} />}
-          title="CSV spreadsheet"
+          title="CSV"
           description="Page data for Excel or Google Sheets"
           onClick={onExportCsv}
         />
         <OptionCard
           className="export-btn"
           icon={<FileJson size={24} />}
-          title="JSON data"
+          title="JSON"
           description="Raw data for import or backup"
           onClick={onExportJson}
         />
         <OptionCard
           className="export-btn"
+          icon={<FileCode size={24} />}
+          title="XML"
+          description="Sitemap XML URL list"
+          onClick={onExportXml}
+        />
+        <OptionCard
+          className="export-btn"
           icon={<List size={24} />}
-          title="Site index"
+          title="Index"
           description="Page list document for Word or Google Docs"
           onClick={onExportSiteIndex}
         />

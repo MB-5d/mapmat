@@ -8,6 +8,7 @@ function Accordion({
   onOpenChange,
   title,
   meta = null,
+  headerActions = null,
   children,
   id,
   className,
@@ -18,20 +19,27 @@ function Accordion({
 
   return (
     <div className={classNames('ui-accordion', open && 'is-open', className)}>
-      <button
-        id={triggerId}
-        type="button"
-        className="ui-accordion__trigger"
-        aria-expanded={!!open}
-        aria-controls={panelId}
-        onClick={() => onOpenChange?.(!open)}
-      >
-        <span className="ui-accordion__title">{title}</span>
-        <span className="ui-accordion__trailing">
-          {meta ? <span className="ui-accordion__meta">{meta}</span> : null}
-          <ChevronDown className="ui-accordion__chevron" size={18} aria-hidden="true" />
-        </span>
-      </button>
+      <div className="ui-accordion__header">
+        <button
+          id={triggerId}
+          type="button"
+          className="ui-accordion__trigger"
+          aria-expanded={!!open}
+          aria-controls={panelId}
+          onClick={() => onOpenChange?.(!open)}
+        >
+          <span className="ui-accordion__title">{title}</span>
+          <span className="ui-accordion__trailing">
+            {meta ? <span className="ui-accordion__meta">{meta}</span> : null}
+            <ChevronDown className="ui-accordion__chevron" size={18} aria-hidden="true" />
+          </span>
+        </button>
+        {headerActions ? (
+          <div className="ui-accordion__actions">
+            {headerActions}
+          </div>
+        ) : null}
+      </div>
       {open ? (
         <div
           id={panelId}

@@ -351,7 +351,7 @@ const NodeCard = ({
       )}
 
       {showThumbnails && (
-        <div className="card-thumb">
+        <div className={`card-thumb${hasThumb && shouldLoadThumb && !thumbError ? ' card-thumb-with-image' : ''}`}>
           {thumbLoading && !thumbError && (
             <div className="thumb-loading">
               <Loader2 size={24} className="thumb-spinner" />
