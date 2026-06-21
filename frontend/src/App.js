@@ -197,6 +197,13 @@ import {
   buildConnectorBezier,
   USER_FLOW_ARROWHEAD,
 } from './utils/connectorGeometry';
+import {
+  buildExportScene,
+  drawExportSceneToPdf,
+  getPdfSceneScale,
+  loadExportThumbnailDataUrls,
+  renderExportSceneToPngBlob,
+} from './utils/exportScene';
 
 const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
@@ -683,10 +690,6 @@ const getCanvasGridMetrics = (scaleValue) => {
     dotRadius: canvasGridScale < 0.5 ? 0.25 : (canvasGridScale > 2 ? 1 : 0.75),
   };
 };
-
-const waitForNextPaint = () => new Promise((resolve) => {
-  requestAnimationFrame(() => requestAnimationFrame(resolve));
-});
 
 const parseEnvBool = (value, fallback = false) => {
   if (value === undefined || value === null || value === '') return fallback;
@@ -1960,45 +1963,6 @@ const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
   return result;
 };
 
-const getPdfImagePlacement = ({
-  imageWidthPx,
-  imageHeightPx,
-  pageWidth,
-  pageHeight,
-  margin = 10,
-}) => {
-  if (!Number.isFinite(imageWidthPx) || imageWidthPx <= 0
-    || !Number.isFinite(imageHeightPx) || imageHeightPx <= 0) {
-    throw new Error('Cannot export PDF because the map capture has invalid dimensions');
-  }
-  if (!Number.isFinite(pageWidth) || pageWidth <= 0
-    || !Number.isFinite(pageHeight) || pageHeight <= 0) {
-    throw new Error('Cannot export PDF because the page size is invalid');
-  }
-
-  const safeMargin = Number.isFinite(margin) ? Math.max(0, margin) : 0;
-  const pxToMm = 25.4 / 96;
-  const imageWidthMm = imageWidthPx * pxToMm;
-  const imageHeightMm = imageHeightPx * pxToMm;
-  const availableWidth = Math.max(1, pageWidth - safeMargin * 2);
-  const availableHeight = Math.max(1, pageHeight - safeMargin * 2);
-  const imageScale = Math.min(
-    availableWidth / imageWidthMm,
-    availableHeight / imageHeightMm,
-    1,
-  );
-  const width = imageWidthMm * imageScale;
-  const height = imageHeightMm * imageScale;
-
-  return {
-    x: (pageWidth - width) / 2,
-    y: (pageHeight - height) / 2,
-    width,
-    height,
-    imageScale,
-  };
-};
-
 const mapHasThumbnailAsset = (rootNode, orphanNodes = []) => {
   let found = false;
   const walk = (node) => {
@@ -2697,7 +2661,6 @@ export const __testing = {
   getCommentPopoverPosition,
   getCommentPopoverDrawerPosition,
   getCommentDrawerNodeFocusTarget,
-  getPdfImagePlacement,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -2740,7 +2703,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  const [disableCanvasCulling, setDisableCanvasCulling] = useState(false);
+  const disableCanvasCulling = false;
   const scaleRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const transformCommitRef = useRef({ raf: null, timer: null });
@@ -12916,6 +12879,57 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [currentMap?.id, getUsagePageCount]);
 
+  const createShareLinkUrl = useCallback(async (permission = sharePermission) => {
+    const { share } = await api.createShare({
+      map_id: currentMap?.id || null,
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      expires_in_days: 30,
+    });
+
+    return new URL(
+      buildRouteUrl(createShareRoute(share.id, permission, mapOrientation)),
+      window.location.origin
+    ).toString();
+  }, [
+    colors,
+    connectionColors,
+    connections,
+    currentMap?.id,
+    mapOrientation,
+    orphans,
+    root,
+    sharePermission,
+  ]);
+
+  const canCreateShareLinksForCurrentMap = useCallback(() => {
+    if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canManageShares()) {
+      showToast('You do not have permission to create share links for this map.', 'warning');
+      return false;
+    }
+    return true;
+  }, [canManageShares, currentMap?.id, isLoggedIn, showToast]);
+
+  const handleShareLinkError = useCallback((error) => {
+    if (
+      error.code === 'AUTH_REQUIRED'
+      || error.payload?.code === 'AUTH_REQUIRED'
+      || error.message?.includes('Authentication')
+    ) {
+      openAuthModal({
+        contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
+      });
+      return true;
+    }
+    if (handleEntitlementError(error, 'Client share links are not available on this plan.')) {
+      return true;
+    }
+    return false;
+  }, [handleEntitlementError, openAuthModal]);
+
   const exportJson = () => {
     if (!root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
@@ -13050,147 +13064,62 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const exportPdf = async () => {
-    if (!hasMap || !contentRef.current || !canvasRef.current) return;
+    if (!hasMap || !root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
-
-    // Save current transform state
-    const savedScale = scaleRef.current;
-    const savedPan = { ...panRef.current };
+    if (!canCreateShareLinksForCurrentMap()) return;
 
     showToast('Generating PDF...', 'info', true);
 
     try {
-      setDisableCanvasCulling(true);
-      await waitForNextPaint();
-      // Dynamically import dependencies
-      const [{ jsPDF }, { toPng }] = await Promise.all([
+      const [{ jsPDF }, shareUrl] = await Promise.all([
         import('jspdf'),
-        import('html-to-image'),
+        createShareLinkUrl(sharePermission),
       ]);
-
-      // Reset to 1:1 scale for accurate capture
-      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-      await new Promise(r => setTimeout(r, 200));
-
-      // Capture visual map using same approach as PNG export
-      const content = contentRef.current;
-      const canvas = canvasRef.current;
-      const canvasRect = canvas.getBoundingClientRect();
-      const cards = content.querySelectorAll('[data-node-card="1"]');
-
-      if (!cards.length) {
-        applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
+      const exportTitle = currentMap?.name || mapName || root.title || getHostname(root.url) || 'Untitled Map';
+      const scene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        shareUrl,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+      });
+      if (!scene || !scene.nodes.length) {
         showToast('No content to download', 'warning');
         return;
       }
 
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      cards.forEach(card => {
-        const rect = card.getBoundingClientRect();
-        minX = Math.min(minX, rect.left - canvasRect.left);
-        minY = Math.min(minY, rect.top - canvasRect.top);
-        maxX = Math.max(maxX, rect.right - canvasRect.left);
-        maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-      });
-
-      // Include connector SVGs in bounds
-      const svgs = content.querySelectorAll('.connector-svg');
-      svgs.forEach(svg => {
-        const rect = svg.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          minX = Math.min(minX, rect.left - canvasRect.left);
-          minY = Math.min(minY, rect.top - canvasRect.top);
-          maxX = Math.max(maxX, rect.right - canvasRect.left);
-          maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-        }
-      });
-
-      const padding = 60;
-      const imgWidth = Math.ceil(maxX - minX + padding * 2);
-      const imgHeight = Math.ceil(maxY - minY + padding * 2);
-
-      // Position the content so the map is centered with equal padding
-      const offsetX = -minX + padding;
-      const offsetY = -minY + padding - 80;
-      applyTransform({ scale: 1, x: offsetX, y: offsetY }, { skipPanClamp: true });
-
-      // Hide grid dots for export
-      content.classList.add('export-mode');
-
-      await new Promise(r => setTimeout(r, 200));
-
-      // Capture as PNG so jsPDF can embed the map reliably across versions.
-      const pngDataUrl = await toPng(canvas, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: null,
-        width: imgWidth,
-        height: imgHeight,
-        skipFonts: true,
-        style: {
-          width: `${imgWidth}px`,
-          height: `${imgHeight}px`,
-          backgroundColor: 'transparent',
-        },
-        filter: (node) => {
-          if (node.classList?.contains('zoom-controls')) return false;
-          if (node.classList?.contains('color-key')) return false;
-          if (node.classList?.contains('minimap-navigator')) return false;
-          // Exclude cross-origin thumbnail images
-          if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
-          return true;
-        },
-      });
-
-      // Restore grid dots and transform state
-      content.classList.remove('export-mode');
-      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
-
-      // Determine PDF orientation based on aspect ratio
-      const isLandscape = imgWidth > imgHeight;
+      const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
+      const pdfScale = getPdfSceneScale(scene);
       const pdf = new jsPDF({
-        orientation: isLandscape ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: 'a4',
+        orientation: scene.width > scene.height ? 'landscape' : 'portrait',
+        unit: 'pt',
+        format: [scene.width * pdfScale, scene.height * pdfScale],
+        compress: true,
+        precision: 12,
       });
 
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const placement = getPdfImagePlacement({
-        imageWidthPx: imgWidth,
-        imageHeightPx: imgHeight,
-        pageWidth,
-        pageHeight,
-        margin: 10,
-      });
-
-      pdf.addImage(
-        pngDataUrl,
-        'PNG',
-        placement.x,
-        placement.y,
-        placement.width,
-        placement.height,
-      );
+      drawExportSceneToPdf(pdf, scene, thumbnailDataUrls, pdfScale);
 
       const hostname = getHostname(root.url) || 'download';
       pdf.save(`sitemap-${hostname}.pdf`);
       recordExportUsage('export_pdf', {
         format: 'pdf',
-        width: imgWidth,
-        height: imgHeight,
-        bytes: pngDataUrl.length,
+        width: scene.width,
+        height: scene.height,
+        thumbnails: thumbnailDataUrls.size,
       });
       showToast('PDF downloaded successfully', 'success');
     } catch (e) {
+      if (handleShareLinkError(e)) return;
       console.error('PDF export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
       showToast(`PDF download failed: ${errorMsg}`, 'error');
-      // Restore grid and transform state on error
-      if (contentRef.current) contentRef.current.classList.remove('export-mode');
-      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
-    } finally {
-      setDisableCanvasCulling(false);
     }
   };
 
@@ -13383,28 +13312,11 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const copyShareLink = async (permission = sharePermission) => {
     if (!guardAccountCanCreateWork('Share link creation')) return;
-    if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canManageShares()) {
-      showToast('You do not have permission to create share links for this map.', 'warning');
-      return;
-    }
+    if (!canCreateShareLinksForCurrentMap()) return;
     try {
-      // Create share via API
-      const { share } = await api.createShare({
-        map_id: currentMap?.id || null,
-        root,
-        orphans,
-        connections,
-        colors,
-        connectionColors,
-        expires_in_days: 30, // Share links expire in 30 days
-      });
+      const shareUrl = await createShareLinkUrl(permission);
 
-      const shareUrl = new URL(
-        buildRouteUrl(createShareRoute(share.id, permission, mapOrientation)),
-        window.location.origin
-      );
-
-      await navigator.clipboard.writeText(shareUrl.toString());
+      await navigator.clipboard.writeText(shareUrl);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
       setHasCreatedShareLink(true);
@@ -13414,19 +13326,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                         permission === ACCESS_LEVELS.COMMENT ? 'can comment' : 'can edit';
       showToast(`Link copied (${permLabel})`, 'success');
     } catch (e) {
-      if (
-        e.code === 'AUTH_REQUIRED'
-        || e.payload?.code === 'AUTH_REQUIRED'
-        || e.message?.includes('Authentication')
-      ) {
-        openAuthModal({
-          contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
-        });
-        return;
-      }
-      if (handleEntitlementError(e, 'Client share links are not available on this plan.')) {
-        return;
-      }
+      if (handleShareLinkError(e)) return;
       showToast(e.message || 'Failed to create share link', 'error');
     }
   };
@@ -13448,124 +13348,52 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const exportPng = async () => {
-    if (!hasMap || !contentRef.current || !canvasRef.current) return;
+    if (!hasMap || !root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
-
-    // Save current transform state
-    const savedScale = scaleRef.current;
-    const savedPan = { ...panRef.current };
+    if (!canCreateShareLinksForCurrentMap()) return;
 
     try {
       showToast('Generating PNG...', 'info', true);
-      setDisableCanvasCulling(true);
-      await waitForNextPaint();
-
-      // Reset to 1:1 scale for accurate capture
-      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-
-      // Wait for React to re-render
-      await new Promise(r => setTimeout(r, 200));
-
-      const { toPng } = await import('html-to-image');
-
-      const content = contentRef.current;
-      const canvas = canvasRef.current;
-      const canvasRect = canvas.getBoundingClientRect();
-
-      // Find bounds of all cards
-      const cards = content.querySelectorAll('[data-node-card="1"]');
-      if (!cards.length) {
-        applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
+      const shareUrl = await createShareLinkUrl(sharePermission);
+      const exportTitle = currentMap?.name || mapName || root.title || getHostname(root.url) || 'Untitled Map';
+      const scene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        shareUrl,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+      });
+      if (!scene || !scene.nodes.length) {
         showToast('No content to download', 'warning');
         return;
       }
 
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      cards.forEach(card => {
-        const rect = card.getBoundingClientRect();
-        minX = Math.min(minX, rect.left - canvasRect.left);
-        minY = Math.min(minY, rect.top - canvasRect.top);
-        maxX = Math.max(maxX, rect.right - canvasRect.left);
-        maxY = Math.max(maxY, rect.bottom - canvasRect.top);
+      const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
+      const pngExport = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
+        pixelRatio: 3,
       });
-
-      // Include connector SVGs in bounds
-      const svgs = content.querySelectorAll('.connector-svg');
-      svgs.forEach(svg => {
-        const rect = svg.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          minX = Math.min(minX, rect.left - canvasRect.left);
-          minY = Math.min(minY, rect.top - canvasRect.top);
-          maxX = Math.max(maxX, rect.right - canvasRect.left);
-          maxY = Math.max(maxY, rect.bottom - canvasRect.top);
-        }
-      });
-
-      const padding = 60;
-      const exportWidth = Math.ceil(maxX - minX + padding * 2);
-      const exportHeight = Math.ceil(maxY - minY + padding * 2);
-
-      // Position the content so the map is centered with equal padding on all sides
-      const offsetX = -minX + padding;
-      const offsetY = -minY + padding - 80; // -80 to account for content top: 80px in CSS
-      applyTransform({ scale: 1, x: offsetX, y: offsetY }, { skipPanClamp: true });
-
-      // Hide grid dots for export
-      content.style.setProperty('--export-mode', '1');
-      content.classList.add('export-mode');
-
-      await new Promise(r => setTimeout(r, 200));
-
-      // Capture the canvas element directly with transparent background
-      const dataUrl = await toPng(canvas, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: null, // Transparent background
-        width: exportWidth,
-        height: exportHeight,
-        skipFonts: true,
-        style: {
-          width: `${exportWidth}px`,
-          height: `${exportHeight}px`,
-          backgroundColor: 'transparent',
-        },
-        filter: (node) => {
-          // Exclude zoom controls, color key, and grid from export
-          if (node.classList?.contains('zoom-controls')) return false;
-          if (node.classList?.contains('color-key')) return false;
-          if (node.classList?.contains('minimap-navigator')) return false;
-          // Exclude cross-origin thumbnail images
-          if (node.tagName === 'IMG' && node.classList?.contains('thumb-img')) return false;
-          return true;
-        },
-      });
-
-      // Restore grid dots
-      content.classList.remove('export-mode');
-
-      // Download
-      const link = document.createElement('a');
-      link.download = `sitemap-${getHostname(root.url) || 'download'}-${Date.now()}.png`;
-      link.href = dataUrl;
-      link.click();
+      downloadBlob(`sitemap-${getHostname(root.url) || 'download'}-${Date.now()}.png`, pngExport.blob);
 
       recordExportUsage('export_png', {
         format: 'png',
-        width: exportWidth,
-        height: exportHeight,
-        bytes: dataUrl.length,
+        width: pngExport.width,
+        height: pngExport.height,
+        bytes: pngExport.blob.size,
+        pixelRatio: pngExport.pixelRatio,
+        thumbnails: thumbnailDataUrls.size,
       });
       showToast('PNG downloaded successfully', 'success');
     } catch (e) {
+      if (handleShareLinkError(e)) return;
       console.error('PNG export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
       showToast(`PNG download failed: ${errorMsg}`, 'error');
-      // Restore grid dots on error
-      if (contentRef.current) contentRef.current.classList.remove('export-mode');
-    } finally {
-      // Restore original transform state
-      applyTransform({ scale: savedScale, x: savedPan.x, y: savedPan.y });
-      setDisableCanvasCulling(false);
     }
   };
 
