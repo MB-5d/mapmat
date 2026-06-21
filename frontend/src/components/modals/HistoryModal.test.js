@@ -59,6 +59,7 @@ describe('HistoryModal', () => {
     expect(deleteButton.className).toContain('ui-btn');
     expect(sortSelect).not.toBeNull();
     expect(sortSelect.className).toContain('ui-select');
+    expect(container.querySelector('.history-modal')?.className).toContain('drawer-card');
 
     act(() => {
       deleteButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

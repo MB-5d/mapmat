@@ -1960,6 +1960,45 @@ const collectAllNodesWithOrphans = (rootNode, orphanNodes = []) => {
   return result;
 };
 
+const getPdfImagePlacement = ({
+  imageWidthPx,
+  imageHeightPx,
+  pageWidth,
+  pageHeight,
+  margin = 10,
+}) => {
+  if (!Number.isFinite(imageWidthPx) || imageWidthPx <= 0
+    || !Number.isFinite(imageHeightPx) || imageHeightPx <= 0) {
+    throw new Error('Cannot export PDF because the map capture has invalid dimensions');
+  }
+  if (!Number.isFinite(pageWidth) || pageWidth <= 0
+    || !Number.isFinite(pageHeight) || pageHeight <= 0) {
+    throw new Error('Cannot export PDF because the page size is invalid');
+  }
+
+  const safeMargin = Number.isFinite(margin) ? Math.max(0, margin) : 0;
+  const pxToMm = 25.4 / 96;
+  const imageWidthMm = imageWidthPx * pxToMm;
+  const imageHeightMm = imageHeightPx * pxToMm;
+  const availableWidth = Math.max(1, pageWidth - safeMargin * 2);
+  const availableHeight = Math.max(1, pageHeight - safeMargin * 2);
+  const imageScale = Math.min(
+    availableWidth / imageWidthMm,
+    availableHeight / imageHeightMm,
+    1,
+  );
+  const width = imageWidthMm * imageScale;
+  const height = imageHeightMm * imageScale;
+
+  return {
+    x: (pageWidth - width) / 2,
+    y: (pageHeight - height) / 2,
+    width,
+    height,
+    imageScale,
+  };
+};
+
 const mapHasThumbnailAsset = (rootNode, orphanNodes = []) => {
   let found = false;
   const walk = (node) => {
@@ -2658,6 +2697,7 @@ export const __testing = {
   getCommentPopoverPosition,
   getCommentPopoverDrawerPosition,
   getCommentDrawerNodeFocusTarget,
+  getPdfImagePlacement,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -13023,7 +13063,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setDisableCanvasCulling(true);
       await waitForNextPaint();
       // Dynamically import dependencies
-      const [{ jsPDF }, { toSvg }] = await Promise.all([
+      const [{ jsPDF }, { toPng }] = await Promise.all([
         import('jspdf'),
         import('html-to-image'),
       ]);
@@ -13079,9 +13119,10 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       await new Promise(r => setTimeout(r, 200));
 
-      // Capture as SVG for vector quality
-      const svgDataUrl = await toSvg(canvas, {
+      // Capture as PNG so jsPDF can embed the map reliably across versions.
+      const pngDataUrl = await toPng(canvas, {
         cacheBust: true,
+        pixelRatio: 2,
         backgroundColor: null,
         width: imgWidth,
         height: imgHeight,
@@ -13115,29 +13156,22 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
+      const placement = getPdfImagePlacement({
+        imageWidthPx: imgWidth,
+        imageHeightPx: imgHeight,
+        pageWidth,
+        pageHeight,
+        margin: 10,
+      });
 
-      // Convert pixels to mm (96 DPI)
-      const pxToMm = 25.4 / 96;
-      const imgWidthMm = imgWidth * pxToMm;
-      const imgHeightMm = imgHeight * pxToMm;
-
-      // Scale to fit page with margins
-      const availableWidth = pageWidth - margin * 2;
-      const availableHeight = pageHeight - margin * 2;
-      const scaleX = availableWidth / imgWidthMm;
-      const scaleY = availableHeight / imgHeightMm;
-      const imgScale = Math.min(scaleX, scaleY, 1);
-
-      const finalWidth = imgWidthMm * imgScale;
-      const finalHeight = imgHeightMm * imgScale;
-
-      // Center the image
-      const xOffset = (pageWidth - finalWidth) / 2;
-      const yOffset = (pageHeight - finalHeight) / 2;
-
-      // Add SVG as image (jsPDF supports SVG data URLs)
-      pdf.addImage(svgDataUrl, 'SVG', xOffset, yOffset, finalWidth, finalHeight);
+      pdf.addImage(
+        pngDataUrl,
+        'PNG',
+        placement.x,
+        placement.y,
+        placement.width,
+        placement.height,
+      );
 
       const hostname = getHostname(root.url) || 'download';
       pdf.save(`sitemap-${hostname}.pdf`);
@@ -13145,6 +13179,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         format: 'pdf',
         width: imgWidth,
         height: imgHeight,
+        bytes: pngDataUrl.length,
       });
       showToast('PDF downloaded successfully', 'success');
     } catch (e) {

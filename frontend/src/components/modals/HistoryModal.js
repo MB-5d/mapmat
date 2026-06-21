@@ -41,7 +41,7 @@ const HistoryModal = ({
       subtitle="Scan history"
       className="history-drawer"
     >
-      <div className="history-modal">
+      <section className="drawer-card history-modal">
         <div className="modal-body">
           {scanHistory.length === 0 ? (
             <div className="history-empty">
@@ -110,7 +110,7 @@ const HistoryModal = ({
             </>
           )}
         </div>
-      </div>
+      </section>
     </AccountDrawer>
   );
 };

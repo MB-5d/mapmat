@@ -7292,7 +7292,7 @@ body {
 
 .drawer-card {
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--modal-card-radius);
   padding: 14px 16px;
   background: var(--modal-card-bg);
   display: flex;
@@ -9096,6 +9096,13 @@ body {
   padding: 40px 24px;
   text-align: center;
   color: var(--ui-color-input-placeholder);
+}
+
+.history-modal {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border-radius: var(--modal-card-radius);
 }
 
 .history-modal .modal-body {
