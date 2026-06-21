@@ -12204,7 +12204,7 @@ body {
 }
 
 .scan-time-chart {
-  --scan-time-ring-size: 160px;
+  --scan-time-ring-size: 192px;
   --scan-time-ring-thickness: 16px;
   position: relative;
   width: var(--scan-time-ring-size);
@@ -12321,7 +12321,7 @@ body {
   display: inline-flex;
   align-items: baseline;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 5px;
   color: var(--color-text-secondary);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -12337,6 +12337,12 @@ body {
   color: var(--ui-color-primary);
   font-style: normal;
   font-weight: 700;
+}
+
+.scan-inline-note {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .scan-progress-track,

@@ -49,6 +49,7 @@ const ScanProgressModal = ({
   scanElapsed,
   urlInput,
   onRequestStop,
+  onRequestCancel,
   onStopScan,
   onCancelScan,
   onContinueScan,
@@ -128,8 +129,9 @@ const ScanProgressModal = ({
               <span>Pages {primaryLabel.toLowerCase()}</span>
               <span>
                 <strong>{formatCount(primaryCount)} of {formatCount(pageTotal)}</strong>
-                {' '}
-                {pageTotal > 0 ? <em>{pagePercent}%</em> : null}
+                {pageTotal > 0 ? (
+                  <span className="scan-inline-note">({pagePercent}%)</span>
+                ) : null}
               </span>
             </div>
             <div className="scan-progress-track" role="img" aria-label={`${formatCount(primaryCount)} of ${formatCount(pageTotal)} pages ${primaryLabel.toLowerCase()}`}>
@@ -151,13 +153,12 @@ const ScanProgressModal = ({
               <span>Findings</span>
               <span>
                 <strong>{formatCount(totalFindings)}</strong>
-                {' '}
-                <em>{totalFindings === 1 ? 'finding' : 'findings'}</em>
+                <span className="scan-inline-note">issues</span>
               </span>
             </div>
             {findingItems.length ? (
               <>
-                <div className="scan-findings-bar" role="img" aria-label={`${formatCount(totalFindings)} findings found`}>
+                <div className="scan-findings-bar" role="img" aria-label={`${formatCount(totalFindings)} issues found`}>
                   {findingItems.map((item) => (
                     <span
                       key={item.key}
@@ -189,13 +190,22 @@ const ScanProgressModal = ({
       </>
     );
     footer = (
-      <Button
-        variant="danger"
-        onClick={onRequestStop}
-        loading={isStoppingScan}
-      >
-        {isStoppingScan ? 'Stopping...' : 'Stop'}
-      </Button>
+      <>
+        <Button
+          variant="secondary"
+          onClick={onRequestCancel}
+          disabled={isStoppingScan}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          onClick={onRequestStop}
+          loading={isStoppingScan}
+        >
+          {isStoppingScan ? 'Stopping...' : 'Stop'}
+        </Button>
+      </>
     );
   } else if (showCancelConfirm) {
     body = (
