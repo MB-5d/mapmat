@@ -12204,9 +12204,11 @@ body {
 }
 
 .scan-time-chart {
+  --scan-time-ring-size: 160px;
+  --scan-time-ring-thickness: 16px;
   position: relative;
-  width: 176px;
-  height: 176px;
+  width: var(--scan-time-ring-size);
+  height: var(--scan-time-ring-size);
   margin: 0 auto 32px;
   display: grid;
   place-items: center;
@@ -12226,7 +12228,7 @@ body {
 .scan-time-donut::after {
   content: "";
   position: absolute;
-  inset: 16px;
+  inset: var(--scan-time-ring-thickness);
   border-radius: 50%;
   background: var(--modal-bg);
   box-shadow: inset 0 0 0 1px var(--color-border);
@@ -12264,10 +12266,24 @@ body {
 }
 
 .scan-time-value {
+  order: 1;
   font-size: 28px;
 }
 
+.scan-time-label--elapsed {
+  order: 2;
+}
+
+.scan-time-separator {
+  order: 3;
+}
+
+.scan-time-label--estimate {
+  order: 4;
+}
+
 .scan-time-total {
+  order: 5;
   font-size: 20px;
 }
 
@@ -12391,7 +12407,7 @@ body {
 .scan-finding-dot--errorPages,
 .scan-findings-segment--scanLimited,
 .scan-finding-dot--scanLimited {
-  background: var(--ui-status-danger-text);
+  background: var(--ui-status-danger-icon);
 }
 
 .scan-findings-segment--duplicates,
@@ -12400,7 +12416,7 @@ body {
 .scan-finding-dot--missing,
 .scan-findings-segment--authenticatedPages,
 .scan-finding-dot--authenticatedPages {
-  background: var(--ui-status-warning-text);
+  background: var(--ui-status-warning-icon);
 }
 
 .scan-findings-segment--inactivePages,
@@ -12451,12 +12467,11 @@ body {
   }
 
   .scan-time-chart {
-    width: 152px;
-    height: 152px;
+    --scan-time-ring-size: 152px;
   }
 
   .scan-time-donut::after {
-    inset: 16px;
+    inset: var(--scan-time-ring-thickness);
   }
 
   .scan-time-value {

@@ -49,7 +49,6 @@ const ScanProgressModal = ({
   scanElapsed,
   urlInput,
   onRequestStop,
-  onRequestCancel,
   onStopScan,
   onCancelScan,
   onContinueScan,
@@ -190,22 +189,13 @@ const ScanProgressModal = ({
       </>
     );
     footer = (
-      <>
-        <Button
-          variant="secondary"
-          onClick={onRequestCancel}
-          disabled={isStoppingScan}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="danger"
-          onClick={onRequestStop}
-          loading={isStoppingScan}
-        >
-          {isStoppingScan ? 'Stopping...' : 'Stop'}
-        </Button>
-      </>
+      <Button
+        variant="danger"
+        onClick={onRequestStop}
+        loading={isStoppingScan}
+      >
+        {isStoppingScan ? 'Stopping...' : 'Stop'}
+      </Button>
     );
   } else if (showCancelConfirm) {
     body = (

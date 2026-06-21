@@ -45,26 +45,23 @@ describe('ScanProgressModal', () => {
     jest.clearAllMocks();
   });
 
-  test('shows cancel and stop actions while scanning', () => {
+  test('shows only the stop action while scanning', () => {
     act(() => {
       root.render(<ScanProgressModal {...baseProps} />);
     });
 
-    expect(container.textContent).toContain('Cancel');
+    expect(container.textContent).not.toContain('Cancel');
     expect(container.textContent).toContain('Stop');
     expect(container.querySelector('.modal-footer')).not.toBeNull();
 
     const buttons = Array.from(container.querySelectorAll('button'));
-    expect(buttons).toHaveLength(2);
-    expect(buttons[0].className).toContain('ui-btn--type-secondary');
-    expect(buttons[1].className).toContain('ui-btn--style-danger');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].className).toContain('ui-btn--style-danger');
 
     act(() => {
       buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      buttons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(baseProps.onRequestCancel).toHaveBeenCalledTimes(1);
     expect(baseProps.onRequestStop).toHaveBeenCalledTimes(1);
   });
 
@@ -104,8 +101,8 @@ describe('ScanProgressModal', () => {
 
   test('uses the requested scan chart dimensions and spacing', () => {
     expect(appCss).toMatch(/\.scan-url \{[\s\S]*margin: 0 0 40px;/);
-    expect(appCss).toMatch(/\.scan-time-chart \{[\s\S]*margin: 0 auto 32px;/);
-    expect(appCss).toMatch(/\.scan-time-donut::after \{[\s\S]*inset: 16px;/);
+    expect(appCss).toMatch(/\.scan-time-chart \{[\s\S]*--scan-time-ring-size: 160px;[\s\S]*--scan-time-ring-thickness: 16px;[\s\S]*margin: 0 auto 32px;/);
+    expect(appCss).toMatch(/\.scan-time-donut::after \{[\s\S]*inset: var\(--scan-time-ring-thickness\);/);
     expect(appCss).toMatch(/\.scan-chart-section \+ \.scan-chart-section \{[\s\S]*margin-top: 32px;/);
     expect(appCss).toMatch(/\.scan-progress-track,\n\.scan-findings-bar \{[\s\S]*height: 32px;[\s\S]*border-radius: 6px;/);
   });
@@ -121,8 +118,8 @@ describe('ScanProgressModal', () => {
   });
 
   test('uses map label token families for findings colors', () => {
-    expect(appCss).toMatch(/\.scan-findings-segment--brokenLinks,[\s\S]*\.scan-finding-dot--scanLimited \{[\s\S]*background: var\(--ui-status-danger-text\);/);
-    expect(appCss).toMatch(/\.scan-findings-segment--duplicates,[\s\S]*\.scan-finding-dot--authenticatedPages \{[\s\S]*background: var\(--ui-status-warning-text\);/);
+    expect(appCss).toMatch(/\.scan-findings-segment--brokenLinks,[\s\S]*\.scan-finding-dot--scanLimited \{[\s\S]*background: var\(--ui-status-danger-icon\);/);
+    expect(appCss).toMatch(/\.scan-findings-segment--duplicates,[\s\S]*\.scan-finding-dot--authenticatedPages \{[\s\S]*background: var\(--ui-status-warning-icon\);/);
     expect(appCss).toMatch(/\.scan-findings-segment--inactivePages,[\s\S]*\.scan-finding-dot--inactivePages \{[\s\S]*background: var\(--ui-color-muted\);/);
   });
 
@@ -236,11 +233,10 @@ describe('ScanProgressModal', () => {
 
     expect(container.textContent).toContain('Stopping scan and preparing current results...');
     const buttons = Array.from(container.querySelectorAll('button'));
-    expect(buttons).toHaveLength(2);
+    expect(buttons).toHaveLength(1);
     expect(buttons[0].disabled).toBe(true);
-    expect(buttons[1].disabled).toBe(true);
-    expect(buttons[1].className).toContain('ui-btn--style-danger');
-    expect(buttons[1].textContent).toBe('Stopping...');
+    expect(buttons[0].className).toContain('ui-btn--style-danger');
+    expect(buttons[0].textContent).toBe('Stopping...');
   });
 
   test('shows the scan error state and lets the user dismiss it', () => {
