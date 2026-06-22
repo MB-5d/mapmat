@@ -335,9 +335,13 @@ const AuthModal = ({
   const emailFieldType = view === AUTH_VIEWS.LOGIN ? 'text' : 'email';
   const emailFieldPlaceholder = view === AUTH_VIEWS.LOGIN ? 'you@example.com or username' : 'you@example.com';
   const emailFieldAutoComplete = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
+  const emailFieldId = view === AUTH_VIEWS.LOGIN ? 'auth-login-identifier' : 'auth-email';
+  const emailFieldName = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
   const passwordLabel = view === AUTH_VIEWS.RESET ? 'New password' : 'Password';
   const passwordPlaceholder = view === AUTH_VIEWS.RESET ? 'New password' : 'Your password';
   const passwordAutoComplete = view === AUTH_VIEWS.LOGIN ? 'current-password' : 'new-password';
+  const passwordFieldId = view === AUTH_VIEWS.LOGIN ? 'auth-login-password' : 'auth-new-password';
+  const passwordFieldName = view === AUTH_VIEWS.LOGIN ? 'password' : 'new-password';
   const passwordHelperText = requiresNewPassword ? 'Must be at least 8 characters' : '';
 
   return (
@@ -382,8 +386,10 @@ const AuthModal = ({
         {status ? <div className="auth-success">{status}</div> : null}
 
         {view === AUTH_VIEWS.SIGNUP ? (
-          <Field label="Username">
+          <Field label="Username" htmlFor="auth-signup-username">
             <TextInput
+              id="auth-signup-username"
+              name="username"
               type="text"
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -394,8 +400,10 @@ const AuthModal = ({
           </Field>
         ) : null}
 
-        <Field label={emailFieldLabel}>
+        <Field label={emailFieldLabel} htmlFor={emailFieldId}>
           <TextInput
+            id={emailFieldId}
+            name={emailFieldName}
             type={emailFieldType}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -407,8 +415,10 @@ const AuthModal = ({
         </Field>
 
         {view === AUTH_VIEWS.VERIFY || view === AUTH_VIEWS.RESET ? (
-          <Field label="Verification code">
+          <Field label="Verification code" htmlFor="auth-verification-code">
             <TextInput
+              id="auth-verification-code"
+              name="one-time-code"
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
@@ -416,6 +426,7 @@ const AuthModal = ({
               onChange={(event) => setCode(event.target.value.replace(/\D+/g, '').slice(0, codeLength))}
               placeholder={`${codeLength}-digit code`}
               required
+              autoComplete="one-time-code"
               disabled={loading}
             />
             <FieldHint>This code expires in about {expiresInMinutes} minutes.</FieldHint>
@@ -423,8 +434,10 @@ const AuthModal = ({
         ) : null}
 
         {view !== AUTH_VIEWS.FORGOT && view !== AUTH_VIEWS.VERIFY ? (
-          <Field label={passwordLabel}>
+          <Field label={passwordLabel} htmlFor={passwordFieldId}>
             <TextInput
+              id={passwordFieldId}
+              name={passwordFieldName}
               type={showPassword ? 'text' : 'password'}
               value={password}
               onChange={(event) => setPassword(event.target.value)}

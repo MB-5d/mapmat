@@ -151,6 +151,14 @@ describe('AuthModal', () => {
 
     const inputs = container.querySelectorAll('input');
     const form = container.querySelector('form');
+    expect(inputs[0].id).toBe('auth-login-identifier');
+    expect(inputs[0].name).toBe('username');
+    expect(inputs[0].getAttribute('autocomplete')).toBe('username');
+    expect(container.querySelector('label[for="auth-login-identifier"]')).not.toBeNull();
+    expect(inputs[1].id).toBe('auth-login-password');
+    expect(inputs[1].name).toBe('password');
+    expect(inputs[1].getAttribute('autocomplete')).toBe('current-password');
+    expect(container.querySelector('label[for="auth-login-password"]')).not.toBeNull();
 
     await act(async () => {
       setInputValue(inputs[0], 'alex');
@@ -215,10 +223,11 @@ describe('AuthModal', () => {
     const tabLabels = Array.from(container.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent.trim());
     expect(tabLabels).toEqual(['Sign up', 'Log in']);
 
-    expect(getCssRule('.auth-form')).toContain('padding: var(--unit-24) var(--unit-24) 32px;');
+    expect(getCssRule('.auth-form')).toContain('padding: var(--unit-24) var(--unit-24) 0;');
     expect(getCssRule('.auth-inline-actions--single')).toContain('justify-content: center;');
-    expect(getCssRule('.auth-provider-section')).toContain('padding: 0 24px 32px;');
-    expect(getCssRule('.auth-provider-section')).toContain('gap: var(--unit-24);');
+    expect(getCssRule('.auth-provider-section')).toContain('padding: var(--unit-32) var(--unit-24) var(--unit-32);');
+    expect(getCssRule('.auth-provider-section')).toContain('gap: var(--unit-32);');
+    expect(getCssRule('.auth-form + .auth-footer')).toContain('margin-top: var(--unit-32);');
   });
 
   test('completes Google sign-in from the official button credential callback', async () => {

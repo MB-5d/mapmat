@@ -1624,6 +1624,14 @@ body {
   color: var(--ui-color-muted);
 }
 
+.ui-option-card__children {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
 .ui-option-card__badge {
   margin-left: auto;
   flex-shrink: 0;
@@ -10211,7 +10219,7 @@ body {
 }
 
 .auth-form {
-  padding: var(--unit-24) var(--unit-24) 32px;
+  padding: var(--unit-24) var(--unit-24) 0;
   display: flex;
   flex-direction: column;
   gap: var(--unit-24);
@@ -10312,11 +10320,15 @@ body {
 }
 
 .auth-provider-section {
-  padding: 0 24px 32px;
+  padding: var(--unit-32) var(--unit-24) var(--unit-32);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--unit-24);
+  gap: var(--unit-32);
+}
+
+.auth-form + .auth-footer {
+  margin-top: var(--unit-32);
 }
 
 .auth-provider-divider {
@@ -10757,6 +10769,26 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.export-btn-index {
+  cursor: default;
+}
+
+.export-btn-index:hover {
+  background: var(--ui-color-surface-muted);
+  border-color: var(--ui-color-border);
+}
+
+.export-btn-index:hover .ui-option-card__icon {
+  color: var(--ui-color-muted);
+}
+
+.export-index-format-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
 }
 
 /* Import Modal */

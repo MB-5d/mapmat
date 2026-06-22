@@ -65,7 +65,7 @@ const ProjectsModal = ({
     <AccountDrawer
       isOpen={show}
       onClose={onClose}
-      title="Maps & Projects"
+      title="Maps & projects"
       className="projects-drawer"
     >
       <div className="projects-modal">

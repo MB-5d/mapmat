@@ -1090,13 +1090,13 @@ describe('CanvasToolbar', () => {
 
     expect(container.textContent).toContain('Image report');
     expect(container.textContent).toContain('Image report1');
-    expect(container.textContent).toContain('View screenshots');
+    expect(container.textContent).toContain('Node thumbnails');
     expect(container.textContent).toContain('Visibility');
     expect(container.textContent).toContain('Review');
     expect(container.textContent).not.toContain('Thumbnails (visible area)');
     expect(container.textContent).not.toContain('Full page');
     expect(container.textContent).not.toContain('Saves a full-page asset per page');
-    expect(container.textContent).not.toContain('Thumbnails');
+    expect(container.textContent).not.toContain('View screenshots');
     expect(container.textContent).not.toContain('Screenshots');
     expect(container.textContent).not.toContain('Capture issues');
     expect(container.textContent).not.toContain('PDF/file');

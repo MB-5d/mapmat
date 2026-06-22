@@ -81,7 +81,7 @@ describe('ProjectsModal', () => {
     renderModal();
 
     expect(container.querySelector('.project-folder.ui-accordion')).not.toBeNull();
-    expect(container.textContent).toContain('Maps & Projects');
+    expect(container.textContent).toContain('Maps & projects');
     expect(container.textContent).not.toContain('Projects & maps');
 
     const newMapButton = Array.from(container.querySelectorAll('button')).find(

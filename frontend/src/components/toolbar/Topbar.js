@@ -301,11 +301,11 @@ const Topbar = ({
             type="primary"
             buttonStyle="brand"
             size="md"
-            title="Sign up / Log in"
+            title="Sign up / log in"
             onClick={onSignup || onLogin}
             startIcon={<LogIn size={18} />}
           >
-            Sign up / Log in
+            Sign up / log in
           </Button>
         )}
       </div>

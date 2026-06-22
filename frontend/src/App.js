@@ -124,7 +124,17 @@ import {
   buildReportEntries,
   comparePageNumbers,
 } from './utils/reportUtils';
-import { getSeoValue } from './utils/seoMetadata';
+import {
+  buildExportMetadata,
+  buildSiteIndexHtml,
+  buildSiteIndexMarkdown,
+  buildSiteIndexText,
+  buildSitemapCsv,
+  buildSitemapExportRows,
+  buildSitemapJsonPayload,
+  buildSitemapXml,
+  getSitemapExportFilenameBase,
+} from './utils/fileExports';
 import {
   parseXmlSitemap,
   parseRssAtom,
@@ -620,6 +630,27 @@ const getInitialLargeMapHomeTransform = ({
   });
 };
 
+const queueNormalMapInitialCenter = ({
+  pendingInitialCenterRef,
+  pendingInitialLargeMapCenterRef,
+  scheduleResetViewRef,
+  attempts,
+} = {}) => {
+  if (!pendingInitialCenterRef) return false;
+  pendingInitialCenterRef.current = true;
+  if (pendingInitialLargeMapCenterRef) {
+    pendingInitialLargeMapCenterRef.current = false;
+  }
+  if (scheduleResetViewRef?.current) {
+    if (Number.isFinite(Number(attempts))) {
+      scheduleResetViewRef.current(Number(attempts));
+    } else {
+      scheduleResetViewRef.current();
+    }
+  }
+  return true;
+};
+
 const DUPLICATE_REVEAL_MARGIN_PX = 24;
 const getPanToRevealLayoutNode = ({
   nodeData,
@@ -700,83 +731,6 @@ const parseEnvBool = (value, fallback = false) => {
   return fallback;
 };
 
-const escapeXml = (value) => String(value ?? '')
-  .replace(/&/g, '&amp;')
-  .replace(/</g, '&lt;')
-  .replace(/>/g, '&gt;')
-  .replace(/"/g, '&quot;')
-  .replace(/'/g, '&apos;');
-
-const normalizeBriefText = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
-
-const getAiExportPageType = (node = {}, fallback = 'Page') => {
-  const isRenderableText = isRenderableTextUrl(node.url);
-  if (node.pageType && !(isRenderableText && String(node.pageType).toLowerCase() === 'file')) return node.pageType;
-  if (node.subdomainRoot) return 'Subdomain';
-  if (!isRenderableText && (node.isFile || node.orphanType === 'file')) return 'File';
-  if (isVirtualMissingNode(node)) return 'Missing';
-  if (node.isDuplicate) return 'Duplicate';
-  if (node.isBroken || node.orphanType === 'broken') return 'Broken';
-  if (node.orphanType === 'orphan') return 'Orphan';
-  return fallback;
-};
-
-const buildAiExportRows = (rootNode, orphanNodes = []) => {
-  const rows = [];
-
-  const visit = (node, number, depth, section) => {
-    if (!node) return;
-    const annotations = node.annotations || {};
-    rows.push({
-      id: node.id || '',
-      number,
-      depth,
-      section,
-      title: normalizeBriefText(node.title) || 'Untitled',
-      url: normalizeBriefText(node.url),
-      pageType: getAiExportPageType(node, section === 'orphan' ? 'Orphan' : 'Page'),
-      description: getSeoValue(node, 'description'),
-      metaKeywords: getSeoValue(node, 'keywords'),
-      canonicalUrl: getSeoValue(node, 'canonicalUrl'),
-      h1: getSeoValue(node, 'h1'),
-      h2: getSeoValue(node, 'h2'),
-      robots: getSeoValue(node, 'robots'),
-      annotationStatus: annotations.status || 'none',
-      annotationTags: Array.isArray(annotations.tags) ? annotations.tags : [],
-      annotationNote: normalizeBriefText(annotations.note),
-      thumbnailUrl: node.thumbnailUrl || '',
-      thumbnailFullUrl: node.thumbnailFullUrl || '',
-      fullScreenshotUrl: node.fullScreenshotUrl || '',
-      childCount: Array.isArray(node.children) ? node.children.length : 0,
-    });
-
-    (node.children || []).forEach((child, index) => {
-      visit(child, `${number}.${index + 1}`, depth + 1, section);
-    });
-  };
-
-  if (rootNode) visit(rootNode, '1', 0, 'main');
-  (orphanNodes || []).forEach((orphan, index) => {
-    visit(orphan, `O${index + 1}`, 0, 'orphan');
-  });
-
-  return rows;
-};
-
-const buildAiSiteMapXml = (rows) => {
-  const urls = rows
-    .map((row) => row.url)
-    .filter(Boolean)
-    .filter((url, index, allUrls) => allUrls.indexOf(url) === index);
-
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...urls.map((url) => `  <url><loc>${escapeXml(url)}</loc></url>`),
-    '</urlset>',
-  ].join('\n');
-};
-
 const buildAiSiteBriefMarkdown = ({ hostname, mode, rows, generatedAt }) => {
   const mainRows = rows.filter((row) => row.section === 'main');
   const orphanRows = rows.filter((row) => row.section === 'orphan');
@@ -838,9 +792,11 @@ const buildAiSiteData = ({
   mode,
   hostname,
   generatedAt,
+  metadata,
 }) => ({
   exportType: 'vellic-ai-site-build',
   version: 1,
+  metadata,
   mode,
   hostname,
   generatedAt,
@@ -965,18 +921,6 @@ const downloadBlob = (filename, blob) => {
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 };
-
-const slugifyExportFilenameTitle = (value) => {
-  const slug = String(value || '')
-    .trim()
-    .replace(/['"]/g, '')
-    .replace(/[^a-z0-9]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80);
-  return slug || 'Untitled-Map';
-};
-
-const getSitemapExportFilenameBase = (title) => `Sitemap_${slugifyExportFilenameTitle(title)}`;
 
 const COLLABORATION_UI_ENABLED = parseEnvBool(
   process.env.REACT_APP_COLLABORATION_UI_ENABLED,
@@ -1334,6 +1278,25 @@ const DEFAULT_COLLABORATION_SETTINGS = Object.freeze({
 const sameId = (left, right) => {
   if (left === undefined || left === null || right === undefined || right === null) return false;
   return String(left) === String(right);
+};
+
+const normalizeShareAccessForApp = (value) => (
+  Object.values(ACCESS_LEVELS).includes(value) ? value : ACCESS_LEVELS.VIEW
+);
+
+const getRequestedRoleForShareAccess = (access) => {
+  const normalized = normalizeShareAccessForApp(access);
+  if (normalized === ACCESS_LEVELS.EDIT) return 'editor';
+  if (normalized === ACCESS_LEVELS.COMMENT) return 'commenter';
+  return 'viewer';
+};
+
+const hasRequiredPermissionForShareAccess = (permissions, access) => {
+  const features = permissions?.features || {};
+  const normalized = normalizeShareAccessForApp(access);
+  if (normalized === ACCESS_LEVELS.EDIT) return !!features.mapEdit;
+  if (normalized === ACCESS_LEVELS.COMMENT) return !!features.mapComment || !!features.mapEdit;
+  return !!features.mapView || !!features.mapComment || !!features.mapEdit;
 };
 
 const trimActivityText = (value, maxLength = 72) => {
@@ -2666,6 +2629,7 @@ export const __testing = {
   getNextExpandedStackState,
   getMapLayoutRefreshTransformOptions,
   getInitialLargeMapHomeTransform,
+  queueNormalMapInitialCenter,
   mergeLargeMapNodeSnapshot,
   getLargeMapStackSelectionIdsFromNode,
   getLargeMapEditParentId,
@@ -3440,7 +3404,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     return buildMapDisplaySummary(root, orphans);
   }, [currentMap?.displaySummary, currentMap?.largeMapShell, largeMapDisplaySummary, root, orphans]);
   const maxDepth = fullMapDisplaySummary.maxDepth;
-  const totalNodes = useMemo(() => countNodes(root), [root]);
   const effectiveScanLayerAvailability = fullMapDisplaySummary.scanLayerAvailability || scanLayerAvailability;
   const layerVisibility = useMemo(() => ({
     placementPrimary: effectiveScanLayerAvailability.placementPrimary ? scanLayerVisibility.placementPrimary : true,
@@ -5923,7 +5886,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
     setUrlInput(share.root.url || '');
     setCurrentMap(null);
-    setMapName(share.name || share.root.title || '');
+    setMapName(share.mapName || share.name || share.root.title || '');
     setHasCreatedShareLink(true);
     setAccessLevel(nextAccess);
     setSharePermission(nextAccess);
@@ -5980,16 +5943,58 @@ export default function App({ currentRoute, navigateToRoute }) {
       loadedShareRouteKeyRef.current = '';
       return undefined;
     }
+    if (authLoading) return undefined;
 
     const shareRouteKey = `${currentRoute.shareId}:${currentRoute.search || ''}`;
     if (loadedShareRouteKeyRef.current === shareRouteKey) return undefined;
 
     let cancelled = false;
     api.getShare(currentRoute.shareId)
-      .then(({ share }) => {
+      .then(async ({ share }) => {
         if (cancelled || !share?.root) return;
+        const routeAccess = currentRoute?.surface === ROUTE_SURFACES.SHARE
+          && Object.values(ACCESS_LEVELS).includes(currentRoute?.accessLevel)
+          ? currentRoute.accessLevel
+          : null;
+        const requestedAccess = routeAccess || normalizeShareAccessForApp(share.accessLevel);
+
+        if (share.mapId && isLoggedIn) {
+          const requestedRole = getRequestedRoleForShareAccess(requestedAccess);
+          try {
+            const { permissions } = await api.getMapFeatureGates(share.mapId);
+            if (cancelled) return;
+            if (hasRequiredPermissionForShareAccess(permissions, requestedAccess)) {
+              loadedShareRouteKeyRef.current = shareRouteKey;
+              navigateToRoute(createMapRoute(share.mapId), { replace: true });
+              return;
+            }
+          } catch (error) {
+            if (cancelled) return;
+            if (error?.status !== 403 && error?.status !== 404) {
+              throw error;
+            }
+          }
+
+          loadedShareRouteKeyRef.current = shareRouteKey;
+          setRouteMapGateState({
+            mapId: share.mapId,
+            loading: false,
+            errorStatus: 403,
+            errorMessage: `This link requires ${requestedRole} access to the saved map.`,
+            requestStatus: 'idle',
+            requestError: '',
+            requestedRole,
+            source: 'share',
+          });
+          setRouteAccessRequestMessage('');
+          return;
+        }
+
         loadedShareRouteKeyRef.current = shareRouteKey;
-        applySharedMapPayload(share);
+        applySharedMapPayload({
+          ...share,
+          accessLevel: requestedAccess,
+        });
       })
       .catch((error) => {
         if (cancelled) return;
@@ -6017,9 +6022,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     };
   }, [
     applySharedMapPayload,
+    authLoading,
+    currentRoute?.accessLevel,
     currentRoute?.shareId,
     currentRoute?.search,
     currentRoute?.surface,
+    isLoggedIn,
+    navigateToRoute,
     showToast,
   ]);
 
@@ -7656,12 +7665,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleRequestRouteMapAccess = useCallback(async () => {
     const mapId = currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map'
       ? currentRoute.mapId
-      : null;
+      : routeMapGateState?.mapId || null;
     if (!mapId) return;
     if (!isLoggedIn) {
       openAuthModal();
       return;
     }
+    const requestedRole = routeMapGateState?.requestedRole || 'viewer';
 
     setRouteMapGateState((previous) => ({
       mapId,
@@ -7670,11 +7680,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
       requestStatus: 'submitting',
       requestError: '',
+      requestedRole,
+      source: previous?.source || null,
     }));
 
     try {
       const response = await api.createMapAccessRequest(mapId, {
-        requestedRole: 'viewer',
+        requestedRole,
         message: routeAccessRequestMessage.trim() || undefined,
       });
       trackEvent('access_request_sent', {
@@ -7689,6 +7701,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         requestStatus: 'submitted',
         requestError: '',
         requestId: response?.accessRequest?.id || null,
+        requestedRole,
+        source: previous?.source || null,
       }));
       showToast(
         response?.reused
@@ -7707,6 +7721,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         errorMessage: previous?.errorMessage || 'You do not currently have access to this map.',
         requestStatus: error?.status === 403 ? 'disabled' : 'idle',
         requestError: error?.message || 'Failed to send access request.',
+        requestedRole,
+        source: previous?.source || null,
       }));
       showToast(
         error?.message || 'Failed to send access request.',
@@ -7721,6 +7737,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     loadPendingMapInvites,
     openAuthModal,
     routeAccessRequestMessage,
+    routeMapGateState?.mapId,
+    routeMapGateState?.requestedRole,
     showToast,
   ]);
 
@@ -10839,6 +10857,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   useEffect(() => {
     if (currentRoute?.surface === ROUTE_SURFACES.APP && currentRoute?.section === 'map') return;
+    if (currentRoute?.surface === ROUTE_SURFACES.SHARE) return;
     setRouteMapGateState(null);
     setRouteAccessRequestMessage('');
   }, [currentRoute?.section, currentRoute?.surface]);
@@ -12920,6 +12939,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [currentMap?.id, getUsagePageCount]);
 
+  const getCurrentExportTitle = () => (
+    currentMap?.name || mapName || root?.title || getHostname(root?.url) || 'Untitled Map'
+  );
+
   const createShareLinkUrl = useCallback(async (permission = sharePermission) => {
     const { share } = await api.createShare({
       map_id: currentMap?.id || null,
@@ -12975,11 +12998,29 @@ export default function App({ currentRoute, navigateToRoute }) {
   const exportJson = () => {
     if (!root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
-    const content = JSON.stringify({ root, colors, connectionColors }, null, 2);
-    downloadText('sitemap.json', content);
+    const exportTitle = getCurrentExportTitle();
+    const generatedAt = new Date();
+    const rows = buildSitemapExportRows(root, orphans);
+    const metadata = buildExportMetadata({
+      title: exportTitle,
+      generatedAt,
+      pageCount: rows.length,
+      format: 'json',
+    });
+    const content = JSON.stringify(buildSitemapJsonPayload({
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      rows,
+      metadata,
+    }), null, 2);
+    downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.json`, content);
     recordExportUsage('export_json', {
       format: 'json',
       bytes: new Blob([content]).size,
+      rows: rows.length,
     });
     showToast('Downloaded JSON');
   };
@@ -12987,9 +13028,17 @@ export default function App({ currentRoute, navigateToRoute }) {
   const exportXml = () => {
     if (!root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
-    const rows = buildAiExportRows(root, orphans);
-    const content = buildAiSiteMapXml(rows);
-    downloadText('sitemap.xml', content);
+    const exportTitle = getCurrentExportTitle();
+    const generatedAt = new Date();
+    const rows = buildSitemapExportRows(root, orphans);
+    const metadata = buildExportMetadata({
+      title: exportTitle,
+      generatedAt,
+      pageCount: rows.length,
+      format: 'xml',
+    });
+    const content = buildSitemapXml(rows, metadata);
+    downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.xml`, content);
     recordExportUsage('export_xml', {
       format: 'xml',
       bytes: new Blob([content]).size,
@@ -13002,11 +13051,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
 
+    const exportTitle = getCurrentExportTitle();
     const hostname = getHostname(root.url) || 'site';
-    const generatedAt = new Date().toISOString();
-    const rows = buildAiExportRows(root, orphans);
+    const generatedAt = new Date();
+    const rows = buildSitemapExportRows(root, orphans);
+    const metadata = buildExportMetadata({
+      title: exportTitle,
+      generatedAt,
+      pageCount: rows.length,
+      format: 'ai-site-brief',
+    });
     const mode = root.url ? 'Improve Existing Site' : 'Build New Site';
-    const baseFilename = `ai-site-brief-${hostname}`;
+    const baseFilename = getSitemapExportFilenameBase(exportTitle, generatedAt);
     const siteData = buildAiSiteData({
       root,
       orphans,
@@ -13016,13 +13072,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       rows,
       mode,
       hostname,
-      generatedAt,
+      generatedAt: metadata.generatedAt,
+      metadata,
     });
 
     const zipBlob = createZipPackageBlob([
       {
         path: 'AI_SITE_BRIEF.md',
-        content: buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt }),
+        content: buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt: metadata.generatedAt }),
       },
       {
         path: 'site-map.json',
@@ -13030,7 +13087,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       },
       {
         path: 'sitemap.xml',
-        content: buildAiSiteMapXml(rows),
+        content: buildSitemapXml(rows, metadata),
       },
       {
         path: 'references/README.md',
@@ -13052,65 +13109,17 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
 
-    // Flatten tree to array with all node data
-    const rows = [];
-    const flattenWithNumber = (node, depth = 0, number = '1') => {
-      rows.push({
-        number,
-        depth,
-        title: (node.title || '').replace(/"/g, '""'),
-        url: node.url || '',
-        description: getSeoValue(node, 'description').replace(/"/g, '""'),
-        metaKeywords: getSeoValue(node, 'keywords').replace(/"/g, '""'),
-        canonicalUrl: getSeoValue(node, 'canonicalUrl'),
-        h1: getSeoValue(node, 'h1').replace(/"/g, '""'),
-        h2: getSeoValue(node, 'h2').replace(/"/g, '""'),
-        robots: getSeoValue(node, 'robots').replace(/"/g, '""'),
-        hasChildren: node.children?.length > 0 ? 'Yes' : 'No',
-        childCount: node.children?.length || 0,
-      });
-      (node.children || []).forEach((child, idx) => {
-        flattenWithNumber(child, depth + 1, `${number}.${idx + 1}`);
-      });
-    };
-
-    flattenWithNumber(root, 0, '1');
-
-    // Create CSV content
-    const headers = [
-      'Page Number',
-      'Depth Level',
-      'Page Title',
-      'URL',
-      'Description',
-      'Meta Keywords',
-      'Canonical URL',
-      'H1',
-      'H2',
-      'Meta Robots',
-      'Has Children',
-      'Child Count',
-    ];
-    const csvRows = [
-      headers.join(','),
-      ...rows.map(row => [
-        `"${row.number}"`,
-        row.depth,
-        `"${row.title}"`,
-        `"${row.url}"`,
-        `"${row.description}"`,
-        `"${row.metaKeywords}"`,
-        `"${row.canonicalUrl}"`,
-        `"${row.h1}"`,
-        `"${row.h2}"`,
-        `"${row.robots}"`,
-        row.hasChildren,
-        row.childCount,
-      ].join(','))
-    ];
-
-    const content = csvRows.join('\n');
-    downloadText('sitemap.csv', content);
+    const exportTitle = getCurrentExportTitle();
+    const generatedAt = new Date();
+    const rows = buildSitemapExportRows(root, orphans);
+    const metadata = buildExportMetadata({
+      title: exportTitle,
+      generatedAt,
+      pageCount: rows.length,
+      format: 'csv',
+    });
+    const content = buildSitemapCsv(rows, metadata);
+    downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.csv`, content);
     recordExportUsage('export_csv', {
       format: 'csv',
       bytes: new Blob([content]).size,
@@ -13131,7 +13140,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         import('jspdf'),
         createShareLinkUrl(sharePermission),
       ]);
-      const exportTitle = currentMap?.name || mapName || root.title || getHostname(root.url) || 'Untitled Map';
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
       const scene = buildExportScene({
         root,
         orphans,
@@ -13144,6 +13154,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         shareUrl,
         reportStats,
         reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
       });
       if (!scene || !scene.nodes.length) {
         showToast('No content to download', 'warning');
@@ -13163,7 +13174,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       await registerExportPdfFonts(pdf);
       drawExportSceneToPdf(pdf, scene, thumbnailDataUrls, pdfScale);
 
-      const filenameBase = getSitemapExportFilenameBase(exportTitle);
+      const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
       pdf.save(`${filenameBase}.pdf`);
       recordExportUsage('export_pdf', {
         format: 'pdf',
@@ -13191,6 +13202,14 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     try {
       const [{ jsPDF }] = await Promise.all([import('jspdf')]);
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: reportRows.length,
+        format: 'scan-report',
+      });
       const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
       const pageHeight = pdf.internal.pageSize.getHeight();
       const marginX = 40;
@@ -13202,6 +13221,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       pdf.setFontSize(11);
       pdf.text(`Total pages: ${reportStats.total}`, marginX, y);
+      y += 16;
+      pdf.text(`${metadata.tagline} - ${metadata.sourceUrl}`, marginX, y);
       y += 16;
 
       const statLines = [
@@ -13260,7 +13281,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         y += rowHeight + 6;
       });
 
-      pdf.save('scan-report.pdf');
+      pdf.save(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.pdf`);
       recordExportUsage('export_report_pdf', {
         format: 'pdf',
         rows: reportRows.length,
@@ -13273,98 +13294,64 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
-  const exportSiteIndex = () => {
+  const exportSiteIndex = (format = 'doc') => {
     if (!root) return;
     if (!guardAccountCanCreateWork('Exporting')) return;
 
-    const hostname = getHostname(root.url) || 'sitemap';
-
-    // Build page list
-    const rows = [];
-    const flattenForDoc = (node, number = '1', depth = 0) => {
-      const indent = '    '.repeat(depth);
-      rows.push({
-        number,
-        title: node.title || 'Untitled',
-        url: node.url || '',
-        indent,
-        depth,
-      });
-      (node.children || []).forEach((child, idx) => {
-        flattenForDoc(child, `${number}.${idx + 1}`, depth + 1);
-      });
+    const formatConfigByKey = {
+      doc: {
+        extension: 'doc',
+        mimeType: 'application/msword',
+        label: 'DOC',
+        build: buildSiteIndexHtml,
+      },
+      txt: {
+        extension: 'txt',
+        mimeType: 'text/plain;charset=utf-8',
+        label: 'plain text',
+        build: buildSiteIndexText,
+      },
+      html: {
+        extension: 'html',
+        mimeType: 'text/html;charset=utf-8',
+        label: 'HTML',
+        build: buildSiteIndexHtml,
+      },
+      md: {
+        extension: 'md',
+        mimeType: 'text/markdown;charset=utf-8',
+        label: 'Markdown',
+        build: buildSiteIndexMarkdown,
+      },
     };
-    flattenForDoc(root);
-
-    // Create HTML content that Word/Google Docs/TextEdit can open
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Site Index - ${hostname}</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
-    h1 { color: #6366f1; margin-bottom: 5px; }
-    .subtitle { color: #64748b; margin-bottom: 30px; }
-    .meta { color: #94a3b8; font-size: 12px; margin-bottom: 20px; }
-    table { border-collapse: collapse; width: 100%; }
-    th { background: #f1f5f9; text-align: left; padding: 10px; font-size: 12px; color: #475569; border-bottom: 2px solid #e2e8f0; }
-    td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-    .num { color: #94a3b8; font-size: 12px; white-space: nowrap; }
-    .title { color: #1e293b; }
-    .url { color: #6366f1; font-size: 12px; word-break: break-all; }
-    .indent-1 { padding-left: 20px; }
-    .indent-2 { padding-left: 40px; }
-    .indent-3 { padding-left: 60px; }
-    .indent-4 { padding-left: 80px; }
-    .indent-5 { padding-left: 100px; }
-  </style>
-</head>
-<body>
-  <h1>Site Index</h1>
-  <p class="subtitle">${hostname}</p>
-  <p class="meta">Root URL: ${root.url}<br>Total Pages: ${totalNodes}<br>Generated: ${new Date().toLocaleString()}</p>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width: 60px;">#</th>
-        <th>Page Title</th>
-        <th style="width: 40%;">URL</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows.map(row => `
-        <tr>
-          <td class="num">${row.number}</td>
-          <td class="title indent-${Math.min(row.depth, 5)}">${row.title}</td>
-          <td class="url">${row.url}</td>
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
-</body>
-</html>
-    `.trim();
-
-    // Download as .doc (HTML format is compatible with Word)
-    const blob = new Blob([htmlContent], { type: 'application/msword' });
-    const blobUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = `site-index-${hostname}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    // Delay URL revocation to allow download to start
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    const normalizedFormat = Object.prototype.hasOwnProperty.call(formatConfigByKey, format)
+      ? format
+      : 'doc';
+    const formatConfig = formatConfigByKey[normalizedFormat];
+    const exportTitle = getCurrentExportTitle();
+    const generatedAt = new Date();
+    const hostname = getHostname(root.url) || 'sitemap';
+    const rows = buildSitemapExportRows(root, orphans);
+    const metadata = buildExportMetadata({
+      title: exportTitle,
+      generatedAt,
+      pageCount: rows.length,
+      format: `site-index-${normalizedFormat}`,
+    });
+    const content = formatConfig.build({
+      rows,
+      metadata,
+      rootUrl: root.url,
+      hostname,
+    });
+    const blob = new Blob([content], { type: formatConfig.mimeType });
+    downloadBlob(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.${formatConfig.extension}`, blob);
     recordExportUsage('export_site_index', {
-      format: 'doc',
+      format: normalizedFormat,
       bytes: blob.size,
       rows: rows.length,
     });
-    showToast('Site Index downloaded', 'success');
+    showToast(`Site Index ${formatConfig.label} downloaded`, 'success');
   };
 
   const copyShareLink = async (permission = sharePermission) => {
@@ -13412,7 +13399,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     try {
       showToast('Generating PNG...', 'info', true);
       const shareUrl = await createShareLinkUrl(sharePermission);
-      const exportTitle = currentMap?.name || mapName || root.title || getHostname(root.url) || 'Untitled Map';
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
       const scene = buildExportScene({
         root,
         orphans,
@@ -13425,6 +13413,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         shareUrl,
         reportStats,
         reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
       });
       if (!scene || !scene.nodes.length) {
         showToast('No content to download', 'warning');
@@ -13435,7 +13424,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const pngExport = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
         pixelRatio: 4,
       });
-      const filenameBase = getSitemapExportFilenameBase(exportTitle);
+      const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
       downloadBlob(`${filenameBase}.png`, pngExport.blob);
 
       recordExportUsage('export_png', {
@@ -16603,6 +16592,12 @@ export default function App({ currentRoute, navigateToRoute }) {
           connectionColors: DEFAULT_CONNECTION_COLORS,
         }, 'Updated');
         applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+        queueNormalMapInitialCenter({
+          pendingInitialCenterRef,
+          pendingInitialLargeMapCenterRef,
+          scheduleResetViewRef,
+          attempts: 20,
+        });
         setUrlInput(tree.url || '');
         setMapName('');
         setShowImportModal(false);
@@ -16655,16 +16650,21 @@ export default function App({ currentRoute, navigateToRoute }) {
   const zoomBounds = getZoomBounds();
   const showInviteAcceptGate = currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'invite_accept';
-  const showMapAccessGate = currentRoute?.surface === ROUTE_SURFACES.APP
-    && currentRoute?.section === 'map'
-    && !isBillingReturnRoute
-    && (!currentMap?.id || !sameId(currentMap.id, currentRoute?.mapId))
-    && (
-      !!routeMapGateState
-      || !isLoggedIn
-      || authLoading
-      || !!pendingInviteForCurrentRoute
-    );
+  const showMapAccessGate = (
+    currentRoute?.surface === ROUTE_SURFACES.APP
+      && currentRoute?.section === 'map'
+      && !isBillingReturnRoute
+      && (!currentMap?.id || !sameId(currentMap.id, currentRoute?.mapId))
+      && (
+        !!routeMapGateState
+        || !isLoggedIn
+        || authLoading
+        || !!pendingInviteForCurrentRoute
+      )
+  ) || (
+    currentRoute?.surface === ROUTE_SURFACES.SHARE
+      && !!routeMapGateState
+  );
   const isWelcomeModalEligible = currentRoute?.surface === ROUTE_SURFACES.APP
     && (currentRoute?.section === 'home' || currentRoute?.section === 'map')
     && !showInviteAcceptGate
@@ -16979,6 +16979,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             requestStatus={routeMapGateState?.requestStatus || 'idle'}
             requestError={routeMapGateState?.requestError || ''}
             requestMessage={routeAccessRequestMessage}
+            requestedRole={routeMapGateState?.requestedRole || 'viewer'}
             onLogin={() => openAuthModal()}
             onGoHome={() => navigateToRoute(createAppHomeRoute(), { replace: true })}
             onRequestMessageChange={setRouteAccessRequestMessage}
@@ -17139,7 +17140,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       : (
                         <>
                           <span>Use existing sitemap files</span>
-                          <span className="blank-card-copy-secondary">(XML, HTML, CSV, Markdown, or text)</span>
+                          <span className="blank-card-copy-secondary">(XML, CSV, Markdown, TXT, or HTML link page)</span>
                         </>
                       )}
                   </div>
@@ -18274,7 +18275,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onExportCsv={() => { exportCsv(); setShowExportModal(false); }}
         onExportJson={() => { exportJson(); setShowExportModal(false); }}
         onExportXml={() => { exportXml(); setShowExportModal(false); }}
-        onExportSiteIndex={() => { exportSiteIndex(); setShowExportModal(false); }}
+        onExportSiteIndex={(format) => { exportSiteIndex(format); setShowExportModal(false); }}
       />
 
       <ShareModal

@@ -117,7 +117,7 @@ describe('Topbar', () => {
     const auth = renderTopbar({ isLoggedIn: false });
 
     const loginButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Sign up / Log in')
+      button.textContent.includes('Sign up / log in')
     );
 
     expect(loginButton).not.toBeNull();

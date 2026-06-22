@@ -6,6 +6,7 @@ import Icon from './Icon';
 const OptionCard = React.forwardRef(
   (
     {
+      as: Component = 'button',
       title,
       description = '',
       icon,
@@ -17,9 +18,9 @@ const OptionCard = React.forwardRef(
     },
     ref
   ) => (
-    <button
+    <Component
       ref={ref}
-      type={type}
+      {...(Component === 'button' ? { type } : {})}
       className={classNames('ui-option-card', className)}
       {...props}
     >
@@ -27,10 +28,10 @@ const OptionCard = React.forwardRef(
       <span className="ui-option-card__content">
         <span className="ui-option-card__title">{title}</span>
         {description ? <span className="ui-option-card__description">{description}</span> : null}
+        {children ? <span className="ui-option-card__children">{children}</span> : null}
       </span>
       {badge ? <span className="ui-option-card__badge">{badge}</span> : null}
-      {children}
-    </button>
+    </Component>
   )
 );
 

@@ -229,7 +229,7 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).toContain('Start from scratch');
     expect(container.textContent).toContain('Open saved maps and shared work');
     expect(container.textContent).toContain('Use existing sitemap files');
-    expect(container.textContent).toContain('(XML, HTML, CSV, Markdown, or text)');
+    expect(container.textContent).toContain('(XML, CSV, Markdown, TXT, or HTML link page)');
     expect(container.textContent).not.toContain('start blank');
     expect(container.textContent).not.toContain('blank structure');
     expect(getBlankCardButton('Modify')).not.toBeNull();
@@ -257,7 +257,7 @@ describe('App blank home and welcome modal', () => {
     await click(getBlankCardButton('Modify'));
 
     expect(getProjectsDrawer()).not.toBeNull();
-    expect(container.textContent).toContain('Projects & maps');
+    expect(container.textContent).toContain('Maps & projects');
   });
 
   test('logged-out modify opens auth with contextual supporting copy', async () => {
@@ -282,7 +282,7 @@ describe('App blank home and welcome modal', () => {
 
     expect(api.login).toHaveBeenCalledWith(defaultUser.email, 'password123');
     expect(getProjectsDrawer()).not.toBeNull();
-    expect(container.textContent).toContain('Projects & maps');
+    expect(container.textContent).toContain('Maps & projects');
     expect(container.textContent).not.toContain('Log in or sign up to select and modify maps.');
   });
 

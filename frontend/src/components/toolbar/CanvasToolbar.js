@@ -187,7 +187,7 @@ const CanvasToolbar = ({
           <MenuSectionHeader className="canvas-tool-menu-label">Visibility</MenuSectionHeader>
           <MenuItem
             className="canvas-tool-menu-toggle"
-            label="View screenshots"
+            label="Node thumbnails"
             endSlot={showThumbnails ? <Eye size={16} /> : <EyeOff size={16} />}
             onClick={onToggleThumbnails}
           />

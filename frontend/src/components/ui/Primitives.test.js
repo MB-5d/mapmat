@@ -1,5 +1,7 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import fs from 'fs';
+import path from 'path';
 
 import Accordion from './Accordion';
 import Avatar from './Avatar';
@@ -22,6 +24,12 @@ import StatusAlert from './StatusAlert';
 import TextInput from './TextInput';
 import ToggleSwitch from './ToggleSwitch';
 import Toast from './Toast';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
+const getCssRule = (selector) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return appCss.match(new RegExp(`${escapedSelector} \\{[^}]+\\}`))?.[0] || '';
+};
 
 describe('ui primitives', () => {
   let container;
@@ -292,6 +300,8 @@ describe('ui primitives', () => {
     expect(container.querySelector('.node-status-note-dot')).not.toBeNull();
     expect(container.querySelector('.comment-badge')?.textContent).toBe('');
     expect(container.querySelector('.comment-badge')?.getAttribute('aria-label')).toBe('View 3 notes');
+    expect(getCssRule('.ui-badge__content')).toContain('line-height: inherit;');
+    expect(getCssRule('.ui-tag__content')).toContain('line-height: inherit;');
   });
 
   test('StatusAlert and Toast share tone, icon, and dismiss primitives', () => {
@@ -528,6 +538,14 @@ describe('ui primitives', () => {
             description="Save an image"
             onClick={onOptionClick}
           />
+          <OptionCard
+            as="div"
+            className="static-option-card"
+            title="Index"
+            description="Choose a format"
+          >
+            <span>Inline action</span>
+          </OptionCard>
         </div>
       );
     });
@@ -544,5 +562,10 @@ describe('ui primitives', () => {
 
     expect(onSegmentChange).toHaveBeenCalledWith('two');
     expect(onOptionClick).toHaveBeenCalledTimes(1);
+
+    const staticCard = container.querySelector('.static-option-card');
+    expect(staticCard.tagName).toBe('DIV');
+    expect(staticCard.getAttribute('type')).toBeNull();
+    expect(staticCard.querySelector('.ui-option-card__children').textContent).toContain('Inline action');
   });
 });

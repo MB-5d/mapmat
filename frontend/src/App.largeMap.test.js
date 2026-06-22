@@ -30,6 +30,23 @@ describe('large map viewport behavior', () => {
     })).toBeNull();
   });
 
+  test('imported normal maps queue home centering after layout is available', () => {
+    const pendingInitialCenterRef = { current: false };
+    const pendingInitialLargeMapCenterRef = { current: true };
+    const scheduleResetView = jest.fn();
+
+    expect(__testing.queueNormalMapInitialCenter({
+      pendingInitialCenterRef,
+      pendingInitialLargeMapCenterRef,
+      scheduleResetViewRef: { current: scheduleResetView },
+      attempts: 20,
+    })).toBe(true);
+
+    expect(pendingInitialCenterRef.current).toBe(true);
+    expect(pendingInitialLargeMapCenterRef.current).toBe(false);
+    expect(scheduleResetView).toHaveBeenCalledWith(20);
+  });
+
   test('auto-center key ignores image metadata and thumbnail visibility', () => {
     const baseKey = __testing.getLargeMapAutoCenterKey({
       mapId: 'map-1',

@@ -24,6 +24,7 @@ export default function MapAccessGate({
   requestStatus = 'idle',
   requestError = '',
   requestMessage = '',
+  requestedRole = 'viewer',
   loading = false,
   onLogin,
   onGoHome,
@@ -36,6 +37,7 @@ export default function MapAccessGate({
   const requestPending = requestStatus === 'submitting';
   const requestSubmitted = requestStatus === 'submitted';
   const requestDisabled = requestStatus === 'disabled';
+  const requestedRoleLabel = formatRoleLabel(requestedRole).toLowerCase();
 
   let title = 'You do not currently have access to this map';
   let description = 'If the map owners allow it, you can request access from here.';
@@ -159,7 +161,7 @@ export default function MapAccessGate({
               loading={requestPending}
             >
               {!requestPending ? <Send size={16} /> : null}
-              <span>{requestSubmitted ? 'Request sent' : 'Request viewer access'}</span>
+              <span>{requestSubmitted ? 'Request sent' : `Request ${requestedRoleLabel} access`}</span>
             </Button>
           )}
         </div>

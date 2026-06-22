@@ -3731,6 +3731,9 @@ router.post('/shares', requireAuth, async (req, res) => {
     res.json({
       share: {
         id: shareId,
+        mapId: map?.id || map_id || null,
+        mapName: map?.name || null,
+        projectId: map?.project_id || null,
         expiresAt,
         accessLevel: normalizedAccessLevel,
         orientation: normalizedOrientation,
@@ -3759,9 +3762,10 @@ router.get('/shares/:id', async (req, res) => {
       return res.status(410).json({ error: 'This share link has expired' });
     }
 
-    if (share.map_id && share.project_id) {
-      const map = await mapStore.getMapByIdAsync(share.map_id);
-      if (!map || (map.project_id || null) !== share.project_id) {
+    let sharedMap = null;
+    if (share.map_id) {
+      sharedMap = await mapStore.getMapByIdAsync(share.map_id);
+      if (share.project_id && (!sharedMap || (sharedMap.project_id || null) !== share.project_id)) {
         return res.status(410).json({
           error: 'This map has moved. Ask the map owner for the new share link.',
           code: 'SHARE_MAP_MOVED',
@@ -3780,6 +3784,9 @@ router.get('/shares/:id', async (req, res) => {
       share: {
         id: share.id,
         ...parseMapFields(share),
+        mapId: share.map_id || null,
+        mapName: sharedMap?.name || null,
+        projectId: sharedMap?.project_id || share.project_id || null,
         accessLevel: normalizeShareAccessLevel(share.access_level),
         orientation: normalizeShareOrientation(share.orientation),
         sharedBy: share.shared_by_name,

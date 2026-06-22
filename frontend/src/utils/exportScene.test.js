@@ -79,7 +79,7 @@ describe('export scene helpers', () => {
     expect(svg).not.toContain('stack-toggle');
     expect(svg).toContain('Created with');
     expect(svg).toContain(VELLIC_LOGO_MARK_PATH);
-    expect(svg).toMatch(/y="88" fill="#64748b"[^>]*>app\.vellic\.io\/share\/example<\/text>/);
+    expect(svg).toMatch(/y="88" fill="#1e293b"[^>]*>app\.vellic\.io\/share\/example<\/text>/);
   });
 
   test('renderExportSvg rounds level bars and centers badge labels', () => {
@@ -95,6 +95,20 @@ describe('export scene helpers', () => {
     expect(svg).toMatch(/<path d="M [^"]+ C [^"]+" fill="#38bdf8"/);
     expect(svg).toContain('dominant-baseline="middle"');
     expect(svg).toContain('MISSING');
+  });
+
+  test('buildExportScene keeps header insights compact', () => {
+    const scene = buildExportScene({
+      root: makeNode('home'),
+      title: 'Example Map',
+      reportStats: { total: 155, missing: 8, duplicates: 2 },
+      reportTypeOptions: REPORT_TYPE_OPTIONS,
+    });
+
+    const [totalPages, missing, duplicates] = scene.header.insightPositions;
+    expect(missing.x).toBeLessThan(150);
+    expect(missing.x - totalPages.x).toBeGreaterThan(24);
+    expect(duplicates.x - missing.x).toBeLessThan(120);
   });
 
   test('formatShareUrlForExport keeps displayed share URLs typeable without query params', () => {
