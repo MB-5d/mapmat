@@ -22,6 +22,8 @@ const ExportModal = ({
   onExportXml,
   onExportSiteIndex,
   onExportAiSiteBrief,
+  imageExportDisabled = false,
+  imageExportDisabledReason = '',
 }) => {
   if (!show) return null;
 
@@ -53,8 +55,9 @@ const ExportModal = ({
           className="export-btn"
           icon={<FileImage size={24} />}
           title="Image"
-          description="High resolution snapshot with transparency"
+          description={imageExportDisabled ? imageExportDisabledReason : 'High resolution snapshot with transparency'}
           onClick={onExportPng}
+          disabled={imageExportDisabled}
         />
         <OptionCard
           className="export-btn"

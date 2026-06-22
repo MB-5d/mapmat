@@ -1,7 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import ReportDrawer from './ReportDrawer';
+
+const appCss = fs.readFileSync(path.join(__dirname, '../../App.css'), 'utf8');
 
 describe('ReportDrawer', () => {
   let container;
@@ -164,6 +168,58 @@ describe('ReportDrawer', () => {
     });
 
     expect(getVisibleTitles()).toEqual(['contact']);
+  });
+
+  test('filters report rows from summary chips and clears filters from the total chip', () => {
+    renderDrawer();
+
+    const duplicateChip = container.querySelector('button[aria-label="Filter by Duplicate"]');
+    const totalChip = container.querySelector('.report-total-card');
+
+    expect(getVisibleTitles()).toEqual(['about', 'pricing', 'contact']);
+    expect(totalChip.disabled).toBe(true);
+
+    act(() => {
+      duplicateChip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(getVisibleTitles()).toEqual(['pricing']);
+    expect(duplicateChip.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.report-filter-active-dot')).not.toBeNull();
+    expect(totalChip.disabled).toBe(false);
+
+    act(() => {
+      totalChip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(getVisibleTitles()).toEqual(['about', 'pricing', 'contact']);
+    expect(container.querySelector('.report-filter-active-dot')).toBeNull();
+    expect(totalChip.disabled).toBe(true);
+  });
+
+  test('shows only available filter labels in the filters menu', () => {
+    renderDrawer();
+
+    const filterToggle = container.querySelector('.report-filter-toggle');
+    act(() => {
+      filterToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const filterLabels = Array.from(container.querySelectorAll('.report-filter-item')).map((item) =>
+      item.textContent.trim()
+    );
+
+    expect(filterLabels).toEqual(['Duplicate', 'Broken links', 'Error pages']);
+    expect(container.querySelector('.report-filter-count')).toBeNull();
+  });
+
+  test('keeps report controls sticky while tabs scroll with the drawer body', () => {
+    renderDrawer();
+
+    expect(container.querySelector('.report-drawer-body .report-tabs')).not.toBeNull();
+    expect(container.querySelector('.report-drawer > .report-tabs')).toBeNull();
+    expect(appCss).toMatch(/\.report-filters-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
+    expect(appCss).toMatch(/\.report-table-header \{[\s\S]*position: sticky;[\s\S]*top: var\(--report-filter-row-sticky-height\);/);
   });
 
   test('shows SEO metadata in expanded report details', () => {

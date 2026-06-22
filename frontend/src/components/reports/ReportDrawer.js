@@ -43,6 +43,18 @@ const REPORT_TABS = [
   { value: 'insights', label: 'Insights' },
 ];
 
+const REPORT_FILTER_META = {
+  orphanPages: { label: 'Orphan', className: 'report-filter-chip--orphan' },
+  duplicates: { label: 'Duplicate', className: 'report-filter-chip--warning' },
+  missing: { label: 'Missing', className: 'report-filter-chip--warning' },
+  errorPages: { label: 'Error', className: 'report-filter-chip--danger' },
+  brokenLinks: { label: 'Broken links', className: 'report-filter-chip--danger' },
+  inactivePages: { label: 'Inactive', className: 'report-filter-chip--muted' },
+  subdomains: { label: 'Subdomain', className: 'report-filter-chip--info' },
+  files: { label: 'Files', className: 'report-filter-chip--info' },
+  authenticatedPages: { label: 'Authenticated', className: 'report-filter-chip--warning' },
+};
+
 const ReportDrawer = ({
   isOpen,
   onClose,
@@ -75,7 +87,7 @@ const ReportDrawer = ({
   const [filters, setFilters] = useState(() => {
     const initial = {};
     typeOptions.forEach(option => {
-      initial[option.key] = true;
+      initial[option.key] = false;
     });
     return initial;
   });
@@ -100,7 +112,7 @@ const ReportDrawer = ({
     if (!isOpen) return;
     const next = {};
     typeOptions.forEach(option => {
-      next[option.key] = true;
+      next[option.key] = false;
     });
     setFilters(next);
   }, [isOpen, typeOptions]);
@@ -142,17 +154,15 @@ const ReportDrawer = ({
     : null;
 
   const activeFilterKeys = useMemo(
-    () => Object.entries(filters).filter(([, value]) => value).map(([key]) => key),
-    [filters]
+    () => visibleFilterOptions.filter(option => filters[option.key]).map(option => option.key),
+    [filters, visibleFilterOptions]
   );
+  const hasActiveFilters = activeFilterKeys.length > 0;
 
   const filteredEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const allFiltersEnabled = visibleFilterOptions.every(option => filters[option.key]);
     return entries.filter(entry => {
-      const matchesFilters = allFiltersEnabled
-        ? true
-        : activeFilterKeys.length === 0
+      const matchesFilters = !hasActiveFilters
         ? true
         : entry.types.some(type => activeFilterKeys.includes(type));
       if (!matchesFilters) return false;
@@ -163,7 +173,7 @@ const ReportDrawer = ({
         || (entry.number || '').toLowerCase().includes(query)
       );
     });
-  }, [entries, activeFilterKeys, search, visibleFilterOptions, filters]);
+  }, [entries, activeFilterKeys, search, hasActiveFilters]);
 
   const entryOrder = useMemo(
     () => new Map(entries.map((entry, index) => [entry.id, index])),
@@ -255,18 +265,44 @@ const ReportDrawer = ({
     bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const toggleFilter = (key) => {
+    setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const showAllFilters = () => {
+    setFilters((prev) => {
+      const next = { ...prev };
+      visibleFilterOptions.forEach(option => {
+        next[option.key] = false;
+      });
+      return next;
+    });
+  };
+
   if (!shouldRender) return null;
 
   const statCards = [
-    { key: 'orphanPages', label: 'Orphan pages' },
-    { key: 'inactivePages', label: 'Inactive pages' },
-    { key: 'errorPages', label: 'Error pages' },
-    { key: 'brokenLinks', label: 'Broken links' },
-    { key: 'files', label: 'Files / downloads' },
-    { key: 'subdomains', label: 'Subdomains' },
-    { key: 'missing', label: 'Missing' },
-    { key: 'duplicates', label: 'Duplicate' },
-  ].filter(segment => stats[segment.key] > 0);
+    { key: 'orphanPages' },
+    { key: 'inactivePages' },
+    { key: 'errorPages' },
+    { key: 'brokenLinks' },
+    { key: 'files' },
+    { key: 'subdomains' },
+    { key: 'missing' },
+    { key: 'duplicates' },
+    { key: 'authenticatedPages' },
+  ]
+    .map(segment => {
+      const option = typeOptions.find(item => item.key === segment.key);
+      const meta = REPORT_FILTER_META[segment.key] || {};
+      return {
+        ...segment,
+        filterLabel: option?.label || meta.label || segment.key,
+        label: meta.label || option?.label || segment.key,
+        className: meta.className || 'report-filter-chip--info',
+      };
+    })
+    .filter(segment => stats[segment.key] > 0 && visibleFilterOptions.some(option => option.key === segment.key));
 
   return (
     <aside
@@ -306,18 +342,6 @@ const ReportDrawer = ({
         </div>
       </header>
 
-      <SegmentedControl
-        className="report-tabs"
-        variant="tabs"
-        size="sm"
-        fullWidth
-        ariaLabel="Report views"
-        value={activeTab}
-        onChange={setActiveTab}
-        options={REPORT_TABS}
-        optionRole="tab"
-      />
-
       <div
         className="report-drawer-body"
         ref={bodyRef}
@@ -331,6 +355,17 @@ const ReportDrawer = ({
           e.nativeEvent?.stopImmediatePropagation?.();
         }}
       >
+        <SegmentedControl
+          className="report-tabs"
+          variant="tabs"
+          size="sm"
+          fullWidth
+          ariaLabel="Report views"
+          value={activeTab}
+          onChange={setActiveTab}
+          options={REPORT_TABS}
+          optionRole="tab"
+        />
         {activeTab === 'report' ? (
           <>
         {scanCollapseReason && (
@@ -358,34 +393,44 @@ const ReportDrawer = ({
           </div>
         )}
         <section className="report-summary">
-          <div className="report-total-card">
+          <button
+            type="button"
+            className={`report-total-card ${!hasActiveFilters ? 'is-selected' : ''}`}
+            onClick={showAllFilters}
+            disabled={!hasActiveFilters}
+            aria-pressed={!hasActiveFilters}
+          >
             <div className="report-total-value">{stats.total}</div>
             <div className="report-total-label">Pages on map</div>
-          </div>
+          </button>
           <div className="report-stat-cards">
-            {statCards.map((segment, index) => (
-              <div
+            {statCards.map((segment) => (
+              <button
+                type="button"
                 key={segment.key}
-                className="report-stat"
-                data-bar-index={index + 1}
+                className={`report-stat ${segment.className} ${filters[segment.key] ? 'is-selected' : ''}`}
+                onClick={() => toggleFilter(segment.key)}
+                aria-pressed={Boolean(filters[segment.key])}
+                aria-label={`Filter by ${segment.filterLabel}`}
               >
                 <div className="report-stat-label">{segment.label}</div>
                 <div className="report-stat-value">{stats[segment.key]}</div>
-              </div>
+              </button>
             ))}
           </div>
         </section>
 
         <div className="report-divider" />
 
-        <section className="report-filters report-filters-sticky">
-          <div className="report-filter-row">
+        <section className="report-filters">
+          <div className="report-filter-row report-filters-sticky">
             <button
               type="button"
-              className="report-filter-toggle"
+              className={`report-filter-toggle ${hasActiveFilters ? 'has-active-filters' : ''}`}
               onClick={() => setShowFilters((prev) => !prev)}
             >
               <Filter size={16} />
+              {hasActiveFilters && <span className="report-filter-active-dot" aria-hidden="true" />}
               Filter by
               {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
@@ -406,12 +451,9 @@ const ReportDrawer = ({
                 <div key={option.key} className="report-filter-item">
                   <CheckboxField
                     checked={filters[option.key] || false}
-                    onChange={() => {
-                      setFilters((prev) => ({ ...prev, [option.key]: !prev[option.key] }));
-                    }}
+                    onChange={() => toggleFilter(option.key)}
                     label={option.label}
                   />
-                  <span className="report-filter-count">{filterCounts[option.key] || 0}</span>
                 </div>
               ))}
             </div>

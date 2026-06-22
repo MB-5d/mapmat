@@ -97,4 +97,25 @@ describe('ExportModal', () => {
 
     expect(onExportSiteIndex.mock.calls.map(([format]) => format)).toEqual(['doc', 'txt', 'html', 'md']);
   });
+
+  test('disables Image export with a size-limit notice', () => {
+    const onExportPng = jest.fn();
+    renderModal({
+      onExportPng,
+      imageExportDisabled: true,
+      imageExportDisabledReason: 'Image export is unavailable for maps this large. Use PDF for full-size export.',
+    });
+
+    const imageButton = Array.from(container.querySelectorAll('button.export-btn'))
+      .find((button) => button.textContent.includes('Image'));
+
+    expect(imageButton.disabled).toBe(true);
+    expect(container.textContent).toContain('Image export is unavailable for maps this large. Use PDF for full-size export.');
+
+    act(() => {
+      imageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onExportPng).not.toHaveBeenCalled();
+  });
 });

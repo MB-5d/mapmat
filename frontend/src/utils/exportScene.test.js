@@ -3,9 +3,9 @@ import {
   buildExportInsights,
   buildExportScene,
   drawExportSceneToPdf,
+  getPngExportLimitReason,
   formatShareUrlForExport,
   getPngExportPixelRatio,
-  getPngExportTilePlan,
   getPdfSceneScale,
   registerExportPdfFonts,
   renderExportSvg,
@@ -138,23 +138,17 @@ describe('export scene helpers', () => {
     expect(Math.ceil(50000 * ratio) * Math.ceil(12000 * ratio)).toBeLessThanOrEqual(80000000);
   });
 
-  test('getPngExportTilePlan keeps high resolution for oversized scenes by tiling', () => {
-    const plan = getPngExportTilePlan({
+  test('getPngExportLimitReason blocks oversized single-image exports instead of tiling', () => {
+    const reason = getPngExportLimitReason({
       width: 50000,
       height: 12000,
     }, {
       pixelRatio: 4,
       maxDimension: 32767,
       maxPixels: 160000000,
-      maxTileDimension: 8000,
-      maxTilePixels: 64000000,
     });
 
-    expect(plan.mode).toBe('tiles');
-    expect(plan.pixelRatio).toBe(4);
-    expect(plan.tileCount).toBeGreaterThan(1);
-    expect(plan.width).toBe(200000);
-    expect(plan.height).toBe(48000);
+    expect(reason).toBe('Image export is unavailable for maps this large. Use PDF for full-size export.');
   });
 
   test('relationship connectors use canonical palette keys and avoid reserved tree endpoints', () => {

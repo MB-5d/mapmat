@@ -210,10 +210,12 @@ import {
 import {
   buildExportScene,
   drawExportSceneToPdf,
+  getPngExportLimitReason,
   getPdfSceneScale,
   loadExportThumbnailDataUrls,
+  PNG_EXPORT_PIXEL_RATIO,
   registerExportPdfFonts,
-  renderExportSceneToPngTiles,
+  renderExportSceneToPngBlob,
 } from './utils/exportScene';
 
 const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
@@ -864,11 +866,7 @@ const createZipPackageBlob = (files) => {
 
   files.forEach(({ path, content }) => {
     const nameBytes = encoder.encode(path);
-    const dataBytes = typeof content === 'string'
-      ? encoder.encode(content)
-      : content instanceof Uint8Array
-        ? content
-        : new Uint8Array(content);
+    const dataBytes = encoder.encode(content);
     const crc = getZipCrc32(dataBytes);
     const localOffset = offset;
     const commonHeader = [
@@ -13401,10 +13399,35 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!canCreateShareLinksForCurrentMap()) return;
 
     try {
-      showToast('Generating PNG...', 'info', true);
-      const shareUrl = await createShareLinkUrl(sharePermission);
       const exportTitle = getCurrentExportTitle();
       const generatedAt = new Date();
+      const baseScene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
+      });
+      if (!baseScene || !baseScene.nodes.length) {
+        showToast('No content to download', 'warning');
+        return;
+      }
+      const pngLimitReason = getPngExportLimitReason(baseScene, {
+        pixelRatio: PNG_EXPORT_PIXEL_RATIO,
+      });
+      if (pngLimitReason) {
+        showToast(pngLimitReason, 'warning');
+        return;
+      }
+
+      showToast('Generating PNG...', 'info', true);
+      const shareUrl = await createShareLinkUrl(sharePermission);
       const scene = buildExportScene({
         root,
         orphans,
@@ -13419,61 +13442,22 @@ export default function App({ currentRoute, navigateToRoute }) {
         reportTypeOptions: REPORT_TYPE_OPTIONS,
         generatedAt,
       });
-      if (!scene || !scene.nodes.length) {
-        showToast('No content to download', 'warning');
-        return;
-      }
-
       const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
-      const pngExport = await renderExportSceneToPngTiles(scene, thumbnailDataUrls, {
-        pixelRatio: 4,
+      const pngExport = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
+        pixelRatio: PNG_EXPORT_PIXEL_RATIO,
       });
       const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
-      if (pngExport.mode === 'tiles') {
-        const tileFiles = await Promise.all(pngExport.tiles.map(async (tile) => ({
-          path: `tiles/${filenameBase}_row-${String(tile.row + 1).padStart(2, '0')}_col-${String(tile.column + 1).padStart(2, '0')}.png`,
-          content: new Uint8Array(await tile.blob.arrayBuffer()),
-        })));
-        const manifest = {
-          title: exportTitle,
-          width: pngExport.width,
-          height: pngExport.height,
-          pixelRatio: pngExport.pixelRatio,
-          rows: pngExport.rows,
-          columns: pngExport.columns,
-          tiles: pngExport.tiles.map(({ row, column, x, y, width, height }) => ({
-            row: row + 1,
-            column: column + 1,
-            x,
-            y,
-            width,
-            height,
-          })),
-        };
-        const zipBlob = createZipPackageBlob([
-          {
-            path: 'manifest.json',
-            content: JSON.stringify(manifest, null, 2),
-          },
-          ...tileFiles,
-        ]);
-        downloadBlob(`${filenameBase}_png-tiles.zip`, zipBlob);
-      } else {
-        downloadBlob(`${filenameBase}.png`, pngExport.tiles[0].blob);
-      }
+      downloadBlob(`${filenameBase}.png`, pngExport.blob);
 
       recordExportUsage('export_png', {
         format: 'png',
         width: pngExport.width,
         height: pngExport.height,
-        bytes: pngExport.tiles.reduce((total, tile) => total + tile.blob.size, 0),
+        bytes: pngExport.blob.size,
         pixelRatio: pngExport.pixelRatio,
-        tiles: pngExport.tileCount,
         thumbnails: thumbnailDataUrls.size,
       });
-      showToast(pngExport.mode === 'tiles'
-        ? `PNG downloaded as ${pngExport.tileCount} high-res tiles`
-        : 'PNG downloaded successfully', 'success');
+      showToast('PNG downloaded successfully', 'success');
     } catch (e) {
       if (handleShareLinkError(e)) return;
       console.error('PNG export error:', e);
@@ -13481,6 +13465,39 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(`PNG download failed: ${errorMsg}`, 'error');
     }
   };
+
+  const pngExportUnavailableReason = useMemo(() => {
+    if (!showExportModal || !hasMap || !root) return '';
+    const scene = buildExportScene({
+      root,
+      orphans,
+      colors,
+      connectionColors,
+      connections,
+      showThumbnails,
+      orientation: mapOrientation,
+      title: currentMap?.name || mapName || root?.title || getHostname(root?.url) || 'Untitled Map',
+      reportStats,
+      reportTypeOptions: REPORT_TYPE_OPTIONS,
+    });
+    if (!scene || !scene.nodes.length) return '';
+    return getPngExportLimitReason(scene, {
+      pixelRatio: PNG_EXPORT_PIXEL_RATIO,
+    });
+  }, [
+    showExportModal,
+    hasMap,
+    root,
+    orphans,
+    colors,
+    connectionColors,
+    connections,
+    showThumbnails,
+    mapOrientation,
+    currentMap?.name,
+    mapName,
+    reportStats,
+  ]);
 
   const updateCommentsForNode = (nodeId, updater) => {
     let updated = false;
@@ -18308,7 +18325,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         show={showExportModal}
         onClose={() => setShowExportModal(false)}
         onExportAiSiteBrief={() => { exportAiSiteBrief(); setShowExportModal(false); }}
-        onExportPng={() => { setShowExportModal(false); exportPng(); }}
+        imageExportDisabled={Boolean(pngExportUnavailableReason)}
+        imageExportDisabledReason={pngExportUnavailableReason}
+        onExportPng={() => {
+          if (pngExportUnavailableReason) return;
+          setShowExportModal(false);
+          exportPng();
+        }}
         onExportPdf={() => { setShowExportModal(false); exportPdf(); }}
         onExportCsv={() => { exportCsv(); setShowExportModal(false); }}
         onExportJson={() => { exportJson(); setShowExportModal(false); }}

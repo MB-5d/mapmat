@@ -36,10 +36,10 @@ const NODE_BADGE_PAD_X = 12;
 const CONNECTION_STROKE_WIDTH = 3;
 const TREE_CONNECTOR_STROKE_WIDTH = 1.25;
 const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
+export const PNG_EXPORT_PIXEL_RATIO = 4;
+export const PNG_EXPORT_UNAVAILABLE_REASON = 'Image export is unavailable for maps this large. Use PDF for full-size export.';
 const MAX_PNG_DIMENSION = 32767;
 const MAX_PNG_PIXELS = 160000000;
-const PNG_TILE_MAX_DIMENSION = 8000;
-const PNG_TILE_MAX_PIXELS = 64000000;
 const PDF_MAX_PAGE_SIDE = 14400;
 const EXPORT_PDF_FONT_FAMILY = 'Sora';
 const EXPORT_PDF_FONT_FILE = 'Sora-Variable.ttf';
@@ -800,7 +800,7 @@ const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
   }
   if (scene.showThumbnails) {
     const dividerY = y + NODE_THUMB_TOP + NODE_THUMB_HEIGHT;
-    parts.push(`<line x1="${x}" y1="${dividerY}" x2="${x + item.w}" y2="${dividerY}" stroke="${DESIGN_COLORS.border}" stroke-width="1"/>`);
+    parts.push(`<rect x="${x}" y="${dividerY}" width="${item.w}" height="1" fill="${DESIGN_COLORS.border}"/>`);
   }
 
   parts.push('</g>');
@@ -1062,7 +1062,7 @@ const drawPdfImageCover = (pdf, imageDataUrl, x, y, w, h) => {
   const rect = getPdfImageCoverRect(pdf, imageDataUrl, x, y, w, h);
   if (typeof pdf.saveGraphicsState === 'function' && typeof pdf.clip === 'function') {
     pdf.saveGraphicsState();
-    pdf.rect(x, y, w, h);
+    pdf.rect(x, y, w, h, null);
     pdf.clip();
     pdf.discardPath?.();
     pdf.addImage(imageDataUrl, 'PNG', rect.x, rect.y, rect.w, rect.h);
@@ -1140,7 +1140,7 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   const hasCardClip = typeof pdf.saveGraphicsState === 'function' && typeof pdf.clip === 'function';
   if (hasCardClip) {
     pdf.saveGraphicsState();
-    pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale);
+    pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale, null);
     pdf.clip();
     pdf.discardPath?.();
   }
@@ -1165,10 +1165,8 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
       setPdfFill(pdf, DESIGN_COLORS.surfaceMuted);
       pdf.rect(thumbX, thumbY, thumbW, thumbH, 'F');
     }
-    if (pdf.setLineDashPattern) pdf.setLineDashPattern([], 0);
-    setPdfStroke(pdf, DESIGN_COLORS.border);
-    pdf.setLineWidth(1 * scale);
-    pdf.line(thumbX, thumbY + thumbH, thumbX + thumbW, thumbY + thumbH);
+    setPdfFill(pdf, DESIGN_COLORS.border);
+    pdf.rect(thumbX, thumbY + thumbH, thumbW, Math.max(0.5, 1 * scale), 'F');
   }
 
   if (hasCardClip) {
@@ -1231,7 +1229,7 @@ export const drawExportSceneToPdf = (pdf, scene, thumbnailDataUrls = new Map(), 
 };
 
 export const getPngExportPixelRatio = (scene, options = {}) => {
-  const requestedPixelRatio = Number(options.pixelRatio || 3);
+  const requestedPixelRatio = Number(options.pixelRatio || PNG_EXPORT_PIXEL_RATIO);
   const maxDimension = Number(options.maxDimension || MAX_PNG_DIMENSION);
   const maxPixels = Number(options.maxPixels || MAX_PNG_PIXELS);
   const widthLimit = maxDimension / Math.max(scene?.width || 0, 1);
@@ -1240,47 +1238,26 @@ export const getPngExportPixelRatio = (scene, options = {}) => {
   return Math.min(requestedPixelRatio, widthLimit, heightLimit, areaLimit);
 };
 
-export const getPngExportTilePlan = (scene, options = {}) => {
-  const pixelRatio = Math.max(1, Number(options.pixelRatio || 3));
+export const getPngExportDimensions = (scene, options = {}) => {
+  const pixelRatio = Math.max(1, Number(options.pixelRatio || PNG_EXPORT_PIXEL_RATIO));
+  const width = Math.ceil(Math.max(scene?.width || 0, 1) * pixelRatio);
+  const height = Math.ceil(Math.max(scene?.height || 0, 1) * pixelRatio);
+  return {
+    width,
+    height,
+    pixels: width * height,
+    pixelRatio,
+  };
+};
+
+export const getPngExportLimitReason = (scene, options = {}) => {
+  const { width, height, pixels } = getPngExportDimensions(scene, options);
   const maxDimension = Number(options.maxDimension || MAX_PNG_DIMENSION);
   const maxPixels = Number(options.maxPixels || MAX_PNG_PIXELS);
-  const maxTileDimension = Number(options.maxTileDimension || PNG_TILE_MAX_DIMENSION);
-  const maxTilePixels = Number(options.maxTilePixels || PNG_TILE_MAX_PIXELS);
-  const width = Math.max(scene?.width || 0, 1);
-  const height = Math.max(scene?.height || 0, 1);
-  const fullWidth = Math.ceil(width * pixelRatio);
-  const fullHeight = Math.ceil(height * pixelRatio);
-  const fullPixels = fullWidth * fullHeight;
-
-  if (fullWidth <= maxDimension && fullHeight <= maxDimension && fullPixels <= maxPixels) {
-    return {
-      mode: 'single',
-      pixelRatio,
-      columns: 1,
-      rows: 1,
-      tileCount: 1,
-      width: fullWidth,
-      height: fullHeight,
-    };
+  if (width > maxDimension || height > maxDimension || pixels > maxPixels) {
+    return PNG_EXPORT_UNAVAILABLE_REASON;
   }
-
-  const maxTileSide = Math.max(1, Math.floor(Math.min(maxTileDimension, Math.sqrt(maxTilePixels))));
-  const tileWidth = Math.max(1, Math.floor(maxTileSide / pixelRatio));
-  const tileHeight = Math.max(1, Math.floor(maxTileSide / pixelRatio));
-  const columns = Math.ceil(width / tileWidth);
-  const rows = Math.ceil(height / tileHeight);
-
-  return {
-    mode: 'tiles',
-    pixelRatio,
-    columns,
-    rows,
-    tileCount: columns * rows,
-    tileWidth,
-    tileHeight,
-    width: fullWidth,
-    height: fullHeight,
-  };
+  return '';
 };
 
 const loadExportSvgImage = (scene, thumbnailDataUrls = new Map()) => {
@@ -1329,52 +1306,6 @@ export const renderExportSceneToPngBlob = async (
       height: canvas.height,
       pixelRatio: effectivePixelRatio,
     };
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
-};
-
-export const renderExportSceneToPngTiles = async (
-  scene,
-  thumbnailDataUrls = new Map(),
-  options = {},
-) => {
-  const plan = getPngExportTilePlan(scene, options);
-  if (plan.mode === 'single') {
-    const single = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
-      ...options,
-      pixelRatio: plan.pixelRatio,
-    });
-    return { ...plan, tiles: [{ column: 0, row: 0, blob: single.blob, width: single.width, height: single.height }] };
-  }
-
-  const { image, svgUrl } = await loadExportSvgImage(scene, thumbnailDataUrls);
-  try {
-    const tiles = [];
-    for (let row = 0; row < plan.rows; row += 1) {
-      for (let column = 0; column < plan.columns; column += 1) {
-        const sx = column * plan.tileWidth;
-        const sy = row * plan.tileHeight;
-        const sw = Math.min(plan.tileWidth, scene.width - sx);
-        const sh = Math.min(plan.tileHeight, scene.height - sy);
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.ceil(sw * plan.pixelRatio);
-        canvas.height = Math.ceil(sh * plan.pixelRatio);
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        tiles.push({
-          column,
-          row,
-          x: sx,
-          y: sy,
-          width: canvas.width,
-          height: canvas.height,
-          blob: await canvasToPngBlob(canvas),
-        });
-      }
-    }
-    return { ...plan, tiles };
   } finally {
     URL.revokeObjectURL(svgUrl);
   }
