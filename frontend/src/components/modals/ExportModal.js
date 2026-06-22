@@ -29,7 +29,8 @@ const ExportModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Download"
+      title="Download map"
+      subtitle="Save your map in any format you need"
       scrollable
       className="export-modal"
     >

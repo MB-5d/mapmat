@@ -48,6 +48,9 @@ describe('ExportModal', () => {
   test('shows export options in the requested order including XML', () => {
     renderModal();
 
+    expect(container.querySelector('.modal-header h3')?.textContent).toBe('Download map');
+    expect(container.querySelector('.modal-subtitle')?.textContent).toBe('Save your map in any format you need');
+
     const optionTitles = Array.from(container.querySelectorAll('.export-btn .ui-option-card__title'))
       .map((node) => node.textContent.trim());
 
