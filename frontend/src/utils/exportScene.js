@@ -38,6 +38,7 @@ const TREE_CONNECTOR_STROKE_WIDTH = 1.25;
 const NODE_CONNECTOR_MASK_PADDING = 8;
 const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
 const MAX_PNG_DIMENSION = 16000;
+const MAX_PNG_PIXELS = 80000000;
 const PDF_MAX_PAGE_SIDE = 14400;
 const EXPORT_PDF_FONT_FAMILY = 'Sora';
 const EXPORT_PDF_FONT_FILE = 'Sora-Variable.ttf';
@@ -965,14 +966,16 @@ const drawSvgPathPdf = (pdf, pathData, x, y, scaleX, scaleY, color) => {
   const commands = transformPdfPathCommands(parseSimpleSvgPath(pathData), x, y, scaleX, scaleY);
   if (!commands.length) return;
   setPdfFill(pdf, color);
-  pdf.path(commands, 'F');
+  pdf.path(commands);
+  pdf.fill();
 };
 
 const drawAbsoluteSvgPathPdf = (pdf, pathData, color) => {
   const commands = parseSimpleSvgPath(pathData);
   if (!commands.length) return;
   setPdfFill(pdf, color);
-  pdf.path(commands, 'F');
+  pdf.path(commands);
+  pdf.fill();
 };
 
 const drawVellicLogoPdf = (pdf, x, y, width) => {
@@ -1274,15 +1277,22 @@ export const drawExportSceneToPdf = (pdf, scene, thumbnailDataUrls = new Map(), 
   scene.nodes.forEach((node) => drawNodePdf(pdf, scene, node, thumbnailDataUrls, scale));
 };
 
+export const getPngExportPixelRatio = (scene, options = {}) => {
+  const requestedPixelRatio = Number(options.pixelRatio || 3);
+  const maxDimension = Number(options.maxDimension || MAX_PNG_DIMENSION);
+  const maxPixels = Number(options.maxPixels || MAX_PNG_PIXELS);
+  const widthLimit = maxDimension / Math.max(scene?.width || 0, 1);
+  const heightLimit = maxDimension / Math.max(scene?.height || 0, 1);
+  const areaLimit = Math.sqrt(maxPixels / Math.max((scene?.width || 0) * (scene?.height || 0), 1));
+  return Math.min(requestedPixelRatio, widthLimit, heightLimit, areaLimit);
+};
+
 export const renderExportSceneToPngBlob = async (
   scene,
   thumbnailDataUrls = new Map(),
   options = {},
 ) => {
-  const requestedPixelRatio = Number(options.pixelRatio || 3);
-  const maxDimension = Number(options.maxDimension || MAX_PNG_DIMENSION);
-  const ratioLimit = maxDimension / Math.max(scene.width, scene.height, 1);
-  const effectivePixelRatio = Math.max(1, Math.min(requestedPixelRatio, ratioLimit));
+  const effectivePixelRatio = getPngExportPixelRatio(scene, options);
   const svg = renderExportSvg(scene, thumbnailDataUrls);
   const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
   const svgUrl = URL.createObjectURL(svgBlob);

@@ -4,6 +4,7 @@ import {
   buildExportScene,
   drawExportSceneToPdf,
   formatShareUrlForExport,
+  getPngExportPixelRatio,
   getPdfSceneScale,
   registerExportPdfFonts,
   renderExportSvg,
@@ -118,6 +119,21 @@ describe('export scene helpers', () => {
     expect(formatShareUrlForExport(
       'https://staging.vellic.io/share/ab42x9?access=view&orientation=vertical',
     )).toBe('staging.vellic.io/share/ab42x9');
+  });
+
+  test('getPngExportPixelRatio scales oversized scenes below one to fit browser limits', () => {
+    const ratio = getPngExportPixelRatio({
+      width: 50000,
+      height: 12000,
+    }, {
+      pixelRatio: 4,
+      maxDimension: 16000,
+      maxPixels: 80000000,
+    });
+
+    expect(ratio).toBeLessThan(1);
+    expect(Math.ceil(50000 * ratio)).toBeLessThanOrEqual(16000);
+    expect(Math.ceil(50000 * ratio) * Math.ceil(12000 * ratio)).toBeLessThanOrEqual(80000000);
   });
 
   test('relationship connectors use canonical palette keys and avoid reserved tree endpoints', () => {

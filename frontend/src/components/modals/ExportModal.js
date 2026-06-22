@@ -1,5 +1,5 @@
 import React from 'react';
-import { File, FileCode, FileImage, FileJson, FileSpreadsheet, FileText, FileType, List, Sparkles } from 'lucide-react';
+import { File, FileCode, FileImage, FileJson, FileSpreadsheet, FileText, FileType, ListTree, Sparkles } from 'lucide-react';
 
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
@@ -79,7 +79,7 @@ const ExportModal = ({
         <OptionCard
           as="div"
           className="export-btn export-btn-index"
-          icon={<List size={24} />}
+          icon={<ListTree size={24} />}
           title="Index"
           description="Formatted document of page list with links"
         >

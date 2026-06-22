@@ -10771,6 +10771,11 @@ body {
   gap: 16px;
 }
 
+.export-options .ui-option-card {
+  align-items: flex-start;
+  padding: calc(var(--space-lg) - 8px);
+}
+
 .export-btn-index {
   cursor: default;
 }
@@ -10787,8 +10792,12 @@ body {
 .export-index-format-actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
+  flex-wrap: nowrap;
+  gap: 8px 12px;
+}
+
+.export-index-format-actions .ui-btn {
+  white-space: nowrap;
 }
 
 /* Import Modal */
