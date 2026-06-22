@@ -5902,6 +5902,18 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const applySharedMapPayload = useCallback((share) => {
     if (!share?.root) return;
+    const routeAccess = currentRoute?.surface === ROUTE_SURFACES.SHARE
+      && Object.values(ACCESS_LEVELS).includes(currentRoute?.accessLevel)
+      ? currentRoute.accessLevel
+      : null;
+    const payloadAccess = Object.values(ACCESS_LEVELS).includes(share.accessLevel)
+      ? share.accessLevel
+      : null;
+    const nextAccess = routeAccess || payloadAccess || ACCESS_LEVELS.VIEW;
+    const routeOrientation = currentRoute?.surface === ROUTE_SURFACES.SHARE
+      ? currentRoute?.orientation
+      : null;
+    const payloadOrientation = share.orientation ? normalizeMapOrientation(share.orientation) : null;
     resetScanLayers();
     setRoot(share.root);
     setOrphans(normalizeOrphans(share.orphans));
@@ -5913,12 +5925,24 @@ export default function App({ currentRoute, navigateToRoute }) {
     setCurrentMap(null);
     setMapName(share.name || share.root.title || '');
     setHasCreatedShareLink(true);
+    setAccessLevel(nextAccess);
+    setSharePermission(nextAccess);
+    setCurrentShareAccess(nextAccess);
+    if (routeOrientation || payloadOrientation) {
+      setMapOrientation(routeOrientation || payloadOrientation);
+    }
     setIsImportedMap(false);
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
     pendingInitialCenterRef.current = true;
     scheduleResetViewRef.current?.();
-  }, [applyTransform, resetScanLayers]);
+  }, [
+    applyTransform,
+    currentRoute?.accessLevel,
+    currentRoute?.orientation,
+    currentRoute?.surface,
+    resetScanLayers,
+  ]);
 
   // Check auth and load data on mount
   React.useEffect(() => {
@@ -5964,21 +5988,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     api.getShare(currentRoute.shareId)
       .then(({ share }) => {
         if (cancelled || !share?.root) return;
-        if (share?.map_id) {
-          clearLoadedMapViewRef.current?.();
-          navigateToRoute(createMapRoute(share.map_id), { replace: true });
-          return;
-        }
         loadedShareRouteKeyRef.current = shareRouteKey;
         applySharedMapPayload(share);
       })
       .catch((error) => {
         if (cancelled) return;
-        if (error?.code === 'SHARE_ACCESS_REQUIRED' && error?.payload?.mapId) {
-          clearLoadedMapViewRef.current?.();
-          navigateToRoute(createMapRoute(error.payload.mapId), { replace: true });
-          return;
-        }
         const sharedData = localStorage.getItem(currentRoute.shareId);
         if (sharedData) {
           try {
@@ -6006,7 +6020,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     currentRoute?.shareId,
     currentRoute?.search,
     currentRoute?.surface,
-    navigateToRoute,
     showToast,
   ]);
 
@@ -12909,11 +12922,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       connections,
       colors,
       connectionColors,
-      expires_in_days: 30,
+      access_level: permission,
+      orientation: mapOrientation,
     });
 
     return new URL(
-      buildRouteUrl(createShareRoute(share.id, permission, mapOrientation)),
+      buildRouteUrl(createShareRoute(share.id)),
       window.location.origin
     ).toString();
   }, [

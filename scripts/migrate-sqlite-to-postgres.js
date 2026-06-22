@@ -104,8 +104,8 @@ const TABLES = [
     name: 'shares',
     conflictKey: 'id',
     columns: [
-      'id', 'map_id', 'user_id', 'root_data', 'orphans_data', 'connections_data', 'colors',
-      'connection_colors', 'created_at', 'expires_at', 'view_count',
+      'id', 'map_id', 'project_id', 'user_id', 'root_data', 'orphans_data', 'connections_data', 'colors',
+      'connection_colors', 'access_level', 'orientation', 'created_at', 'expires_at', 'view_count',
     ],
   },
   {
@@ -215,12 +215,15 @@ CREATE TABLE IF NOT EXISTS pages (
 CREATE TABLE IF NOT EXISTS shares (
   id TEXT PRIMARY KEY,
   map_id TEXT REFERENCES maps(id) ON DELETE SET NULL,
+  project_id TEXT,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   root_data TEXT NOT NULL,
   orphans_data TEXT,
   connections_data TEXT,
   colors TEXT,
   connection_colors TEXT,
+  access_level TEXT,
+  orientation TEXT,
   created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
   expires_at TIMESTAMPTZ,
   view_count INTEGER DEFAULT 0

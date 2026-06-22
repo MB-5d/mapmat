@@ -3613,6 +3613,18 @@ router.delete('/history', requireAuth, async (req, res) => {
 const SHARE_ID_ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';
 const SHARE_ID_LENGTH = 6;
 const SHARE_ID_MAX_ATTEMPTS = 12;
+const SHARE_ACCESS_LEVELS = new Set(['view', 'comment', 'edit']);
+const SHARE_ORIENTATIONS = new Set(['vertical', 'horizontal']);
+
+function normalizeShareAccessLevel(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return SHARE_ACCESS_LEVELS.has(normalized) ? normalized : 'view';
+}
+
+function normalizeShareOrientation(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return SHARE_ORIENTATIONS.has(normalized) ? normalized : null;
+}
 
 function createCompactShareId() {
   let id = '';
@@ -3634,7 +3646,18 @@ async function createUniqueShareIdAsync() {
 // POST /api/shares - Create a share link
 router.post('/shares', requireAuth, async (req, res) => {
   try {
-    const { map_id, root, orphans, connections, colors, connectionColors, expires_in_days } = req.body;
+    const {
+      map_id,
+      root,
+      orphans,
+      connections,
+      colors,
+      connectionColors,
+      access_level,
+      accessLevel,
+      orientation,
+      expires_in_days,
+    } = req.body;
 
     if (!root) {
       return res.status(400).json({ error: 'Map data is required' });
@@ -3643,10 +3666,11 @@ router.post('/shares', requireAuth, async (req, res) => {
     const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.shareCreate);
     if (!entitlement) return;
 
+    let map = null;
     // If map_id provided, verify ownership
     if (map_id) {
       const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
-      const map = collaborationEnabled
+      map = collaborationEnabled
         ? await mapStore.getMapAccessibleToUserAsync(map_id, req.user.id)
         : await mapStore.getMapForUserAsync(map_id, req.user.id);
       if (!ensureResourceAction({
@@ -3659,35 +3683,58 @@ router.post('/shares', requireAuth, async (req, res) => {
       })) return;
     }
 
-    const shareId = await createUniqueShareIdAsync();
     const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
     const expiresAt = expires_in_days
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
-
-    await shareStore.createShareAsync({
-      id: shareId,
-      mapId: map_id || null,
-      userId: req.user.id,
+    const normalizedAccessLevel = normalizeShareAccessLevel(access_level || accessLevel);
+    const normalizedOrientation = normalizeShareOrientation(orientation);
+    const sharePayload = {
       rootData: JSON.stringify(sanitizedTree.root),
       orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
       connectionsData: connections ? JSON.stringify(connections) : null,
       colors: colors ? JSON.stringify(colors) : null,
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      accessLevel: normalizedAccessLevel,
+      orientation: normalizedOrientation,
       expiresAt,
-    });
+    };
 
-    recordUsageEvent(req, 'share_created', 1, {
-      mapId: map_id || null,
-      shareId,
-      pages: countMapNodes(sanitizedTree.root, sanitizedTree.orphans),
-      expiresAt,
-    });
+    const reusableShare = map?.id
+      ? await shareStore.getFirstMapShareForUserAsync({
+        mapId: map.id,
+        projectId: map.project_id || null,
+        userId: req.user.id,
+      })
+      : null;
+    const shareId = reusableShare?.id || await createUniqueShareIdAsync();
+
+    if (reusableShare) {
+      await shareStore.updateShareSnapshotAsync(shareId, sharePayload);
+    } else {
+      await shareStore.createShareAsync({
+        id: shareId,
+        mapId: map_id || null,
+        projectId: map?.project_id || null,
+        userId: req.user.id,
+        ...sharePayload,
+      });
+
+      recordUsageEvent(req, 'share_created', 1, {
+        mapId: map_id || null,
+        shareId,
+        pages: countMapNodes(sanitizedTree.root, sanitizedTree.orphans),
+        expiresAt,
+      });
+    }
 
     res.json({
       share: {
         id: shareId,
         expiresAt,
+        accessLevel: normalizedAccessLevel,
+        orientation: normalizedOrientation,
+        reused: !!reusableShare,
       },
     });
   } catch (error) {
@@ -3712,22 +3759,13 @@ router.get('/shares/:id', async (req, res) => {
       return res.status(410).json({ error: 'This share link has expired' });
     }
 
-    if (share.map_id) {
-      const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
-      if (collaborationEnabled) {
-        const actorUserId = req.user?.id || null;
-        const { map, role } = await resolveMapPermissionContextAsync({
-          mapId: share.map_id,
-          actorUserId,
+    if (share.map_id && share.project_id) {
+      const map = await mapStore.getMapByIdAsync(share.map_id);
+      if (!map || (map.project_id || null) !== share.project_id) {
+        return res.status(410).json({
+          error: 'This map has moved. Ask the map owner for the new share link.',
+          code: 'SHARE_MAP_MOVED',
         });
-
-        if (!map || !permissionPolicy.can(permissionPolicy.ACTIONS.MAP_READ, role)) {
-          return res.status(403).json({
-            error: 'This shared map now requires app access',
-            code: 'SHARE_ACCESS_REQUIRED',
-            mapId: share.map_id,
-          });
-        }
       }
     }
 
@@ -3742,6 +3780,8 @@ router.get('/shares/:id', async (req, res) => {
       share: {
         id: share.id,
         ...parseMapFields(share),
+        accessLevel: normalizeShareAccessLevel(share.access_level),
+        orientation: normalizeShareOrientation(share.orientation),
         sharedBy: share.shared_by_name,
         createdAt: share.created_at,
         viewCount: share.view_count + 1,

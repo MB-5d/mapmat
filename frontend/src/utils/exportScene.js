@@ -39,6 +39,7 @@ const PDF_MAX_PAGE_SIDE = 14400;
 const EXPORT_PDF_FONT_FAMILY = 'Sora';
 const EXPORT_PDF_FONT_FILE = 'Sora-Variable.ttf';
 const EXPORT_SVG_FONT_STACK = "'Sora', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const VELLIC_SITE_URL = 'https://vellic.io';
 
 const DESIGN_COLORS = {
   surface: '#ffffff',
@@ -670,7 +671,7 @@ const renderHeaderSvg = (scene) => {
   ];
 
   if (scene.header.shareUrl) {
-    parts.push(`<text x="${x}" y="${linkY}" fill="${DESIGN_COLORS.brand}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="13" font-weight="400">${escapeXml(scene.header.displayShareUrl || scene.header.shareUrl)}</text>`);
+    parts.push(`<text x="${x}" y="${linkY}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="13" font-weight="400">${escapeXml(scene.header.displayShareUrl || scene.header.shareUrl)}</text>`);
   }
 
   scene.header.insights.forEach((insight, index) => {
@@ -1068,6 +1069,9 @@ const drawHeaderPdf = (pdf, scene, scale) => {
   setPdfFill(pdf, DESIGN_COLORS.muted);
   pdf.text('Created with', createdX, 50 * scale);
   drawVellicLogoPdf(pdf, logoX, 28 * scale, logoWidth);
+  if (typeof pdf.link === 'function') {
+    pdf.link(logoX, 28 * scale, logoWidth, 34 * scale, { url: VELLIC_SITE_URL });
+  }
 
   if (scene.header.shareUrl) {
     setPdfFont(pdf, 'normal');
@@ -1102,8 +1106,18 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   const h = item.h * scale;
   const depthColor = normalizeHexColor(getDepthColor(scene.colors, item.depth), '#14B8A6');
   const inset = NODE_INSET * scale;
+  const connectorMask = Math.max(CONNECTION_STROKE_WIDTH, TREE_CONNECTOR_STROKE_WIDTH) * scale;
 
   setPdfFill(pdf, '#FFFFFF');
+  pdf.roundedRect(
+    x - connectorMask,
+    y - connectorMask,
+    w + connectorMask * 2,
+    h + connectorMask * 2,
+    NODE_RADIUS * scale + connectorMask,
+    NODE_RADIUS * scale + connectorMask,
+    'F',
+  );
   pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale, 'F');
 
   const hasCardClip = typeof pdf.saveGraphicsState === 'function' && typeof pdf.clip === 'function';

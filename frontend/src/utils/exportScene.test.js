@@ -79,6 +79,7 @@ describe('export scene helpers', () => {
     expect(svg).not.toContain('stack-toggle');
     expect(svg).toContain('Created with');
     expect(svg).toContain(VELLIC_LOGO_MARK_PATH);
+    expect(svg).toMatch(/y="88" fill="#64748b"[^>]*>app\.vellic\.io\/share\/example<\/text>/);
   });
 
   test('renderExportSvg rounds level bars and centers badge labels', () => {
@@ -148,7 +149,9 @@ describe('export scene helpers', () => {
     });
 
     expect(() => drawExportSceneToPdf(pdf, scene, new Map(), scale)).not.toThrow();
-    expect(pdf.output()).not.toContain('/Subtype /Image');
+    const output = pdf.output();
+    expect(output).not.toContain('/Subtype /Image');
+    expect(output).toContain('https://vellic.io');
   });
 
   test('registerExportPdfFonts embeds Sora for vector PDF text', async () => {

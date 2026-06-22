@@ -154,10 +154,13 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS shares (
     id TEXT PRIMARY KEY,
     map_id TEXT,
+    project_id TEXT,
     user_id TEXT NOT NULL,
     root_data TEXT NOT NULL,
     colors TEXT,
     connection_colors TEXT,
+    access_level TEXT,
+    orientation TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     expires_at DATETIME,
     view_count INTEGER DEFAULT 0,
@@ -248,6 +251,9 @@ ensureColumn('map_versions', 'bookmarked_at', 'DATETIME');
 ensureColumn('shares', 'orphans_data', 'TEXT');
 ensureColumn('shares', 'connections_data', 'TEXT');
 ensureColumn('shares', 'connection_colors', 'TEXT');
+ensureColumn('shares', 'project_id', 'TEXT');
+ensureColumn('shares', 'access_level', 'TEXT');
+ensureColumn('shares', 'orientation', 'TEXT');
 ensureColumn('scan_history', 'orphans_data', 'TEXT');
 ensureColumn('scan_history', 'connections_data', 'TEXT');
 ensureColumn('scan_history', 'connection_colors', 'TEXT');
