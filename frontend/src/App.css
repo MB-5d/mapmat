@@ -5871,7 +5871,6 @@ body {
 }
 
 .report-drawer {
-  --report-filter-row-sticky-height: 44px;
   position: fixed;
   right: 0;
   top: 0;
@@ -5886,7 +5885,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--unit-12);
-  padding: var(--unit-16) var(--unit-20) var(--unit-20);
+  padding: var(--unit-16) var(--unit-20) 0;
   overflow: hidden;
   animation: reportSlideIn 0.2s ease-out;
   min-height: 0;
@@ -6125,6 +6124,13 @@ body {
   gap: var(--unit-10);
 }
 
+.report-filter-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
 .report-filter-toggle {
   display: inline-flex;
   align-items: center;
@@ -6155,6 +6161,19 @@ body {
   border-radius: 999px;
   background: var(--ui-color-primary);
   box-shadow: 0 0 0 2px var(--modal-bg);
+}
+
+.report-filter-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  min-width: 220px;
+  max-width: min(280px, calc(100vw - 48px));
+}
+
+.report-filter-menu-item {
+  width: 100%;
 }
 
 .report-filter-label {
@@ -6206,12 +6225,24 @@ body {
   border-radius: 12px;
   overflow: visible;
   min-height: 0;
+  margin-bottom: 0;
+}
+
+.report-table-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--modal-bg);
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.report-table-sticky .report-filter-row {
+  padding: 0 0 var(--unit-10);
+  background: var(--modal-bg);
 }
 
 .report-table-header {
-  position: sticky;
-  top: var(--report-filter-row-sticky-height);
-  z-index: 4;
   display: grid;
   grid-template-columns: 10px 64px 96px 1.4fr 60px 110px 24px;
   gap: 6px;
@@ -6224,6 +6255,7 @@ body {
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
   border-bottom: 1px solid var(--color-border);
+  border-top: 0;
 }
 
 .report-header-issues {

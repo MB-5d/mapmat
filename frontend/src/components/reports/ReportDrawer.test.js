@@ -33,7 +33,7 @@ describe('ReportDrawer', () => {
       twitter: { card: 'summary_large_image' },
       pageType: 'Standard',
       levelColor: '#818cf8',
-      thumbnailUrl: '',
+      thumbnailUrl: 'https://example.com/pricing.png',
     },
     {
       id: '2',
@@ -98,6 +98,7 @@ describe('ReportDrawer', () => {
         missing: 1,
       },
       typeOptions: [
+        { key: 'standard', label: 'Standard' },
         { key: 'duplicates', label: 'Duplicate' },
         { key: 'brokenLinks', label: 'Broken links' },
         { key: 'errorPages', label: 'Error pages' },
@@ -205,21 +206,45 @@ describe('ReportDrawer', () => {
       filterToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    const filterLabels = Array.from(container.querySelectorAll('.report-filter-item')).map((item) =>
+    const filterLabels = Array.from(container.querySelectorAll('.report-filter-menu-item')).map((item) =>
       item.textContent.trim()
     );
 
-    expect(filterLabels).toEqual(['Duplicate', 'Broken links', 'Error pages']);
-    expect(container.querySelector('.report-filter-count')).toBeNull();
+    expect(filterLabels).toEqual(['Duplicate', 'Broken links', 'Error pages', 'Has image']);
+    expect(filterLabels).not.toContain('Standard');
+    expect(container.querySelector('.report-filter-list')).toBeNull();
   });
 
-  test('keeps report controls sticky while tabs scroll with the drawer body', () => {
+  test('filters image-backed rows from the shared filter menu', () => {
     renderDrawer();
 
+    const filterToggle = container.querySelector('.report-filter-toggle');
+    act(() => {
+      filterToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const hasImageItem = Array.from(container.querySelectorAll('.report-filter-menu-item')).find((item) =>
+      item.textContent.includes('Has image')
+    );
+    act(() => {
+      hasImageItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(getVisibleTitles()).toEqual(['pricing']);
+    expect(hasImageItem.getAttribute('aria-checked')).toBe('true');
+    expect(container.querySelector('.report-filter-active-dot')).not.toBeNull();
+  });
+
+  test('shows fixed report title and keeps table controls sticky while tabs scroll with the drawer body', () => {
+    renderDrawer();
+
+    expect(container.querySelector('.report-drawer-title').textContent).toBe('Scan report & insights');
+    expect(container.querySelector('.report-drawer-subtitle').textContent).toBe('QA Report');
     expect(container.querySelector('.report-drawer-body .report-tabs')).not.toBeNull();
     expect(container.querySelector('.report-drawer > .report-tabs')).toBeNull();
-    expect(appCss).toMatch(/\.report-filters-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
-    expect(appCss).toMatch(/\.report-table-header \{[\s\S]*position: sticky;[\s\S]*top: var\(--report-filter-row-sticky-height\);/);
+    expect(appCss).toMatch(/\.report-table-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
+    const tableHeaderBlock = appCss.match(/\.report-table-header \{[^}]*\}/)?.[0] || '';
+    expect(tableHeaderBlock).not.toContain('position: sticky');
   });
 
   test('shows SEO metadata in expanded report details', () => {

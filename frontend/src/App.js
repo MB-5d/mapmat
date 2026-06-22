@@ -3941,8 +3941,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [currentMap?.id, root, isViewingHistoricalVersion, getVersionSnapshot, serializeVersionSnapshot, isLiveEditingModeActive, isCoeditingReadOnlyMode]);
 
   const reportTitle = useMemo(() => {
-    return root?.title || getHostname(root?.url) || 'Website';
-  }, [root]);
+    const title = currentMap?.name || mapName || 'Untitled Map';
+    return title.trim() || 'Untitled Map';
+  }, [currentMap?.name, mapName]);
 
   const otherPresenceSessions = useMemo(() => {
     const currentSessionId = presenceSessionIdRef.current;

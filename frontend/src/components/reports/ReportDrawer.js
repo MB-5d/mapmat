@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowUpToLine,
   ArrowUpDown,
+  Check,
   ChevronDown,
   ChevronUp,
   Download,
@@ -14,8 +15,8 @@ import {
 } from 'lucide-react';
 
 import Button from '../ui/Button';
-import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
+import { MenuItem, MenuPanel } from '../ui/Menu';
 import SearchInput from '../ui/SearchInput';
 import SegmentedControl from '../ui/SegmentedControl';
 import SelectInput from '../ui/SelectInput';
@@ -70,7 +71,6 @@ const ReportDrawer = ({
   onLocateUrl,
   onUpgrade,
   reportTitle,
-  reportTimestamp,
   scanMeta,
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'number', direction: 'asc' });
@@ -142,9 +142,31 @@ const ReportDrawer = ({
     return counts;
   }, [entries, typeOptions]);
 
-  const visibleFilterOptions = useMemo(
-    () => typeOptions.filter(option => filterCounts[option.key] > 0),
+  const typeFilterOptions = useMemo(
+    () => typeOptions
+      .filter(option => option.key !== 'standard' && filterCounts[option.key] > 0)
+      .map(option => ({
+        ...option,
+        matches: (entry) => entry.types.includes(option.key),
+      })),
     [typeOptions, filterCounts]
+  );
+
+  const extraFilterOptions = useMemo(() => {
+    const options = [];
+    if (entries.some(entry => Boolean(entry.thumbnailUrl))) {
+      options.push({
+        key: 'hasImage',
+        label: 'Has image',
+        matches: (entry) => Boolean(entry.thumbnailUrl),
+      });
+    }
+    return options;
+  }, [entries]);
+
+  const visibleFilterOptions = useMemo(
+    () => [...typeFilterOptions, ...extraFilterOptions],
+    [typeFilterOptions, extraFilterOptions]
   );
   const scanCollapseReason = scanMeta?.partialReason === 'scan_collapsed'
     ? (scanMeta?.scanDiagnostics?.collapseReason || 'Root-only scan returned after discovery signals were found')
@@ -161,10 +183,11 @@ const ReportDrawer = ({
 
   const filteredEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const activeFilterOptions = visibleFilterOptions.filter(option => filters[option.key]);
     return entries.filter(entry => {
       const matchesFilters = !hasActiveFilters
         ? true
-        : entry.types.some(type => activeFilterKeys.includes(type));
+        : activeFilterOptions.some(option => option.matches(entry));
       if (!matchesFilters) return false;
       if (!query) return true;
       return (
@@ -173,7 +196,7 @@ const ReportDrawer = ({
         || (entry.number || '').toLowerCase().includes(query)
       );
     });
-  }, [entries, activeFilterKeys, search, hasActiveFilters]);
+  }, [entries, filters, search, hasActiveFilters, visibleFilterOptions]);
 
   const entryOrder = useMemo(
     () => new Map(entries.map((entry, index) => [entry.id, index])),
@@ -253,9 +276,10 @@ const ReportDrawer = ({
     );
   };
 
-  const truncatedTitle = reportTitle.length > 56
-    ? `${reportTitle.slice(0, 56).trim()}…`
-    : reportTitle;
+  const mapTitle = reportTitle?.trim() || 'Untitled Map';
+  const truncatedMapTitle = mapTitle.length > 56
+    ? `${mapTitle.slice(0, 56).trim()}…`
+    : mapTitle;
 
   const handleBodyScroll = (event) => {
     setShowBackToTop(event.currentTarget.scrollTop > 240);
@@ -323,8 +347,8 @@ const ReportDrawer = ({
     >
       <header className="report-drawer-header">
         <div className="report-header-title">
-          <div className="report-drawer-title">Report — {truncatedTitle}</div>
-          <div className="report-drawer-subtitle">{reportTimestamp || '—'}</div>
+          <div className="report-drawer-title">Scan report &amp; insights</div>
+          <div className="report-drawer-subtitle" title={mapTitle}>{truncatedMapTitle}</div>
         </div>
         <div className="report-header-actions">
           <Button className="report-open-link" variant="secondary" size="sm" onClick={onDownload}>
@@ -422,53 +446,62 @@ const ReportDrawer = ({
 
         <div className="report-divider" />
 
-        <section className="report-filters">
-          <div className="report-filter-row report-filters-sticky">
-            <button
-              type="button"
-              className={`report-filter-toggle ${hasActiveFilters ? 'has-active-filters' : ''}`}
-              onClick={() => setShowFilters((prev) => !prev)}
-            >
-              <Filter size={16} />
-              {hasActiveFilters && <span className="report-filter-active-dot" aria-hidden="true" />}
-              Filter by
-              {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-            <SearchInput
-              size="sm"
-              aria-label="Search report pages"
-              placeholder="Search by page name, number, or URL"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onClear={() => setSearch('')}
-              className="report-search"
-              inputClassName="report-search-input"
-            />
-          </div>
-          {showFilters && (
-            <div className="report-filter-list">
-              {visibleFilterOptions.map((option) => (
-                <div key={option.key} className="report-filter-item">
-                  <CheckboxField
-                    checked={filters[option.key] || false}
-                    onChange={() => toggleFilter(option.key)}
-                    label={option.label}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
         <section className="report-table">
-          <div className="report-table-header">
-            <div />
-            <div>{renderSortButton('number', 'Number')}</div>
-            <div>{renderSortButton('pageType', 'Page type')}</div>
-            <div>{renderSortButton('title', 'Page name')}</div>
-            <div>{renderSortButton('issues', 'Issues', 'report-header-issues')}</div>
-            <div>Show on map</div>
-            <div />
+          <div className="report-table-sticky">
+            <div className="report-filter-row">
+              <div className="report-filter-control">
+                <button
+                  type="button"
+                  className={`report-filter-toggle ${hasActiveFilters ? 'has-active-filters' : ''}`}
+                  onClick={() => setShowFilters((prev) => !prev)}
+                  aria-expanded={showFilters}
+                  aria-haspopup="menu"
+                >
+                  <Filter size={16} />
+                  {hasActiveFilters && <span className="report-filter-active-dot" aria-hidden="true" />}
+                  Filter by
+                  {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {showFilters && visibleFilterOptions.length > 0 && (
+                  <MenuPanel className="report-filter-menu" role="menu">
+                    {visibleFilterOptions.map((option) => {
+                      const selected = Boolean(filters[option.key]);
+                      return (
+                        <MenuItem
+                          key={option.key}
+                          className="report-filter-menu-item"
+                          role="menuitemcheckbox"
+                          aria-checked={selected}
+                          selected={selected}
+                          label={option.label}
+                          endSlot={selected ? <Check size={14} aria-hidden="true" /> : null}
+                          onClick={() => toggleFilter(option.key)}
+                        />
+                      );
+                    })}
+                  </MenuPanel>
+                )}
+              </div>
+              <SearchInput
+                size="sm"
+                aria-label="Search report pages"
+                placeholder="Search by page name, number, or URL"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onClear={() => setSearch('')}
+                className="report-search"
+                inputClassName="report-search-input"
+              />
+            </div>
+            <div className="report-table-header">
+              <div />
+              <div>{renderSortButton('number', 'Number')}</div>
+              <div>{renderSortButton('pageType', 'Page type')}</div>
+              <div>{renderSortButton('title', 'Page name')}</div>
+              <div>{renderSortButton('issues', 'Issues', 'report-header-issues')}</div>
+              <div>Show on map</div>
+              <div />
+            </div>
           </div>
           <div
             className="report-table-body"
