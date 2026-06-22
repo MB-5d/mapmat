@@ -4,6 +4,7 @@ import {
   FolderInput,
   FolderPlus,
   Network,
+  PlusSquare,
   Trash2,
 } from 'lucide-react';
 
@@ -64,8 +65,7 @@ const ProjectsModal = ({
     <AccountDrawer
       isOpen={show}
       onClose={onClose}
-      title="Projects"
-      subtitle="Projects & maps"
+      title="Maps & Projects"
       className="projects-drawer"
     >
       <div className="projects-modal">
@@ -94,6 +94,7 @@ const ProjectsModal = ({
                         contentClassName="project-folder-body"
                         open={isExpanded}
                         onOpenChange={() => onToggleProjectExpanded(project.id)}
+                        headerActionsPlacement="beforeMeta"
                         title={(
                           <span className="project-folder-main">
                             <span className="project-folder-icon" aria-hidden="true">
@@ -116,16 +117,6 @@ const ProjectsModal = ({
                             >
                               <EditIcon size={14} />
                             </button>
-                            <Button
-                              type="link"
-                              buttonStyle="brand"
-                              className="project-add-map-btn"
-                              size="sm"
-                              startIcon={<FolderPlus />}
-                              onClick={() => onAddMap(project.id)}
-                            >
-                              Add map
-                            </Button>
                           </div>
                         ) : null}
                       >
@@ -292,13 +283,22 @@ const ProjectsModal = ({
 
               <div className="projects-modal-actions">
                 <Button
-                  className="add-project-btn"
+                  className="add-map-btn"
                   type="button"
                   variant="primary"
+                  startIcon={<PlusSquare />}
+                  onClick={() => onAddMap()}
+                >
+                  New map
+                </Button>
+                <Button
+                  className="add-project-btn"
+                  type="button"
+                  variant="secondary"
                   startIcon={<FolderPlus />}
                   onClick={onAddProject}
                 >
-                  Add project
+                  New project
                 </Button>
               </div>
             </>

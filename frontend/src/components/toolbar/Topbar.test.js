@@ -19,6 +19,7 @@ describe('Topbar', () => {
       onShowSettings: jest.fn(),
       onLogout: jest.fn(),
       onLogin: jest.fn(),
+      onSignup: jest.fn(),
     };
     act(() => {
       root.render(
@@ -107,6 +108,8 @@ describe('Topbar', () => {
       'Workspace',
       'Account',
     ]);
+    expect(container.textContent).toContain('Maps');
+    expect(container.textContent).not.toContain('Projects');
     expect(container.querySelectorAll('.account-menu-item-badge')).toHaveLength(2);
   });
 
@@ -114,7 +117,7 @@ describe('Topbar', () => {
     const auth = renderTopbar({ isLoggedIn: false });
 
     const loginButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Log in')
+      button.textContent.includes('Sign up / Log in')
     );
 
     expect(loginButton).not.toBeNull();
@@ -131,7 +134,8 @@ describe('Topbar', () => {
       loginButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(auth.onLogin).toHaveBeenCalledTimes(1);
+    expect(auth.onSignup).toHaveBeenCalledTimes(1);
+    expect(auth.onLogin).not.toHaveBeenCalled();
   });
 
   test('keeps the account trigger bubble filled instead of transparent', () => {

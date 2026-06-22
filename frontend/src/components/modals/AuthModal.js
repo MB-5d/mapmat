@@ -83,8 +83,8 @@ const AuthModal = ({
   const googleButtonRef = useRef(null);
 
   const authTabs = useMemo(() => ([
-    { value: AUTH_VIEWS.LOGIN, label: 'Log in' },
     { value: AUTH_VIEWS.SIGNUP, label: 'Sign up' },
+    { value: AUTH_VIEWS.LOGIN, label: 'Log in' },
   ]), []);
 
   useEffect(() => {

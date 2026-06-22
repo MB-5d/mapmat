@@ -6974,6 +6974,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     openAuthModal();
   }, [openAuthModal]);
 
+  const handleSignup = useCallback(() => {
+    openAuthModal({ initialView: 'signup' });
+  }, [openAuthModal]);
+
   const getBillingReturnPath = useCallback(() => {
     if (typeof window === 'undefined') return '/app';
     return `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -7763,6 +7767,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     isLoggedIn,
     currentUser,
     onLogin: handleLogin,
+    onSignup: handleSignup,
     onLogout: handleLogout,
     onShowProfile: handleShowProfile,
     onShowBilling: handleShowBilling,
@@ -7771,6 +7776,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     isLoggedIn,
     currentUser,
     handleLogin,
+    handleSignup,
     handleLogout,
     handleShowProfile,
     handleShowBilling,
@@ -18433,7 +18439,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onAddMap={(projectId) => openCreateMapFlow({ defaultProjectId: projectId })}
         onAddProject={async () => {
           const name = await showPrompt({
-            title: 'New Project',
+            title: 'New project',
             message: 'Enter a name for the new project:',
             placeholder: 'Project name'
           });

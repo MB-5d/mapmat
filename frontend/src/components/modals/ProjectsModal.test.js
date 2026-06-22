@@ -77,23 +77,26 @@ describe('ProjectsModal', () => {
     root = null;
   });
 
-  test('shows add-map only for owned projects and keeps delete inside the expanded body', () => {
+  test('uses global new-map action and keeps delete inside the expanded body', () => {
     renderModal();
 
     expect(container.querySelector('.project-folder.ui-accordion')).not.toBeNull();
+    expect(container.textContent).toContain('Maps & Projects');
+    expect(container.textContent).not.toContain('Projects & maps');
 
-    const addMapButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent.replace(/\s+/g, ' ').trim() === 'Add map'
+    const newMapButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.replace(/\s+/g, ' ').trim() === 'New map'
     );
 
-    expect(addMapButton).not.toBeNull();
+    expect(newMapButton).not.toBeNull();
+    expect(container.textContent).not.toContain('Add map');
     expect(container.textContent).not.toContain('Delete project');
 
     act(() => {
-      addMapButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      newMapButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(props.onAddMap).toHaveBeenCalledWith('project-1');
+    expect(props.onAddMap).toHaveBeenCalledWith();
 
     renderModal({ expandedProjects: { 'project-1': true } });
     expect(container.textContent).toContain('Delete project');
@@ -170,20 +173,20 @@ describe('ProjectsModal', () => {
       editingMapName: 'Renamed Map',
     });
 
-    const addMapButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.replace(/\s+/g, ' ').trim() === 'Add map'
+    const newMapButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.replace(/\s+/g, ' ').trim() === 'New map'
     );
-    const addProjectButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.replace(/\s+/g, ' ').trim() === 'Add project'
+    const newProjectButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.replace(/\s+/g, ' ').trim() === 'New project'
     );
     const projectInput = container.querySelector('input.project-name-input');
     const mapInput = container.querySelector('input.project-map-name-input');
 
-    expect(addMapButton.className).toContain('ui-btn');
-    expect(addMapButton.className).toContain('ui-btn--type-link');
-    expect(addProjectButton.className).toContain('ui-btn');
-    expect(addProjectButton.className).toContain('ui-btn--type-primary');
-    expect(addProjectButton.className).toContain('ui-btn--style-brand');
+    expect(newMapButton.className).toContain('ui-btn');
+    expect(newMapButton.className).toContain('ui-btn--type-primary');
+    expect(newMapButton.className).toContain('ui-btn--style-brand');
+    expect(newProjectButton.className).toContain('ui-btn');
+    expect(newProjectButton.className).toContain('ui-btn--type-secondary');
     expect(projectInput.className).toContain('ui-input');
     expect(mapInput.className).toContain('ui-input');
 

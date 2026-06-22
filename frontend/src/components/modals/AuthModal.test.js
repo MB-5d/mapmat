@@ -200,8 +200,24 @@ describe('AuthModal', () => {
     );
   });
 
-  test('keeps equal spacing around the provider divider', () => {
-    expect(getCssRule('.auth-form')).toContain('padding: var(--unit-24);');
+  test('keeps requested auth tab order and form/provider spacing', async () => {
+    await act(async () => {
+      root.render(
+        <AuthModal
+          onClose={jest.fn()}
+          onSuccess={jest.fn()}
+          onDemo={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const tabLabels = Array.from(container.querySelectorAll('[role="tab"]')).map((tab) => tab.textContent.trim());
+    expect(tabLabels).toEqual(['Sign up', 'Log in']);
+
+    expect(getCssRule('.auth-form')).toContain('padding: var(--unit-24) var(--unit-24) 32px;');
+    expect(getCssRule('.auth-inline-actions--single')).toContain('justify-content: center;');
+    expect(getCssRule('.auth-provider-section')).toContain('padding: 0 24px 32px;');
     expect(getCssRule('.auth-provider-section')).toContain('gap: var(--unit-24);');
   });
 

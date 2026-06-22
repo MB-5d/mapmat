@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   CreditCard,
   ExternalLink,
-  Folder,
   History,
   LogIn,
   LogOut,
   Mail,
+  Network,
   Settings2,
   ShieldCheck,
   UserCircle,
@@ -65,7 +65,7 @@ const Topbar = ({
   pendingInviteCount = 0,
   pendingAccessRequestCount = 0,
 }) => {
-  const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onLogout, onLogin } = useAuth();
+  const { isLoggedIn, currentUser, onShowProfile, onShowBilling, onShowSettings, onLogout, onLogin, onSignup } = useAuth();
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const accountMenuRef = useRef(null);
   const figmaAccountMenuAppliedRef = useRef('');
@@ -229,8 +229,8 @@ const Topbar = ({
                   <MenuItem
                     className="account-menu-item"
                     role="menuitem"
-                    icon={<Folder size={16} />}
-                    label="Projects"
+                    icon={<Network size={16} />}
+                    label="Maps"
                     onClick={() => {
                       closeMenu();
                       onShowProjects();
@@ -301,11 +301,11 @@ const Topbar = ({
             type="primary"
             buttonStyle="brand"
             size="md"
-            title="Log in"
-            onClick={onLogin}
+            title="Sign up / Log in"
+            onClick={onSignup || onLogin}
             startIcon={<LogIn size={18} />}
           >
-            Log in
+            Sign up / Log in
           </Button>
         )}
       </div>
