@@ -35,10 +35,11 @@ const NODE_BADGE_FONT_SIZE = 9;
 const NODE_BADGE_PAD_X = 12;
 const CONNECTION_STROKE_WIDTH = 3;
 const TREE_CONNECTOR_STROKE_WIDTH = 1.25;
-const NODE_CONNECTOR_MASK_PADDING = 8;
 const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
-const MAX_PNG_DIMENSION = 16000;
-const MAX_PNG_PIXELS = 80000000;
+const MAX_PNG_DIMENSION = 32767;
+const MAX_PNG_PIXELS = 160000000;
+const PNG_TILE_MAX_DIMENSION = 8000;
+const PNG_TILE_MAX_PIXELS = 64000000;
 const PDF_MAX_PAGE_SIDE = 14400;
 const EXPORT_PDF_FONT_FAMILY = 'Sora';
 const EXPORT_PDF_FONT_FILE = 'Sora-Variable.ttf';
@@ -52,7 +53,7 @@ const DESIGN_COLORS = {
   text: '#1e293b',
   muted: '#64748b',
   subtle: '#94a3b8',
-  brand: '#4f46e5',
+  brand: '#6366f1',
   brandSoft: '#eef2ff',
   brandSoftBorder: '#c7d2fe',
   warningBg: '#fef3c7',
@@ -115,6 +116,11 @@ const hexToRgb = (value, fallback = '#64748B') => {
 const setPdfFill = (pdf, color) => {
   const { r, g, b } = hexToRgb(color);
   pdf.setFillColor(r, g, b);
+};
+
+const setPdfText = (pdf, color) => {
+  const { r, g, b } = hexToRgb(color);
+  pdf.setTextColor(r, g, b);
 };
 
 const setPdfStroke = (pdf, color) => {
@@ -731,19 +737,6 @@ const renderTreeConnectorsSvg = (scene) => scene.treeConnectors.map((connector) 
   width: TREE_CONNECTOR_STROKE_WIDTH,
 })).join('');
 
-const getTopBarPath = (x, y, width, height, radius) => {
-  const r = Math.min(radius, height, width / 2);
-  return [
-    `M ${x} ${y + height}`,
-    `L ${x} ${y + r}`,
-    `C ${x} ${y + r * 0.447715} ${x + r * 0.447715} ${y} ${x + r} ${y}`,
-    `H ${x + width - r}`,
-    `C ${x + width - r * 0.447715} ${y} ${x + width} ${y + r * 0.447715} ${x + width} ${y + r}`,
-    `L ${x + width} ${y + height}`,
-    'Z',
-  ].join(' ');
-};
-
 const getArrowHeadPoints = (end, previous, size) => {
   const angle = Math.atan2(end.y - previous.y, end.x - previous.x);
   return {
@@ -797,7 +790,7 @@ const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
     `<clipPath id="${cardClipId}"><rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" rx="${NODE_RADIUS}"/></clipPath>`,
     `<g clip-path="url(#${cardClipId})">`,
     `<rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" fill="${DESIGN_COLORS.surface}"/>`,
-    `<path d="${getTopBarPath(x, y, item.w, NODE_TOP_BAR_HEIGHT, NODE_RADIUS)}" fill="${escapeAttr(depthColor)}"/>`,
+    `<rect x="${x}" y="${y}" width="${item.w}" height="${NODE_TOP_BAR_HEIGHT}" fill="${escapeAttr(depthColor)}"/>`,
   ];
 
   if (thumbDataUrl) {
@@ -970,14 +963,6 @@ const drawSvgPathPdf = (pdf, pathData, x, y, scaleX, scaleY, color) => {
   pdf.fill();
 };
 
-const drawAbsoluteSvgPathPdf = (pdf, pathData, color) => {
-  const commands = parseSimpleSvgPath(pathData);
-  if (!commands.length) return;
-  setPdfFill(pdf, color);
-  pdf.path(commands);
-  pdf.fill();
-};
-
 const drawVellicLogoPdf = (pdf, x, y, width) => {
   const scale = width / 214;
   drawSvgPathPdf(pdf, VELLIC_LOGO_MARK_PATH, x, y, scale * 0.410256, scale * 0.410256, DESIGN_COLORS.brand);
@@ -1099,14 +1084,14 @@ const drawHeaderPdf = (pdf, scene, scale) => {
 
   setPdfFont(pdf, 'normal');
   pdf.setFontSize(28 * scale);
-  setPdfFill(pdf, DESIGN_COLORS.text);
+  setPdfText(pdf, DESIGN_COLORS.text);
   pdf.text(scene.header.title, x, titleY, {
     maxWidth: Math.max(100, (scene.width - scene.padding * 2) * scale),
   });
 
   setPdfFont(pdf, 'normal');
   pdf.setFontSize(13 * scale);
-  setPdfFill(pdf, DESIGN_COLORS.muted);
+  setPdfText(pdf, DESIGN_COLORS.muted);
   pdf.text('Created with', createdX, 50 * scale);
   drawVellicLogoPdf(pdf, logoX, 28 * scale, logoWidth);
   if (typeof pdf.link === 'function') {
@@ -1116,7 +1101,7 @@ const drawHeaderPdf = (pdf, scene, scale) => {
   if (scene.header.shareUrl) {
     setPdfFont(pdf, 'normal');
     pdf.setFontSize(13 * scale);
-    setPdfFill(pdf, DESIGN_COLORS.brand);
+    setPdfText(pdf, DESIGN_COLORS.brand);
     const linkText = scene.header.displayShareUrl || scene.header.shareUrl;
     pdf.text(linkText, x, linkY);
     if (typeof pdf.link === 'function') {
@@ -1135,7 +1120,7 @@ const drawHeaderPdf = (pdf, scene, scale) => {
     const statY = statsY + position.y * scale;
     setPdfFont(pdf, 'normal');
     pdf.setFontSize(12 * scale);
-    setPdfFill(pdf, DESIGN_COLORS.muted);
+    setPdfText(pdf, DESIGN_COLORS.muted);
     pdf.text(position.text, statX, statY);
   });
 };
@@ -1148,18 +1133,8 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   const h = item.h * scale;
   const depthColor = normalizeHexColor(getDepthColor(scene.colors, item.depth), '#14B8A6');
   const inset = NODE_INSET * scale;
-  const connectorMask = NODE_CONNECTOR_MASK_PADDING * scale;
 
   setPdfFill(pdf, '#FFFFFF');
-  pdf.roundedRect(
-    x - connectorMask,
-    y - connectorMask,
-    w + connectorMask * 2,
-    h + connectorMask * 2,
-    NODE_RADIUS * scale + connectorMask,
-    NODE_RADIUS * scale + connectorMask,
-    'F',
-  );
   pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale, 'F');
 
   const hasCardClip = typeof pdf.saveGraphicsState === 'function' && typeof pdf.clip === 'function';
@@ -1171,11 +1146,7 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   }
 
   setPdfFill(pdf, depthColor);
-  drawAbsoluteSvgPathPdf(
-    pdf,
-    getTopBarPath(x, y, w, NODE_TOP_BAR_HEIGHT * scale, NODE_RADIUS * scale),
-    depthColor,
-  );
+  pdf.rect(x, y, w, NODE_TOP_BAR_HEIGHT * scale, 'F');
 
   const thumbDataUrl = scene.showThumbnails ? thumbnailDataUrls?.get(node?.id) : null;
   if (scene.showThumbnails) {
@@ -1194,6 +1165,7 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
       setPdfFill(pdf, DESIGN_COLORS.surfaceMuted);
       pdf.rect(thumbX, thumbY, thumbW, thumbH, 'F');
     }
+    if (pdf.setLineDashPattern) pdf.setLineDashPattern([], 0);
     setPdfStroke(pdf, DESIGN_COLORS.border);
     pdf.setLineWidth(1 * scale);
     pdf.line(thumbX, thumbY + thumbH, thumbX + thumbW, thumbY + thumbH);
@@ -1203,6 +1175,7 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
     pdf.restoreGraphicsState();
   }
 
+  if (pdf.setLineDashPattern) pdf.setLineDashPattern([], 0);
   setPdfStroke(pdf, DESIGN_COLORS.border);
   pdf.setLineWidth(1 * scale);
   pdf.roundedRect(x, y, w, h, NODE_RADIUS * scale, NODE_RADIUS * scale, 'S');
@@ -1215,14 +1188,14 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
   const titleLines = wrapText(node?.title || node?.url || 'Untitled', 32, 3);
   setPdfFont(pdf, 'normal');
   pdf.setFontSize(NODE_TITLE_FONT_SIZE * scale);
-  setPdfFill(pdf, DESIGN_COLORS.text);
+  setPdfText(pdf, DESIGN_COLORS.text);
   renderPdfTextLines(pdf, titleLines, x + inset, titleY, NODE_TITLE_LINE_HEIGHT * scale, { maxWidth: w - inset * 2 });
 
   const number = textValue(item.number || node?.number || node?.pageNumber);
   if (number) {
     setPdfFont(pdf, 'normal');
     pdf.setFontSize(NODE_NUMBER_FONT_SIZE * scale);
-    setPdfFill(pdf, DESIGN_COLORS.muted);
+    setPdfText(pdf, DESIGN_COLORS.muted);
     pdf.text(number, x + inset, y + h - 20 * scale);
   }
 
@@ -1237,32 +1210,13 @@ const drawNodePdf = (pdf, scene, item, thumbnailDataUrls, scale) => {
     pdf.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, badgeHeight / 2, badgeHeight / 2, 'FD');
     setPdfFont(pdf, 'bold');
     pdf.setFontSize(NODE_BADGE_FONT_SIZE * scale);
-    setPdfFill(pdf, badge.text);
+    setPdfText(pdf, badge.text);
     pdf.text(badge.label.toUpperCase(), badgeX + badgeWidth / 2, badgeY + badgeHeight / 2, {
       align: 'center',
       baseline: 'middle',
     });
     badgeX -= 6 * scale;
   });
-};
-
-const drawNodeConnectorMaskPdf = (pdf, scene, item, scale) => {
-  const x = toSceneX(scene, item.x) * scale;
-  const y = toSceneY(scene, item.y) * scale;
-  const w = item.w * scale;
-  const h = item.h * scale;
-  const mask = NODE_CONNECTOR_MASK_PADDING * scale;
-  if (pdf.setLineDashPattern) pdf.setLineDashPattern([], 0);
-  setPdfFill(pdf, DESIGN_COLORS.surface);
-  pdf.roundedRect(
-    x - mask,
-    y - mask,
-    w + mask * 2,
-    h + mask * 2,
-    NODE_RADIUS * scale + mask,
-    NODE_RADIUS * scale + mask,
-    'F',
-  );
 };
 
 export const drawExportSceneToPdf = (pdf, scene, thumbnailDataUrls = new Map(), scale = 1) => {
@@ -1273,7 +1227,6 @@ export const drawExportSceneToPdf = (pdf, scene, thumbnailDataUrls = new Map(), 
   pdf.setLineWidth(TREE_CONNECTOR_STROKE_WIDTH * scale);
   scene.treeConnectors.forEach((connector) => drawPdfLine(pdf, scene, connector, scale));
   scene.relationshipConnectors.forEach((connector) => drawPdfRelationshipConnector(pdf, scene, connector, scale));
-  scene.nodes.forEach((node) => drawNodeConnectorMaskPdf(pdf, scene, node, scale));
   scene.nodes.forEach((node) => drawNodePdf(pdf, scene, node, thumbnailDataUrls, scale));
 };
 
@@ -1287,23 +1240,81 @@ export const getPngExportPixelRatio = (scene, options = {}) => {
   return Math.min(requestedPixelRatio, widthLimit, heightLimit, areaLimit);
 };
 
+export const getPngExportTilePlan = (scene, options = {}) => {
+  const pixelRatio = Math.max(1, Number(options.pixelRatio || 3));
+  const maxDimension = Number(options.maxDimension || MAX_PNG_DIMENSION);
+  const maxPixels = Number(options.maxPixels || MAX_PNG_PIXELS);
+  const maxTileDimension = Number(options.maxTileDimension || PNG_TILE_MAX_DIMENSION);
+  const maxTilePixels = Number(options.maxTilePixels || PNG_TILE_MAX_PIXELS);
+  const width = Math.max(scene?.width || 0, 1);
+  const height = Math.max(scene?.height || 0, 1);
+  const fullWidth = Math.ceil(width * pixelRatio);
+  const fullHeight = Math.ceil(height * pixelRatio);
+  const fullPixels = fullWidth * fullHeight;
+
+  if (fullWidth <= maxDimension && fullHeight <= maxDimension && fullPixels <= maxPixels) {
+    return {
+      mode: 'single',
+      pixelRatio,
+      columns: 1,
+      rows: 1,
+      tileCount: 1,
+      width: fullWidth,
+      height: fullHeight,
+    };
+  }
+
+  const maxTileSide = Math.max(1, Math.floor(Math.min(maxTileDimension, Math.sqrt(maxTilePixels))));
+  const tileWidth = Math.max(1, Math.floor(maxTileSide / pixelRatio));
+  const tileHeight = Math.max(1, Math.floor(maxTileSide / pixelRatio));
+  const columns = Math.ceil(width / tileWidth);
+  const rows = Math.ceil(height / tileHeight);
+
+  return {
+    mode: 'tiles',
+    pixelRatio,
+    columns,
+    rows,
+    tileCount: columns * rows,
+    tileWidth,
+    tileHeight,
+    width: fullWidth,
+    height: fullHeight,
+  };
+};
+
+const loadExportSvgImage = (scene, thumbnailDataUrls = new Map()) => {
+  const svg = renderExportSvg(scene, thumbnailDataUrls);
+  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ image: img, svgUrl });
+    img.onerror = () => {
+      URL.revokeObjectURL(svgUrl);
+      reject(new Error('Could not render export image'));
+    };
+    img.src = svgUrl;
+  });
+};
+
+const canvasToPngBlob = (canvas) => new Promise((resolve, reject) => {
+  canvas.toBlob((nextBlob) => {
+    if (nextBlob) resolve(nextBlob);
+    else reject(new Error('Could not create PNG export'));
+  }, 'image/png');
+});
+
 export const renderExportSceneToPngBlob = async (
   scene,
   thumbnailDataUrls = new Map(),
   options = {},
 ) => {
   const effectivePixelRatio = getPngExportPixelRatio(scene, options);
-  const svg = renderExportSvg(scene, thumbnailDataUrls);
-  const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-  const svgUrl = URL.createObjectURL(svgBlob);
+  const { image, svgUrl } = await loadExportSvgImage(scene, thumbnailDataUrls);
 
   try {
-    const image = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error('Could not render export image'));
-      img.src = svgUrl;
-    });
     const canvas = document.createElement('canvas');
     canvas.width = Math.ceil(scene.width * effectivePixelRatio);
     canvas.height = Math.ceil(scene.height * effectivePixelRatio);
@@ -1311,18 +1322,59 @@ export const renderExportSceneToPngBlob = async (
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob((nextBlob) => {
-        if (nextBlob) resolve(nextBlob);
-        else reject(new Error('Could not create PNG export'));
-      }, 'image/png');
-    });
+    const blob = await canvasToPngBlob(canvas);
     return {
       blob,
       width: canvas.width,
       height: canvas.height,
       pixelRatio: effectivePixelRatio,
     };
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+};
+
+export const renderExportSceneToPngTiles = async (
+  scene,
+  thumbnailDataUrls = new Map(),
+  options = {},
+) => {
+  const plan = getPngExportTilePlan(scene, options);
+  if (plan.mode === 'single') {
+    const single = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
+      ...options,
+      pixelRatio: plan.pixelRatio,
+    });
+    return { ...plan, tiles: [{ column: 0, row: 0, blob: single.blob, width: single.width, height: single.height }] };
+  }
+
+  const { image, svgUrl } = await loadExportSvgImage(scene, thumbnailDataUrls);
+  try {
+    const tiles = [];
+    for (let row = 0; row < plan.rows; row += 1) {
+      for (let column = 0; column < plan.columns; column += 1) {
+        const sx = column * plan.tileWidth;
+        const sy = row * plan.tileHeight;
+        const sw = Math.min(plan.tileWidth, scene.width - sx);
+        const sh = Math.min(plan.tileHeight, scene.height - sy);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(sw * plan.pixelRatio);
+        canvas.height = Math.ceil(sh * plan.pixelRatio);
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+        tiles.push({
+          column,
+          row,
+          x: sx,
+          y: sy,
+          width: canvas.width,
+          height: canvas.height,
+          blob: await canvasToPngBlob(canvas),
+        });
+      }
+    }
+    return { ...plan, tiles };
   } finally {
     URL.revokeObjectURL(svgUrl);
   }

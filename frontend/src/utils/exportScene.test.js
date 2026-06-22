@@ -5,6 +5,7 @@ import {
   drawExportSceneToPdf,
   formatShareUrlForExport,
   getPngExportPixelRatio,
+  getPngExportTilePlan,
   getPdfSceneScale,
   registerExportPdfFonts,
   renderExportSvg,
@@ -83,7 +84,7 @@ describe('export scene helpers', () => {
     expect(svg).toMatch(/y="88" fill="#1e293b"[^>]*>app\.vellic\.io\/share\/example<\/text>/);
   });
 
-  test('renderExportSvg rounds level bars and centers badge labels', () => {
+  test('renderExportSvg clips level bars inside the node and centers badge labels', () => {
     const scene = buildExportScene({
       root: makeNode('home', [{ ...makeNode('missing'), isMissing: true }]),
       title: 'Example Map',
@@ -93,7 +94,8 @@ describe('export scene helpers', () => {
     });
     const svg = renderExportSvg(scene, new Map());
 
-    expect(svg).toMatch(/<path d="M [^"]+ C [^"]+" fill="#38bdf8"/);
+    expect(svg).toMatch(/<clipPath id="export-card-/);
+    expect(svg).toMatch(/<rect x="[^"]+" y="[^"]+" width="[^"]+" height="10" fill="#38bdf8"/);
     expect(svg).toContain('dominant-baseline="middle"');
     expect(svg).toContain('MISSING');
   });
@@ -134,6 +136,25 @@ describe('export scene helpers', () => {
     expect(ratio).toBeLessThan(1);
     expect(Math.ceil(50000 * ratio)).toBeLessThanOrEqual(16000);
     expect(Math.ceil(50000 * ratio) * Math.ceil(12000 * ratio)).toBeLessThanOrEqual(80000000);
+  });
+
+  test('getPngExportTilePlan keeps high resolution for oversized scenes by tiling', () => {
+    const plan = getPngExportTilePlan({
+      width: 50000,
+      height: 12000,
+    }, {
+      pixelRatio: 4,
+      maxDimension: 32767,
+      maxPixels: 160000000,
+      maxTileDimension: 8000,
+      maxTilePixels: 64000000,
+    });
+
+    expect(plan.mode).toBe('tiles');
+    expect(plan.pixelRatio).toBe(4);
+    expect(plan.tileCount).toBeGreaterThan(1);
+    expect(plan.width).toBe(200000);
+    expect(plan.height).toBe(48000);
   });
 
   test('relationship connectors use canonical palette keys and avoid reserved tree endpoints', () => {
@@ -182,6 +203,40 @@ describe('export scene helpers', () => {
     const output = pdf.output();
     expect(output).not.toContain('/Subtype /Image');
     expect(output).toContain('https://vellic.io');
+    expect(output).toContain('0.388 0.4 0.945 rg');
+  });
+
+  test('drawExportSceneToPdf resets dashed flow styles before node borders', () => {
+    const scene = buildExportScene({
+      root: makeNode('home', [makeNode('about')]),
+      title: 'Example Map',
+      shareUrl: 'https://app.vellic.io/share/example',
+      connections: [{
+        id: 'crosslink-1',
+        type: 'crosslink',
+        sourceNodeId: 'home',
+        targetNodeId: 'about',
+        sourceAnchor: 'right',
+        targetAnchor: 'left',
+      }],
+      reportStats: { total: 2 },
+      reportTypeOptions: REPORT_TYPE_OPTIONS,
+    });
+    const scale = getPdfSceneScale(scene);
+    const pdf = new jsPDF({
+      orientation: scene.width > scene.height ? 'landscape' : 'portrait',
+      unit: 'pt',
+      format: [scene.width * scale, scene.height * scale],
+      compress: false,
+    });
+
+    drawExportSceneToPdf(pdf, scene, new Map(), scale);
+    const output = pdf.output();
+    const dashedIndex = output.indexOf('[9. 7.] 0. d');
+    const resetIndex = output.indexOf('[] 0. d', dashedIndex);
+
+    expect(dashedIndex).toBeGreaterThan(-1);
+    expect(resetIndex).toBeGreaterThan(dashedIndex);
   });
 
   test('registerExportPdfFonts embeds Sora for vector PDF text', async () => {

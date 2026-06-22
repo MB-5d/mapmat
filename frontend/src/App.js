@@ -213,7 +213,7 @@ import {
   getPdfSceneScale,
   loadExportThumbnailDataUrls,
   registerExportPdfFonts,
-  renderExportSceneToPngBlob,
+  renderExportSceneToPngTiles,
 } from './utils/exportScene';
 
 const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
@@ -864,7 +864,11 @@ const createZipPackageBlob = (files) => {
 
   files.forEach(({ path, content }) => {
     const nameBytes = encoder.encode(path);
-    const dataBytes = encoder.encode(content);
+    const dataBytes = typeof content === 'string'
+      ? encoder.encode(content)
+      : content instanceof Uint8Array
+        ? content
+        : new Uint8Array(content);
     const crc = getZipCrc32(dataBytes);
     const localOffset = offset;
     const commonHeader = [
@@ -13421,21 +13425,55 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
 
       const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
-      const pngExport = await renderExportSceneToPngBlob(scene, thumbnailDataUrls, {
+      const pngExport = await renderExportSceneToPngTiles(scene, thumbnailDataUrls, {
         pixelRatio: 4,
       });
       const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
-      downloadBlob(`${filenameBase}.png`, pngExport.blob);
+      if (pngExport.mode === 'tiles') {
+        const tileFiles = await Promise.all(pngExport.tiles.map(async (tile) => ({
+          path: `tiles/${filenameBase}_row-${String(tile.row + 1).padStart(2, '0')}_col-${String(tile.column + 1).padStart(2, '0')}.png`,
+          content: new Uint8Array(await tile.blob.arrayBuffer()),
+        })));
+        const manifest = {
+          title: exportTitle,
+          width: pngExport.width,
+          height: pngExport.height,
+          pixelRatio: pngExport.pixelRatio,
+          rows: pngExport.rows,
+          columns: pngExport.columns,
+          tiles: pngExport.tiles.map(({ row, column, x, y, width, height }) => ({
+            row: row + 1,
+            column: column + 1,
+            x,
+            y,
+            width,
+            height,
+          })),
+        };
+        const zipBlob = createZipPackageBlob([
+          {
+            path: 'manifest.json',
+            content: JSON.stringify(manifest, null, 2),
+          },
+          ...tileFiles,
+        ]);
+        downloadBlob(`${filenameBase}_png-tiles.zip`, zipBlob);
+      } else {
+        downloadBlob(`${filenameBase}.png`, pngExport.tiles[0].blob);
+      }
 
       recordExportUsage('export_png', {
         format: 'png',
         width: pngExport.width,
         height: pngExport.height,
-        bytes: pngExport.blob.size,
+        bytes: pngExport.tiles.reduce((total, tile) => total + tile.blob.size, 0),
         pixelRatio: pngExport.pixelRatio,
+        tiles: pngExport.tileCount,
         thumbnails: thumbnailDataUrls.size,
       });
-      showToast('PNG downloaded successfully', 'success');
+      showToast(pngExport.mode === 'tiles'
+        ? `PNG downloaded as ${pngExport.tileCount} high-res tiles`
+        : 'PNG downloaded successfully', 'success');
     } catch (e) {
       if (handleShareLinkError(e)) return;
       console.error('PNG export error:', e);
