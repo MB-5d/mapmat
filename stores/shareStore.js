@@ -119,19 +119,20 @@ async function getShareWithUserByIdAsync(shareId) {
 
 async function getFirstMapShareForUserAsync({ mapId, projectId, userId }) {
   await ensureShareSchemaAsync();
+  const projectFilter = projectId ? 'project_id = ?' : 'project_id IS NULL';
+  const params = [mapId, userId, COMPACT_SHARE_ID_LENGTH];
+  if (projectId) params.push(projectId);
+
   return adapter.queryOneAsync(`
     SELECT *
     FROM shares
     WHERE map_id = ?
       AND user_id = ?
       AND LENGTH(id) = ?
-      AND (
-        (? IS NULL AND project_id IS NULL)
-        OR project_id = ?
-      )
+      AND ${projectFilter}
     ORDER BY created_at ASC
     LIMIT 1
-  `, [mapId, userId, COMPACT_SHARE_ID_LENGTH, projectId || null, projectId || null]);
+  `, params);
 }
 
 function incrementShareViewCountAsync(shareId) {
