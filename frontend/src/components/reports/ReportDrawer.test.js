@@ -187,7 +187,7 @@ describe('ReportDrawer', () => {
 
     expect(getVisibleTitles()).toEqual(['pricing']);
     expect(duplicateChip.getAttribute('aria-pressed')).toBe('true');
-    expect(container.querySelector('.report-filter-active-dot')).not.toBeNull();
+    expect(container.querySelector('.report-filter-control .report-filter-active-dot')).not.toBeNull();
     expect(totalChip.disabled).toBe(false);
 
     act(() => {
@@ -195,7 +195,7 @@ describe('ReportDrawer', () => {
     });
 
     expect(getVisibleTitles()).toEqual(['about', 'pricing', 'contact']);
-    expect(container.querySelector('.report-filter-active-dot')).toBeNull();
+    expect(container.querySelector('.report-filter-control .report-filter-active-dot')).toBeNull();
     expect(totalChip.disabled).toBe(true);
   });
 
@@ -214,7 +214,7 @@ describe('ReportDrawer', () => {
       item.textContent.trim()
     );
 
-    expect(filterLabels).toEqual(['Duplicate', 'Broken links', 'Error pages', 'Has image']);
+    expect(filterLabels).toEqual(['Error pages', 'Duplicate', 'Broken links', 'Has image']);
     expect(filterLabels).not.toContain('Standard');
     expect(container.querySelector('.report-filter-list')).toBeNull();
   });
@@ -267,7 +267,7 @@ describe('ReportDrawer', () => {
     expect(selectedHasImageItem.getAttribute('aria-checked')).toBe('true');
     expect(selectedHasImageItem.className).not.toContain('ui-menu-item--selected');
     expect(selectedHasImageItem.querySelector('.ui-menu-item__end')).not.toBeNull();
-    expect(container.querySelector('.report-filter-active-dot')).not.toBeNull();
+    expect(container.querySelector('.report-filter-control .report-filter-active-dot')).not.toBeNull();
   });
 
   test('shows fixed report title and keeps table controls sticky in the drawer body', () => {
@@ -286,6 +286,7 @@ describe('ReportDrawer', () => {
     expect(container.querySelector('.report-table-header').textContent).not.toContain('Show on map');
     expect(container.querySelector('.report-header-show')).not.toBeNull();
     expect(container.querySelector('.report-details-control')).not.toBeNull();
+    expect(container.querySelector('.report-details-control .report-filter-active-dot')).not.toBeNull();
     expect(container.querySelector('.report-summary')?.className).toContain('report-summary--single-row');
     const summaryBlock = appCss.match(/\.report-summary \{[^}]*\}/)?.[0] || '';
     const drawerBlock = appCss.match(/\.report-drawer \{[^}]*\}/)?.[0] || '';
@@ -317,6 +318,8 @@ describe('ReportDrawer', () => {
     const detailsMenuBlock = appCss.match(/\.report-details-menu \{[^}]*\}/)?.[0] || '';
     expect(detailsMenuBlock).toContain('max-height: 388px');
     expect(detailsMenuBlock).toContain('overflow-y: auto');
+    const lastRowBlock = appCss.match(/\.report-row:last-child \{[^}]*\}/)?.[0] || '';
+    expect(lastRowBlock).toContain('border-bottom: 0');
     expect(appCss).toMatch(/\.report-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
   });
 
@@ -428,7 +431,7 @@ describe('ReportDrawer', () => {
     expect(onLocateNode).toHaveBeenCalledWith('2');
   });
 
-  test('uses report chip labels for expanded finding badges', () => {
+  test('does not count or badge the row page type as a finding', () => {
     renderDrawer({
       entries: [
         {
@@ -436,13 +439,24 @@ describe('ReportDrawer', () => {
           id: 'orphan',
           title: 'orphan node',
           number: '5',
-          types: ['orphanPages'],
+          types: ['orphanPages', 'inactivePages'],
           pageType: 'Orphan',
         },
+      ],
+      stats: {
+        total: 1,
+        inactivePages: 1,
+        orphanPages: 1,
+      },
+      typeOptions: [
+        { key: 'orphanPages', label: 'Orphan pages' },
+        { key: 'inactivePages', label: 'Inactive pages' },
       ],
     });
 
     const orphanRow = container.querySelector('.report-row-main');
+
+    expect(orphanRow.querySelector('.report-cell-count').textContent.trim()).toBe('1');
 
     act(() => {
       orphanRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -452,8 +466,94 @@ describe('ReportDrawer', () => {
       badge.textContent.trim()
     );
 
-    expect(detailBadges).toEqual(['Orphan']);
+    expect(detailBadges).toEqual(['Inactive']);
     expect(container.textContent).not.toContain('Orphan pages');
+  });
+
+  test('orders summary chips by report grouping', () => {
+    const orderedTypes = [
+      'subdomains',
+      'orphanPages',
+      'errorPages',
+      'missing',
+      'duplicates',
+      'inactivePages',
+      'shortTitle',
+      'longTitle',
+      'missingDescription',
+      'shortDescription',
+      'longDescription',
+      'missingH1',
+      'brokenLinks',
+      'files',
+      'authenticatedPages',
+    ];
+    renderDrawer({
+      entries: [
+        {
+          ...entries[0],
+          id: 'grouped',
+          types: orderedTypes,
+        },
+      ],
+      stats: {
+        total: 1,
+        subdomains: 1,
+        orphanPages: 1,
+        errorPages: 1,
+        missing: 1,
+        duplicates: 1,
+        inactivePages: 1,
+        shortTitle: 1,
+        longTitle: 1,
+        missingDescription: 1,
+        shortDescription: 1,
+        longDescription: 1,
+        missingH1: 1,
+        brokenLinks: 1,
+        files: 1,
+        authenticatedPages: 1,
+      },
+      typeOptions: [
+        { key: 'duplicates', label: 'Duplicate' },
+        { key: 'brokenLinks', label: 'Broken links' },
+        { key: 'inactivePages', label: 'Inactive pages' },
+        { key: 'errorPages', label: 'Error pages' },
+        { key: 'orphanPages', label: 'Orphan pages' },
+        { key: 'subdomains', label: 'Subdomains' },
+        { key: 'files', label: 'Files / downloads' },
+        { key: 'authenticatedPages', label: 'Authenticated pages' },
+        { key: 'missing', label: 'Missing' },
+        { key: 'shortTitle', label: 'Short title' },
+        { key: 'longTitle', label: 'Very long title' },
+        { key: 'missingDescription', label: 'No description' },
+        { key: 'shortDescription', label: 'Short description' },
+        { key: 'longDescription', label: 'Very long description' },
+        { key: 'missingH1', label: 'No H1' },
+      ],
+    });
+
+    const statLabels = Array.from(container.querySelectorAll('.report-stat-label')).map((label) =>
+      label.textContent.trim()
+    );
+
+    expect(statLabels).toEqual([
+      'Subdomain',
+      'Orphan',
+      'Error',
+      'Missing',
+      'Duplicate',
+      'Inactive',
+      'Short title',
+      'Very long title',
+      'No description',
+      'Short description',
+      'Very long description',
+      'No H1',
+      'Broken links',
+      'Files',
+      'Authenticated',
+    ]);
   });
 
   test('shows dashes instead of zero findings', () => {

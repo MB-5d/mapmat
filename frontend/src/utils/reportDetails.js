@@ -20,6 +20,16 @@ export const REPORT_DETAIL_OPTIONS = [
 
 export const NON_FINDING_TYPES = new Set(['standard']);
 
+const PAGE_TYPE_FINDING_TYPES = {
+  duplicate: 'duplicates',
+  file: 'files',
+  home: 'standard',
+  missing: 'missing',
+  orphan: 'orphanPages',
+  standard: 'standard',
+  subdomain: 'subdomains',
+};
+
 export const createDefaultVisibleReportDetails = () => (
   REPORT_DETAIL_OPTIONS.reduce((next, option) => {
     next[option.key] = option.defaultVisible;
@@ -27,9 +37,18 @@ export const createDefaultVisibleReportDetails = () => (
   }, {})
 );
 
-export const getReportFindingTypes = (entry) => (
-  (entry?.types || []).filter((type) => !NON_FINDING_TYPES.has(type))
-);
+const getPageTypeFindingType = (entry) => {
+  const pageType = String(entry?.pageType || '').trim().toLowerCase();
+  return PAGE_TYPE_FINDING_TYPES[pageType] || '';
+};
+
+export const getReportFindingTypes = (entry) => {
+  const pageTypeFindingType = getPageTypeFindingType(entry);
+  return (entry?.types || []).filter((type) => (
+    !NON_FINDING_TYPES.has(type)
+    && type !== pageTypeFindingType
+  ));
+};
 
 const getVisibleDetails = (visibleDetails = null) => ({
   ...createDefaultVisibleReportDetails(),

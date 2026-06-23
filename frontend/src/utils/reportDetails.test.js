@@ -11,6 +11,18 @@ describe('reportDetails', () => {
     })).toEqual(['shortTitle', 'missingH1']);
   });
 
+  test('excludes the current page type from findings', () => {
+    expect(getReportFindingTypes({
+      pageType: 'Subdomain',
+      types: ['subdomains', 'inactivePages'],
+    })).toEqual(['inactivePages']);
+
+    expect(getReportFindingTypes({
+      pageType: 'Orphan',
+      types: ['orphanPages', 'duplicates'],
+    })).toEqual(['duplicates']);
+  });
+
   test('returns only visible non-empty detail rows', () => {
     const visibleDetails = {
       ...createDefaultVisibleReportDetails(),

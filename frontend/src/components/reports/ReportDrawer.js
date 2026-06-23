@@ -45,6 +45,32 @@ const REPORT_FILTER_META = {
   missingH1: { label: 'No H1', className: 'report-filter-chip--warning' },
 };
 
+const REPORT_STAT_CARD_ORDER = [
+  'subdomains',
+  'orphanPages',
+  'errorPages',
+  'missing',
+  'duplicates',
+  'inactivePages',
+  'missingTitle',
+  'shortTitle',
+  'longTitle',
+  'missingDescription',
+  'shortDescription',
+  'longDescription',
+  'missingH1',
+  'brokenLinks',
+  'files',
+  'authenticatedPages',
+];
+
+const REPORT_FILTER_ORDER_INDEX = new Map(REPORT_STAT_CARD_ORDER.map((key, index) => [key, index]));
+
+const sortReportTypeOptions = (left, right) => (
+  (REPORT_FILTER_ORDER_INDEX.get(left.key) ?? Number.MAX_SAFE_INTEGER)
+  - (REPORT_FILTER_ORDER_INDEX.get(right.key) ?? Number.MAX_SAFE_INTEGER)
+);
+
 const normalizeReportLookupValue = (value) => (
   String(value || '')
     .trim()
@@ -182,7 +208,7 @@ const ReportDrawer = ({
       counts[option.key] = 0;
     });
     entries.forEach(entry => {
-      entry.types.forEach(type => {
+      (entry.types || []).forEach(type => {
         counts[type] = (counts[type] || 0) + 1;
       });
     });
@@ -192,9 +218,10 @@ const ReportDrawer = ({
   const typeFilterOptions = useMemo(
     () => typeOptions
       .filter(option => option.key !== 'standard' && filterCounts[option.key] > 0)
+      .sort(sortReportTypeOptions)
       .map(option => ({
         ...option,
-        matches: (entry) => entry.types.includes(option.key),
+        matches: (entry) => (entry.types || []).includes(option.key),
       })),
     [typeOptions, filterCounts]
   );
@@ -227,6 +254,7 @@ const ReportDrawer = ({
     [filters, visibleFilterOptions]
   );
   const hasActiveFilters = activeFilterKeys.length > 0;
+  const hasSelectedDetails = REPORT_DETAIL_OPTIONS.some((option) => visibleDetails[option.key]);
 
   const filteredEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -374,24 +402,8 @@ const ReportDrawer = ({
 
   if (!shouldRender) return null;
 
-  const statCards = [
-    { key: 'orphanPages' },
-    { key: 'inactivePages' },
-    { key: 'errorPages' },
-    { key: 'brokenLinks' },
-    { key: 'files' },
-    { key: 'subdomains' },
-    { key: 'missing' },
-    { key: 'duplicates' },
-    { key: 'authenticatedPages' },
-    { key: 'missingTitle' },
-    { key: 'shortTitle' },
-    { key: 'longTitle' },
-    { key: 'missingDescription' },
-    { key: 'shortDescription' },
-    { key: 'longDescription' },
-    { key: 'missingH1' },
-  ]
+  const statCards = REPORT_STAT_CARD_ORDER
+    .map(key => ({ key }))
     .map(segment => {
       const option = typeOptions.find(item => item.key === segment.key);
       const meta = REPORT_FILTER_META[segment.key] || {};
@@ -554,7 +566,7 @@ const ReportDrawer = ({
                 <div className="report-details-control" ref={detailsMenuRef}>
                   <button
                     type="button"
-                    className="report-filter-toggle"
+                    className={`report-filter-toggle ${hasSelectedDetails ? 'has-active-details' : ''}`}
                     onClick={() => {
                       setShowFilters(false);
                       setShowDetailsMenu((prev) => !prev);
@@ -563,6 +575,7 @@ const ReportDrawer = ({
                     aria-haspopup="menu"
                   >
                     <Microscope size={16} />
+                    {hasSelectedDetails && <span className="report-filter-active-dot" aria-hidden="true" />}
                     Details
                     {showDetailsMenu ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
