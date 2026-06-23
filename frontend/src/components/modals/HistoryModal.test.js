@@ -119,5 +119,6 @@ describe('HistoryModal', () => {
     const backToTop = container.querySelector('.drawer-back-to-top');
     expect(backToTop).not.toBeNull();
     expect(backToTop.textContent).toContain('Back to top');
+    expect(historyList.contains(backToTop)).toBe(false);
   });
 });

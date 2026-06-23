@@ -127,19 +127,19 @@ const HistoryModal = ({
                     </div>
                   </div>
                 ))}
-                {showBackToTop ? (
-                  <Button
-                    type="primary"
-                    buttonStyle="mono"
-                    size="sm"
-                    className="drawer-back-to-top"
-                    onClick={scrollToTop}
-                    startIcon={<ArrowUpToLine />}
-                  >
-                    Back to top
-                  </Button>
-                ) : null}
               </div>
+              {showBackToTop ? (
+                <Button
+                  type="primary"
+                  buttonStyle="mono"
+                  size="sm"
+                  className="drawer-back-to-top"
+                  onClick={scrollToTop}
+                  startIcon={<ArrowUpToLine />}
+                >
+                  Back to top
+                </Button>
+              ) : null}
             </>
           )}
         </div>

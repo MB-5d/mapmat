@@ -13118,11 +13118,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       const contentWidth = pageWidth - marginX * 2;
       const bodyFontSize = 8.5;
       const bodyLineHeight = 12;
-      const detailLineHeight = 11;
+      const detailLineHeight = 9.5;
       const textColor = '#1e293b';
       const mutedColor = '#64748b';
       const borderColor = '#e2e8f0';
       const softBgColor = '#f8fafc';
+      const panelBgColor = '#ffffff';
       const linkColor = '#4f46e5';
       const urlPattern = /^https?:\/\//i;
 
@@ -13221,38 +13222,38 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
 
       const drawCreatedWithBrand = () => {
-        const logoWidth = 84;
+        const logoWidth = 58;
         const logoX = pageWidth - marginX - logoWidth;
-        const logoY = 30;
-        setFont('normal', 8.5);
+        const logoY = 34;
+        setFont('normal', 6.5);
         setTextColor(mutedColor);
         const createdText = 'Created with';
         const createdWidth = pdf.getTextWidth?.(createdText) || 50;
-        pdf.text(createdText, logoX - createdWidth - 8, logoY + 17);
+        pdf.text(createdText, logoX - createdWidth - 5, logoY + 11);
         drawVellicLogoPdf(pdf, logoX, logoY, logoWidth);
         if (typeof pdf.link === 'function') {
-          pdf.link(logoX, logoY, logoWidth, 26, { url: metadata.sourceUrl });
+          pdf.link(logoX, logoY, logoWidth, 18, { url: metadata.sourceUrl });
         }
       };
 
       const drawHeader = () => {
         let headerY = 42;
         drawCreatedWithBrand();
-        setFont('bold', 10);
+        setFont('bold', 9);
         setTextColor(mutedColor);
         pdf.text('Scan report & findings', marginX, headerY);
-        headerY += 22;
+        headerY += 18;
         setFont('bold', 20);
         setTextColor(textColor);
         const titleLines = wrapText(reportTitle || exportTitle || 'Untitled Map', contentWidth - 150);
         pdf.text(titleLines, marginX, headerY);
-        headerY += Math.max(1, titleLines.length) * 24;
+        headerY += Math.max(1, titleLines.length) * 19;
         if (siteDisplayUrl) {
           const siteLines = wrapText(siteDisplayUrl, contentWidth - 150);
-          drawLinkedLines(siteLines, marginX, headerY, 13, siteUrl, contentWidth - 150);
-          headerY += siteLines.length * 13 + 6;
+          drawLinkedLines(siteLines, marginX, headerY, 12, siteUrl, contentWidth - 150);
+          headerY += siteLines.length * 12;
         }
-        return headerY + 8;
+        return headerY + 22;
       };
 
       const alwaysShowReportStatKeys = new Set([
@@ -13269,32 +13270,55 @@ export default function App({ currentRoute, navigateToRoute }) {
         .map((option) => ({ ...option, value: reportStats[option.key] || 0 }));
 
       const drawStats = () => {
-        const cardGap = 8;
-        const cardWidth = (contentWidth - cardGap * 2) / 3;
-        const cardHeight = 34;
+        const gridColumns = 4;
+        const cardGap = 5;
+        const panelPadding = 10;
+        const totalBlockHeight = 27;
+        const cardWidth = (contentWidth - panelPadding * 2 - cardGap * (gridColumns - 1)) / gridColumns;
+        const cardHeight = 24;
+        const rowCount = Math.max(1, Math.ceil(statLines.length / gridColumns));
+        const panelHeight = panelPadding + totalBlockHeight + 8 + (rowCount * cardHeight) + ((rowCount - 1) * cardGap) + panelPadding;
+        const panelTop = y;
+
+        setDrawColor(borderColor);
+        setFillColor(panelBgColor);
+        pdf.roundedRect(marginX, panelTop, contentWidth, panelHeight, 7, 7, 'FD');
+
+        setFont('bold', 13);
+        setTextColor(textColor);
+        pdf.text(String(reportStats.total || reportRows.length || 0), marginX + panelPadding, panelTop + 17);
+        setFont('normal', 6.5);
+        setTextColor(mutedColor);
+        pdf.text('Total pages', marginX + panelPadding, panelTop + 28);
+
+        const cardsTop = panelTop + panelPadding + totalBlockHeight + 8;
         statLines.forEach((stat, index) => {
-          const col = index % 3;
-          const row = Math.floor(index / 3);
-          const x = marginX + col * (cardWidth + cardGap);
-          const cardY = y + row * (cardHeight + cardGap);
+          const col = index % gridColumns;
+          const row = Math.floor(index / gridColumns);
+          const x = marginX + panelPadding + col * (cardWidth + cardGap);
+          const cardY = cardsTop + row * (cardHeight + cardGap);
           setDrawColor(borderColor);
           setFillColor(softBgColor);
-          pdf.roundedRect(x, cardY, cardWidth, cardHeight, 6, 6, 'FD');
-          setFont('normal', 7.5);
+          pdf.roundedRect(x, cardY, cardWidth, cardHeight, 4, 4, 'FD');
+          setFont('bold', 5.8);
           setTextColor(mutedColor);
-          pdf.text(stat.label, x + 9, cardY + 13, { maxWidth: cardWidth - 18 });
-          setFont('bold', 11);
+          const label = wrapText(stat.label, cardWidth - 12)[0] || stat.label;
+          pdf.text(label, x + 6, cardY + 8.5);
+          setFont('bold', 8.5);
           setTextColor(textColor);
-          pdf.text(String(stat.value), x + 9, cardY + 27);
+          pdf.text(String(stat.value), x + 6, cardY + 19);
         });
-        y += Math.ceil(statLines.length / 3) * (cardHeight + cardGap) + 8;
+        y += panelHeight + 18;
       };
 
       const tableColumns = {
         page: { x: marginX, w: 42 },
-        title: { x: marginX + 54, w: 248 },
-        findings: { x: marginX + 316, w: contentWidth - 316 },
+        details: { x: marginX + 54, w: 300 },
+        findings: { x: marginX + 378, w: contentWidth - 378 },
       };
+      const detailColumnGap = 12;
+      const detailColumnWidth = (tableColumns.details.w - detailColumnGap) / 2;
+      const detailValueFontSize = 7.3;
 
       function drawTableHeader() {
         setFont('bold', 8.5);
@@ -13303,7 +13327,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         pdf.line(marginX, y, marginX + contentWidth, y);
         y += 14;
         pdf.text('Page', tableColumns.page.x, y);
-        pdf.text('Title', tableColumns.title.x, y);
+        pdf.text('Details', tableColumns.details.x, y);
         pdf.text('Findings', tableColumns.findings.x, y);
         y += 8;
         pdf.line(marginX, y, marginX + contentWidth, y);
@@ -13326,15 +13350,44 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         setFont('normal', bodyFontSize);
         const pageLines = wrapText(row.number || '--', tableColumns.page.w);
-        const titleLines = wrapText(title, tableColumns.title.w);
+        const titleLines = wrapText(title, tableColumns.details.w);
         const findingLines = wrapText(findingsText, tableColumns.findings.w);
         const mainLineCount = Math.max(pageLines.length, titleLines.length, findingLines.length, 1);
-        const valueX = tableColumns.title.x;
-        const valueWidth = contentWidth - (valueX - marginX);
-        const preparedDetails = detailRows.map((detail) => ({
-          ...detail,
-          valueLines: wrapText(String(detail.value || ''), valueWidth),
-        }));
+        const preparedDetails = detailRows.map((detail) => {
+          setFont('bold', detailValueFontSize);
+          const labelLines = wrapText(`${detail.label}:`, detailColumnWidth);
+          setFont('normal', detailValueFontSize);
+          const valueLines = wrapText(String(detail.value || ''), detailColumnWidth);
+          return {
+            ...detail,
+            labelLines,
+            valueLines,
+            height: ((labelLines.length + valueLines.length) * detailLineHeight) + 4,
+          };
+        });
+
+        const drawDetailItem = (detail, x, startY) => {
+          let itemY = startY;
+          setFont('bold', detailValueFontSize);
+          setTextColor(textColor);
+          detail.labelLines.forEach((line) => {
+            pdf.text(line, x, itemY);
+            itemY += detailLineHeight;
+          });
+          if (detail.link || urlPattern.test(String(detail.value || ''))) {
+            detail.valueLines.forEach((line) => {
+              drawLinkedLines([line], x, itemY, detailLineHeight, detail.link || detail.value, detailColumnWidth, detailValueFontSize);
+              itemY += detailLineHeight;
+            });
+          } else {
+            setFont('normal', detailValueFontSize);
+            setTextColor(textColor);
+            detail.valueLines.forEach((line) => {
+              pdf.text(line, x, itemY);
+              itemY += detailLineHeight;
+            });
+          }
+        };
 
         ensureSpace(mainLineCount * bodyLineHeight + 24);
 
@@ -13342,33 +13395,24 @@ export default function App({ currentRoute, navigateToRoute }) {
         setFont('normal', bodyFontSize);
         setTextColor(textColor);
         pdf.text(pageLines, tableColumns.page.x, y);
-        pdf.text(titleLines, tableColumns.title.x, y);
+        pdf.text(titleLines, tableColumns.details.x, y);
         pdf.text(findingLines, tableColumns.findings.x, y);
-        y += mainLineCount * bodyLineHeight + 7;
+        y += mainLineCount * bodyLineHeight + 8;
 
-        preparedDetails.forEach((detail) => {
-          ensureSpace(detailLineHeight * 2 + 10);
-          setFont('bold', 8);
-          setTextColor(textColor);
-          pdf.text(`${detail.label}:`, tableColumns.title.x, y);
-          y += detailLineHeight;
-          if (detail.link || urlPattern.test(String(detail.value || ''))) {
-            detail.valueLines.forEach((line) => {
-              ensureSpace(detailLineHeight + 4);
-              drawLinkedLines([line], valueX, y, detailLineHeight, detail.link || detail.value, valueWidth, 8);
-              y += detailLineHeight;
-            });
-          } else {
-            setFont('normal', 8);
-            setTextColor(textColor);
-            detail.valueLines.forEach((line) => {
-              ensureSpace(detailLineHeight + 4);
-              pdf.text(line, valueX, y);
-              y += detailLineHeight;
-            });
+        for (let index = 0; index < preparedDetails.length; index += 2) {
+          const leftDetail = preparedDetails[index];
+          const rightDetail = preparedDetails[index + 1];
+          const pairHeight = Math.max(leftDetail?.height || 0, rightDetail?.height || 0);
+          ensureSpace(pairHeight + 6);
+          const pairY = y;
+          if (leftDetail) {
+            drawDetailItem(leftDetail, tableColumns.details.x, pairY);
           }
-          y += 4;
-        });
+          if (rightDetail) {
+            drawDetailItem(rightDetail, tableColumns.details.x + detailColumnWidth + detailColumnGap, pairY);
+          }
+          y += pairHeight + 5;
+        }
 
         ensureSpace(16);
         y += 6;
@@ -13377,7 +13421,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         y += 10;
 
         if (typeof pdf.link === 'function' && row.url && !preparedDetails.some((detail) => detail.key === 'url')) {
-          pdf.link(tableColumns.title.x, rowTop - 9, tableColumns.title.w, mainLineCount * bodyLineHeight, { url: normalizeLinkUrl(row.url) });
+          pdf.link(tableColumns.details.x, rowTop - 9, tableColumns.details.w, mainLineCount * bodyLineHeight, { url: normalizeLinkUrl(row.url) });
         }
       });
 

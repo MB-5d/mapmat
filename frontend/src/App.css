@@ -6762,6 +6762,18 @@ body {
   overscroll-behavior: contain;
 }
 
+.history-drawer.account-drawer,
+.version-history-drawer.account-drawer {
+  gap: 0;
+  padding-bottom: 0;
+}
+
+.history-drawer .account-drawer-body,
+.version-history-drawer .account-drawer-body {
+  flex: 1;
+  padding-right: 0;
+}
+
 .version-history-card {
   display: flex;
   flex-direction: column;
@@ -6769,8 +6781,24 @@ body {
 }
 
 .version-history-drawer .account-drawer-body {
+  gap: 0;
   padding-bottom: var(--unit-88);
   scroll-padding-bottom: var(--unit-88);
+}
+
+.version-history-drawer .version-history-tabs {
+  margin: var(--unit-16) 0;
+}
+
+.version-history-drawer .version-history-card {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  padding: 0 16px var(--unit-88);
+  background: transparent;
 }
 
 .timeline-group-list,
@@ -7169,6 +7197,14 @@ body {
 }
 
 .report-drawer .drawer-back-to-top {
+  position: absolute;
+  right: var(--unit-32);
+  bottom: var(--unit-20);
+  margin: 0;
+  z-index: 8;
+}
+
+.history-drawer .drawer-back-to-top {
   position: absolute;
   right: var(--unit-32);
   bottom: var(--unit-20);

@@ -941,7 +941,9 @@ describe('map image asset persistence', () => {
     expect(appCss).toMatch(/\.report-drawer:not\(\.image-report-drawer\) \.report-drawer-body \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
     expect(appCss).toMatch(/\.image-report-list-shell \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
     expect(appCss).toMatch(/\.version-history-drawer \.account-drawer-body \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.version-history-drawer \.version-history-card \{[\s\S]*flex: 1;[\s\S]*min-height: 0;[\s\S]*padding: 0 16px var\(--unit-88\);/);
     expect(appCss).toMatch(/\.history-list \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.history-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
     expect(appCss).toMatch(/\.comments-panel-body \{[\s\S]*padding: 12px 12px var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
   });
 
