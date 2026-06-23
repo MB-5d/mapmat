@@ -937,6 +937,14 @@ describe('map image asset persistence', () => {
     expect(appCss).toMatch(/\.image-upload-zone \{[\s\S]*border: var\(--border-width-subtle\) dashed var\(--ui-color-border-strong\);/);
   });
 
+  test('back-to-top scroll areas reserve bottom clearance', () => {
+    expect(appCss).toMatch(/\.report-drawer:not\(\.image-report-drawer\) \.report-drawer-body \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.image-report-list-shell \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.version-history-drawer \.account-drawer-body \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.history-list \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+    expect(appCss).toMatch(/\.comments-panel-body \{[\s\S]*padding: 12px 12px var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
+  });
+
   test('autosave snapshots only track canvas content changes', () => {
     const base = {
       name: 'Original map name',
