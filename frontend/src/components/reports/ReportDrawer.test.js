@@ -370,6 +370,23 @@ describe('ReportDrawer', () => {
     expect(descriptionItem.getAttribute('aria-checked')).toBe('true');
   });
 
+  test('passes visible report details to the download action', () => {
+    const onDownload = jest.fn();
+    renderDrawer({ onDownload });
+
+    const downloadButton = container.querySelector('.report-download-button');
+    act(() => {
+      downloadButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onDownload).toHaveBeenCalledWith(expect.objectContaining({
+      visibleDetails: expect.objectContaining({
+        description: true,
+        referrerUrl: false,
+      }),
+    }));
+  });
+
   test('uses page titles for duplicate and parent locate links', () => {
     const onLocateNode = jest.fn();
     renderDrawer({ onLocateNode });

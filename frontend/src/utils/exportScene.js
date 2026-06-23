@@ -963,7 +963,7 @@ const drawSvgPathPdf = (pdf, pathData, x, y, scaleX, scaleY, color) => {
   pdf.fill();
 };
 
-const drawVellicLogoPdf = (pdf, x, y, width) => {
+export const drawVellicLogoPdf = (pdf, x, y, width) => {
   const scale = width / 214;
   drawSvgPathPdf(pdf, VELLIC_LOGO_MARK_PATH, x, y, scale * 0.410256, scale * 0.410256, DESIGN_COLORS.brand);
   drawSvgPathPdf(pdf, VELLIC_LOGO_WORDMARK_PATHS.v, x + 70.04 * scale, y + 12.91 * scale, scale, scale, DESIGN_COLORS.text);

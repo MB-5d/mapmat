@@ -18,6 +18,12 @@ import Button from '../ui/Button';
 import IconButton from '../ui/IconButton';
 import { MenuItem, MenuPanel } from '../ui/Menu';
 import SearchInput from '../ui/SearchInput';
+import {
+  REPORT_DETAIL_OPTIONS,
+  createDefaultVisibleReportDetails,
+  getReportDetailRows,
+  getReportFindingTypes,
+} from '../../utils/reportDetails';
 import { comparePageNumbers } from '../../utils/reportUtils';
 
 const REPORT_FILTER_META = {
@@ -39,35 +45,6 @@ const REPORT_FILTER_META = {
   missingH1: { label: 'No H1', className: 'report-filter-chip--warning' },
 };
 
-const NON_FINDING_TYPES = new Set(['standard']);
-
-const REPORT_DETAIL_OPTIONS = [
-  { key: 'duplicateOf', label: 'Duplicate of', defaultVisible: true },
-  { key: 'parentUrl', label: 'Parent', defaultVisible: true },
-  { key: 'referrerUrl', label: 'Referrer', defaultVisible: false },
-  { key: 'httpStatus', label: 'HTTP status', defaultVisible: true },
-  { key: 'errorType', label: 'Error type', defaultVisible: true },
-  { key: 'scanStatus', label: 'Scan status', defaultVisible: false },
-  { key: 'reason', label: 'Reason', defaultVisible: true },
-  { key: 'description', label: 'Description', defaultVisible: true },
-  { key: 'metaKeywords', label: 'Meta keywords', defaultVisible: true },
-  { key: 'canonical', label: 'Canonical', defaultVisible: true },
-  { key: 'h1', label: 'H1', defaultVisible: true },
-  { key: 'h2', label: 'H2', defaultVisible: true },
-  { key: 'robots', label: 'Robots', defaultVisible: true },
-  { key: 'language', label: 'Language', defaultVisible: true },
-  { key: 'openGraphTitle', label: 'Open Graph title', defaultVisible: true },
-  { key: 'openGraphDescription', label: 'Open Graph description', defaultVisible: true },
-  { key: 'twitterCard', label: 'Twitter card', defaultVisible: true },
-];
-
-const createDefaultVisibleDetails = () => (
-  REPORT_DETAIL_OPTIONS.reduce((next, option) => {
-    next[option.key] = option.defaultVisible;
-    return next;
-  }, {})
-);
-
 const normalizeReportLookupValue = (value) => (
   String(value || '')
     .trim()
@@ -83,10 +60,6 @@ const formatReportLinkFallback = (value) => (
     .replace(/^https?:\/\//i, '')
     .replace(/^www\./i, '')
     .replace(/\/+$/g, '')
-);
-
-const getEntryFindingTypes = (entry) => (
-  (entry?.types || []).filter((type) => !NON_FINDING_TYPES.has(type))
 );
 
 const ReportDrawer = ({
@@ -110,7 +83,7 @@ const ReportDrawer = ({
   const [expandedRow, setExpandedRow] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [showDetailsMenu, setShowDetailsMenu] = useState(false);
-  const [visibleDetails, setVisibleDetails] = useState(createDefaultVisibleDetails);
+  const [visibleDetails, setVisibleDetails] = useState(createDefaultVisibleReportDetails);
   const bodyRef = useRef(null);
   const filterMenuRef = useRef(null);
   const detailsMenuRef = useRef(null);
@@ -304,7 +277,7 @@ const ReportDrawer = ({
       } else if (sortConfig.key === 'title') {
         result = (left.title || left.url || '').localeCompare(right.title || right.url || '', undefined, { sensitivity: 'base' });
       } else if (sortConfig.key === 'issues') {
-        result = getEntryFindingTypes(left).length - getEntryFindingTypes(right).length;
+        result = getReportFindingTypes(left).length - getReportFindingTypes(right).length;
       }
 
       if (result === 0) {
@@ -454,7 +427,12 @@ const ReportDrawer = ({
           <div className="report-drawer-subtitle" title={mapTitle}>{truncatedMapTitle}</div>
         </div>
         <div className="report-header-actions">
-          <Button className="report-download-button" variant="secondary" size="sm" onClick={onDownload}>
+          <Button
+            className="report-download-button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onDownload?.({ visibleDetails })}
+          >
             <Download size={14} />
             Download report
           </Button>
@@ -638,23 +616,8 @@ const ReportDrawer = ({
           {sortedEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
             const isLocked = Boolean(entry.isEntitlementLocked || entry.entitlementLocked);
-            const findingCount = getEntryFindingTypes(entry).length;
-            const seoRows = [
-              ['HTTP status', entry.httpErrorLabel || (entry.statusCode ? `HTTP ${entry.statusCode}` : ''), 'httpStatus'],
-              ['Error type', entry.isViewableError ? 'Viewable HTTP error' : entry.httpErrorType, 'errorType'],
-              ['Scan status', entry.isVirtualMissing ? 'Missing virtual page' : entry.scanStatus, 'scanStatus'],
-              ['Reason', entry.blockedReason, 'reason'],
-              ['Description', entry.description, 'description'],
-              ['Meta keywords', entry.metaKeywords, 'metaKeywords'],
-              ['Canonical', entry.canonicalUrl, 'canonical'],
-              ['H1', entry.h1, 'h1'],
-              ['H2', entry.h2, 'h2'],
-              ['Robots', entry.robots, 'robots'],
-              ['Language', entry.language, 'language'],
-              ['Open Graph title', entry.openGraph?.title, 'openGraphTitle'],
-              ['Open Graph description', entry.openGraph?.description, 'openGraphDescription'],
-              ['Twitter card', entry.twitter?.card, 'twitterCard'],
-            ].filter(([, value]) => value);
+            const findingCount = getReportFindingTypes(entry).length;
+            const detailRows = getReportDetailRows(entry, visibleDetails);
             const duplicateEntry = getLinkedEntry(entry.duplicateOf);
             const parentEntry = getLinkedEntry(entry.parentUrl);
             return (
@@ -735,7 +698,7 @@ const ReportDrawer = ({
                             </Button>
                           ) : null}
                           <div className="report-detail-badges">
-                            {getEntryFindingTypes(entry).map(type => {
+                            {getReportFindingTypes(entry).map(type => {
                               const meta = REPORT_FILTER_META[type] || {};
                               return (
                                 <span key={type} className={`report-badge ${meta.className || 'report-filter-chip--info'}`}>
@@ -788,12 +751,14 @@ const ReportDrawer = ({
                               </button>
                             </div>
                           )}
-                          {seoRows.filter(([, , key]) => visibleDetails[key]).map(([label, value]) => (
-                            <div className="report-detail-link-row" key={label}>
-                              <strong>{label}:</strong>
-                              <span>{value}</span>
-                            </div>
-                          ))}
+                          {detailRows
+                            .filter((row) => !['duplicateOf', 'parentUrl', 'referrerUrl'].includes(row.key))
+                            .map(({ label, value }) => (
+                              <div className="report-detail-link-row" key={label}>
+                                <strong>{label}:</strong>
+                                <span>{value}</span>
+                              </div>
+                            ))}
                         </div>
                       </div>
                     </div>

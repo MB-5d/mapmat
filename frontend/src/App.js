@@ -210,6 +210,7 @@ import {
 import {
   buildExportScene,
   drawExportSceneToPdf,
+  drawVellicLogoPdf,
   getPngExportLimitReason,
   getPdfSceneScale,
   loadExportThumbnailDataUrls,
@@ -217,6 +218,10 @@ import {
   registerExportPdfFonts,
   renderExportSceneToPngBlob,
 } from './utils/exportScene';
+import {
+  getReportDetailRows,
+  getReportFindingTypes,
+} from './utils/reportDetails';
 
 const PERMISSION_AUTH_CONTEXT_MESSAGE = 'Sign in is required to verify your account type and permissions. We do not use this step to sell or share your information.';
 const MODIFY_AUTH_CONTEXT_MESSAGE = 'Log in or sign up to select and modify maps.';
@@ -13086,7 +13091,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
-  const downloadReportPdf = async () => {
+  const downloadReportPdf = async ({ visibleDetails: reportVisibleDetails } = {}) => {
     if (!reportEntries.length) {
       showToast('No report data available', 'warning');
       return;
@@ -13099,26 +13104,156 @@ export default function App({ currentRoute, navigateToRoute }) {
       const [{ jsPDF }] = await Promise.all([import('jspdf')]);
       const exportTitle = getCurrentExportTitle();
       const generatedAt = new Date();
+      const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
+      await registerExportPdfFonts(pdf);
       const metadata = buildExportMetadata({
         title: exportTitle,
         generatedAt,
         pageCount: reportRows.length,
         format: 'scan-report',
       });
-      const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const marginX = 40;
-      let y = 40;
+      const marginX = 42;
+      const contentWidth = pageWidth - marginX * 2;
+      const bodyFontSize = 8.5;
+      const bodyLineHeight = 12;
+      const detailLineHeight = 11;
+      const textColor = '#1e293b';
+      const mutedColor = '#64748b';
+      const borderColor = '#e2e8f0';
+      const softBgColor = '#f8fafc';
+      const linkColor = '#4f46e5';
+      const urlPattern = /^https?:\/\//i;
 
-      pdf.setFontSize(18);
-      pdf.text('Scan report', marginX, y);
-      y += 22;
+      const setFont = (style = 'normal', size = bodyFontSize) => {
+        const fonts = pdf.getFontList?.() || {};
+        if (fonts.Sora) pdf.setFont('Sora', style === 'bold' ? 'bold' : 'normal');
+        else pdf.setFont('helvetica', style === 'bold' ? 'bold' : 'normal');
+        pdf.setFontSize(size);
+      };
 
-      pdf.setFontSize(11);
-      pdf.text(`Total pages: ${reportStats.total}`, marginX, y);
-      y += 16;
-      pdf.text(`${metadata.tagline} - ${metadata.sourceUrl}`, marginX, y);
-      y += 16;
+      const hexToRgb = (color) => {
+        if (typeof color !== 'string' || !/^#[0-9a-f]{6}$/i.test(color)) return null;
+        return [
+          parseInt(color.slice(1, 3), 16),
+          parseInt(color.slice(3, 5), 16),
+          parseInt(color.slice(5, 7), 16),
+        ];
+      };
+
+      const setTextColor = (color) => {
+        const rgb = hexToRgb(color);
+        if (rgb) pdf.setTextColor(...rgb);
+        else pdf.setTextColor(color);
+      };
+
+      const setDrawColor = (color) => {
+        const rgb = hexToRgb(color);
+        if (rgb) pdf.setDrawColor(...rgb);
+        else pdf.setDrawColor(color);
+      };
+
+      const setFillColor = (color) => {
+        const rgb = hexToRgb(color);
+        if (rgb) pdf.setFillColor(...rgb);
+        else pdf.setFillColor(color);
+      };
+
+      const normalizeLinkUrl = (value = '') => {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        return urlPattern.test(raw) ? raw : `https://${raw}`;
+      };
+
+      const formatDisplayUrl = (value = '') => (
+        String(value || '')
+          .trim()
+          .replace(/^https?:\/\//i, '')
+          .replace(/^www\./i, '')
+          .replace(/\/+$/g, '')
+      );
+
+      const siteUrl = root?.url || currentMap?.root?.url || lastScanUrl || urlInput || reportRows.find((row) => row.url)?.url || '';
+      const siteDisplayUrl = formatDisplayUrl(siteUrl);
+
+      const wrapText = (value, width) => {
+        const text = String(value || '');
+        if (!text) return [];
+        const initialLines = pdf.splitTextToSize(text, width).flatMap((line) => String(line).split('\n'));
+        return initialLines.flatMap((line) => {
+          if ((pdf.getTextWidth?.(line) || 0) <= width) return [line];
+          const chunks = [];
+          let current = '';
+          Array.from(line).forEach((char) => {
+            const next = `${current}${char}`;
+            if (current && (pdf.getTextWidth?.(next) || 0) > width) {
+              chunks.push(current);
+              current = char;
+            } else {
+              current = next;
+            }
+          });
+          if (current) chunks.push(current);
+          return chunks;
+        });
+      };
+
+      const ensureSpace = (heightNeeded) => {
+        if (y + heightNeeded <= pageHeight - 48) return;
+        pdf.addPage();
+        y = 42;
+        drawTableHeader();
+      };
+
+      const drawLinkedLines = (lines, x, startY, lineHeight, url, maxWidth, size = bodyFontSize) => {
+        const linkUrl = normalizeLinkUrl(url);
+        setFont('normal', size);
+        setTextColor(linkColor);
+        lines.forEach((line, index) => {
+          const lineY = startY + index * lineHeight;
+          pdf.text(line, x, lineY);
+          if (linkUrl && typeof pdf.link === 'function') {
+            const linkWidth = Math.min(maxWidth, Math.max(1, pdf.getTextWidth?.(line) || line.length * size * 0.5));
+            pdf.link(x, lineY - lineHeight + 2, linkWidth, lineHeight, { url: linkUrl });
+          }
+        });
+      };
+
+      const drawCreatedWithBrand = () => {
+        const logoWidth = 84;
+        const logoX = pageWidth - marginX - logoWidth;
+        const logoY = 30;
+        setFont('normal', 8.5);
+        setTextColor(mutedColor);
+        const createdText = 'Created with';
+        const createdWidth = pdf.getTextWidth?.(createdText) || 50;
+        pdf.text(createdText, logoX - createdWidth - 8, logoY + 17);
+        drawVellicLogoPdf(pdf, logoX, logoY, logoWidth);
+        if (typeof pdf.link === 'function') {
+          pdf.link(logoX, logoY, logoWidth, 26, { url: metadata.sourceUrl });
+        }
+      };
+
+      const drawHeader = () => {
+        let headerY = 42;
+        drawCreatedWithBrand();
+        setFont('bold', 10);
+        setTextColor(mutedColor);
+        pdf.text('Scan report & findings', marginX, headerY);
+        headerY += 22;
+        setFont('bold', 20);
+        setTextColor(textColor);
+        const titleLines = wrapText(reportTitle || exportTitle || 'Untitled Map', contentWidth - 150);
+        pdf.text(titleLines, marginX, headerY);
+        headerY += Math.max(1, titleLines.length) * 24;
+        if (siteDisplayUrl) {
+          const siteLines = wrapText(siteDisplayUrl, contentWidth - 150);
+          drawLinkedLines(siteLines, marginX, headerY, 13, siteUrl, contentWidth - 150);
+          headerY += siteLines.length * 13 + 6;
+        }
+        return headerY + 8;
+      };
 
       const alwaysShowReportStatKeys = new Set([
         'orphanPages',
@@ -13131,53 +13266,119 @@ export default function App({ currentRoute, navigateToRoute }) {
       const statLines = REPORT_TYPE_OPTIONS
         .filter((option) => option.key !== 'standard')
         .filter((option) => alwaysShowReportStatKeys.has(option.key) || reportStats[option.key] > 0)
-        .map((option) => `${option.label}: ${reportStats[option.key] || 0}`);
+        .map((option) => ({ ...option, value: reportStats[option.key] || 0 }));
 
-      statLines.forEach((line) => {
-        pdf.text(line, marginX, y);
+      const drawStats = () => {
+        const cardGap = 8;
+        const cardWidth = (contentWidth - cardGap * 2) / 3;
+        const cardHeight = 34;
+        statLines.forEach((stat, index) => {
+          const col = index % 3;
+          const row = Math.floor(index / 3);
+          const x = marginX + col * (cardWidth + cardGap);
+          const cardY = y + row * (cardHeight + cardGap);
+          setDrawColor(borderColor);
+          setFillColor(softBgColor);
+          pdf.roundedRect(x, cardY, cardWidth, cardHeight, 6, 6, 'FD');
+          setFont('normal', 7.5);
+          setTextColor(mutedColor);
+          pdf.text(stat.label, x + 9, cardY + 13, { maxWidth: cardWidth - 18 });
+          setFont('bold', 11);
+          setTextColor(textColor);
+          pdf.text(String(stat.value), x + 9, cardY + 27);
+        });
+        y += Math.ceil(statLines.length / 3) * (cardHeight + cardGap) + 8;
+      };
+
+      const tableColumns = {
+        page: { x: marginX, w: 42 },
+        title: { x: marginX + 54, w: 248 },
+        findings: { x: marginX + 316, w: contentWidth - 316 },
+      };
+
+      function drawTableHeader() {
+        setFont('bold', 8.5);
+        setTextColor(mutedColor);
+        setDrawColor(borderColor);
+        pdf.line(marginX, y, marginX + contentWidth, y);
         y += 14;
-      });
+        pdf.text('Page', tableColumns.page.x, y);
+        pdf.text('Title', tableColumns.title.x, y);
+        pdf.text('Findings', tableColumns.findings.x, y);
+        y += 8;
+        pdf.line(marginX, y, marginX + contentWidth, y);
+        y += 14;
+      }
 
-      y += 8;
-      pdf.setFontSize(10);
-      pdf.text('Page', marginX, y);
-      pdf.text('Title', marginX + 50, y);
-      pdf.text('Issues', marginX + 220, y);
-      pdf.text('URL', marginX + 310, y);
-      y += 14;
+      let y = drawHeader();
+      drawStats();
+      drawTableHeader();
 
+      const typeLookup = new Map(REPORT_TYPE_OPTIONS.map((option) => [option.key, option.label]));
       reportRows.forEach((row) => {
-        const issues = row.types
-          .map((type) => {
-            const option = REPORT_TYPE_OPTIONS.find((opt) => opt.key === type);
-            return option ? option.label : type;
-          })
-          .join(', ');
-        const title = row.title || row.url || '';
-        const urlLines = pdf.splitTextToSize(row.url || '', 240);
-        const seoLines = [
-          row.httpErrorLabel ? `HTTP status: ${row.httpErrorLabel}` : '',
-          row.isViewableError ? 'Error type: Viewable HTTP error' : '',
-          row.description ? `Description: ${row.description}` : '',
-          row.metaKeywords ? `Keywords: ${row.metaKeywords}` : '',
-          row.canonicalUrl ? `Canonical: ${row.canonicalUrl}` : '',
-          row.h1 ? `H1: ${row.h1}` : '',
-        ].filter(Boolean).flatMap((line) => pdf.splitTextToSize(line, 240));
-        const rowHeight = Math.max(12, (urlLines.length + seoLines.length) * 12);
+        const findingLabels = getReportFindingTypes(row).map((type) => typeLookup.get(type) || type);
+        const findingsText = findingLabels.length ? findingLabels.join(', ') : 'None';
+        const title = row.title || row.url || 'Untitled page';
+        const detailRows = [
+          row.url ? { key: 'url', label: 'URL', value: row.url, link: row.url } : null,
+          ...getReportDetailRows(row, reportVisibleDetails),
+        ].filter(Boolean);
 
-        if (y + rowHeight > pageHeight - 40) {
-          pdf.addPage();
-          y = 40;
-        }
+        setFont('normal', bodyFontSize);
+        const pageLines = wrapText(row.number || '--', tableColumns.page.w);
+        const titleLines = wrapText(title, tableColumns.title.w);
+        const findingLines = wrapText(findingsText, tableColumns.findings.w);
+        const mainLineCount = Math.max(pageLines.length, titleLines.length, findingLines.length, 1);
+        const valueX = tableColumns.title.x;
+        const valueWidth = contentWidth - (valueX - marginX);
+        const preparedDetails = detailRows.map((detail) => ({
+          ...detail,
+          valueLines: wrapText(String(detail.value || ''), valueWidth),
+        }));
 
-        pdf.text(row.number || '--', marginX, y);
-        pdf.text(title.slice(0, 28), marginX + 50, y);
-        pdf.text(issues.slice(0, 40), marginX + 220, y);
-        pdf.text(urlLines, marginX + 310, y);
-        if (seoLines.length) {
-          pdf.text(seoLines, marginX + 310, y + (urlLines.length * 12));
+        ensureSpace(mainLineCount * bodyLineHeight + 24);
+
+        const rowTop = y;
+        setFont('normal', bodyFontSize);
+        setTextColor(textColor);
+        pdf.text(pageLines, tableColumns.page.x, y);
+        pdf.text(titleLines, tableColumns.title.x, y);
+        pdf.text(findingLines, tableColumns.findings.x, y);
+        y += mainLineCount * bodyLineHeight + 7;
+
+        preparedDetails.forEach((detail) => {
+          ensureSpace(detailLineHeight * 2 + 10);
+          setFont('bold', 8);
+          setTextColor(textColor);
+          pdf.text(`${detail.label}:`, tableColumns.title.x, y);
+          y += detailLineHeight;
+          if (detail.link || urlPattern.test(String(detail.value || ''))) {
+            detail.valueLines.forEach((line) => {
+              ensureSpace(detailLineHeight + 4);
+              drawLinkedLines([line], valueX, y, detailLineHeight, detail.link || detail.value, valueWidth, 8);
+              y += detailLineHeight;
+            });
+          } else {
+            setFont('normal', 8);
+            setTextColor(textColor);
+            detail.valueLines.forEach((line) => {
+              ensureSpace(detailLineHeight + 4);
+              pdf.text(line, valueX, y);
+              y += detailLineHeight;
+            });
+          }
+          y += 4;
+        });
+
+        ensureSpace(16);
+        y += 6;
+        setDrawColor(borderColor);
+        pdf.line(marginX, y, marginX + contentWidth, y);
+        y += 10;
+
+        if (typeof pdf.link === 'function' && row.url && !preparedDetails.some((detail) => detail.key === 'url')) {
+          pdf.link(tableColumns.title.x, rowTop - 9, tableColumns.title.w, mainLineCount * bodyLineHeight, { url: normalizeLinkUrl(row.url) });
         }
-        y += rowHeight + 6;
       });
 
       pdf.save(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.pdf`);
