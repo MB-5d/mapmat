@@ -288,12 +288,15 @@ describe('ReportDrawer', () => {
     expect(container.querySelector('.report-details-control')).not.toBeNull();
     expect(container.querySelector('.report-summary')?.className).toContain('report-summary--single-row');
     const summaryBlock = appCss.match(/\.report-summary \{[^}]*\}/)?.[0] || '';
-    expect(summaryBlock).toContain('margin-bottom: var(--unit-24)');
+    const drawerBlock = appCss.match(/\.report-drawer \{[^}]*\}/)?.[0] || '';
+    expect(drawerBlock).toContain('--report-controls-sticky-height: 56px');
+    expect(summaryBlock).toContain('margin-bottom: var(--unit-28)');
     const singleRowBlock = appCss.match(/\.report-summary--single-row \{[^}]*\}/)?.[0] || '';
     expect(singleRowBlock).toContain('grid-template-columns: 160px 1fr');
     const searchBlock = appCss.match(/\.report-search \{[^}]*\}/)?.[0] || '';
     expect(searchBlock).toContain('max-width: 296px');
     expect(appCss).toMatch(/\.report-controls-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
+    expect(appCss).toMatch(/\.report-controls-sticky \{[\s\S]*padding-bottom: var\(--unit-24\);/);
     const tableBlock = appCss.match(/\.report-table \{[^}]*\}/)?.[0] || '';
     expect(tableBlock).toContain('flex: 0 0 auto');
     expect(tableBlock).not.toContain('border: 1px solid');

@@ -5871,7 +5871,7 @@ body {
 }
 
 .report-drawer {
-  --report-controls-sticky-height: 42px;
+  --report-controls-sticky-height: 56px;
   position: fixed;
   right: 0;
   top: 0;
@@ -5962,7 +5962,7 @@ body {
   gap: var(--unit-10);
   align-items: start;
   margin-top: var(--unit-12);
-  margin-bottom: var(--unit-24);
+  margin-bottom: var(--unit-28);
 }
 
 .report-summary--single-row {
@@ -6260,7 +6260,7 @@ body {
   top: 0;
   z-index: 6;
   min-height: var(--report-controls-sticky-height);
-  padding-bottom: var(--unit-10);
+  padding-bottom: var(--unit-24);
   background: var(--modal-bg);
 }
 
