@@ -45,6 +45,49 @@ describe('reportUtils', () => {
     expect(getReportTypesForNode(node)).not.toContain('errorPages');
   });
 
+  test('adds factual metadata issue types for report chips and filters', () => {
+    const node = {
+      id: 'seo-1',
+      title: 'This page title is intentionally very long so the report can flag it as a factual metadata issue',
+      url: 'https://example.com/long-title',
+      description: 'Too short',
+      h1s: [],
+      seoMetadata: {},
+    };
+
+    expect(getReportTypesForNode(node)).toEqual(expect.arrayContaining([
+      'longTitle',
+      'shortDescription',
+      'missingH1',
+    ]));
+  });
+
+  test('uses scanned H1 arrays before flagging missing H1', () => {
+    const node = {
+      id: 'seo-2',
+      title: 'Product overview',
+      url: 'https://example.com/product',
+      description: 'A clear product overview with enough detail for the scan report metadata summary.',
+      h1s: ['Product overview'],
+      seoMetadata: {},
+    };
+
+    expect(getReportTypesForNode(node)).not.toContain('missingH1');
+  });
+
+  test('does not add metadata issue types when no scan metadata is present', () => {
+    const node = {
+      id: 'manual-1',
+      title: 'Manual page',
+      url: 'https://example.com/manual',
+    };
+
+    expect(getReportTypesForNode(node)).not.toEqual(expect.arrayContaining([
+      'missingDescription',
+      'missingH1',
+    ]));
+  });
+
   test('caps report total for entitlement-limited maps', () => {
     const entries = Array.from({ length: 50 }, (_, index) => ({
       id: `page-${index}`,

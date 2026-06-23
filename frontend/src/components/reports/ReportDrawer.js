@@ -10,7 +10,6 @@ import {
   ExternalLink,
   Filter,
   Locate,
-  Loader2,
   X,
 } from 'lucide-react';
 
@@ -18,31 +17,7 @@ import Button from '../ui/Button';
 import IconButton from '../ui/IconButton';
 import { MenuItem, MenuPanel } from '../ui/Menu';
 import SearchInput from '../ui/SearchInput';
-import SegmentedControl from '../ui/SegmentedControl';
-import SelectInput from '../ui/SelectInput';
 import { comparePageNumbers } from '../../utils/reportUtils';
-
-const INSIGHT_CATEGORY_LABELS = {
-  seo: 'SEO',
-  technical: 'Technical',
-  ia: 'IA',
-  content: 'Content',
-  accessibility: 'Accessibility Hints',
-};
-
-const INSIGHT_SEVERITY_LABELS = {
-  critical: 'Critical',
-  high: 'High',
-  medium: 'Medium',
-  low: 'Low',
-  info: 'Info',
-};
-
-const SCORE_LABEL = (score) => (Number.isFinite(score) ? `${score}` : '--');
-const REPORT_TABS = [
-  { value: 'report', label: 'Report' },
-  { value: 'insights', label: 'Insights' },
-];
 
 const REPORT_FILTER_META = {
   orphanPages: { label: 'Orphan', className: 'report-filter-chip--orphan' },
@@ -54,6 +29,13 @@ const REPORT_FILTER_META = {
   subdomains: { label: 'Subdomain', className: 'report-filter-chip--info' },
   files: { label: 'Files', className: 'report-filter-chip--info' },
   authenticatedPages: { label: 'Authenticated', className: 'report-filter-chip--warning' },
+  missingTitle: { label: 'No title', className: 'report-filter-chip--warning' },
+  shortTitle: { label: 'Short title', className: 'report-filter-chip--info' },
+  longTitle: { label: 'Very long title', className: 'report-filter-chip--warning' },
+  missingDescription: { label: 'No description', className: 'report-filter-chip--warning' },
+  shortDescription: { label: 'Short description', className: 'report-filter-chip--info' },
+  longDescription: { label: 'Very long description', className: 'report-filter-chip--warning' },
+  missingH1: { label: 'No H1', className: 'report-filter-chip--warning' },
 };
 
 const ReportDrawer = ({
@@ -63,10 +45,6 @@ const ReportDrawer = ({
   stats,
   typeOptions,
   onDownload,
-  insights,
-  insightsLoading = false,
-  insightsError = '',
-  onRunInsights,
   onLocateNode,
   onLocateUrl,
   onUpgrade,
@@ -74,15 +52,12 @@ const ReportDrawer = ({
   scanMeta,
 }) => {
   const [sortConfig, setSortConfig] = useState({ key: 'number', direction: 'asc' });
-  const [activeTab, setActiveTab] = useState('report');
   const [showFilters, setShowFilters] = useState(false);
   const [shouldRender, setShouldRender] = useState(isOpen);
   const [isClosing, setIsClosing] = useState(false);
   const [search, setSearch] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
-  const [insightCategory, setInsightCategory] = useState('all');
-  const [insightSeverity, setInsightSeverity] = useState('all');
   const bodyRef = useRef(null);
   const filterMenuRef = useRef(null);
   const [filters, setFilters] = useState(() => {
@@ -251,23 +226,6 @@ const ReportDrawer = ({
     });
   }, [entryOrder, filteredEntries, sortConfig]);
 
-  const pageInsightLookup = useMemo(() => {
-    const map = new Map();
-    (insights?.pageInsights || []).forEach((entry) => {
-      if (entry.pageId) map.set(entry.pageId, entry);
-      if (entry.url) map.set(entry.url, entry);
-    });
-    return map;
-  }, [insights]);
-
-  const filteredFindings = useMemo(() => {
-    const findings = Array.isArray(insights?.findings) ? insights.findings : [];
-    return findings.filter((finding) => (
-      (insightCategory === 'all' || finding.category === insightCategory)
-      && (insightSeverity === 'all' || finding.severity === insightSeverity)
-    ));
-  }, [insightCategory, insightSeverity, insights]);
-
   const toggleSort = (key) => {
     setSortConfig((previous) => {
       if (previous.key === key) {
@@ -338,6 +296,13 @@ const ReportDrawer = ({
     { key: 'missing' },
     { key: 'duplicates' },
     { key: 'authenticatedPages' },
+    { key: 'missingTitle' },
+    { key: 'shortTitle' },
+    { key: 'longTitle' },
+    { key: 'missingDescription' },
+    { key: 'shortDescription' },
+    { key: 'longDescription' },
+    { key: 'missingH1' },
   ]
     .map(segment => {
       const option = typeOptions.find(item => item.key === segment.key);
@@ -402,19 +367,6 @@ const ReportDrawer = ({
           e.nativeEvent?.stopImmediatePropagation?.();
         }}
       >
-        <SegmentedControl
-          className="report-tabs"
-          variant="tabs"
-          size="sm"
-          fullWidth
-          ariaLabel="Report views"
-          value={activeTab}
-          onChange={setActiveTab}
-          options={REPORT_TABS}
-          optionRole="tab"
-        />
-        {activeTab === 'report' ? (
-          <>
         {scanCollapseReason && (
           <div className="ui-status-alert ui-status-alert--warning report-scan-alert">
             <AlertTriangle size={16} className="ui-status-alert__icon" />
@@ -439,7 +391,7 @@ const ReportDrawer = ({
             </Button>
           </div>
         )}
-        <section className="report-summary">
+        <section className={`report-summary ${statCards.length > 0 && statCards.length <= 4 ? 'report-summary--single-row' : ''}`}>
           <button
             type="button"
             className={`report-total-card ${!hasActiveFilters ? 'is-selected' : ''}`}
@@ -493,7 +445,6 @@ const ReportDrawer = ({
                           className="report-filter-menu-item"
                           role="menuitemcheckbox"
                           aria-checked={selected}
-                          selected={selected}
                           label={option.label}
                           endSlot={selected ? <Check size={14} aria-hidden="true" /> : null}
                           onClick={() => toggleFilter(option.key)}
@@ -522,7 +473,7 @@ const ReportDrawer = ({
               <div>{renderSortButton('pageType', 'Page type')}</div>
               <div>{renderSortButton('title', 'Page name')}</div>
               <div>{renderSortButton('issues', 'Issues', 'report-header-issues')}</div>
-              <div>Show</div>
+              <div className="report-header-show">Show</div>
               <div />
             </div>
           <div
@@ -533,7 +484,6 @@ const ReportDrawer = ({
           {sortedEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
             const isLocked = Boolean(entry.isEntitlementLocked || entry.entitlementLocked);
-            const pageInsight = pageInsightLookup.get(entry.id) || pageInsightLookup.get(entry.url) || null;
             const seoRows = [
               ['HTTP status', entry.httpErrorLabel || (entry.statusCode ? `HTTP ${entry.statusCode}` : '')],
               ['Error type', entry.isViewableError ? 'Viewable HTTP error' : entry.httpErrorType],
@@ -582,9 +532,6 @@ const ReportDrawer = ({
                   <div className="report-cell report-cell-type">{entry.pageType}</div>
                   <div className="report-cell report-cell-title" title={entry.title || entry.url}>
                     <span>{entry.title || entry.url}</span>
-                    {!isLocked && pageInsight && (
-                      <span className="report-page-score">{pageInsight.score}</span>
-                    )}
                   </div>
                   <div className="report-cell report-cell-count">{isLocked ? 'Locked' : entry.types.length}</div>
                   <IconButton
@@ -621,13 +568,6 @@ const ReportDrawer = ({
                       )}
                       <div className="report-detail-right">
                         <div className="report-detail-info">
-                          {pageInsight && (
-                            <div className="report-page-insight">
-                              <strong>Page Insight Score</strong>
-                              <span>{pageInsight.score}/100</span>
-                              <small>{pageInsight.findingCount} finding{pageInsight.findingCount === 1 ? '' : 's'}</small>
-                            </div>
-                          )}
                           <Button
                             type="button"
                             className="report-open-link"
@@ -703,125 +643,6 @@ const ReportDrawer = ({
         </div>
       </section>
         </section>
-          </>
-        ) : (
-          <section className="insights-panel">
-            {!insights && !insightsLoading && (
-              <div className="insights-empty">
-                <div className="insights-empty-title">Map Insights have not been run yet.</div>
-                <div className="insights-empty-copy">Run deterministic checks against the current scan data.</div>
-                <Button type="button" variant="primary" onClick={onRunInsights}>
-                  Run insights
-                </Button>
-              </div>
-            )}
-
-            {insightsLoading && (
-              <div className="insights-empty">
-                <Loader2 size={22} className="spin" />
-                <div className="insights-empty-title">Running Insights...</div>
-              </div>
-            )}
-
-            {insightsError && !insightsLoading && (
-              <div className="insights-error">
-                {insightsError}
-              </div>
-            )}
-
-            {insights && !insightsLoading && (
-              <>
-                <section className="insights-summary">
-                  <div className="insights-score-card insights-score-card-main">
-                    <div className="insights-score-value">{SCORE_LABEL(insights.overallScore)}</div>
-                    <div className="insights-score-label">Overall Health</div>
-                  </div>
-                  {Object.entries(INSIGHT_CATEGORY_LABELS).map(([key, label]) => (
-                    <div key={key} className="insights-score-card">
-                      <div className="insights-score-value">{SCORE_LABEL(insights.scores?.[key])}</div>
-                      <div className="insights-score-label">{label}</div>
-                    </div>
-                  ))}
-                </section>
-
-                <section className="insights-counts">
-                  <span>{insights.totals?.pages || 0} pages</span>
-                  <span>{insights.findings?.length || 0} findings</span>
-                  <span>{insights.totals?.errorPages || 0} error pages</span>
-                  <span>{insights.totals?.missingMetaDescriptions || 0} missing descriptions</span>
-                  <span>{insights.totals?.missingH1s || 0} missing H1s</span>
-                </section>
-
-                <section className="insights-actions">
-                  <Button type="button" variant="secondary" size="sm" onClick={onRunInsights}>
-                    Rerun insights
-                  </Button>
-                  <SelectInput
-                    size="sm"
-                    label="Category"
-                    fieldClassName="insights-filter"
-                    value={insightCategory}
-                    onChange={(event) => setInsightCategory(event.target.value)}
-                  >
-                    <option value="all">All</option>
-                    {Object.entries(INSIGHT_CATEGORY_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </SelectInput>
-                  <SelectInput
-                    size="sm"
-                    label="Severity"
-                    fieldClassName="insights-filter"
-                    value={insightSeverity}
-                    onChange={(event) => setInsightSeverity(event.target.value)}
-                  >
-                    <option value="all">All</option>
-                    {Object.entries(INSIGHT_SEVERITY_LABELS).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </SelectInput>
-                </section>
-
-                <section className="insights-findings">
-                  {filteredFindings.map((finding) => (
-                    <article key={finding.id} className={`insight-finding insight-${finding.severity}`}>
-                      <div className="insight-finding-header">
-                        <span className="insight-finding-title">{finding.title}</span>
-                        <span className="insight-finding-meta">
-                          {INSIGHT_CATEGORY_LABELS[finding.category] || finding.category} | {INSIGHT_SEVERITY_LABELS[finding.severity] || finding.severity}
-                        </span>
-                      </div>
-                      <p>{finding.description}</p>
-                      <p className="insight-recommendation">{finding.recommendation}</p>
-                      <div className="insight-finding-footer">
-                        <span>{finding.url || 'Site-wide'}</span>
-                        {(finding.pageId || finding.url) && (
-                          <IconButton
-                            htmlType="button"
-                            className="report-map-link"
-                            variant="ghost"
-                            buttonStyle="brand"
-                            size="xs"
-                            icon={<Locate />}
-                            label="See on map"
-                            title="See on map"
-                            onClick={() => {
-                              if (finding.pageId) onLocateNode?.(finding.pageId);
-                              else onLocateUrl?.(finding.url);
-                            }}
-                          />
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                  {filteredFindings.length === 0 && (
-                    <div className="report-empty">No findings match these filters.</div>
-                  )}
-                </section>
-              </>
-            )}
-          </section>
-        )}
       {showBackToTop ? (
         <Button
           type="primary"

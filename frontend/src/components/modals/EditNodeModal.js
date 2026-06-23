@@ -68,7 +68,6 @@ const EditNodeModal = ({
   onAddCustomType,
   specialParentOptions = [],
   isHomePageCreation = false,
-  insightSummary = null,
 }) => {
   const rawPageType = node?.pageType || PAGE_TYPE_PAGE;
   const initialPageType = isHomePageCreation
@@ -663,26 +662,6 @@ const EditNodeModal = ({
             </div>
           ) : renderImageUploadZone()}
         </Field>
-
-        {insightSummary && (
-          <div className="edit-node-insights-section">
-            <div className="edit-node-section-title">Page insights</div>
-            <div className="edit-node-insights-summary">
-              <span className="edit-node-insights-score">{insightSummary.score}/100</span>
-              <span>{insightSummary.findingCount} finding{insightSummary.findingCount === 1 ? '' : 's'}</span>
-            </div>
-            {(insightSummary.topFindings || []).length > 0 && (
-              <div className="edit-node-insights-list">
-                {insightSummary.topFindings.slice(0, 3).map((finding) => (
-                  <div key={finding.id} className="edit-node-insight-item">
-                    <strong>{finding.title}</strong>
-                    <span>{finding.recommendation}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         <Accordion
           id="edit-node-seo-metadata"

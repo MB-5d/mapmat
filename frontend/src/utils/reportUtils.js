@@ -1,4 +1,4 @@
-import { getSeoValue } from './seoMetadata';
+import { getSeoMetadata, getSeoValue } from './seoMetadata';
 import { getDepthColor } from './constants';
 import { isRenderableTextUrl } from './url';
 import {
@@ -7,6 +7,78 @@ import {
   isRealHttpErrorNode,
   isVirtualMissingNode,
 } from './scanStatus';
+
+const TITLE_MIN_LENGTH = 10;
+const TITLE_MAX_LENGTH = 70;
+const DESCRIPTION_MIN_LENGTH = 50;
+const DESCRIPTION_MAX_LENGTH = 170;
+
+const normalizeReportText = (value) => {
+  if (value === undefined || value === null) return '';
+  return String(value).replace(/\s+/g, ' ').trim();
+};
+
+const hasOwnMetadataField = (node, field) => (
+  Object.prototype.hasOwnProperty.call(node || {}, field)
+);
+
+const hasMetadataEvidence = (node) => {
+  if (!node) return false;
+  if (node.metadataAvailable === true) return true;
+  if (Object.keys(getSeoMetadata(node)).length > 0) return true;
+  return [
+    'description',
+    'canonicalUrl',
+    'metaTags',
+    'h1',
+    'h2',
+    'h1s',
+    'h2s',
+  ].some((field) => hasOwnMetadataField(node, field));
+};
+
+const shouldCheckMetadataIssues = (node, { orphanType, isRenderableText, isRealError }) => (
+  node
+  && !node.isEntitlementLocked
+  && !node.entitlementLocked
+  && !node.authRequired
+  && !isRealError
+  && !isVirtualMissingNode(node)
+  && node.scanStatus !== 'scan_limited'
+  && node.metadataAvailable !== false
+  && !node.isChallengePage
+  && hasMetadataEvidence(node)
+  && (isRenderableText || (orphanType !== 'file' && !node.isFile))
+);
+
+const addLengthIssue = (types, missingKey, shortKey, longKey, value, min, max) => {
+  if (!value) {
+    types.add(missingKey);
+    return;
+  }
+  if (value.length < min) types.add(shortKey);
+  if (value.length > max) types.add(longKey);
+};
+
+const addMetadataIssueTypes = (types, node, context) => {
+  if (!shouldCheckMetadataIssues(node, context)) return;
+
+  const title = normalizeReportText(node.title);
+  const description = getSeoValue(node, 'description');
+  const h1 = getSeoValue(node, 'h1');
+
+  addLengthIssue(types, 'missingTitle', 'shortTitle', 'longTitle', title, TITLE_MIN_LENGTH, TITLE_MAX_LENGTH);
+  addLengthIssue(
+    types,
+    'missingDescription',
+    'shortDescription',
+    'longDescription',
+    description,
+    DESCRIPTION_MIN_LENGTH,
+    DESCRIPTION_MAX_LENGTH
+  );
+  if (!h1) types.add('missingH1');
+};
 
 export const getReportTypesForNode = (node, overrides = {}) => {
   const types = new Set();
@@ -39,6 +111,7 @@ export const getReportTypesForNode = (node, overrides = {}) => {
   if (isSubdomain) types.add('subdomains');
   if (!isRenderableText && (node.isFile || orphanType === 'file')) types.add('files');
   if (node.authRequired) types.add('authenticatedPages');
+  addMetadataIssueTypes(types, node, { orphanType, isRenderableText, isRealError });
   return Array.from(types);
 };
 

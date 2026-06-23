@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 
 import { getDepthColor } from '../../utils/constants';
 import { isNodeGhostedByLayers } from '../../utils/mapDisplaySummary';
+import { getFindingBadgesForNode } from '../../utils/nodeFindingBadges';
 import { DraggableNodeCard } from '../nodes/NodeCard';
 
 const SCENE_FETCH_IDLE_MS = 80;
@@ -24,8 +25,6 @@ const toSceneNodeData = (node) => ({
   ...node,
   node,
 });
-
-const isEntitlementLockedNode = (node) => Boolean(node?.isEntitlementLocked || node?.entitlementLocked);
 
 const mergeSceneNodeSnapshot = (sceneNode, snapshot) => {
   if (!snapshot) return sceneNode;
@@ -71,6 +70,7 @@ const MapSurfaceV2 = ({
   onAddNote,
   onViewNotes,
   activeId,
+  badgeVisibility,
   layerVisibility,
   changeFilters,
   showPageNumbers,
@@ -336,7 +336,7 @@ const MapSurfaceV2 = ({
               onViewNotes={onViewNotes}
               activeId={isBranchDragging ? node.id : activeId}
               isGhosted={isGhosted}
-              badges={isEntitlementLockedNode(node) ? ['Upgrade'] : []}
+              badges={getFindingBadgesForNode(node, nodeData, badgeVisibility)}
               showPageNumbers={showPageNumbers}
               showAnnotations={!markerFilteredOut}
               thumbnailRequestIds={thumbnailRequestIds}

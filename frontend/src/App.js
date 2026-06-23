@@ -65,8 +65,9 @@ import ColorKey from './components/toolbar/ColorKey';
 import LayersPanel from './components/toolbar/LayersPanel';
 import RightRail from './components/toolbar/RightRail';
 import Topbar from './components/toolbar/Topbar';
-import { getHostname, isRenderableTextUrl } from './utils/url';
+import { getHostname } from './utils/url';
 import { getNodeHttpErrorLabel, isRealHttpErrorNode, isVirtualMissingNode } from './utils/scanStatus';
+import { getFindingBadgesForNode } from './utils/nodeFindingBadges';
 import {
   APP_ONLY_MODE,
   API_BASE,
@@ -107,7 +108,6 @@ import {
   DEFAULT_SCAN_LAYER_VISIBILITY,
   buildMapDisplaySummary,
   isNodeGhostedByLayers,
-  isTopLevelOrphanRoot,
   normalizeMapDisplaySummary,
 } from './utils/mapDisplaySummary';
 import {
@@ -1754,35 +1754,7 @@ const SitemapTree = ({
 
   const statusFilters = changeFilters?.statuses || {};
 
-  const getBadgesForNode = (node, nodeMeta) => {
-    const badges = [];
-    if (isEntitlementLockedNode(node)) {
-      badges.push('Upgrade');
-      return badges;
-    }
-    if (node.isDuplicate) badges.push('Duplicate');
-    if (isVirtualMissingNode(node)) badges.push('Missing');
-    const orphanType = nodeMeta?.orphanType || node.orphanType;
-    const isRenderableText = isRenderableTextUrl(node.url);
-    const isSubdomainTree = node.subdomainRoot || nodeMeta?.isSubdomainTree || orphanType === 'subdomain';
-    const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
-    if (isSubdomainTree && badgeVisibility?.subdomains) badges.push('Subdomain');
-    if (orphanType === 'orphan' && badgeVisibility?.orphanPages) badges.push('Orphan');
-    if (!isRenderableText && orphanType === 'file' && badgeVisibility?.files) badges.push('File');
-    if (orphanType === 'broken' && !isOrphanRoot && badgeVisibility?.brokenLinks) badges.push('Broken Link');
-    if (!isRenderableText && node.isFile && badgeVisibility?.files && !badges.includes('File')) badges.push('File');
-    if (node.isBroken && !isOrphanRoot && badgeVisibility?.brokenLinks && !badges.includes('Broken Link')) {
-      badges.push('Broken Link');
-    }
-    if (node.authRequired && badgeVisibility?.authenticatedPages) {
-      badges.push('Auth');
-    } else if (isRealHttpErrorNode(node) && badgeVisibility?.errorPages) {
-      badges.push(getNodeHttpErrorLabel(node) || 'Error');
-    } else if ((node.isInactive || orphanType === 'inactive') && badgeVisibility?.inactivePages && !badges.includes('Inactive')) {
-      badges.push('Inactive');
-    }
-    return badges;
-  };
+  const getBadgesForNode = (node, nodeMeta) => getFindingBadgesForNode(node, nodeMeta, badgeVisibility);
 
   // Convert connector data to SVG path strings
   const connectorPaths = visibleLayoutConnectors.map(c => {
@@ -2663,9 +2635,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
   });
-  const [mapInsights, setMapInsights] = useState(null);
-  const [insightsLoading, setInsightsLoading] = useState(false);
-  const [insightsError, setInsightsError] = useState('');
   const [scanLayerAvailability, setScanLayerAvailability] = useState({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
   const [scanLayerVisibility, setScanLayerVisibility] = useState({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
   const [mapName, setMapName] = useState('');
@@ -3576,20 +3545,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     () => buildReportStats(reportEntries, REPORT_TYPE_OPTIONS, scanMeta),
     [reportEntries, scanMeta]
   );
-
-  const pageInsightLookup = useMemo(() => {
-    const map = new Map();
-    (mapInsights?.pageInsights || []).forEach((entry) => {
-      if (entry.pageId) map.set(entry.pageId, entry);
-      if (entry.url) map.set(entry.url, entry);
-    });
-    return map;
-  }, [mapInsights]);
-
-  const getPageInsightForNode = useCallback((node) => {
-    if (!node) return null;
-    return pageInsightLookup.get(node.id) || pageInsightLookup.get(node.url) || null;
-  }, [pageInsightLookup]);
 
   const getVersionSnapshot = useCallback(() => {
     const latestRoot = rootRef.current || root;
@@ -10621,8 +10576,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
-    setMapInsights(null);
-    setInsightsError('');
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     largeMapHomeNodeRef.current = null;
@@ -10659,8 +10612,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
-    setMapInsights(null);
-    setInsightsError('');
     setColors(DEFAULT_COLORS);
     setConnectionColors(DEFAULT_CONNECTION_COLORS);
     setCurrentMap(null);
@@ -10722,8 +10673,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setCurrentMap(map);
-    setMapInsights(map.insights || null);
-    setInsightsError('');
     if (!skipNavigation) {
       navigateToRoute(createMapRoute(map.id));
     }
@@ -10796,8 +10745,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       connections: [],
       largeMapShell: true,
     });
-    setMapInsights(null);
-    setInsightsError('');
     if (!skipNavigation) {
       navigateToRoute(createMapRoute(map.id));
     }
@@ -11202,61 +11149,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast('History is view-only for now', 'info');
   };
 
-  const runMapInsights = useCallback(async () => {
-    if (!root) {
-      setInsightsError('Scan a site before running Insights.');
-      return;
-    }
-
-    setInsightsLoading(true);
-    setInsightsError('');
-    try {
-      const canPersistToHistory = Boolean(
-        isLoggedIn
-        && lastHistoryId
-        && lastScanUrl
-        && root?.url
-        && normalizeUrlForCompare(root.url) === normalizeUrlForCompare(lastScanUrl)
-      );
-      const { insights, saved } = await api.analyzeInsights({
-        root,
-        orphans,
-        scanMeta,
-        history_id: canPersistToHistory ? lastHistoryId : null,
-        map_id: isLoggedIn && currentMap?.id ? currentMap.id : null,
-      });
-      setMapInsights(insights || null);
-      if (saved && currentMap?.id) {
-        setCurrentMap((prev) => (
-          prev ? { ...prev, insights, insights_generated_at: insights?.updatedAt || new Date().toISOString() } : prev
-        ));
-        setProjects((prev) => prev.map((project) => ({
-          ...project,
-          maps: (project.maps || []).map((map) => (
-            map.id === currentMap.id
-              ? { ...map, insights, insights_generated_at: insights?.updatedAt || new Date().toISOString() }
-              : map
-          )),
-        })));
-      }
-      if (saved && lastHistoryId) {
-        setScanHistory((prev) => prev.map((item) => (
-          item.id === lastHistoryId
-            ? { ...item, insights, insights_generated_at: insights?.updatedAt || new Date().toISOString() }
-            : item
-        )));
-      }
-      showToast(saved ? 'Insights saved' : 'Insights ready', 'success');
-    } catch (error) {
-      console.error('Run insights failed:', error);
-      const message = error.message || 'Failed to run Insights';
-      setInsightsError(message);
-      showToast(message, 'error');
-    } finally {
-      setInsightsLoading(false);
-    }
-  }, [currentMap?.id, isLoggedIn, lastHistoryId, lastScanUrl, orphans, root, scanMeta, showToast]);
-
   const toggleHistorySelection = (id) => {
     setSelectedHistoryItems(prev => {
       const next = new Set(prev);
@@ -11552,8 +11444,6 @@ export default function App({ currentRoute, navigateToRoute }) {
     setScanErrorMessage('');
     setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
     setShowScanOptions(false);
-    setMapInsights(null);
-    setInsightsError('');
     setLastHistoryId(null);
     setLastScanUrl('');
     setLoading(true);
@@ -12257,6 +12147,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           });
         } else if (!selectionAdditiveRef.current) {
           setSelectedNodeIds(new Set());
+          setActiveId(null);
         }
       }
       selectionActiveRef.current = false;
@@ -12280,6 +12171,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setIsPanning(false);
     if (wasDragging && moved < 3) {
       setSelectedNodeIds(new Set());
+      setActiveId(null);
     }
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -13228,14 +13120,18 @@ export default function App({ currentRoute, navigateToRoute }) {
       pdf.text(`${metadata.tagline} - ${metadata.sourceUrl}`, marginX, y);
       y += 16;
 
-      const statLines = [
-        `Orphans: ${reportStats.orphanPages}`,
-        `Duplicates: ${reportStats.duplicates}`,
-        `Broken links: ${reportStats.brokenLinks}`,
-        `Inactive: ${reportStats.inactivePages}`,
-        `Errors: ${reportStats.errorPages}`,
-        `Missing: ${reportStats.missing}`,
-      ];
+      const alwaysShowReportStatKeys = new Set([
+        'orphanPages',
+        'duplicates',
+        'brokenLinks',
+        'inactivePages',
+        'errorPages',
+        'missing',
+      ]);
+      const statLines = REPORT_TYPE_OPTIONS
+        .filter((option) => option.key !== 'standard')
+        .filter((option) => alwaysShowReportStatKeys.has(option.key) || reportStats[option.key] > 0)
+        .map((option) => `${option.label}: ${reportStats[option.key] || 0}`);
 
       statLines.forEach((line) => {
         pdf.text(line, marginX, y);
@@ -14106,6 +14002,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
     } else {
       setSelectedNodeIds(new Set(targetIds));
+      setActiveId(null);
     }
   };
 
@@ -17351,6 +17248,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     onAddNote={(node) => openCommentPopover(node)}
                     onViewNotes={(node) => openCommentPopover(node)}
                     activeId={activeId}
+                    badgeVisibility={badgeVisibility}
                     layerVisibility={layerVisibility}
                     changeFilters={changeFilters}
                     showPageNumbers={layers.pageNumbers}
@@ -18122,10 +18020,6 @@ export default function App({ currentRoute, navigateToRoute }) {
               stats={reportStats}
               typeOptions={REPORT_TYPE_OPTIONS}
               onDownload={downloadReportPdf}
-              insights={mapInsights}
-              insightsLoading={insightsLoading}
-              insightsError={insightsError}
-              onRunInsights={runMapInsights}
               onLocateNode={locateReportNodeOnMap}
               onLocateUrl={locateReportUrlOnMap}
               onUpgrade={() => openPlansModal('report')}
@@ -19030,7 +18924,6 @@ export default function App({ currentRoute, navigateToRoute }) {
           onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
           specialParentOptions={specialParentOptions}
           isHomePageCreation={editModalMode === 'add' && !root}
-          insightSummary={getPageInsightForNode(editModalNode)}
         />
       )}
 

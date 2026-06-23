@@ -44,6 +44,14 @@ export const getSeoValue = (node = {}, key) => {
   if (key === 'description') {
     return normalizeText(node.description || seoMetadata.description || seoMetadata.openGraph?.description || seoMetadata.twitter?.description);
   }
+  if (key === 'h1' || key === 'h2') {
+    const pluralKey = `${key}s`;
+    const candidate = node[pluralKey]?.length
+      ? node[pluralKey]
+      : node[key] || seoMetadata[pluralKey] || seoMetadata[key];
+    if (Array.isArray(candidate)) return candidate.map(normalizeText).filter(Boolean).join(', ');
+    return normalizeText(candidate);
+  }
   if (key === 'keywords') {
     return normalizeMetaTagsForInput(node.metaTags, seoMetadata);
   }

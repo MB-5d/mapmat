@@ -260,25 +260,33 @@ describe('ReportDrawer', () => {
     });
 
     expect(getVisibleTitles()).toEqual(['pricing']);
-    expect(hasImageItem.getAttribute('aria-checked')).toBe('true');
+    const selectedHasImageItem = Array.from(container.querySelectorAll('.report-filter-menu-item')).find((item) =>
+      item.textContent.includes('Has image')
+    );
+    expect(selectedHasImageItem.getAttribute('aria-checked')).toBe('true');
+    expect(selectedHasImageItem.className).not.toContain('ui-menu-item--selected');
+    expect(selectedHasImageItem.querySelector('.ui-menu-item__end')).not.toBeNull();
     expect(container.querySelector('.report-filter-active-dot')).not.toBeNull();
   });
 
-  test('shows fixed report title and keeps table controls sticky while tabs scroll with the drawer body', () => {
+  test('shows fixed report title and keeps table controls sticky in the drawer body', () => {
     renderDrawer();
 
     expect(container.querySelector('.report-drawer-title').textContent).toBe('Scan report & insights');
     expect(container.querySelector('.report-drawer-subtitle').textContent).toBe('QA Report');
-    expect(container.querySelector('.report-drawer-body .report-tabs')).not.toBeNull();
-    expect(container.querySelector('.report-drawer > .report-tabs')).toBeNull();
+    expect(container.querySelector('.report-tabs')).toBeNull();
     expect(container.querySelector('.report-divider')).toBeNull();
     expect(container.querySelector('.report-table-region > .report-controls-sticky .report-filter-row')).not.toBeNull();
     expect(container.querySelector('.report-table .report-filter-row')).toBeNull();
     expect(container.querySelector('.report-table > .report-table-header')).not.toBeNull();
     expect(container.querySelector('.report-table-header').textContent).toContain('Show');
     expect(container.querySelector('.report-table-header').textContent).not.toContain('Show on map');
+    expect(container.querySelector('.report-header-show')).not.toBeNull();
+    expect(container.querySelector('.report-summary')?.className).toContain('report-summary--single-row');
     const summaryBlock = appCss.match(/\.report-summary \{[^}]*\}/)?.[0] || '';
     expect(summaryBlock).toContain('margin-bottom: var(--unit-24)');
+    const singleRowBlock = appCss.match(/\.report-summary--single-row \{[^}]*\}/)?.[0] || '';
+    expect(singleRowBlock).toContain('grid-template-columns: 160px 1fr');
     const searchBlock = appCss.match(/\.report-search \{[^}]*\}/)?.[0] || '';
     expect(searchBlock).toContain('max-width: 296px');
     expect(appCss).toMatch(/\.report-controls-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
@@ -291,7 +299,12 @@ describe('ReportDrawer', () => {
     const tableHeaderBlock = appCss.match(/\.report-table-header \{[^}]*\}/)?.[0] || '';
     expect(tableHeaderBlock).toContain('position: sticky');
     expect(tableHeaderBlock).toContain('top: var(--report-controls-sticky-height)');
-    expect(tableHeaderBlock).toContain('border: 1px solid var(--color-border)');
+    expect(tableHeaderBlock).toContain('grid-template-columns: 10px 64px 96px 1.4fr 76px 40px 24px');
+    expect(tableHeaderBlock).toContain('box-shadow: inset 0 0 0 1px var(--color-border)');
+    const rowMainBlock = appCss.match(/(?:^|\n)\.report-row-main \{[^}]*\}/)?.[0] || '';
+    expect(rowMainBlock).toContain('grid-template-columns: 10px 64px 96px 1.4fr 76px 40px 24px');
+    const mapLinkBlock = appCss.match(/\.report-map-link\.ui-icon-btn \{[^}]*\}/)?.[0] || '';
+    expect(mapLinkBlock).toContain('justify-self: center');
     expect(appCss).toMatch(/\.report-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
   });
 
@@ -336,85 +349,6 @@ describe('ReportDrawer', () => {
     expect(container.textContent).not.toContain('Canonical:');
   });
 
-  test('runs insights from the empty state', () => {
-    const onRunInsights = jest.fn();
-    renderDrawer({ onRunInsights });
-
-    const insightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
-      button.textContent.includes('Insights')
-    );
-    act(() => {
-      insightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(container.textContent).toContain('Map Insights have not been run yet.');
-    const runButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.includes('Run insights')
-    );
-    act(() => {
-      runButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onRunInsights).toHaveBeenCalledTimes(1);
-  });
-
-  test('shows completed insights and page score in report rows', () => {
-    renderDrawer({
-      insights: {
-        overallScore: 84,
-        scores: { seo: 80, technical: 90, ia: 88, content: 75, accessibility: null },
-        totals: { pages: 3, errorPages: 1, missingMetaDescriptions: 1, missingH1s: 1 },
-        findings: [
-          {
-            id: 'seo-1',
-            pageId: '1',
-            url: 'https://example.com/pricing',
-            category: 'seo',
-            severity: 'medium',
-            title: 'Missing meta description',
-            description: 'Pricing is missing a description.',
-            recommendation: 'Add a clear description.',
-          },
-          {
-            id: 'technical-1',
-            pageId: '3',
-            url: 'https://example.com/contact',
-            category: 'technical',
-            severity: 'high',
-            title: '4xx page',
-            description: 'contact returned HTTP 404 / Not Found.',
-            recommendation: 'Fix the page, redirect it, or remove stale links to it.',
-            evidence: { statusCode: 404, statusLabel: 'HTTP 404 / Not Found' },
-          },
-        ],
-        pageInsights: [
-          {
-            pageId: '1',
-            url: 'https://example.com/pricing',
-            score: 95,
-            findingCount: 1,
-            topFindings: [],
-          },
-        ],
-      },
-    });
-
-    expect(container.textContent).toContain('pricing95');
-
-    const insightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
-      button.textContent.includes('Insights')
-    );
-    act(() => {
-      insightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(container.textContent).toContain('Overall Health');
-    expect(container.textContent).toContain('84');
-    expect(container.textContent).toContain('Missing meta description');
-    expect(container.textContent).toContain('Add a clear description.');
-    expect(container.textContent).toContain('HTTP 404 / Not Found');
-  });
-
   test('shows scan collapse diagnostics in the report', () => {
     renderDrawer({
       scanMeta: {
@@ -429,26 +363,4 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('root_links_found');
   });
 
-  test('shows insights loading and error states', () => {
-    renderDrawer({ insightsLoading: true });
-
-    const insightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
-      button.textContent.includes('Insights')
-    );
-    act(() => {
-      insightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(container.textContent).toContain('Running Insights...');
-
-    renderDrawer({ insightsError: 'Failed to analyze scan' });
-    const nextInsightsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((button) =>
-      button.textContent.includes('Insights')
-    );
-    act(() => {
-      nextInsightsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(container.textContent).toContain('Failed to analyze scan');
-  });
 });

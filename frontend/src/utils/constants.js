@@ -80,6 +80,13 @@ export const REPORT_TYPE_OPTIONS = [
   { key: 'subdomains', label: 'Subdomains' },
   { key: 'files', label: 'Files / downloads' },
   { key: 'authenticatedPages', label: 'Authenticated pages' },
+  { key: 'missingTitle', label: 'No title' },
+  { key: 'shortTitle', label: 'Short title' },
+  { key: 'longTitle', label: 'Very long title' },
+  { key: 'missingDescription', label: 'No description' },
+  { key: 'shortDescription', label: 'Short description' },
+  { key: 'longDescription', label: 'Very long description' },
+  { key: 'missingH1', label: 'No H1' },
 ];
 
 export const ANNOTATION_STATUS_OPTIONS = [

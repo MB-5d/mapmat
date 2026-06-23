@@ -246,6 +246,56 @@ describe('MapSurfaceV2', () => {
     expect(container.textContent).not.toContain('Performance mode');
   });
 
+  test('renders finding badges for visible large-map scene nodes', async () => {
+    const getScene = jest.fn().mockResolvedValue({
+      scene: {
+        mapId: 'map-1',
+        bounds: { w: 900, h: 600 },
+        homeNode: { id: 'home', x: 0, y: 0, w: 288, h: 200 },
+        visibleNodeCount: 1,
+        nodes: [{
+          id: 'broken',
+          title: 'Broken page',
+          url: 'https://example.com/broken',
+          number: '1',
+          depth: 1,
+          x: 0,
+          y: 0,
+          w: 288,
+          h: 200,
+          isDuplicate: true,
+          isBroken: true,
+          statusCode: 500,
+          subdomainRoot: true,
+        }],
+        connectors: [],
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <MapSurfaceV2
+          mapId="map-1"
+          getScene={getScene}
+          getViewState={() => ({ pan: { x: 0, y: 0 }, scale: 1 })}
+          canvasSize={{ width: 1000, height: 700 }}
+          orientation="vertical"
+          showThumbnails={false}
+          colors={{}}
+          selectedNodeIds={new Set()}
+          showPageNumbers
+        />
+      );
+    });
+    await act(async () => {
+      await wait(350);
+    });
+
+    const badges = Array.from(container.querySelectorAll('.node-badge')).map((badge) => badge.textContent);
+    expect(badges).toEqual(['Duplicate', 'Broken Link', 'HTTP 500']);
+    expect(badges).not.toContain('Subdomain');
+  });
+
   test('keeps cached thumbnails when the scene response omits LOD image URLs', async () => {
     const getScene = jest.fn().mockResolvedValue({
       scene: {
