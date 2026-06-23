@@ -84,6 +84,7 @@ const ReportDrawer = ({
   const [insightCategory, setInsightCategory] = useState('all');
   const [insightSeverity, setInsightSeverity] = useState('all');
   const bodyRef = useRef(null);
+  const filterMenuRef = useRef(null);
   const [filters, setFilters] = useState(() => {
     const initial = {};
     typeOptions.forEach(option => {
@@ -120,6 +121,28 @@ const ReportDrawer = ({
   useEffect(() => {
     if (!isOpen) setShowBackToTop(false);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!showFilters) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (filterMenuRef.current?.contains(event.target)) return;
+      setShowFilters(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowFilters(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showFilters]);
 
   const typeLookup = useMemo(() => {
     const map = new Map();
@@ -447,7 +470,7 @@ const ReportDrawer = ({
         <section className="report-table-region">
           <div className="report-controls-sticky">
             <div className="report-filter-row">
-              <div className="report-filter-control">
+              <div className="report-filter-control" ref={filterMenuRef}>
                 <button
                   type="button"
                   className={`report-filter-toggle ${hasActiveFilters ? 'has-active-filters' : ''}`}
@@ -457,7 +480,7 @@ const ReportDrawer = ({
                 >
                   <Filter size={16} />
                   {hasActiveFilters && <span className="report-filter-active-dot" aria-hidden="true" />}
-                  Filter by
+                  Filters
                   {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </button>
                 {showFilters && visibleFilterOptions.length > 0 && (

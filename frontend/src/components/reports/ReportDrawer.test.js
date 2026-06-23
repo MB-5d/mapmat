@@ -202,6 +202,9 @@ describe('ReportDrawer', () => {
     renderDrawer();
 
     const filterToggle = container.querySelector('.report-filter-toggle');
+    expect(filterToggle.textContent).toContain('Filters');
+    expect(filterToggle.textContent).not.toContain('Filter by');
+
     act(() => {
       filterToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
@@ -213,6 +216,32 @@ describe('ReportDrawer', () => {
     expect(filterLabels).toEqual(['Duplicate', 'Broken links', 'Error pages', 'Has image']);
     expect(filterLabels).not.toContain('Standard');
     expect(container.querySelector('.report-filter-list')).toBeNull();
+  });
+
+  test('closes the shared filters menu from the toggle and outside clicks', () => {
+    renderDrawer();
+
+    const filterToggle = container.querySelector('.report-filter-toggle');
+
+    act(() => {
+      filterToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('.report-filter-menu')).not.toBeNull();
+
+    act(() => {
+      filterToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('.report-filter-menu')).toBeNull();
+
+    act(() => {
+      filterToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(container.querySelector('.report-filter-menu')).not.toBeNull();
+
+    act(() => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(container.querySelector('.report-filter-menu')).toBeNull();
   });
 
   test('filters image-backed rows from the shared filter menu', () => {
@@ -245,7 +274,12 @@ describe('ReportDrawer', () => {
     expect(container.querySelector('.report-divider')).toBeNull();
     expect(container.querySelector('.report-table-region > .report-controls-sticky .report-filter-row')).not.toBeNull();
     expect(container.querySelector('.report-table .report-filter-row')).toBeNull();
+    expect(container.querySelector('.report-table > .report-table-header')).not.toBeNull();
     expect(appCss).toMatch(/\.report-controls-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
+    const tableBlock = appCss.match(/\.report-table \{[^}]*\}/)?.[0] || '';
+    expect(tableBlock).toContain('flex: 0 0 auto');
+    const tableBodyBlock = appCss.match(/\.report-table-body \{[^}]*\}/)?.[0] || '';
+    expect(tableBodyBlock).toContain('flex: 0 0 auto');
     const tableHeaderBlock = appCss.match(/\.report-table-header \{[^}]*\}/)?.[0] || '';
     expect(tableHeaderBlock).toContain('position: sticky');
     expect(tableHeaderBlock).toContain('top: var(--report-controls-sticky-height)');
