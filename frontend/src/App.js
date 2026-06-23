@@ -13116,9 +13116,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       const pageHeight = pdf.internal.pageSize.getHeight();
       const marginX = 42;
       const contentWidth = pageWidth - marginX * 2;
-      const bodyFontSize = 8.5;
-      const bodyLineHeight = 12;
-      const detailLineHeight = 9.5;
+      const bodyFontSize = 8;
+      const bodyLineHeight = 10;
+      const detailLineHeight = 7.4;
+      const continuationTopY = 56;
       const textColor = '#1e293b';
       const mutedColor = '#64748b';
       const borderColor = '#cbd5e1';
@@ -13203,7 +13204,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const ensureSpace = (heightNeeded) => {
         if (y + heightNeeded <= pageHeight - 48) return;
         pdf.addPage();
-        y = 42;
+        y = continuationTopY;
         drawTableHeader();
       };
 
@@ -13242,20 +13243,21 @@ export default function App({ currentRoute, navigateToRoute }) {
         setFont('bold', 9);
         setTextColor(mutedColor);
         pdf.text('Scan report & findings', marginX, headerY);
-        headerY += 21;
-        setFont('bold', 20);
+        headerY += 17;
+        setFont('bold', 16);
         setTextColor(textColor);
         const titleLines = wrapText(reportTitle || exportTitle || 'Untitled Map', contentWidth - 150);
         titleLines.forEach((line, index) => {
-          pdf.text(line, marginX, headerY + index * 22);
+          pdf.text(line, marginX, headerY + index * 18);
         });
-        headerY += ((Math.max(1, titleLines.length) - 1) * 22) + 13;
+        headerY += ((Math.max(1, titleLines.length) - 1) * 18) + 9;
         if (siteDisplayUrl) {
+          setFont('normal', 7.2);
           const siteLines = wrapText(siteDisplayUrl, contentWidth - 150);
-          drawLinkedLines(siteLines, marginX, headerY, 11, siteUrl, contentWidth - 150);
-          headerY += siteLines.length * 11;
+          drawLinkedLines(siteLines, marginX, headerY, 9.5, siteUrl, contentWidth - 150, 7.2);
+          headerY += siteLines.length * 9.5;
         }
-        return headerY + 16;
+        return headerY + 15;
       };
 
       const alwaysShowReportStatKeys = new Set([
@@ -13275,11 +13277,11 @@ export default function App({ currentRoute, navigateToRoute }) {
         const gridColumns = 4;
         const cardGap = 5;
         const panelPadding = 10;
-        const totalBlockHeight = 27;
+        const totalBlockHeight = 21;
         const cardWidth = (contentWidth - panelPadding * 2 - cardGap * (gridColumns - 1)) / gridColumns;
         const cardHeight = 24;
         const rowCount = Math.max(1, Math.ceil(statLines.length / gridColumns));
-        const panelHeight = panelPadding + totalBlockHeight + 8 + (rowCount * cardHeight) + ((rowCount - 1) * cardGap) + panelPadding;
+        const panelHeight = panelPadding + totalBlockHeight + 3 + (rowCount * cardHeight) + ((rowCount - 1) * cardGap) + panelPadding;
         const panelTop = y;
 
         setDrawColor(borderColor);
@@ -13294,7 +13296,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setTextColor(mutedColor);
         pdf.text('Total pages', marginX + panelPadding, panelTop + 28);
 
-        const cardsTop = panelTop + panelPadding + totalBlockHeight + 8;
+        const cardsTop = panelTop + panelPadding + totalBlockHeight + 3;
         statLines.forEach((stat, index) => {
           const col = index % gridColumns;
           const row = Math.floor(index / gridColumns);
@@ -13323,15 +13325,15 @@ export default function App({ currentRoute, navigateToRoute }) {
       const detailLabelWidth = 68;
       const detailValueGap = 8;
       const detailValueWidth = tableColumns.details.w - detailLabelWidth - detailValueGap;
-      const detailValueFontSize = 7.5;
+      const detailLabelFontSize = 7;
+      const detailValueFontSize = 6.6;
 
       function drawTableHeader() {
+        y += 5;
         setFont('bold', 8.5);
         setTextColor(mutedColor);
         setDrawColor(borderColor);
         pdf.setLineWidth(0.7);
-        pdf.line(marginX, y, marginX + contentWidth, y);
-        y += 14;
         pdf.text('Page', tableColumns.page.x, y);
         pdf.text('Details', tableColumns.details.x, y);
         pdf.text('Findings', tableColumns.findings.x, y);
@@ -13360,7 +13362,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         const findingLines = wrapText(findingsText, tableColumns.findings.w);
         const mainLineCount = Math.max(pageLines.length, titleLines.length, findingLines.length, 1);
         const preparedDetails = detailRows.map((detail) => {
-          setFont('bold', detailValueFontSize);
+          setFont('bold', detailLabelFontSize);
           const labelLines = wrapText(`${detail.label}:`, detailLabelWidth);
           setFont('normal', detailValueFontSize);
           const valueLines = wrapText(String(detail.value || ''), detailValueWidth);
@@ -13368,17 +13370,19 @@ export default function App({ currentRoute, navigateToRoute }) {
             ...detail,
             labelLines,
             valueLines,
-            height: Math.max(labelLines.length, valueLines.length) * detailLineHeight + 4,
+            height: Math.max(labelLines.length, valueLines.length) * detailLineHeight + 1,
           };
         });
 
         const drawDetailItem = (detail, startY) => {
           const labelX = tableColumns.details.x + detailLabelWidth;
           const valueX = labelX + detailValueGap;
-          setFont('bold', detailValueFontSize);
+          setFont('bold', detailLabelFontSize);
           setTextColor(textColor);
           detail.labelLines.forEach((line, lineIndex) => {
-            pdf.text(line, labelX, startY + lineIndex * detailLineHeight, { align: 'right' });
+            const labelY = startY + lineIndex * detailLineHeight;
+            pdf.text(line, labelX, labelY, { align: 'right' });
+            pdf.text(line, labelX - 0.08, labelY, { align: 'right' });
           });
           if (detail.link || urlPattern.test(String(detail.value || ''))) {
             detail.valueLines.forEach((line, lineIndex) => {
@@ -13393,7 +13397,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
         };
 
-        ensureSpace(mainLineCount * bodyLineHeight + 24);
+        ensureSpace(mainLineCount * bodyLineHeight + 18);
 
         const rowTop = y;
         setFont('normal', bodyFontSize);
@@ -13402,20 +13406,20 @@ export default function App({ currentRoute, navigateToRoute }) {
         setFont('bold', bodyFontSize);
         pdf.text(titleLines, tableColumns.details.x, y);
         pdf.text(findingLines, tableColumns.findings.x, y);
-        y += mainLineCount * bodyLineHeight + 8;
+        y += mainLineCount * bodyLineHeight + 5;
 
         preparedDetails.forEach((detail) => {
-          ensureSpace(detail.height + 5);
+          ensureSpace(detail.height + 2);
           drawDetailItem(detail, y);
-          y += detail.height + 3;
+          y += detail.height + 1;
         });
 
-        ensureSpace(16);
-        y += 8;
+        ensureSpace(10);
+        y += 4;
         setDrawColor(borderColor);
         pdf.setLineWidth(0.7);
         pdf.line(marginX, y, marginX + contentWidth, y);
-        y += 10;
+        y += 7;
 
         if (typeof pdf.link === 'function' && row.url && !preparedDetails.some((detail) => detail.key === 'url')) {
           pdf.link(tableColumns.details.x, rowTop - 9, tableColumns.details.w, mainLineCount * bodyLineHeight, { url: normalizeLinkUrl(row.url) });
