@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Filter,
   Locate,
+  Microscope,
   X,
 } from 'lucide-react';
 
@@ -38,6 +39,48 @@ const REPORT_FILTER_META = {
   missingH1: { label: 'No H1', className: 'report-filter-chip--warning' },
 };
 
+const NON_FINDING_TYPES = new Set(['standard']);
+
+const REPORT_DETAIL_OPTIONS = [
+  { key: 'duplicateOf', label: 'Duplicate of', defaultVisible: true },
+  { key: 'parentUrl', label: 'Parent', defaultVisible: true },
+  { key: 'referrerUrl', label: 'Referrer', defaultVisible: false },
+  { key: 'httpStatus', label: 'HTTP status', defaultVisible: true },
+  { key: 'errorType', label: 'Error type', defaultVisible: true },
+  { key: 'scanStatus', label: 'Scan status', defaultVisible: false },
+  { key: 'reason', label: 'Reason', defaultVisible: true },
+  { key: 'description', label: 'Description', defaultVisible: true },
+  { key: 'metaKeywords', label: 'Meta keywords', defaultVisible: true },
+  { key: 'canonical', label: 'Canonical', defaultVisible: true },
+  { key: 'h1', label: 'H1', defaultVisible: true },
+  { key: 'h2', label: 'H2', defaultVisible: true },
+  { key: 'robots', label: 'Robots', defaultVisible: true },
+  { key: 'language', label: 'Language', defaultVisible: true },
+  { key: 'openGraphTitle', label: 'Open Graph title', defaultVisible: true },
+  { key: 'openGraphDescription', label: 'Open Graph description', defaultVisible: true },
+  { key: 'twitterCard', label: 'Twitter card', defaultVisible: true },
+];
+
+const createDefaultVisibleDetails = () => (
+  REPORT_DETAIL_OPTIONS.reduce((next, option) => {
+    next[option.key] = option.defaultVisible;
+    return next;
+  }, {})
+);
+
+const normalizeReportLookupValue = (value) => (
+  String(value || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/g, '')
+    .toLowerCase()
+);
+
+const getEntryFindingTypes = (entry) => (
+  (entry?.types || []).filter((type) => !NON_FINDING_TYPES.has(type))
+);
+
 const ReportDrawer = ({
   isOpen,
   onClose,
@@ -58,8 +101,11 @@ const ReportDrawer = ({
   const [search, setSearch] = useState('');
   const [expandedRow, setExpandedRow] = useState(null);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [showDetailsMenu, setShowDetailsMenu] = useState(false);
+  const [visibleDetails, setVisibleDetails] = useState(createDefaultVisibleDetails);
   const bodyRef = useRef(null);
   const filterMenuRef = useRef(null);
+  const detailsMenuRef = useRef(null);
   const [filters, setFilters] = useState(() => {
     const initial = {};
     typeOptions.forEach(option => {
@@ -118,6 +164,28 @@ const ReportDrawer = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [showFilters]);
+
+  useEffect(() => {
+    if (!showDetailsMenu) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (detailsMenuRef.current?.contains(event.target)) return;
+      setShowDetailsMenu(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowDetailsMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showDetailsMenu]);
 
   const typeLookup = useMemo(() => {
     const map = new Map();
@@ -196,6 +264,19 @@ const ReportDrawer = ({
     });
   }, [entries, filters, search, hasActiveFilters, visibleFilterOptions]);
 
+  const entryLookup = useMemo(() => {
+    const byId = new Map();
+    const byUrl = new Map();
+    entries.forEach((entry) => {
+      if (entry.id) byId.set(String(entry.id), entry);
+      if (entry.url) {
+        byUrl.set(entry.url, entry);
+        byUrl.set(normalizeReportLookupValue(entry.url), entry);
+      }
+    });
+    return { byId, byUrl };
+  }, [entries]);
+
   const entryOrder = useMemo(
     () => new Map(entries.map((entry, index) => [entry.id, index])),
     [entries]
@@ -215,7 +296,7 @@ const ReportDrawer = ({
       } else if (sortConfig.key === 'title') {
         result = (left.title || left.url || '').localeCompare(right.title || right.url || '', undefined, { sensitivity: 'base' });
       } else if (sortConfig.key === 'issues') {
-        result = (left.types?.length || 0) - (right.types?.length || 0);
+        result = getEntryFindingTypes(left).length - getEntryFindingTypes(right).length;
       }
 
       if (result === 0) {
@@ -274,6 +355,27 @@ const ReportDrawer = ({
     setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const toggleDetailVisibility = (key) => {
+    setVisibleDetails((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const getLinkedEntry = (value) => {
+    if (!value) return null;
+    const raw = String(value);
+    return entryLookup.byId.get(raw)
+      || entryLookup.byUrl.get(raw)
+      || entryLookup.byUrl.get(normalizeReportLookupValue(raw))
+      || null;
+  };
+
+  const locateLinkedEntry = (linkedEntry, fallbackUrl) => {
+    if (linkedEntry?.id) {
+      onLocateNode?.(linkedEntry.id);
+      return;
+    }
+    if (fallbackUrl) onLocateUrl?.(fallbackUrl);
+  };
+
   const showAllFilters = () => {
     setFilters((prev) => {
       const next = { ...prev };
@@ -322,7 +424,7 @@ const ReportDrawer = ({
       data-feedback-id="report-drawer"
       data-feedback-label="Report drawer"
       role="dialog"
-      aria-label="Scan report"
+      aria-label="Scan results and findings"
       onPointerDown={(e) => e.stopPropagation()}
       onWheel={(e) => {
         e.stopPropagation();
@@ -335,11 +437,11 @@ const ReportDrawer = ({
     >
       <header className="report-drawer-header">
         <div className="report-header-title">
-          <div className="report-drawer-title">Scan report &amp; insights</div>
+          <div className="report-drawer-title">Scan results &amp; findings</div>
           <div className="report-drawer-subtitle" title={mapTitle}>{truncatedMapTitle}</div>
         </div>
         <div className="report-header-actions">
-          <Button className="report-open-link" variant="secondary" size="sm" onClick={onDownload}>
+          <Button className="report-download-button" variant="secondary" size="sm" onClick={onDownload}>
             <Download size={14} />
             Download report
           </Button>
@@ -422,37 +524,76 @@ const ReportDrawer = ({
         <section className="report-table-region">
           <div className="report-controls-sticky">
             <div className="report-filter-row">
-              <div className="report-filter-control" ref={filterMenuRef}>
-                <button
-                  type="button"
-                  className={`report-filter-toggle ${hasActiveFilters ? 'has-active-filters' : ''}`}
-                  onClick={() => setShowFilters((prev) => !prev)}
-                  aria-expanded={showFilters}
-                  aria-haspopup="menu"
-                >
-                  <Filter size={16} />
-                  {hasActiveFilters && <span className="report-filter-active-dot" aria-hidden="true" />}
-                  Filters
-                  {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-                {showFilters && visibleFilterOptions.length > 0 && (
-                  <MenuPanel className="report-filter-menu" role="menu">
-                    {visibleFilterOptions.map((option) => {
-                      const selected = Boolean(filters[option.key]);
-                      return (
-                        <MenuItem
-                          key={option.key}
-                          className="report-filter-menu-item"
-                          role="menuitemcheckbox"
-                          aria-checked={selected}
-                          label={option.label}
-                          endSlot={selected ? <Check size={14} aria-hidden="true" /> : null}
-                          onClick={() => toggleFilter(option.key)}
-                        />
-                      );
-                    })}
-                  </MenuPanel>
-                )}
+              <div className="report-filter-menus">
+                <div className="report-filter-control" ref={filterMenuRef}>
+                  <button
+                    type="button"
+                    className={`report-filter-toggle ${hasActiveFilters ? 'has-active-filters' : ''}`}
+                    onClick={() => {
+                      setShowDetailsMenu(false);
+                      setShowFilters((prev) => !prev);
+                    }}
+                    aria-expanded={showFilters}
+                    aria-haspopup="menu"
+                  >
+                    <Filter size={16} />
+                    {hasActiveFilters && <span className="report-filter-active-dot" aria-hidden="true" />}
+                    Filters
+                    {showFilters ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+                  {showFilters && visibleFilterOptions.length > 0 && (
+                    <MenuPanel className="report-filter-menu" role="menu">
+                      {visibleFilterOptions.map((option) => {
+                        const selected = Boolean(filters[option.key]);
+                        return (
+                          <MenuItem
+                            key={option.key}
+                            className="report-filter-menu-item"
+                            role="menuitemcheckbox"
+                            aria-checked={selected}
+                            label={option.label}
+                            endSlot={selected ? <Check size={14} aria-hidden="true" /> : null}
+                            onClick={() => toggleFilter(option.key)}
+                          />
+                        );
+                      })}
+                    </MenuPanel>
+                  )}
+                </div>
+                <div className="report-details-control" ref={detailsMenuRef}>
+                  <button
+                    type="button"
+                    className="report-filter-toggle"
+                    onClick={() => {
+                      setShowFilters(false);
+                      setShowDetailsMenu((prev) => !prev);
+                    }}
+                    aria-expanded={showDetailsMenu}
+                    aria-haspopup="menu"
+                  >
+                    <Microscope size={16} />
+                    Details
+                    {showDetailsMenu ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+                  {showDetailsMenu && (
+                    <MenuPanel className="report-filter-menu report-details-menu" role="menu">
+                      {REPORT_DETAIL_OPTIONS.map((option) => {
+                        const selected = Boolean(visibleDetails[option.key]);
+                        return (
+                          <MenuItem
+                            key={option.key}
+                            className="report-filter-menu-item"
+                            role="menuitemcheckbox"
+                            aria-checked={selected}
+                            label={option.label}
+                            endSlot={selected ? <Check size={14} aria-hidden="true" /> : null}
+                            onClick={() => toggleDetailVisibility(option.key)}
+                          />
+                        );
+                      })}
+                    </MenuPanel>
+                  )}
+                </div>
               </div>
               <SearchInput
                 size="sm"
@@ -472,7 +613,7 @@ const ReportDrawer = ({
               <div>{renderSortButton('number', 'Number')}</div>
               <div>{renderSortButton('pageType', 'Page type')}</div>
               <div>{renderSortButton('title', 'Page name')}</div>
-              <div>{renderSortButton('issues', 'Issues', 'report-header-issues')}</div>
+              <div>{renderSortButton('issues', 'Findings', 'report-header-issues')}</div>
               <div className="report-header-show">Show</div>
               <div />
             </div>
@@ -485,21 +626,22 @@ const ReportDrawer = ({
             const isExpanded = expandedRow === entry.id;
             const isLocked = Boolean(entry.isEntitlementLocked || entry.entitlementLocked);
             const seoRows = [
-              ['HTTP status', entry.httpErrorLabel || (entry.statusCode ? `HTTP ${entry.statusCode}` : '')],
-              ['Error type', entry.isViewableError ? 'Viewable HTTP error' : entry.httpErrorType],
-              ['Scan status', entry.isVirtualMissing ? 'Missing virtual page' : entry.scanStatus],
-              ['Reason', entry.blockedReason],
-              ['Description', entry.description],
-              ['Meta keywords', entry.metaKeywords],
-              ['Canonical', entry.canonicalUrl],
-              ['H1', entry.h1],
-              ['H2', entry.h2],
-              ['Robots', entry.robots],
-              ['Language', entry.language],
-              ['Open Graph title', entry.openGraph?.title],
-              ['Open Graph description', entry.openGraph?.description],
-              ['Twitter card', entry.twitter?.card],
+              ['HTTP status', entry.httpErrorLabel || (entry.statusCode ? `HTTP ${entry.statusCode}` : ''), 'httpStatus'],
+              ['Error type', entry.isViewableError ? 'Viewable HTTP error' : entry.httpErrorType, 'errorType'],
+              ['Scan status', entry.isVirtualMissing ? 'Missing virtual page' : entry.scanStatus, 'scanStatus'],
+              ['Reason', entry.blockedReason, 'reason'],
+              ['Description', entry.description, 'description'],
+              ['Meta keywords', entry.metaKeywords, 'metaKeywords'],
+              ['Canonical', entry.canonicalUrl, 'canonical'],
+              ['H1', entry.h1, 'h1'],
+              ['H2', entry.h2, 'h2'],
+              ['Robots', entry.robots, 'robots'],
+              ['Language', entry.language, 'language'],
+              ['Open Graph title', entry.openGraph?.title, 'openGraphTitle'],
+              ['Open Graph description', entry.openGraph?.description, 'openGraphDescription'],
+              ['Twitter card', entry.twitter?.card, 'twitterCard'],
             ].filter(([, value]) => value);
+            const duplicateEntry = getLinkedEntry(entry.duplicateOf);
             return (
               <div key={entry.id} className={`report-row ${isLocked ? 'report-row--locked' : ''}`}>
                 <div
@@ -533,7 +675,7 @@ const ReportDrawer = ({
                   <div className="report-cell report-cell-title" title={entry.title || entry.url}>
                     <span>{entry.title || entry.url}</span>
                   </div>
-                  <div className="report-cell report-cell-count">{isLocked ? 'Locked' : entry.types.length}</div>
+                  <div className="report-cell report-cell-count">{isLocked ? 'Locked' : getEntryFindingTypes(entry).length}</div>
                   <IconButton
                     htmlType="button"
                     className="report-map-link"
@@ -558,48 +700,54 @@ const ReportDrawer = ({
                 </div>
                 {!isLocked && isExpanded && (
                   <div className="report-row-detail">
-                    <div className="report-detail-main">
+                    <div className={`report-detail-main ${entry.thumbnailUrl ? '' : 'report-detail-main--no-thumb'}`}>
                       {entry.thumbnailUrl ? (
                         <div className="report-thumb">
                           <img src={entry.thumbnailUrl} alt={entry.title || entry.url} />
                         </div>
-                      ) : (
-                        <div className="report-thumb report-thumb-empty">No preview</div>
-                      )}
+                      ) : null}
                       <div className="report-detail-right">
                         <div className="report-detail-info">
-                          <Button
-                            type="button"
-                            className="report-open-link"
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => window.open(entry.url, '_blank', 'noopener')}
-                          >
-                            Open page
-                            <ExternalLink size={14} />
-                          </Button>
+                          {entry.url ? (
+                            <Button
+                              type="link"
+                              className="report-open-link"
+                              size="sm"
+                              onClick={() => window.open(entry.url, '_blank', 'noopener')}
+                              endIcon={<ExternalLink size={14} />}
+                            >
+                              Open page
+                            </Button>
+                          ) : null}
                           <div className="report-detail-badges">
-                            {entry.types.map(type => (
-                              <span key={type} className="report-badge">
-                                {typeLookup.get(type) || type}
-                              </span>
-                            ))}
+                            {getEntryFindingTypes(entry).map(type => {
+                              const meta = REPORT_FILTER_META[type] || {};
+                              return (
+                                <span key={type} className={`report-badge ${meta.className || 'report-filter-chip--info'}`}>
+                                  {typeLookup.get(type) || type}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
                         <div className="report-detail-links">
-                          {entry.duplicateOf && (
+                          {entry.duplicateOf && visibleDetails.duplicateOf && (
                             <div className="report-detail-link-row">
                               <strong>Duplicate of:</strong>
-                              <button
-                                type="button"
+                              <Button
+                                type="link"
+                                size="sm"
                                 className="report-internal-link"
-                                onClick={() => onLocateUrl?.(entry.duplicateOf)}
+                                startIcon={<Locate size={14} />}
+                                onClick={() => {
+                                  locateLinkedEntry(duplicateEntry, entry.duplicateOf);
+                                }}
                               >
-                                {entry.duplicateOf.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
-                              </button>
+                                {duplicateEntry?.title || entry.duplicateOf.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                              </Button>
                             </div>
                           )}
-                          {entry.parentUrl && (
+                          {entry.parentUrl && visibleDetails.parentUrl && (
                             <div className="report-detail-link-row">
                               <strong>Parent:</strong>
                               <button
@@ -611,7 +759,7 @@ const ReportDrawer = ({
                               </button>
                             </div>
                           )}
-                          {entry.referrerUrl && (
+                          {entry.referrerUrl && visibleDetails.referrerUrl && (
                             <div className="report-detail-link-row">
                               <strong>Referrer:</strong>
                               <button
@@ -623,7 +771,7 @@ const ReportDrawer = ({
                               </button>
                             </div>
                           )}
-                          {seoRows.map(([label, value]) => (
+                          {seoRows.filter(([, , key]) => visibleDetails[key]).map(([label, value]) => (
                             <div className="report-detail-link-row" key={label}>
                               <strong>{label}:</strong>
                               <span>{value}</span>

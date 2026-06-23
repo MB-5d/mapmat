@@ -881,6 +881,18 @@ describe('map image asset persistence', () => {
     expect(handler).not.toContain('setShowReportDrawer(false);');
   });
 
+  test('node clicks can replace report-focused selection in view mode', () => {
+    const handlerStart = appJs.indexOf('const handleNodeClick = (node, event) => {');
+    const handlerEnd = appJs.indexOf('const openLargeMapNodeMenu', handlerStart);
+    const handler = appJs.slice(handlerStart, handlerEnd);
+
+    expect(handlerStart).toBeGreaterThan(-1);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    expect(handler).toContain('const targetIds = getNodeStackSelectionIds(node.id);');
+    expect(handler).toContain('if (shiftActive) {\n      if (!canEdit()) return;');
+    expect(handler).not.toContain('if (!canEdit()) return;\n\n    const targetIds = getNodeStackSelectionIds(node.id);');
+  });
+
   test('large maps keep area selection enabled', () => {
     expect(appJs).toContain('const rawNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];');
     expect(appJs).toContain('largeMapVisibleNodesRef.current = rawNodes.map((node) => (');

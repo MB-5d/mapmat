@@ -18,10 +18,10 @@ describe('ReportDrawer', () => {
       title: 'pricing',
       url: 'https://example.com/pricing',
       number: '3',
-      types: ['duplicates'],
-      duplicateOf: '',
-      parentUrl: '',
-      referrerUrl: '',
+      types: ['standard', 'duplicates'],
+      duplicateOf: 'https://example.com/about',
+      parentUrl: 'https://example.com/',
+      referrerUrl: 'https://example.com/source',
       description: 'Plans and pricing metadata',
       metaKeywords: 'pricing, plans',
       canonicalUrl: 'https://example.com/pricing',
@@ -40,7 +40,7 @@ describe('ReportDrawer', () => {
       title: 'about',
       url: 'https://example.com/about',
       number: '2',
-      types: [],
+      types: ['standard'],
       duplicateOf: '',
       parentUrl: '',
       referrerUrl: '',
@@ -272,16 +272,19 @@ describe('ReportDrawer', () => {
   test('shows fixed report title and keeps table controls sticky in the drawer body', () => {
     renderDrawer();
 
-    expect(container.querySelector('.report-drawer-title').textContent).toBe('Scan report & insights');
+    expect(container.querySelector('.report-drawer-title').textContent).toBe('Scan results & findings');
     expect(container.querySelector('.report-drawer-subtitle').textContent).toBe('QA Report');
     expect(container.querySelector('.report-tabs')).toBeNull();
     expect(container.querySelector('.report-divider')).toBeNull();
     expect(container.querySelector('.report-table-region > .report-controls-sticky .report-filter-row')).not.toBeNull();
     expect(container.querySelector('.report-table .report-filter-row')).toBeNull();
     expect(container.querySelector('.report-table > .report-table-header')).not.toBeNull();
+    expect(container.querySelector('.report-table-header').textContent).toContain('Findings');
     expect(container.querySelector('.report-table-header').textContent).toContain('Show');
+    expect(container.querySelector('.report-table-header').textContent).not.toContain('Issues');
     expect(container.querySelector('.report-table-header').textContent).not.toContain('Show on map');
     expect(container.querySelector('.report-header-show')).not.toBeNull();
+    expect(container.querySelector('.report-details-control')).not.toBeNull();
     expect(container.querySelector('.report-summary')?.className).toContain('report-summary--single-row');
     const summaryBlock = appCss.match(/\.report-summary \{[^}]*\}/)?.[0] || '';
     expect(summaryBlock).toContain('margin-bottom: var(--unit-24)');
@@ -295,14 +298,16 @@ describe('ReportDrawer', () => {
     expect(tableBlock).not.toContain('border: 1px solid');
     const tableBodyBlock = appCss.match(/\.report-table-body \{[^}]*\}/)?.[0] || '';
     expect(tableBodyBlock).toContain('flex: 0 0 auto');
-    expect(tableBodyBlock).toContain('border-left: 1px solid var(--color-border)');
+    expect(tableBodyBlock).toContain('border: 1px solid var(--color-border)');
+    expect(tableBodyBlock).toContain('border-top: 0');
     const tableHeaderBlock = appCss.match(/\.report-table-header \{[^}]*\}/)?.[0] || '';
     expect(tableHeaderBlock).toContain('position: sticky');
     expect(tableHeaderBlock).toContain('top: var(--report-controls-sticky-height)');
-    expect(tableHeaderBlock).toContain('grid-template-columns: 10px 64px 96px 1.4fr 76px 40px 24px');
-    expect(tableHeaderBlock).toContain('box-shadow: inset 0 0 0 1px var(--color-border)');
+    expect(tableHeaderBlock).toContain('grid-template-columns: 10px 64px 96px 1.4fr 92px 32px 24px');
+    expect(tableHeaderBlock).toContain('border: 1px solid var(--color-border)');
+    expect(tableHeaderBlock).toContain('box-shadow: none');
     const rowMainBlock = appCss.match(/(?:^|\n)\.report-row-main \{[^}]*\}/)?.[0] || '';
-    expect(rowMainBlock).toContain('grid-template-columns: 10px 64px 96px 1.4fr 76px 40px 24px');
+    expect(rowMainBlock).toContain('grid-template-columns: 10px 64px 96px 1.4fr 92px 32px 24px');
     const mapLinkBlock = appCss.match(/\.report-map-link\.ui-icon-btn \{[^}]*\}/)?.[0] || '';
     expect(mapLinkBlock).toContain('justify-self: center');
     expect(appCss).toMatch(/\.report-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
@@ -327,6 +332,77 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('https://example.com/pricing');
     expect(container.textContent).toContain('Open Graph title:');
     expect(container.textContent).toContain('Pricing OG');
+    expect(container.textContent).not.toContain('Scan status:');
+    expect(container.textContent).not.toContain('Referrer:');
+
+    const detailBadges = Array.from(container.querySelectorAll('.report-detail-badges .report-badge')).map((badge) =>
+      badge.textContent.trim()
+    );
+    expect(detailBadges).toEqual(['Duplicate']);
+    expect(container.querySelector('.report-open-link').className).toContain('ui-btn--type-link');
+    expect(container.querySelector('.report-thumb')).not.toBeNull();
+  });
+
+  test('opens details menu and keeps referrer and scan status hidden by default', () => {
+    renderDrawer();
+
+    const detailsToggle = container.querySelector('.report-details-control .report-filter-toggle');
+    expect(detailsToggle.textContent).toContain('Details');
+
+    act(() => {
+      detailsToggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const detailsItems = Array.from(container.querySelectorAll('.report-details-menu .report-filter-menu-item'));
+    const referrerItem = detailsItems.find((item) => item.textContent.includes('Referrer'));
+    const scanStatusItem = detailsItems.find((item) => item.textContent.includes('Scan status'));
+    const descriptionItem = detailsItems.find((item) => item.textContent.includes('Description'));
+
+    expect(referrerItem.getAttribute('aria-checked')).toBe('false');
+    expect(scanStatusItem.getAttribute('aria-checked')).toBe('false');
+    expect(descriptionItem.getAttribute('aria-checked')).toBe('true');
+  });
+
+  test('uses the duplicate page title for duplicate locate links', () => {
+    const onLocateNode = jest.fn();
+    renderDrawer({ onLocateNode });
+
+    const pricingRow = Array.from(container.querySelectorAll('.report-row-main')).find((row) =>
+      row.textContent.includes('pricing')
+    );
+
+    act(() => {
+      pricingRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const duplicateLink = Array.from(container.querySelectorAll('.report-internal-link')).find((button) =>
+      button.textContent.includes('about')
+    );
+
+    expect(duplicateLink).not.toBeNull();
+    expect(duplicateLink.className).toContain('ui-btn--type-link');
+    expect(container.textContent).not.toContain('example.com/about');
+
+    act(() => {
+      duplicateLink.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onLocateNode).toHaveBeenCalledWith('2');
+  });
+
+  test('does not render an empty thumbnail placeholder in expanded report details', () => {
+    renderDrawer();
+
+    const aboutRow = Array.from(container.querySelectorAll('.report-row-main')).find((row) =>
+      row.textContent.includes('about')
+    );
+
+    act(() => {
+      aboutRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.report-thumb')).toBeNull();
+    expect(container.querySelector('.report-detail-main')?.className).toContain('report-detail-main--no-thumb');
   });
 
   test('locates a report row on the map from the row action', () => {

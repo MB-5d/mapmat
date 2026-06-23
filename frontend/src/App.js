@@ -13986,10 +13986,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     );
     if (interactiveTarget) return;
 
-    if (!canEdit()) return;
-
     const targetIds = getNodeStackSelectionIds(node.id);
     if (shiftActive) {
+      if (!canEdit()) return;
       setSelectedNodeIds((prev) => {
         const next = new Set(prev);
         const allSelected = targetIds.every((id) => next.has(id));
