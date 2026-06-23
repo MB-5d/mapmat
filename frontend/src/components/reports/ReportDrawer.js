@@ -444,10 +444,8 @@ const ReportDrawer = ({
           </div>
         </section>
 
-        <div className="report-divider" />
-
-        <section className="report-table">
-          <div className="report-table-sticky">
+        <section className="report-table-region">
+          <div className="report-controls-sticky">
             <div className="report-filter-row">
               <div className="report-filter-control">
                 <button
@@ -493,6 +491,8 @@ const ReportDrawer = ({
                 inputClassName="report-search-input"
               />
             </div>
+          </div>
+          <section className="report-table">
             <div className="report-table-header">
               <div />
               <div>{renderSortButton('number', 'Number')}</div>
@@ -502,7 +502,6 @@ const ReportDrawer = ({
               <div>Show on map</div>
               <div />
             </div>
-          </div>
           <div
             className="report-table-body"
             onWheel={(e) => e.stopPropagation()}
@@ -677,6 +676,7 @@ const ReportDrawer = ({
           )}
         </div>
       </section>
+        </section>
           </>
         ) : (
           <section className="insights-panel">

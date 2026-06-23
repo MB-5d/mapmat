@@ -242,9 +242,14 @@ describe('ReportDrawer', () => {
     expect(container.querySelector('.report-drawer-subtitle').textContent).toBe('QA Report');
     expect(container.querySelector('.report-drawer-body .report-tabs')).not.toBeNull();
     expect(container.querySelector('.report-drawer > .report-tabs')).toBeNull();
-    expect(appCss).toMatch(/\.report-table-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
+    expect(container.querySelector('.report-divider')).toBeNull();
+    expect(container.querySelector('.report-table-region > .report-controls-sticky .report-filter-row')).not.toBeNull();
+    expect(container.querySelector('.report-table .report-filter-row')).toBeNull();
+    expect(appCss).toMatch(/\.report-controls-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
     const tableHeaderBlock = appCss.match(/\.report-table-header \{[^}]*\}/)?.[0] || '';
-    expect(tableHeaderBlock).not.toContain('position: sticky');
+    expect(tableHeaderBlock).toContain('position: sticky');
+    expect(tableHeaderBlock).toContain('top: var(--report-controls-sticky-height)');
+    expect(appCss).toMatch(/\.report-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
   });
 
   test('shows SEO metadata in expanded report details', () => {
