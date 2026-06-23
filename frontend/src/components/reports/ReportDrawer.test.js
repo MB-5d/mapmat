@@ -20,7 +20,7 @@ describe('ReportDrawer', () => {
       number: '3',
       types: ['standard', 'duplicates'],
       duplicateOf: 'https://example.com/about',
-      parentUrl: 'https://example.com/',
+      parentUrl: 'https://example.com/about',
       referrerUrl: 'https://example.com/source',
       description: 'Plans and pricing metadata',
       metaKeywords: 'pricing, plans',
@@ -99,6 +99,7 @@ describe('ReportDrawer', () => {
       },
       typeOptions: [
         { key: 'standard', label: 'Standard' },
+        { key: 'orphanPages', label: 'Orphan pages' },
         { key: 'duplicates', label: 'Duplicate' },
         { key: 'brokenLinks', label: 'Broken links' },
         { key: 'errorPages', label: 'Error pages' },
@@ -310,6 +311,9 @@ describe('ReportDrawer', () => {
     expect(rowMainBlock).toContain('grid-template-columns: 10px 64px 96px 1.4fr 92px 32px 24px');
     const mapLinkBlock = appCss.match(/\.report-map-link\.ui-icon-btn \{[^}]*\}/)?.[0] || '';
     expect(mapLinkBlock).toContain('justify-self: center');
+    const detailsMenuBlock = appCss.match(/\.report-details-menu \{[^}]*\}/)?.[0] || '';
+    expect(detailsMenuBlock).toContain('max-height: 388px');
+    expect(detailsMenuBlock).toContain('overflow-y: auto');
     expect(appCss).toMatch(/\.report-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
   });
 
@@ -363,7 +367,7 @@ describe('ReportDrawer', () => {
     expect(descriptionItem.getAttribute('aria-checked')).toBe('true');
   });
 
-  test('uses the duplicate page title for duplicate locate links', () => {
+  test('uses page titles for duplicate and parent locate links', () => {
     const onLocateNode = jest.fn();
     renderDrawer({ onLocateNode });
 
@@ -381,6 +385,7 @@ describe('ReportDrawer', () => {
 
     expect(duplicateLink).not.toBeNull();
     expect(duplicateLink.className).toContain('ui-btn--type-link');
+    expect(duplicateLink.querySelector('.ui-btn__icon')).toBeNull();
     expect(container.textContent).not.toContain('example.com/about');
 
     act(() => {
@@ -388,6 +393,57 @@ describe('ReportDrawer', () => {
     });
 
     expect(onLocateNode).toHaveBeenCalledWith('2');
+
+    const parentLink = Array.from(container.querySelectorAll('.report-detail-link-row')).find((row) =>
+      row.textContent.includes('Parent:')
+    )?.querySelector('.report-internal-link');
+
+    expect(parentLink).not.toBeNull();
+    expect(parentLink.textContent.trim()).toBe('about');
+
+    act(() => {
+      parentLink.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onLocateNode).toHaveBeenCalledWith('2');
+  });
+
+  test('uses report chip labels for expanded finding badges', () => {
+    renderDrawer({
+      entries: [
+        {
+          ...entries[1],
+          id: 'orphan',
+          title: 'orphan node',
+          number: '5',
+          types: ['orphanPages'],
+          pageType: 'Orphan',
+        },
+      ],
+    });
+
+    const orphanRow = container.querySelector('.report-row-main');
+
+    act(() => {
+      orphanRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const detailBadges = Array.from(container.querySelectorAll('.report-detail-badges .report-badge')).map((badge) =>
+      badge.textContent.trim()
+    );
+
+    expect(detailBadges).toEqual(['Orphan']);
+    expect(container.textContent).not.toContain('Orphan pages');
+  });
+
+  test('shows dashes instead of zero findings', () => {
+    renderDrawer();
+
+    const aboutRow = Array.from(container.querySelectorAll('.report-row-main')).find((row) =>
+      row.textContent.includes('about')
+    );
+
+    expect(aboutRow.querySelector('.report-cell-count').textContent.trim()).toBe('--');
   });
 
   test('does not render an empty thumbnail placeholder in expanded report details', () => {

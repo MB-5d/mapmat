@@ -77,6 +77,14 @@ const normalizeReportLookupValue = (value) => (
     .toLowerCase()
 );
 
+const formatReportLinkFallback = (value) => (
+  String(value || '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/g, '')
+);
+
 const getEntryFindingTypes = (entry) => (
   (entry?.types || []).filter((type) => !NON_FINDING_TYPES.has(type))
 );
@@ -368,6 +376,11 @@ const ReportDrawer = ({
       || null;
   };
 
+  const getLinkedEntryLabel = (value) => {
+    const linkedEntry = getLinkedEntry(value);
+    return linkedEntry?.title || linkedEntry?.pageName || formatReportLinkFallback(value);
+  };
+
   const locateLinkedEntry = (linkedEntry, fallbackUrl) => {
     if (linkedEntry?.id) {
       onLocateNode?.(linkedEntry.id);
@@ -625,6 +638,7 @@ const ReportDrawer = ({
           {sortedEntries.map(entry => {
             const isExpanded = expandedRow === entry.id;
             const isLocked = Boolean(entry.isEntitlementLocked || entry.entitlementLocked);
+            const findingCount = getEntryFindingTypes(entry).length;
             const seoRows = [
               ['HTTP status', entry.httpErrorLabel || (entry.statusCode ? `HTTP ${entry.statusCode}` : ''), 'httpStatus'],
               ['Error type', entry.isViewableError ? 'Viewable HTTP error' : entry.httpErrorType, 'errorType'],
@@ -642,6 +656,7 @@ const ReportDrawer = ({
               ['Twitter card', entry.twitter?.card, 'twitterCard'],
             ].filter(([, value]) => value);
             const duplicateEntry = getLinkedEntry(entry.duplicateOf);
+            const parentEntry = getLinkedEntry(entry.parentUrl);
             return (
               <div key={entry.id} className={`report-row ${isLocked ? 'report-row--locked' : ''}`}>
                 <div
@@ -675,7 +690,7 @@ const ReportDrawer = ({
                   <div className="report-cell report-cell-title" title={entry.title || entry.url}>
                     <span>{entry.title || entry.url}</span>
                   </div>
-                  <div className="report-cell report-cell-count">{isLocked ? 'Locked' : getEntryFindingTypes(entry).length}</div>
+                  <div className="report-cell report-cell-count">{isLocked ? 'Locked' : (findingCount > 0 ? findingCount : '--')}</div>
                   <IconButton
                     htmlType="button"
                     className="report-map-link"
@@ -724,7 +739,7 @@ const ReportDrawer = ({
                               const meta = REPORT_FILTER_META[type] || {};
                               return (
                                 <span key={type} className={`report-badge ${meta.className || 'report-filter-chip--info'}`}>
-                                  {typeLookup.get(type) || type}
+                                  {meta.label || typeLookup.get(type) || type}
                                 </span>
                               );
                             })}
@@ -738,25 +753,27 @@ const ReportDrawer = ({
                                 type="link"
                                 size="sm"
                                 className="report-internal-link"
-                                startIcon={<Locate size={14} />}
                                 onClick={() => {
                                   locateLinkedEntry(duplicateEntry, entry.duplicateOf);
                                 }}
                               >
-                                {duplicateEntry?.title || entry.duplicateOf.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
+                                {getLinkedEntryLabel(entry.duplicateOf)}
                               </Button>
                             </div>
                           )}
                           {entry.parentUrl && visibleDetails.parentUrl && (
                             <div className="report-detail-link-row">
                               <strong>Parent:</strong>
-                              <button
-                                type="button"
+                              <Button
+                                type="link"
+                                size="sm"
                                 className="report-internal-link"
-                                onClick={() => onLocateUrl?.(entry.parentUrl)}
+                                onClick={() => {
+                                  locateLinkedEntry(parentEntry, entry.parentUrl);
+                                }}
                               >
-                                {entry.parentUrl.replace(/^https?:\/\//, '').replace(/^www\./i, '')}
-                              </button>
+                                {getLinkedEntryLabel(entry.parentUrl)}
+                              </Button>
                             </div>
                           )}
                           {entry.referrerUrl && visibleDetails.referrerUrl && (
