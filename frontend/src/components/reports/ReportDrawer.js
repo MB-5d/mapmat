@@ -522,7 +522,7 @@ const ReportDrawer = ({
               <div>{renderSortButton('pageType', 'Page type')}</div>
               <div>{renderSortButton('title', 'Page name')}</div>
               <div>{renderSortButton('issues', 'Issues', 'report-header-issues')}</div>
-              <div>Show on map</div>
+              <div>Show</div>
               <div />
             </div>
           <div
@@ -587,9 +587,15 @@ const ReportDrawer = ({
                     )}
                   </div>
                   <div className="report-cell report-cell-count">{isLocked ? 'Locked' : entry.types.length}</div>
-                  <button
-                    type="button"
+                  <IconButton
+                    htmlType="button"
                     className="report-map-link"
+                    variant="ghost"
+                    buttonStyle="brand"
+                    size="xs"
+                    icon={isLocked ? <ExternalLink /> : <Locate />}
+                    label={isLocked ? 'Upgrade' : 'See on map'}
+                    title={isLocked ? 'Upgrade' : 'See on map'}
                     onClick={(event) => {
                       event.stopPropagation();
                       if (isLocked) {
@@ -598,10 +604,7 @@ const ReportDrawer = ({
                       }
                       onLocateNode?.(entry.id);
                     }}
-                  >
-                    {isLocked ? <ExternalLink size={16} /> : <Locate size={16} />}
-                    {isLocked ? 'Upgrade' : 'See on map'}
-                  </button>
+                  />
                   <span className="report-row-toggle">
                     {!isLocked && (isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />)}
                   </span>
@@ -793,17 +796,20 @@ const ReportDrawer = ({
                       <div className="insight-finding-footer">
                         <span>{finding.url || 'Site-wide'}</span>
                         {(finding.pageId || finding.url) && (
-                          <button
-                            type="button"
+                          <IconButton
+                            htmlType="button"
                             className="report-map-link"
+                            variant="ghost"
+                            buttonStyle="brand"
+                            size="xs"
+                            icon={<Locate />}
+                            label="See on map"
+                            title="See on map"
                             onClick={() => {
                               if (finding.pageId) onLocateNode?.(finding.pageId);
                               else onLocateUrl?.(finding.url);
                             }}
-                          >
-                            <Locate size={16} />
-                            See on map
-                          </button>
+                          />
                         )}
                       </div>
                     </article>

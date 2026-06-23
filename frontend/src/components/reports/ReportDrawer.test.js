@@ -275,14 +275,23 @@ describe('ReportDrawer', () => {
     expect(container.querySelector('.report-table-region > .report-controls-sticky .report-filter-row')).not.toBeNull();
     expect(container.querySelector('.report-table .report-filter-row')).toBeNull();
     expect(container.querySelector('.report-table > .report-table-header')).not.toBeNull();
+    expect(container.querySelector('.report-table-header').textContent).toContain('Show');
+    expect(container.querySelector('.report-table-header').textContent).not.toContain('Show on map');
+    const summaryBlock = appCss.match(/\.report-summary \{[^}]*\}/)?.[0] || '';
+    expect(summaryBlock).toContain('margin-bottom: var(--unit-24)');
+    const searchBlock = appCss.match(/\.report-search \{[^}]*\}/)?.[0] || '';
+    expect(searchBlock).toContain('max-width: 296px');
     expect(appCss).toMatch(/\.report-controls-sticky \{[\s\S]*position: sticky;[\s\S]*top: 0;/);
     const tableBlock = appCss.match(/\.report-table \{[^}]*\}/)?.[0] || '';
     expect(tableBlock).toContain('flex: 0 0 auto');
+    expect(tableBlock).not.toContain('border: 1px solid');
     const tableBodyBlock = appCss.match(/\.report-table-body \{[^}]*\}/)?.[0] || '';
     expect(tableBodyBlock).toContain('flex: 0 0 auto');
+    expect(tableBodyBlock).toContain('border-left: 1px solid var(--color-border)');
     const tableHeaderBlock = appCss.match(/\.report-table-header \{[^}]*\}/)?.[0] || '';
     expect(tableHeaderBlock).toContain('position: sticky');
     expect(tableHeaderBlock).toContain('top: var(--report-controls-sticky-height)');
+    expect(tableHeaderBlock).toContain('border: 1px solid var(--color-border)');
     expect(appCss).toMatch(/\.report-drawer \.drawer-back-to-top \{[\s\S]*position: absolute;[\s\S]*bottom: var\(--unit-20\);/);
   });
 
@@ -311,11 +320,13 @@ describe('ReportDrawer', () => {
     const onLocateNode = jest.fn();
     renderDrawer({ onLocateNode });
 
-    const seeOnMapButton = Array.from(container.querySelectorAll('.report-map-link')).find((button) =>
-      button.textContent.includes('See on map')
-    );
+    const seeOnMapButton = container.querySelector('.report-map-link[aria-label="See on map"]');
 
     expect(seeOnMapButton.type).toBe('button');
+    expect(seeOnMapButton.title).toBe('See on map');
+    expect(seeOnMapButton.textContent).not.toContain('See on map');
+    expect(seeOnMapButton.className).toContain('ui-icon-btn--type-ghost');
+    expect(seeOnMapButton.className).toContain('ui-icon-btn--style-brand');
 
     act(() => {
       seeOnMapButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
