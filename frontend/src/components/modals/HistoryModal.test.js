@@ -110,6 +110,8 @@ describe('HistoryModal', () => {
     expect(container.querySelector('.drawer-back-to-top')).toBeNull();
 
     const historyList = container.querySelector('.history-list');
+    const historyActions = container.querySelector('.history-actions');
+    expect(historyList.contains(historyActions)).toBe(true);
     historyList.scrollTop = 260;
 
     act(() => {

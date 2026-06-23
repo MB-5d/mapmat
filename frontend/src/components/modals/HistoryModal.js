@@ -64,41 +64,41 @@ const HistoryModal = ({
             </div>
           ) : (
             <>
-              <div className="history-actions">
-                <div className="history-actions-left">
-                  <label className="history-select-all">
-                    <input
-                      ref={selectAllRef}
-                      type="checkbox"
-                      checked={scanHistory.length > 0 && selectedHistoryItems.size === scanHistory.length}
-                      onChange={onSelectAllToggle}
-                    />
-                    <span>Select all</span>
-                  </label>
-                  {selectedHistoryItems.size > 0 && (
-                    <IconButton
-                      className="history-delete-selected-btn"
-                      variant="danger"
-                      size="sm"
-                      icon={<Trash2 />}
-                      label={`Delete selected (${selectedHistoryItems.size})`}
-                      title={`Delete selected (${selectedHistoryItems.size})`}
-                      onClick={onDeleteSelected}
-                    />
-                  )}
-                </div>
-                <div className="history-actions-right">
-                  <div className="history-sort">
-                    <span>Sort</span>
-                    <SelectInput size="sm" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
-                      <option value="newest">Newest</option>
-                      <option value="oldest">Oldest</option>
-                      <option value="pageCount">Page count</option>
-                    </SelectInput>
+              <div className="history-list" ref={listRef} onScroll={handleListScroll}>
+                <div className="history-actions">
+                  <div className="history-actions-left">
+                    <label className="history-select-all">
+                      <input
+                        ref={selectAllRef}
+                        type="checkbox"
+                        checked={scanHistory.length > 0 && selectedHistoryItems.size === scanHistory.length}
+                        onChange={onSelectAllToggle}
+                      />
+                      <span>Select all</span>
+                    </label>
+                    {selectedHistoryItems.size > 0 && (
+                      <IconButton
+                        className="history-delete-selected-btn"
+                        variant="danger"
+                        size="sm"
+                        icon={<Trash2 />}
+                        label={`Delete selected (${selectedHistoryItems.size})`}
+                        title={`Delete selected (${selectedHistoryItems.size})`}
+                        onClick={onDeleteSelected}
+                      />
+                    )}
+                  </div>
+                  <div className="history-actions-right">
+                    <div className="history-sort">
+                      <span>Sort</span>
+                      <SelectInput size="sm" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+                        <option value="newest">Newest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="pageCount">Page count</option>
+                      </SelectInput>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="history-list" ref={listRef} onScroll={handleListScroll}>
                 {sortedHistory.map(item => (
                   <div
                     key={item.id}
