@@ -2,6 +2,7 @@ import React from 'react';
 
 import classNames from '../../utils/classNames';
 import Icon from './Icon';
+import { isUiToneStyle } from './toneStyles';
 
 const TAG_TYPES = new Set(['fill', 'hollow']);
 const TAG_STYLES = new Set(['brand', 'mono']);
@@ -26,7 +27,7 @@ const Tag = React.forwardRef(
     ref
   ) => {
     const resolvedType = TAG_TYPES.has(type) ? type : 'hollow';
-    const resolvedStyle = TAG_STYLES.has(tagStyle) ? tagStyle : 'mono';
+    const resolvedStyle = TAG_STYLES.has(tagStyle) || isUiToneStyle(tagStyle) ? tagStyle : 'mono';
     const resolvedSize = TAG_SIZES.has(size) ? size : 'md';
     const resolvedState = TAG_STATES.has(state) ? state : 'rest';
     const isInteractive = Component !== 'span' || props.onClick || props.tabIndex != null;
@@ -41,6 +42,7 @@ const Tag = React.forwardRef(
           `ui-tag--type-${resolvedType}`,
           `ui-tag--style-${resolvedStyle}`,
           `ui-tag--state-${resolvedState}`,
+          isUiToneStyle(resolvedStyle) && `ui-tone--${resolvedStyle}`,
           isInteractive && 'ui-tag--interactive',
           className
         )}

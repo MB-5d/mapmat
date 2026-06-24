@@ -56,7 +56,7 @@ describe('NodeCard', () => {
           canEdit
           canComment
           showCommentAction
-          badges={['Subdomain']}
+          badges={['Subdomain', 'Duplicate']}
           onDelete={jest.fn()}
           onEdit={jest.fn()}
           onDuplicate={jest.fn()}
@@ -69,7 +69,9 @@ describe('NodeCard', () => {
 
     expect(container.querySelector('.comment-badge')).not.toBeNull();
     expect(container.querySelector('.node-status-badge.status-to_move')).not.toBeNull();
-    expect(container.querySelector('.node-badge')).not.toBeNull();
+    expect(container.querySelector('.node-badge')?.textContent).toContain('Duplicate');
+    expect(container.querySelector('.node-badge')?.className).toContain('ui-tone--orange');
+    expect(container.textContent).not.toContain('Subdomain');
     expect(container.querySelector('.page-number')?.textContent).toBe('s1.4');
     expect(container.querySelectorAll('.node-card-action.ui-icon-btn')).toHaveLength(4);
     const deleteAction = container.querySelector('.node-card-action[aria-label="Delete"]');

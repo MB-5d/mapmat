@@ -11,6 +11,9 @@ const colorAliases = {
   },
 };
 
+const toneNames = ['sky', 'teal', 'blue', 'indigo', 'violet', 'yellow', 'amber', 'orange', 'red', 'rose', 'green', 'slate'];
+const toneTokenNames = ['surface', 'border', 'text', 'accent', 'hover', 'selected', 'focus'];
+
 const primitiveColors = {
   neutral: {
     'white': '#ffffff',
@@ -52,6 +55,58 @@ const primitiveColors = {
     '900': '#1e3a8a',
     '950': '#172554',
   },
+  sky: {
+    '50': '#f0f9ff',
+    '100': '#e0f2fe',
+    '200': '#bae6fd',
+    '300': '#7dd3fc',
+    '400': '#38bdf8',
+    '500': '#0ea5e9',
+    '600': '#0284c7',
+    '700': '#0369a1',
+    '800': '#075985',
+    '900': '#0c4a6e',
+    '950': '#082f49',
+  },
+  teal: {
+    '50': '#f0fdfa',
+    '100': '#ccfbf1',
+    '200': '#99f6e4',
+    '300': '#5eead4',
+    '400': '#2dd4bf',
+    '500': '#14b8a6',
+    '600': '#0d9488',
+    '700': '#0f766e',
+    '800': '#115e59',
+    '900': '#134e4a',
+    '950': '#042f2e',
+  },
+  indigo: {
+    '50': '#eef2ff',
+    '100': '#e0e7ff',
+    '200': '#c7d2fe',
+    '300': '#a5b4fc',
+    '400': '#818cf8',
+    '500': '#6366f1',
+    '600': '#4f46e5',
+    '700': '#4338ca',
+    '800': '#3730a3',
+    '900': '#312e81',
+    '950': '#1e1b4b',
+  },
+  violet: {
+    '50': '#f5f3ff',
+    '100': '#ede9fe',
+    '200': '#ddd6fe',
+    '300': '#c4b5fd',
+    '400': '#a78bfa',
+    '500': '#8b5cf6',
+    '600': '#7c3aed',
+    '700': '#6d28d9',
+    '800': '#5b21b6',
+    '900': '#4c1d95',
+    '950': '#2e1065',
+  },
   green: {
     '50': '#f0fdf4',
     '100': '#dcfce7',
@@ -78,6 +133,32 @@ const primitiveColors = {
     '900': '#78350f',
     '950': '#451a03',
   },
+  amber: {
+    '50': '#fffbeb',
+    '100': '#fef3c7',
+    '200': '#fde68a',
+    '300': '#fcd34d',
+    '400': '#fbbf24',
+    '500': '#f59e0b',
+    '600': '#d97706',
+    '700': '#b45309',
+    '800': '#92400e',
+    '900': '#78350f',
+    '950': '#451a03',
+  },
+  orange: {
+    '50': '#fff7ed',
+    '100': '#ffedd5',
+    '200': '#fed7aa',
+    '300': '#fdba74',
+    '400': '#fb923c',
+    '500': '#f97316',
+    '600': '#ea580c',
+    '700': '#c2410c',
+    '800': '#9a3412',
+    '900': '#7c2d12',
+    '950': '#431407',
+  },
   red: {
     '50': '#fef2f2',
     '100': '#fee2e2',
@@ -90,6 +171,32 @@ const primitiveColors = {
     '800': '#991b1b',
     '900': '#7f1d1d',
     '950': '#450a0a',
+  },
+  rose: {
+    '50': '#fff1f2',
+    '100': '#ffe4e6',
+    '200': '#fecdd3',
+    '300': '#fda4af',
+    '400': '#fb7185',
+    '500': '#f43f5e',
+    '600': '#e11d48',
+    '700': '#be123c',
+    '800': '#9f1239',
+    '900': '#881337',
+    '950': '#4c0519',
+  },
+  slate: {
+    '50': '#f8fafc',
+    '100': '#f1f5f9',
+    '200': '#e2e8f0',
+    '300': '#cbd5e1',
+    '400': '#94a3b8',
+    '500': '#64748b',
+    '600': '#475569',
+    '700': '#334155',
+    '800': '#1e293b',
+    '900': '#0f172a',
+    '950': '#020617',
   },
   plum: {
     '50': '#f5effa',
@@ -155,6 +262,13 @@ const componentTokens = {
       activeBgHover: 'var(--ui-color-primary-hover)',
       activeFg: 'var(--ui-icon-inverse)',
     },
+  },
+  chip: {
+    radius: 'var(--ui-radius-lg)',
+    filterHeight: '58px',
+    filterPadding: 'var(--unit-8) var(--unit-10)',
+    metricHeight: '72px',
+    metricPadding: 'var(--unit-10) var(--unit-12)',
   },
 };
 
@@ -483,6 +597,56 @@ const typography = {
   },
 };
 
+const toneSemantics = {
+  light: {
+    sky: { surface: 'var(--color-sky-50)', border: 'var(--color-sky-300)', text: 'var(--color-sky-800)', accent: 'var(--color-sky-500)', hover: 'var(--color-sky-100)', selected: 'var(--color-sky-100)', focus: 'rgba(14, 165, 233, 0.18)' },
+    teal: { surface: 'var(--color-teal-50)', border: 'var(--color-teal-300)', text: 'var(--color-teal-800)', accent: 'var(--color-teal-500)', hover: 'var(--color-teal-100)', selected: 'var(--color-teal-100)', focus: 'rgba(20, 184, 166, 0.18)' },
+    blue: { surface: 'var(--color-blue-50)', border: 'var(--color-blue-300)', text: 'var(--color-blue-800)', accent: 'var(--color-blue-500)', hover: 'var(--color-blue-100)', selected: 'var(--color-blue-100)', focus: 'rgba(59, 130, 246, 0.18)' },
+    indigo: { surface: 'var(--color-indigo-50)', border: 'var(--color-indigo-300)', text: 'var(--color-indigo-800)', accent: 'var(--color-indigo-500)', hover: 'var(--color-indigo-100)', selected: 'var(--color-indigo-100)', focus: 'rgba(99, 102, 241, 0.2)' },
+    violet: { surface: 'var(--color-violet-50)', border: 'var(--color-violet-300)', text: 'var(--color-violet-800)', accent: 'var(--color-violet-500)', hover: 'var(--color-violet-100)', selected: 'var(--color-violet-100)', focus: 'rgba(139, 92, 246, 0.2)' },
+    yellow: { surface: 'var(--color-yellow-50)', border: 'var(--color-yellow-400)', text: 'var(--color-yellow-800)', accent: 'var(--color-yellow-500)', hover: 'var(--color-yellow-100)', selected: 'var(--color-yellow-100)', focus: 'rgba(245, 158, 11, 0.2)' },
+    amber: { surface: 'var(--color-amber-50)', border: 'var(--color-amber-400)', text: 'var(--color-amber-800)', accent: 'var(--color-amber-500)', hover: 'var(--color-amber-100)', selected: 'var(--color-amber-100)', focus: 'rgba(245, 158, 11, 0.2)' },
+    orange: { surface: 'var(--color-orange-50)', border: 'var(--color-orange-400)', text: 'var(--color-orange-800)', accent: 'var(--color-orange-500)', hover: 'var(--color-orange-100)', selected: 'var(--color-orange-100)', focus: 'rgba(249, 115, 22, 0.2)' },
+    red: { surface: 'var(--color-red-50)', border: 'var(--color-red-300)', text: 'var(--color-red-800)', accent: 'var(--color-red-500)', hover: 'var(--color-red-100)', selected: 'var(--color-red-100)', focus: 'rgba(239, 68, 68, 0.2)' },
+    rose: { surface: 'var(--color-rose-50)', border: 'var(--color-rose-300)', text: 'var(--color-rose-800)', accent: 'var(--color-rose-500)', hover: 'var(--color-rose-100)', selected: 'var(--color-rose-100)', focus: 'rgba(244, 63, 94, 0.2)' },
+    green: { surface: 'var(--color-green-50)', border: 'var(--color-green-300)', text: 'var(--color-green-800)', accent: 'var(--color-green-500)', hover: 'var(--color-green-100)', selected: 'var(--color-green-100)', focus: 'rgba(34, 197, 94, 0.18)' },
+    slate: { surface: 'var(--color-slate-100)', border: 'var(--color-slate-300)', text: 'var(--color-slate-700)', accent: 'var(--color-slate-500)', hover: 'var(--color-slate-200)', selected: 'var(--color-slate-200)', focus: 'rgba(100, 116, 139, 0.18)' },
+  },
+  dark: {
+    sky: { surface: 'rgba(14, 165, 233, 0.14)', border: 'var(--color-sky-700)', text: 'var(--color-sky-200)', accent: 'var(--color-sky-400)', hover: 'rgba(14, 165, 233, 0.22)', selected: 'rgba(14, 165, 233, 0.26)', focus: 'rgba(56, 189, 248, 0.28)' },
+    teal: { surface: 'rgba(20, 184, 166, 0.14)', border: 'var(--color-teal-700)', text: 'var(--color-teal-200)', accent: 'var(--color-teal-400)', hover: 'rgba(20, 184, 166, 0.22)', selected: 'rgba(20, 184, 166, 0.26)', focus: 'rgba(45, 212, 191, 0.28)' },
+    blue: { surface: 'rgba(59, 130, 246, 0.14)', border: 'var(--color-blue-700)', text: 'var(--color-blue-200)', accent: 'var(--color-blue-400)', hover: 'rgba(59, 130, 246, 0.22)', selected: 'rgba(59, 130, 246, 0.26)', focus: 'rgba(96, 165, 250, 0.28)' },
+    indigo: { surface: 'rgba(99, 102, 241, 0.16)', border: 'var(--color-indigo-700)', text: 'var(--color-indigo-200)', accent: 'var(--color-indigo-400)', hover: 'rgba(99, 102, 241, 0.24)', selected: 'rgba(99, 102, 241, 0.3)', focus: 'rgba(129, 140, 248, 0.3)' },
+    violet: { surface: 'rgba(139, 92, 246, 0.16)', border: 'var(--color-violet-700)', text: 'var(--color-violet-200)', accent: 'var(--color-violet-400)', hover: 'rgba(139, 92, 246, 0.24)', selected: 'rgba(139, 92, 246, 0.3)', focus: 'rgba(167, 139, 250, 0.3)' },
+    yellow: { surface: 'rgba(245, 158, 11, 0.16)', border: 'var(--color-yellow-600)', text: 'var(--color-yellow-200)', accent: 'var(--color-yellow-400)', hover: 'rgba(245, 158, 11, 0.24)', selected: 'rgba(245, 158, 11, 0.3)', focus: 'rgba(251, 191, 36, 0.3)' },
+    amber: { surface: 'rgba(245, 158, 11, 0.16)', border: 'var(--color-amber-600)', text: 'var(--color-amber-200)', accent: 'var(--color-amber-400)', hover: 'rgba(245, 158, 11, 0.24)', selected: 'rgba(245, 158, 11, 0.3)', focus: 'rgba(251, 191, 36, 0.3)' },
+    orange: { surface: 'rgba(249, 115, 22, 0.16)', border: 'var(--color-orange-700)', text: 'var(--color-orange-200)', accent: 'var(--color-orange-400)', hover: 'rgba(249, 115, 22, 0.24)', selected: 'rgba(249, 115, 22, 0.3)', focus: 'rgba(251, 146, 60, 0.3)' },
+    red: { surface: 'rgba(239, 68, 68, 0.16)', border: 'var(--color-red-800)', text: 'var(--color-red-200)', accent: 'var(--color-red-400)', hover: 'rgba(239, 68, 68, 0.24)', selected: 'rgba(239, 68, 68, 0.3)', focus: 'rgba(248, 113, 113, 0.3)' },
+    rose: { surface: 'rgba(244, 63, 94, 0.16)', border: 'var(--color-rose-800)', text: 'var(--color-rose-200)', accent: 'var(--color-rose-400)', hover: 'rgba(244, 63, 94, 0.24)', selected: 'rgba(244, 63, 94, 0.3)', focus: 'rgba(251, 113, 133, 0.3)' },
+    green: { surface: 'rgba(34, 197, 94, 0.14)', border: 'var(--color-green-800)', text: 'var(--color-green-200)', accent: 'var(--color-green-400)', hover: 'rgba(34, 197, 94, 0.22)', selected: 'rgba(34, 197, 94, 0.26)', focus: 'rgba(74, 222, 128, 0.28)' },
+    slate: { surface: 'rgba(148, 163, 184, 0.12)', border: 'var(--color-slate-600)', text: 'var(--color-slate-300)', accent: 'var(--color-slate-400)', hover: 'rgba(148, 163, 184, 0.18)', selected: 'rgba(148, 163, 184, 0.22)', focus: 'rgba(148, 163, 184, 0.24)' },
+  },
+};
+
+function buildToneTokens(mode) {
+  return Object.fromEntries(
+    toneNames.flatMap((tone) => (
+      toneTokenNames.map((token) => [`ui-tone-${tone}-${token}`, toneSemantics[mode][tone][token]])
+    ))
+  );
+}
+
+function titleCaseTone(tone) {
+  return tone
+    .split('-')
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
+}
+
+function titleCaseToken(token) {
+  return `${token.charAt(0).toUpperCase()}${token.slice(1)}`;
+}
+
 const appSemantics = {
   light: {
     'ui-color-primary': 'var(--color-brand-500)',
@@ -566,6 +730,13 @@ const appSemantics = {
     'ui-status-danger-border': 'var(--color-red-300)',
     'ui-status-danger-text': 'var(--color-red-800)',
     'ui-status-danger-icon': 'var(--color-red-600)',
+    ...buildToneTokens('light'),
+    'ui-chip-bg': 'var(--ui-color-surface-muted)',
+    'ui-chip-border': 'var(--ui-color-border)',
+    'ui-chip-text': 'var(--ui-color-muted)',
+    'ui-chip-value': 'var(--ui-color-text)',
+    'ui-chip-hover-bg': 'var(--ui-color-surface-muted)',
+    'ui-chip-selected-bg': 'var(--ui-color-accent-soft)',
     'ui-tag-bg': 'var(--ui-color-surface-muted)',
     'ui-tag-border': 'var(--ui-color-border)',
     'ui-tag-text': 'var(--ui-color-muted)',
@@ -716,6 +887,13 @@ const appSemantics = {
     'ui-status-danger-border': 'var(--color-red-900)',
     'ui-status-danger-text': 'var(--color-red-200)',
     'ui-status-danger-icon': 'var(--color-red-400)',
+    ...buildToneTokens('dark'),
+    'ui-chip-bg': 'var(--color-plum-950)',
+    'ui-chip-border': 'var(--ui-color-border-strong)',
+    'ui-chip-text': 'var(--ui-color-muted)',
+    'ui-chip-value': 'var(--ui-color-text)',
+    'ui-chip-hover-bg': 'var(--color-plum-800)',
+    'ui-chip-selected-bg': 'var(--ui-color-accent-soft)',
     'ui-tag-bg': 'var(--color-plum-950)',
     'ui-tag-border': 'var(--ui-color-border-strong)',
     'ui-tag-text': 'var(--ui-color-muted)',
@@ -1036,6 +1214,20 @@ const semanticColorNames = {
   'ui-status-danger-border': 'Status/Danger/Border',
   'ui-status-danger-text': 'Status/Danger/Content',
   'ui-status-danger-icon': 'Status/Danger/Icon',
+  ...Object.fromEntries(
+    toneNames.flatMap((tone) => (
+      toneTokenNames.map((token) => [
+        `ui-tone-${tone}-${token}`,
+        `Tone/${titleCaseTone(tone)}/${titleCaseToken(token)}`,
+      ])
+    ))
+  ),
+  'ui-chip-bg': 'Chip/Default/Surface',
+  'ui-chip-border': 'Chip/Default/Border',
+  'ui-chip-text': 'Chip/Default/Content',
+  'ui-chip-value': 'Chip/Default/Value',
+  'ui-chip-hover-bg': 'Chip/Default/Hover Surface',
+  'ui-chip-selected-bg': 'Chip/Default/Selected Surface',
   'ui-tag-bg': 'Tag/Default/Surface',
   'ui-tag-border': 'Tag/Default/Border',
   'ui-tag-text': 'Tag/Default/Content',
@@ -1358,6 +1550,23 @@ const components = [
     ],
   },
   {
+    name: 'Chip',
+    kind: 'primitive',
+    source: 'frontend/src/components/ui/Chip.js',
+    props: {
+      variant: ['filter', 'metric'],
+      tone: ['brand', 'mono', ...toneNames],
+      label: 'string',
+      value: 'string | number',
+      selected: 'boolean',
+      disabled: 'boolean',
+      interactive: 'boolean',
+      icon: 'node',
+    },
+    states: ['rest', 'hover', 'selected', 'focus-visible', 'disabled', 'theme via semantic token modes'],
+    notes: ['Tags render as Badge when passive and Chip when selectable or filterable.'],
+  },
+  {
     name: 'StatusAlert',
     kind: 'primitive',
     source: 'frontend/src/components/ui/StatusAlert.js',
@@ -1624,7 +1833,7 @@ const components = [
     source: 'frontend/src/components/ui/Badge.js',
     props: {
       type: ['fill', 'hollow'],
-      style: ['brand', 'mono', 'info', 'error', 'warning', 'success', 'neutral'],
+      style: ['brand', 'mono', 'info', 'error', 'warning', 'success', 'neutral', ...toneNames],
       size: ['sm', 'md'],
       label: 'string',
       startIcon: 'icon',
@@ -1639,7 +1848,7 @@ const components = [
     source: 'frontend/src/components/ui/Tag.js',
     props: {
       type: ['fill', 'hollow'],
-      style: ['brand', 'mono'],
+      style: ['brand', 'mono', ...toneNames],
       size: ['sm', 'md'],
       state: ['rest', 'hover', 'focus'],
       label: 'string',
@@ -1647,7 +1856,7 @@ const components = [
       endIcon: 'icon',
     },
     states: ['rest', 'hover', 'focus', 'theme via semantic token modes'],
-    notes: ['Functional larger chip with 6px radius. Uses label typography and button color behavior.'],
+    notes: ['User/content metadata. Render as Badge when passive and Chip when selectable or filterable.'],
   },
   {
     name: 'NodeMenu',

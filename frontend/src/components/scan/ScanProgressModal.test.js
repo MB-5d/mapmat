@@ -122,10 +122,9 @@ describe('ScanProgressModal', () => {
     expect(centerItems.slice(0, 2)).toEqual(['1:35', 'Elapsed']);
   });
 
-  test('uses map label token families for findings colors', () => {
-    expect(appCss).toMatch(/\.scan-findings-segment--brokenLinks,[\s\S]*\.scan-finding-dot--scanLimited \{[\s\S]*background: var\(--ui-status-danger-icon\);/);
-    expect(appCss).toMatch(/\.scan-findings-segment--duplicates,[\s\S]*\.scan-finding-dot--authenticatedPages \{[\s\S]*background: var\(--ui-status-warning-icon\);/);
-    expect(appCss).toMatch(/\.scan-findings-segment--inactivePages,[\s\S]*\.scan-finding-dot--inactivePages \{[\s\S]*background: var\(--ui-color-muted\);/);
+  test('uses shared finding tone tokens for findings colors', () => {
+    expect(appCss).toMatch(/\.scan-findings-segment \{[\s\S]*background: var\(--ui-tone-accent-current, var\(--ui-color-primary\)\);/);
+    expect(appCss).toMatch(/\.scan-finding-dot \{[\s\S]*background: var\(--ui-tone-accent-current, var\(--color-text-secondary\)\);/);
   });
 
   test('shows only found issue categories in the findings bar', () => {
@@ -159,6 +158,10 @@ describe('ScanProgressModal', () => {
     const segments = Array.from(container.querySelectorAll('.scan-findings-segment'));
     expect(segments).toHaveLength(3);
     expect(segments[0].style.width).toBe('50%');
+    expect(segments[0].className).toContain('ui-tone--red');
+    expect(segments[1].className).toContain('ui-tone--red');
+    expect(segments[2].className).toContain('ui-tone--slate');
+    expect(container.querySelector('.scan-finding-dot--brokenLinks')?.className).toContain('ui-tone--red');
   });
 
   test('uses fallback estimate buckets when total time is not known', () => {

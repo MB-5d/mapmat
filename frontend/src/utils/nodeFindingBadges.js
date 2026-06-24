@@ -29,14 +29,12 @@ export const getFindingBadgesForNode = (
 
   const orphanType = nodeMeta?.orphanType || node.orphanType;
   const isRenderableText = isRenderableTextUrl(node.url);
-  const isSubdomainTree = node.subdomainRoot || nodeMeta?.isSubdomainTree || orphanType === 'subdomain';
   const isOrphanRoot = isTopLevelOrphanRoot(nodeMeta);
   const isRealError = isRealHttpErrorNode(node);
 
   if (node.isDuplicate && canShowBadge(visibility, 'duplicates')) badges.push('Duplicate');
   if (isVirtualMissingNode(node) && canShowBadge(visibility, 'missing')) badges.push('Missing');
-  if (isSubdomainTree && canShowBadge(visibility, 'subdomains')) badges.push('Subdomain');
-  if (orphanType === 'orphan' && canShowBadge(visibility, 'orphanPages')) badges.push('Orphan');
+  // Orphan and subdomain are conveyed by page numbering/placement, not node badges.
   if (!isRenderableText && orphanType === 'file' && canShowBadge(visibility, 'files')) badges.push('File');
   if (orphanType === 'broken' && !isOrphanRoot && canShowBadge(visibility, 'brokenLinks')) {
     badges.push('Broken Link');

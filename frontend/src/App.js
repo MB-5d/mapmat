@@ -2679,6 +2679,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [isImportedMap, setIsImportedMap] = useState(false); // Whether current map is from import
   const [accessLevel, setAccessLevel] = useState(ACCESS_LEVELS.EDIT); // Permission level
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showCollaborationModal, setShowCollaborationModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showCreateMapModal, setShowCreateMapModal] = useState(false);
@@ -4858,7 +4859,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   );
   const canManageCollaborationSettingsResolvedValue = canManageCollaborationSettingsValue || currentCollaborationRole === 'owner';
   const canViewAccessRequestsResolvedValue = canViewAccessRequestsValue || currentCollaborationRole === 'owner';
-  const canOpenShareModalValue = canEditValue || canSelfServeCollaborationValue;
+  const canOpenShareModalValue = canManageSharesValue;
+  const canOpenCollaborationModalValue = COLLABORATION_UI_ENABLED && isLoggedIn && (
+    canViewCollaborationPanelValue
+    || canSelfServeCollaborationValue
+    || canSendCollaborationInvitesResolvedValue
+  );
 
   // Permission helper functions
   const canEdit = useCallback(() => canEditValue, [canEditValue]);
@@ -6326,7 +6332,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (
       !COLLABORATION_UI_ENABLED
       || !canViewCollaborationPanelValue
-      || !showShareModal
+      || !showCollaborationModal
       || !currentMap?.id
       || !isLoggedIn
     ) return;
@@ -6351,7 +6357,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     } finally {
       setCollaborationLoading(false);
     }
-  }, [canViewCollaborationPanelValue, currentMap?.id, isLoggedIn, showShareModal]);
+  }, [canViewCollaborationPanelValue, currentMap?.id, isLoggedIn, showCollaborationModal]);
 
   const sendCollaborationInvite = useCallback(async () => {
     if (!guardAccountCanCreateWork('Inviting collaborators')) return;
@@ -6586,25 +6592,25 @@ export default function App({ currentRoute, navigateToRoute }) {
   ]);
 
   useEffect(() => {
-    if (!showShareModal) return;
+    if (!showCollaborationModal) return;
     if (!COLLABORATION_UI_ENABLED) return;
     if (!canViewCollaborationPanelValue) return;
     loadCollaborationData();
-  }, [canViewCollaborationPanelValue, loadCollaborationData, showShareModal]);
+  }, [canViewCollaborationPanelValue, loadCollaborationData, showCollaborationModal]);
 
   useEffect(() => {
-    if (!showShareModal || !COLLABORATION_UI_ENABLED || canViewCollaborationPanelValue) return;
+    if (!showCollaborationModal || !COLLABORATION_UI_ENABLED || canViewCollaborationPanelValue) return;
     setCollaborationError('');
     setCollaborationMemberships([]);
     setCollaborationInvites([]);
-  }, [canViewCollaborationPanelValue, showShareModal]);
+  }, [canViewCollaborationPanelValue, showCollaborationModal]);
 
   useEffect(() => {
-    if (showShareModal) return;
+    if (showCollaborationModal) return;
     setCollaborationError('');
     setCollaborationMemberships([]);
     setCollaborationInvites([]);
-  }, [showShareModal]);
+  }, [showCollaborationModal]);
 
   const resolvePresenceAccessMode = useCallback(() => {
     if (canEditValue) return 'edit';
@@ -10635,6 +10641,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowImageReportDrawer(false);
     setShowVersionHistoryDrawer(false);
     setShowShareModal(false);
+    setShowCollaborationModal(false);
     setSelectedNodeIds(new Set());
     setSelectionBox(null);
     setThumbnailScopeIds(null);
@@ -18223,7 +18230,13 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowColorKey(false);
                   setShowShareModal(true);
                 },
+                onCollaborate: () => {
+                  setShowViewDropdown(false);
+                  setShowColorKey(false);
+                  setShowCollaborationModal(true);
+                },
                 canOpenShare: canOpenShareModalValue,
+                canOpenCollaborate: canOpenCollaborationModalValue,
                 hasMap,
                 hasSavedMap: !!currentMap?.id,
                 showVersionHistory: showVersionHistoryDrawer,
@@ -18481,11 +18494,29 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       <ShareModal
         show={showShareModal}
+        mode="share"
         onClose={() => {
           setShowShareModal(false);
           setShareEmails('');
           setLinkCopied(false);
           setSharePermission(ACCESS_LEVELS.VIEW);
+        }}
+        accessLevels={ACCESS_LEVELS}
+        sharePermission={sharePermission}
+        onChangePermission={(permission) => setSharePermission(permission)}
+        linkCopied={linkCopied}
+        onCopyLink={() => copyShareLink(sharePermission)}
+        canShareLinks={canManageShares()}
+        shareEmails={shareEmails}
+        onShareEmailsChange={setShareEmails}
+        onSendEmail={sendShareEmail}
+      />
+
+      <ShareModal
+        show={showCollaborationModal}
+        mode="collaboration"
+        onClose={() => {
+          setShowCollaborationModal(false);
           setCollaborationInviteEmail('');
           setCollaborationInviteRole('viewer');
           setCollaborationError('');

@@ -8,6 +8,7 @@ import Avatar from './Avatar';
 import Badge from './Badge';
 import Button from './Button';
 import CheckboxField from './CheckboxField';
+import Chip from './Chip';
 import Icon from './Icon';
 import IconButton from './IconButton';
 import Modal from './Modal';
@@ -262,20 +263,28 @@ describe('ui primitives', () => {
     expect(onChange).toHaveBeenCalledWith('horizontal');
   });
 
-  test('Badge, Tag, and node badges use shared primitives', () => {
+  test('Badge, Tag, Chip, and node badges use shared primitives', () => {
     act(() => {
       root.render(
         <div>
           <Badge
-            badgeStyle="brand"
-            type="fill"
+            badgeStyle="amber"
+            type="hollow"
             size="sm"
             icon={<span className="badge-icon-marker">+</span>}
             label="Current"
           />
+          <Chip
+            variant="filter"
+            tone="amber"
+            label="Missing"
+            value={18}
+            interactive
+            selected
+          />
           <Tag
             type="fill"
-            tagStyle="brand"
+            tagStyle="teal"
             size="sm"
             state="focus"
             label="Subdomain"
@@ -291,9 +300,12 @@ describe('ui primitives', () => {
       );
     });
 
-    expect(container.querySelector('.ui-badge--sm.ui-badge--type-fill.ui-badge--style-brand')).not.toBeNull();
+    expect(container.querySelector('.ui-badge--sm.ui-badge--type-hollow.ui-badge--style-amber.ui-tone--amber')).not.toBeNull();
     expect(container.querySelector('.ui-badge__icon .badge-icon-marker')).not.toBeNull();
-    expect(container.querySelector('.ui-tag--sm.ui-tag--type-fill.ui-tag--style-brand.ui-tag--state-focus')).not.toBeNull();
+    expect(container.querySelector('.ui-chip--variant-filter.ui-chip--tone-amber.ui-tone--amber.ui-chip--selected')).not.toBeNull();
+    expect(container.querySelector('.ui-chip__label')?.textContent).toBe('Missing');
+    expect(container.querySelector('.ui-chip__value')?.textContent).toBe('18');
+    expect(container.querySelector('.ui-tag--sm.ui-tag--type-fill.ui-tag--style-teal.ui-tone--teal.ui-tag--state-focus')).not.toBeNull();
     expect(container.querySelector('.ui-tag__icon .tag-icon-marker')).not.toBeNull();
     expect(container.querySelector('.node-badge.ui-badge')).not.toBeNull();
     expect(container.querySelector('.node-status-badge.status-moved.ui-badge')).not.toBeNull();
@@ -302,6 +314,8 @@ describe('ui primitives', () => {
     expect(container.querySelector('.comment-badge')?.getAttribute('aria-label')).toBe('View 3 notes');
     expect(getCssRule('.ui-badge__content')).toContain('line-height: inherit;');
     expect(getCssRule('.ui-tag__content')).toContain('line-height: inherit;');
+    expect(appCss).toMatch(/\.ui-chip__label,\n\.ui-chip__value \{[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
+    expect(getCssRule('.ui-chip[class*="ui-tone--"]')).toContain('--ui-chip-bg-current: var(--ui-tone-surface-current);');
   });
 
   test('StatusAlert and Toast share tone, icon, and dismiss primitives', () => {

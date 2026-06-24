@@ -282,6 +282,36 @@ describe('UI design-system contract', () => {
     expect(findDisabledOverridesForSharedButtonClasses()).toEqual([]);
   });
 
+  test('shared tone and chip tokens define badge, tag, and filter surfaces', () => {
+    [
+      'sky',
+      'teal',
+      'blue',
+      'indigo',
+      'violet',
+      'yellow',
+      'amber',
+      'orange',
+      'red',
+      'rose',
+      'green',
+      'slate',
+    ].forEach((tone) => {
+      expect(generatedCss).toContain(`--ui-tone-${tone}-surface:`);
+      expect(generatedCss).toContain(`--ui-tone-${tone}-border:`);
+      expect(generatedCss).toContain(`--ui-tone-${tone}-text:`);
+      expect(generatedCss).toContain(`--ui-tone-${tone}-accent:`);
+      expect(appCss).toContain(`.ui-tone--${tone}`);
+    });
+
+    expect(generatedCss).toContain('--ui-chip-filter-height: 58px;');
+    expect(generatedCss).toContain('--ui-chip-metric-height: 72px;');
+    expect(appCss).toMatch(/\.ui-chip \{[\s\S]*border-radius: var\(--ui-chip-radius\);[\s\S]*text-decoration: none;/);
+    expect(appCss).toMatch(/\.ui-chip\[class\*="ui-tone--"\] \{[\s\S]*--ui-chip-bg-current: var\(--ui-tone-surface-current\);/);
+    expect(appCss).toMatch(/\.ui-badge\[class\*="ui-tone--"\]\.ui-badge--type-hollow \{[\s\S]*--ui-badge-bg-current: var\(--ui-tone-surface-current\);/);
+    expect(appCss).toMatch(/\.ui-tag\[class\*="ui-tone--"\]\.ui-tag--type-hollow \{[\s\S]*--ui-tag-bg-current: var\(--ui-tone-surface-current\);/);
+  });
+
   test('buttons, modal titles, and drawer titles use sentence case', () => {
     expect(generatedCss).toContain('--ui-button-text-transform: none;');
     expect(generatedCss).toContain('--ui-shell-title-text-transform: none;');

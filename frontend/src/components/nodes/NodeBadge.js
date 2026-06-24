@@ -1,22 +1,12 @@
 import React from 'react';
 
 import classNames from '../../utils/classNames';
+import { getNodeBadgeTone } from '../../utils/findingTones';
 import Badge from '../ui/Badge';
-
-const NODE_BADGE_STYLE = {
-  Duplicate: 'warning',
-  Missing: 'warning',
-  File: 'info',
-  'Broken Link': 'error',
-  Auth: 'warning',
-  Error: 'error',
-  Inactive: 'neutral',
-};
 
 const getBadgeStyle = (label, badgeStyle) => {
   if (badgeStyle) return badgeStyle;
-  if (/^HTTP\s+\d+/i.test(String(label || ''))) return 'error';
-  return NODE_BADGE_STYLE[label] || 'neutral';
+  return getNodeBadgeTone(label);
 };
 
 const NodeBadge = ({ label, className, children, badgeStyle, ...props }) => (

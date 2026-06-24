@@ -2,6 +2,7 @@ import React from 'react';
 
 import classNames from '../../utils/classNames';
 import Icon from './Icon';
+import { isUiToneStyle } from './toneStyles';
 
 const BADGE_TYPES = new Set(['fill', 'hollow']);
 const BADGE_STYLES = new Set(['brand', 'mono', 'info', 'error', 'warning', 'success', 'neutral']);
@@ -25,7 +26,7 @@ const Badge = React.forwardRef(
     ref
   ) => {
     const resolvedType = BADGE_TYPES.has(type) ? type : 'hollow';
-    const resolvedStyle = BADGE_STYLES.has(badgeStyle) ? badgeStyle : 'brand';
+    const resolvedStyle = BADGE_STYLES.has(badgeStyle) || isUiToneStyle(badgeStyle) ? badgeStyle : 'brand';
     const resolvedSize = BADGE_SIZES.has(size) ? size : 'md';
     const content = children ?? label;
     const leadingIcon = startIcon ?? icon;
@@ -38,6 +39,7 @@ const Badge = React.forwardRef(
           `ui-badge--${resolvedSize}`,
           `ui-badge--type-${resolvedType}`,
           `ui-badge--style-${resolvedStyle}`,
+          isUiToneStyle(resolvedStyle) && `ui-tone--${resolvedStyle}`,
           className
         )}
         {...props}

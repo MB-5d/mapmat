@@ -24,6 +24,7 @@ import {
   Share2,
   Undo2,
   Workflow,
+  createLucideIcon,
 } from 'lucide-react';
 
 import IconButton from '../ui/IconButton';
@@ -37,6 +38,13 @@ import {
   MenuSectionHeader,
   MenuTitle,
 } from '../ui/Menu';
+
+const UserRoundPlus = createLucideIcon('UserRoundPlus', [
+  ['path', { d: 'M2 21a8 8 0 0 1 13.292-6', key: '1n5e0e' }],
+  ['circle', { cx: '10', cy: '8', r: '5', key: '1ypgyx' }],
+  ['path', { d: 'M19 16v6', key: 'tddt3s' }],
+  ['path', { d: 'M22 19h-6', key: 'y42fxk' }],
+]);
 
 const ToolButton = ({
   active = false,
@@ -146,7 +154,9 @@ const CanvasToolbar = ({
   onShowVersionHistory,
   onExport,
   onShare,
+  onCollaborate,
   canOpenShare = false,
+  canOpenCollaborate = false,
   hasMap,
   hasSavedMap,
   showVersionHistory,
@@ -603,13 +613,25 @@ const CanvasToolbar = ({
     />
   ) : null;
 
+  const collaborateButton = canOpenCollaborate ? (
+    <ToolButton
+      key="collaborate"
+      className={shareUnavailable ? 'disabled' : ''}
+      onClick={shareUnavailable ? onBlockedShareAttempt : onCollaborate}
+      icon={<UserRoundPlus className="lucide-user-round-plus" />}
+      label="Collaborate"
+      title="Collaborate"
+      aria-disabled={shareUnavailable}
+    />
+  ) : null;
+
   const sections = [
     [selectButton, userFlowButton, crosslinkButton].filter(Boolean),
     canEdit ? [addPageButton, duplicateButton].filter(Boolean) : [],
     canEdit ? [undoButton, redoButton].filter(Boolean) : [],
     [commentsButton, reportButton, historyButton].filter(Boolean),
     [imageMenuButton, layersButton, legendButton, orientationButton].filter(Boolean),
-    [saveButton, clearCanvasButton, exportButton, shareButton].filter(Boolean),
+    [saveButton, clearCanvasButton, exportButton, shareButton, collaborateButton].filter(Boolean),
   ].filter((section) => section.length > 0);
 
   return (

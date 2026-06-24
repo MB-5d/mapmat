@@ -134,7 +134,9 @@ describe('CanvasToolbar', () => {
           onShowVersionHistory={jest.fn()}
           onExport={jest.fn()}
           onShare={jest.fn()}
+          onCollaborate={jest.fn()}
           canOpenShare
+          canOpenCollaborate
           hasMap
           hasSavedMap
           showVersionHistory={false}
@@ -163,11 +165,16 @@ describe('CanvasToolbar', () => {
       'Clear canvas',
       'Download',
       'Share',
+      'Collaborate',
     ]);
 
     const duplicateButton = container.querySelector('button[aria-label="Duplicate map"]');
+    const collaborateButton = container.querySelector('button[aria-label="Collaborate"]');
     expect(duplicateButton).not.toBeNull();
     expect(duplicateButton.querySelector('svg')).not.toBeNull();
+    expect(collaborateButton).not.toBeNull();
+    expect(collaborateButton.getAttribute('title')).toBe('Collaborate');
+    expect(container.querySelector('.lucide-user-round-plus')).not.toBeNull();
     expect(container.querySelector('.lucide-copy-plus')).toBeNull();
   });
 

@@ -14,10 +14,13 @@ import {
   X,
 } from 'lucide-react';
 
+import Badge from '../ui/Badge';
 import Button from '../ui/Button';
+import Chip from '../ui/Chip';
 import IconButton from '../ui/IconButton';
 import { MenuItem, MenuPanel } from '../ui/Menu';
 import SearchInput from '../ui/SearchInput';
+import { getFindingTone } from '../../utils/findingTones';
 import {
   REPORT_DETAIL_OPTIONS,
   createDefaultVisibleReportDetails,
@@ -27,22 +30,22 @@ import {
 import { comparePageNumbers } from '../../utils/reportUtils';
 
 const REPORT_FILTER_META = {
-  orphanPages: { label: 'Orphan', className: 'report-filter-chip--orphan' },
-  duplicates: { label: 'Duplicate', className: 'report-filter-chip--warning' },
-  missing: { label: 'Missing', className: 'report-filter-chip--warning' },
-  errorPages: { label: 'Error', className: 'report-filter-chip--danger' },
-  brokenLinks: { label: 'Broken links', className: 'report-filter-chip--danger' },
-  inactivePages: { label: 'Inactive', className: 'report-filter-chip--muted' },
-  subdomains: { label: 'Subdomain', className: 'report-filter-chip--info' },
-  files: { label: 'Files', className: 'report-filter-chip--info' },
-  authenticatedPages: { label: 'Authenticated', className: 'report-filter-chip--warning' },
-  missingTitle: { label: 'No title', className: 'report-filter-chip--warning' },
-  shortTitle: { label: 'Short title', className: 'report-filter-chip--info' },
-  longTitle: { label: 'Very long title', className: 'report-filter-chip--warning' },
-  missingDescription: { label: 'No description', className: 'report-filter-chip--warning' },
-  shortDescription: { label: 'Short description', className: 'report-filter-chip--info' },
-  longDescription: { label: 'Very long description', className: 'report-filter-chip--warning' },
-  missingH1: { label: 'No H1', className: 'report-filter-chip--warning' },
+  orphanPages: { label: 'Orphan', tone: getFindingTone('orphanPages') },
+  duplicates: { label: 'Duplicate', tone: getFindingTone('duplicates') },
+  missing: { label: 'Missing', tone: getFindingTone('missing') },
+  errorPages: { label: 'Error', tone: getFindingTone('errorPages') },
+  brokenLinks: { label: 'Broken links', tone: getFindingTone('brokenLinks') },
+  inactivePages: { label: 'Inactive', tone: getFindingTone('inactivePages') },
+  subdomains: { label: 'Subdomain', tone: getFindingTone('subdomains') },
+  files: { label: 'Files', tone: getFindingTone('files') },
+  authenticatedPages: { label: 'Authenticated', tone: getFindingTone('authenticatedPages') },
+  missingTitle: { label: 'No title', tone: getFindingTone('missingTitle') },
+  shortTitle: { label: 'Short title', tone: getFindingTone('shortTitle') },
+  longTitle: { label: 'Very long title', tone: getFindingTone('longTitle') },
+  missingDescription: { label: 'No description', tone: getFindingTone('missingDescription') },
+  shortDescription: { label: 'Short description', tone: getFindingTone('shortDescription') },
+  longDescription: { label: 'Very long description', tone: getFindingTone('longDescription') },
+  missingH1: { label: 'No H1', tone: getFindingTone('missingH1') },
 };
 
 const REPORT_STAT_CARD_ORDER = [
@@ -411,7 +414,7 @@ const ReportDrawer = ({
         ...segment,
         filterLabel: option?.label || meta.label || segment.key,
         label: meta.label || option?.label || segment.key,
-        className: meta.className || 'report-filter-chip--info',
+        tone: meta.tone || getFindingTone(segment.key),
       };
     })
     .filter(segment => stats[segment.key] > 0 && visibleFilterOptions.some(option => option.key === segment.key));
@@ -497,29 +500,37 @@ const ReportDrawer = ({
           </div>
         )}
         <section className={`report-summary ${statCards.length > 0 && statCards.length <= 4 ? 'report-summary--single-row' : ''}`}>
-          <button
-            type="button"
+          <Chip
+            variant="metric"
+            tone="brand"
+            interactive
+            selected={!hasActiveFilters}
             className={`report-total-card ${!hasActiveFilters ? 'is-selected' : ''}`}
             onClick={showAllFilters}
             disabled={!hasActiveFilters}
             aria-pressed={!hasActiveFilters}
-          >
-            <div className="report-total-value">{stats.total}</div>
-            <div className="report-total-label">Pages on map</div>
-          </button>
+            label="Pages on map"
+            value={stats.total}
+            labelClassName="report-total-label"
+            valueClassName="report-total-value"
+          />
           <div className="report-stat-cards">
             {statCards.map((segment) => (
-              <button
-                type="button"
+              <Chip
+                variant="filter"
+                tone={segment.tone}
+                interactive
                 key={segment.key}
-                className={`report-stat ${segment.className} ${filters[segment.key] ? 'is-selected' : ''}`}
+                className={`report-stat ${filters[segment.key] ? 'is-selected' : ''}`}
                 onClick={() => toggleFilter(segment.key)}
+                selected={Boolean(filters[segment.key])}
                 aria-pressed={Boolean(filters[segment.key])}
                 aria-label={`Filter by ${segment.filterLabel}`}
-              >
-                <div className="report-stat-label">{segment.label}</div>
-                <div className="report-stat-value">{stats[segment.key]}</div>
-              </button>
+                label={segment.label}
+                value={stats[segment.key]}
+                labelClassName="report-stat-label"
+                valueClassName="report-stat-value"
+              />
             ))}
           </div>
         </section>
@@ -714,9 +725,14 @@ const ReportDrawer = ({
                             {getReportFindingTypes(entry).map(type => {
                               const meta = REPORT_FILTER_META[type] || {};
                               return (
-                                <span key={type} className={`report-badge ${meta.className || 'report-filter-chip--info'}`}>
-                                  {meta.label || typeLookup.get(type) || type}
-                                </span>
+                                <Badge
+                                  key={type}
+                                  className="report-badge"
+                                  type="hollow"
+                                  size="sm"
+                                  badgeStyle={meta.tone || getFindingTone(type)}
+                                  label={meta.label || typeLookup.get(type) || type}
+                                />
                               );
                             })}
                           </div>

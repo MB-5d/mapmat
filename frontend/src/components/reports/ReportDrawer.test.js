@@ -180,6 +180,10 @@ describe('ReportDrawer', () => {
 
     expect(getVisibleTitles()).toEqual(['about', 'pricing', 'contact']);
     expect(totalChip.disabled).toBe(true);
+    expect(totalChip.className).toContain('ui-chip--variant-metric');
+    expect(totalChip.className).toContain('ui-chip--tone-brand');
+    expect(duplicateChip.className).toContain('ui-chip--variant-filter');
+    expect(duplicateChip.className).toContain('ui-tone--orange');
 
     act(() => {
       duplicateChip.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -301,6 +305,7 @@ describe('ReportDrawer', () => {
     const tableBlock = appCss.match(/\.report-table \{[^}]*\}/)?.[0] || '';
     expect(tableBlock).toContain('flex: 0 0 auto');
     expect(tableBlock).not.toContain('border: 1px solid');
+    expect(appCss).not.toContain('report-filter-chip--danger');
     const tableBodyBlock = appCss.match(/\.report-table-body \{[^}]*\}/)?.[0] || '';
     expect(tableBodyBlock).toContain('flex: 0 0 auto');
     expect(tableBodyBlock).toContain('border: 1px solid var(--color-border)');
@@ -349,6 +354,7 @@ describe('ReportDrawer', () => {
       badge.textContent.trim()
     );
     expect(detailBadges).toEqual(['Duplicate']);
+    expect(container.querySelector('.report-detail-badges .report-badge')?.className).toContain('ui-tone--orange');
     expect(container.querySelector('.report-open-link').className).toContain('ui-btn--type-link');
     expect(container.querySelector('.report-thumb')).not.toBeNull();
   });

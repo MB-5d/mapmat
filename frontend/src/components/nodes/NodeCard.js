@@ -28,6 +28,8 @@ const NODE_STATUS_BADGE_STYLE = {
   note: 'neutral',
 };
 
+const HIDDEN_NODE_FINDING_BADGES = new Set(['Orphan', 'Subdomain']);
+
 const NodeCard = ({
   node,
   number,
@@ -72,6 +74,7 @@ const NodeCard = ({
   const [shouldLoadThumb, setShouldLoadThumb] = useState(false);
   const cardRef = useRef(null);
   const thumbImgRef = useRef(null);
+  const visibleBadges = badges.filter((badge) => !HIDDEN_NODE_FINDING_BADGES.has(badge));
 
   const thumb = node.thumbnailUrl
     ? (thumbnailReloadKey
@@ -485,9 +488,9 @@ const NodeCard = ({
         </button>
       )}
 
-      {badges.length > 0 && (
+      {visibleBadges.length > 0 && (
         <div className="node-badges" aria-hidden="true">
-          {badges.map((badge) => (
+          {visibleBadges.map((badge) => (
             <NodeBadge key={badge} label={badge} />
           ))}
         </div>

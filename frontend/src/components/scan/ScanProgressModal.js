@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 
 import Button from '../ui/Button';
 import Modal from '../ui/Modal';
+import { getFindingTone } from '../../utils/findingTones';
 
 const FINDING_ITEMS = [
   { key: 'brokenLinks', label: 'Broken links' },
@@ -162,7 +163,7 @@ const ScanProgressModal = ({
                   {findingItems.map((item) => (
                     <span
                       key={item.key}
-                      className={`scan-findings-segment scan-findings-segment--${item.key}`}
+                      className={`scan-findings-segment scan-findings-segment--${item.key} ui-tone--${getFindingTone(item.key)}`}
                       style={{ width: `${(item.count / totalFindings) * 100}%` }}
                       aria-hidden="true"
                     />
@@ -171,7 +172,7 @@ const ScanProgressModal = ({
                 <div className="scan-findings-list">
                   {findingItems.map((item) => (
                     <div key={item.key} className="scan-finding-item">
-                      <span className={`scan-finding-dot scan-finding-dot--${item.key}`} aria-hidden="true" />
+                      <span className={`scan-finding-dot scan-finding-dot--${item.key} ui-tone--${getFindingTone(item.key)}`} aria-hidden="true" />
                       <span>{item.label}</span>
                       <strong>{formatCount(item.count)}</strong>
                     </div>

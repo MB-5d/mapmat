@@ -155,6 +155,11 @@ function primitiveCssEntries() {
   entries['ui-icon-button-active-bg'] = componentTokens.iconButton.color.activeBg;
   entries['ui-icon-button-active-bg-hover'] = componentTokens.iconButton.color.activeBgHover;
   entries['ui-icon-button-active-fg'] = componentTokens.iconButton.color.activeFg;
+  entries['ui-chip-radius'] = componentTokens.chip.radius;
+  entries['ui-chip-filter-height'] = componentTokens.chip.filterHeight;
+  entries['ui-chip-filter-padding'] = componentTokens.chip.filterPadding;
+  entries['ui-chip-metric-height'] = componentTokens.chip.metricHeight;
+  entries['ui-chip-metric-padding'] = componentTokens.chip.metricPadding;
   for (const [name, value] of Object.entries(unitScale)) {
     entries[`unit-${name}`] = `${value}px`;
   }

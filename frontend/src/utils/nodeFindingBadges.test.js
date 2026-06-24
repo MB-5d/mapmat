@@ -4,6 +4,16 @@ describe('node finding badges', () => {
   test('keeps obvious placement badges hidden by default', () => {
     expect(getFindingBadgesForNode({ id: 'subdomain', subdomainRoot: true })).not.toContain('Subdomain');
     expect(getFindingBadgesForNode({ id: 'orphan', orphanType: 'orphan' }, { orphanType: 'orphan' })).not.toContain('Orphan');
+    expect(getFindingBadgesForNode(
+      { id: 'subdomain-visible', subdomainRoot: true },
+      null,
+      { subdomains: true, orphanPages: true }
+    )).toEqual([]);
+    expect(getFindingBadgesForNode(
+      { id: 'orphan-visible', orphanType: 'orphan' },
+      { orphanType: 'orphan' },
+      { subdomains: true, orphanPages: true }
+    )).toEqual([]);
   });
 
   test('returns established finding badges without suppressing later statuses', () => {

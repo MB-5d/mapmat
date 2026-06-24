@@ -23,9 +23,8 @@ describe('ShareModal', () => {
     jest.clearAllMocks();
   });
 
-  test('changes permission and collaboration settings', () => {
+  test('changes share permission from the share modal', () => {
     const onChangePermission = jest.fn();
-    const onUpdateCollaborationSettings = jest.fn();
 
     act(() => {
       root.render(
@@ -35,6 +34,42 @@ describe('ShareModal', () => {
           accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
           sharePermission="view"
           onChangePermission={onChangePermission}
+          linkCopied={false}
+          onCopyLink={jest.fn()}
+          shareEmails=""
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={jest.fn()}
+          collaborationMemberships={[]}
+          collaborationInvites={[]}
+          collaborationAccessRequests={[]}
+        />
+      );
+    });
+
+    const commentRadio = container.querySelector('input[type="radio"][value="comment"]');
+
+    act(() => {
+      commentRadio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onChangePermission).toHaveBeenCalledWith('comment');
+    expect(container.textContent).toContain('Copy share link');
+    expect(container.querySelector('input[placeholder="Share by email"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Collaborators');
+  });
+
+  test('changes collaboration settings from the collaboration modal', () => {
+    const onUpdateCollaborationSettings = jest.fn();
+
+    act(() => {
+      root.render(
+        <ShareModal
+          show
+          mode="collaboration"
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="view"
+          onChangePermission={jest.fn()}
           linkCopied={false}
           onCopyLink={jest.fn()}
           shareEmails=""
@@ -57,16 +92,16 @@ describe('ShareModal', () => {
       );
     });
 
-    const commentRadio = container.querySelector('input[type="radio"][value="comment"]');
     const toggles = container.querySelectorAll('.share-collab-checkbox input[type="checkbox"]');
 
     act(() => {
-      commentRadio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       toggles[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
       toggles[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(onChangePermission).toHaveBeenCalledWith('comment');
+    expect(container.textContent).toContain('Collaborate');
+    expect(container.textContent).toContain('Collaborators');
+    expect(container.textContent).not.toContain('Copy share link');
     expect(onUpdateCollaborationSettings).toHaveBeenCalledWith({
       non_viewer_invites_require_owner: false,
     });

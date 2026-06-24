@@ -1,6 +1,6 @@
 {
   "meta": {
-    "generatedOn": "2026-06-20",
+    "generatedOn": "2026-06-24",
     "sources": [
       "frontend/src/components/ui",
       "frontend/src/components/ui/icons.js",
@@ -178,6 +178,50 @@
         "Icon button sizes are xxs 16px, xs 24px, sm 32px, md 40px, lg 48px.",
         "XXS icon buttons use radius/xs (4px).",
         "Active icon buttons use primary fill with inverse icon color."
+      ]
+    },
+    {
+      "name": "Chip",
+      "kind": "primitive",
+      "source": "frontend/src/components/ui/Chip.js",
+      "props": {
+        "variant": [
+          "filter",
+          "metric"
+        ],
+        "tone": [
+          "brand",
+          "mono",
+          "sky",
+          "teal",
+          "blue",
+          "indigo",
+          "violet",
+          "yellow",
+          "amber",
+          "orange",
+          "red",
+          "rose",
+          "green",
+          "slate"
+        ],
+        "label": "string",
+        "value": "string | number",
+        "selected": "boolean",
+        "disabled": "boolean",
+        "interactive": "boolean",
+        "icon": "node"
+      },
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focus-visible",
+        "disabled",
+        "theme via semantic token modes"
+      ],
+      "notes": [
+        "Tags render as Badge when passive and Chip when selectable or filterable."
       ]
     },
     {
@@ -607,7 +651,19 @@
           "error",
           "warning",
           "success",
-          "neutral"
+          "neutral",
+          "sky",
+          "teal",
+          "blue",
+          "indigo",
+          "violet",
+          "yellow",
+          "amber",
+          "orange",
+          "red",
+          "rose",
+          "green",
+          "slate"
         ],
         "size": [
           "sm",
@@ -637,7 +693,19 @@
         ],
         "style": [
           "brand",
-          "mono"
+          "mono",
+          "sky",
+          "teal",
+          "blue",
+          "indigo",
+          "violet",
+          "yellow",
+          "amber",
+          "orange",
+          "red",
+          "rose",
+          "green",
+          "slate"
         ],
         "size": [
           "sm",
@@ -659,7 +727,7 @@
         "theme via semantic token modes"
       ],
       "notes": [
-        "Functional larger chip with 6px radius. Uses label typography and button color behavior."
+        "User/content metadata. Render as Badge when passive and Chip when selectable or filterable."
       ]
     },
     {

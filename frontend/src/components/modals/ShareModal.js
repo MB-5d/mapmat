@@ -36,6 +36,7 @@ const sameId = (left, right) => {
 const ShareModal = ({
   show,
   onClose,
+  mode = 'share',
   accessLevels,
   sharePermission,
   onChangePermission,
@@ -109,6 +110,9 @@ const ShareModal = ({
   const viewerInvitesOpen = collaborationCapabilities?.accessPolicy === 'viewer_invites_open';
   const showInviteComposer = collaborationAvailable && canSendCollaborationInvites && visibleInviteRoleOptions.length > 0;
   const showSelfServeSummary = collaborationAvailable && !canViewManagementSurfaces;
+  const isCollaborationMode = mode === 'collaboration';
+  const showShareContent = !isCollaborationMode && canShareLinks;
+  const showCollaborationContent = isCollaborationMode && collaborationEnabled;
 
   const handleSettingToggle = (key, value) => {
     onUpdateCollaborationSettings?.({ [key]: value });
@@ -192,12 +196,12 @@ const ShareModal = ({
     <Modal
       show={show}
       onClose={onClose}
-      title="Share sitemap"
+      title={isCollaborationMode ? 'Collaborate' : 'Share sitemap'}
       size="md"
       scrollable
       className="share-modal"
     >
-          {canShareLinks ? (
+          {showShareContent ? (
             <>
               <div className="share-section">
                 <div className="share-section-title">Permission level</div>
@@ -220,22 +224,20 @@ const ShareModal = ({
                   {linkCopied ? <Check size={18} /> : <Copy size={18} />}
                   <span>{linkCopied ? 'Link copied' : 'Copy share link'}</span>
                 </Button>
-              </div>
 
-              <div className="share-section">
-                <div className="share-section-title">Send via email</div>
+                <div className="share-provider-divider"><span>or</span></div>
+
                 <div className="share-email-section">
-                  <div className="share-email-input">
-                    <Mail size={18} />
-                    <TextInput
-                      type="text"
-                      className="share-email-text-input"
-                      placeholder="Enter email addresses..."
-                      value={shareEmails}
-                      onChange={(e) => onShareEmailsChange(e.target.value)}
-                    />
-                  </div>
-                  <Button className="share-email-btn" size="sm" onClick={onSendEmail}>
+                  <TextInput
+                    type="text"
+                    shellClassName="share-email-input"
+                    inputClassName="share-email-text-input"
+                    placeholder="Share by email"
+                    value={shareEmails}
+                    onChange={(e) => onShareEmailsChange(e.target.value)}
+                    leftIcon={<Mail size={18} />}
+                  />
+                  <Button className="share-email-btn" startIcon={<Send size={14} />} onClick={onSendEmail}>
                     Send
                   </Button>
                 </div>
@@ -243,7 +245,7 @@ const ShareModal = ({
             </>
           ) : null}
 
-          {collaborationEnabled && (
+          {showCollaborationContent && (
             <div className="share-section">
               <div className="share-section-title">Collaborators</div>
               {!collaborationAvailable ? (
@@ -323,17 +325,16 @@ const ShareModal = ({
 
                   {showInviteComposer ? (
                     <div className="share-collab-invite-row">
-                      <div className="share-email-input">
-                        <Mail size={18} />
-                        <TextInput
-                          type="text"
-                          className="share-email-text-input"
-                          placeholder="Invite by email..."
-                          value={collaborationInviteEmail}
-                          onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
-                          disabled={!canSendCollaborationInvites}
-                        />
-                      </div>
+                      <TextInput
+                        type="text"
+                        shellClassName="share-email-input"
+                        inputClassName="share-email-text-input"
+                        placeholder="Invite by email..."
+                        value={collaborationInviteEmail}
+                        onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
+                        disabled={!canSendCollaborationInvites}
+                        leftIcon={<Mail size={18} />}
+                      />
                       <SelectInput
                         className="share-collab-role-select"
                         value={collaborationInviteRole}
