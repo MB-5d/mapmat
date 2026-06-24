@@ -1,11 +1,13 @@
 import {
   buildExportMetadata,
+  buildSiteIndexHtml,
   buildSiteIndexMarkdown,
   buildSiteIndexText,
   buildSitemapCsv,
   buildSitemapExportRows,
   buildSitemapJsonPayload,
   buildSitemapXml,
+  buildTxtSitemap,
 } from './fileExports';
 import {
   parseCsv,
@@ -83,18 +85,18 @@ describe('importParsers', () => {
     expect(result.connectionColors).toEqual({ crossLinks: '#111111' });
   });
 
-  test('restores Vellic CSV hierarchy instead of rebuilding from URL paths', () => {
+  test('restores CSV hierarchy instead of rebuilding from URL paths', () => {
     const rows = buildSampleRows();
     const csv = buildSitemapCsv(rows, buildExportMetadata({ title: 'CSV Round Trip', pageCount: rows.length }));
 
     const result = parseImportFileContent(csv, 'csv');
 
-    expect(result.parseType).toBe('Vellic CSV');
+    expect(result.parseType).toBe('CSV sitemap');
     expectSampleStructure(result);
     expect(parseCsv(csv)).not.toContain('https://vellic.io');
   });
 
-  test('restores Vellic Markdown site index hierarchy', () => {
+  test('restores Markdown nested site index hierarchy', () => {
     const rows = buildSampleRows();
     const markdown = buildSiteIndexMarkdown({
       rows,
@@ -105,11 +107,26 @@ describe('importParsers', () => {
 
     const result = parseImportFileContent(markdown, 'md');
 
-    expect(result.parseType).toBe('Vellic Markdown');
+    expect(result.parseType).toBe('Markdown sitemap');
     expectSampleStructure(result);
   });
 
-  test('restores Vellic text site index hierarchy', () => {
+  test('restores HTML nested site index hierarchy', () => {
+    const rows = buildSampleRows();
+    const html = buildSiteIndexHtml({
+      rows,
+      metadata: buildExportMetadata({ title: 'HTML Round Trip', pageCount: rows.length }),
+      rootUrl: 'https://example.com',
+      hostname: 'example.com',
+    });
+
+    const result = parseImportFileContent(html, 'html');
+
+    expect(result.parseType).toBe('HTML sitemap');
+    expectSampleStructure(result);
+  });
+
+  test('restores text index hierarchy', () => {
     const rows = buildSampleRows();
     const text = buildSiteIndexText({
       rows,
@@ -120,23 +137,73 @@ describe('importParsers', () => {
 
     const result = parseImportFileContent(text, 'txt');
 
-    expect(result.parseType).toBe('Vellic text');
+    expect(result.parseType).toBe('Text index');
     expectSampleStructure(result);
   });
 
-  test('restores Vellic XML hierarchy from safe sitemap comments', () => {
+  test('imports standard XML URLs without relying on hidden hierarchy comments', () => {
     const rows = buildSampleRows();
     const xml = buildSitemapXml(rows, buildExportMetadata({ title: 'XML Round Trip', pageCount: rows.length }));
 
     const result = parseImportFileContent(xml, 'xml');
 
-    expect(result.parseType).toBe('Vellic XML');
-    expectSampleStructure(result);
+    expect(result.parseType).toBe('XML Sitemap');
+    expect(result.count).toBe(rows.length);
+    expect(result.root.title).toBe('Imported Sites');
     expect(xml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
     expect(xml).toContain('<loc>https://example.com/about/team</loc>');
+    expect(xml).not.toContain('vellic-page:');
+    expect(xml).not.toContain('https://vellic.io');
   });
 
-  test('does not import Vellic branding URLs from generic CSV metadata', () => {
+  test('imports external CSV depth columns as hierarchy', () => {
+    const csv = [
+      'Title,URL,Depth,Type',
+      'Home,https://external.test/,0,Home',
+      'Services,https://external.test/services,1,Page',
+      'Consulting,https://external.test/services/consulting,2,Page',
+    ].join('\n');
+
+    const result = parseImportFileContent(csv, 'csv');
+
+    expect(result.parseType).toBe('CSV sitemap');
+    expect(result.root.title).toBe('Home');
+    expect(result.root.children[0].title).toBe('Services');
+    expect(result.root.children[0].children[0].title).toBe('Consulting');
+  });
+
+  test('imports external HTML nested links as hierarchy', () => {
+    const html = `
+      <ul>
+        <li><a href="https://external.test/">Home</a>
+          <ul>
+            <li><a href="https://external.test/about">About</a></li>
+          </ul>
+        </li>
+      </ul>
+    `;
+
+    const result = parseImportFileContent(html, 'html');
+
+    expect(result.parseType).toBe('HTML sitemap');
+    expect(result.root.title).toBe('Home');
+    expect(result.root.children[0].title).toBe('About');
+  });
+
+  test('imports strict TXT sitemap as URL-inferred structure', () => {
+    const txt = buildTxtSitemap([
+      { url: 'https://external.test/' },
+      { url: 'https://external.test/about' },
+    ]);
+
+    const result = parseImportFileContent(txt, 'txt');
+
+    expect(result.parseType).toBe('Text');
+    expect(result.root.url).toBe('https://external.test/');
+    expect(result.root.children[0].url).toBe('https://external.test/about');
+  });
+
+  test('does not import non-URL CSV metadata columns as pages', () => {
     const csv = [
       '"URL","Source URL"',
       '"https://example.com","https://vellic.io"',

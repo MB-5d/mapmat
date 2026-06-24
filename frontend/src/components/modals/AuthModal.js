@@ -336,7 +336,8 @@ const AuthModal = ({
   const emailFieldPlaceholder = view === AUTH_VIEWS.LOGIN ? 'you@example.com or username' : 'you@example.com';
   const emailFieldAutoComplete = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
   const emailFieldId = view === AUTH_VIEWS.LOGIN ? 'auth-login-identifier' : 'auth-email';
-  const emailFieldName = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
+  const emailFieldName = view === AUTH_VIEWS.LOGIN ? undefined : 'email';
+  const emailFieldInputMode = view === AUTH_VIEWS.LOGIN ? 'email' : undefined;
   const passwordLabel = view === AUTH_VIEWS.RESET ? 'New password' : 'Password';
   const passwordPlaceholder = view === AUTH_VIEWS.RESET ? 'New password' : 'Your password';
   const passwordAutoComplete = view === AUTH_VIEWS.LOGIN ? 'current-password' : 'new-password';
@@ -410,6 +411,9 @@ const AuthModal = ({
             placeholder={emailFieldPlaceholder}
             required
             autoComplete={emailFieldAutoComplete}
+            autoCapitalize="none"
+            inputMode={emailFieldInputMode}
+            spellCheck={false}
             disabled={loading || googleLoading}
           />
         </Field>

@@ -7,7 +7,8 @@ import OptionCard from '../ui/OptionCard';
 
 const INDEX_FORMAT_OPTIONS = [
   { format: 'doc', label: 'Doc', icon: File },
-  { format: 'txt', label: 'Plain text', icon: FileText },
+  { format: 'txt', label: 'Text index', icon: FileText },
+  { format: 'sitemapTxt', label: 'TXT sitemap', icon: FileText },
   { format: 'html', label: 'HTML', icon: FileCode },
   { format: 'md', label: 'Markdown', icon: FileType },
 ];

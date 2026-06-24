@@ -21,7 +21,10 @@ const Avatar = ({
 }) => {
   const resolvedSrc = resolveApiAssetUrl(src);
   const fallbackIcon = <Icon icon={icon ?? <User />} size={size} />;
-  const fallbackContent = typeof label === 'string' && label.trim() ? label : fallbackIcon;
+  const fallbackText = typeof label === 'string' ? label.trim() : '';
+  const fallbackContent = fallbackText ? (
+    <span className="ui-avatar__fallback">{fallbackText}</span>
+  ) : fallbackIcon;
 
   return (
     <span

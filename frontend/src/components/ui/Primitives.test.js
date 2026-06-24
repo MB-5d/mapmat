@@ -136,6 +136,7 @@ describe('ui primitives', () => {
     const [imageAvatar, fallbackAvatar] = container.querySelectorAll('.ui-avatar');
     expect(imageAvatar.querySelector('img')).not.toBeNull();
     expect(fallbackAvatar.textContent).toContain('MB');
+    expect(fallbackAvatar.querySelector('.ui-avatar__fallback')).not.toBeNull();
     expect(fallbackAvatar.className).toContain('ui-avatar--lg');
     expect(fallbackAvatar.className).toContain('ui-avatar--rounded');
   });
@@ -315,6 +316,8 @@ describe('ui primitives', () => {
     expect(getCssRule('.ui-badge')).toContain('height: 20px;');
     expect(getCssRule('.ui-badge__content')).toContain('line-height: 1;');
     expect(getCssRule('.ui-badge__content')).toContain('transform: translateY(0.04em);');
+    expect(getCssRule('.ui-avatar__fallback')).toContain('letter-spacing: 0;');
+    expect(getCssRule('.ui-avatar__fallback')).toContain('transform: translateY(0.04em);');
     expect(getCssRule('.ui-tag__content')).toContain('line-height: inherit;');
     expect(appCss).toMatch(/\.ui-chip__label,\n\.ui-chip__value \{[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
     expect(getCssRule('.ui-chip[class*="ui-tone--"]')).toContain('--ui-chip-bg-current: var(--ui-tone-surface-current);');

@@ -28,10 +28,10 @@ const ImportModal = ({
           <li><strong>JSON</strong> - Exact Vellic map backup</li>
           <li><strong>XML</strong> - Standard sitemap.xml files</li>
           <li><strong>RSS/Atom</strong> - Feed files with links</li>
-          <li><strong>HTML</strong> - Extracts all links from the page</li>
+          <li><strong>HTML</strong> - Nested links, tables, or page links</li>
           <li><strong>CSV</strong> - Spreadsheet sitemap files</li>
-          <li><strong>Markdown</strong> - Readable site indexes</li>
-          <li><strong>TXT</strong> - Plain text site indexes</li>
+          <li><strong>Markdown</strong> - Nested links or readable site indexes</li>
+          <li><strong>TXT</strong> - URL lists or text indexes</li>
         </ul>
       </div>
       <label

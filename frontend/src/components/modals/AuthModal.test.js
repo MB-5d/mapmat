@@ -152,8 +152,12 @@ describe('AuthModal', () => {
     const inputs = container.querySelectorAll('input');
     const form = container.querySelector('form');
     expect(inputs[0].id).toBe('auth-login-identifier');
-    expect(inputs[0].name).toBe('username');
+    expect(inputs[0].hasAttribute('name')).toBe(false);
+    expect(inputs[0].type).toBe('text');
+    expect(inputs[0].getAttribute('inputmode')).toBe('email');
     expect(inputs[0].getAttribute('autocomplete')).toBe('username');
+    expect(inputs[0].getAttribute('autocapitalize')).toBe('none');
+    expect(inputs[0].getAttribute('spellcheck')).toBe('false');
     expect(container.querySelector('label[for="auth-login-identifier"]')).not.toBeNull();
     expect(inputs[1].id).toBe('auth-login-password');
     expect(inputs[1].name).toBe('password');

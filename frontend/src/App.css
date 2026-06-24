@@ -2494,6 +2494,20 @@ body {
   user-select: none;
 }
 
+.ui-avatar__fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: center;
+  transform: translateY(0.04em);
+  text-box-edge: var(--ui-text-box-edge);
+  text-box-trim: var(--ui-text-box-trim);
+  text-edge: var(--ui-text-edge);
+  leading-trim: var(--ui-leading-trim);
+}
+
 .ui-avatar--circle {
   border-radius: 999px;
 }

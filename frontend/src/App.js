@@ -129,6 +129,7 @@ import {
   buildSiteIndexHtml,
   buildSiteIndexMarkdown,
   buildSiteIndexText,
+  buildTxtSitemap,
   buildSitemapCsv,
   buildSitemapExportRows,
   buildSitemapJsonPayload,
@@ -779,6 +780,9 @@ ${pageList(orphanRows) || '- None found.'}
 ## Companion files
 - site-map.json contains the full structured map data.
 - sitemap.xml contains the URL list for tools that expect XML.
+- sitemap.txt contains one URL per line for tools that expect a plain text sitemap.
+- site-index.html and site-index.md contain readable nested site indexes.
+- site-map.csv contains spreadsheet-friendly page data.
 - Screenshots and thumbnails are referenced in site-map.json when available.
 `;
 };
@@ -13013,6 +13017,32 @@ export default function App({ currentRoute, navigateToRoute }) {
         content: buildSitemapXml(rows, metadata),
       },
       {
+        path: 'sitemap.txt',
+        content: buildTxtSitemap(rows),
+      },
+      {
+        path: 'site-index.html',
+        content: buildSiteIndexHtml({
+          rows,
+          metadata,
+          rootUrl: root.url,
+          hostname,
+        }),
+      },
+      {
+        path: 'site-index.md',
+        content: buildSiteIndexMarkdown({
+          rows,
+          metadata,
+          rootUrl: root.url,
+          hostname,
+        }),
+      },
+      {
+        path: 'site-map.csv',
+        content: buildSitemapCsv(rows, metadata),
+      },
+      {
         path: 'references/README.md',
         content: '# References\n\nAdd brand guidelines, design system files, reference images, copy docs, content matrices, or screenshots here before sharing this package with an AI code tool.\n',
       },
@@ -13023,7 +13053,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       format: 'zip',
       bytes: zipBlob.size,
       rows: rows.length,
-      packageFiles: 4,
+      packageFiles: 8,
     });
     showToast('Downloaded AI Site Brief package');
   };
@@ -13503,8 +13533,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       txt: {
         extension: 'txt',
         mimeType: 'text/plain;charset=utf-8',
-        label: 'plain text',
+        label: 'Text index',
         build: buildSiteIndexText,
+      },
+      sitemapTxt: {
+        extension: 'sitemap.txt',
+        mimeType: 'text/plain;charset=utf-8',
+        label: 'TXT sitemap',
+        build: ({ rows }) => buildTxtSitemap(rows),
       },
       html: {
         extension: 'html',
@@ -17368,7 +17404,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       : (
                         <>
                           <span>Use existing sitemap files</span>
-                          <span className="blank-card-copy-secondary">(JSON, XML, CSV, Markdown, TXT, or HTML link page)</span>
+                          <span className="blank-card-copy-secondary">(XML, CSV, TXT, MD, or HTML)</span>
                         </>
                       )}
                   </div>

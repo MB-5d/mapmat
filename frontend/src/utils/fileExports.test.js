@@ -7,6 +7,7 @@ import {
   buildSitemapExportRows,
   buildSitemapJsonPayload,
   buildSitemapXml,
+  buildTxtSitemap,
   getSitemapExportFilenameBase,
 } from './fileExports';
 
@@ -84,7 +85,8 @@ describe('fileExports', () => {
     expect(csv.split('\n')).toHaveLength(2);
     expect(csv).toContain('"Home, ""quoted"""');
     expect(csv).toContain('"Line one Line two"');
-    expect(csv).toContain('"https://vellic.io"');
+    expect(csv).not.toContain('Source URL');
+    expect(csv).not.toContain('"https://vellic.io"');
   });
 
   test('adds metadata and complete map data to JSON exports', () => {
@@ -110,7 +112,7 @@ describe('fileExports', () => {
     expect(payload.connections).toHaveLength(1);
   });
 
-  test('adds safe branding metadata to XML without changing loc values', () => {
+  test('builds standard XML with only real page URLs in loc values', () => {
     const metadata = buildExportMetadata({
       title: 'XML Test',
       generatedAt: new Date('2026-06-22T12:00:00.000Z'),
@@ -127,8 +129,9 @@ describe('fileExports', () => {
       },
     ], metadata);
 
-    expect(xml).toContain('<!-- Sitemap by Vellic.io | https://vellic.io | Generated 2026-06-22T12:00:00.000Z -->');
-    expect(xml).toContain('<!-- vellic-page:');
+    expect(xml).toContain('<!-- Sitemap by Vellic.io | Generated 2026-06-22T12:00:00.000Z -->');
+    expect(xml).not.toContain('https://vellic.io');
+    expect(xml).not.toContain('vellic-page:');
     expect(xml).toContain('<loc>https://example.com/a?x=1&amp;y=2</loc>');
   });
 
@@ -162,12 +165,15 @@ describe('fileExports', () => {
 
     expect(html).toContain('<title>Site Index - Index Test</title>');
     expect(html).toContain('Home &amp; Launch');
-    expect(html).toContain('<a href="https://example.com/about?x=1&amp;y=2">https://example.com/about?x=1&amp;y=2</a>');
+    expect(html).toContain('<nav aria-label="Site index">');
+    expect(html).toContain('<ul>');
+    expect(html).toContain('<a href="https://example.com/about?x=1&amp;y=2">About</a>');
     expect(html).toContain('Sitemap by Vellic.io');
     expect(html).not.toContain('href="https://vellic.io"');
+    expect(html).not.toContain('<table>');
   });
 
-  test('builds Markdown site index with clean URL rows', () => {
+  test('builds CommonMark Markdown site index with nested link rows', () => {
     const metadata = buildExportMetadata({
       title: 'Markdown Index',
       generatedAt: new Date('2026-06-22T12:00:00.000Z'),
@@ -190,7 +196,8 @@ describe('fileExports', () => {
     });
 
     expect(markdown).toContain('# Site Index');
-    expect(markdown).toContain('| 1 |   About \\| Team | Page | https://example.com/about/team |');
+    expect(markdown).toContain('  - 1 [About | Team](https://example.com/about/team) - Page');
+    expect(markdown).not.toContain('| # |');
     expect(markdown).not.toContain('<table>');
   });
 
@@ -220,5 +227,16 @@ describe('fileExports', () => {
     expect(text).toContain('1.1   Team (Page)');
     expect(text).toContain('  https://example.com/about/team');
     expect(text).not.toContain('<html>');
+  });
+
+  test('builds strict TXT sitemap with only URLs', () => {
+    const text = buildTxtSitemap([
+      { url: 'https://example.com/' },
+      { url: 'https://example.com/about' },
+      { title: 'No URL' },
+    ]);
+
+    expect(text).toBe('https://example.com/\nhttps://example.com/about');
+    expect(text.split('\n').every((line) => line.startsWith('https://'))).toBe(true);
   });
 });

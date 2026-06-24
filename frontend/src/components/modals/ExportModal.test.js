@@ -80,7 +80,8 @@ describe('ExportModal', () => {
     expect(actions).not.toBeNull();
     expect(buttons.map((button) => button.textContent.trim())).toEqual([
       'Doc',
-      'Plain text',
+      'Text index',
+      'TXT sitemap',
       'HTML',
       'Markdown',
     ]);
@@ -95,7 +96,7 @@ describe('ExportModal', () => {
       });
     });
 
-    expect(onExportSiteIndex.mock.calls.map(([format]) => format)).toEqual(['doc', 'txt', 'html', 'md']);
+    expect(onExportSiteIndex.mock.calls.map(([format]) => format)).toEqual(['doc', 'txt', 'sitemapTxt', 'html', 'md']);
   });
 
   test('disables Image export with a size-limit notice', () => {
