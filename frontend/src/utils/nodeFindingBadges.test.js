@@ -25,7 +25,7 @@ describe('node finding badges', () => {
       statusCode: 500,
     });
 
-    expect(badges).toEqual(['Duplicate', 'Broken Link', 'HTTP 500']);
+    expect(badges).toEqual(['Duplicate', 'Broken Link', '500']);
   });
 
   test('keeps auth and inactive rules aligned with report filters', () => {

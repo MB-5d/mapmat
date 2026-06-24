@@ -46,16 +46,111 @@ describe('ShareModal', () => {
       );
     });
 
-    const commentRadio = container.querySelector('input[type="radio"][value="comment"]');
+    const commentCard = Array.from(container.querySelectorAll('.share-permission-card')).find(
+      (card) => card.textContent.includes('Can comment')
+    );
 
     act(() => {
-      commentRadio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      commentCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onChangePermission).toHaveBeenCalledWith('comment');
+    expect(container.querySelector('.share-permission-card.ui-option-card')).not.toBeNull();
+    expect(container.querySelector('input[type="radio"]')).toBeNull();
+    expect(container.querySelectorAll('.share-section')).toHaveLength(1);
     expect(container.textContent).toContain('Copy share link');
     expect(container.querySelector('input[placeholder="Share by email"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Collaborators');
+  });
+
+  test('disables unavailable share levels and share actions with a reason', () => {
+    const onChangePermission = jest.fn();
+    const onCopyLink = jest.fn();
+
+    act(() => {
+      root.render(
+        <ShareModal
+          show
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="edit"
+          onChangePermission={onChangePermission}
+          linkCopied={false}
+          onCopyLink={onCopyLink}
+          canShareLinks
+          allowedSharePermissions={['view']}
+          shareEmails=""
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={jest.fn()}
+          collaborationMemberships={[]}
+          collaborationInvites={[]}
+          collaborationAccessRequests={[]}
+        />
+      );
+    });
+
+    const editCard = Array.from(container.querySelectorAll('.share-permission-card')).find(
+      (card) => card.textContent.includes('Can edit')
+    );
+    const copyButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.includes('Copy share link')
+    );
+    const sendButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.trim() === 'Send'
+    );
+
+    act(() => {
+      editCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      copyButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(editCard.disabled).toBe(true);
+    expect(copyButton.disabled).toBe(true);
+    expect(sendButton.disabled).toBe(true);
+    expect(container.textContent).toContain('Your account does not have permission to grant others that level on this map.');
+    expect(onChangePermission).not.toHaveBeenCalled();
+    expect(onCopyLink).not.toHaveBeenCalled();
+  });
+
+  test('shows upgrade action when share links are plan locked', () => {
+    const onUpgradePlan = jest.fn();
+
+    act(() => {
+      root.render(
+        <ShareModal
+          show
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="view"
+          onChangePermission={jest.fn()}
+          linkCopied={false}
+          onCopyLink={jest.fn()}
+          canShareLinks={false}
+          shareLinksDisabledReason="Client share links are not available on this plan."
+          onUpgradePlan={onUpgradePlan}
+          allowedSharePermissions={['view', 'comment', 'edit']}
+          shareEmails=""
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={jest.fn()}
+          collaborationMemberships={[]}
+          collaborationInvites={[]}
+          collaborationAccessRequests={[]}
+        />
+      );
+    });
+
+    const upgradeButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.trim() === 'Upgrade plan'
+    );
+
+    expect(container.textContent).toContain('Client share links are not available on this plan.');
+    expect(upgradeButton).toBeTruthy();
+
+    act(() => {
+      upgradeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onUpgradePlan).toHaveBeenCalledTimes(1);
   });
 
   test('changes collaboration settings from the collaboration modal', () => {

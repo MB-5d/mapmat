@@ -1291,6 +1291,12 @@ const normalizeShareAccessForApp = (value) => (
   Object.values(ACCESS_LEVELS).includes(value) ? value : ACCESS_LEVELS.VIEW
 );
 
+const SHARE_ACCESS_RANK = {
+  [ACCESS_LEVELS.VIEW]: 1,
+  [ACCESS_LEVELS.COMMENT]: 2,
+  [ACCESS_LEVELS.EDIT]: 3,
+};
+
 const getRequestedRoleForShareAccess = (access) => {
   const normalized = normalizeShareAccessForApp(access);
   if (normalized === ACCESS_LEVELS.EDIT) return 'editor';
@@ -4860,11 +4866,27 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canManageCollaborationSettingsResolvedValue = canManageCollaborationSettingsValue || currentCollaborationRole === 'owner';
   const canViewAccessRequestsResolvedValue = canViewAccessRequestsValue || currentCollaborationRole === 'owner';
   const canOpenShareModalValue = canManageSharesValue;
+  const clientShareLinksPlanAllowedValue = currentUser?.entitlements?.features?.clientShareLinks !== false;
+  const canUseShareLinksValue = canManageSharesValue && clientShareLinksPlanAllowedValue;
+  const shareLinksDisabledReasonValue = !clientShareLinksPlanAllowedValue
+    ? 'Client share links are not available on this plan.'
+    : 'Your account does not have permission to create share links for this map.';
   const canOpenCollaborationModalValue = COLLABORATION_UI_ENABLED && isLoggedIn && (
     canViewCollaborationPanelValue
     || canSelfServeCollaborationValue
     || canSendCollaborationInvitesResolvedValue
   );
+  const maxGrantableSharePermissionValue = canEditValue
+    ? ACCESS_LEVELS.EDIT
+    : canCommentValue
+      ? ACCESS_LEVELS.COMMENT
+      : ACCESS_LEVELS.VIEW;
+  const allowedSharePermissionsValue = useMemo(() => {
+    const maxRank = SHARE_ACCESS_RANK[maxGrantableSharePermissionValue] || SHARE_ACCESS_RANK[ACCESS_LEVELS.VIEW];
+    return Object.values(ACCESS_LEVELS).filter((permission) => (
+      (SHARE_ACCESS_RANK[permission] || 0) <= maxRank
+    ));
+  }, [maxGrantableSharePermissionValue]);
 
   // Permission helper functions
   const canEdit = useCallback(() => canEditValue, [canEditValue]);
@@ -13125,8 +13147,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       const contentWidth = pageWidth - marginX * 2;
       const bodyFontSize = 8;
       const bodyLineHeight = 10;
-      const detailLineHeight = 7.4;
+      const detailLineHeight = 7.6;
+      const firstPageTopY = 56;
       const continuationTopY = 56;
+      const tableHeaderToRowGap = 15;
+      const rowDividerToRowGap = 14;
+      const titleToDetailsGap = 9;
       const textColor = '#1e293b';
       const mutedColor = '#64748b';
       const borderColor = '#cbd5e1';
@@ -13232,7 +13258,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       const drawCreatedWithBrand = () => {
         const logoWidth = 42;
         const logoX = pageWidth - marginX - logoWidth;
-        const logoY = 36;
+        const logoY = firstPageTopY - 8;
         setFont('normal', 6.5);
         setTextColor(mutedColor);
         const createdText = 'Created with';
@@ -13245,7 +13271,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       };
 
       const drawHeader = () => {
-        let headerY = 42;
+        let headerY = firstPageTopY;
         drawCreatedWithBrand();
         setFont('bold', 9);
         setTextColor(mutedColor);
@@ -13275,13 +13301,36 @@ export default function App({ currentRoute, navigateToRoute }) {
         'errorPages',
         'missing',
       ]);
-      const statLines = REPORT_TYPE_OPTIONS
-        .filter((option) => option.key !== 'standard')
+      const reportPdfStatOrder = [
+        'subdomains',
+        'orphanPages',
+        'errorPages',
+        'missing',
+        'duplicates',
+        'inactivePages',
+        'missingTitle',
+        'shortTitle',
+        'longTitle',
+        'missingDescription',
+        'shortDescription',
+        'longDescription',
+        'missingH1',
+        'brokenLinks',
+        'files',
+        'authenticatedPages',
+      ];
+      const reportPdfStatOrderSet = new Set(reportPdfStatOrder);
+      const reportTypeOptionByKey = new Map(REPORT_TYPE_OPTIONS.map((option) => [option.key, option]));
+      const orderedReportTypeOptions = [
+        ...reportPdfStatOrder.map((key) => reportTypeOptionByKey.get(key)).filter(Boolean),
+        ...REPORT_TYPE_OPTIONS.filter((option) => option.key !== 'standard' && !reportPdfStatOrderSet.has(option.key)),
+      ];
+      const statLines = orderedReportTypeOptions
         .filter((option) => alwaysShowReportStatKeys.has(option.key) || reportStats[option.key] > 0)
         .map((option) => ({ ...option, value: reportStats[option.key] || 0 }));
 
       const drawStats = () => {
-        const gridColumns = 4;
+        const gridColumns = 5;
         const cardGap = 5;
         const panelPadding = 10;
         const totalBlockHeight = 21;
@@ -13329,10 +13378,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         details: { x: marginX + 54, w: 324 },
         findings: { x: marginX + 408, w: contentWidth - 408 },
       };
-      const detailLabelWidth = 68;
-      const detailValueGap = 8;
+      const detailLabelWidth = 72;
+      const detailValueGap = 9;
       const detailValueWidth = tableColumns.details.w - detailLabelWidth - detailValueGap;
-      const detailLabelFontSize = 7;
+      const detailLabelFontSize = 7.2;
       const detailValueFontSize = 6.6;
 
       function drawTableHeader() {
@@ -13346,7 +13395,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         pdf.text('Findings', tableColumns.findings.x, y);
         y += 9;
         pdf.line(marginX, y, marginX + contentWidth, y);
-        y += 18;
+        y += tableHeaderToRowGap;
       }
 
       let y = drawHeader();
@@ -13389,7 +13438,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           detail.labelLines.forEach((line, lineIndex) => {
             const labelY = startY + lineIndex * detailLineHeight;
             pdf.text(line, labelX, labelY, { align: 'right' });
-            pdf.text(line, labelX - 0.08, labelY, { align: 'right' });
+            pdf.text(line, labelX - 0.16, labelY, { align: 'right' });
           });
           if (detail.link || urlPattern.test(String(detail.value || ''))) {
             detail.valueLines.forEach((line, lineIndex) => {
@@ -13404,7 +13453,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
         };
 
-        ensureSpace(mainLineCount * bodyLineHeight + 18);
+        ensureSpace(mainLineCount * bodyLineHeight + 22);
 
         const rowTop = y;
         setFont('normal', bodyFontSize);
@@ -13413,7 +13462,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setFont('bold', bodyFontSize);
         pdf.text(titleLines, tableColumns.details.x, y);
         pdf.text(findingLines, tableColumns.findings.x, y);
-        y += mainLineCount * bodyLineHeight + 5;
+        y += mainLineCount * bodyLineHeight + titleToDetailsGap;
 
         preparedDetails.forEach((detail) => {
           ensureSpace(detail.height + 2);
@@ -13426,7 +13475,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         setDrawColor(borderColor);
         pdf.setLineWidth(0.7);
         pdf.line(marginX, y, marginX + contentWidth, y);
-        y += 7;
+        y += rowDividerToRowGap;
 
         if (typeof pdf.link === 'function' && row.url && !preparedDetails.some((detail) => detail.key === 'url')) {
           pdf.link(tableColumns.details.x, rowTop - 9, tableColumns.details.w, mainLineCount * bodyLineHeight, { url: normalizeLinkUrl(row.url) });
@@ -18506,7 +18555,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         onChangePermission={(permission) => setSharePermission(permission)}
         linkCopied={linkCopied}
         onCopyLink={() => copyShareLink(sharePermission)}
-        canShareLinks={canManageShares()}
+        canShareLinks={canUseShareLinksValue}
+        allowedSharePermissions={allowedSharePermissionsValue}
+        shareLinksDisabledReason={shareLinksDisabledReasonValue}
+        onUpgradePlan={() => openPlansModal('share')}
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}
@@ -18528,7 +18580,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         onChangePermission={(permission) => setSharePermission(permission)}
         linkCopied={linkCopied}
         onCopyLink={() => copyShareLink(sharePermission)}
-        canShareLinks={canManageShares()}
+        canShareLinks={canUseShareLinksValue}
+        allowedSharePermissions={allowedSharePermissionsValue}
+        shareLinksDisabledReason={shareLinksDisabledReasonValue}
+        onUpgradePlan={() => openPlansModal('share')}
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
         onSendEmail={sendShareEmail}

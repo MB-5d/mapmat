@@ -312,7 +312,9 @@ describe('ui primitives', () => {
     expect(container.querySelector('.node-status-note-dot')).not.toBeNull();
     expect(container.querySelector('.comment-badge')?.textContent).toBe('');
     expect(container.querySelector('.comment-badge')?.getAttribute('aria-label')).toBe('View 3 notes');
-    expect(getCssRule('.ui-badge__content')).toContain('line-height: inherit;');
+    expect(getCssRule('.ui-badge')).toContain('height: 20px;');
+    expect(getCssRule('.ui-badge__content')).toContain('line-height: 1;');
+    expect(getCssRule('.ui-badge__content')).toContain('transform: translateY(0.04em);');
     expect(getCssRule('.ui-tag__content')).toContain('line-height: inherit;');
     expect(appCss).toMatch(/\.ui-chip__label,\n\.ui-chip__value \{[\s\S]*leading-trim: var\(--ui-leading-trim\);/);
     expect(getCssRule('.ui-chip[class*="ui-tone--"]')).toContain('--ui-chip-bg-current: var(--ui-tone-surface-current);');

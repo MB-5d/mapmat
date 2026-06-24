@@ -292,7 +292,7 @@ describe('MapSurfaceV2', () => {
     });
 
     const badges = Array.from(container.querySelectorAll('.node-badge')).map((badge) => badge.textContent);
-    expect(badges).toEqual(['Duplicate', 'Broken Link', 'HTTP 500']);
+    expect(badges).toEqual(['Duplicate', 'Broken Link', '500']);
     expect(badges).not.toContain('Subdomain');
   });
 

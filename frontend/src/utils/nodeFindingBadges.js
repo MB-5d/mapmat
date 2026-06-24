@@ -1,5 +1,5 @@
 import { isTopLevelOrphanRoot } from './mapDisplaySummary';
-import { getNodeHttpErrorLabel, isRealHttpErrorNode, isVirtualMissingNode } from './scanStatus';
+import { getNodeHttpErrorLabel, getNodeStatusCode, isRealHttpErrorNode, isVirtualMissingNode } from './scanStatus';
 import { isRenderableTextUrl } from './url';
 
 export const DEFAULT_NODE_BADGE_VISIBILITY = Object.freeze({
@@ -49,7 +49,8 @@ export const getFindingBadgesForNode = (
     badges.push('Auth');
   }
   if (isRealError && canShowBadge(visibility, 'errorPages')) {
-    badges.push(getNodeHttpErrorLabel(node) || 'Error');
+    const statusCode = getNodeStatusCode(node);
+    badges.push(statusCode ? String(statusCode) : getNodeHttpErrorLabel(node) || 'Error');
   }
   if (
     node.scanStatus !== 'scan_limited'

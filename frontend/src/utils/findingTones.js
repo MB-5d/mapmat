@@ -33,6 +33,8 @@ export const NODE_BADGE_TONE_BY_LABEL = Object.freeze({
 export const getFindingTone = (key, fallback = 'blue') => FINDING_TONE_BY_KEY[key] || fallback;
 
 export const getNodeBadgeTone = (label, fallback = 'slate') => {
-  if (/^HTTP\s+\d+/i.test(String(label || ''))) return 'red';
+  const text = String(label || '').trim();
+  const status = Number(text);
+  if (/^HTTP\s+\d+/i.test(text) || (Number.isFinite(status) && status >= 400)) return 'red';
   return NODE_BADGE_TONE_BY_LABEL[label] || fallback;
 };

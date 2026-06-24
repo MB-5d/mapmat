@@ -10,12 +10,13 @@ import {
   Users,
 } from 'lucide-react';
 
+import classNames from '../../utils/classNames';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import CheckboxField from '../ui/CheckboxField';
 import { EditIcon } from '../ui/icons';
 import Modal from '../ui/Modal';
-import RadioCardGroup from '../ui/RadioCardGroup';
+import OptionCard from '../ui/OptionCard';
 import SelectInput from '../ui/SelectInput';
 import TextInput from '../ui/TextInput';
 
@@ -43,6 +44,10 @@ const ShareModal = ({
   linkCopied,
   onCopyLink,
   canShareLinks = true,
+  shareLinksDisabledReason = 'Your account does not have permission to create share links for this map.',
+  allowedSharePermissions = null,
+  sharePermissionDisabledReason = 'Your account does not have permission to grant others that level on this map.',
+  onUpgradePlan,
   shareEmails,
   onShareEmailsChange,
   onSendEmail,
@@ -111,12 +116,16 @@ const ShareModal = ({
   const showInviteComposer = collaborationAvailable && canSendCollaborationInvites && visibleInviteRoleOptions.length > 0;
   const showSelfServeSummary = collaborationAvailable && !canViewManagementSurfaces;
   const isCollaborationMode = mode === 'collaboration';
-  const showShareContent = !isCollaborationMode && canShareLinks;
+  const showShareContent = !isCollaborationMode;
   const showCollaborationContent = isCollaborationMode && collaborationEnabled;
 
   const handleSettingToggle = (key, value) => {
     onUpdateCollaborationSettings?.({ [key]: value });
   };
+
+  const allowedSharePermissionSet = Array.isArray(allowedSharePermissions)
+    ? new Set(allowedSharePermissions)
+    : null;
 
   const permissionOptions = [
     {
@@ -137,7 +146,23 @@ const ShareModal = ({
       description: 'Full editing access',
       icon: <EditIcon size={16} />,
     },
-  ];
+  ].map((option) => {
+    const disabled = allowedSharePermissionSet ? !allowedSharePermissionSet.has(option.value) : false;
+    return {
+      ...option,
+      disabled,
+      disabledReason: disabled ? sharePermissionDisabledReason : '',
+    };
+  });
+
+  const selectedPermissionOption = permissionOptions.find((option) => option.value === sharePermission) || permissionOptions[0];
+  const selectedPermissionDisabled = !!selectedPermissionOption?.disabled;
+  const shareActionDisabled = !canShareLinks || selectedPermissionDisabled;
+  const shareActionDisabledReason = !canShareLinks
+    ? shareLinksDisabledReason
+    : selectedPermissionDisabled
+      ? selectedPermissionOption.disabledReason
+      : '';
 
   const renderMembershipRow = (member) => {
     const isSelf = sameId(member.userId, currentUserId);
@@ -205,25 +230,50 @@ const ShareModal = ({
             <>
               <div className="share-section">
                 <div className="share-section-title">Permission level</div>
-                <RadioCardGroup
-                  className="share-permission-options"
-                  name="sharePermission"
-                  value={sharePermission}
-                  onChange={onChangePermission}
-                  options={permissionOptions}
-                />
-              </div>
+                <div className="share-permission-options" role="radiogroup" aria-label="Permission level">
+                  {permissionOptions.map((option) => {
+                    const selected = option.value === sharePermission;
+                    return (
+                      <OptionCard
+                        key={option.value}
+                        className={classNames(
+                          'share-permission-card',
+                          selected && 'is-selected'
+                        )}
+                        icon={option.icon}
+                        title={option.label}
+                        description={option.disabled ? option.disabledReason : option.description}
+                        disabled={option.disabled}
+                        onClick={() => onChangePermission?.(option.value)}
+                        role="radio"
+                        aria-checked={selected}
+                      />
+                    );
+                  })}
+                </div>
 
-              <div className="share-section">
-                <Button
-                  className={`share-link-btn ${linkCopied ? 'copied' : ''}`}
-                  variant={linkCopied ? 'secondary' : 'primary'}
-                  onClick={onCopyLink}
-                  disabled={!canShareLinks}
-                >
-                  {linkCopied ? <Check size={18} /> : <Copy size={18} />}
-                  <span>{linkCopied ? 'Link copied' : 'Copy share link'}</span>
-                </Button>
+                <div className="share-action-block">
+                  <Button
+                    className={`share-link-btn ${linkCopied ? 'copied' : ''}`}
+                    variant={linkCopied ? 'secondary' : 'primary'}
+                    onClick={onCopyLink}
+                    disabled={shareActionDisabled}
+                  >
+                    {linkCopied ? <Check size={18} /> : <Copy size={18} />}
+                    <span>{linkCopied ? 'Link copied' : 'Copy share link'}</span>
+                  </Button>
+
+                  {shareActionDisabledReason ? (
+                    <div className="share-disabled-reason">
+                      <span>{shareActionDisabledReason}</span>
+                      {!canShareLinks && onUpgradePlan ? (
+                        <Button type="button" variant="secondary" size="sm" onClick={onUpgradePlan}>
+                          Upgrade plan
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
 
                 <div className="share-provider-divider"><span>or</span></div>
 
@@ -236,8 +286,14 @@ const ShareModal = ({
                     value={shareEmails}
                     onChange={(e) => onShareEmailsChange(e.target.value)}
                     leftIcon={<Mail size={18} />}
+                    disabled={shareActionDisabled}
                   />
-                  <Button className="share-email-btn" startIcon={<Send size={14} />} onClick={onSendEmail}>
+                  <Button
+                    className="share-email-btn"
+                    startIcon={<Send size={14} />}
+                    onClick={onSendEmail}
+                    disabled={shareActionDisabled}
+                  >
                     Send
                   </Button>
                 </div>
