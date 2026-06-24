@@ -383,7 +383,8 @@ describe('UI design-system contract', () => {
     expect(appCss).toMatch(/\.scan-options-depth-field \{[\s\S]*gap: var\(--space-xs\);/);
     expect(appCss).toMatch(/\.scan-options-depth-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
     expect(appCss).toMatch(/\.share-collab-setting \{[\s\S]*gap: var\(--space-xs\);/);
-    expect(appCss).toMatch(/\.share-collab-setting-label \{[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(appCss).not.toContain('.share-collab-setting-label');
+    expect(appCss).not.toContain('.share-collab-setting-help');
     expect(appCss).toMatch(/\.feedback-field-group \{[\s\S]*gap: var\(--space-sm\);/);
     expect(adminCss).toMatch(/\.admin-console-auth-form span \{[\s\S]*margin-bottom: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
     expect(adminCss).toMatch(/\.admin-feedback-item-controls label,[\s\S]*gap: var\(--space-xs\);/);

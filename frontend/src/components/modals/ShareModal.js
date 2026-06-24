@@ -412,32 +412,30 @@ const ShareModal = ({
                   {canViewManagementSurfaces ? (
                     <div className="share-collab-settings">
                       <div className="share-collab-settings-grid">
-                        <label className="share-collab-setting">
-                          <span className="share-collab-setting-label">Access mode</span>
-                          <SelectInput
-                            className="share-collab-role-select"
-                            value={settings.accessPolicy}
-                            disabled={!canManageCollaborationSettings || collaborationLoading}
-                            onChange={(event) => handleSettingToggle('access_policy', event.target.value)}
-                          >
-                            <option value="private">Private (Only owners and editors can invite collaborators)</option>
-                            <option value="viewer_invites_open">Open viewer invites (People with map access can invite viewers)</option>
-                          </SelectInput>
-                          <span className="share-collab-setting-help">Controls who can invite viewer-only collaborators.</span>
-                        </label>
-                        <label className="share-collab-setting">
-                          <span className="share-collab-setting-label">Presence names</span>
-                          <SelectInput
-                            className="share-collab-role-select"
-                            value={settings.presenceIdentityMode}
-                            disabled={!canManageCollaborationSettings || collaborationLoading}
-                            onChange={(event) => handleSettingToggle('presence_identity_mode', event.target.value)}
-                          >
-                            <option value="named">Named (Show collaborator names and emails)</option>
-                            <option value="anonymous">Anonymous (Show role-based anonymous names)</option>
-                          </SelectInput>
-                          <span className="share-collab-setting-help">Controls whether live collaborators appear by name or anonymously.</span>
-                        </label>
+                        <SelectInput
+                          fieldClassName="share-collab-setting"
+                          label="Access mode"
+                          hint="Controls who can invite viewer-only collaborators."
+                          className="share-collab-role-select"
+                          value={settings.accessPolicy}
+                          disabled={!canManageCollaborationSettings || collaborationLoading}
+                          onChange={(event) => handleSettingToggle('access_policy', event.target.value)}
+                        >
+                          <option value="private">Private (Only owners and editors can invite collaborators)</option>
+                          <option value="viewer_invites_open">Open viewer invites (People with map access can invite viewers)</option>
+                        </SelectInput>
+                        <SelectInput
+                          fieldClassName="share-collab-setting"
+                          label="Presence names"
+                          hint="Controls whether live collaborators appear by name or anonymously."
+                          className="share-collab-role-select"
+                          value={settings.presenceIdentityMode}
+                          disabled={!canManageCollaborationSettings || collaborationLoading}
+                          onChange={(event) => handleSettingToggle('presence_identity_mode', event.target.value)}
+                        >
+                          <option value="named">Named (Show collaborator names and emails)</option>
+                          <option value="anonymous">Anonymous (Show role-based anonymous names)</option>
+                        </SelectInput>
                       </div>
                       <CheckboxField
                         className="share-collab-checkbox"
