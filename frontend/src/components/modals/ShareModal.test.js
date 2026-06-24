@@ -188,6 +188,14 @@ describe('ShareModal', () => {
     });
 
     const toggles = container.querySelectorAll('.share-collab-checkbox input[type="checkbox"]');
+    const optionLabels = Array.from(container.querySelectorAll('option')).map((option) => option.textContent.trim());
+    const sectionTitles = Array.from(container.querySelectorAll('.share-section-title')).map((title) => title.textContent.trim());
+    const getAccordionTrigger = (label) => Array.from(container.querySelectorAll('.share-collab-accordion .ui-accordion__trigger')).find(
+      (button) => button.textContent.includes(label)
+    );
+    const invitesAccordion = getAccordionTrigger('Invites');
+    const membersAccordion = getAccordionTrigger('Members');
+    const accessRequestsAccordion = getAccordionTrigger('Access requests');
 
     act(() => {
       toggles[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -195,7 +203,26 @@ describe('ShareModal', () => {
     });
 
     expect(container.textContent).toContain('Collaborate');
+    expect(sectionTitles).toEqual(['Access policy', 'Collaborators']);
     expect(container.textContent).toContain('Collaborators');
+    expect(container.querySelector('.share-collab-settings .share-collab-subtitle')).toBeNull();
+    expect(optionLabels).toEqual(expect.arrayContaining([
+      'Private (Only owners and editors can invite collaborators)',
+      'Open viewer invites (People with map access can invite viewers)',
+      'Named (Show collaborator names and emails)',
+      'Anonymous (Show role-based anonymous names)',
+    ]));
+    expect(container.textContent).toContain('Controls who can invite viewer-only collaborators.');
+    expect(container.textContent).toContain('Controls whether live collaborators appear by name or anonymously.');
+    expect(invitesAccordion).toBeTruthy();
+    expect(membersAccordion).toBeTruthy();
+    expect(accessRequestsAccordion).toBeTruthy();
+    expect(invitesAccordion.getAttribute('aria-expanded')).toBe('true');
+    expect(membersAccordion.getAttribute('aria-expanded')).toBe('false');
+    expect(accessRequestsAccordion.getAttribute('aria-expanded')).toBe('false');
+    expect(container.textContent).toContain('No pending invites.');
+    expect(container.textContent).not.toContain('No collaborators yet.');
+    expect(container.textContent).not.toContain('No pending access requests.');
     expect(container.textContent).not.toContain('Copy share link');
     expect(onUpdateCollaborationSettings).toHaveBeenCalledWith({
       non_viewer_invites_require_owner: false,
@@ -205,8 +232,8 @@ describe('ShareModal', () => {
     });
   });
 
-  test('email send action uses shared brand filled button styling', () => {
-    act(() => {
+  test('email send action uses shared brand filled button styling and requires a valid email', () => {
+    const renderShareModal = (shareEmails) => {
       root.render(
         <ShareModal
           show
@@ -216,7 +243,7 @@ describe('ShareModal', () => {
           onChangePermission={jest.fn()}
           linkCopied={false}
           onCopyLink={jest.fn()}
-          shareEmails=""
+          shareEmails={shareEmails}
           onShareEmailsChange={jest.fn()}
           onSendEmail={jest.fn()}
           collaborationEnabled={false}
@@ -225,15 +252,36 @@ describe('ShareModal', () => {
           collaborationAccessRequests={[]}
         />
       );
-    });
-
-    const sendButton = Array.from(container.querySelectorAll('button')).find(
+    };
+    const getSendButton = () => Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent.trim() === 'Send'
     );
+
+    act(() => {
+      renderShareModal('');
+    });
+
+    let sendButton = getSendButton();
 
     expect(sendButton).toBeTruthy();
     expect(sendButton.className).toContain('ui-btn');
     expect(sendButton.className).toContain('ui-btn--type-primary');
     expect(sendButton.className).toContain('ui-btn--style-brand');
+    expect(sendButton.disabled).toBe(true);
+
+    act(() => {
+      renderShareModal('not-an-email');
+    });
+
+    sendButton = getSendButton();
+    expect(sendButton.disabled).toBe(true);
+    expect(container.querySelector('input[placeholder="Share by email"]').getAttribute('aria-invalid')).toBe('true');
+
+    act(() => {
+      renderShareModal('person@example.com');
+    });
+
+    sendButton = getSendButton();
+    expect(sendButton.disabled).toBe(false);
   });
 });

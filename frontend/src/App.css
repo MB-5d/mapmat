@@ -11831,7 +11831,7 @@ body {
 }
 
 .share-modal .modal-body {
-  padding: 0;
+  padding: 0 0 16px;
 }
 
 .share-section + .share-section {
@@ -11846,6 +11846,10 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 12px;
+}
+
+.share-section-title--collaborators {
+  margin-top: 18px;
 }
 
 .save-map-share {
@@ -12040,7 +12044,7 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 120px auto;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .share-collab-send {
@@ -12074,8 +12078,8 @@ body {
 
 .share-collab-settings-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
 .share-collab-setting {
@@ -12088,6 +12092,12 @@ body {
   font-size: var(--type-label-sm-size);
   line-height: var(--type-label-sm-line-height);
   font-weight: var(--type-label-sm-weight);
+  color: var(--ui-color-muted);
+}
+
+.share-collab-setting-help {
+  font-size: var(--type-caption-md-size);
+  line-height: var(--type-caption-md-line-height);
   color: var(--ui-color-muted);
 }
 
@@ -12117,6 +12127,23 @@ body {
   font-weight: 600;
   color: var(--ui-color-muted);
   margin-bottom: 8px;
+}
+
+.share-collab-accordions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-collab-accordion-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.share-collab-accordion .ui-accordion__content {
+  gap: 12px;
 }
 
 .share-collab-list {
@@ -13627,6 +13654,10 @@ body {
 [data-theme="dark"] .share-collab-setting-label,
 [data-theme="dark"] .share-collab-subtitle {
   color: var(--ui-color-text);
+}
+
+[data-theme="dark"] .share-collab-setting-help {
+  color: var(--ui-color-muted);
 }
 
 [data-theme="dark"] .share-collab-checkbox {

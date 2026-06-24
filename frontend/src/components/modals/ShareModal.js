@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 
 import classNames from '../../utils/classNames';
+import Accordion from '../ui/Accordion';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import CheckboxField from '../ui/CheckboxField';
@@ -28,6 +29,15 @@ const ROLE_OPTIONS = [
 ];
 
 const APPROVAL_ROLE_OPTIONS = ROLE_OPTIONS.filter((option) => option.value !== 'owner');
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const hasValidShareEmailInput = (value = '') => {
+  const emails = String(value || '')
+    .split(/[,\s;]+/)
+    .map((email) => email.trim())
+    .filter(Boolean);
+  return emails.length > 0 && emails.every((email) => EMAIL_PATTERN.test(email));
+};
 
 const sameId = (left, right) => {
   if (left === undefined || left === null || right === undefined || right === null) return false;
@@ -79,6 +89,7 @@ const ShareModal = ({
   onReviewCollaborationAccessRequest,
 }) => {
   const [requestRoleSelections, setRequestRoleSelections] = useState({});
+  const [openCollaborationAccordion, setOpenCollaborationAccordion] = useState('invites');
 
   useEffect(() => {
     const nextSelections = {};
@@ -87,6 +98,12 @@ const ShareModal = ({
     });
     setRequestRoleSelections(nextSelections);
   }, [collaborationAccessRequests]);
+
+  useEffect(() => {
+    if (show && mode === 'collaboration') {
+      setOpenCollaborationAccordion('invites');
+    }
+  }, [show, mode]);
 
   if (!show) return null;
 
@@ -121,6 +138,10 @@ const ShareModal = ({
 
   const handleSettingToggle = (key, value) => {
     onUpdateCollaborationSettings?.({ [key]: value });
+  };
+
+  const handleCollaborationAccordionOpenChange = (accordionKey) => (open) => {
+    setOpenCollaborationAccordion(open ? accordionKey : null);
   };
 
   const allowedSharePermissionSet = Array.isArray(allowedSharePermissions)
@@ -163,6 +184,9 @@ const ShareModal = ({
     : selectedPermissionDisabled
       ? selectedPermissionOption.disabledReason
       : '';
+  const hasValidShareEmail = hasValidShareEmailInput(shareEmails);
+  const shareEmailSendDisabled = shareActionDisabled || !hasValidShareEmail;
+  const shareEmailHasInvalidValue = Boolean(String(shareEmails || '').trim()) && !hasValidShareEmail;
 
   const renderMembershipRow = (member) => {
     const isSelf = sameId(member.userId, currentUserId);
@@ -216,6 +240,82 @@ const ShareModal = ({
       </div>
     );
   };
+
+  const renderPendingInviteRow = (invite) => (
+    <div className="share-collab-item" key={invite.id}>
+      <div className="share-collab-main">
+        <div className="share-collab-name">{invite.inviteeEmail}</div>
+        <div className="share-collab-meta">{formatRole(invite.role)}</div>
+      </div>
+      <button
+        className="share-collab-revoke"
+        onClick={() => onRevokeCollaborationInvite?.(invite.id)}
+        aria-label="Revoke invite"
+        disabled={collaborationLoading || !canSendCollaborationInvites}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+
+  const renderAccessRequestRow = (request) => (
+    <div className="share-collab-item share-collab-item-stack" key={request.id}>
+      <div className="share-collab-main">
+        <div className="share-collab-name">
+          {request.requesterName || request.requesterEmail || 'Requester'}
+        </div>
+        <div className="share-collab-meta">
+          Requested {formatRole(request.requestedRole)}
+          {request.message ? ` • ${request.message}` : ''}
+        </div>
+      </div>
+      <div className="share-collab-request-actions">
+        <SelectInput
+          className="share-collab-role-select"
+          value={requestRoleSelections[request.id] || request.requestedRole || 'viewer'}
+          onChange={(event) => setRequestRoleSelections((prev) => ({
+            ...prev,
+            [request.id]: event.target.value,
+          }))}
+          disabled={collaborationLoading}
+        >
+          {APPROVAL_ROLE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </SelectInput>
+        <Button
+          className="share-email-btn"
+          size="sm"
+          onClick={() => onReviewCollaborationAccessRequest?.(
+            request.id,
+            'approved',
+            requestRoleSelections[request.id] || request.requestedRole || 'viewer'
+          )}
+          disabled={collaborationLoading}
+        >
+          Approve
+        </Button>
+        <Button
+          className="share-collab-deny"
+          variant="secondary"
+          size="sm"
+          onClick={() => onReviewCollaborationAccessRequest?.(request.id, 'denied')}
+          disabled={collaborationLoading}
+        >
+          Deny
+        </Button>
+      </div>
+    </div>
+  );
+
+  const renderAccordionTitle = (icon, label) => (
+    <span className="share-collab-accordion-title">
+      {icon}
+      <span>{label}</span>
+    </span>
+  );
 
   return (
     <Modal
@@ -287,12 +387,13 @@ const ShareModal = ({
                     onChange={(e) => onShareEmailsChange(e.target.value)}
                     leftIcon={<Mail size={18} />}
                     disabled={shareActionDisabled}
+                    invalid={shareEmailHasInvalidValue}
                   />
                   <Button
                     className="share-email-btn"
                     startIcon={<Send size={14} />}
                     onClick={onSendEmail}
-                    disabled={shareActionDisabled}
+                    disabled={shareEmailSendDisabled}
                   >
                     Send
                   </Button>
@@ -303,17 +404,13 @@ const ShareModal = ({
 
           {showCollaborationContent && (
             <div className="share-section">
-              <div className="share-section-title">Collaborators</div>
+              <div className="share-section-title">Access policy</div>
               {!collaborationAvailable ? (
                 <div className="share-collab-empty">Save this map first to invite collaborators.</div>
               ) : (
                 <>
                   {canViewManagementSurfaces ? (
                     <div className="share-collab-settings">
-                      <div className="share-collab-subtitle">
-                        <Users size={14} />
-                        <span>Access policy</span>
-                      </div>
                       <div className="share-collab-settings-grid">
                         <label className="share-collab-setting">
                           <span className="share-collab-setting-label">Access mode</span>
@@ -323,9 +420,10 @@ const ShareModal = ({
                             disabled={!canManageCollaborationSettings || collaborationLoading}
                             onChange={(event) => handleSettingToggle('access_policy', event.target.value)}
                           >
-                            <option value="private">Private</option>
-                            <option value="viewer_invites_open">Open viewer invites</option>
+                            <option value="private">Private (Only owners and editors can invite collaborators)</option>
+                            <option value="viewer_invites_open">Open viewer invites (People with map access can invite viewers)</option>
                           </SelectInput>
+                          <span className="share-collab-setting-help">Controls who can invite viewer-only collaborators.</span>
                         </label>
                         <label className="share-collab-setting">
                           <span className="share-collab-setting-label">Presence names</span>
@@ -335,9 +433,10 @@ const ShareModal = ({
                             disabled={!canManageCollaborationSettings || collaborationLoading}
                             onChange={(event) => handleSettingToggle('presence_identity_mode', event.target.value)}
                           >
-                            <option value="named">Named</option>
-                            <option value="anonymous">Anonymous</option>
+                            <option value="named">Named (Show collaborator names and emails)</option>
+                            <option value="anonymous">Anonymous (Show role-based anonymous names)</option>
                           </SelectInput>
+                          <span className="share-collab-setting-help">Controls whether live collaborators appear by name or anonymously.</span>
                         </label>
                       </div>
                       <CheckboxField
@@ -379,166 +478,104 @@ const ShareModal = ({
                     </div>
                   ) : null}
 
-                  {showInviteComposer ? (
-                    <div className="share-collab-invite-row">
-                      <TextInput
-                        type="text"
-                        shellClassName="share-email-input"
-                        inputClassName="share-email-text-input"
-                        placeholder="Invite by email..."
-                        value={collaborationInviteEmail}
-                        onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
-                        disabled={!canSendCollaborationInvites}
-                        leftIcon={<Mail size={18} />}
-                      />
-                      <SelectInput
-                        className="share-collab-role-select"
-                        value={collaborationInviteRole}
-                        onChange={(e) => onCollaborationInviteRoleChange?.(e.target.value)}
-                        disabled={!canSendCollaborationInvites || visibleInviteRoleOptions.length <= 1}
-                      >
-                        {visibleInviteRoleOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </SelectInput>
-                      <Button
-                        className="share-collab-send"
-                        variant="secondary"
-                        size="sm"
-                        onClick={onSendCollaborationInvite}
-                        disabled={collaborationLoading || !canSendCollaborationInvites}
-                        loading={collaborationLoading}
-                      >
-                        {!collaborationLoading ? <Send size={14} /> : null}
-                        <span>Invite</span>
-                      </Button>
-                    </div>
-                  ) : null}
-
-                  {!showInviteComposer && !canViewManagementSurfaces ? (
-                    <div className="share-collab-empty">No self-serve collaboration actions are available on this map.</div>
-                  ) : null}
-
                   {collaborationError ? (
                     <div className="share-collab-error">{collaborationError}</div>
                   ) : null}
 
-                  {canViewManagementSurfaces ? (
-                    <>
-                      <div className="share-collab-grid">
-                        <div>
-                          <div className="share-collab-subtitle">
-                            <Users size={14} />
-                            <span>Members</span>
-                          </div>
-                          <div className="share-collab-list">
-                            {collaborationMemberships.length === 0 ? (
-                              <div className="share-collab-empty">No collaborators yet.</div>
-                            ) : (
-                              collaborationMemberships.map(renderMembershipRow)
-                            )}
-                          </div>
+                  <div className="share-section-title share-section-title--collaborators">Collaborators</div>
+                  <div className="share-collab-accordions">
+                    <Accordion
+                      id="share-collab-invites"
+                      className="share-collab-accordion"
+                      title={renderAccordionTitle(<Mail size={14} aria-hidden="true" />, 'Invites')}
+                      open={openCollaborationAccordion === 'invites'}
+                      onOpenChange={handleCollaborationAccordionOpenChange('invites')}
+                    >
+                      {showInviteComposer ? (
+                        <div className="share-collab-invite-row">
+                          <TextInput
+                            type="text"
+                            shellClassName="share-email-input"
+                            inputClassName="share-email-text-input"
+                            placeholder="Invite by email..."
+                            value={collaborationInviteEmail}
+                            onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
+                            disabled={!canSendCollaborationInvites}
+                            leftIcon={<Mail size={18} />}
+                          />
+                          <SelectInput
+                            className="share-collab-role-select"
+                            value={collaborationInviteRole}
+                            onChange={(e) => onCollaborationInviteRoleChange?.(e.target.value)}
+                            disabled={!canSendCollaborationInvites || visibleInviteRoleOptions.length <= 1}
+                          >
+                            {visibleInviteRoleOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </SelectInput>
+                          <Button
+                            className="share-collab-send"
+                            variant="secondary"
+                            size="sm"
+                            onClick={onSendCollaborationInvite}
+                            disabled={collaborationLoading || !canSendCollaborationInvites}
+                            loading={collaborationLoading}
+                          >
+                            {!collaborationLoading ? <Send size={14} /> : null}
+                            <span>Invite</span>
+                          </Button>
                         </div>
+                      ) : null}
 
-                        <div>
-                          <div className="share-collab-subtitle">
-                            <Mail size={14} />
-                            <span>Pending invites</span>
-                          </div>
-                          <div className="share-collab-list">
-                            {collaborationInvites.length === 0 ? (
-                              <div className="share-collab-empty">No pending invites.</div>
-                            ) : (
-                              collaborationInvites.map((invite) => (
-                                <div className="share-collab-item" key={invite.id}>
-                                  <div className="share-collab-main">
-                                    <div className="share-collab-name">{invite.inviteeEmail}</div>
-                                    <div className="share-collab-meta">{formatRole(invite.role)}</div>
-                                  </div>
-                                  <button
-                                    className="share-collab-revoke"
-                                    onClick={() => onRevokeCollaborationInvite?.(invite.id)}
-                                    aria-label="Revoke invite"
-                                    disabled={collaborationLoading || !canSendCollaborationInvites}
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  ) : null}
+                      {!showInviteComposer && !canViewManagementSurfaces ? (
+                        <div className="share-collab-empty">No self-serve collaboration actions are available on this map.</div>
+                      ) : null}
 
-                  {canViewAccessRequests ? (
-                    <div className="share-collab-access-requests">
-                      <div className="share-collab-subtitle">
-                        <Mail size={14} />
-                        <span>Access requests</span>
-                      </div>
                       <div className="share-collab-list">
-                        {collaborationAccessRequests.length === 0 ? (
-                          <div className="share-collab-empty">No pending access requests.</div>
+                        {collaborationInvites.length === 0 ? (
+                          <div className="share-collab-empty">No pending invites.</div>
                         ) : (
-                          collaborationAccessRequests.map((request) => (
-                            <div className="share-collab-item share-collab-item-stack" key={request.id}>
-                              <div className="share-collab-main">
-                                <div className="share-collab-name">
-                                  {request.requesterName || request.requesterEmail || 'Requester'}
-                                </div>
-                                <div className="share-collab-meta">
-                                  Requested {formatRole(request.requestedRole)}
-                                  {request.message ? ` • ${request.message}` : ''}
-                                </div>
-                              </div>
-                              <div className="share-collab-request-actions">
-                                <SelectInput
-                                  className="share-collab-role-select"
-                                  value={requestRoleSelections[request.id] || request.requestedRole || 'viewer'}
-                                  onChange={(event) => setRequestRoleSelections((prev) => ({
-                                    ...prev,
-                                    [request.id]: event.target.value,
-                                  }))}
-                                  disabled={collaborationLoading}
-                                >
-                                  {APPROVAL_ROLE_OPTIONS.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </SelectInput>
-                                <Button
-                                  className="share-email-btn"
-                                  size="sm"
-                                  onClick={() => onReviewCollaborationAccessRequest?.(
-                                    request.id,
-                                    'approved',
-                                    requestRoleSelections[request.id] || request.requestedRole || 'viewer'
-                                  )}
-                                  disabled={collaborationLoading}
-                                >
-                                  Approve
-                                </Button>
-                                <Button
-                                  className="share-collab-deny"
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => onReviewCollaborationAccessRequest?.(request.id, 'denied')}
-                                  disabled={collaborationLoading}
-                                >
-                                  Deny
-                                </Button>
-                              </div>
-                            </div>
-                          ))
+                          collaborationInvites.map(renderPendingInviteRow)
                         )}
                       </div>
-                    </div>
-                  ) : null}
+                    </Accordion>
+
+                    <Accordion
+                      id="share-collab-members"
+                      className="share-collab-accordion"
+                      title={renderAccordionTitle(<Users size={14} aria-hidden="true" />, 'Members')}
+                      open={openCollaborationAccordion === 'members'}
+                      onOpenChange={handleCollaborationAccordionOpenChange('members')}
+                    >
+                      <div className="share-collab-list">
+                        {collaborationMemberships.length === 0 ? (
+                          <div className="share-collab-empty">No collaborators yet.</div>
+                        ) : (
+                          collaborationMemberships.map(renderMembershipRow)
+                        )}
+                      </div>
+                    </Accordion>
+
+                    <Accordion
+                      id="share-collab-access-requests"
+                      className="share-collab-accordion"
+                      title={renderAccordionTitle(<Mail size={14} aria-hidden="true" />, 'Access requests')}
+                      open={openCollaborationAccordion === 'access-requests'}
+                      onOpenChange={handleCollaborationAccordionOpenChange('access-requests')}
+                    >
+                      <div className="share-collab-list">
+                        {!canViewAccessRequests ? (
+                          <div className="share-collab-empty">Only owners can review access requests.</div>
+                        ) : collaborationAccessRequests.length === 0 ? (
+                          <div className="share-collab-empty">No pending access requests.</div>
+                        ) : (
+                          collaborationAccessRequests.map(renderAccessRequestRow)
+                        )}
+                      </div>
+                    </Accordion>
+                  </div>
                 </>
               )}
             </div>
