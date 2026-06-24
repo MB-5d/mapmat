@@ -225,9 +225,13 @@ describe('AuthModal', () => {
 
     expect(getCssRule('.auth-form')).toContain('padding: var(--unit-24) var(--unit-24) 0;');
     expect(getCssRule('.auth-inline-actions--single')).toContain('justify-content: center;');
-    expect(getCssRule('.auth-provider-section')).toContain('padding: var(--unit-24) var(--unit-24);');
-    expect(getCssRule('.auth-provider-section')).toContain('gap: var(--unit-24);');
-    expect(getCssRule('.auth-form + .auth-footer')).toContain('margin-top: var(--unit-24);');
+    expect(getCssRule('.auth-modal .modal-body')).toContain('gap: 0;');
+    expect(getCssRule('.auth-provider-section')).toContain('margin-top: var(--unit-32);');
+    expect(getCssRule('.auth-provider-section')).toContain('padding: 0 var(--unit-24);');
+    expect(getCssRule('.auth-provider-section')).toContain('gap: 0;');
+    expect(getCssRule('.auth-provider-divider')).toContain('padding: 0;');
+    expect(getCssRule('.auth-google-btn-host')).toContain('padding: var(--unit-32) 0;');
+    expect(getCssRule('.auth-form + .auth-footer')).toContain('margin-top: var(--unit-32);');
   });
 
   test('completes Google sign-in from the official button credential callback', async () => {
