@@ -25,12 +25,13 @@ const ImportModal = ({
       <div className="import-info">
         <p>Import a sitemap from a file. Supported formats:</p>
         <ul className="import-formats">
+          <li><strong>JSON</strong> - Exact Vellic map backup</li>
           <li><strong>XML</strong> - Standard sitemap.xml files</li>
           <li><strong>RSS/Atom</strong> - Feed files with links</li>
           <li><strong>HTML</strong> - Extracts all links from the page</li>
-          <li><strong>CSV</strong> - Comma-separated URLs</li>
-          <li><strong>Markdown</strong> - Extracts URLs from markdown</li>
-          <li><strong>TXT</strong> - Plain text with URLs</li>
+          <li><strong>CSV</strong> - Spreadsheet sitemap files</li>
+          <li><strong>Markdown</strong> - Readable site indexes</li>
+          <li><strong>TXT</strong> - Plain text site indexes</li>
         </ul>
       </div>
       <label
@@ -41,7 +42,7 @@ const ImportModal = ({
       >
         <input
           type="file"
-          accept=".xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
+          accept=".json,.xml,.rss,.atom,.html,.htm,.csv,.md,.markdown,.txt"
           onChange={onFileChange}
           disabled={loading}
         />
@@ -54,7 +55,7 @@ const ImportModal = ({
           <>
             <FileUp size={48} />
             <span>Click to select file or drag and drop</span>
-            <span className="import-hint">.xml, .rss, .atom, .html, .csv, .md, .txt</span>
+            <span className="import-hint">.json, .xml, .rss, .atom, .html, .csv, .md, .txt</span>
           </>
         )}
       </label>

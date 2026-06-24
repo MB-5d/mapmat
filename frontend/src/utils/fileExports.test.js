@@ -117,10 +117,18 @@ describe('fileExports', () => {
       pageCount: 1,
     });
     const xml = buildSitemapXml([
-      { url: 'https://example.com/a?x=1&y=2' },
+      {
+        number: '0',
+        section: 'main',
+        depth: 0,
+        title: 'Home',
+        pageType: 'Home',
+        url: 'https://example.com/a?x=1&y=2',
+      },
     ], metadata);
 
     expect(xml).toContain('<!-- Sitemap by Vellic.io | https://vellic.io | Generated 2026-06-22T12:00:00.000Z -->');
+    expect(xml).toContain('<!-- vellic-page:');
     expect(xml).toContain('<loc>https://example.com/a?x=1&amp;y=2</loc>');
   });
 

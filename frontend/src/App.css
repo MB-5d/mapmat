@@ -11848,7 +11848,7 @@ body {
   margin-bottom: var(--unit-16);
 }
 
-.share-section-title--collaborators {
+.share-section-title--access-policy {
   margin-top: var(--unit-24);
 }
 
@@ -12042,13 +12042,14 @@ body {
 
 .share-collab-invite-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px auto;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
   gap: var(--unit-12);
+  align-items: center;
   margin-bottom: 0;
 }
 
 .share-collab-send {
-  min-width: 108px;
+  min-width: 112px;
   white-space: nowrap;
 }
 
@@ -12058,6 +12059,58 @@ body {
 
 .ui-select-shell.share-collab-role-select {
   padding: 0;
+}
+
+.share-collab-role-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.share-collab-role-trigger {
+  min-width: 78px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--unit-10);
+  padding: 0 var(--unit-12);
+  border: var(--border-width-subtle) solid var(--ui-input-mono-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-color-input-bg);
+  color: var(--ui-color-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.share-collab-role-trigger:hover:not(:disabled),
+.share-collab-role-trigger[aria-expanded="true"] {
+  border-color: var(--ui-input-mono-border-hover);
+  color: var(--ui-color-text);
+}
+
+.share-collab-role-trigger:focus-visible {
+  outline: none;
+  border-color: var(--ui-input-mono-border-focus);
+  box-shadow: var(--ui-focus-ring);
+}
+
+.share-collab-role-trigger:disabled {
+  background: var(--ui-input-disabled-bg);
+  border-color: var(--ui-input-disabled-border);
+  color: var(--ui-input-disabled-text);
+  cursor: not-allowed;
+}
+
+.share-collab-role-menu-panel {
+  position: absolute;
+  top: calc(100% + var(--unit-8));
+  right: 0;
+  z-index: 10;
+  min-width: 164px;
+}
+
+.share-collab-role-menu-item .ui-menu-item__icon {
+  color: currentColor;
 }
 
 .share-collab-settings {
@@ -12085,6 +12138,12 @@ body {
 
 .share-collab-checkbox {
   align-items: flex-start;
+}
+
+.share-collab-checkbox .ui-checkbox-field__label {
+  font-size: var(--type-caption-md-size);
+  line-height: var(--type-caption-md-line-height);
+  font-weight: var(--type-body-sm-weight);
 }
 
 .share-collab-checkbox input {

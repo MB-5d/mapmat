@@ -178,17 +178,31 @@ const escapeXml = (value) => String(value ?? '')
 
 const escapeXmlComment = (value) => String(value ?? '').replace(/--/g, '- -');
 
+export const VELLIC_XML_ROW_COMMENT_PREFIX = 'vellic-page:';
+
+const buildVellicXmlRowComment = (row = {}) => {
+  const payload = encodeURIComponent(JSON.stringify({
+    number: row.number,
+    section: row.section,
+    depth: row.depth,
+    title: row.title,
+    pageType: row.pageType,
+  }));
+  return `  <!-- ${VELLIC_XML_ROW_COMMENT_PREFIX}${payload} -->`;
+};
+
 export const buildSitemapXml = (rows = [], metadata = buildExportMetadata()) => {
   const urls = rows
-    .map((row) => row.url)
-    .filter(Boolean)
-    .filter((url, index, allUrls) => allUrls.indexOf(url) === index);
+    .filter((row) => row?.url);
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<!-- ${escapeXmlComment(metadata.tagline)} | ${escapeXmlComment(metadata.sourceUrl)} | Generated ${escapeXmlComment(metadata.generatedAt)} -->`,
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    ...urls.map((url) => `  <url><loc>${escapeXml(url)}</loc></url>`),
+    ...urls.flatMap((row) => [
+      buildVellicXmlRowComment(row),
+      `  <url><loc>${escapeXml(row.url)}</loc></url>`,
+    ]),
     '</urlset>',
   ].join('\n');
 };

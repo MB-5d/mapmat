@@ -203,7 +203,7 @@ describe('ShareModal', () => {
     });
 
     expect(container.textContent).toContain('Collaborate');
-    expect(sectionTitles).toEqual(['Access policy', 'Collaborators']);
+    expect(sectionTitles).toEqual(['Collaborators', 'Access policy']);
     expect(container.textContent).toContain('Collaborators');
     expect(container.querySelector('.share-collab-settings .share-collab-subtitle')).toBeNull();
     expect(optionLabels).toEqual(expect.arrayContaining([
@@ -212,8 +212,13 @@ describe('ShareModal', () => {
       'Named (Show collaborator names and emails)',
       'Anonymous (Show role-based anonymous names)',
     ]));
-    expect(container.textContent).toContain('Controls who can invite viewer-only collaborators.');
-    expect(container.textContent).toContain('Controls whether live collaborators appear by name or anonymously.');
+    expect(container.textContent).toContain('Access');
+    expect(container.textContent).toContain('Appearance');
+    expect(container.textContent).not.toContain('Access mode');
+    expect(container.textContent).not.toContain('Presence names');
+    expect(container.textContent).toContain('Controls who can invite viewer-only collaborators');
+    expect(container.textContent).not.toContain('Controls who can invite viewer-only collaborators.');
+    expect(container.textContent).toContain('Controls how live collaborators appear to others');
     expect(invitesAccordion).toBeTruthy();
     expect(membersAccordion).toBeTruthy();
     expect(accessRequestsAccordion).toBeTruthy();
@@ -230,6 +235,77 @@ describe('ShareModal', () => {
     expect(onUpdateCollaborationSettings).toHaveBeenCalledWith({
       access_requests_enabled: false,
     });
+  });
+
+  test('collaboration invite row uses an icon role menu and requires a valid invite email', () => {
+    const onCollaborationInviteRoleChange = jest.fn();
+    const onSendCollaborationInvite = jest.fn();
+    const renderCollaborationModal = (collaborationInviteEmail) => {
+      root.render(
+        <ShareModal
+          show
+          mode="collaboration"
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="view"
+          onChangePermission={jest.fn()}
+          linkCopied={false}
+          onCopyLink={jest.fn()}
+          shareEmails=""
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={jest.fn()}
+          collaborationEnabled
+          collaborationAvailable
+          collaborationInviteEmail={collaborationInviteEmail}
+          onCollaborationInviteEmailChange={jest.fn()}
+          collaborationInviteRole="viewer"
+          onCollaborationInviteRoleChange={onCollaborationInviteRoleChange}
+          onSendCollaborationInvite={onSendCollaborationInvite}
+          collaborationMemberships={[]}
+          collaborationInvites={[]}
+          collaborationAccessRequests={[]}
+        />
+      );
+    };
+    const getInviteButton = () => Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent.trim() === 'Invite'
+    );
+
+    act(() => {
+      renderCollaborationModal('');
+    });
+
+    const roleTrigger = container.querySelector('.share-collab-role-trigger');
+    let inviteButton = getInviteButton();
+
+    expect(roleTrigger).toBeTruthy();
+    expect(roleTrigger.getAttribute('aria-label')).toBe('Invite role: Viewer');
+    expect(roleTrigger.textContent).not.toContain('Viewer');
+    expect(inviteButton.className).toContain('ui-btn--type-primary');
+    expect(inviteButton.className).toContain('ui-btn--md');
+    expect(inviteButton.disabled).toBe(true);
+
+    act(() => {
+      roleTrigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const commenterItem = Array.from(container.querySelectorAll('.share-collab-role-menu-item')).find(
+      (item) => item.textContent.includes('Commenter')
+    );
+    expect(commenterItem).toBeTruthy();
+
+    act(() => {
+      commenterItem.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onCollaborationInviteRoleChange).toHaveBeenCalledWith('commenter');
+
+    act(() => {
+      renderCollaborationModal('teammate@example.com');
+    });
+
+    inviteButton = getInviteButton();
+    expect(inviteButton.disabled).toBe(false);
   });
 
   test('email send action uses shared brand filled button styling and requires a valid email', () => {

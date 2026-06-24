@@ -136,13 +136,7 @@ import {
   getSitemapExportFilenameBase,
 } from './utils/fileExports';
 import {
-  parseXmlSitemap,
-  parseRssAtom,
-  parseHtml,
-  parseCsv,
-  parseMarkdown,
-  parsePlainText,
-  buildTreeFromUrls,
+  parseImportFileContent,
 } from './utils/importParsers';
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
@@ -16796,54 +16790,34 @@ export default function App({ currentRoute, navigateToRoute }) {
       const text = await file.text();
       // Use file extension - don't rely on file.type which is often empty for XML
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      let urls = [];
-      let parseType = '';
+      const imported = parseImportFileContent(text, ext);
 
-      if (ext === 'xml') {
-        // Could be sitemap or RSS/Atom
-        if (text.includes('<rss') || text.includes('<feed')) {
-          urls = parseRssAtom(text);
-          parseType = 'RSS/Atom';
-        } else {
-          urls = parseXmlSitemap(text);
-          parseType = 'XML Sitemap';
-        }
-      } else if (ext === 'rss' || ext === 'atom') {
-        urls = parseRssAtom(text);
-        parseType = 'RSS/Atom';
-      } else if (ext === 'html' || ext === 'htm') {
-        urls = parseHtml(text);
-        parseType = 'HTML';
-      } else if (ext === 'csv') {
-        urls = parseCsv(text);
-        parseType = 'CSV';
-      } else if (ext === 'md' || ext === 'markdown') {
-        urls = parseMarkdown(text);
-        parseType = 'Markdown';
-      } else {
-        urls = parsePlainText(text);
-        parseType = 'Text';
-      }
-
-      if (urls.length === 0) {
-        showToast(`No URLs found in ${parseType} file`, 'error');
+      if (!imported?.root) {
+        showToast(`No URLs found in ${imported?.parseType || 'file'}`, 'error');
         setImportLoading(false);
         return;
       }
 
-      const tree = buildTreeFromUrls(urls);
-      if (tree) {
-        setRoot(tree);
-        setOrphans([]); // Clear orphans when importing new URLs
+      const importedOrphans = imported.orphans || [];
+      const importedConnections = imported.connections || [];
+      const importedColors = imported.colors || DEFAULT_COLORS;
+      const importedConnectionColors = imported.connectionColors || DEFAULT_CONNECTION_COLORS;
+
+      if (imported.root) {
+        setRoot(imported.root);
+        setOrphans(importedOrphans);
+        setConnections(importedConnections);
+        setColors(importedColors);
+        setConnectionColors(importedConnectionColors);
         setCurrentMap(null);
         navigateToRoute(createAppHomeRoute());
         setIsImportedMap(true); // Mark as imported - scanning won't work
         setDraftVersionFromSnapshot({
-          root: tree,
-          orphans: [],
-          connections: [],
-          colors: DEFAULT_COLORS,
-          connectionColors: DEFAULT_CONNECTION_COLORS,
+          root: imported.root,
+          orphans: importedOrphans,
+          connections: importedConnections,
+          colors: importedColors,
+          connectionColors: importedConnectionColors,
         }, 'Updated');
         applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
         queueNormalMapInitialCenter({
@@ -16852,10 +16826,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           scheduleResetViewRef,
           attempts: 20,
         });
-        setUrlInput(tree.url || '');
+        setUrlInput(imported.root.url || '');
         setMapName('');
         setShowImportModal(false);
-        showToast(`Imported ${urls.length} URLs from ${parseType}`, 'success');
+        showToast(`Imported ${imported.count || 1} pages from ${imported.parseType}`, 'success');
       } else {
         showToast('Could not build sitemap from URLs', 'error');
       }
@@ -17394,7 +17368,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       : (
                         <>
                           <span>Use existing sitemap files</span>
-                          <span className="blank-card-copy-secondary">(XML, CSV, Markdown, TXT, or HTML link page)</span>
+                          <span className="blank-card-copy-secondary">(JSON, XML, CSV, Markdown, TXT, or HTML link page)</span>
                         </>
                       )}
                   </div>

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ChevronDown,
   Check,
   Copy,
   Eye,
@@ -16,6 +17,7 @@ import Button from '../ui/Button';
 import Badge from '../ui/Badge';
 import CheckboxField from '../ui/CheckboxField';
 import { EditIcon } from '../ui/icons';
+import { MenuItem, MenuPanel } from '../ui/Menu';
 import Modal from '../ui/Modal';
 import OptionCard from '../ui/OptionCard';
 import SelectInput from '../ui/SelectInput';
@@ -37,6 +39,13 @@ const hasValidShareEmailInput = (value = '') => {
     .map((email) => email.trim())
     .filter(Boolean);
   return emails.length > 0 && emails.every((email) => EMAIL_PATTERN.test(email));
+};
+
+const renderRoleIcon = (role, size = 16) => {
+  if (role === 'commenter') return <MessageSquare size={size} />;
+  if (role === 'editor') return <EditIcon size={size} />;
+  if (role === 'owner') return <Users size={size} />;
+  return <Eye size={size} />;
 };
 
 const sameId = (left, right) => {
@@ -90,6 +99,8 @@ const ShareModal = ({
 }) => {
   const [requestRoleSelections, setRequestRoleSelections] = useState({});
   const [openCollaborationAccordion, setOpenCollaborationAccordion] = useState('invites');
+  const [showInviteRoleMenu, setShowInviteRoleMenu] = useState(false);
+  const inviteRoleMenuRef = useRef(null);
 
   useEffect(() => {
     const nextSelections = {};
@@ -104,6 +115,33 @@ const ShareModal = ({
       setOpenCollaborationAccordion('invites');
     }
   }, [show, mode]);
+
+  useEffect(() => {
+    if (!showInviteRoleMenu) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (inviteRoleMenuRef.current?.contains(event.target)) return;
+      setShowInviteRoleMenu(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowInviteRoleMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showInviteRoleMenu]);
+
+  useEffect(() => {
+    if (!show || mode !== 'collaboration' || !collaborationAvailable || !canSendCollaborationInvites) {
+      setShowInviteRoleMenu(false);
+    }
+  }, [show, mode, collaborationAvailable, canSendCollaborationInvites]);
 
   if (!show) return null;
 
@@ -132,6 +170,12 @@ const ShareModal = ({
   const viewerInvitesOpen = collaborationCapabilities?.accessPolicy === 'viewer_invites_open';
   const showInviteComposer = collaborationAvailable && canSendCollaborationInvites && visibleInviteRoleOptions.length > 0;
   const showSelfServeSummary = collaborationAvailable && !canViewManagementSurfaces;
+  const selectedInviteRoleOption = visibleInviteRoleOptions.find((option) => option.value === collaborationInviteRole)
+    || visibleInviteRoleOptions[0]
+    || inviteRoleOptions[0];
+  const hasValidCollaborationInviteEmail = hasValidShareEmailInput(collaborationInviteEmail);
+  const collaborationInviteHasInvalidValue = Boolean(String(collaborationInviteEmail || '').trim()) && !hasValidCollaborationInviteEmail;
+  const collaborationInviteSendDisabled = collaborationLoading || !canSendCollaborationInvites || !hasValidCollaborationInviteEmail;
   const isCollaborationMode = mode === 'collaboration';
   const showShareContent = !isCollaborationMode;
   const showCollaborationContent = isCollaborationMode && collaborationEnabled;
@@ -404,83 +448,15 @@ const ShareModal = ({
 
           {showCollaborationContent && (
             <div className="share-section">
-              <div className="share-section-title">Access policy</div>
+              <div className="share-section-title">Collaborators</div>
               {!collaborationAvailable ? (
                 <div className="share-collab-empty">Save this map first to invite collaborators.</div>
               ) : (
                 <>
-                  {canViewManagementSurfaces ? (
-                    <div className="share-collab-settings">
-                      <div className="share-collab-settings-grid">
-                        <SelectInput
-                          fieldClassName="share-collab-setting"
-                          label="Access mode"
-                          hint="Controls who can invite viewer-only collaborators."
-                          className="share-collab-role-select"
-                          value={settings.accessPolicy}
-                          disabled={!canManageCollaborationSettings || collaborationLoading}
-                          onChange={(event) => handleSettingToggle('access_policy', event.target.value)}
-                        >
-                          <option value="private">Private (Only owners and editors can invite collaborators)</option>
-                          <option value="viewer_invites_open">Open viewer invites (People with map access can invite viewers)</option>
-                        </SelectInput>
-                        <SelectInput
-                          fieldClassName="share-collab-setting"
-                          label="Presence names"
-                          hint="Controls whether live collaborators appear by name or anonymously."
-                          className="share-collab-role-select"
-                          value={settings.presenceIdentityMode}
-                          disabled={!canManageCollaborationSettings || collaborationLoading}
-                          onChange={(event) => handleSettingToggle('presence_identity_mode', event.target.value)}
-                        >
-                          <option value="named">Named (Show collaborator names and emails)</option>
-                          <option value="anonymous">Anonymous (Show role-based anonymous names)</option>
-                        </SelectInput>
-                      </div>
-                      <CheckboxField
-                        className="share-collab-checkbox"
-                        checked={!!settings.nonViewerInvitesRequireOwner}
-                        disabled={!canManageCollaborationSettings || collaborationLoading}
-                        onChange={(event) => handleSettingToggle('non_viewer_invites_require_owner', event.target.checked)}
-                        label="Require owner approval for editor and commenter invites"
-                      />
-                      <CheckboxField
-                        className="share-collab-checkbox"
-                        checked={!!settings.accessRequestsEnabled}
-                        disabled={!canManageCollaborationSettings || collaborationLoading}
-                        onChange={(event) => handleSettingToggle('access_requests_enabled', event.target.checked)}
-                        label="Allow access requests from removed or outside users"
-                      />
-                      {!canManageCollaborationSettings ? (
-                        <div className="share-collab-empty">Only owners can change collaboration settings.</div>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  {showSelfServeSummary ? (
-                    <div className="share-collab-settings">
-                      <div className="share-collab-subtitle">
-                        <Users size={14} />
-                        <span>Access summary</span>
-                      </div>
-                      <div className="share-collab-empty">
-                        {viewerInvitesOpen
-                          ? 'Viewer invites are open on this map.'
-                          : 'This map uses owner-managed collaboration.'}
-                      </div>
-                      <div className="share-collab-empty">
-                        {viewerInvitesOpen
-                          ? 'You can invite read-only viewers, but higher access still stays owner-controlled.'
-                          : 'Only owners and editors can send invites from this map.'}
-                      </div>
-                    </div>
-                  ) : null}
-
                   {collaborationError ? (
                     <div className="share-collab-error">{collaborationError}</div>
                   ) : null}
 
-                  <div className="share-section-title share-section-title--collaborators">Collaborators</div>
                   <div className="share-collab-accordions">
                     <Accordion
                       id="share-collab-invites"
@@ -499,30 +475,50 @@ const ShareModal = ({
                             value={collaborationInviteEmail}
                             onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
                             disabled={!canSendCollaborationInvites}
+                            invalid={collaborationInviteHasInvalidValue}
                             leftIcon={<Mail size={18} />}
                           />
-                          <SelectInput
-                            className="share-collab-role-select"
-                            value={collaborationInviteRole}
-                            onChange={(e) => onCollaborationInviteRoleChange?.(e.target.value)}
-                            disabled={!canSendCollaborationInvites || visibleInviteRoleOptions.length <= 1}
-                          >
-                            {visibleInviteRoleOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </SelectInput>
+                          <div className="share-collab-role-menu" ref={inviteRoleMenuRef}>
+                            <button
+                              type="button"
+                              className="share-collab-role-trigger"
+                              aria-label={`Invite role: ${selectedInviteRoleOption.label}`}
+                              aria-haspopup="menu"
+                              aria-expanded={showInviteRoleMenu}
+                              onClick={() => setShowInviteRoleMenu((current) => !current)}
+                              disabled={!canSendCollaborationInvites || visibleInviteRoleOptions.length <= 1}
+                            >
+                              {renderRoleIcon(selectedInviteRoleOption.value, 16)}
+                              <ChevronDown size={16} aria-hidden="true" />
+                            </button>
+                            {showInviteRoleMenu ? (
+                              <MenuPanel className="share-collab-role-menu-panel" role="menu" aria-label="Invite role">
+                                {visibleInviteRoleOptions.map((option) => (
+                                  <MenuItem
+                                    key={option.value}
+                                    className="share-collab-role-menu-item"
+                                    icon={renderRoleIcon(option.value, 14)}
+                                    label={option.label}
+                                    selected={option.value === collaborationInviteRole}
+                                    role="menuitemradio"
+                                    aria-checked={option.value === collaborationInviteRole}
+                                    onClick={() => {
+                                      onCollaborationInviteRoleChange?.(option.value);
+                                      setShowInviteRoleMenu(false);
+                                    }}
+                                  />
+                                ))}
+                              </MenuPanel>
+                            ) : null}
+                          </div>
                           <Button
                             className="share-collab-send"
-                            variant="secondary"
-                            size="sm"
+                            startIcon={<Send size={14} />}
                             onClick={onSendCollaborationInvite}
-                            disabled={collaborationLoading || !canSendCollaborationInvites}
+                            disabled={collaborationInviteSendDisabled}
                             loading={collaborationLoading}
                           >
-                            {!collaborationLoading ? <Send size={14} /> : null}
-                            <span>Invite</span>
+                            Invite
                           </Button>
                         </div>
                       ) : null}
@@ -574,6 +570,74 @@ const ShareModal = ({
                       </div>
                     </Accordion>
                   </div>
+
+                  <div className="share-section-title share-section-title--access-policy">Access policy</div>
+                  {canViewManagementSurfaces ? (
+                    <div className="share-collab-settings">
+                      <div className="share-collab-settings-grid">
+                        <SelectInput
+                          fieldClassName="share-collab-setting"
+                          label="Access"
+                          hint="Controls who can invite viewer-only collaborators"
+                          className="share-collab-role-select"
+                          value={settings.accessPolicy}
+                          disabled={!canManageCollaborationSettings || collaborationLoading}
+                          onChange={(event) => handleSettingToggle('access_policy', event.target.value)}
+                        >
+                          <option value="private">Private (Only owners and editors can invite collaborators)</option>
+                          <option value="viewer_invites_open">Open viewer invites (People with map access can invite viewers)</option>
+                        </SelectInput>
+                        <SelectInput
+                          fieldClassName="share-collab-setting"
+                          label="Appearance"
+                          hint="Controls how live collaborators appear to others"
+                          className="share-collab-role-select"
+                          value={settings.presenceIdentityMode}
+                          disabled={!canManageCollaborationSettings || collaborationLoading}
+                          onChange={(event) => handleSettingToggle('presence_identity_mode', event.target.value)}
+                        >
+                          <option value="named">Named (Show collaborator names and emails)</option>
+                          <option value="anonymous">Anonymous (Show role-based anonymous names)</option>
+                        </SelectInput>
+                      </div>
+                      <CheckboxField
+                        className="share-collab-checkbox"
+                        checked={!!settings.nonViewerInvitesRequireOwner}
+                        disabled={!canManageCollaborationSettings || collaborationLoading}
+                        onChange={(event) => handleSettingToggle('non_viewer_invites_require_owner', event.target.checked)}
+                        label="Require owner approval for editor and commenter invites"
+                      />
+                      <CheckboxField
+                        className="share-collab-checkbox"
+                        checked={!!settings.accessRequestsEnabled}
+                        disabled={!canManageCollaborationSettings || collaborationLoading}
+                        onChange={(event) => handleSettingToggle('access_requests_enabled', event.target.checked)}
+                        label="Allow access requests from removed or outside users"
+                      />
+                      {!canManageCollaborationSettings ? (
+                        <div className="share-collab-empty">Only owners can change collaboration settings.</div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {showSelfServeSummary ? (
+                    <div className="share-collab-settings">
+                      <div className="share-collab-subtitle">
+                        <Users size={14} />
+                        <span>Access summary</span>
+                      </div>
+                      <div className="share-collab-empty">
+                        {viewerInvitesOpen
+                          ? 'Viewer invites are open on this map.'
+                          : 'This map uses owner-managed collaboration.'}
+                      </div>
+                      <div className="share-collab-empty">
+                        {viewerInvitesOpen
+                          ? 'You can invite read-only viewers, but higher access still stays owner-controlled.'
+                          : 'Only owners and editors can send invites from this map.'}
+                      </div>
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>

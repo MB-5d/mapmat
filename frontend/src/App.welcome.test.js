@@ -229,7 +229,7 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).toContain('Start from scratch');
     expect(container.textContent).toContain('Open saved maps and shared work');
     expect(container.textContent).toContain('Use existing sitemap files');
-    expect(container.textContent).toContain('(XML, CSV, Markdown, TXT, or HTML link page)');
+    expect(container.textContent).toContain('(JSON, XML, CSV, Markdown, TXT, or HTML link page)');
     expect(container.textContent).not.toContain('start blank');
     expect(container.textContent).not.toContain('blank structure');
     expect(getBlankCardButton('Modify')).not.toBeNull();
