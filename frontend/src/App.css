@@ -4479,6 +4479,8 @@ body {
 }
 
 .ui-menu-title + .ui-menu-section,
+.ui-menu-title + .layers-panel-list,
+.ui-menu-title + .color-key-list,
 .ui-menu-title + .canvas-tool-menu-hint {
   margin-top: 8px;
 }
@@ -10418,15 +10420,15 @@ body {
 }
 
 .auth-provider-section {
-  padding: var(--unit-32) var(--unit-24) var(--unit-32);
+  padding: var(--unit-24) var(--unit-24);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--unit-32);
+  gap: var(--unit-24);
 }
 
 .auth-form + .auth-footer {
-  margin-top: var(--unit-32);
+  margin-top: var(--unit-24);
 }
 
 .auth-provider-divider {

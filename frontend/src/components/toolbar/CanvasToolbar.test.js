@@ -479,6 +479,7 @@ describe('CanvasToolbar', () => {
     expect(appCss).toMatch(/\.canvas-tool-menu-images\s*{[^}]*width:\s*232px;[^}]*min-width:\s*232px;[^}]*max-width:\s*232px;[^}]*overflow:\s*hidden;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-images-scroll\s*{[^}]*overflow-y:\s*auto;/s);
     expect(appCss).not.toMatch(/\.canvas-tool-menu-images \.ui-menu-title\s*{/);
+    expect(appCss).toMatch(/\.ui-menu-title \+ \.ui-menu-section,[\s\S]*\.ui-menu-title \+ \.layers-panel-list,[\s\S]*\.ui-menu-title \+ \.color-key-list,[\s\S]*\.ui-menu-title \+ \.canvas-tool-menu-hint\s*{[^}]*margin-top:\s*8px;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-credits\s*{[^}]*flex:\s*0 0 auto;[^}]*flex-direction:\s*column;[^}]*align-items:\s*flex-start;/s);
     expect(appCss).toMatch(/\.canvas-tool-menu-credits-copy\s*{[^}]*display:\s*block;/s);
   });
