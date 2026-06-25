@@ -2,6 +2,7 @@ const { getDefaultAppBaseUrl } = require('./emailTemplates');
 
 const isProd = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_PUBLIC_DOMAIN;
 const SUPPORTED_EMAIL_PROVIDERS = new Set(['disabled', 'log', 'resend', 'postmark']);
+const SUPPORTED_COPY_MODES = new Set(['cc', 'bcc']);
 
 function normalizeProviderName(value) {
   const normalized = String(value || '').trim().toLowerCase();
@@ -13,9 +14,26 @@ function normalizeEmailAddress(value) {
   return String(value || '').trim().toLowerCase() || null;
 }
 
+function normalizeEmailAddressList(value) {
+  const seen = new Set();
+  return String(value || '')
+    .split(/[,\n]/)
+    .map((entry) => normalizeEmailAddress(entry))
+    .filter((entry) => {
+      if (!entry || seen.has(entry)) return false;
+      seen.add(entry);
+      return true;
+    });
+}
+
 function normalizeOptionalText(value) {
   const normalized = String(value || '').trim();
   return normalized || null;
+}
+
+function normalizeCopyMode(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return SUPPORTED_COPY_MODES.has(normalized) ? normalized : 'bcc';
 }
 
 function getEmailConfigSnapshot() {
@@ -30,6 +48,9 @@ function getEmailConfigSnapshot() {
   const postmarkWebhookToken = normalizeOptionalText(process.env.POSTMARK_WEBHOOK_TOKEN);
   const postmarkWebhookTokenHeader = normalizeOptionalText(process.env.POSTMARK_WEBHOOK_TOKEN_HEADER)
     || 'x-postmark-webhook-token';
+  const copyToAddresses = normalizeEmailAddressList(process.env.EMAIL_COPY_TO_ADDRESSES);
+  const copyMode = normalizeCopyMode(process.env.EMAIL_COPY_MODE);
+  const recipientOverrideAddresses = normalizeEmailAddressList(process.env.EMAIL_RECIPIENT_OVERRIDE_ADDRESSES);
 
   return {
     provider,
@@ -43,6 +64,13 @@ function getEmailConfigSnapshot() {
     postmarkWebhookBasicAuthConfigured: !!(postmarkWebhookBasicUsername && postmarkWebhookBasicPassword),
     postmarkWebhookTokenConfigured: !!postmarkWebhookToken,
     postmarkWebhookTokenHeader,
+    copyToConfigured: copyToAddresses.length > 0,
+    copyToCount: copyToAddresses.length,
+    copyMode,
+    copyToAddresses,
+    recipientOverrideConfigured: recipientOverrideAddresses.length > 0,
+    recipientOverrideCount: recipientOverrideAddresses.length,
+    recipientOverrideAddresses,
   };
 }
 
@@ -67,6 +95,11 @@ function buildHealthSnapshot() {
     postmarkWebhookBasicAuthConfigured: config.postmarkWebhookBasicAuthConfigured,
     postmarkWebhookTokenConfigured: config.postmarkWebhookTokenConfigured,
     postmarkWebhookTokenHeader: config.postmarkWebhookTokenHeader,
+    copyToConfigured: config.copyToConfigured,
+    copyToCount: config.copyToCount,
+    copyMode: config.copyMode,
+    recipientOverrideConfigured: config.recipientOverrideConfigured,
+    recipientOverrideCount: config.recipientOverrideCount,
     providerConfigured:
       config.provider === 'log'
       || config.provider === 'disabled'
@@ -83,7 +116,30 @@ function buildHealthSnapshot() {
   };
 }
 
-async function sendViaResendAsync({ config, toEmail, subject, text, html, replyToEmail = null }) {
+function resolveDeliveryRecipients({ config, toEmail }) {
+  const toEmails = config.recipientOverrideAddresses.length > 0
+    ? config.recipientOverrideAddresses
+    : [toEmail];
+  const toSet = new Set(toEmails);
+  const copyEmails = config.copyToAddresses.filter((email) => !toSet.has(email));
+  const ccEmails = config.copyMode === 'cc' ? copyEmails : [];
+  const bccEmails = config.copyMode === 'bcc' ? copyEmails : [];
+
+  return {
+    originalToEmail: toEmail,
+    toEmails,
+    ccEmails,
+    bccEmails,
+    copied: copyEmails.length > 0,
+    overridden: config.recipientOverrideAddresses.length > 0,
+  };
+}
+
+function joinPostmarkRecipients(emails) {
+  return Array.isArray(emails) && emails.length > 0 ? emails.join(',') : undefined;
+}
+
+async function sendViaResendAsync({ config, recipients, subject, text, html, replyToEmail = null }) {
   if (!config.resendApiKeyConfigured) {
     throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend.');
   }
@@ -97,7 +153,9 @@ async function sendViaResendAsync({ config, toEmail, subject, text, html, replyT
     },
     body: JSON.stringify({
       from: getFromHeader(config),
-      to: [toEmail],
+      to: recipients.toEmails,
+      cc: recipients.ccEmails.length > 0 ? recipients.ccEmails : undefined,
+      bcc: recipients.bccEmails.length > 0 ? recipients.bccEmails : undefined,
       subject,
       text,
       html,
@@ -133,7 +191,7 @@ async function sendViaResendAsync({ config, toEmail, subject, text, html, replyT
   };
 }
 
-async function sendViaPostmarkAsync({ config, toEmail, subject, text, html, replyToEmail = null }) {
+async function sendViaPostmarkAsync({ config, recipients, subject, text, html, replyToEmail = null }) {
   if (!config.postmarkServerTokenConfigured) {
     throw new Error('POSTMARK_SERVER_TOKEN is required when EMAIL_PROVIDER=postmark.');
   }
@@ -148,7 +206,9 @@ async function sendViaPostmarkAsync({ config, toEmail, subject, text, html, repl
     },
     body: JSON.stringify({
       From: getFromHeader(config),
-      To: toEmail,
+      To: joinPostmarkRecipients(recipients.toEmails),
+      Cc: joinPostmarkRecipients(recipients.ccEmails),
+      Bcc: joinPostmarkRecipients(recipients.bccEmails),
       Subject: subject,
       TextBody: text,
       HtmlBody: html,
@@ -198,6 +258,7 @@ async function sendEmailAsync({
   if (!normalizedToEmail) {
     throw new Error('A valid recipient email is required for email delivery.');
   }
+  const recipients = resolveDeliveryRecipients({ config, toEmail: normalizedToEmail });
 
   const normalizedSubject = String(subject || '').trim();
   if (!normalizedSubject) {
@@ -212,6 +273,11 @@ async function sendEmailAsync({
       providerResponse: {
         reason: 'provider_disabled',
         metadata: metadata || null,
+        originalToEmail: recipients.originalToEmail,
+        toEmails: recipients.toEmails,
+        ccEmails: recipients.ccEmails,
+        bccEmails: recipients.bccEmails,
+        recipientOverridden: recipients.overridden,
       },
     };
   }
@@ -220,6 +286,10 @@ async function sendEmailAsync({
     console.log('[email]', JSON.stringify({
       provider: 'log',
       toEmail: normalizedToEmail,
+      toEmails: recipients.toEmails,
+      ccEmails: recipients.ccEmails,
+      bccEmails: recipients.bccEmails,
+      recipientOverridden: recipients.overridden,
       subject: normalizedSubject,
       replyTo: normalizedReplyToEmail || config.replyToAddress,
       metadata: metadata || null,
@@ -231,6 +301,11 @@ async function sendEmailAsync({
       providerMessageId: null,
       providerResponse: {
         logged: true,
+        originalToEmail: recipients.originalToEmail,
+        toEmails: recipients.toEmails,
+        ccEmails: recipients.ccEmails,
+        bccEmails: recipients.bccEmails,
+        recipientOverridden: recipients.overridden,
       },
     };
   }
@@ -238,7 +313,7 @@ async function sendEmailAsync({
   if (config.provider === 'resend') {
     return sendViaResendAsync({
       config,
-      toEmail: normalizedToEmail,
+      recipients,
       subject: normalizedSubject,
       text,
       html,
@@ -249,7 +324,7 @@ async function sendEmailAsync({
   if (config.provider === 'postmark') {
     return sendViaPostmarkAsync({
       config,
-      toEmail: normalizedToEmail,
+      recipients,
       subject: normalizedSubject,
       text,
       html,
