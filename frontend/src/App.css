@@ -10317,10 +10317,15 @@ body {
 
 .modal-card.plans-modal .modal-body {
   padding: 16px 22px;
+  overflow-y: auto;
 }
 
 .modal-card.plans-modal .modal-footer {
   padding: 12px 22px 16px;
+  position: relative;
+  z-index: 2;
+  border-top: 1px solid var(--color-border);
+  background: var(--modal-bg);
 }
 
 .plans-modal-body {
@@ -10341,9 +10346,9 @@ body {
 
 .plans-modal-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 220px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 280px);
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .plans-modal-layout .plans-modal-grid {
@@ -10353,7 +10358,7 @@ body {
 
 .plans-modal-layout .plans-modal-card {
   gap: 8px;
-  min-height: 318px;
+  min-height: 306px;
   padding: 12px;
   text-align: left;
 }
@@ -10395,14 +10400,14 @@ body {
 .plans-modal-layout .plans-modal-card p {
   font-size: 12px;
   line-height: 1.35;
-  min-height: 48px;
+  min-height: 44px;
 }
 
 .plans-modal-layout .plans-modal-card-features {
   grid-template-columns: 1fr;
   gap: 5px;
   padding-left: 16px;
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.25;
 }
 
@@ -10422,6 +10427,38 @@ body {
   gap: 6px;
 }
 
+.plans-modal-packs {
+  max-height: 346px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.plans-modal-pack-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--ui-color-border);
+  border-radius: 8px;
+  background: var(--ui-color-surface);
+}
+
+.plans-modal-pack-section > span {
+  color: var(--ui-color-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.plans-modal-pack-caption {
+  color: var(--ui-color-muted);
+  font-size: 10.5px;
+  line-height: 1.25;
+}
+
 .plans-modal-packs > .plans-modal-pack-list {
   display: flex;
   grid-template-columns: none;
@@ -10429,12 +10466,13 @@ body {
 
 .plans-modal-pack-card {
   cursor: pointer;
-  grid-template-columns: minmax(0, 1fr) 74px;
+  grid-template-columns: 1fr;
   grid-template-areas:
-    "main quantity"
-    "action quantity";
-  gap: 6px 8px;
-  min-height: 62px;
+    "main"
+    "quantity"
+    "action";
+  gap: 5px;
+  min-height: 0;
   padding: 8px;
 }
 
@@ -10443,7 +10481,7 @@ body {
 }
 
 .plans-modal-pack-main strong {
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .plans-modal-pack-main small {
@@ -10453,6 +10491,7 @@ body {
 .plans-modal-pack-quantity {
   display: flex;
   grid-area: quantity;
+  width: 88px;
   min-width: 0;
   flex-direction: column;
   gap: 4px;
@@ -10460,7 +10499,7 @@ body {
 
 .plans-modal-pack-quantity small {
   color: var(--ui-color-muted);
-  font-size: 10.5px;
+  font-size: 10px;
   line-height: 1.2;
 }
 

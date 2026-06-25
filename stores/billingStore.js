@@ -589,17 +589,32 @@ async function countBillableEditorsForAccountAsync(accountId) {
   const row = await adapter.queryOneAsync(`
     SELECT COUNT(*) AS count
     FROM account_memberships am
-    INNER JOIN billing_accounts ba ON ba.id = am.account_id
     WHERE am.account_id = ?
       AND am.seat_status IN ('accepted', 'invited', 'pending')
       AND am.role IN ('editor', 'owner')
-      AND NOT (
-        am.role = 'owner'
-        AND am.user_id IS NOT NULL
-        AND am.user_id = ba.owner_user_id
-      )
   `, [accountId]);
   return Number(row?.count || 0);
+}
+
+async function getAccountMembershipForUserAsync(accountId, userId) {
+  await ensureBillingSchemaAsync();
+  if (!accountId || !userId) return null;
+  return adapter.queryOneAsync(`
+    SELECT *
+    FROM account_memberships
+    WHERE account_id = ?
+      AND user_id = ?
+      AND seat_status IN ('accepted', 'invited', 'pending')
+    ORDER BY
+      CASE role
+        WHEN 'owner' THEN 1
+        WHEN 'editor' THEN 2
+        WHEN 'commenter' THEN 3
+        WHEN 'viewer' THEN 4
+        ELSE 5
+      END
+    LIMIT 1
+  `, [accountId, userId]);
 }
 
 async function countSeatRolesForAccountAsync(accountId) {
@@ -1193,6 +1208,7 @@ module.exports = {
   countActiveProjectsForAccountAsync,
   countBillableSeatsForAccountAsync,
   countBillableEditorsForAccountAsync,
+  getAccountMembershipForUserAsync,
   countSeatRolesForAccountAsync,
   upsertInvitedMembershipAsync,
   markMembershipAcceptedAsync,

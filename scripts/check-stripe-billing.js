@@ -15,6 +15,9 @@ process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_50 = 'price_screenshot_pack_3_test';
 process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_100 = 'price_screenshot_pack_4_test';
 process.env.STRIPE_PRICE_SCREENSHOT_PACK_5 = 'price_screenshot_pack_5_test';
 process.env.STRIPE_PRICE_SCREENSHOT_PACK_6 = 'price_screenshot_pack_6_test';
+process.env.STRIPE_PRICE_PAGE_PACK_1 = 'price_page_pack_1_test';
+process.env.STRIPE_PRICE_PAGE_PACK_2 = 'price_page_pack_2_test';
+process.env.STRIPE_PRICE_PAGE_PACK_3 = 'price_page_pack_3_test';
 
 const authStore = require('../stores/authStore');
 const billingStore = require('../stores/billingStore');
@@ -33,6 +36,7 @@ const {
   getRecurringAddOnPriceConfigByStripePrice,
   applyStripeSubscriptionToAccountAsync,
   createAddOnCheckoutSessionAsync,
+  createBundleCheckoutSessionAsync,
   refreshBillingAccountFromStripeAsync,
 } = require('../utils/stripeBilling');
 
@@ -98,18 +102,25 @@ async function main() {
   const freeCatalog = billingCatalog.plans.find((entry) => entry.key === 'free');
   assert.equal(freeCatalog.prices.monthly.formatted, '$0');
   assert.equal(freeCatalog.featureHighlights.includes('100 pages per scan'), true);
+  assert.equal(freeCatalog.featureHighlights.includes('25 screenshots incl.'), true);
+  assert.equal(freeCatalog.featureHighlights.includes('5 downloads (XML and Index)'), true);
   const proCatalog = billingCatalog.plans.find((entry) => entry.key === 'pro');
   assert.equal(proCatalog.prices.monthly.configured, true);
   assert.equal(proCatalog.prices.yearly.configured, true);
   assert.equal(proCatalog.prices.monthly.formatted, '$8');
   assert.equal(proCatalog.limits.activePages, 10000);
   assert.equal(proCatalog.featureHighlights.includes('10,000 active pages total on account'), true);
+  assert.equal(proCatalog.featureHighlights.includes('300 screenshots incl.'), true);
+  assert.equal(proCatalog.featureHighlights.includes('Unlimited downloads (any format)'), true);
   const recurringExtraEditor = billingCatalog.recurringAddOns.find((entry) => entry.key === 'extra_editor' && entry.billingCycle === 'monthly');
   assert.equal(recurringExtraEditor.configured, true);
   assert.equal(recurringExtraEditor.priceEnv, 'STRIPE_PRICE_EXTRA_EDITOR_MONTHLY');
   const extraEditorPrice = getRecurringAddOnPriceConfigByStripePrice('price_extra_editor_test');
   assert.equal(extraEditorPrice.key, 'extra_editor');
   assert.equal(extraEditorPrice.entitlements.editors, 1);
+  assert.equal(extraEditorPrice.entitlements.activePages, 10000);
+  assert.equal(extraEditorPrice.entitlements.downloads, 15);
+  assert.equal(extraEditorPrice.entitlements.screenshotCredits, 300);
   const screenshotPacks = billingCatalog.addOns.filter((entry) => entry.meter === METERS.screenshotCredits);
   assert.deepEqual(screenshotPacks.map((entry) => entry.key), [
     'screenshot_pack_1',
@@ -122,10 +133,18 @@ async function main() {
   assert.deepEqual(screenshotPacks.map((entry) => entry.quantity), [10, 25, 50, 100, 1000, 10000]);
   assert.equal(screenshotPacks.find((entry) => entry.key === 'screenshot_pack_2').priceEnvFallbacks.includes('STRIPE_PRICE_SCREENSHOT_CREDITS_25'), true);
   assert.equal(screenshotPacks.every((entry) => entry.configured), true);
+  const pagePacks = billingCatalog.addOns.filter((entry) => entry.meter === METERS.activePages);
+  assert.deepEqual(pagePacks.map((entry) => entry.key), ['page_pack_1', 'page_pack_2', 'page_pack_3']);
+  assert.deepEqual(pagePacks.map((entry) => entry.quantity), [1000, 10000, 50000]);
+  assert.equal(pagePacks.every((entry) => entry.configured), true);
   const addOnPrice = getAddOnPriceConfigByStripePrice('price_screenshot_pack_4_test');
   assert.equal(addOnPrice.key, 'screenshot_pack_4');
   assert.equal(addOnPrice.meter, METERS.screenshotCredits);
   assert.equal(addOnPrice.quantity, 100);
+  const pageAddOnPrice = getAddOnPriceConfigByStripePrice('price_page_pack_2_test');
+  assert.equal(pageAddOnPrice.key, 'page_pack_2');
+  assert.equal(pageAddOnPrice.meter, METERS.activePages);
+  assert.equal(pageAddOnPrice.quantity, 10000);
   const legacyAddOnAlias = getAddOnPriceConfig('screenshot_credits_100');
   assert.equal(legacyAddOnAlias.key, 'screenshot_pack_4');
 
@@ -159,6 +178,37 @@ async function main() {
   assert.equal(checkoutPayload.invoice_creation.enabled, true);
   assert.deepEqual(checkoutPayload.invoice_creation.invoice_data.metadata, checkoutPayload.metadata);
 
+  let bundlePayload = null;
+  await createBundleCheckoutSessionAsync({
+    user: checkoutUser,
+    account: checkoutAccountWithCustomer,
+    planKey: 'pro',
+    billingCycle: 'monthly',
+    addOns: [
+      { addonKey: 'page_pack_1', quantity: 1 },
+      { addonKey: 'screenshot_pack_1', quantity: 2 },
+    ],
+    returnPath: '/app/profile',
+    stripeClient: {
+      checkout: {
+        sessions: {
+          create: async (payload) => {
+            bundlePayload = payload;
+            return { id: 'cs_checkout_bundle', url: 'https://checkout.stripe.test/bundle' };
+          },
+        },
+      },
+    },
+  });
+  assert.equal(bundlePayload.mode, 'subscription');
+  assert.deepEqual(bundlePayload.line_items, [
+    { price: 'price_pro_test', quantity: 1 },
+    { price: 'price_page_pack_1_test', quantity: 1 },
+    { price: 'price_screenshot_pack_1_test', quantity: 2 },
+  ]);
+  assert.equal(bundlePayload.metadata.checkoutType, 'bundle');
+  assert.equal(bundlePayload.metadata.addonKeys, 'page_pack_1,screenshot_pack_1');
+
   const subscriber = await createTestUser('subscriber');
   await billingStore.startTrialAsync({
     accountId: (await resolveAccountEntitlementsAsync(subscriber)).account.id,
@@ -190,6 +240,7 @@ async function main() {
   assert.equal(proWithExtraEditors.limits.editors.limit, 3);
   assert.equal(proWithExtraEditors.meters.activePages.grantExtra, 20000);
   assert.equal(proWithExtraEditors.meters.activePages.limit, 30000);
+  assert.equal(proWithExtraEditors.meters.downloads.grantRemaining, 30);
   assert.equal(proWithExtraEditors.meters.screenshotCredits.grantRemaining, 600);
 
   await applyStripeSubscriptionToAccountAsync(

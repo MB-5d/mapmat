@@ -7,6 +7,7 @@ export const PAID_BILLING_PLAN_KEYS = ['pro', 'studio', 'agency'];
 
 const PLAN_ORDER = ['free', 'pro', 'studio', 'agency'];
 const SCREENSHOT_CREDITS_METER = 'screenshot_credits';
+const PAGE_CREDITS_METERS = new Set(['active_pages', 'crawl_pages']);
 
 const FALLBACK_PLAN_CARDS = [
   {
@@ -18,7 +19,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For trying Vellic on a small site or one-off audit.',
     marketingCta: 'Get started',
     marketingAction: 'signup',
-    features: ['1 active project', '1,000 active pages total on account', '100 pages per scan', '25 screenshot credits', '5 PNG downloads', '1 editor'],
+    features: ['1 active project', '1,000 active pages total on account', '100 pages per scan', '25 screenshots incl.', '5 downloads (XML and Index)', '1 editor'],
     prices: {
       monthly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -33,7 +34,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For solo audits with screenshots and saved work.',
     marketingCta: 'Subscribe',
     marketingAction: 'checkout',
-    features: ['5 active projects', '10,000 active pages total on account', '300 screenshot credits', 'Unlimited downloads', '1 editor'],
+    features: ['5 active projects', '10,000 active pages total on account', '300 screenshots incl.', 'Unlimited downloads (any format)', '1 editor'],
     prices: {
       monthly: { amount: 800, currency: 'usd', formatted: '$8', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 7200, currency: 'usd', formatted: '$72', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -48,7 +49,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For small teams handling recurring site work.',
     marketingCta: 'Subscribe',
     marketingAction: 'checkout',
-    features: ['15 active projects', '50,000 active pages total on account', '1,000 screenshot credits', 'Unlimited downloads', '3 editors'],
+    features: ['15 active projects', '50,000 active pages total on account', '1,000 screenshots incl.', 'Unlimited downloads (any format)', '3 editors'],
     prices: {
       monthly: { amount: 1800, currency: 'usd', formatted: '$18', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 14400, currency: 'usd', formatted: '$144', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -63,7 +64,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For heavier client audits and shared delivery.',
     marketingCta: 'Subscribe',
     marketingAction: 'checkout',
-    features: ['Unlimited projects', '200,000 active pages total on account', '5,000 screenshot credits', 'Unlimited downloads', '10 editors'],
+    features: ['Unlimited projects', '200,000 active pages total on account', '5,000 screenshots incl.', 'Unlimited downloads (any format)', '10 editors'],
     prices: {
       monthly: { amount: 8800, currency: 'usd', formatted: '$88', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 96000, currency: 'usd', formatted: '$960', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -197,7 +198,22 @@ export function buildScreenshotCreditPackCards(catalog) {
       return {
         ...entry,
         quantity,
-        label: entry.name || `${formatBillingCount(quantity)} screenshot credits`,
+        label: `${formatBillingCount(quantity)} credits*`,
+        priceLabel: entry.formatted || entry.price || (entry.configured ? 'Stripe checkout' : ''),
+      };
+    })
+    .sort((left, right) => (left.quantity - right.quantity) || String(left.key).localeCompare(String(right.key)));
+}
+
+export function buildPageCreditPackCards(catalog) {
+  return (catalog?.addOns || [])
+    .filter((entry) => PAGE_CREDITS_METERS.has(entry?.meter))
+    .map((entry) => {
+      const quantity = Math.max(0, Math.floor(Number(entry.quantity || 0)));
+      return {
+        ...entry,
+        quantity,
+        label: entry.name || `${formatBillingCount(quantity)} pages`,
         priceLabel: entry.formatted || entry.price || (entry.configured ? 'Stripe checkout' : ''),
       };
     })

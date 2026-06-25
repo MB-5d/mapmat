@@ -168,6 +168,17 @@ async function sumActivePagesForAccountAsync(accountId, ownerUserId = null) {
   }, 0);
 }
 
+async function countActiveMapsForAccountAsync(accountId, ownerUserId = null) {
+  await ensureMapBillingSchemaAsync();
+  const row = await adapter.queryOneAsync(`
+    SELECT COUNT(*) AS count
+    FROM maps
+    WHERE (account_id = ? OR (account_id IS NULL AND user_id = ?))
+      AND COALESCE(status, 'active') != 'archived'
+  `, [accountId, ownerUserId || '']);
+  return Number(row?.count || 0);
+}
+
 function normalizeMapNameForCompare(value) {
   return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
@@ -526,6 +537,7 @@ module.exports = {
   countMapsByUserAsync,
   countMapsAccessibleToUserAsync,
   sumActivePagesForAccountAsync,
+  countActiveMapsForAccountAsync,
   getMapNameConflictAsync,
   getMapWithProjectForUserAsync,
   getMapWithProjectAccessibleToUserAsync,

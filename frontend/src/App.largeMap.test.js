@@ -209,6 +209,57 @@ describe('large map viewport behavior', () => {
     });
   });
 
+  test('partial imports keep available pages and drop connections to omitted pages', () => {
+    const imported = {
+      root: {
+        id: 'root',
+        url: 'https://example.com/',
+        title: 'Example',
+        children: [
+          { id: 'child-1', url: 'https://example.com/a', title: 'A', children: [] },
+          { id: 'child-2', url: 'https://example.com/b', title: 'B', children: [] },
+        ],
+      },
+      orphans: [
+        { id: 'orphan-1', url: 'https://other.example/', title: 'Other', children: [] },
+      ],
+      connections: [
+        { sourceNodeId: 'root', targetNodeId: 'child-1' },
+        { sourceNodeId: 'child-2', targetNodeId: 'orphan-1' },
+      ],
+    };
+
+    const partial = __testing.limitImportedMapToPageCount(imported, 2);
+
+    expect(partial.partialImport).toBe(true);
+    expect(partial.count).toBe(2);
+    expect(partial.root.children.map((node) => node.id)).toEqual(['child-1']);
+    expect(partial.orphans).toEqual([]);
+    expect(partial.connections).toEqual([
+      { sourceNodeId: 'root', targetNodeId: 'child-1' },
+    ]);
+  });
+
+  test('map save payload strips entitlement ghost nodes', () => {
+    const payload = __testing.buildMapSavePayload({
+      root: {
+        id: 'root',
+        url: 'https://example.com/',
+        title: 'Example',
+        children: [
+          { id: 'real-child', url: 'https://example.com/a', title: 'A', children: [] },
+          { id: 'ghost-child', isEntitlementLocked: true, entitlementLocked: true, children: [] },
+        ],
+      },
+      orphans: [
+        { id: 'ghost-orphan', isEntitlementLocked: true, entitlementLocked: true, children: [] },
+      ],
+    });
+
+    expect(payload.root.children.map((node) => node.id)).toEqual(['real-child']);
+    expect(payload.orphans).toEqual([]);
+  });
+
   test('capped scans do not add locked previews when the site finishes under the limit', () => {
     const root = {
       id: 'root',

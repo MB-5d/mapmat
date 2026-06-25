@@ -68,6 +68,7 @@ const REPORT_STAT_CARD_ORDER = [
 ];
 
 const REPORT_FILTER_ORDER_INDEX = new Map(REPORT_STAT_CARD_ORDER.map((key, index) => [key, index]));
+const REPORT_COUNT_FORMATTER = new Intl.NumberFormat('en-US');
 
 const sortReportTypeOptions = (left, right) => (
   (REPORT_FILTER_ORDER_INDEX.get(left.key) ?? Number.MAX_SAFE_INTEGER)
@@ -90,6 +91,8 @@ const formatReportLinkFallback = (value) => (
     .replace(/^www\./i, '')
     .replace(/\/+$/g, '')
 );
+
+const formatReportCount = (value) => REPORT_COUNT_FORMATTER.format(Math.max(0, Number(value) || 0));
 
 const ReportDrawer = ({
   isOpen,
@@ -248,6 +251,7 @@ const ReportDrawer = ({
   const scanCollapseReason = scanMeta?.partialReason === 'scan_collapsed'
     ? (scanMeta?.scanDiagnostics?.collapseReason || 'Root-only scan returned after discovery signals were found')
     : '';
+  const isPartialImport = scanMeta?.partialReason === 'import_page_limit';
   const entitlementNotice = scanMeta?.entitlement?.capped && scanMeta.entitlement.limitReached !== false
     ? scanMeta.entitlement
     : null;
@@ -488,15 +492,30 @@ const ReportDrawer = ({
           <div className="ui-status-alert ui-status-alert--warning report-upgrade-alert">
             <AlertTriangle size={16} className="ui-status-alert__icon" />
             <div className="ui-status-alert__content">
-              <strong>Full map locked.</strong>
-              <span>
-                Showing {entitlementNotice.visiblePageLimit || entitlementNotice.allowedPages || 25} visible pages.
-                Upgrade to see the full map.
-              </span>
+              {isPartialImport ? (
+                <>
+                  <strong>Map incomplete.</strong>
+                  <span>
+                    Imported {formatReportCount(entitlementNotice.visiblePageCount || entitlementNotice.allowedPages)} of{' '}
+                    {formatReportCount(entitlementNotice.sourcePageCount || entitlementNotice.requestedPages)} pages.
+                    Upgrade plan or buy more pages to import the rest.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong>Full map locked.</strong>
+                  <span>
+                    Showing {entitlementNotice.visiblePageLimit || entitlementNotice.allowedPages || 25} visible pages.
+                    Upgrade to see the full map.
+                  </span>
+                </>
+              )}
             </div>
-            <Button type="button" variant="primary" size="sm" onClick={onUpgrade}>
-              Upgrade plan
-            </Button>
+            {onUpgrade ? (
+              <Button type="button" variant="primary" size="sm" onClick={onUpgrade}>
+                Upgrade plan
+              </Button>
+            ) : null}
           </div>
         )}
         <section className={`report-summary ${statCards.length > 0 && statCards.length <= 4 ? 'report-summary--single-row' : ''}`}>

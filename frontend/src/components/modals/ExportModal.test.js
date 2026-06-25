@@ -127,4 +127,19 @@ describe('ExportModal', () => {
     expect(container.textContent).not.toContain('PNG download is temporarily unavailable.');
     expect(onExportPng).not.toHaveBeenCalled();
   });
+
+  test('limits Free users to XML and Index downloads', () => {
+    renderModal({ limitedFormatsOnly: true });
+
+    expect(container.querySelector('.modal-subtitle')?.textContent).toBe('Save XML or Index files');
+
+    const optionTitles = Array.from(container.querySelectorAll('.export-btn .ui-option-card__title'))
+      .map((node) => node.textContent.trim());
+
+    expect(optionTitles).toEqual(['XML', 'Index']);
+    expect(container.textContent).not.toContain('PDF');
+    expect(container.textContent).not.toContain('CSV');
+    expect(container.textContent).not.toContain('JSON');
+    expect(container.textContent).not.toContain('AI brief');
+  });
 });

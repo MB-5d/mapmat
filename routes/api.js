@@ -384,13 +384,14 @@ function parseStoredInsights(raw) {
 
 function stripNodeForStorage(node) {
   if (!node || typeof node !== 'object') return node;
+  if (node.isEntitlementLocked || node.entitlementLocked) return null;
   const next = { ...node };
   delete next.internalLinks;
   delete next._childUrls;
   delete next._treeDepth;
   delete next._treeSize;
   if (Array.isArray(node.children)) {
-    next.children = node.children.map(stripNodeForStorage);
+    next.children = node.children.map(stripNodeForStorage).filter(Boolean);
   }
   return next;
 }
@@ -398,7 +399,7 @@ function stripNodeForStorage(node) {
 function sanitizeMapTreeForStorage({ root, orphans } = {}) {
   return {
     root: root ? stripNodeForStorage(root) : root,
-    orphans: Array.isArray(orphans) ? orphans.map(stripNodeForStorage) : orphans,
+    orphans: Array.isArray(orphans) ? orphans.map(stripNodeForStorage).filter(Boolean) : orphans,
   };
 }
 
@@ -1854,7 +1855,8 @@ router.post('/usage-events', requireAuth, async (req, res) => {
     const downloadEntitlement = await requireAccountActionAsync(
       req,
       res,
-      ENTITLEMENT_ACTIONS.organizedExportCreate
+      ENTITLEMENT_ACTIONS.organizedExportCreate,
+      { eventType }
     );
     if (!downloadEntitlement) return;
 
@@ -2394,33 +2396,10 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
     }
 
     const packageName = buildImageDownloadPackageName(map.name || repaired.parsed.root?.title || 'Map');
-    const exportEntitlement = await requireAccountActionAsync(
-      req,
-      res,
-      ENTITLEMENT_ACTIONS.organizedExportCreate
-    );
-    if (!exportEntitlement) return;
-    const exportIdempotencyKey = req.get('Idempotency-Key')
-      || req.body?.idempotencyKey
-      || `organized-export:${id}:${Date.now()}`;
 
     if (files.length === 1) {
       const file = files[0];
       const filename = file.path.split('/').pop() || `${packageName}.jpg`;
-      await recordMeterDebitAsync({
-        user: req.user,
-        accountSummary: exportEntitlement.summary,
-        meter: ENTITLEMENT_METERS.organizedExports,
-        quantity: 1,
-        idempotencyKey: exportIdempotencyKey,
-        metadata: {
-          mapId: id,
-          scope,
-          packageType: 'single',
-          fileCount: files.length,
-          bytes: file.buffer.length,
-        },
-      });
       recordUsageEvent(req, 'download_images', 1, {
         mapId: id,
         scope,
@@ -2447,20 +2426,6 @@ router.post('/maps/:id/images/download', requireAuth, async (req, res) => {
       })),
     ]);
     const zipBuffer = createZipBuffer(zipEntries);
-    await recordMeterDebitAsync({
-      user: req.user,
-      accountSummary: exportEntitlement.summary,
-      meter: ENTITLEMENT_METERS.organizedExports,
-      quantity: 1,
-      idempotencyKey: exportIdempotencyKey,
-      metadata: {
-        mapId: id,
-        scope,
-        packageType: 'zip',
-        fileCount: files.length,
-        bytes: zipBuffer.length,
-      },
-    });
     recordUsageEvent(req, 'download_images', 1, {
       mapId: id,
       scope,

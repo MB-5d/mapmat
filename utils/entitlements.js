@@ -8,6 +8,7 @@ const PLAN_CONFIG_PATH = path.join(__dirname, '..', 'config', 'billing', 'plans.
 const METERS = Object.freeze({
   activePages: 'active_pages',
   crawlPages: 'crawl_pages',
+  activeMaps: 'active_maps',
   screenshotCredits: 'screenshot_credits',
   organizedExports: 'organized_exports',
   downloads: 'organized_exports',
@@ -28,6 +29,7 @@ const ACTIONS = Object.freeze({
 });
 
 const ARCHIVE_BLOCKED_ACTIONS = new Set(Object.values(ACTIONS));
+const FREE_LIMITED_DOWNLOAD_EVENT_TYPES = new Set(['export_xml', 'export_site_index']);
 
 function loadPlanConfig() {
   try {
@@ -253,10 +255,12 @@ async function resolveAccountEntitlementsAsync(user) {
     features[featureKey] = true;
   });
 
-  const [activeProjectCount, activePageCount, editorCount] = await Promise.all([
+  const [activeProjectCount, activePageCount, activeMapCount, editorCount, membership] = await Promise.all([
     billingStore.countActiveProjectsForAccountAsync(account.id, account.owner_user_id),
     mapStore.sumActivePagesForAccountAsync(account.id, account.owner_user_id),
+    mapStore.countActiveMapsForAccountAsync(account.id, account.owner_user_id),
     billingStore.countBillableEditorsForAccountAsync(account.id),
+    billingStore.getAccountMembershipForUserAsync(account.id, user.id),
   ]);
 
   const trialKind = String(account.trial_kind || 'personal').trim().toLowerCase() === 'team'
@@ -275,13 +279,19 @@ async function resolveAccountEntitlementsAsync(user) {
     ? normalizeLimit(config.trialDefaults?.screenshotCredits ?? 15)
     : getLimitValue(entitlementPlan.limits, 'screenshotCredits');
 
-  const [activePages, screenshotCredits, downloads, activeProjects, editors] = await Promise.all([
+  const [activePages, activeMaps, screenshotCredits, downloads, activeProjects, editors] = await Promise.all([
     buildCountLimitSummary({
       account,
       meter: METERS.activePages,
       baseLimit: getLimitValue(entitlementPlan.limits, 'activePages', 'crawlPages'),
       currentCount: activePageCount,
       grantMeters: [METERS.activePages, METERS.crawlPages],
+    }),
+    buildCountLimitSummary({
+      account,
+      meter: METERS.activeMaps,
+      baseLimit: getLimitValue(entitlementPlan.limits, 'activeMaps') ?? null,
+      currentCount: activeMapCount,
     }),
     buildMeterSummary({
       account,
@@ -330,6 +340,7 @@ async function resolveAccountEntitlementsAsync(user) {
       stripeProductId: account.stripe_product_id || null,
       stripeLatestInvoiceId: account.stripe_latest_invoice_id || null,
       stripeCancelAt: account.stripe_cancel_at || null,
+      membershipRole: membership?.role || (account.owner_user_id === user.id ? 'owner' : null),
     },
     plan: {
       key: plan.key || account.plan_key || 'free',
@@ -350,12 +361,14 @@ async function resolveAccountEntitlementsAsync(user) {
     meters: {
       activePages,
       crawlPages: activePages,
+      activeMaps,
       screenshotCredits,
       downloads,
       organizedExports: downloads,
     },
     limits: {
       activeProjects,
+      activeMaps,
       activePages,
       editors,
       seats: editors,
@@ -492,6 +505,17 @@ async function checkAccountActionAsync(user, action, options = {}) {
   }
 
   if (action === ACTIONS.organizedExportCreate) {
+    const eventType = String(options.eventType || '').trim();
+    if (
+      eventType
+      && summary.features?.standardExports === false
+      && !FREE_LIMITED_DOWNLOAD_EVENT_TYPES.has(eventType)
+    ) {
+      return buildDenied(action, summary, 'This download format requires a paid plan.', {
+        code: 'DOWNLOAD_FORMAT_PLAN_REQUIRED',
+        entitlement: { feature: 'standardExports', eventType },
+      });
+    }
     const meter = summary.meters.downloads || summary.meters.organizedExports;
     if (!meter.unlimited && meter.remaining <= 0) {
       const message = summary.trial?.active
@@ -640,7 +664,7 @@ function getScreenshotCreditCost({ type = 'thumb', viewport = 'desktop', pair = 
   if (normalizedType === 'full' && normalizedViewport === 'mobile') {
     return normalizeLimit(costs.mobile_full_page ?? 2);
   }
-  if (normalizedType === 'full') return normalizeLimit(costs.desktop_full_page ?? 3);
+  if (normalizedType === 'full') return normalizeLimit(costs.desktop_full_page ?? 1);
   if (normalizedViewport === 'mobile') return normalizeLimit(costs.mobile_viewport ?? 1);
   return normalizeLimit(costs.desktop_viewport ?? 1);
 }

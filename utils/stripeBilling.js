@@ -56,7 +56,7 @@ function isStripeBillingEnabled() {
 function getStripeClient({ requireEnabled = true } = {}) {
   const secretKey = getStripeSecretKey();
   if (requireEnabled && !isStripeBillingEnabled()) {
-    throw new BillingError('Billing is not enabled yet.', 503, 'BILLING_NOT_ENABLED');
+    throw new BillingError('Checkout is unavailable.', 503, 'BILLING_NOT_ENABLED');
   }
   if (!secretKey) return null;
   if (!stripeClient || stripeClientKey !== secretKey) {
@@ -144,6 +144,7 @@ function normalizeMeterKey(value) {
   const aliases = {
     activePages: METERS.activePages,
     crawlPages: METERS.activePages,
+    activeMaps: METERS.activeMaps,
     screenshotCredits: METERS.screenshotCredits,
     organizedExports: METERS.organizedExports,
     downloads: METERS.downloads,
@@ -270,16 +271,28 @@ function buildPlanFeatureHighlights(plan) {
     highlights.push(formatPlanLimitValue(limits.scanPagesPerRun, 'page per scan', 'pages per scan'));
   }
 
-  highlights.push(formatPlanLimitValue(limits.screenshotCredits, 'screenshot credit', 'screenshot credits', {
-    zeroLabel: 'No screenshot credits',
-  }));
+  const screenshotLimit = limits.screenshotCredits;
+  if (screenshotLimit === null) {
+    highlights.push('Unlimited screenshots');
+  } else {
+    const screenshotCount = Math.max(0, Math.floor(Number(screenshotLimit || 0)));
+    highlights.push(screenshotCount === 0 ? 'No screenshots' : `${screenshotCount.toLocaleString('en-US')} screenshots incl.`);
+  }
   const downloadsLimit = Object.prototype.hasOwnProperty.call(limits, 'downloads')
     ? limits.downloads
     : limits.organizedScreenshotExports;
-  highlights.push(formatPlanLimitValue(downloadsLimit, 'download', 'downloads', {
-    zeroLabel: 'No downloads',
-    unlimitedLabel: 'Unlimited downloads',
-  }));
+  if (downloadsLimit === null) {
+    highlights.push('Unlimited downloads (any format)');
+  } else {
+    const downloadCount = Math.max(0, Math.floor(Number(downloadsLimit || 0)));
+    if (downloadCount === 0) {
+      highlights.push('No downloads');
+    } else if (plan?.features?.standardExports === false) {
+      highlights.push(`${downloadCount.toLocaleString('en-US')} downloads (XML and Index)`);
+    } else {
+      highlights.push(`${downloadCount.toLocaleString('en-US')} ${downloadCount === 1 ? 'download' : 'downloads'}`);
+    }
+  }
   highlights.push(formatPlanLimitValue(limits.editors ?? limits.seats, 'editor', 'editors'));
 
   return highlights.filter(Boolean);
@@ -839,6 +852,85 @@ async function createAddOnCheckoutSessionAsync({ user, account, addonKey, quanti
   return session;
 }
 
+function normalizeBundleAddOns(addOns = []) {
+  const byKey = new Map();
+  (Array.isArray(addOns) ? addOns : []).forEach((entry) => {
+    const addOn = getAddOnPriceConfig(entry?.addonKey || entry?.key);
+    const quantity = Math.min(Math.max(1, Math.floor(Number(entry?.quantity || 1))), 100);
+    const current = byKey.get(addOn.key);
+    byKey.set(addOn.key, {
+      addOn,
+      quantity: Math.min(100, (current?.quantity || 0) + quantity),
+    });
+  });
+  return Array.from(byKey.values());
+}
+
+async function createBundleCheckoutSessionAsync({
+  user,
+  account,
+  planKey = null,
+  billingCycle = 'monthly',
+  addOns = [],
+  returnPath = '/app',
+  stripeClient: providedStripeClient = null,
+}) {
+  const stripe = providedStripeClient || getStripeClient();
+  const normalizedAddOns = normalizeBundleAddOns(addOns);
+  const plan = planKey ? getPlanPriceConfig(planKey, billingCycle) : null;
+  if (!plan && normalizedAddOns.length === 0) {
+    throw new BillingError('Choose a plan or credit pack before checkout.', 400, 'BILLING_SELECTION_REQUIRED');
+  }
+  if (
+    plan
+    && account?.stripe_subscription_id
+    && ['active', 'trialing', 'past_due', 'unpaid'].includes(String(account.stripe_subscription_status || '').toLowerCase())
+  ) {
+    throw new BillingError('Use the billing portal to change this subscription.', 409, 'BILLING_PORTAL_REQUIRED');
+  }
+  const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
+  const mode = plan ? 'subscription' : 'payment';
+  const lineItems = [
+    ...(plan ? [{ price: plan.priceId, quantity: 1 }] : []),
+    ...normalizedAddOns.map(({ addOn, quantity }) => ({ price: addOn.priceId, quantity })),
+  ];
+  const metadata = {
+    checkoutType: plan ? 'bundle' : 'addon_bundle',
+    planKey: plan?.key || '',
+    billingCycle: plan?.billingCycle || '',
+    addonKeys: normalizedAddOns.map(({ addOn }) => addOn.key).join(','),
+    vellicAccountId: account.id,
+    vellicOwnerUserId: account.owner_user_id,
+  };
+  const sessionPayload = {
+    mode,
+    customer: customerId,
+    line_items: lineItems,
+    success_url: buildReturnUrl(returnPath, 'success', {
+      billingSessionId: '{CHECKOUT_SESSION_ID}',
+    }),
+    cancel_url: buildReturnUrl(returnPath, 'cancelled'),
+    metadata,
+    allow_promotion_codes: true,
+  };
+  if (mode === 'payment') {
+    sessionPayload.payment_intent_data = { metadata };
+    sessionPayload.invoice_creation = {
+      enabled: true,
+      invoice_data: { metadata },
+    };
+  } else {
+    sessionPayload.subscription_data = {
+      metadata: {
+        ...metadata,
+        planKey: plan.key,
+        billingCycle: plan.billingCycle,
+      },
+    };
+  }
+  return stripe.checkout.sessions.create(sessionPayload);
+}
+
 async function createPortalSessionAsync({ user, account, returnPath = '/app' }) {
   const stripe = getStripeClient();
   const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
@@ -961,7 +1053,8 @@ async function handleCheckoutSessionCompletedAsync({ stripe, session }) {
   if (session.mode === 'subscription' && session.subscription) {
     const subscription = await stripe.subscriptions.retrieve(getStripeObjectId(session.subscription));
     await applyStripeSubscriptionToAccountAsync(subscription, account.id);
-    return { accountId: account.id, grants: [] };
+    const grants = await grantAddOnsForCheckoutSessionAsync({ stripe, session, account });
+    return { accountId: account.id, grants };
   }
 
   if (session.mode === 'payment') {
@@ -1138,6 +1231,7 @@ module.exports = {
   getRecurringAddOnPriceConfigByStripePrice,
   createPlanCheckoutSessionAsync,
   createAddOnCheckoutSessionAsync,
+  createBundleCheckoutSessionAsync,
   createPortalSessionAsync,
   refreshBillingAccountFromStripeAsync,
   applyStripeSubscriptionToAccountAsync,

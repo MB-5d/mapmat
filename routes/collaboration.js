@@ -1057,6 +1057,17 @@ router.post('/maps/:id/invites', async (req, res) => {
     }
 
     const inviteeUserId = await authStore.findUserIdByEmailAsync(inviteeEmail);
+    const accountRequiredInviteRoles = new Set([
+      permissionPolicy.ROLES.OWNER,
+      permissionPolicy.ROLES.EDITOR,
+      permissionPolicy.ROLES.COMMENTER,
+    ]);
+    if (!inviteeUserId && accountRequiredInviteRoles.has(inviteRole)) {
+      return res.status(400).json({
+        error: 'Commenters and editors need a Vellic account before they can be invited.',
+        code: 'INVITEE_ACCOUNT_REQUIRED',
+      });
+    }
     if (inviteeUserId && inviteeUserId === map.user_id) {
       return res.status(400).json({ error: 'Cannot invite map owner' });
     }

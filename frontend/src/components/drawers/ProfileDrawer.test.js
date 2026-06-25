@@ -204,9 +204,17 @@ describe('ProfileDrawer', () => {
     const billingButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.trim() === 'Manage'
     );
+    const addPagesButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Add pages'
+    );
+    const addScreenshotsButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.trim() === 'Add screenshots'
+    );
 
     expect(planButton).not.toBeNull();
     expect(billingButton).not.toBeNull();
+    expect(addPagesButton).not.toBeNull();
+    expect(addScreenshotsButton).not.toBeNull();
     expect(planButton.className).toContain('ui-btn--type-secondary');
     expect(planButton.className).toContain('ui-btn--style-mono');
     expect(planButton.className).not.toContain('ui-btn--style-brand');
@@ -264,6 +272,12 @@ describe('ProfileDrawer', () => {
                   used: 3,
                   unlimited: true,
                 },
+                activeMaps: {
+                  limit: null,
+                  remaining: null,
+                  used: 2,
+                  unlimited: true,
+                },
 	                editors: {
 	                  limit: 5,
 	                  remaining: 4,
@@ -295,16 +309,54 @@ describe('ProfileDrawer', () => {
     const rowFor = (label) => rows.find((row) => row.querySelector('th')?.textContent === label);
     const cellText = (row, index) => row.querySelectorAll('td')[index]?.textContent;
 
-	    expect(cellText(rowFor('Pages'), 0)).toBe('88');
-	    expect(cellText(rowFor('Pages'), 1)).toBe('12');
-	    expect(rowFor('Screenshot credits').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
-	    expect(cellText(rowFor('Screenshot credits'), 1)).toBe('1,035');
-	    expect(cellText(rowFor('Downloads'), 0)).toBe('4');
-	    expect(cellText(rowFor('Downloads'), 1)).toBe('1');
-	    expect(rowFor('Active projects').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
-	    expect(cellText(rowFor('Active projects'), 1)).toBe('3');
-	    expect(cellText(rowFor('Editors'), 0)).toBe('4');
-	    expect(cellText(rowFor('Editors'), 1)).toBe('1');
+    expect(rows.map((row) => row.querySelector('th')?.textContent)).toEqual([
+      'Editors',
+      'Projects',
+      'Maps',
+      'Pages',
+      'Downloads',
+      'Screenshots',
+    ]);
+    expect(cellText(rowFor('Editors'), 0)).toBe('4');
+    expect(cellText(rowFor('Editors'), 1)).toBe('1');
+    expect(rowFor('Projects').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
+    expect(cellText(rowFor('Projects'), 1)).toBe('3');
+    expect(rowFor('Maps').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
+    expect(cellText(rowFor('Maps'), 1)).toBe('2');
+    expect(cellText(rowFor('Pages'), 0)).toBe('88');
+    expect(cellText(rowFor('Pages'), 1)).toBe('12');
+    expect(cellText(rowFor('Downloads'), 0)).toBe('4');
+    expect(cellText(rowFor('Downloads'), 1)).toBe('1');
+    expect(rowFor('Screenshots').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
+    expect(cellText(rowFor('Screenshots'), 1)).toBe('1,035');
+  });
+
+  test('hides plan details from commenters', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={{
+            ...baseUser,
+            entitlements: {
+              account: { state: 'active', ownerUserId: 'owner-1', membershipRole: 'commenter' },
+              plan: { name: 'Studio' },
+              meters: {},
+              limits: {},
+            },
+          }}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          onOpenPlans={jest.fn()}
+          onOpenBilling={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-controls="account-plan-details"]')).toBeNull();
+    expect(container.querySelector('.account-plan-actions')).toBeNull();
   });
 
   test('keeps only one profile accordion open at a time', () => {

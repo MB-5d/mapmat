@@ -7,6 +7,7 @@ const {
   getBillingCatalogForClientAsync,
   createPlanCheckoutSessionAsync,
   createAddOnCheckoutSessionAsync,
+  createBundleCheckoutSessionAsync,
   createPortalSessionAsync,
   refreshBillingAccountFromStripeAsync,
 } = require('../utils/stripeBilling');
@@ -97,6 +98,15 @@ router.post('/checkout/sessions', async (req, res) => {
         account,
         addonKey: req.body?.addonKey,
         quantity: req.body?.quantity,
+        returnPath: getReturnPath(req),
+      });
+    } else if (type === 'bundle') {
+      session = await createBundleCheckoutSessionAsync({
+        user: req.user,
+        account,
+        planKey: req.body?.planKey,
+        billingCycle: req.body?.billingCycle,
+        addOns: req.body?.addOns,
         returnPath: getReturnPath(req),
       });
     } else {

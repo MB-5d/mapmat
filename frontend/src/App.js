@@ -197,6 +197,7 @@ import {
   BILLING_CYCLE_OPTIONS,
   PAID_BILLING_PLAN_KEYS,
   buildPlanCardsFromBillingCatalog,
+  buildPageCreditPackCards,
   buildScreenshotCreditPackCards,
 } from './utils/billingPlans';
 import {
@@ -1599,6 +1600,7 @@ const PresenceChipList = ({ collaborators = [] }) => {
 
 const stripNodeForMapSave = (node) => {
   if (!node || typeof node !== 'object') return node;
+  if (node.isEntitlementLocked || node.entitlementLocked) return null;
   const next = { ...node };
   delete next.internalLinks;
   delete next._childUrls;
@@ -1610,14 +1612,14 @@ const stripNodeForMapSave = (node) => {
     }
   });
   if (Array.isArray(node.children)) {
-    next.children = node.children.map(stripNodeForMapSave);
+    next.children = node.children.map(stripNodeForMapSave).filter(Boolean);
   }
   return next;
 };
 
 const prepareMapTreeForSave = ({ root, orphans } = {}) => ({
   root: root ? stripNodeForMapSave(root) : root,
-  orphans: Array.isArray(orphans) ? orphans.map(stripNodeForMapSave) : [],
+  orphans: Array.isArray(orphans) ? orphans.map(stripNodeForMapSave).filter(Boolean) : [],
 });
 
 const buildMapSavePayload = (payload = {}) => {
@@ -2659,6 +2661,7 @@ export const __testing = {
   getScanLimitProgressNote,
   getGuestScanPromptSubtitle,
   getGuestScanPromptBody,
+  limitImportedMapToPageCount,
   shouldShowScanLimitPreview,
   canRescanEntitlementLimitedMap,
   getVisibleScanAllowanceForEntitlements,
@@ -2964,8 +2967,9 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [billingCatalogError, setBillingCatalogError] = useState('');
   const [billingActionKey, setBillingActionKey] = useState('');
   const [billingCycle, setBillingCycle] = useState('monthly');
-  const [billingSelection, setBillingSelection] = useState(null);
-  const [screenshotPackQuantities, setScreenshotPackQuantities] = useState({});
+  const [billingSelectedPlanKey, setBillingSelectedPlanKey] = useState('');
+  const [selectedAddOnKeys, setSelectedAddOnKeys] = useState({});
+  const [addOnQuantities, setAddOnQuantities] = useState({});
   const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
   const billingRouteSessionId = String(currentRoute?.searchParams?.get('billingSessionId') || '');
   const isBillingReturnRoute = billingRouteResult === 'success'
@@ -4170,96 +4174,152 @@ export default function App({ currentRoute, navigateToRoute }) {
     () => buildScreenshotCreditPackCards(billingCatalog),
     [billingCatalog]
   );
+  const pageCreditPacks = useMemo(
+    () => buildPageCreditPackCards(billingCatalog),
+    [billingCatalog]
+  );
+  const creditPackOptions = useMemo(
+    () => [...pageCreditPacks, ...screenshotCreditPacks],
+    [pageCreditPacks, screenshotCreditPacks]
+  );
 
 	  useEffect(() => {
 	    if (!plansModal) {
-	      setBillingSelection(null);
+	      setBillingSelectedPlanKey('');
+	      setSelectedAddOnKeys({});
 	      return;
 	    }
-	    const defaultPlanKey = planOptionCards.some((entry) => entry.key === currentBillingPlanKey)
-	      ? currentBillingPlanKey
-	      : 'free';
-	    setBillingSelection((current) => current || { type: 'plan', key: defaultPlanKey });
-	  }, [currentBillingPlanKey, planOptionCards, plansModal]);
+      if (plansModal.context === 'page-credits' || plansModal.context === 'import-page-limit') {
+        const firstPagePack = pageCreditPacks[0];
+        if (firstPagePack) {
+          setSelectedAddOnKeys((current) => ({ ...current, [firstPagePack.key]: true }));
+        }
+      }
+      if (plansModal.context === 'screenshot-credits') {
+        const firstScreenshotPack = screenshotCreditPacks[0];
+        if (firstScreenshotPack) {
+          setSelectedAddOnKeys((current) => ({ ...current, [firstScreenshotPack.key]: true }));
+        }
+      }
+	  }, [pageCreditPacks, plansModal, screenshotCreditPacks]);
 
-  const getScreenshotPackQuantity = useCallback((packKey) => (
-    normalizeAddOnQuantity(screenshotPackQuantities[packKey])
-  ), [screenshotPackQuantities]);
+  const getAddOnQuantity = useCallback((packKey) => (
+    normalizeAddOnQuantity(addOnQuantities[packKey])
+  ), [addOnQuantities]);
 
-  const updateScreenshotPackQuantity = useCallback((packKey, value) => {
-    setScreenshotPackQuantities((current) => ({
+  const updateAddOnQuantity = useCallback((packKey, value) => {
+    setAddOnQuantities((current) => ({
       ...current,
       [packKey]: normalizeAddOnQuantity(value),
     }));
   }, []);
 
+  const toggleAddOnSelection = useCallback((packKey, forceSelected = null) => {
+    setSelectedAddOnKeys((current) => {
+      const selected = forceSelected === null ? !current[packKey] : Boolean(forceSelected);
+      const next = { ...current };
+      if (selected) {
+        next[packKey] = true;
+      } else {
+        delete next[packKey];
+      }
+      return next;
+    });
+  }, []);
+
+  const handlePlanSelection = useCallback((planKey) => {
+    if (planKey === currentBillingPlanKey) {
+      setBillingSelectedPlanKey('');
+      return;
+    }
+    setBillingSelectedPlanKey((current) => (current === planKey ? '' : planKey));
+  }, [currentBillingPlanKey]);
+
   const getBillingCheckoutUnavailableReason = useCallback((entry, cycle = billingCycle) => {
     if (isLoggedIn && !isPrimaryBillingOwner) return 'Primary owner only';
     if (!billingCatalog) return '';
-    if (!billingCatalog.enabled) return 'Billing not enabled';
+    if (!billingCatalog.enabled) return 'Checkout unavailable';
     const planPrice = entry?.prices ? entry.prices[normalizeBillingCycle(cycle)] : entry;
     if (!planPrice?.configured) return 'Checkout not configured';
     return '';
   }, [billingCatalog, billingCycle, isLoggedIn, isPrimaryBillingOwner]);
 
   const selectedBillingPurchase = useMemo(() => {
-    if (!billingSelection) return null;
-    if (billingSelection.type === 'addon') {
-      const pack = screenshotCreditPacks.find((entry) => entry.key === billingSelection.key);
-      if (!pack) return null;
-      const quantity = normalizeAddOnQuantity(screenshotPackQuantities[pack.key]);
-      const amount = Number.isFinite(Number(pack.unitAmount))
-        ? Number(pack.unitAmount) * quantity
-        : null;
-      const unavailableReason = getBillingCheckoutUnavailableReason(pack);
-      return {
-        type: 'addon',
-        key: pack.key,
-        label: `${formatEntitlementCount(pack.quantity * quantity)} screenshot credits`,
-        subtotal: amount === null ? '--' : formatCurrencyMinorAmount(amount, pack.currency),
-        checkoutLabel: 'Checkout',
-        disabled: !!unavailableReason,
-        unavailableReason,
-        quantity,
-      };
+    const selectedPlan = billingSelectedPlanKey
+      ? planOptionCards.find((entry) => entry.key === billingSelectedPlanKey)
+      : null;
+    const selectedPlanCatalogEntry = selectedPlan ? billingPlanCatalogByKey.get(selectedPlan.key) : null;
+    const selectedPlanPrice = selectedPlanCatalogEntry?.prices?.[normalizeBillingCycle(billingCycle)] || null;
+    let unavailableReason = '';
+    const addOns = creditPackOptions
+      .filter((pack) => selectedAddOnKeys[pack.key])
+      .map((pack) => {
+        const quantity = getAddOnQuantity(pack.key);
+        const amount = Number.isFinite(Number(pack.unitAmount))
+          ? Number(pack.unitAmount) * quantity
+          : null;
+        if (!unavailableReason) unavailableReason = getBillingCheckoutUnavailableReason(pack);
+        return {
+          key: pack.key,
+          quantity,
+          label: pack.label || pack.name,
+          amount,
+          currency: pack.currency,
+        };
+      });
+
+    const includePlan = selectedPlan
+      && selectedPlan.key !== currentBillingPlanKey
+      && selectedPlan.key !== 'free';
+    if (includePlan && !unavailableReason) {
+      unavailableReason = getBillingCheckoutUnavailableReason(selectedPlanCatalogEntry, billingCycle);
     }
-    const plan = planOptionCards.find((entry) => entry.key === billingSelection.key)
-      || planOptionCards.find((entry) => entry.key === currentBillingPlanKey)
-      || null;
-	    if (!plan) return null;
-	    const catalogEntry = billingPlanCatalogByKey.get(plan.key);
-	    let unavailableReason = plan.key === currentBillingPlanKey
-	      ? 'Current plan'
-	      : getBillingCheckoutUnavailableReason(catalogEntry, billingCycle);
-	    let checkoutLabel = plan.key === currentBillingPlanKey ? 'Current plan' : 'Checkout';
-	    if (plan.key === 'free' && plan.key !== currentBillingPlanKey) {
-	      if (!isLoggedIn) {
-	        unavailableReason = '';
-	        checkoutLabel = 'Sign up';
-	      } else {
-	        unavailableReason = 'Use Manage billing';
-	      }
-	    }
-	    return {
-	      type: 'plan',
-	      key: plan.key,
-	      label: plan.name,
-	      subtotal: `${plan.price}${plan.priceSuffix || ''}`,
-	      checkoutLabel,
-	      disabled: plan.key === currentBillingPlanKey || !!unavailableReason,
-	      unavailableReason,
-	      billingCycle,
+    if (billingSelectedPlanKey === 'free' && currentBillingPlanKey !== 'free') {
+      unavailableReason = 'Use Manage billing';
+    }
+
+    const items = [
+      ...(includePlan ? [{
+        key: selectedPlan.key,
+        label: selectedPlan.name,
+        amount: Number.isFinite(Number(selectedPlanPrice?.unitAmount ?? selectedPlanPrice?.amount))
+          ? Number(selectedPlanPrice?.unitAmount ?? selectedPlanPrice?.amount)
+          : null,
+        currency: selectedPlanPrice?.currency || 'usd',
+      }] : []),
+      ...addOns,
+    ];
+    if (items.length === 0) return null;
+
+    const subtotalAmount = items.some((item) => item.amount === null)
+      ? null
+      : items.reduce((total, item) => total + Number(item.amount || 0), 0);
+    const currency = items.find((item) => item.currency)?.currency || 'usd';
+    const label = items.length === 1
+      ? items[0].label
+      : `${items.length} selected`;
+
+    return {
+      type: 'bundle',
+      planKey: includePlan ? selectedPlan.key : null,
+      addOns,
+      label,
+      subtotal: subtotalAmount === null ? '--' : formatCurrencyMinorAmount(subtotalAmount, currency),
+      checkoutLabel: 'Checkout',
+      disabled: !!unavailableReason,
+      unavailableReason,
+      billingCycle,
     };
   }, [
     billingCycle,
 	    billingPlanCatalogByKey,
-	    billingSelection,
+    billingSelectedPlanKey,
+    creditPackOptions,
 	    currentBillingPlanKey,
+    getAddOnQuantity,
 	    getBillingCheckoutUnavailableReason,
-	    isLoggedIn,
 	    planOptionCards,
-    screenshotCreditPacks,
-    screenshotPackQuantities,
+    selectedAddOnKeys,
   ]);
 
   const showEntitlementLock = useCallback(({
@@ -4359,7 +4419,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const getScreenshotCreditCostForType = useCallback((captureType) => {
     const costs = currentUser?.entitlements?.screenshotCreditCosts || {};
     if (captureType === 'full') {
-      return Math.max(1, Number(costs.desktop_full_page || 3));
+      return Math.max(1, Number(costs.desktop_full_page || 1));
     }
     return Math.max(1, Number(costs.desktop_viewport || 1));
   }, [currentUser?.entitlements]);
@@ -7087,7 +7147,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     });
   }, [guestScanPrompt, openAuthModal]);
 
-  const openProjectsPanel = useCallback(() => {
+  const openProjectsPanel = useCallback(({ skipAuth = false } = {}) => {
+    if (!skipAuth && !isLoggedIn) {
+      openAuthModal({
+        contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
+        postSuccessAction: 'open-projects',
+      });
+      return;
+    }
     setShowProjectsModal(true);
     setShowHistoryModal(false);
     setShowCommentsPanel(false);
@@ -7096,7 +7163,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
     setShowVersionHistoryDrawer(false);
-  }, []);
+  }, [isLoggedIn, openAuthModal]);
 
   const handleLogin = useCallback(() => {
     openAuthModal();
@@ -7218,58 +7285,50 @@ export default function App({ currentRoute, navigateToRoute }) {
     showToast,
   ]);
 
-  const handleAddOnCheckout = useCallback(async (addonKey, quantity = 1) => {
+  const handleSelectedBillingCheckout = useCallback(async () => {
+    if (!selectedBillingPurchase || selectedBillingPurchase.disabled) return;
     if (!isLoggedIn) {
       setPlansModal(null);
       openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
       return;
     }
     if (!isPrimaryBillingOwner) {
-      showToast('Only the primary account owner can purchase credits.', 'warning');
+      showToast('Only the primary account owner can change billing.', 'warning');
       return;
     }
-    const checkoutQuantity = normalizeAddOnQuantity(quantity);
-    const actionKey = `addon:${addonKey}`;
+    const actionKey = `bundle:${selectedBillingPurchase.planKey || 'addons'}`;
     setBillingActionKey(actionKey);
     try {
       const session = await api.createBillingCheckoutSession({
-        type: 'addon',
-        addonKey,
-        quantity: checkoutQuantity,
+        type: 'bundle',
+        planKey: selectedBillingPurchase.planKey,
+        billingCycle: selectedBillingPurchase.billingCycle || billingCycle,
+        addOns: selectedBillingPurchase.addOns.map((entry) => ({
+          addonKey: entry.key,
+          quantity: entry.quantity,
+        })),
         returnPath: getBillingReturnPath(),
       });
       redirectToBillingUrl(session.url);
     } catch (error) {
-      showToast(error.message || 'Credit pack checkout is not available yet.', 'error');
+      if (error?.code === 'BILLING_PORTAL_REQUIRED') {
+        await handleBillingPortal('plan-change');
+        return;
+      }
+      showToast(error.message || 'Checkout is not available yet.', 'error');
     } finally {
       setBillingActionKey((current) => (current === actionKey ? '' : current));
     }
-  }, [getBillingReturnPath, isLoggedIn, isPrimaryBillingOwner, openAuthModal, redirectToBillingUrl, showToast]);
-
-  const handleSelectedBillingCheckout = useCallback(() => {
-    if (!selectedBillingPurchase || selectedBillingPurchase.disabled) return;
-    if (selectedBillingPurchase.type === 'addon') {
-      handleAddOnCheckout(selectedBillingPurchase.key, selectedBillingPurchase.quantity || 1);
-      return;
-    }
-    if (selectedBillingPurchase.key === 'free') {
-      if (!isLoggedIn) {
-        setPlansModal(null);
-        openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
-        return;
-      }
-      dismissPlansModal();
-      return;
-    }
-    handlePlanCheckout(selectedBillingPurchase.key, selectedBillingPurchase.billingCycle || billingCycle);
   }, [
     billingCycle,
-    dismissPlansModal,
-    handleAddOnCheckout,
-    handlePlanCheckout,
+    getBillingReturnPath,
+    handleBillingPortal,
     isLoggedIn,
+    isPrimaryBillingOwner,
     openAuthModal,
+    redirectToBillingUrl,
     selectedBillingPurchase,
+    showToast,
   ]);
 
   useEffect(() => {
@@ -7422,7 +7481,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       console.error('Failed to load user data:', e);
     }
     if (postSuccessAction === 'open-projects') {
-      openProjectsPanel();
+      openProjectsPanel({ skipAuth: true });
     }
     if (pendingScan && postSuccessAction === 'select-plan-before-scan') {
       pendingPlanScanRef.current = {
@@ -7934,6 +7993,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [handleBillingPortal]);
 
   const handleShowHistory = useCallback(() => {
+    if (!isLoggedIn) {
+      openAuthModal({
+        contextMessage: MODIFY_AUTH_CONTEXT_MESSAGE,
+        postSuccessAction: 'open-projects',
+      });
+      return;
+    }
     setShowHistoryModal(true);
     setShowProjectsModal(false);
     setShowCommentsPanel(false);
@@ -7942,7 +8008,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowProfileDrawer(false);
     setShowSettingsDrawer(false);
     setShowVersionHistoryDrawer(false);
-  }, []);
+  }, [isLoggedIn, openAuthModal]);
 
   const authValue = useMemo(() => ({
     isLoggedIn,
@@ -9665,13 +9731,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
-    const trial = currentUser?.entitlements?.trial || null;
-    if (trial?.active && trial.organizedDownloadsAllowed === false) {
-      setShowImageMenu(false);
-      setScreenshotDownloadUpsell({ scope, count: allTargets.length });
-      return;
-    }
-
     setShowImageMenu(false);
     showToast('Preparing image download...', 'loading', true);
 
@@ -9690,11 +9749,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       refreshCurrentUser();
     } catch (error) {
       console.error('Image asset download error:', error);
-      if (isEntitlementError(error)) {
-        syncEntitlementsFromError(error);
-        setScreenshotDownloadUpsell({ scope, count: allTargets.length });
-        return;
-      }
       showToast(error.message || 'Failed to download images', 'error');
     }
   };
@@ -13022,9 +13076,9 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const getUsagePageCount = useCallback(() => {
     if (!root) return 0;
-    return countNodes(root) + (Array.isArray(orphans)
-      ? orphans.reduce((total, orphan) => total + countNodes(orphan), 0)
-      : 0);
+    return collectAllNodesWithOrphans(root, orphans)
+      .filter((node) => !isEntitlementLockedNode(node))
+      .length;
   }, [orphans, root]);
 
   const recordDownloadUsage = useCallback(async (eventType, meta = {}) => {
@@ -17124,18 +17178,43 @@ export default function App({ currentRoute, navigateToRoute }) {
       countNodes(imported.root)
       + importedOrphans.reduce((total, orphan) => total + countNodes(orphan), 0)
     );
+    const sourceCount = Math.max(importedPageCount, Math.floor(Number(originalPageCount || importedPageCount)));
+    const entitlementMeta = partial ? {
+      capped: true,
+      limitReached: true,
+      source: 'import',
+      partialReason: 'import_page_limit',
+      allowedPages: importedPageCount,
+      visiblePageLimit: importedPageCount,
+      visiblePageCount: importedPageCount,
+      requestedPages: sourceCount,
+      sourcePageCount: sourceCount,
+      lockedPageEstimate: Math.max(0, sourceCount - importedPageCount),
+    } : null;
+    const displayImported = partial
+      ? addScanLimitGhosts(imported.root, importedOrphans, entitlementMeta)
+      : { root: imported.root, orphans: importedOrphans };
+    const nextRoot = displayImported.root;
+    const nextOrphans = displayImported.orphans || [];
 
-    setRoot(imported.root);
-    setOrphans(importedOrphans);
+    setRoot(nextRoot);
+    setOrphans(nextOrphans);
     setConnections(importedConnections);
     setColors(importedColors);
     setConnectionColors(importedConnectionColors);
+    setScanMeta(partial ? {
+      brokenLinks: [],
+      partial: true,
+      partialReason: 'import_page_limit',
+      scanDiagnostics: null,
+      entitlement: entitlementMeta,
+    } : { brokenLinks: [] });
     setCurrentMap(null);
     navigateToRoute(createAppHomeRoute());
     setIsImportedMap(true);
     setDraftVersionFromSnapshot({
-      root: imported.root,
-      orphans: importedOrphans,
+      root: nextRoot,
+      orphans: nextOrphans,
       connections: importedConnections,
       colors: importedColors,
       connectionColors: importedConnectionColors,
@@ -17147,10 +17226,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       scheduleResetViewRef,
       attempts: 20,
     });
-    setUrlInput(imported.root.url || '');
+    setUrlInput(nextRoot.url || '');
     setMapName('');
     setShowImportModal(false);
-    const sourceCount = Math.max(importedPageCount, Math.floor(Number(originalPageCount || importedPageCount)));
     showToast(
       partial
         ? `Imported ${formatEntitlementCount(importedPageCount)} of ${formatEntitlementCount(sourceCount)} pages from ${imported.parseType}`
@@ -17160,9 +17238,31 @@ export default function App({ currentRoute, navigateToRoute }) {
     return true;
   };
 
+  const requireImportAuth = useCallback(() => {
+    if (isLoggedIn) return true;
+    setShowImportModal(false);
+    setBlankUploadDragActive(false);
+    openAuthModal({
+      contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE,
+      initialView: 'signup',
+    });
+    return false;
+  }, [isLoggedIn, openAuthModal]);
+
+  const openImportModalFlow = useCallback(() => {
+    if (!requireImportAuth()) return;
+    setShowImportModal(true);
+  }, [requireImportAuth]);
+
+  const openBlankUploadPicker = useCallback(() => {
+    if (!requireImportAuth()) return;
+    blankUploadInputRef.current?.click();
+  }, [requireImportAuth]);
+
   // Process imported file (shared by both browse and drag-drop)
   const processImportFile = async (file) => {
     if (!file) return;
+    if (!requireImportAuth()) return;
 
     setImportLoading(true);
 
@@ -17521,7 +17621,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         collaborators={titleCollaborators}
         sharedTitle={root?.title || 'Shared sitemap'}
         onCreateMap={() => openCreateMapFlow()}
-        onImportFile={() => setShowImportModal(true)}
+        onImportFile={openImportModalFlow}
         onShowInvites={handleShowInviteInbox}
         onShowAccessRequests={handleShowAccessRequestsInbox}
         onShowProjects={handleShowProjects}
@@ -17700,7 +17800,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 <button
                   type="button"
                   className={`blank-card blank-card-upload ${blankUploadDragActive ? 'drag-over' : ''}`}
-                  onClick={() => blankUploadInputRef.current?.click()}
+                  onClick={openBlankUploadPicker}
                   onDrop={handleImportDrop}
                   onDragOver={handleImportDragOver}
                   onDragLeave={handleImportDragLeave}
@@ -18638,7 +18738,7 @@ export default function App({ currentRoute, navigateToRoute }) {
               onDownload={downloadReportPdf}
               onLocateNode={locateReportNodeOnMap}
               onLocateUrl={locateReportUrlOnMap}
-              onUpgrade={() => openPlansModal('report')}
+              onUpgrade={isPrimaryBillingOwner ? () => openPlansModal('report') : null}
               reportTitle={reportTitle}
               reportTimestamp={reportTimestamp}
               scanMeta={scanMeta}
@@ -18849,6 +18949,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onExportJson={() => { exportJson(); setShowExportModal(false); }}
         onExportXml={() => { exportXml(); setShowExportModal(false); }}
         onExportSiteIndex={(format) => { exportSiteIndex(format); setShowExportModal(false); }}
+        limitedFormatsOnly={currentUser?.entitlements?.features?.standardExports === false}
       />
 
       <ShareModal
@@ -19143,15 +19244,17 @@ export default function App({ currentRoute, navigateToRoute }) {
               >
                 Not now
               </Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setEntitlementLockModal(null);
-                  openPlansModal('entitlement-lock');
-                }}
-              >
-                {entitlementLockModal.actionLabel || 'View plan options'}
-              </Button>
+              {isPrimaryBillingOwner ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setEntitlementLockModal(null);
+                    openPlansModal('entitlement-lock');
+                  }}
+                >
+                  {entitlementLockModal.actionLabel || 'View plan options'}
+                </Button>
+              ) : null}
             </>
           )}
         >
@@ -19166,7 +19269,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           show
 	          onClose={dismissPlansModal}
 	          title="Upgrade"
-	          subtitle="Choose a plan or screenshot credit pack before opening Stripe checkout."
+	          subtitle="Choose a plan, page pack, or screenshot credit pack before opening Stripe checkout."
 	          className="plans-modal"
 	          scrollable
 	          footer={(
@@ -19221,7 +19324,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 	              <div className="plans-modal-grid" aria-label="Plan options">
 	                {planOptionCards.map((plan) => {
 	                  const isCurrentPlan = currentBillingPlanKey === plan.key;
-	                  const isSelected = billingSelection?.type === 'plan' && billingSelection.key === plan.key;
+	                  const isSelected = isCurrentPlan || billingSelectedPlanKey === plan.key;
 	                  return (
 	                    <button
 	                      type="button"
@@ -19232,7 +19335,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 	                      )}
 	                      key={plan.key}
 	                      disabled={!!billingActionKey}
-	                      onClick={() => setBillingSelection({ type: 'plan', key: plan.key })}
+	                      onClick={() => handlePlanSelection(plan.key)}
 	                    >
 	                      <div className="plans-modal-card-header">
 	                        <strong>{plan.name}</strong>
@@ -19249,67 +19352,125 @@ export default function App({ currentRoute, navigateToRoute }) {
 	                        ))}
 	                      </ul>
 	                      <small className="plans-modal-card-action">
-	                        {isCurrentPlan ? 'Current plan' : 'Select'}
+	                        {isCurrentPlan ? 'Current plan' : billingSelectedPlanKey === plan.key ? 'Selected' : 'Select'}
 	                      </small>
 	                    </button>
 	                  );
 	                })}
 	              </div>
 	              <div className="plans-modal-packs">
-	                <span>Screenshot credit packs</span>
-	              {screenshotCreditPacks.length ? (
-	                <div className="plans-modal-pack-list">
-	                  {screenshotCreditPacks.map((pack) => {
-	                    const unavailableReason = getBillingCheckoutUnavailableReason(pack);
-	                    const packQuantity = getScreenshotPackQuantity(pack.key);
-	                    const totalCredits = Math.max(0, pack.quantity * packQuantity);
-	                    const isSelected = billingSelection?.type === 'addon' && billingSelection.key === pack.key;
-	                    return (
-	                      <div
-	                        role="button"
-	                        tabIndex={billingActionKey ? -1 : 0}
-	                        className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
-	                        key={pack.key}
-	                        aria-disabled={!!billingActionKey}
-	                        onClick={() => setBillingSelection({ type: 'addon', key: pack.key })}
-	                        onKeyDown={(event) => {
-	                          if (event.key === 'Enter' || event.key === ' ') {
-	                            event.preventDefault();
-	                            setBillingSelection({ type: 'addon', key: pack.key });
-	                          }
-	                        }}
-	                      >
-	                        <div className="plans-modal-pack-main">
-	                          <strong>{formatEntitlementCount(pack.quantity)} credits</strong>
-	                          {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
-	                        </div>
-	                        <div className="plans-modal-pack-quantity">
-	                          <TextInput
-                            type="number"
-                            min="1"
-                            max={ADD_ON_QUANTITY_MAX}
-                            step="1"
-                            size="sm"
-	                            label="Quantity"
-	                            labelHidden
-	                            value={packQuantity}
-	                            disabled={!!billingActionKey || !!unavailableReason}
-	                            onClick={(event) => event.stopPropagation()}
-	                            onChange={(event) => {
-	                              updateScreenshotPackQuantity(pack.key, event.target.value);
-	                              setBillingSelection({ type: 'addon', key: pack.key });
+	                <div className="plans-modal-pack-section">
+	                  <span>Page packs</span>
+	                  {pageCreditPacks.length ? (
+	                    <div className="plans-modal-pack-list">
+	                      {pageCreditPacks.map((pack) => {
+	                        const unavailableReason = getBillingCheckoutUnavailableReason(pack);
+	                        const packQuantity = getAddOnQuantity(pack.key);
+	                        const totalPages = Math.max(0, pack.quantity * packQuantity);
+	                        const isSelected = Boolean(selectedAddOnKeys[pack.key]);
+	                        return (
+	                          <div
+	                            role="button"
+	                            tabIndex={billingActionKey ? -1 : 0}
+	                            className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
+	                            key={pack.key}
+	                            aria-disabled={!!billingActionKey}
+	                            onClick={() => toggleAddOnSelection(pack.key)}
+	                            onKeyDown={(event) => {
+	                              if (event.key === 'Enter' || event.key === ' ') {
+	                                event.preventDefault();
+	                                toggleAddOnSelection(pack.key);
+	                              }
 	                            }}
-	                          />
-	                          <small>{formatEntitlementCount(totalCredits)} total credits</small>
-	                        </div>
-	                        <small className="plans-modal-card-action">Select</small>
-	                      </div>
-	                    );
-	                  })}
+	                          >
+	                            <div className="plans-modal-pack-main">
+	                              <strong>{formatEntitlementCount(pack.quantity)} pages</strong>
+	                              {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
+	                            </div>
+	                            <div className="plans-modal-pack-quantity">
+	                              <TextInput
+	                                type="number"
+	                                min="1"
+	                                max={ADD_ON_QUANTITY_MAX}
+	                                step="1"
+	                                size="sm"
+	                                label="Quantity"
+	                                labelHidden
+	                                value={packQuantity}
+	                                disabled={!!billingActionKey || !!unavailableReason}
+	                                onClick={(event) => event.stopPropagation()}
+	                                onChange={(event) => {
+	                                  updateAddOnQuantity(pack.key, event.target.value);
+	                                  toggleAddOnSelection(pack.key, true);
+	                                }}
+	                              />
+	                              <small>{formatEntitlementCount(totalPages)} pages</small>
+	                            </div>
+	                            <small className="plans-modal-card-action">{isSelected ? 'Selected' : 'Select'}</small>
+	                          </div>
+	                        );
+	                      })}
+	                    </div>
+	                  ) : null}
 	                </div>
-	              ) : billingCatalog && !billingCatalogLoading ? (
-	                <StatusAlert tone="warning">Screenshot credit packs are not configured yet.</StatusAlert>
-	              ) : null}
+	                <div className="plans-modal-pack-section">
+	                  <span>Screenshot credit packs</span>
+	                  {screenshotCreditPacks.length ? (
+	                    <div className="plans-modal-pack-list">
+	                      {screenshotCreditPacks.map((pack) => {
+	                        const unavailableReason = getBillingCheckoutUnavailableReason(pack);
+	                        const packQuantity = getAddOnQuantity(pack.key);
+	                        const totalCredits = Math.max(0, pack.quantity * packQuantity);
+	                        const isSelected = Boolean(selectedAddOnKeys[pack.key]);
+	                        return (
+	                          <div
+	                            role="button"
+	                            tabIndex={billingActionKey ? -1 : 0}
+	                            className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
+	                            key={pack.key}
+	                            aria-disabled={!!billingActionKey}
+	                            onClick={() => toggleAddOnSelection(pack.key)}
+	                            onKeyDown={(event) => {
+	                              if (event.key === 'Enter' || event.key === ' ') {
+	                                event.preventDefault();
+	                                toggleAddOnSelection(pack.key);
+	                              }
+	                            }}
+	                          >
+	                            <div className="plans-modal-pack-main">
+	                              <strong>{formatEntitlementCount(pack.quantity)} credits*</strong>
+	                              {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
+	                            </div>
+	                            <div className="plans-modal-pack-quantity">
+	                              <TextInput
+	                                type="number"
+	                                min="1"
+	                                max={ADD_ON_QUANTITY_MAX}
+	                                step="1"
+	                                size="sm"
+	                                label="Quantity"
+	                                labelHidden
+	                                value={packQuantity}
+	                                disabled={!!billingActionKey || !!unavailableReason}
+	                                onClick={(event) => event.stopPropagation()}
+	                                onChange={(event) => {
+	                                  updateAddOnQuantity(pack.key, event.target.value);
+	                                  toggleAddOnSelection(pack.key, true);
+	                                }}
+	                              />
+	                              <small>{formatEntitlementCount(totalCredits)} credits*</small>
+	                            </div>
+	                            <small className="plans-modal-card-action">{isSelected ? 'Selected' : 'Select'}</small>
+	                          </div>
+	                        );
+	                      })}
+	                    </div>
+	                  ) : null}
+	                  <small className="plans-modal-pack-caption">*1 credit = 1 screenshot of any size</small>
+	                </div>
+	                {billingCatalog && !billingCatalogLoading && !pageCreditPacks.length && !screenshotCreditPacks.length ? (
+	                  <StatusAlert tone="warning">Credit packs are unavailable.</StatusAlert>
+	                ) : null}
 	              </div>
 	            </div>
 	          </div>
@@ -19531,7 +19692,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         onClose={() => setShowProfileDrawer(false)}
         onUpdate={(updatedUser) => setCurrentUser(updatedUser)}
         onLogout={handleLogout}
-        onOpenPlans={() => openPlansModal('profile')}
+        onOpenPlans={(context = 'profile') => {
+          setShowProfileDrawer(false);
+          window.setTimeout(() => openPlansModal(context), 220);
+        }}
         onOpenBilling={() => handleBillingPortal('profile')}
         billingLoading={billingActionKey === 'portal:profile'}
         showToast={showToast}
@@ -19612,7 +19776,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           setCreateMapMode(true);
           setShowSaveMapModal(true);
         }}
-        onImportFromFile={() => setShowImportModal(true)}
+        onImportFromFile={openImportModalFlow}
       />
 
       <ImportModal
@@ -19629,16 +19793,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         <Modal
           show
           onClose={() => setImportPageLimitModal(null)}
-          title="Not enough page room"
+          title="Account limit reached"
           className="import-limit-modal"
           footer={(
             <>
-              <Button
-                variant="secondary"
-                onClick={() => setImportPageLimitModal(null)}
-              >
-                Cancel
-              </Button>
               {importPageLimitModal.availablePages > 0 ? (
                 <Button
                   variant={importPageLimitModal.canManageBilling ? 'secondary' : 'primary'}
@@ -19656,7 +19814,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     setImportPageLimitModal(null);
                   }}
                 >
-                  Continue with {formatEntitlementCount(importPageLimitModal.availablePages)} pages
+                  Continue
                 </Button>
               ) : null}
               {importPageLimitModal.canManageBilling ? (
@@ -19667,7 +19825,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     openPlansModal('import-page-limit');
                   }}
                 >
-                  Add pages or upgrade
+                  Upgrade
                 </Button>
               ) : null}
             </>

@@ -28,6 +28,7 @@ const ExportModal = ({
   onExportAiSiteBrief,
   imageExportDisabled = false,
   imageExportDisabledReason = '',
+  limitedFormatsOnly = false,
 }) => {
   if (!show) return null;
   const imageExportDescription = imageExportDisabled
@@ -39,33 +40,37 @@ const ExportModal = ({
       show={show}
       onClose={onClose}
       title="Download map"
-      subtitle="Save your map in any format you need"
+      subtitle={limitedFormatsOnly ? 'Save XML or Index files' : 'Save your map in any format you need'}
       scrollable
       className="export-modal"
     >
       <div className="export-options">
-        <OptionCard
-          className="export-btn"
-          icon={<Sparkles size={24} />}
-          title="AI brief"
-          description="Site-building brief for AI code tools"
-          onClick={onExportAiSiteBrief}
-        />
-        <OptionCard
-          className="export-btn"
-          icon={<FileText size={24} />}
-          title="PDF"
-          description="Visual sitemap in vector"
-          onClick={onExportPdf}
-        />
-        <OptionCard
-          className="export-btn"
-          icon={<FileCode size={24} />}
-          title="SVG"
-          description="Editable sitemap for Figma and design tools"
-          onClick={onExportSvg}
-        />
-        {SHOW_IMAGE_EXPORT_OPTION && (
+        {!limitedFormatsOnly && (
+          <>
+            <OptionCard
+              className="export-btn"
+              icon={<Sparkles size={24} />}
+              title="AI brief"
+              description="Site-building brief for AI code tools"
+              onClick={onExportAiSiteBrief}
+            />
+            <OptionCard
+              className="export-btn"
+              icon={<FileText size={24} />}
+              title="PDF"
+              description="Visual sitemap in vector"
+              onClick={onExportPdf}
+            />
+            <OptionCard
+              className="export-btn"
+              icon={<FileCode size={24} />}
+              title="SVG"
+              description="Editable sitemap for Figma and design tools"
+              onClick={onExportSvg}
+            />
+          </>
+        )}
+        {SHOW_IMAGE_EXPORT_OPTION && !limitedFormatsOnly && (
           <OptionCard
             className="export-btn"
             icon={<FileImage size={24} />}
@@ -75,20 +80,24 @@ const ExportModal = ({
             disabled={imageExportDisabled}
           />
         )}
-        <OptionCard
-          className="export-btn"
-          icon={<FileSpreadsheet size={24} />}
-          title="CSV"
-          description="All your sitemap data in a spreadsheet"
-          onClick={onExportCsv}
-        />
-        <OptionCard
-          className="export-btn"
-          icon={<FileJson size={24} />}
-          title="JSON"
-          description="Raw data for import or backup"
-          onClick={onExportJson}
-        />
+        {!limitedFormatsOnly && (
+          <>
+            <OptionCard
+              className="export-btn"
+              icon={<FileSpreadsheet size={24} />}
+              title="CSV"
+              description="All your sitemap data in a spreadsheet"
+              onClick={onExportCsv}
+            />
+            <OptionCard
+              className="export-btn"
+              icon={<FileJson size={24} />}
+              title="JSON"
+              description="Raw data for import or backup"
+              onClick={onExportJson}
+            />
+          </>
+        )}
         <OptionCard
           className="export-btn"
           icon={<FileCode size={24} />}

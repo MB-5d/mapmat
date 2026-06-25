@@ -167,16 +167,19 @@ const ProfileDrawer = ({
   const planStatus = getPlanStatusBadge({ accountState, entitlements, isArchived, trialEnded });
   const isPrimaryBillingOwner = !entitlements?.account?.ownerUserId
     || entitlements.account.ownerUserId === user?.id;
+  const accountRole = String(entitlements?.account?.membershipRole || '').trim().toLowerCase();
+  const canViewPlanDetails = isPrimaryBillingOwner || accountRole === 'owner' || accountRole === 'editor';
   const planDetailsOpen = openProfileAccordion === 'plan';
   const profileDetailsOpen = openProfileAccordion === 'profile';
   const passwordDetailsOpen = openProfileAccordion === 'password';
   const deleteDetailsOpen = openProfileAccordion === 'delete';
   const usageRows = [
-    { label: 'Pages', item: entitlements?.meters?.activePages || entitlements?.meters?.crawlPages },
-    { label: 'Screenshot credits', item: entitlements?.meters?.screenshotCredits },
-    { label: 'Downloads', item: entitlements?.meters?.downloads || entitlements?.meters?.organizedExports },
-    { label: 'Active projects', item: entitlements?.limits?.activeProjects },
     { label: 'Editors', item: entitlements?.limits?.editors || entitlements?.limits?.seats },
+    { label: 'Projects', item: entitlements?.limits?.activeProjects },
+    { label: 'Maps', item: entitlements?.limits?.activeMaps || entitlements?.meters?.activeMaps },
+    { label: 'Pages', item: entitlements?.meters?.activePages || entitlements?.meters?.crawlPages },
+    { label: 'Downloads', item: entitlements?.meters?.downloads || entitlements?.meters?.organizedExports },
+    { label: 'Screenshots', item: entitlements?.meters?.screenshotCredits },
   ].filter((row) => row.item);
   const hasNameChange = Boolean(user) && name.trim() !== String(user?.name || '').trim();
   const hasEmailChange = Boolean(user) && email.trim().toLowerCase() !== String(user?.email || '').trim().toLowerCase();
@@ -439,7 +442,7 @@ const ProfileDrawer = ({
           {error && <div className="auth-error">{error}</div>}
           {success && <div className="auth-success">{success}</div>}
 
-          {entitlements ? (
+          {entitlements && canViewPlanDetails ? (
             <Accordion
               id="account-plan-details"
               open={planDetailsOpen}
@@ -490,32 +493,51 @@ const ProfileDrawer = ({
                   </tbody>
                 </table>
               </div>
-              <div className="account-plan-actions">
+              {isPrimaryBillingOwner ? (
+                <div className="account-plan-actions">
 	                <Button
 	                  type="button"
 	                  variant="secondary"
 	                  buttonStyle="mono"
 	                  size="sm"
 	                  onClick={onOpenPlans}
-	                  disabled={!user || !isPrimaryBillingOwner}
+	                  disabled={!user}
 	                >
 	                  Switch
 	                </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="mono"
+                    size="sm"
+                    onClick={() => onOpenPlans?.('page-credits')}
+                    disabled={!user}
+                  >
+                    Add pages
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    buttonStyle="mono"
+                    size="sm"
+                    onClick={() => onOpenPlans?.('screenshot-credits')}
+                    disabled={!user}
+                  >
+                    Add screenshots
+                  </Button>
 	                <Button
 	                  type="button"
 	                  variant="ghost"
 	                  size="sm"
 	                  onClick={onOpenBilling}
-	                  disabled={!user || !onOpenBilling || !isPrimaryBillingOwner}
+	                  disabled={!user || !onOpenBilling}
 	                  loading={billingLoading}
 	                  endIcon={<ExternalLink size={14} />}
 	                >
 	                  Manage
 	                </Button>
 	              </div>
-	              {!isPrimaryBillingOwner ? (
-	                <div className="field-hint">Only the primary account owner can change billing.</div>
-	              ) : null}
+              ) : null}
 	            </Accordion>
           ) : null}
 

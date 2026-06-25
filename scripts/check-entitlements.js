@@ -39,9 +39,13 @@ async function main() {
   assert.equal(summary.meters.screenshotCredits.included, 25);
   assert.equal(summary.meters.downloads.included, 5);
   assert.equal(summary.limits.activeProjects.limit, 1);
+  assert.equal(summary.limits.activeMaps.unlimited, true);
+  assert.equal(summary.limits.activeMaps.used, 0);
+  assert.equal(summary.limits.editors.used, 1);
+  assert.equal(summary.limits.editors.remaining, 0);
   assert.equal(summary.limits.scanPagesPerRun.limit, 100);
-  assert.equal(summary.screenshotCreditCosts.desktop_full_page, 3);
-  assert.equal(getScreenshotCreditCost({ type: 'full' }), 3);
+  assert.equal(summary.screenshotCreditCosts.desktop_full_page, 1);
+  assert.equal(getScreenshotCreditCost({ type: 'full' }), 1);
 
   const freeScanCheck = await checkAccountActionAsync(user, ACTIONS.scanStart, { requestedPages: 5000 });
   assert.equal(freeScanCheck.allowed, true);
@@ -51,6 +55,16 @@ async function main() {
   const freeScreenshotCheck = await checkAccountActionAsync(user, ACTIONS.screenshotCapture, { credits: 26 });
   assert.equal(freeScreenshotCheck.allowed, false);
   assert.equal(freeScreenshotCheck.code, 'ENTITLEMENT_REQUIRED');
+  const freeEditorInviteCheck = await checkAccountActionAsync(user, ACTIONS.seatInvite);
+  assert.equal(freeEditorInviteCheck.allowed, false);
+  assert.equal(freeEditorInviteCheck.code, 'ENTITLEMENT_REQUIRED');
+  const freeXmlDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_xml' });
+  assert.equal(freeXmlDownloadCheck.allowed, true);
+  const freeIndexDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_site_index' });
+  assert.equal(freeIndexDownloadCheck.allowed, true);
+  const freePdfDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_report_pdf' });
+  assert.equal(freePdfDownloadCheck.allowed, false);
+  assert.equal(freePdfDownloadCheck.code, 'DOWNLOAD_FORMAT_PLAN_REQUIRED');
 
   const tierUser = await authStore.createUserAsync({
     email: `entitlements-tier-${Date.now()}@example.test`,
@@ -151,6 +165,7 @@ async function main() {
   const afterPageUse = await resolveAccountEntitlementsAsync(user);
   assert.equal(afterPageUse.meters.activePages.used, 1000);
   assert.equal(afterPageUse.meters.activePages.remaining, 0);
+  assert.equal(afterPageUse.limits.activeMaps.used, 1);
   const pageLimitCheck = await checkAccountActionAsync(user, ACTIONS.mapWrite, { pageDelta: 1 });
   assert.equal(pageLimitCheck.allowed, false);
   assert.equal(pageLimitCheck.code, 'ENTITLEMENT_REQUIRED');
@@ -179,6 +194,8 @@ async function main() {
   assert.equal(personalTrial.meters.downloads.included, 15);
   assert.equal(personalTrial.trial.organizedDownloadsAllowed, true);
   assert.equal(personalTrial.limits.editors.limit, 1);
+  assert.equal(personalTrial.limits.editors.used, 1);
+  assert.equal(personalTrial.limits.editors.remaining, 0);
   const personalTrialEndsAt = parseSqlUtcTimestamp(personalTrial.trial.endsAt);
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   assert.ok(personalTrialEndsAt - Date.now() > sevenDaysMs - 60 * 1000);
@@ -207,7 +224,8 @@ async function main() {
   assert.equal(teamTrial.trial.active, true);
   assert.equal(teamTrial.trial.kind, 'team');
   assert.equal(teamTrial.limits.editors.limit, 4);
-  assert.equal(teamTrial.limits.editors.remaining, 4);
+  assert.equal(teamTrial.limits.editors.used, 1);
+  assert.equal(teamTrial.limits.editors.remaining, 3);
 
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
