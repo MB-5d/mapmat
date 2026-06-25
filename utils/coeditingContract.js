@@ -120,6 +120,33 @@ function normalizeTimestamp(raw, errors) {
   return new Date(timestampMs).toISOString();
 }
 
+function normalizeOptionalTimestamp(raw, field, errors) {
+  if (raw === null || raw === undefined || raw === '') return null;
+
+  const value = String(raw || '').trim();
+  const timestampMs = Date.parse(value);
+  if (!Number.isFinite(timestampMs)) {
+    pushError(errors, field, 'Must be a valid ISO-8601 timestamp');
+    return null;
+  }
+
+  return new Date(timestampMs).toISOString();
+}
+
+function normalizeBoolean(raw, field, errors, fallback = false) {
+  if (raw === null || raw === undefined || raw === '') return fallback;
+  if (typeof raw === 'boolean') return raw;
+  if (raw === 1) return true;
+  if (raw === 0) return false;
+
+  const value = String(raw).trim().toLowerCase();
+  if (['true', '1'].includes(value)) return true;
+  if (['false', '0'].includes(value)) return false;
+
+  pushError(errors, field, 'Must be a boolean');
+  return fallback;
+}
+
 function normalizeChanges(raw, field, errors) {
   if (!isPlainObject(raw)) {
     pushError(errors, field, 'Must be an object');
@@ -201,7 +228,7 @@ function normalizeNonNegativeInteger(raw, field, errors, fallback = 0) {
 }
 
 function normalizeNodeMovePayload(payload, errors) {
-  const allowed = ['nodeId', 'targetParentId', 'insertIndex', 'rootChanges'];
+  const allowed = ['nodeId', 'targetParentId', 'insertIndex', 'rootChanges', 'markMovedPositionChanges', 'movedAt'];
   ensureAllowedKeys(payload, allowed, 'payload', errors);
 
   let rootChanges = null;
@@ -224,6 +251,13 @@ function normalizeNodeMovePayload(payload, errors) {
     targetParentId: normalizePatternedString(payload.targetParentId, 'payload.targetParentId', ENTITY_ID_PATTERN, errors),
     insertIndex: normalizeNonNegativeInteger(payload.insertIndex, 'payload.insertIndex', errors, 0),
     rootChanges,
+    markMovedPositionChanges: normalizeBoolean(
+      payload.markMovedPositionChanges,
+      'payload.markMovedPositionChanges',
+      errors,
+      false
+    ),
+    movedAt: normalizeOptionalTimestamp(payload.movedAt, 'payload.movedAt', errors),
   };
 }
 

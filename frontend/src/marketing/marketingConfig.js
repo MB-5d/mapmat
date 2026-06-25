@@ -52,13 +52,13 @@ export const buildAppScanUrl = (scanUrl = '', options = null) => {
   return `${APP_ORIGIN}/app?${params.toString()}`;
 };
 
-export const buildAppBillingUrl = (planKey = '', billingCycle = 'yearly') => {
+export const buildAppBillingUrl = (planKey = '', billingCycle = 'monthly') => {
   const params = new URLSearchParams();
   params.set('intent', 'checkout');
   params.set('billingPlan', String(planKey || '').trim().toLowerCase());
   params.set(
     'billingCycle',
-    String(billingCycle || '').trim().toLowerCase() === 'monthly' ? 'monthly' : 'yearly'
+    String(billingCycle || '').trim().toLowerCase() === 'yearly' ? 'yearly' : 'monthly'
   );
   return `${APP_ORIGIN}/app?${params.toString()}`;
 };

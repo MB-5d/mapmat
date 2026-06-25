@@ -370,7 +370,7 @@ function normalizeBillingCycle(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (['month', 'monthly'].includes(normalized)) return 'monthly';
   if (['year', 'yearly', 'annual', 'annually'].includes(normalized)) return 'yearly';
-  return 'yearly';
+  return 'monthly';
 }
 
 function isEntitlementLockedNode(node) {
@@ -2977,7 +2977,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [billingCatalogLoading, setBillingCatalogLoading] = useState(false);
   const [billingCatalogError, setBillingCatalogError] = useState('');
   const [billingActionKey, setBillingActionKey] = useState('');
-  const [billingCycle, setBillingCycle] = useState('yearly');
+  const [billingCycle, setBillingCycle] = useState('monthly');
   const [billingModalTab, setBillingModalTab] = useState(BILLING_MODAL_TABS.PLANS);
   const [billingSelectedPlanKey, setBillingSelectedPlanKey] = useState('');
   const [selectedAddOnKeys, setSelectedAddOnKeys] = useState({});
@@ -4361,8 +4361,10 @@ export default function App({ currentRoute, navigateToRoute }) {
           onChange={(event) => toggleAddOnSelection(pack.key, event.target.checked)}
         />
         <div className="plans-modal-pack-main">
-          <strong>{formatEntitlementCount(pack.quantity)} {unitLabel.plural}</strong>
-          {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
+          <div className="plans-modal-pack-title-row">
+            <strong>{formatEntitlementCount(pack.quantity)} {unitLabel.plural}</strong>
+            {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
+          </div>
         </div>
         <div className="plans-modal-pack-quantity">
           <TextInput
@@ -4381,8 +4383,8 @@ export default function App({ currentRoute, navigateToRoute }) {
               toggleAddOnSelection(pack.key, true);
             }}
           />
-          <small>{formatEntitlementCount(totalQuantity)} {displayUnit}</small>
         </div>
+        <small className="plans-modal-pack-total">= {formatEntitlementCount(totalQuantity)} {displayUnit}</small>
       </div>
     );
   };
@@ -19437,7 +19439,15 @@ export default function App({ currentRoute, navigateToRoute }) {
                         </ul>
                         <div className="plans-modal-pricing-card__actions">
                           {isCurrentPlan ? (
-                            <span className="plans-modal-pricing-card__current">Current plan</span>
+                            <Button
+                              className="plans-modal-pricing-card__cta"
+                              type="button"
+                              variant="secondary"
+                              buttonStyle="brand"
+                              disabled
+                            >
+                              Current plan
+                            </Button>
                           ) : (
                             <Button
                               className="plans-modal-pricing-card__cta"
@@ -19474,7 +19484,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                     ) : null}
                   </section>
                   <section className="plans-modal-pack-section">
-                    <h3>Screenshot credit packs</h3>
+                    <h3>Screenshot Credits</h3>
                     {screenshotCreditPacks.length ? (
                       <div className="plans-modal-pack-list">
                         {screenshotCreditPacks.map((pack) => renderBillingPackCard(pack, {
@@ -19483,7 +19493,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                         }))}
                       </div>
                     ) : null}
-                    <small className="plans-modal-pack-caption">*1 credit = 1 screenshot of any size</small>
+                    <small className="plans-modal-pack-caption">*1 credit = 1 screenshot of any size, unlimited downloads</small>
                   </section>
                 </div>
                 {billingCatalog && !billingCatalogLoading && !pageCreditPacks.length && !screenshotCreditPacks.length ? (

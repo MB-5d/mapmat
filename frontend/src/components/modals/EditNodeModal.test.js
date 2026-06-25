@@ -233,6 +233,9 @@ describe('EditNodeModal', () => {
     expect(viewButton).not.toBeNull();
     expect(replaceButton).not.toBeNull();
     expect(deleteImageButton).not.toBeNull();
+    expect(viewButton.getAttribute('title')).toBe('View full size image');
+    expect(replaceButton.getAttribute('title')).toBe('Replace image');
+    expect(deleteImageButton.getAttribute('title')).toBe('Delete image');
     expect(container.querySelector('.btn-remove-thumb')).toBeNull();
 
     act(() => {
@@ -420,7 +423,7 @@ describe('EditNodeModal', () => {
     });
 
     const deleteButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent === 'Delete');
+      .find((button) => button.textContent === 'Delete page');
     const cancelButton = Array.from(container.querySelectorAll('button'))
       .find((button) => button.textContent === 'Cancel');
     expect(deleteButton).not.toBeUndefined();
@@ -431,6 +434,27 @@ describe('EditNodeModal', () => {
     });
 
     expect(onDelete).toHaveBeenCalledWith('node-1');
+  });
+
+  test('does not show delete action for the home page', () => {
+    const onDelete = jest.fn();
+
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{ id: 'root', title: 'Home', url: 'https://example.com/', pageType: 'Home', pageNumber: '0' }}
+          allNodes={[]}
+          rootTree={{ id: 'root', children: [] }}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          onDelete={onDelete}
+          mode="edit"
+        />
+      );
+    });
+
+    expect(Array.from(container.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Delete page')).toBeUndefined();
   });
 
   test('shows duplicate source link and locate action for duplicate pages', () => {
@@ -526,6 +550,9 @@ describe('EditNodeModal', () => {
     expect(container.textContent).toContain('Move details');
     expect(container.textContent).toContain('Moved from position');
     expect(container.textContent).toContain('1.2');
+    const markerField = Array.from(container.querySelectorAll('.field'))
+      .find((field) => field.textContent.includes('Marker'));
+    expect(markerField.textContent).toContain('Move details');
   });
 
   test('only allows one Home page type', () => {

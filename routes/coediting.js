@@ -25,6 +25,7 @@ const {
 const { resolveCoeditingRolloutAsync } = require('../utils/coeditingRollout');
 const {
   recordCommitLatencyAsync,
+  recordDroppedEventAsync,
   recordVersionConflictAsync,
   recordReadOnlyBlockAsync,
 } = require('../utils/coeditingObservability');
@@ -301,6 +302,7 @@ router.post('/maps/:id/ops/ingest', async (req, res) => {
     });
   } catch (error) {
     if (error instanceof CoeditingContractError) {
+      await recordDroppedEventAsync('contract_invalid_envelope');
       return res.status(400).json({
         error: 'Invalid coediting operation envelope',
         code: error.code,

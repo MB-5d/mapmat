@@ -1452,7 +1452,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
   const [contactSubmitError, setContactSubmitError] = useState('');
   const [contactSubmitted, setContactSubmitted] = useState(false);
   const [billingCatalog, setBillingCatalog] = useState(null);
-  const [pricingBillingCycle, setPricingBillingCycle] = useState('yearly');
+  const [pricingBillingCycle, setPricingBillingCycle] = useState('monthly');
   const pendingScrollBehaviorRef = useRef('auto');
 
   useEffect(() => {

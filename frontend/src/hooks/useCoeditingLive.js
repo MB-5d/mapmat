@@ -26,6 +26,7 @@ const DEFAULT_HEARTBEAT_SEC = 20;
 const RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
 const JOIN_TIMEOUT_MS = 8000;
 const MAX_SELECTION_IDS = 12;
+const CONTRACT_INVALID_REVERT_MESSAGE = 'That live edit could not be saved and was reverted. Please try again.';
 
 function clampInt(value, fallback, { min, max }) {
   const parsed = Number.parseInt(value, 10);
@@ -357,6 +358,17 @@ export function useCoeditingLive({
         onWarn?.('Live editing is temporarily read-only for this map.');
         return;
       }
+      if (error?.code === 'COEDITING_CONTRACT_INVALID') {
+        removePendingDraft(draft.opId);
+        onWarn?.(CONTRACT_INVALID_REVERT_MESSAGE);
+        try {
+          await hydrateFromServer();
+          return;
+        } catch (resyncError) {
+          markOutOfSync(resyncError?.message || 'Failed to resync live document');
+          return;
+        }
+      }
       if (error?.status === 409) {
         try {
           await hydrateFromServer({ preferReplay: true });
@@ -381,7 +393,7 @@ export function useCoeditingLive({
         }, 0);
       }
     }
-  }, [actorId, applyCommittedOperation, canEdit, enabled, hydrateFromServer, mapId, markOutOfSync, onWarn]);
+  }, [actorId, applyCommittedOperation, canEdit, enabled, hydrateFromServer, mapId, markOutOfSync, onWarn, removePendingDraft]);
 
   const acceptCommittedOperation = useCallback((operation, options = {}) => {
     if (!operation?.opId) return false;

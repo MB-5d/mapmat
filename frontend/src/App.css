@@ -8478,7 +8478,8 @@ body {
   padding: 0 var(--unit-16) var(--unit-16);
 }
 
-.edit-node-duplicate-section {
+.edit-node-duplicate-section,
+.edit-node-marker-detail-card {
   display: flex;
   flex-direction: column;
   gap: var(--unit-10);
@@ -8488,7 +8489,14 @@ body {
   background: var(--ui-status-warning-bg);
 }
 
-.edit-node-duplicate-row {
+.edit-node-marker-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-8);
+}
+
+.edit-node-duplicate-row,
+.edit-node-marker-detail-row {
   display: grid;
   grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr);
   gap: var(--unit-8);
@@ -8499,7 +8507,8 @@ body {
   line-height: var(--type-body-xs-line-height);
 }
 
-.edit-node-duplicate-row strong {
+.edit-node-duplicate-row strong,
+.edit-node-marker-detail-row strong {
   min-width: 0;
   color: var(--color-text-primary);
   font-size: var(--type-body-sm-size);
@@ -8537,7 +8546,8 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .edit-node-duplicate-row {
+  .edit-node-duplicate-row,
+  .edit-node-marker-detail-row {
     grid-template-columns: 1fr;
   }
 }
@@ -8579,6 +8589,7 @@ body {
 .thumbnail-preview {
   position: relative;
   margin-top: 0;
+  min-height: 184px;
   border-radius: var(--ui-radius-lg);
   overflow: hidden;
   border: var(--border-width-subtle) solid var(--ui-color-border);
@@ -8593,7 +8604,7 @@ body {
 
 .thumbnail-preview img {
   width: 100%;
-  max-height: 144px;
+  height: 184px;
   object-fit: cover;
   display: block;
 }
@@ -8720,7 +8731,7 @@ body {
 }
 
 .image-upload-zone {
-  min-height: 120px;
+  min-height: 184px;
   border: var(--border-width-subtle) dashed var(--ui-color-border-strong);
   border-radius: var(--ui-radius-lg);
   display: flex;
@@ -10308,7 +10319,8 @@ body {
 .modal-card.plans-modal {
   width: min(1040px, calc(100vw - 48px));
   max-width: min(1040px, calc(100vw - 48px));
-  max-height: min(600px, calc(100vh - 48px));
+  max-height: min(640px, calc(100vh - 48px));
+  overflow: hidden;
 }
 
 .modal-card.plans-modal .modal-header {
@@ -10582,6 +10594,8 @@ body {
 }
 
 .plans-modal-pack-caption {
+  display: block;
+  padding-bottom: 24px;
   color: var(--ui-color-muted);
   font-size: 10.5px;
   line-height: 1.25;
@@ -10590,9 +10604,9 @@ body {
 .plans-modal-pack-card {
   cursor: pointer;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 92px;
+  grid-template-columns: 18px minmax(0, 1fr) 46px minmax(86px, auto);
   grid-template-areas:
-    "check main quantity";
+    "check main quantity total";
   align-items: center;
   gap: 8px;
   min-height: 0;
@@ -10626,29 +10640,40 @@ body {
   gap: 2px;
 }
 
+.plans-modal-pack-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
 .plans-modal-pack-main strong {
   color: var(--ui-color-text);
   font-size: 14px;
   line-height: 1.15;
 }
 
-.plans-modal-pack-main small {
+.plans-modal-pack-main small,
+.plans-modal-pack-total {
   color: var(--ui-color-muted);
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .plans-modal-pack-quantity {
   display: flex;
   grid-area: quantity;
-  width: 92px;
+  width: 46px;
   min-width: 0;
   flex-direction: column;
   gap: 4px;
 }
 
-.plans-modal-pack-quantity small {
+.plans-modal-pack-total {
+  grid-area: total;
+  justify-self: end;
   color: var(--ui-color-muted);
-  font-size: 10px;
   line-height: 1.2;
 }
 
@@ -10727,7 +10752,8 @@ body {
     grid-template-columns: 18px minmax(0, 1fr);
     grid-template-areas:
       "check main"
-      ". quantity";
+      ". quantity"
+      ". total";
   }
 
   .plans-modal-footer {
@@ -12205,6 +12231,7 @@ body {
   background: rgba(0, 0, 0, 0.6);
   padding: 60px;
   outline: none;
+  z-index: 10020;
   display: flex;
   align-items: flex-start;
   justify-content: center;

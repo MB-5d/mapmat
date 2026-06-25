@@ -76,6 +76,8 @@ function main() {
         rootChanges: {
           annotations: { status: 'moved' },
         },
+        markMovedPositionChanges: 'true',
+        movedAt: '2026-03-13T13:16:00-05:00',
       },
     },
     {
@@ -86,6 +88,8 @@ function main() {
   assert.strictEqual(normalizedMove.payload.targetParentId, '__orphans__');
   assert.strictEqual(normalizedMove.payload.insertIndex, 2);
   assert.strictEqual(normalizedMove.payload.rootChanges.annotations.status, 'moved');
+  assert.strictEqual(normalizedMove.payload.markMovedPositionChanges, true);
+  assert.strictEqual(normalizedMove.payload.movedAt, '2026-03-13T18:16:00.000Z');
 
   expectInvalid(
     {

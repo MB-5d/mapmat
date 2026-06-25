@@ -1,6 +1,6 @@
 export const BILLING_CYCLE_OPTIONS = [
-  { key: 'yearly', label: 'Yearly' },
   { key: 'monthly', label: 'Monthly' },
+  { key: 'yearly', label: 'Yearly' },
 ];
 
 export const PAID_BILLING_PLAN_KEYS = ['pro', 'studio', 'agency'];
@@ -76,7 +76,7 @@ function normalizeBillingCycle(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (['month', 'monthly'].includes(normalized)) return 'monthly';
   if (['year', 'yearly', 'annual', 'annually'].includes(normalized)) return 'yearly';
-  return 'yearly';
+  return 'monthly';
 }
 
 function getFallbackPlan(key) {
@@ -171,7 +171,7 @@ function normalizePlanEntry(entry, billingCycle) {
 }
 
 export function buildPlanCardsFromBillingCatalog(catalog, {
-  billingCycle = 'yearly',
+  billingCycle = 'monthly',
   includeFree = true,
   paidOnly = false,
 } = {}) {

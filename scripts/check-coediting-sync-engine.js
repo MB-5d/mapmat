@@ -173,6 +173,8 @@ async function main() {
         rootChanges: {
           annotations: { status: 'moved', tags: [], note: '', meta: { updatedAt: 'now' } },
         },
+        markMovedPositionChanges: true,
+        movedAt: '2026-03-13T18:16:00.000Z',
       },
     },
     {
@@ -201,7 +203,10 @@ async function main() {
   assert.strictEqual(replayed.root.children[0].id, 'node-b');
   assert.strictEqual(replayed.root.children[0].children[0].id, 'node-a');
   assert.strictEqual(replayed.root.children[0].children[0].title, 'Child A Updated');
+  assert.strictEqual(replayed.root.children[0].annotations.status, 'moved');
+  assert.strictEqual(replayed.root.children[0].annotations.meta.movedFromPosition, '2');
   assert.strictEqual(replayed.root.children[0].children[0].annotations.status, 'moved');
+  assert.strictEqual(replayed.root.children[0].children[0].annotations.meta.movedFromPosition, '1');
   assert.strictEqual(replayed.connections.length, 1);
   assert.strictEqual(replayed.connections[0].id, 'link-a');
   assert.strictEqual(replayed.connections[0].sourceNodeId, 'root');

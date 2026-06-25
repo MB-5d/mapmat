@@ -114,7 +114,13 @@ const EditNodeModal = ({
   const [clearSavedImageAssets, setClearSavedImageAssets] = useState(false);
   const fileInputRef = useRef(null);
   const trimmedUrl = url.trim();
-  const canDelete = allowDelete && mode === 'edit' && !isHomePageCreation && typeof onDelete === 'function' && node?.id;
+  const nodeNumber = String(node?.pageNumber ?? node?.number ?? '').trim();
+  const isHomeNode = isHomePageCreation
+    || pageType === PAGE_TYPE_HOME
+    || node?.id === rootTree?.id
+    || nodeNumber === '0'
+    || nodeNumber === '0.0';
+  const canDelete = allowDelete && mode === 'edit' && !isHomeNode && typeof onDelete === 'function' && node?.id;
   const fullScreenshotUrl = clearSavedImageAssets ? '' : String(node?.fullScreenshotUrl || '').trim();
   const thumbnailFullUrl = clearSavedImageAssets ? '' : String(node?.thumbnailFullUrl || '').trim();
   const currentThumbnailUrl = String(thumbnailUrl || '').trim();
@@ -144,6 +150,12 @@ const EditNodeModal = ({
   const movedFromPosition = annotationStatus === 'moved'
     ? String(node?.annotations?.meta?.movedFromPosition || '').trim()
     : '';
+  const markerDetailSections = [
+    movedFromPosition ? {
+      title: 'Move details',
+      rows: [['Moved from position', movedFromPosition]],
+    } : null,
+  ].filter(Boolean);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -382,7 +394,7 @@ const EditNodeModal = ({
         <>
           {canDelete ? (
             <Button type="button" variant="danger" onClick={() => onDelete(node.id)} disabled={isSubmitting}>
-              Delete
+              Delete page
             </Button>
           ) : null}
           <div className="edit-node-modal__footer-actions">
@@ -429,16 +441,6 @@ const EditNodeModal = ({
             placeholder="https://example.com/page"
           />
         </Field>
-
-        {movedFromPosition ? (
-          <div className="edit-node-duplicate-section">
-            <div className="edit-node-section-title">Move details</div>
-            <div className="edit-node-duplicate-row">
-              <span>Moved from position</span>
-              <strong>{movedFromPosition}</strong>
-            </div>
-          </div>
-        ) : null}
 
         {duplicateSourceUrl ? (
           <div className="edit-node-duplicate-section">
@@ -573,6 +575,7 @@ const EditNodeModal = ({
                   buttonStyle="mono"
                   icon={<Replace />}
                   label="Replace image"
+                  title="Replace image"
                   onClick={() => {
                     setSubmitError('');
                     setImageOverlayMode('replace');
@@ -586,6 +589,7 @@ const EditNodeModal = ({
                   buttonStyle="mono"
                   icon={<Trash2 />}
                   label="Delete image"
+                  title="Delete image"
                   onClick={() => {
                     setSubmitError('');
                     setImageOverlayMode('delete');
@@ -601,6 +605,7 @@ const EditNodeModal = ({
                   buttonStyle="mono"
                   icon={<Maximize2 />}
                   label="View full size image"
+                  title="View full size image"
                   onClick={handleViewImage}
                 />
               ) : null}
@@ -819,6 +824,21 @@ const EditNodeModal = ({
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </SelectInput>
+          {markerDetailSections.length ? (
+            <div className="edit-node-marker-details-list" aria-label="Marker details">
+              {markerDetailSections.map((section) => (
+                <div className="edit-node-marker-detail-card" key={section.title}>
+                  <div className="edit-node-section-title">{section.title}</div>
+                  {section.rows.map(([label, value]) => (
+                    <div className="edit-node-marker-detail-row" key={label}>
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </Field>
 
         <Field

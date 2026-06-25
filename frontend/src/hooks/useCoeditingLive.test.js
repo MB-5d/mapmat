@@ -297,6 +297,99 @@ describe('useCoeditingLive', () => {
     expect(latestLiveState.liveStatusDetail).toBe('Connected');
   });
 
+  it('drops contract-invalid drafts and does not retry them after resync', async () => {
+    ingestCoeditingOperation.mockRejectedValueOnce(Object.assign(
+      new Error('Invalid coediting operation envelope'),
+      {
+        status: 400,
+        code: 'COEDITING_CONTRACT_INVALID',
+      }
+    ));
+
+    await connectLiveSession();
+
+    let submitResult;
+    act(() => {
+      submitResult = latestLiveState.submitDraft({
+        type: 'node.add',
+        payload: {
+          nodeId: 'bad-node',
+          parentId: 'root',
+          afterNodeId: null,
+          node: {
+            id: 'bad-node',
+            title: 'Bad Node',
+            children: [],
+          },
+        },
+      });
+    });
+
+    expect(submitResult).toEqual(expect.objectContaining({ ok: true }));
+
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(ingestCoeditingOperation).toHaveBeenCalledTimes(1);
+    expect(latestLiveState.pendingCount).toBe(0);
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.CONNECTED);
+    expect(onWarn).toHaveBeenCalledTimes(1);
+    expect(onWarn).toHaveBeenCalledWith('That live edit could not be saved and was reverted. Please try again.');
+
+    const latestDocument = applyDocument.mock.calls[applyDocument.mock.calls.length - 1][0];
+    expect(latestDocument.root.children).toHaveLength(0);
+
+    const staleSocket = socket;
+    const nextSocket = createMockSocket();
+    openCoeditingSocket.mockReturnValue(nextSocket);
+
+    let resyncPromise;
+    await act(async () => {
+      resyncPromise = latestLiveState.resync();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(staleSocket.close).toHaveBeenCalled();
+
+    act(() => {
+      nextSocket.onopen?.();
+    });
+
+    act(() => {
+      nextSocket.onmessage?.({
+        data: JSON.stringify({
+          type: 'welcome',
+          heartbeatIntervalSec: 20,
+        }),
+      });
+    });
+
+    act(() => {
+      nextSocket.onmessage?.({
+        data: JSON.stringify({
+          type: 'joined',
+          heartbeatIntervalSec: 20,
+          participants: [],
+        }),
+      });
+    });
+
+    let resyncResult;
+    await act(async () => {
+      resyncResult = await resyncPromise;
+    });
+
+    expect(resyncResult).toBe(true);
+    expect(latestLiveState.liveStatus).toBe(COEDITING_LIVE_STATUS.CONNECTED);
+    expect(ingestCoeditingOperation).toHaveBeenCalledTimes(1);
+    expect(onWarn).toHaveBeenCalledTimes(1);
+  });
+
   it('manual resync closes a stale socket and clears out-of-sync after rejoining', async () => {
     await connectLiveSession();
 

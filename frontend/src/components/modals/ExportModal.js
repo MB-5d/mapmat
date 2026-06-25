@@ -63,7 +63,7 @@ const ExportModal = ({
             />
             <OptionCard
               className="export-btn"
-              icon={<FileCode size={24} />}
+              icon={<FileImage size={24} />}
               title="SVG"
               description="Editable sitemap for Figma and design tools"
               onClick={onExportSvg}
