@@ -518,10 +518,8 @@ export async function submitMarketingMailingListSignup(email, payload = {}) {
 }
 
 export async function recordClientUsage(eventType, meta = {}, quantity = 1, options = {}) {
-  const headers = options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : undefined;
   return fetchApi('/api/usage-events', {
     method: 'POST',
-    headers,
     body: JSON.stringify({
       eventType,
       quantity,

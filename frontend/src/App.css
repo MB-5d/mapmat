@@ -12310,14 +12310,14 @@ body {
 
 .share-collab-invite-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: var(--unit-12);
   align-items: center;
   margin-bottom: 0;
 }
 
 .share-collab-send {
-  min-width: 112px;
+  min-width: 104px;
   white-space: nowrap;
 }
 
@@ -12335,7 +12335,7 @@ body {
 }
 
 .share-collab-role-trigger {
-  min-width: 78px;
+  min-width: 70px;
   min-height: 40px;
   display: inline-flex;
   align-items: center;
@@ -12440,6 +12440,24 @@ body {
   gap: var(--unit-16);
 }
 
+.share-collab-accordion:hover {
+  border-color: var(--ui-color-border);
+}
+
+.share-collab-accordion:hover .ui-accordion__chevron {
+  color: var(--ui-color-muted);
+}
+
+.share-collab-accordion:has(.ui-accordion__trigger:hover),
+.share-collab-accordion:has(.ui-accordion__trigger:focus-visible) {
+  border-color: var(--ui-color-border-strong);
+}
+
+.share-collab-accordion:has(.ui-accordion__trigger:hover) .ui-accordion__chevron,
+.share-collab-accordion .ui-accordion__trigger:focus-visible .ui-accordion__chevron {
+  color: var(--ui-color-text);
+}
+
 .share-collab-accordion-title {
   display: inline-flex;
   align-items: center;
@@ -12450,6 +12468,14 @@ body {
 .share-collab-accordion .ui-accordion__content {
   gap: var(--unit-16);
   padding: var(--unit-16);
+}
+
+.share-collab-invites-content {
+  padding-top: var(--unit-8);
+}
+
+.share-collab-members-content {
+  padding-top: 0;
 }
 
 .share-collab-list {
@@ -12471,6 +12497,28 @@ body {
 
 .share-collab-item-wide {
   align-items: center;
+}
+
+.share-collab-members-list {
+  gap: 0;
+}
+
+.share-collab-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--unit-12);
+  padding: var(--unit-12) 0;
+  border-bottom: 1px solid var(--ui-color-border);
+}
+
+.share-collab-member-row:first-child {
+  padding-top: 0;
+}
+
+.share-collab-member-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .share-collab-item-stack {
@@ -13952,6 +14000,24 @@ body {
   color: var(--ui-color-text);
 }
 
+[data-theme="dark"] .share-collab-role-trigger {
+  background: var(--ui-color-input-bg);
+  border-color: var(--ui-input-mono-border);
+  color: var(--ui-color-muted);
+}
+
+[data-theme="dark"] .share-collab-role-trigger:hover:not(:disabled),
+[data-theme="dark"] .share-collab-role-trigger[aria-expanded="true"] {
+  border-color: var(--ui-input-mono-border-hover);
+  color: var(--ui-color-text);
+}
+
+[data-theme="dark"] .share-collab-role-trigger:disabled {
+  background: var(--ui-input-disabled-bg);
+  border-color: var(--ui-input-disabled-border);
+  color: var(--ui-input-disabled-text);
+}
+
 [data-theme="dark"] .share-collab-settings {
   background: var(--ui-color-surface-muted);
   border-color: var(--ui-color-border);
@@ -13967,6 +14033,10 @@ body {
 
 [data-theme="dark"] .share-collab-item {
   background: var(--ui-color-surface);
+  border-color: var(--ui-color-border);
+}
+
+[data-theme="dark"] .share-collab-member-row {
   border-color: var(--ui-color-border);
 }
 

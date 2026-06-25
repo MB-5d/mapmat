@@ -258,7 +258,7 @@ const ShareModal = ({
     const canRemoveMember = canEditMember;
 
     return (
-      <div className="share-collab-item share-collab-item-wide" key={member.id || `${member.userId}-${member.role}`}>
+      <div className="share-collab-member-row" key={member.id || `${member.userId}-${member.role}`}>
         <div className="share-collab-main">
           <div className="share-collab-name">
             {member.userName || member.userEmail || 'Member'}
@@ -475,72 +475,73 @@ const ShareModal = ({
                     <Accordion
                       id="share-collab-invites"
                       className="share-collab-accordion"
+                      contentClassName="share-collab-invites-content"
                       title={renderAccordionTitle(<Mail size={14} aria-hidden="true" />, 'Invites')}
                       open={openCollaborationAccordion === 'invites'}
                       onOpenChange={handleCollaborationAccordionOpenChange('invites')}
                     >
-	                      {showInviteComposer ? (
-	                        <>
-	                          <div className="share-collab-invite-row">
-                          <TextInput
-                            type="text"
-                            shellClassName="share-email-input"
-                            inputClassName="share-email-text-input"
-                            placeholder="Invite by email..."
-                            value={collaborationInviteEmail}
-                            onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
-                            disabled={!canSendCollaborationInvites}
-                            invalid={collaborationInviteHasInvalidValue}
-                            leftIcon={<Mail size={18} />}
-                          />
-                          <div className="share-collab-role-menu" ref={inviteRoleMenuRef}>
-                            <button
-                              type="button"
-                              className="share-collab-role-trigger"
-                              aria-label={`Invite role: ${selectedInviteRoleOption.label}`}
-                              aria-haspopup="menu"
-                              aria-expanded={showInviteRoleMenu}
-                              onClick={() => setShowInviteRoleMenu((current) => !current)}
-                              disabled={!canSendCollaborationInvites || visibleInviteRoleOptions.length <= 1}
+                      {showInviteComposer ? (
+                        <>
+                          <div className="share-collab-invite-row">
+                            <TextInput
+                              type="text"
+                              shellClassName="share-email-input"
+                              inputClassName="share-email-text-input"
+                              placeholder="Invite by email..."
+                              value={collaborationInviteEmail}
+                              onChange={(e) => onCollaborationInviteEmailChange?.(e.target.value)}
+                              disabled={!canSendCollaborationInvites}
+                              invalid={collaborationInviteHasInvalidValue}
+                              leftIcon={<Mail size={18} />}
+                            />
+                            <div className="share-collab-role-menu" ref={inviteRoleMenuRef}>
+                              <button
+                                type="button"
+                                className="share-collab-role-trigger"
+                                aria-label={`Invite role: ${selectedInviteRoleOption.label}`}
+                                aria-haspopup="menu"
+                                aria-expanded={showInviteRoleMenu}
+                                onClick={() => setShowInviteRoleMenu((current) => !current)}
+                                disabled={!canSendCollaborationInvites || visibleInviteRoleOptions.length <= 1}
+                              >
+                                {renderRoleIcon(selectedInviteRoleOption.value, 16)}
+                                <ChevronDown size={16} aria-hidden="true" />
+                              </button>
+                              {showInviteRoleMenu ? (
+                                <MenuPanel className="share-collab-role-menu-panel" role="menu" aria-label="Invite role">
+                                  {visibleInviteRoleOptions.map((option) => (
+                                    <MenuItem
+                                      key={option.value}
+                                      className="share-collab-role-menu-item"
+                                      icon={renderRoleIcon(option.value, 14)}
+                                      label={option.label}
+                                      selected={option.value === collaborationInviteRole}
+                                      role="menuitemradio"
+                                      aria-checked={option.value === collaborationInviteRole}
+                                      onClick={() => {
+                                        onCollaborationInviteRoleChange?.(option.value);
+                                        setShowInviteRoleMenu(false);
+                                      }}
+                                    />
+                                  ))}
+                                </MenuPanel>
+                              ) : null}
+                            </div>
+                            <Button
+                              className="share-collab-send"
+                              startIcon={<Send size={14} />}
+                              onClick={onSendCollaborationInvite}
+                              disabled={collaborationInviteSendDisabled}
+                              loading={collaborationLoading}
                             >
-                              {renderRoleIcon(selectedInviteRoleOption.value, 16)}
-                              <ChevronDown size={16} aria-hidden="true" />
-                            </button>
-                            {showInviteRoleMenu ? (
-                              <MenuPanel className="share-collab-role-menu-panel" role="menu" aria-label="Invite role">
-                                {visibleInviteRoleOptions.map((option) => (
-                                  <MenuItem
-                                    key={option.value}
-                                    className="share-collab-role-menu-item"
-                                    icon={renderRoleIcon(option.value, 14)}
-                                    label={option.label}
-                                    selected={option.value === collaborationInviteRole}
-                                    role="menuitemradio"
-                                    aria-checked={option.value === collaborationInviteRole}
-                                    onClick={() => {
-                                      onCollaborationInviteRoleChange?.(option.value);
-                                      setShowInviteRoleMenu(false);
-                                    }}
-                                  />
-                                ))}
-                              </MenuPanel>
-                            ) : null}
+                              Invite
+                            </Button>
                           </div>
-	                          <Button
-                            className="share-collab-send"
-                            startIcon={<Send size={14} />}
-                            onClick={onSendCollaborationInvite}
-                            disabled={collaborationInviteSendDisabled}
-                            loading={collaborationLoading}
-                          >
-                            Invite
-	                          </Button>
-		                          </div>
-		                          {selectedInviteRequiresAccount ? (
-		                            <div className="share-collab-empty">Commenters and editors need an account before they can comment or edit.</div>
-		                          ) : null}
-	                        </>
-	                      ) : null}
+                          {selectedInviteRequiresAccount ? (
+                            <div className="share-collab-empty">Commenters and editors need an account before they can comment or edit.</div>
+                          ) : null}
+                        </>
+                      ) : null}
 
                       {!showInviteComposer && !canViewManagementSurfaces ? (
                         <div className="share-collab-empty">No self-serve collaboration actions are available on this map.</div>
@@ -548,7 +549,7 @@ const ShareModal = ({
 
                       <div className="share-collab-list">
                         {collaborationInvites.length === 0 ? (
-                          <div className="share-collab-empty">No pending invites.</div>
+                          <div className="share-collab-empty">Your pending invites will show here.</div>
                         ) : (
                           collaborationInvites.map(renderPendingInviteRow)
                         )}
@@ -558,11 +559,12 @@ const ShareModal = ({
                     <Accordion
                       id="share-collab-members"
                       className="share-collab-accordion"
+                      contentClassName="share-collab-members-content"
                       title={renderAccordionTitle(<Users size={14} aria-hidden="true" />, 'Members')}
                       open={openCollaborationAccordion === 'members'}
                       onOpenChange={handleCollaborationAccordionOpenChange('members')}
                     >
-                      <div className="share-collab-list">
+                      <div className="share-collab-list share-collab-members-list">
                         {collaborationMemberships.length === 0 ? (
                           <div className="share-collab-empty">No collaborators yet.</div>
                         ) : (

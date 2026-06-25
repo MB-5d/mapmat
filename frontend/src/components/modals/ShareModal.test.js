@@ -225,7 +225,7 @@ describe('ShareModal', () => {
     expect(invitesAccordion.getAttribute('aria-expanded')).toBe('true');
     expect(membersAccordion.getAttribute('aria-expanded')).toBe('false');
     expect(accessRequestsAccordion.getAttribute('aria-expanded')).toBe('false');
-    expect(container.textContent).toContain('No pending invites.');
+    expect(container.textContent).toContain('Your pending invites will show here.');
     expect(container.textContent).not.toContain('No collaborators yet.');
     expect(container.textContent).not.toContain('No pending access requests.');
     expect(container.textContent).not.toContain('Copy share link');

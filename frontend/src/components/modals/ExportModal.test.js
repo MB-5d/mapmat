@@ -59,7 +59,6 @@ describe('ExportModal', () => {
       'AI brief',
       'PDF',
       'SVG',
-      'Image',
       'CSV',
       'JSON',
       'XML',
@@ -68,7 +67,8 @@ describe('ExportModal', () => {
 
     expect(container.textContent).toContain('Visual sitemap in vector');
     expect(container.textContent).toContain('Editable sitemap for Figma and design tools');
-    expect(container.textContent).toContain('PNG download is temporarily unavailable.');
+    expect(container.textContent).not.toContain('Image');
+    expect(container.textContent).not.toContain('PNG download is temporarily unavailable.');
     expect(container.textContent).toContain('All your sitemap data in a spreadsheet');
     expect(container.textContent).toContain('Formatted document of page list with links');
   });
@@ -115,20 +115,16 @@ describe('ExportModal', () => {
     expect(onExportSiteIndex.mock.calls.map(([format]) => format)).toEqual(['doc', 'txt', 'html', 'md']);
   });
 
-  test('disables Image export for all maps while PNG is paused', () => {
+  test('hides Image export while PNG is paused', () => {
     const onExportPng = jest.fn();
     renderModal({ onExportPng });
 
     const imageButton = Array.from(container.querySelectorAll('button.export-btn'))
       .find((button) => button.textContent.includes('Image'));
 
-    expect(imageButton.disabled).toBe(true);
-    expect(container.textContent).toContain('PNG download is temporarily unavailable.');
-
-    act(() => {
-      imageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
+    expect(imageButton).toBeUndefined();
+    expect(container.textContent).not.toContain('Image');
+    expect(container.textContent).not.toContain('PNG download is temporarily unavailable.');
     expect(onExportPng).not.toHaveBeenCalled();
   });
 });
