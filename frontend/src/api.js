@@ -517,10 +517,17 @@ export async function submitMarketingMailingListSignup(email, payload = {}) {
   }, { includeUserToken: false });
 }
 
-export async function recordClientUsage(eventType, meta = {}, quantity = 1) {
+export async function recordClientUsage(eventType, meta = {}, quantity = 1, options = {}) {
+  const headers = options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : undefined;
   return fetchApi('/api/usage-events', {
     method: 'POST',
-    body: JSON.stringify({ eventType, quantity, meta }),
+    headers,
+    body: JSON.stringify({
+      eventType,
+      quantity,
+      meta,
+      idempotencyKey: options.idempotencyKey,
+    }),
   });
 }
 

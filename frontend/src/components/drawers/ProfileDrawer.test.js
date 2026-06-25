@@ -233,23 +233,30 @@ describe('ProfileDrawer', () => {
             ...baseUser,
             entitlements: {
               account: { state: 'active' },
-              plan: { name: 'Test Unlimited' },
-              meters: {
-                crawlPages: {
-                  meter: 'crawl_pages',
-                  included: 100,
-                  remaining: 88,
-                  used: 12,
-                  unlimited: false,
+	              plan: { name: 'Test Unlimited' },
+	              meters: {
+	                activePages: {
+	                  meter: 'active_pages',
+	                  limit: 100,
+	                  remaining: 88,
+	                  used: 12,
+	                  unlimited: false,
                 },
-                screenshotCredits: {
+	                screenshotCredits: {
                   meter: 'screenshot_credits',
                   included: null,
                   remaining: null,
                   used: 1035,
-                  unlimited: true,
-                },
-              },
+	                  unlimited: true,
+	                },
+	                downloads: {
+	                  meter: 'organized_exports',
+	                  included: 5,
+	                  remaining: 4,
+	                  used: 1,
+	                  unlimited: false,
+	                },
+	              },
               limits: {
                 activeProjects: {
                   limit: null,
@@ -257,10 +264,10 @@ describe('ProfileDrawer', () => {
                   used: 3,
                   unlimited: true,
                 },
-                seats: {
-                  limit: 5,
-                  remaining: 4,
-                  used: 1,
+	                editors: {
+	                  limit: 5,
+	                  remaining: 4,
+	                  used: 1,
                   unlimited: false,
                 },
               },
@@ -288,14 +295,16 @@ describe('ProfileDrawer', () => {
     const rowFor = (label) => rows.find((row) => row.querySelector('th')?.textContent === label);
     const cellText = (row, index) => row.querySelectorAll('td')[index]?.textContent;
 
-    expect(cellText(rowFor('Crawl pages'), 0)).toBe('88');
-    expect(cellText(rowFor('Crawl pages'), 1)).toBe('12');
-    expect(rowFor('Screenshot credits').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
-    expect(cellText(rowFor('Screenshot credits'), 1)).toBe('1,035');
-    expect(rowFor('Active projects').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
-    expect(cellText(rowFor('Active projects'), 1)).toBe('3');
-    expect(cellText(rowFor('Seats'), 0)).toBe('4');
-    expect(cellText(rowFor('Seats'), 1)).toBe('1');
+	    expect(cellText(rowFor('Pages'), 0)).toBe('88');
+	    expect(cellText(rowFor('Pages'), 1)).toBe('12');
+	    expect(rowFor('Screenshot credits').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
+	    expect(cellText(rowFor('Screenshot credits'), 1)).toBe('1,035');
+	    expect(cellText(rowFor('Downloads'), 0)).toBe('4');
+	    expect(cellText(rowFor('Downloads'), 1)).toBe('1');
+	    expect(rowFor('Active projects').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
+	    expect(cellText(rowFor('Active projects'), 1)).toBe('3');
+	    expect(cellText(rowFor('Editors'), 0)).toBe('4');
+	    expect(cellText(rowFor('Editors'), 1)).toBe('1');
   });
 
   test('keeps only one profile accordion open at a time', () => {

@@ -151,8 +151,9 @@ describe('AuthModal', () => {
 
     const inputs = container.querySelectorAll('input');
     const form = container.querySelector('form');
+    expect(form.getAttribute('autocomplete')).toBe('on');
     expect(inputs[0].id).toBe('auth-login-identifier');
-    expect(inputs[0].hasAttribute('name')).toBe(false);
+    expect(inputs[0].name).toBe('username');
     expect(inputs[0].type).toBe('text');
     expect(inputs[0].getAttribute('inputmode')).toBe('email');
     expect(inputs[0].getAttribute('autocomplete')).toBe('username');

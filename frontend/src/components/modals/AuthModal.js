@@ -336,7 +336,7 @@ const AuthModal = ({
   const emailFieldPlaceholder = view === AUTH_VIEWS.LOGIN ? 'you@example.com or username' : 'you@example.com';
   const emailFieldAutoComplete = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
   const emailFieldId = view === AUTH_VIEWS.LOGIN ? 'auth-login-identifier' : 'auth-email';
-  const emailFieldName = view === AUTH_VIEWS.LOGIN ? undefined : 'email';
+  const emailFieldName = view === AUTH_VIEWS.LOGIN ? 'username' : 'email';
   const emailFieldInputMode = view === AUTH_VIEWS.LOGIN ? 'email' : undefined;
   const passwordLabel = view === AUTH_VIEWS.RESET ? 'New password' : 'Password';
   const passwordPlaceholder = view === AUTH_VIEWS.RESET ? 'New password' : 'Your password';
@@ -382,7 +382,7 @@ const AuthModal = ({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="auth-form">
+      <form onSubmit={handleSubmit} className="auth-form" autoComplete="on">
         {error ? <div className="auth-error">{error}</div> : null}
         {status ? <div className="auth-success">{status}</div> : null}
 

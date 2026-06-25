@@ -28,6 +28,7 @@ describe('ExportModal', () => {
       onClose: jest.fn(),
       onExportAiSiteBrief: jest.fn(),
       onExportPdf: jest.fn(),
+      onExportSvg: jest.fn(),
       onExportPng: jest.fn(),
       onExportCsv: jest.fn(),
       onExportJson: jest.fn(),
@@ -57,6 +58,7 @@ describe('ExportModal', () => {
     expect(optionTitles).toEqual([
       'AI brief',
       'PDF',
+      'SVG',
       'Image',
       'CSV',
       'JSON',
@@ -65,9 +67,24 @@ describe('ExportModal', () => {
     ]);
 
     expect(container.textContent).toContain('Visual sitemap in vector');
-    expect(container.textContent).toContain('High resolution snapshot with transparency');
+    expect(container.textContent).toContain('Editable sitemap for Figma and design tools');
+    expect(container.textContent).toContain('PNG download is temporarily unavailable.');
     expect(container.textContent).toContain('All your sitemap data in a spreadsheet');
     expect(container.textContent).toContain('Formatted document of page list with links');
+  });
+
+  test('runs SVG export from the download modal', () => {
+    const onExportSvg = jest.fn();
+    renderModal({ onExportSvg });
+
+    const svgButton = Array.from(container.querySelectorAll('button.export-btn'))
+      .find((button) => button.textContent.includes('SVG'));
+
+    act(() => {
+      svgButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onExportSvg).toHaveBeenCalledTimes(1);
   });
 
   test('shows same-row Index format actions and reports selected format', () => {
@@ -80,7 +97,6 @@ describe('ExportModal', () => {
     expect(actions).not.toBeNull();
     expect(buttons.map((button) => button.textContent.trim())).toEqual([
       'Doc',
-      'Text index',
       'TXT sitemap',
       'HTML',
       'Markdown',
@@ -96,22 +112,18 @@ describe('ExportModal', () => {
       });
     });
 
-    expect(onExportSiteIndex.mock.calls.map(([format]) => format)).toEqual(['doc', 'txt', 'sitemapTxt', 'html', 'md']);
+    expect(onExportSiteIndex.mock.calls.map(([format]) => format)).toEqual(['doc', 'txt', 'html', 'md']);
   });
 
-  test('disables Image export with a size-limit notice', () => {
+  test('disables Image export for all maps while PNG is paused', () => {
     const onExportPng = jest.fn();
-    renderModal({
-      onExportPng,
-      imageExportDisabled: true,
-      imageExportDisabledReason: 'Image export is unavailable for maps this large. Use PDF for full-size export.',
-    });
+    renderModal({ onExportPng });
 
     const imageButton = Array.from(container.querySelectorAll('button.export-btn'))
       .find((button) => button.textContent.includes('Image'));
 
     expect(imageButton.disabled).toBe(true);
-    expect(container.textContent).toContain('Image export is unavailable for maps this large. Use PDF for full-size export.');
+    expect(container.textContent).toContain('PNG download is temporarily unavailable.');
 
     act(() => {
       imageButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));

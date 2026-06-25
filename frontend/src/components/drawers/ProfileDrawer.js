@@ -165,16 +165,18 @@ const ProfileDrawer = ({
   const isArchived = entitlements?.archived;
   const trialEnded = isTrialEnded(entitlements);
   const planStatus = getPlanStatusBadge({ accountState, entitlements, isArchived, trialEnded });
+  const isPrimaryBillingOwner = !entitlements?.account?.ownerUserId
+    || entitlements.account.ownerUserId === user?.id;
   const planDetailsOpen = openProfileAccordion === 'plan';
   const profileDetailsOpen = openProfileAccordion === 'profile';
   const passwordDetailsOpen = openProfileAccordion === 'password';
   const deleteDetailsOpen = openProfileAccordion === 'delete';
   const usageRows = [
-    { label: 'Crawl pages', item: entitlements?.meters?.crawlPages },
+    { label: 'Pages', item: entitlements?.meters?.activePages || entitlements?.meters?.crawlPages },
     { label: 'Screenshot credits', item: entitlements?.meters?.screenshotCredits },
-    { label: 'Organized exports', item: entitlements?.meters?.organizedExports },
+    { label: 'Downloads', item: entitlements?.meters?.downloads || entitlements?.meters?.organizedExports },
     { label: 'Active projects', item: entitlements?.limits?.activeProjects },
-    { label: 'Seats', item: entitlements?.limits?.seats },
+    { label: 'Editors', item: entitlements?.limits?.editors || entitlements?.limits?.seats },
   ].filter((row) => row.item);
   const hasNameChange = Boolean(user) && name.trim() !== String(user?.name || '').trim();
   const hasEmailChange = Boolean(user) && email.trim().toLowerCase() !== String(user?.email || '').trim().toLowerCase();
@@ -457,7 +459,7 @@ const ProfileDrawer = ({
             >
               {isArchived ? (
                 <div className="account-plan-notice">
-                  This account is archived. Existing work can be viewed, but new scans, screenshots, exports, invites, and shares are locked.
+                  This account is archived. Existing work can be viewed, but new scans, screenshots, downloads, invites, and shares are locked.
                 </div>
               ) : trialEnded ? (
                 <div className="account-plan-notice">
@@ -489,29 +491,32 @@ const ProfileDrawer = ({
                 </table>
               </div>
               <div className="account-plan-actions">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  buttonStyle="mono"
-                  size="sm"
-                  onClick={onOpenPlans}
-                  disabled={!user}
-                >
-                  Switch
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={onOpenBilling}
-                  disabled={!user || !onOpenBilling}
-                  loading={billingLoading}
-                  endIcon={<ExternalLink size={14} />}
-                >
-                  Manage
-                </Button>
-              </div>
-            </Accordion>
+	                <Button
+	                  type="button"
+	                  variant="secondary"
+	                  buttonStyle="mono"
+	                  size="sm"
+	                  onClick={onOpenPlans}
+	                  disabled={!user || !isPrimaryBillingOwner}
+	                >
+	                  Switch
+	                </Button>
+	                <Button
+	                  type="button"
+	                  variant="ghost"
+	                  size="sm"
+	                  onClick={onOpenBilling}
+	                  disabled={!user || !onOpenBilling || !isPrimaryBillingOwner}
+	                  loading={billingLoading}
+	                  endIcon={<ExternalLink size={14} />}
+	                >
+	                  Manage
+	                </Button>
+	              </div>
+	              {!isPrimaryBillingOwner ? (
+	                <div className="field-hint">Only the primary account owner can change billing.</div>
+	              ) : null}
+	            </Accordion>
           ) : null}
 
           <input

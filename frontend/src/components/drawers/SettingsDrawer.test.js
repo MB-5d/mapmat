@@ -23,8 +23,9 @@ describe('SettingsDrawer', () => {
     jest.clearAllMocks();
   });
 
-  test('changes theme and toggles page numbers', () => {
+  test('changes theme, map orientation, and page numbers', () => {
     const onThemeChange = jest.fn();
+    const onMapOrientationChange = jest.fn();
     const onTogglePageNumbers = jest.fn();
 
     act(() => {
@@ -34,6 +35,8 @@ describe('SettingsDrawer', () => {
           onClose={jest.fn()}
           theme="auto"
           onThemeChange={onThemeChange}
+          mapOrientation="vertical"
+          onMapOrientationChange={onMapOrientationChange}
           showPageNumbers={false}
           onTogglePageNumbers={onTogglePageNumbers}
           consent={{ analytics: false, experienceResearch: false }}
@@ -44,14 +47,19 @@ describe('SettingsDrawer', () => {
     const lightButton = Array.from(container.querySelectorAll('.ui-segmented-control__option')).find((button) =>
       button.textContent.includes('Light')
     );
+    const horizontalButton = Array.from(container.querySelectorAll('.ui-segmented-control__option')).find((button) =>
+      button.textContent.includes('Horizontal')
+    );
     const toggle = container.querySelector('.ui-toggle__input');
 
     act(() => {
       lightButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      horizontalButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
     expect(onThemeChange).toHaveBeenCalledWith('light');
+    expect(onMapOrientationChange).toHaveBeenCalledWith('horizontal');
     expect(onTogglePageNumbers).toHaveBeenCalledTimes(1);
   });
 

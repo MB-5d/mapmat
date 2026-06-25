@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { ArrowDownFromLine, ArrowRightFromLine, Sun, Moon, Monitor } from 'lucide-react';
 
 import AccountDrawer from './AccountDrawer';
 import Button from '../ui/Button';
@@ -11,6 +11,8 @@ const SettingsDrawer = ({
   onClose,
   theme,
   onThemeChange,
+  mapOrientation = 'vertical',
+  onMapOrientationChange,
   showPageNumbers,
   onTogglePageNumbers,
   consent,
@@ -20,6 +22,10 @@ const SettingsDrawer = ({
     { value: 'auto', label: 'Auto', icon: <Monitor size={14} /> },
     { value: 'light', label: 'Light', icon: <Sun size={14} /> },
     { value: 'dark', label: 'Dark', icon: <Moon size={14} /> },
+  ];
+  const orientationOptions = [
+    { value: 'vertical', label: 'Vertical', icon: <ArrowDownFromLine size={14} /> },
+    { value: 'horizontal', label: 'Horizontal', icon: <ArrowRightFromLine size={14} /> },
   ];
   const optionalConsentLabel = consent?.analytics || consent?.experienceResearch
     ? 'Some optional research tools are allowed.'
@@ -49,6 +55,18 @@ const SettingsDrawer = ({
 
       <section className="drawer-card">
         <div className="drawer-card-title">Canvas</div>
+        <div className="field">
+          <div className="field-label">Map orientation</div>
+          <SegmentedControl
+            className="settings-segment"
+            variant="grid"
+            fullWidth
+            ariaLabel="Map orientation"
+            value={mapOrientation}
+            onChange={onMapOrientationChange}
+            options={orientationOptions}
+          />
+        </div>
         <ToggleSwitch
           className="settings-toggle-row"
           checked={showPageNumbers}

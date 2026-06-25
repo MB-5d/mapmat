@@ -47,6 +47,10 @@ const INVITE_ROLES = new Set([
   permissionPolicy.ROLES.COMMENTER,
   permissionPolicy.ROLES.VIEWER,
 ]);
+const BILLABLE_EDITOR_ROLES = new Set([
+  permissionPolicy.ROLES.OWNER,
+  permissionPolicy.ROLES.EDITOR,
+]);
 const MEMBERSHIP_ROLES = new Set([
   permissionPolicy.ROLES.OWNER,
   permissionPolicy.ROLES.EDITOR,
@@ -76,6 +80,10 @@ function normalizeMembershipRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
   if (!MEMBERSHIP_ROLES.has(normalized)) return null;
   return normalized;
+}
+
+function countsTowardEditorLimit(role) {
+  return BILLABLE_EDITOR_ROLES.has(String(role || '').trim().toLowerCase());
 }
 
 function isOwnerRole(role) {
@@ -539,6 +547,27 @@ async function acceptInviteForUserAsync(invite, user) {
     invite: acceptedInvite,
     membership,
   };
+}
+
+async function getOwnerBillingContextForMapAsync(map, req) {
+  const ownerUser = map.user_id === req.user?.id
+    ? req.user
+    : await authStore.getPublicUserByIdAsync(map.user_id);
+  const ownerAccount = await billingStore.getOrCreateBillingAccountForUserAsync(ownerUser);
+  return { ownerUser, ownerAccount };
+}
+
+async function requireEditorLimitForRoleAsync({ map, req, res, role, currentRole = null }) {
+  if (!countsTowardEditorLimit(role) || countsTowardEditorLimit(currentRole)) {
+    return { allowed: true, ownerAccount: null, entitlement: null };
+  }
+  const { ownerUser, ownerAccount } = await getOwnerBillingContextForMapAsync(map, req);
+  const entitlement = await checkAccountActionAsync(ownerUser, ENTITLEMENT_ACTIONS.seatInvite);
+  if (!entitlement.allowed) {
+    sendEntitlementError(res, entitlement);
+    return { allowed: false, ownerAccount, entitlement };
+  }
+  return { allowed: true, ownerAccount, entitlement };
 }
 
 async function declineInviteForUserAsync(invite, user) {
@@ -1046,10 +1075,15 @@ router.post('/maps/:id/invites', async (req, res) => {
       const isExpired = existingPendingInvite.expires_at
         && new Date(existingPendingInvite.expires_at) < new Date();
       if (!isExpired) {
-        const ownerUser = map.user_id === req.user.id
-          ? req.user
-          : await authStore.getPublicUserByIdAsync(map.user_id);
-        const ownerAccount = await billingStore.getOrCreateBillingAccountForUserAsync(ownerUser);
+        const editorLimit = await requireEditorLimitForRoleAsync({
+          map,
+          req,
+          res,
+          role: inviteRole,
+        });
+        if (!editorLimit.allowed) return;
+        const ownerAccount = editorLimit.ownerAccount
+          || (await getOwnerBillingContextForMapAsync(map, req)).ownerAccount;
         await billingStore.upsertInvitedMembershipAsync({
           accountId: ownerAccount?.id,
           userId: inviteeUserId || null,
@@ -1064,14 +1098,16 @@ router.post('/maps/:id/invites', async (req, res) => {
       await collaborationStore.markInviteExpiredAsync(existingPendingInvite.id);
     }
 
-    const ownerUser = map.user_id === req.user.id
-      ? req.user
-      : await authStore.getPublicUserByIdAsync(map.user_id);
-    const seatEntitlement = await checkAccountActionAsync(ownerUser, ENTITLEMENT_ACTIONS.seatInvite);
-    if (!seatEntitlement.allowed) {
-      return sendEntitlementError(res, seatEntitlement);
-    }
-    if (seatEntitlement.summary?.trial?.active && seatEntitlement.summary.trial.kind === 'team') {
+    const editorLimit = await requireEditorLimitForRoleAsync({
+      map,
+      req,
+      res,
+      role: inviteRole,
+    });
+    if (!editorLimit.allowed) return;
+    const ownerAccount = editorLimit.ownerAccount
+      || (await getOwnerBillingContextForMapAsync(map, req)).ownerAccount;
+    if (editorLimit.entitlement?.summary?.trial?.active && editorLimit.entitlement.summary.trial.kind === 'team') {
       const trialInviteRoles = new Set([
         permissionPolicy.ROLES.EDITOR,
         permissionPolicy.ROLES.COMMENTER,
@@ -1080,10 +1116,10 @@ router.post('/maps/:id/invites', async (req, res) => {
       if (!trialInviteRoles.has(inviteRole)) {
         return res.status(400).json({ error: 'Team trials support one editor, one commenter, and one viewer.' });
       }
-      const roleCounts = await billingStore.countSeatRolesForAccountAsync(seatEntitlement.summary.account.id);
+      const roleCounts = await billingStore.countSeatRolesForAccountAsync(editorLimit.entitlement.summary.account.id);
       if (Number(roleCounts[inviteRole] || 0) >= 1) {
         return res.status(402).json({
-          error: `Team trials include one ${inviteRole}. Upgrade to add more seats for this role.`,
+          error: `Team trials include one ${inviteRole}. Upgrade to add more collaborators for this role.`,
           code: 'TRIAL_ROLE_LIMIT',
           role: inviteRole,
         });
@@ -1101,7 +1137,7 @@ router.post('/maps/:id/invites', async (req, res) => {
       expiresAt: parseInviteExpiration(expires_in_days),
     });
     await billingStore.upsertInvitedMembershipAsync({
-      accountId: seatEntitlement.summary.account.id,
+      accountId: ownerAccount?.id,
       userId: inviteeUserId || null,
       email: inviteeEmail,
       role: inviteRole,
@@ -1375,6 +1411,14 @@ router.patch('/maps/:id/members/:userId', async (req, res) => {
     if (isOwnerRole(existingMembership?.role) && actorRole !== permissionPolicy.ROLES.OWNER) {
       return res.status(403).json({ error: 'Only owners can change owner access' });
     }
+    const editorLimit = await requireEditorLimitForRoleAsync({
+      map,
+      req,
+      res,
+      role: normalizedRole,
+      currentRole: existingMembership?.role || null,
+    });
+    if (!editorLimit.allowed) return;
 
     const membership = await collaborationStore.setMembershipRoleAsync({
       mapId: id,
@@ -1382,6 +1426,16 @@ router.patch('/maps/:id/members/:userId', async (req, res) => {
       role: normalizedRole,
       invitedByUserId: req.user.id,
     });
+    if (countsTowardEditorLimit(normalizedRole)) {
+      const ownerAccount = editorLimit.ownerAccount
+        || (await getOwnerBillingContextForMapAsync(map, req)).ownerAccount;
+      await billingStore.upsertInvitedMembershipAsync({
+        accountId: ownerAccount?.id,
+        userId,
+        email: user.email || null,
+        role: normalizedRole,
+      });
+    }
 
     if (!existingMembership || existingMembership.role !== normalizedRole) {
       await recordMapActivityBestEffortAsync({

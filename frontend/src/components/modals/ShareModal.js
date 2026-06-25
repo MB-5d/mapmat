@@ -103,12 +103,24 @@ const ShareModal = ({
   const inviteRoleMenuRef = useRef(null);
 
   useEffect(() => {
+    if (!show || mode !== 'collaboration') return;
+
     const nextSelections = {};
     (collaborationAccessRequests || []).forEach((request) => {
       nextSelections[request.id] = request.requestedRole || 'viewer';
     });
-    setRequestRoleSelections(nextSelections);
-  }, [collaborationAccessRequests]);
+    setRequestRoleSelections((currentSelections) => {
+      const currentKeys = Object.keys(currentSelections);
+      const nextKeys = Object.keys(nextSelections);
+      if (
+        currentKeys.length === nextKeys.length
+        && nextKeys.every((key) => currentSelections[key] === nextSelections[key])
+      ) {
+        return currentSelections;
+      }
+      return nextSelections;
+    });
+  }, [show, mode, collaborationAccessRequests]);
 
   useEffect(() => {
     if (show && mode === 'collaboration') {
@@ -173,6 +185,8 @@ const ShareModal = ({
   const selectedInviteRoleOption = visibleInviteRoleOptions.find((option) => option.value === collaborationInviteRole)
     || visibleInviteRoleOptions[0]
     || inviteRoleOptions[0];
+  const selectedInviteRequiresAccount = selectedInviteRoleOption?.value === 'commenter'
+    || selectedInviteRoleOption?.value === 'editor';
   const hasValidCollaborationInviteEmail = hasValidShareEmailInput(collaborationInviteEmail);
   const collaborationInviteHasInvalidValue = Boolean(String(collaborationInviteEmail || '').trim()) && !hasValidCollaborationInviteEmail;
   const collaborationInviteSendDisabled = collaborationLoading || !canSendCollaborationInvites || !hasValidCollaborationInviteEmail;
@@ -465,8 +479,9 @@ const ShareModal = ({
                       open={openCollaborationAccordion === 'invites'}
                       onOpenChange={handleCollaborationAccordionOpenChange('invites')}
                     >
-                      {showInviteComposer ? (
-                        <div className="share-collab-invite-row">
+	                      {showInviteComposer ? (
+	                        <>
+	                          <div className="share-collab-invite-row">
                           <TextInput
                             type="text"
                             shellClassName="share-email-input"
@@ -511,7 +526,7 @@ const ShareModal = ({
                               </MenuPanel>
                             ) : null}
                           </div>
-                          <Button
+	                          <Button
                             className="share-collab-send"
                             startIcon={<Send size={14} />}
                             onClick={onSendCollaborationInvite}
@@ -519,9 +534,13 @@ const ShareModal = ({
                             loading={collaborationLoading}
                           >
                             Invite
-                          </Button>
-                        </div>
-                      ) : null}
+	                          </Button>
+		                          </div>
+		                          {selectedInviteRequiresAccount ? (
+		                            <div className="share-collab-empty">Commenters and editors need an account before they can comment or edit.</div>
+		                          ) : null}
+	                        </>
+	                      ) : null}
 
                       {!showInviteComposer && !canViewManagementSurfaces ? (
                         <div className="share-collab-empty">No self-serve collaboration actions are available on this map.</div>

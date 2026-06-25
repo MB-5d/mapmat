@@ -38,6 +38,7 @@ const { recordUsageEvent } = require('../utils/usageMetering');
 const {
   ACTIONS: ENTITLEMENT_ACTIONS,
   METERS: ENTITLEMENT_METERS,
+  resolveAccountEntitlementsAsync,
   requireAccountActionAsync,
   recordMeterDebitAsync,
 } = require('../utils/entitlements');
@@ -76,6 +77,7 @@ const CLIENT_USAGE_EVENT_TYPES = new Set([
   'export_json',
   'export_pdf',
   'export_png',
+  'export_svg',
   'export_site_index',
   'export_report_pdf',
 ]);
@@ -815,6 +817,7 @@ async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}
     await mapStore.updateMapByIdAsync(mapRow.id, {
       rootData: nextRow.root_data,
       orphansData: nextRow.orphans_data,
+      pageCount: countMapNodes(sanitizedTree.root, sanitizedTree.orphans),
     });
     nextRow = await mapStore.getMapByIdAsync(mapRow.id) || nextRow;
   }
@@ -1836,7 +1839,7 @@ router.post('/feedback', async (req, res) => {
   }
 });
 
-// POST /api/usage-events - record client-side exports that do not hit backend download routes
+// POST /api/usage-events - reserve and record client-side downloads that do not hit backend download routes
 router.post('/usage-events', requireAuth, async (req, res) => {
   try {
     const eventType = String(req.body?.eventType || '').trim();
@@ -1845,10 +1848,45 @@ router.post('/usage-events', requireAuth, async (req, res) => {
     }
     const quantityRaw = Number.parseInt(req.body?.quantity, 10);
     const quantity = Number.isFinite(quantityRaw) ? Math.min(Math.max(quantityRaw, 1), 10000) : 1;
-    recordUsageEvent(req, eventType, quantity, req.body?.meta || null);
-    return res.status(202).json({ ok: true });
+    const meta = req.body?.meta && typeof req.body.meta === 'object' && !Array.isArray(req.body.meta)
+      ? req.body.meta
+      : null;
+    const downloadEntitlement = await requireAccountActionAsync(
+      req,
+      res,
+      ENTITLEMENT_ACTIONS.organizedExportCreate
+    );
+    if (!downloadEntitlement) return;
+
+    const idempotencyKey = req.get('Idempotency-Key')
+      || req.body?.idempotencyKey
+      || `client-download:${eventType}:${req.user?.id || 'user'}:${uuidv4()}`;
+    await recordMeterDebitAsync({
+      user: req.user,
+      accountSummary: downloadEntitlement.summary,
+      meter: ENTITLEMENT_METERS.downloads,
+      quantity,
+      idempotencyKey,
+      metadata: {
+        ...(meta || {}),
+        eventType,
+      },
+    });
+
+    recordUsageEvent(req, eventType, quantity, meta);
+    const entitlements = await resolveAccountEntitlementsAsync(req.user);
+    return res.status(202).json({
+      ok: true,
+      entitlements,
+    });
   } catch (error) {
     console.error('Record client usage event error:', error);
+    if (error?.code === 'ENTITLEMENT_REQUIRED') {
+      return res.status(error.status || 402).json({
+        error: error.message || 'Your plan has reached its download limit.',
+        code: error.code,
+      });
+    }
     return res.status(500).json({ error: 'Failed to record usage event.' });
   }
 });
@@ -2518,9 +2556,6 @@ router.post('/maps', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
-    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite);
-    if (!entitlement) return;
-
     // If project_id provided, verify ownership
     if (normalizedProjectId) {
       const project = await projectStore.getProjectForUserAsync(normalizedProjectId, req.user.id);
@@ -2544,6 +2579,10 @@ router.post('/maps', requireAuth, async (req, res) => {
     const mapId = uuidv4();
     const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
     const pageCount = countMapNodes(sanitizedTree.root, sanitizedTree.orphans);
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite, {
+      pageDelta: pageCount,
+    });
+    if (!entitlement) return;
 
     await mapStore.createMapAsync({
       id: mapId,
@@ -2558,6 +2597,7 @@ router.post('/maps', requireAuth, async (req, res) => {
       connectionsData: connections ? JSON.stringify(connections) : null,
       colors: colors ? JSON.stringify(colors) : null,
       connectionColors: connectionColors ? JSON.stringify(connectionColors) : null,
+      pageCount,
     });
 
     const map = await mapStore.getMapByIdAsync(mapId);
@@ -2606,9 +2646,6 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       expected_updated_at,
     } = req.body;
     const normalizedProjectId = normalizeProjectSelectionValue(project_id);
-
-    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite);
-    if (!entitlement) return;
 
     const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
     const map = collaborationEnabled
@@ -2702,6 +2739,17 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       sanitizedTree.root || safeParse(map.root_data, 'root_data', null),
       orphans !== undefined ? sanitizedTree.orphans : safeParse(map.orphans_data, 'orphans_data', [])
     );
+    const currentPageCount = Number.isFinite(Number(map.page_count))
+      ? Math.max(0, Math.floor(Number(map.page_count || 0)))
+      : countMapNodes(
+        safeParse(map.root_data, 'root_data', null),
+        safeParse(map.orphans_data, 'orphans_data', [])
+      );
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.mapWrite, {
+      pageDelta: Math.max(0, updatedPageCount - currentPageCount),
+    });
+    if (!entitlement) return;
+
     if (root !== undefined) {
       patch.rootData = JSON.stringify(sanitizedTree.root);
     }
@@ -2732,6 +2780,7 @@ router.put('/maps/:id', requireAuth, async (req, res) => {
       }
       patch.projectId = normalizedProjectId;
     }
+    patch.pageCount = updatedPageCount;
 
     await mapStore.updateMapByIdAsync(id, patch);
     if (staleImageNodeIds.length > 0) {

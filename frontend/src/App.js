@@ -7,6 +7,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import {
+  ExternalLink,
   Loader2,
   MessageSquare,
   RefreshCw,
@@ -87,6 +88,7 @@ import {
   getMapNameConflictMessage,
 } from './utils/mapNameConflicts';
 import { sanitizeUrl, downloadText, clamp } from './utils/helpers';
+import classNames from './utils/classNames';
 import { getValidScanPrefillOptions, getValidScanPrefillUrl, shouldStartScanFromPrefill } from './utils/scanPrefill';
 import {
   BILLING_RETURN_EVENT_KEY,
@@ -128,7 +130,6 @@ import {
   buildExportMetadata,
   buildSiteIndexHtml,
   buildSiteIndexMarkdown,
-  buildSiteIndexText,
   buildTxtSitemap,
   buildSitemapCsv,
   buildSitemapExportRows,
@@ -211,6 +212,7 @@ import {
   loadExportThumbnailDataUrls,
   PNG_EXPORT_PIXEL_RATIO,
   registerExportPdfFonts,
+  renderEditableExportSvg,
   renderExportSceneToPngBlob,
 } from './utils/exportScene';
 import {
@@ -288,9 +290,69 @@ function formatEntitlementCount(value) {
   return Number(value || 0).toLocaleString();
 }
 
+function formatCurrencyMinorAmount(amount, currency = 'usd') {
+  const safeAmount = Math.max(0, Math.floor(Number(amount || 0)));
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: String(currency || 'usd').trim().toUpperCase() || 'USD',
+      minimumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+      maximumFractionDigits: safeAmount % 100 === 0 ? 0 : 2,
+    }).format(safeAmount / 100);
+  } catch {
+    return `$${(safeAmount / 100).toLocaleString('en-US')}`;
+  }
+}
+
 function normalizeAddOnQuantity(value) {
   const parsed = Math.floor(Number(value || 1));
   return Math.min(ADD_ON_QUANTITY_MAX, Math.max(1, Number.isFinite(parsed) ? parsed : 1));
+}
+
+function limitImportedMapToPageCount(imported, pageLimit) {
+  const safeLimit = Math.max(0, Math.floor(Number(pageLimit || 0)));
+  if (!imported?.root || safeLimit <= 0) return null;
+
+  const remaining = { value: safeLimit };
+  const keptNodeIds = new Set();
+  const cloneNode = (node) => {
+    if (!node || remaining.value <= 0) return null;
+    remaining.value -= 1;
+    if (node.id) keptNodeIds.add(node.id);
+    const nextNode = {
+      ...node,
+      children: [],
+    };
+    (node.children || []).forEach((child) => {
+      if (remaining.value <= 0) return;
+      const nextChild = cloneNode(child);
+      if (nextChild) nextNode.children.push(nextChild);
+    });
+    return nextNode;
+  };
+
+  const root = cloneNode(imported.root);
+  if (!root) return null;
+  const orphans = [];
+  (imported.orphans || []).forEach((orphan) => {
+    if (remaining.value <= 0) return;
+    const nextOrphan = cloneNode(orphan);
+    if (nextOrphan) orphans.push(nextOrphan);
+  });
+
+  const connections = (imported.connections || []).filter((connection) => (
+    keptNodeIds.has(connection?.sourceNodeId) && keptNodeIds.has(connection?.targetNodeId)
+  ));
+  const importedCount = countNodes(root) + orphans.reduce((total, orphan) => total + countNodes(orphan), 0);
+
+  return {
+    ...imported,
+    root,
+    orphans,
+    connections,
+    count: importedCount,
+    partialImport: true,
+  };
 }
 
 function normalizeBillingCycle(value) {
@@ -2902,6 +2964,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [billingCatalogError, setBillingCatalogError] = useState('');
   const [billingActionKey, setBillingActionKey] = useState('');
   const [billingCycle, setBillingCycle] = useState('monthly');
+  const [billingSelection, setBillingSelection] = useState(null);
   const [screenshotPackQuantities, setScreenshotPackQuantities] = useState({});
   const billingRouteResult = String(currentRoute?.searchParams?.get('billing') || '');
   const billingRouteSessionId = String(currentRoute?.searchParams?.get('billingSessionId') || '');
@@ -2909,11 +2972,20 @@ export default function App({ currentRoute, navigateToRoute }) {
     || billingRouteResult === 'portal_return'
     || billingRouteResult === 'cancelled';
   const isBillingReturnFromBillingWindow = isBillingReturnRoute && isBillingFlowWindow();
+  const currentBillingPlan = currentUser?.entitlements?.plan || null;
+  const currentBillingPlanKey = currentBillingPlan?.key || (isLoggedIn ? 'free' : 'guest');
+  const isPrimaryBillingOwner = !currentUser?.entitlements?.account?.ownerUserId
+    || currentUser.entitlements.account.ownerUserId === currentUser?.id;
+  const screenshotCreditMeter = currentUser?.entitlements?.meters?.screenshotCredits || null;
+  const screenshotCreditsLabel = screenshotCreditMeter?.unlimited
+    ? '∞'
+    : formatEntitlementCount(Math.max(0, Number(screenshotCreditMeter?.remaining || 0)));
   const scanAuthBrowserImageRef = useRef(null);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importPageLimitModal, setImportPageLimitModal] = useState(null);
   const [blankUploadDragActive, setBlankUploadDragActive] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [editModalNode, setEditModalNode] = useState(null);
@@ -2995,7 +3067,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [showViewDropdown, setShowViewDropdown] = useState(false);
-  const [showOrientationMenu, setShowOrientationMenu] = useState(false);
   const [showImageMenu, setShowImageMenu] = useState(false);
   const [mapOrientation, setMapOrientation] = useState(() => (
     currentRoute?.orientation || normalizeMapOrientation(currentRoute?.searchParams?.get('orientation'))
@@ -3068,7 +3139,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const pendingCreatedNodeViewRef = useRef(null);
   const viewDropdownRef = useRef(null);
   const colorKeyRef = useRef(null);
-  const orientationMenuRef = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
   const blankUploadInputRef = useRef(null);
@@ -3188,18 +3258,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showColorKey]);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (orientationMenuRef.current && !orientationMenuRef.current.contains(e.target)) {
-        setShowOrientationMenu(false);
-      }
-    };
-    if (showOrientationMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showOrientationMenu]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -4104,14 +4162,25 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const planOptionCards = useMemo(() => buildPlanCardsFromBillingCatalog(billingCatalog, {
     billingCycle,
-    includeFree: false,
-    paidOnly: true,
+    includeFree: true,
+    paidOnly: false,
   }), [billingCatalog, billingCycle]);
 
   const screenshotCreditPacks = useMemo(
     () => buildScreenshotCreditPackCards(billingCatalog),
     [billingCatalog]
   );
+
+	  useEffect(() => {
+	    if (!plansModal) {
+	      setBillingSelection(null);
+	      return;
+	    }
+	    const defaultPlanKey = planOptionCards.some((entry) => entry.key === currentBillingPlanKey)
+	      ? currentBillingPlanKey
+	      : 'free';
+	    setBillingSelection((current) => current || { type: 'plan', key: defaultPlanKey });
+	  }, [currentBillingPlanKey, planOptionCards, plansModal]);
 
   const getScreenshotPackQuantity = useCallback((packKey) => (
     normalizeAddOnQuantity(screenshotPackQuantities[packKey])
@@ -4125,12 +4194,73 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, []);
 
   const getBillingCheckoutUnavailableReason = useCallback((entry, cycle = billingCycle) => {
+    if (isLoggedIn && !isPrimaryBillingOwner) return 'Primary owner only';
     if (!billingCatalog) return '';
     if (!billingCatalog.enabled) return 'Billing not enabled';
     const planPrice = entry?.prices ? entry.prices[normalizeBillingCycle(cycle)] : entry;
     if (!planPrice?.configured) return 'Checkout not configured';
     return '';
-  }, [billingCatalog, billingCycle]);
+  }, [billingCatalog, billingCycle, isLoggedIn, isPrimaryBillingOwner]);
+
+  const selectedBillingPurchase = useMemo(() => {
+    if (!billingSelection) return null;
+    if (billingSelection.type === 'addon') {
+      const pack = screenshotCreditPacks.find((entry) => entry.key === billingSelection.key);
+      if (!pack) return null;
+      const quantity = normalizeAddOnQuantity(screenshotPackQuantities[pack.key]);
+      const amount = Number.isFinite(Number(pack.unitAmount))
+        ? Number(pack.unitAmount) * quantity
+        : null;
+      const unavailableReason = getBillingCheckoutUnavailableReason(pack);
+      return {
+        type: 'addon',
+        key: pack.key,
+        label: `${formatEntitlementCount(pack.quantity * quantity)} screenshot credits`,
+        subtotal: amount === null ? '--' : formatCurrencyMinorAmount(amount, pack.currency),
+        checkoutLabel: 'Checkout',
+        disabled: !!unavailableReason,
+        unavailableReason,
+        quantity,
+      };
+    }
+    const plan = planOptionCards.find((entry) => entry.key === billingSelection.key)
+      || planOptionCards.find((entry) => entry.key === currentBillingPlanKey)
+      || null;
+	    if (!plan) return null;
+	    const catalogEntry = billingPlanCatalogByKey.get(plan.key);
+	    let unavailableReason = plan.key === currentBillingPlanKey
+	      ? 'Current plan'
+	      : getBillingCheckoutUnavailableReason(catalogEntry, billingCycle);
+	    let checkoutLabel = plan.key === currentBillingPlanKey ? 'Current plan' : 'Checkout';
+	    if (plan.key === 'free' && plan.key !== currentBillingPlanKey) {
+	      if (!isLoggedIn) {
+	        unavailableReason = '';
+	        checkoutLabel = 'Sign up';
+	      } else {
+	        unavailableReason = 'Use Manage billing';
+	      }
+	    }
+	    return {
+	      type: 'plan',
+	      key: plan.key,
+	      label: plan.name,
+	      subtotal: `${plan.price}${plan.priceSuffix || ''}`,
+	      checkoutLabel,
+	      disabled: plan.key === currentBillingPlanKey || !!unavailableReason,
+	      unavailableReason,
+	      billingCycle,
+    };
+  }, [
+    billingCycle,
+	    billingPlanCatalogByKey,
+	    billingSelection,
+	    currentBillingPlanKey,
+	    getBillingCheckoutUnavailableReason,
+	    isLoggedIn,
+	    planOptionCards,
+    screenshotCreditPacks,
+    screenshotPackQuantities,
+  ]);
 
   const showEntitlementLock = useCallback(({
     title = 'Plan limit reached',
@@ -4148,7 +4278,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (code === 'ACCOUNT_ARCHIVED' || entitlements?.archived) {
       showEntitlementLock({
         title: 'Account archived',
-        message: 'This account is archived. Existing work can still be viewed, but new scans, screenshots, exports, invites, and shares are locked.',
+        message: 'This account is archived. Existing work can still be viewed, but new scans, screenshots, downloads, invites, and shares are locked.',
       });
       return true;
     }
@@ -4199,8 +4329,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (remaining <= 0) {
       return {
         blocked: true,
-        title: 'No crawl pages remaining',
-        message: 'This account has no crawl pages left for the current billing period.',
+        title: 'No active pages remaining',
+        message: 'This account has no active pages left.',
         requestedPages,
         remaining,
       };
@@ -6417,7 +6547,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast('Invite created', 'success');
       await loadCollaborationData();
     } catch (error) {
-      if (handleEntitlementError(error, 'This account has reached its seat limit.')) {
+      if (handleEntitlementError(error, 'This account has reached its editor limit.')) {
         setCollaborationError(error.message || 'Plan limit reached.');
         return;
       }
@@ -6990,6 +7120,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE });
       return;
     }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can manage billing.', 'warning');
+      return;
+    }
     const actionKey = `portal:${context}`;
     setBillingActionKey(actionKey);
     try {
@@ -7002,12 +7136,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     } finally {
       setBillingActionKey((current) => (current === actionKey ? '' : current));
     }
-  }, [getBillingReturnPath, isLoggedIn, openAuthModal, redirectToBillingUrl, showToast]);
+  }, [getBillingReturnPath, isLoggedIn, isPrimaryBillingOwner, openAuthModal, redirectToBillingUrl, showToast]);
 
   const handlePlanCheckout = useCallback(async (planKey, cycle = billingCycle) => {
     if (!isLoggedIn) {
       setPlansModal(null);
       openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can change billing.', 'warning');
       return;
     }
     const normalizedCycle = normalizeBillingCycle(cycle);
@@ -7031,10 +7169,11 @@ export default function App({ currentRoute, navigateToRoute }) {
       setBillingActionKey((current) => (current === actionKey ? '' : current));
     }
   }, [
+    billingCycle,
     getBillingReturnPath,
     handleBillingPortal,
-    billingCycle,
     isLoggedIn,
+    isPrimaryBillingOwner,
     openAuthModal,
     redirectToBillingUrl,
     showToast,
@@ -7044,6 +7183,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!isLoggedIn) {
       setPlansModal(null);
       openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can change billing.', 'warning');
       return;
     }
     const actionKey = `trial:${context}`;
@@ -7069,6 +7212,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [
     isLoggedIn,
+    isPrimaryBillingOwner,
     openAuthModal,
     refreshCurrentUser,
     showToast,
@@ -7078,6 +7222,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!isLoggedIn) {
       setPlansModal(null);
       openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+      return;
+    }
+    if (!isPrimaryBillingOwner) {
+      showToast('Only the primary account owner can purchase credits.', 'warning');
       return;
     }
     const checkoutQuantity = normalizeAddOnQuantity(quantity);
@@ -7096,7 +7244,33 @@ export default function App({ currentRoute, navigateToRoute }) {
     } finally {
       setBillingActionKey((current) => (current === actionKey ? '' : current));
     }
-  }, [getBillingReturnPath, isLoggedIn, openAuthModal, redirectToBillingUrl, showToast]);
+  }, [getBillingReturnPath, isLoggedIn, isPrimaryBillingOwner, openAuthModal, redirectToBillingUrl, showToast]);
+
+  const handleSelectedBillingCheckout = useCallback(() => {
+    if (!selectedBillingPurchase || selectedBillingPurchase.disabled) return;
+    if (selectedBillingPurchase.type === 'addon') {
+      handleAddOnCheckout(selectedBillingPurchase.key, selectedBillingPurchase.quantity || 1);
+      return;
+    }
+    if (selectedBillingPurchase.key === 'free') {
+      if (!isLoggedIn) {
+        setPlansModal(null);
+        openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE, initialView: 'signup' });
+        return;
+      }
+      dismissPlansModal();
+      return;
+    }
+    handlePlanCheckout(selectedBillingPurchase.key, selectedBillingPurchase.billingCycle || billingCycle);
+  }, [
+    billingCycle,
+    dismissPlansModal,
+    handleAddOnCheckout,
+    handlePlanCheckout,
+    isLoggedIn,
+    openAuthModal,
+    selectedBillingPurchase,
+  ]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -11507,7 +11681,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     } catch (err) {
       console.error('Scan job creation failed:', err);
-      if (handleEntitlementError(err, 'Your plan has no crawl pages remaining for this billing period.')) {
+      if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) {
         return;
       }
       trackEvent('scan_failed', {
@@ -12770,15 +12944,12 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (showColorKey) {
           setShowColorKey(false);
         }
-        if (showOrientationMenu) {
-          setShowOrientationMenu(false);
-        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, showOrientationMenu, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
 
   // Smooth wheel handling for canvas zoom. Press-drag remains the pan control.
   const wheelStateRef = useRef({
@@ -12856,15 +13027,92 @@ export default function App({ currentRoute, navigateToRoute }) {
       : 0);
   }, [orphans, root]);
 
-  const recordExportUsage = useCallback((eventType, meta = {}) => {
-    api.recordClientUsage(eventType, {
+  const recordDownloadUsage = useCallback(async (eventType, meta = {}) => {
+    const idempotencyKey = [
+      'client-download',
+      eventType,
+      currentMap?.id || 'unsaved',
+      Date.now(),
+      Math.random().toString(36).slice(2, 10),
+    ].join(':');
+    const result = await api.recordClientUsage(eventType, {
       mapId: currentMap?.id || null,
       pageCount: getUsagePageCount(),
       ...meta,
-    }).catch((error) => {
-      console.warn('Export usage record error:', error?.message || error);
-    });
+    }, 1, { idempotencyKey });
+    if (result?.entitlements) {
+      setCurrentUser((current) => current ? ({
+        ...current,
+        account: result.entitlements.account || current.account || null,
+        entitlements: result.entitlements,
+      }) : current);
+    }
+    return result;
   }, [currentMap?.id, getUsagePageCount]);
+
+  const reserveDownloadUsage = useCallback(async (eventType, meta = {}) => {
+    try {
+      await recordDownloadUsage(eventType, meta);
+      return true;
+    } catch (error) {
+      if (
+        error.status === 401
+        || error.code === 'AUTH_REQUIRED'
+        || error.payload?.code === 'AUTH_REQUIRED'
+        || error.message?.includes('Authentication')
+      ) {
+        openAuthModal({ contextMessage: PERMISSION_AUTH_CONTEXT_MESSAGE });
+        return false;
+      }
+      if (handleEntitlementError(error, 'Your plan has reached its download limit.')) {
+        return false;
+      }
+      console.warn('Download usage record error:', error?.message || error);
+      showToast(error?.message || 'Could not confirm download allowance.', 'error');
+      return false;
+    }
+  }, [handleEntitlementError, openAuthModal, recordDownloadUsage, showToast]);
+
+  const runDownloadAction = useCallback(async (action) => {
+    try {
+      await action();
+    } catch (error) {
+      console.error('Download error:', error);
+      showToast(error?.message || 'Download failed', 'error');
+    }
+  }, [showToast]);
+
+  const exportJson = () => {
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'json',
+      });
+      const content = JSON.stringify(buildSitemapJsonPayload({
+        root,
+        orphans,
+        connections,
+        colors,
+        connectionColors,
+        rows,
+        metadata,
+      }), null, 2);
+      if (!await reserveDownloadUsage('export_json', {
+        format: 'json',
+        bytes: new Blob([content]).size,
+        rows: rows.length,
+      })) return;
+      downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.json`, content);
+      showToast('Downloaded JSON');
+    });
+  };
 
   const getCurrentExportTitle = () => (
     currentMap?.name || mapName || root?.title || getHostname(root?.url) || 'Untitled Map'
@@ -12922,168 +13170,144 @@ export default function App({ currentRoute, navigateToRoute }) {
     return false;
   }, [handleEntitlementError, openAuthModal]);
 
-  const exportJson = () => {
-    if (!root) return;
-    if (!guardAccountCanCreateWork('Exporting')) return;
-    const exportTitle = getCurrentExportTitle();
-    const generatedAt = new Date();
-    const rows = buildSitemapExportRows(root, orphans);
-    const metadata = buildExportMetadata({
-      title: exportTitle,
-      generatedAt,
-      pageCount: rows.length,
-      format: 'json',
-    });
-    const content = JSON.stringify(buildSitemapJsonPayload({
-      root,
-      orphans,
-      connections,
-      colors,
-      connectionColors,
-      rows,
-      metadata,
-    }), null, 2);
-    downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.json`, content);
-    recordExportUsage('export_json', {
-      format: 'json',
-      bytes: new Blob([content]).size,
-      rows: rows.length,
-    });
-    showToast('Downloaded JSON');
-  };
-
   const exportXml = () => {
-    if (!root) return;
-    if (!guardAccountCanCreateWork('Exporting')) return;
-    const exportTitle = getCurrentExportTitle();
-    const generatedAt = new Date();
-    const rows = buildSitemapExportRows(root, orphans);
-    const metadata = buildExportMetadata({
-      title: exportTitle,
-      generatedAt,
-      pageCount: rows.length,
-      format: 'xml',
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'xml',
+      });
+      const content = buildSitemapXml(rows, metadata);
+      if (!await reserveDownloadUsage('export_xml', {
+        format: 'xml',
+        bytes: new Blob([content]).size,
+        rows: rows.length,
+      })) return;
+      downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.xml`, content);
+      showToast('Downloaded XML');
     });
-    const content = buildSitemapXml(rows, metadata);
-    downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.xml`, content);
-    recordExportUsage('export_xml', {
-      format: 'xml',
-      bytes: new Blob([content]).size,
-      rows: rows.length,
-    });
-    showToast('Downloaded XML');
   };
 
   const exportAiSiteBrief = () => {
-    if (!root) return;
-    if (!guardAccountCanCreateWork('Exporting')) return;
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
 
-    const exportTitle = getCurrentExportTitle();
-    const hostname = getHostname(root.url) || 'site';
-    const generatedAt = new Date();
-    const rows = buildSitemapExportRows(root, orphans);
-    const metadata = buildExportMetadata({
-      title: exportTitle,
-      generatedAt,
-      pageCount: rows.length,
-      format: 'ai-site-brief',
-    });
-    const mode = root.url ? 'Improve Existing Site' : 'Build New Site';
-    const baseFilename = getSitemapExportFilenameBase(exportTitle, generatedAt);
-    const siteData = buildAiSiteData({
-      root,
-      orphans,
-      connections,
-      colors,
-      connectionColors,
-      rows,
-      mode,
-      hostname,
-      generatedAt: metadata.generatedAt,
-      metadata,
-    });
+      const exportTitle = getCurrentExportTitle();
+      const hostname = getHostname(root.url) || 'site';
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'ai-site-brief',
+      });
+      const mode = root.url ? 'Improve Existing Site' : 'Build New Site';
+      const baseFilename = getSitemapExportFilenameBase(exportTitle, generatedAt);
+      const siteData = buildAiSiteData({
+        root,
+        orphans,
+        connections,
+        colors,
+        connectionColors,
+        rows,
+        mode,
+        hostname,
+        generatedAt: metadata.generatedAt,
+        metadata,
+      });
 
-    const zipBlob = createZipPackageBlob([
-      {
-        path: 'AI_SITE_BRIEF.md',
-        content: buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt: metadata.generatedAt }),
-      },
-      {
-        path: 'site-map.json',
-        content: JSON.stringify(siteData, null, 2),
-      },
-      {
-        path: 'sitemap.xml',
-        content: buildSitemapXml(rows, metadata),
-      },
-      {
-        path: 'sitemap.txt',
-        content: buildTxtSitemap(rows),
-      },
-      {
-        path: 'site-index.html',
-        content: buildSiteIndexHtml({
-          rows,
-          metadata,
-          rootUrl: root.url,
-          hostname,
-        }),
-      },
-      {
-        path: 'site-index.md',
-        content: buildSiteIndexMarkdown({
-          rows,
-          metadata,
-          rootUrl: root.url,
-          hostname,
-        }),
-      },
-      {
-        path: 'site-map.csv',
-        content: buildSitemapCsv(rows, metadata),
-      },
-      {
-        path: 'references/README.md',
-        content: '# References\n\nAdd brand guidelines, design system files, reference images, copy docs, content matrices, or screenshots here before sharing this package with an AI code tool.\n',
-      },
-    ]);
+      const zipBlob = createZipPackageBlob([
+        {
+          path: 'AI_SITE_BRIEF.md',
+          content: buildAiSiteBriefMarkdown({ hostname, mode, rows, generatedAt: metadata.generatedAt }),
+        },
+        {
+          path: 'site-map.json',
+          content: JSON.stringify(siteData, null, 2),
+        },
+        {
+          path: 'sitemap.xml',
+          content: buildSitemapXml(rows, metadata),
+        },
+        {
+          path: 'sitemap.txt',
+          content: buildTxtSitemap(rows),
+        },
+        {
+          path: 'site-index.html',
+          content: buildSiteIndexHtml({
+            rows,
+            metadata,
+            rootUrl: root.url,
+            hostname,
+          }),
+        },
+        {
+          path: 'site-index.md',
+          content: buildSiteIndexMarkdown({
+            rows,
+            metadata,
+            rootUrl: root.url,
+            hostname,
+          }),
+        },
+        {
+          path: 'site-map.csv',
+          content: buildSitemapCsv(rows, metadata),
+        },
+        {
+          path: 'references/README.md',
+          content: '# References\n\nAdd brand guidelines, design system files, reference images, copy docs, content matrices, or screenshots here before sharing this package with an AI code tool.\n',
+        },
+      ]);
 
-    downloadBlob(`${baseFilename}.zip`, zipBlob);
-    recordExportUsage('export_ai_site_brief', {
-      format: 'zip',
-      bytes: zipBlob.size,
-      rows: rows.length,
-      packageFiles: 8,
+      if (!await reserveDownloadUsage('export_ai_site_brief', {
+        format: 'zip',
+        bytes: zipBlob.size,
+        rows: rows.length,
+        packageFiles: 8,
+      })) return;
+      downloadBlob(`${baseFilename}.zip`, zipBlob);
+      showToast('Downloaded AI Site Brief package');
     });
-    showToast('Downloaded AI Site Brief package');
   };
 
   const exportCsv = () => {
-    if (!root) return;
-    if (!guardAccountCanCreateWork('Exporting')) return;
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
 
-    const exportTitle = getCurrentExportTitle();
-    const generatedAt = new Date();
-    const rows = buildSitemapExportRows(root, orphans);
-    const metadata = buildExportMetadata({
-      title: exportTitle,
-      generatedAt,
-      pageCount: rows.length,
-      format: 'csv',
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: 'csv',
+      });
+      const content = buildSitemapCsv(rows, metadata);
+      if (!await reserveDownloadUsage('export_csv', {
+        format: 'csv',
+        bytes: new Blob([content]).size,
+        rows: rows.length,
+      })) return;
+      downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.csv`, content);
+      showToast('Downloaded CSV');
     });
-    const content = buildSitemapCsv(rows, metadata);
-    downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.csv`, content);
-    recordExportUsage('export_csv', {
-      format: 'csv',
-      bytes: new Blob([content]).size,
-      rows: rows.length,
-    });
-    showToast('Downloaded CSV');
   };
 
   const exportPdf = async () => {
     if (!hasMap || !root) return;
-    if (!guardAccountCanCreateWork('Exporting')) return;
+    if (!guardAccountCanCreateWork('Downloading')) return;
     if (!canCreateShareLinksForCurrentMap()) return;
 
     showToast('Generating PDF...', 'info', true);
@@ -13128,13 +13352,13 @@ export default function App({ currentRoute, navigateToRoute }) {
       drawExportSceneToPdf(pdf, scene, thumbnailDataUrls, pdfScale);
 
       const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
-      pdf.save(`${filenameBase}.pdf`);
-      recordExportUsage('export_pdf', {
+      if (!await reserveDownloadUsage('export_pdf', {
         format: 'pdf',
         width: scene.width,
         height: scene.height,
         thumbnails: thumbnailDataUrls.size,
-      });
+      })) return;
+      pdf.save(`${filenameBase}.pdf`);
       showToast('PDF downloaded successfully', 'success');
     } catch (e) {
       if (handleShareLinkError(e)) return;
@@ -13144,12 +13368,64 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
+  const exportSvg = async () => {
+    if (!hasMap || !root) return;
+    if (!guardAccountCanCreateWork('Downloading')) return;
+    if (!canCreateShareLinksForCurrentMap()) return;
+
+    showToast('Generating SVG...', 'info', true);
+
+    try {
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const shareUrl = await createShareLinkUrl(sharePermission);
+      const scene = buildExportScene({
+        root,
+        orphans,
+        colors,
+        connectionColors,
+        connections,
+        showThumbnails,
+        orientation: mapOrientation,
+        title: exportTitle,
+        shareUrl,
+        reportStats,
+        reportTypeOptions: REPORT_TYPE_OPTIONS,
+        generatedAt,
+      });
+      if (!scene || !scene.nodes.length) {
+        showToast('No content to download', 'warning');
+        return;
+      }
+
+      const thumbnailDataUrls = await loadExportThumbnailDataUrls(scene);
+      const svg = renderEditableExportSvg(scene, thumbnailDataUrls);
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
+      if (!await reserveDownloadUsage('export_svg', {
+        format: 'svg',
+        width: scene.width,
+        height: scene.height,
+        bytes: blob.size,
+        thumbnails: thumbnailDataUrls.size,
+        components: true,
+      })) return;
+      downloadBlob(`${filenameBase}.svg`, blob);
+      showToast('SVG downloaded successfully', 'success');
+    } catch (e) {
+      if (handleShareLinkError(e)) return;
+      console.error('SVG export error:', e);
+      const errorMsg = e?.message || e?.toString() || 'Unknown error';
+      showToast(`SVG download failed: ${errorMsg}`, 'error');
+    }
+  };
+
   const downloadReportPdf = async ({ visibleDetails: reportVisibleDetails } = {}) => {
     if (!reportEntries.length) {
       showToast('No report data available', 'warning');
       return;
     }
-    if (!guardAccountCanCreateWork('Exporting')) return;
+    if (!guardAccountCanCreateWork('Downloading')) return;
 
     showToast('Generating report...', 'info', true);
 
@@ -13506,12 +13782,12 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
       });
 
-      pdf.save(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.pdf`);
-      recordExportUsage('export_report_pdf', {
+      if (!await reserveDownloadUsage('export_report_pdf', {
         format: 'pdf',
         rows: reportRows.length,
         reportPages: reportStats.total,
-      });
+      })) return;
+      pdf.save(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.pdf`);
       showToast('Report downloaded', 'success');
     } catch (error) {
       console.error('Report download error:', error);
@@ -13520,69 +13796,65 @@ export default function App({ currentRoute, navigateToRoute }) {
   };
 
   const exportSiteIndex = (format = 'doc') => {
-    if (!root) return;
-    if (!guardAccountCanCreateWork('Exporting')) return;
+    runDownloadAction(async () => {
+      if (!root) return;
+      if (!guardAccountCanCreateWork('Downloading')) return;
 
-    const formatConfigByKey = {
-      doc: {
-        extension: 'doc',
-        mimeType: 'application/msword',
-        label: 'DOC',
-        build: buildSiteIndexHtml,
-      },
-      txt: {
-        extension: 'txt',
-        mimeType: 'text/plain;charset=utf-8',
-        label: 'Text index',
-        build: buildSiteIndexText,
-      },
-      sitemapTxt: {
-        extension: 'sitemap.txt',
-        mimeType: 'text/plain;charset=utf-8',
-        label: 'TXT sitemap',
-        build: ({ rows }) => buildTxtSitemap(rows),
-      },
-      html: {
-        extension: 'html',
-        mimeType: 'text/html;charset=utf-8',
-        label: 'HTML',
-        build: buildSiteIndexHtml,
-      },
-      md: {
-        extension: 'md',
-        mimeType: 'text/markdown;charset=utf-8',
-        label: 'Markdown',
-        build: buildSiteIndexMarkdown,
-      },
-    };
-    const normalizedFormat = Object.prototype.hasOwnProperty.call(formatConfigByKey, format)
-      ? format
-      : 'doc';
-    const formatConfig = formatConfigByKey[normalizedFormat];
-    const exportTitle = getCurrentExportTitle();
-    const generatedAt = new Date();
-    const hostname = getHostname(root.url) || 'sitemap';
-    const rows = buildSitemapExportRows(root, orphans);
-    const metadata = buildExportMetadata({
-      title: exportTitle,
-      generatedAt,
-      pageCount: rows.length,
-      format: `site-index-${normalizedFormat}`,
+      const formatConfigByKey = {
+        doc: {
+          extension: 'doc',
+          mimeType: 'application/msword',
+          label: 'DOC',
+          build: buildSiteIndexHtml,
+        },
+        txt: {
+          extension: 'txt',
+          mimeType: 'text/plain;charset=utf-8',
+          label: 'TXT sitemap',
+          build: ({ rows }) => buildTxtSitemap(rows),
+        },
+        html: {
+          extension: 'html',
+          mimeType: 'text/html;charset=utf-8',
+          label: 'HTML',
+          build: buildSiteIndexHtml,
+        },
+        md: {
+          extension: 'md',
+          mimeType: 'text/markdown;charset=utf-8',
+          label: 'Markdown',
+          build: buildSiteIndexMarkdown,
+        },
+      };
+      const normalizedFormat = Object.prototype.hasOwnProperty.call(formatConfigByKey, format)
+        ? format
+        : 'doc';
+      const formatConfig = formatConfigByKey[normalizedFormat];
+      const exportTitle = getCurrentExportTitle();
+      const generatedAt = new Date();
+      const hostname = getHostname(root.url) || 'sitemap';
+      const rows = buildSitemapExportRows(root, orphans);
+      const metadata = buildExportMetadata({
+        title: exportTitle,
+        generatedAt,
+        pageCount: rows.length,
+        format: `site-index-${normalizedFormat}`,
+      });
+      const content = formatConfig.build({
+        rows,
+        metadata,
+        rootUrl: root.url,
+        hostname,
+      });
+      const blob = new Blob([content], { type: formatConfig.mimeType });
+      if (!await reserveDownloadUsage('export_site_index', {
+        format: normalizedFormat,
+        bytes: blob.size,
+        rows: rows.length,
+      })) return;
+      downloadBlob(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.${formatConfig.extension}`, blob);
+      showToast(`Site Index ${formatConfig.label} downloaded`, 'success');
     });
-    const content = formatConfig.build({
-      rows,
-      metadata,
-      rootUrl: root.url,
-      hostname,
-    });
-    const blob = new Blob([content], { type: formatConfig.mimeType });
-    downloadBlob(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.${formatConfig.extension}`, blob);
-    recordExportUsage('export_site_index', {
-      format: normalizedFormat,
-      bytes: blob.size,
-      rows: rows.length,
-    });
-    showToast(`Site Index ${formatConfig.label} downloaded`, 'success');
   };
 
   const copyShareLink = async (permission = sharePermission) => {
@@ -13624,7 +13896,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const exportPng = async () => {
     if (!hasMap || !root) return;
-    if (!guardAccountCanCreateWork('Exporting')) return;
+    if (!guardAccountCanCreateWork('Downloading')) return;
     if (!canCreateShareLinksForCurrentMap()) return;
 
     try {
@@ -13676,16 +13948,15 @@ export default function App({ currentRoute, navigateToRoute }) {
         pixelRatio: PNG_EXPORT_PIXEL_RATIO,
       });
       const filenameBase = getSitemapExportFilenameBase(exportTitle, generatedAt);
-      downloadBlob(`${filenameBase}.png`, pngExport.blob);
-
-      recordExportUsage('export_png', {
+      if (!await reserveDownloadUsage('export_png', {
         format: 'png',
         width: pngExport.width,
         height: pngExport.height,
         bytes: pngExport.blob.size,
         pixelRatio: pngExport.pixelRatio,
         thumbnails: thumbnailDataUrls.size,
-      });
+      })) return;
+      downloadBlob(`${filenameBase}.png`, pngExport.blob);
       showToast('PNG downloaded successfully', 'success');
     } catch (e) {
       if (handleShareLinkError(e)) return;
@@ -14686,6 +14957,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const clearCaptureModals = () => {
       setShowCreateMapModal(false);
       setShowImportModal(false);
+      setImportPageLimitModal(null);
       setShowAuthModal(false);
       setShowProfileDrawer(false);
       setShowSettingsDrawer(false);
@@ -14695,7 +14967,6 @@ export default function App({ currentRoute, navigateToRoute }) {
       setShowCommentsPanel(false);
       setShowViewDropdown(false);
       setShowColorKey(false);
-      setShowOrientationMenu(false);
       setShowImageMenu(false);
       setConnectionMenu(null);
       setNodeMenu(null);
@@ -14912,7 +15183,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (figmaCaptureState === 'orientation-menu') {
       appliedFigmaCaptureStateRef.current = figmaCaptureKey;
       closeCompetingPanels();
-      setShowOrientationMenu(true);
+      setShowSettingsDrawer(true);
       return;
     }
 
@@ -16816,6 +17087,79 @@ export default function App({ currentRoute, navigateToRoute }) {
     return !getMoveBlockReason(sourceId, targetParentId);
   }, [getMoveBlockReason]);
 
+  const getImportPageLimitBlock = useCallback((pageCount) => {
+    const safePageCount = Math.max(0, Math.floor(Number(pageCount || 0)));
+    const entitlements = currentUser?.entitlements || null;
+    const activePageLimit = entitlements?.limits?.activePages
+      || entitlements?.meters?.activePages
+      || entitlements?.meters?.crawlPages
+      || null;
+    if (!isLoggedIn || !activePageLimit || activePageLimit.unlimited) return null;
+
+    const availablePages = Math.max(0, Math.floor(Number(activePageLimit.remaining || 0)));
+    if (safePageCount <= availablePages) return null;
+
+    return {
+      pageCount: safePageCount,
+      availablePages,
+      planName: entitlements?.plan?.name || 'current plan',
+      canManageBilling: isPrimaryBillingOwner,
+    };
+  }, [currentUser?.entitlements, isLoggedIn, isPrimaryBillingOwner]);
+
+  const applyImportedMap = (imported, {
+    originalPageCount = null,
+    partial = false,
+  } = {}) => {
+    if (!imported?.root) {
+      showToast('Could not build sitemap from URLs', 'error');
+      return false;
+    }
+
+    const importedOrphans = imported.orphans || [];
+    const importedConnections = imported.connections || [];
+    const importedColors = imported.colors || DEFAULT_COLORS;
+    const importedConnectionColors = imported.connectionColors || DEFAULT_CONNECTION_COLORS;
+    const importedPageCount = Math.max(1,
+      countNodes(imported.root)
+      + importedOrphans.reduce((total, orphan) => total + countNodes(orphan), 0)
+    );
+
+    setRoot(imported.root);
+    setOrphans(importedOrphans);
+    setConnections(importedConnections);
+    setColors(importedColors);
+    setConnectionColors(importedConnectionColors);
+    setCurrentMap(null);
+    navigateToRoute(createAppHomeRoute());
+    setIsImportedMap(true);
+    setDraftVersionFromSnapshot({
+      root: imported.root,
+      orphans: importedOrphans,
+      connections: importedConnections,
+      colors: importedColors,
+      connectionColors: importedConnectionColors,
+    }, 'Updated');
+    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    queueNormalMapInitialCenter({
+      pendingInitialCenterRef,
+      pendingInitialLargeMapCenterRef,
+      scheduleResetViewRef,
+      attempts: 20,
+    });
+    setUrlInput(imported.root.url || '');
+    setMapName('');
+    setShowImportModal(false);
+    const sourceCount = Math.max(importedPageCount, Math.floor(Number(originalPageCount || importedPageCount)));
+    showToast(
+      partial
+        ? `Imported ${formatEntitlementCount(importedPageCount)} of ${formatEntitlementCount(sourceCount)} pages from ${imported.parseType}`
+        : `Imported ${formatEntitlementCount(importedPageCount)} pages from ${imported.parseType}`,
+      partial ? 'warning' : 'success'
+    );
+    return true;
+  };
+
   // Process imported file (shared by both browse and drag-drop)
   const processImportFile = async (file) => {
     if (!file) return;
@@ -16834,41 +17178,25 @@ export default function App({ currentRoute, navigateToRoute }) {
         return;
       }
 
-      const importedOrphans = imported.orphans || [];
-      const importedConnections = imported.connections || [];
-      const importedColors = imported.colors || DEFAULT_COLORS;
-      const importedConnectionColors = imported.connectionColors || DEFAULT_CONNECTION_COLORS;
+      const importedPageCount = Math.max(1,
+        countNodes(imported.root)
+        + (imported.orphans || []).reduce((total, orphan) => total + countNodes(orphan), 0)
+      );
+      const importLimitBlock = getImportPageLimitBlock(importedPageCount);
 
-      if (imported.root) {
-        setRoot(imported.root);
-        setOrphans(importedOrphans);
-        setConnections(importedConnections);
-        setColors(importedColors);
-        setConnectionColors(importedConnectionColors);
-        setCurrentMap(null);
-        navigateToRoute(createAppHomeRoute());
-        setIsImportedMap(true); // Mark as imported - scanning won't work
-        setDraftVersionFromSnapshot({
-          root: imported.root,
-          orphans: importedOrphans,
-          connections: importedConnections,
-          colors: importedColors,
-          connectionColors: importedConnectionColors,
-        }, 'Updated');
-        applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-        queueNormalMapInitialCenter({
-          pendingInitialCenterRef,
-          pendingInitialLargeMapCenterRef,
-          scheduleResetViewRef,
-          attempts: 20,
+      if (importLimitBlock) {
+        setImportPageLimitModal({
+          ...importLimitBlock,
+          fileName: file.name || 'Imported file',
+          parseType: imported.parseType || 'file',
+          imported,
         });
-        setUrlInput(imported.root.url || '');
-        setMapName('');
         setShowImportModal(false);
-        showToast(`Imported ${imported.count || 1} pages from ${imported.parseType}`, 'success');
-      } else {
-        showToast('Could not build sitemap from URLs', 'error');
+        setImportLoading(false);
+        return;
       }
+
+      applyImportedMap(imported);
     } catch (err) {
       console.error('Import error:', err);
       showToast(`Import failed: ${err.message || 'Unknown error'}`, 'error');
@@ -16970,13 +17298,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canvasGridDotRadius = canvasGridMetrics.dotRadius;
   const scanLockedByArchive = Boolean(currentUser?.entitlements?.archived);
   const archiveScanTitle = 'New scans are locked while this account is archived';
-  const currentBillingPlan = currentUser?.entitlements?.plan || null;
-  const currentBillingPlanKey = currentBillingPlan?.key || (isLoggedIn ? 'free' : 'guest');
-  const currentBillingPlanName = currentBillingPlan?.name || (isLoggedIn ? 'Free' : 'Not signed in');
-  const screenshotCreditMeter = currentUser?.entitlements?.meters?.screenshotCredits || null;
-  const screenshotCreditsLabel = screenshotCreditMeter?.unlimited
-    ? 'Unlimited'
-    : formatEntitlementCount(Math.max(0, Number(screenshotCreditMeter?.remaining || 0)));
   const showAppHomeGrid = !hasMap
     && currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'home';
@@ -18029,7 +18350,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                       markMentionCommentsRead();
                       setShowViewDropdown(false);
                       setShowColorKey(false);
-                      setShowOrientationMenu(false);
                       setShowReportDrawer(false);
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
@@ -18049,7 +18369,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                     if (next) {
                       setShowViewDropdown(false);
                       setShowColorKey(false);
-                      setShowOrientationMenu(false);
                       setShowCommentsPanel(false);
                       setShowImageReportDrawer(false);
                       setShowProfileDrawer(false);
@@ -18067,7 +18386,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                     const next = !prev;
                     if (next) {
                       setShowColorKey(false);
-                      setShowOrientationMenu(false);
                     }
                     return next;
                   });
@@ -18130,7 +18448,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                     const next = !prev;
                     if (next) {
                       setShowViewDropdown(false);
-                      setShowOrientationMenu(false);
                     }
                     return next;
                   });
@@ -18162,23 +18479,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                     }}
                   />
                 ),
-                mapOrientation,
-                showOrientationMenu,
-                onToggleOrientationMenu: () => {
-                  setShowOrientationMenu((prev) => {
-                    const next = !prev;
-                    if (next) {
-                      setShowViewDropdown(false);
-                      setShowColorKey(false);
-                    }
-                    return next;
-                  });
-                },
-                orientationMenuRef,
-                onMapOrientationChange: (nextOrientation) => {
-                  setMapOrientation(normalizeMapOrientation(nextOrientation));
-                  setShowOrientationMenu(false);
-                },
                 onToggleImageMenu: () => {
                   if (showImageMenu) {
                     setShowImageMenu(false);
@@ -18186,7 +18486,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                   }
                   setShowViewDropdown(false);
                   setShowColorKey(false);
-                  setShowOrientationMenu(false);
                   setShowImageReportDrawer(false);
                   setShowImageMenu(true);
                   validateCurrentMapImageAssets();
@@ -18545,6 +18844,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           exportPng();
         }}
         onExportPdf={() => { setShowExportModal(false); exportPdf(); }}
+        onExportSvg={() => { setShowExportModal(false); exportSvg(); }}
         onExportCsv={() => { exportCsv(); setShowExportModal(false); }}
         onExportJson={() => { exportJson(); setShowExportModal(false); }}
         onExportXml={() => { exportXml(); setShowExportModal(false); }}
@@ -18864,129 +19164,156 @@ export default function App({ currentRoute, navigateToRoute }) {
       {plansModal && (
         <Modal
           show
-          onClose={dismissPlansModal}
-          title="Upgrade"
-          subtitle="Choose a plan to open Stripe checkout in a new tab."
-          className="plans-modal"
-          scrollable
-          footer={(
-            <Button variant="secondary" onClick={dismissPlansModal}>
-              Close
-            </Button>
-          )}
-        >
-          <div className="plans-modal-body">
-            <div className="plans-modal-current">
-              <span>Current plan</span>
-              <strong>{currentBillingPlanName}</strong>
-            </div>
+	          onClose={dismissPlansModal}
+	          title="Upgrade"
+	          subtitle="Choose a plan or screenshot credit pack before opening Stripe checkout."
+	          className="plans-modal"
+	          scrollable
+	          footer={(
+	            <div className="plans-modal-footer">
+	              <div className="plans-modal-subtotal" aria-live="polite">
+	                <span>Selected</span>
+	                <strong>{selectedBillingPurchase?.label || 'None'}</strong>
+	                <small>Subtotal: {selectedBillingPurchase?.subtotal || '--'}</small>
+	              </div>
+	              <div className="plans-modal-footer-actions">
+	                <Button variant="secondary" onClick={dismissPlansModal}>
+	                  Cancel
+	                </Button>
+	                <Button
+	                  variant="primary"
+	                  onClick={handleSelectedBillingCheckout}
+	                  loading={!!billingActionKey}
+	                  disabled={!selectedBillingPurchase || selectedBillingPurchase.disabled || !!billingActionKey}
+	                  endIcon={!selectedBillingPurchase?.disabled && selectedBillingPurchase?.checkoutLabel === 'Checkout' ? <ExternalLink /> : null}
+	                >
+	                  {selectedBillingPurchase?.checkoutLabel || 'Checkout'}
+	                </Button>
+	              </div>
+	            </div>
+	          )}
+	        >
+	          <div className="plans-modal-body">
             {billingCatalogLoading ? (
               <StatusAlert tone="loading">Checking billing availability...</StatusAlert>
             ) : null}
             {billingCatalogError ? (
               <StatusAlert tone="warning">{billingCatalogError}</StatusAlert>
             ) : null}
-            {billingCatalog && !billingCatalog.enabled ? (
-              <StatusAlert tone="warning">Billing is not enabled yet.</StatusAlert>
-            ) : null}
-            <div className="plans-modal-cycle" role="group" aria-label="Billing cycle">
-              {BILLING_CYCLE_OPTIONS.map((option) => (
-                <button
-                  type="button"
-                  key={option.key}
-                  className={billingCycle === option.key ? 'active' : ''}
-                  aria-pressed={billingCycle === option.key}
-                  disabled={!!billingActionKey}
-                  onClick={() => setBillingCycle(option.key)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <div className="plans-modal-grid" aria-label="Plan options">
-              {planOptionCards.map((plan) => {
-                const catalogEntry = billingPlanCatalogByKey.get(plan.key);
-                const unavailableReason = getBillingCheckoutUnavailableReason(catalogEntry, billingCycle);
-                const planActionKey = `plan:${plan.key}:${billingCycle}`;
-                const isCurrentPlan = currentBillingPlanKey === plan.key;
-                return (
+            <div className="plans-modal-cycle-control">
+              <span className="plans-modal-cycle-label">Billing cycle</span>
+              <div className="plans-modal-cycle" role="group" aria-label="Billing cycle">
+                {BILLING_CYCLE_OPTIONS.map((option) => (
                   <button
                     type="button"
-                    className="plans-modal-card"
-                    key={plan.key}
-                    disabled={!!billingActionKey || !!unavailableReason}
-                    onClick={() => handlePlanCheckout(plan.key, billingCycle)}
+                    key={option.key}
+                    className={billingCycle === option.key ? 'active' : ''}
+                    aria-pressed={billingCycle === option.key}
+                    disabled={!!billingActionKey}
+                    onClick={() => setBillingCycle(option.key)}
                   >
-                    <div className="plans-modal-card-header">
-                      <strong>{plan.name}</strong>
-                      {isCurrentPlan ? <span className="plans-modal-current-badge">Current plan</span> : null}
-                    </div>
-                    <div className="plans-modal-card-price-row">
-                      <strong className="plans-modal-card-price">{plan.price}</strong>
-                      <span>{plan.priceSuffix} · {plan.priceIntervalLabel} checkout</span>
-                    </div>
-                    <p>{plan.note}</p>
-                    <ul className="plans-modal-card-features">
-                      {plan.features.map((feature) => (
-                        <li key={feature}>{feature}</li>
-                      ))}
-                    </ul>
-                    <small className="plans-modal-card-action">
-                      {billingActionKey === planActionKey ? 'Opening checkout...' : (unavailableReason || 'Checkout')}
-                    </small>
+                    {option.label}
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-            <div className="plans-modal-packs">
-              <span>Screenshot credit packs</span>
-              {screenshotCreditPacks.length ? (
-                <div className="plans-modal-pack-grid">
-                  {screenshotCreditPacks.map((pack) => {
-                    const unavailableReason = getBillingCheckoutUnavailableReason(pack);
-                    const packQuantity = getScreenshotPackQuantity(pack.key);
-                    const totalCredits = Math.max(0, pack.quantity * packQuantity);
-                    const packActionKey = `addon:${pack.key}`;
-                    const isPackLoading = billingActionKey === packActionKey;
-                    return (
-                      <div className="plans-modal-pack-card" key={pack.key}>
-                        <div className="plans-modal-pack-main">
-                          <strong>{formatEntitlementCount(pack.quantity)} credits</strong>
-                          <small>{pack.priceLabel}</small>
-                        </div>
-                        <TextInput
-                          type="number"
-                          min="1"
-                          max={ADD_ON_QUANTITY_MAX}
-                          step="1"
-                          size="sm"
-                          label="Quantity"
-                          labelHidden
-                          value={packQuantity}
-                          disabled={!!billingActionKey || !!unavailableReason}
-                          onChange={(event) => updateScreenshotPackQuantity(pack.key, event.target.value)}
-                        />
-                        <small>{formatEntitlementCount(totalCredits)} total credits</small>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          loading={isPackLoading}
-                          disabled={!!billingActionKey || !!unavailableReason}
-                          onClick={() => handleAddOnCheckout(pack.key, packQuantity)}
-                        >
-                          {unavailableReason || 'Checkout'}
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : billingCatalog && !billingCatalogLoading ? (
-                <StatusAlert tone="warning">Screenshot credit packs are not configured yet.</StatusAlert>
-              ) : null}
-            </div>
-          </div>
-        </Modal>
+	            <div className="plans-modal-layout">
+	              <div className="plans-modal-grid" aria-label="Plan options">
+	                {planOptionCards.map((plan) => {
+	                  const isCurrentPlan = currentBillingPlanKey === plan.key;
+	                  const isSelected = billingSelection?.type === 'plan' && billingSelection.key === plan.key;
+	                  return (
+	                    <button
+	                      type="button"
+	                      className={classNames(
+	                        'plans-modal-card',
+	                        isSelected && 'is-selected',
+	                        isCurrentPlan && 'is-current'
+	                      )}
+	                      key={plan.key}
+	                      disabled={!!billingActionKey}
+	                      onClick={() => setBillingSelection({ type: 'plan', key: plan.key })}
+	                    >
+	                      <div className="plans-modal-card-header">
+	                        <strong>{plan.name}</strong>
+	                        {isCurrentPlan ? <span className="plans-modal-current-badge">Current plan</span> : null}
+	                      </div>
+	                      <div className="plans-modal-card-price-row">
+	                        <strong className="plans-modal-card-price">{plan.price}</strong>
+	                        <span>{plan.priceSuffix} · {plan.priceIntervalLabel}</span>
+	                      </div>
+	                      <p>{plan.note}</p>
+	                      <ul className="plans-modal-card-features">
+	                        {plan.features.map((feature) => (
+	                          <li key={feature}>{feature}</li>
+	                        ))}
+	                      </ul>
+	                      <small className="plans-modal-card-action">
+	                        {isCurrentPlan ? 'Current plan' : 'Select'}
+	                      </small>
+	                    </button>
+	                  );
+	                })}
+	              </div>
+	              <div className="plans-modal-packs">
+	                <span>Screenshot credit packs</span>
+	              {screenshotCreditPacks.length ? (
+	                <div className="plans-modal-pack-list">
+	                  {screenshotCreditPacks.map((pack) => {
+	                    const unavailableReason = getBillingCheckoutUnavailableReason(pack);
+	                    const packQuantity = getScreenshotPackQuantity(pack.key);
+	                    const totalCredits = Math.max(0, pack.quantity * packQuantity);
+	                    const isSelected = billingSelection?.type === 'addon' && billingSelection.key === pack.key;
+	                    return (
+	                      <div
+	                        role="button"
+	                        tabIndex={billingActionKey ? -1 : 0}
+	                        className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
+	                        key={pack.key}
+	                        aria-disabled={!!billingActionKey}
+	                        onClick={() => setBillingSelection({ type: 'addon', key: pack.key })}
+	                        onKeyDown={(event) => {
+	                          if (event.key === 'Enter' || event.key === ' ') {
+	                            event.preventDefault();
+	                            setBillingSelection({ type: 'addon', key: pack.key });
+	                          }
+	                        }}
+	                      >
+	                        <div className="plans-modal-pack-main">
+	                          <strong>{formatEntitlementCount(pack.quantity)} credits</strong>
+	                          {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
+	                        </div>
+	                        <div className="plans-modal-pack-quantity">
+	                          <TextInput
+                            type="number"
+                            min="1"
+                            max={ADD_ON_QUANTITY_MAX}
+                            step="1"
+                            size="sm"
+	                            label="Quantity"
+	                            labelHidden
+	                            value={packQuantity}
+	                            disabled={!!billingActionKey || !!unavailableReason}
+	                            onClick={(event) => event.stopPropagation()}
+	                            onChange={(event) => {
+	                              updateScreenshotPackQuantity(pack.key, event.target.value);
+	                              setBillingSelection({ type: 'addon', key: pack.key });
+	                            }}
+	                          />
+	                          <small>{formatEntitlementCount(totalCredits)} total credits</small>
+	                        </div>
+	                        <small className="plans-modal-card-action">Select</small>
+	                      </div>
+	                    );
+	                  })}
+	                </div>
+	              ) : billingCatalog && !billingCatalogLoading ? (
+	                <StatusAlert tone="warning">Screenshot credit packs are not configured yet.</StatusAlert>
+	              ) : null}
+	              </div>
+	            </div>
+	          </div>
+	        </Modal>
       )}
 
       {scanAuthPrompt && (
@@ -19215,6 +19542,8 @@ export default function App({ currentRoute, navigateToRoute }) {
         onClose={() => setShowSettingsDrawer(false)}
         theme={theme}
         onThemeChange={setTheme}
+        mapOrientation={mapOrientation}
+        onMapOrientationChange={(nextOrientation) => setMapOrientation(normalizeMapOrientation(nextOrientation))}
         showPageNumbers={layers.pageNumbers}
         onTogglePageNumbers={() => setLayers(prev => ({ ...prev, pageNumbers: !prev.pageNumbers }))}
         consent={consent}
@@ -19295,6 +19624,73 @@ export default function App({ currentRoute, navigateToRoute }) {
         onFileChange={handleFileImport}
         loading={importLoading}
       />
+
+      {importPageLimitModal && (
+        <Modal
+          show
+          onClose={() => setImportPageLimitModal(null)}
+          title="Not enough page room"
+          className="import-limit-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setImportPageLimitModal(null)}
+              >
+                Cancel
+              </Button>
+              {importPageLimitModal.availablePages > 0 ? (
+                <Button
+                  variant={importPageLimitModal.canManageBilling ? 'secondary' : 'primary'}
+                  onClick={() => {
+                    const partialImport = limitImportedMapToPageCount(
+                      importPageLimitModal.imported,
+                      importPageLimitModal.availablePages
+                    );
+                    if (partialImport) {
+                      applyImportedMap(partialImport, {
+                        originalPageCount: importPageLimitModal.pageCount,
+                        partial: true,
+                      });
+                    }
+                    setImportPageLimitModal(null);
+                  }}
+                >
+                  Continue with {formatEntitlementCount(importPageLimitModal.availablePages)} pages
+                </Button>
+              ) : null}
+              {importPageLimitModal.canManageBilling ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setImportPageLimitModal(null);
+                    openPlansModal('import-page-limit');
+                  }}
+                >
+                  Add pages or upgrade
+                </Button>
+              ) : null}
+            </>
+          )}
+        >
+          <div className="entitlement-modal-body">
+            <p>
+              {importPageLimitModal.fileName || 'This file'} has{' '}
+              {formatEntitlementCount(importPageLimitModal.pageCount)} pages, but this account has{' '}
+              {formatEntitlementCount(importPageLimitModal.availablePages)} active pages available.
+            </p>
+            {importPageLimitModal.availablePages > 0 && importPageLimitModal.canManageBilling ? (
+              <p>You can continue with a partial import using the available pages, or add pages before importing the full file.</p>
+            ) : importPageLimitModal.availablePages > 0 ? (
+              <p>You can continue with a partial import using the available pages, or ask the primary account owner to add pages before importing the full file.</p>
+            ) : importPageLimitModal.canManageBilling ? (
+              <p>Add pages to the account or upgrade the account before importing this file.</p>
+            ) : (
+              <p>Ask the primary account owner to add pages or upgrade the account before importing this file.</p>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {toast && (
         <Toast

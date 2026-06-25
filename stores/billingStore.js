@@ -93,7 +93,8 @@ async function ensureBillingSchemaAsync() {
         ends_at TIMESTAMP,
         metadata TEXT,
         created_by_user_id TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP
       )
     `);
 
@@ -127,8 +128,10 @@ async function ensureBillingSchemaAsync() {
     await ensureColumnAsync('maps', 'account_id', 'TEXT');
     await ensureColumnAsync('maps', 'status', "TEXT NOT NULL DEFAULT 'active'");
     await ensureColumnAsync('maps', 'archived_at', 'TIMESTAMP');
+    await ensureColumnAsync('maps', 'page_count', 'INTEGER');
     await ensureColumnAsync('entitlement_grants', 'remaining_quantity', 'INTEGER');
     await ensureColumnAsync('entitlement_grants', 'external_ref', 'TEXT');
+    await ensureColumnAsync('entitlement_grants', 'updated_at', 'TIMESTAMP');
 
     await adapter.executeAsync(`
       CREATE TABLE IF NOT EXISTS stripe_webhook_events (
@@ -581,6 +584,24 @@ async function countBillableSeatsForAccountAsync(accountId) {
   return Number(row?.count || 0);
 }
 
+async function countBillableEditorsForAccountAsync(accountId) {
+  await ensureBillingSchemaAsync();
+  const row = await adapter.queryOneAsync(`
+    SELECT COUNT(*) AS count
+    FROM account_memberships am
+    INNER JOIN billing_accounts ba ON ba.id = am.account_id
+    WHERE am.account_id = ?
+      AND am.seat_status IN ('accepted', 'invited', 'pending')
+      AND am.role IN ('editor', 'owner')
+      AND NOT (
+        am.role = 'owner'
+        AND am.user_id IS NOT NULL
+        AND am.user_id = ba.owner_user_id
+      )
+  `, [accountId]);
+  return Number(row?.count || 0);
+}
+
 async function countSeatRolesForAccountAsync(accountId) {
   await ensureBillingSchemaAsync();
   const rows = await adapter.queryAllAsync(`
@@ -888,6 +909,111 @@ async function upsertEntitlementGrantByExternalRefAsync({
   }
 }
 
+async function upsertAdjustableEntitlementGrantByExternalRefAsync({
+  accountId,
+  source,
+  externalRef,
+  meter = null,
+  featureKey = null,
+  quantity = null,
+  resetBehavior = 'rollover',
+  startsAt = null,
+  endsAt = null,
+  metadata = null,
+  createdByUserId = null,
+}) {
+  await ensureBillingSchemaAsync();
+  const normalizedExternalRef = String(externalRef || '').trim();
+  if (!normalizedExternalRef) {
+    const grant = await createEntitlementGrantAsync({
+      accountId,
+      source,
+      meter,
+      featureKey,
+      quantity,
+      resetBehavior,
+      startsAt,
+      endsAt,
+      metadata,
+      createdByUserId,
+    });
+    return { grant, created: true };
+  }
+
+  const existing = await adapter.queryOneAsync(
+    'SELECT * FROM entitlement_grants WHERE external_ref = ?',
+    [normalizedExternalRef]
+  );
+  if (existing) {
+    const nextQuantity = quantity === null || quantity === undefined ? null : Number(quantity);
+    const previousQuantity = existing.quantity === null || existing.quantity === undefined
+      ? null
+      : Number(existing.quantity);
+    const previousRemaining = existing.remaining_quantity === null || existing.remaining_quantity === undefined
+      ? previousQuantity
+      : Number(existing.remaining_quantity);
+    const nextRemaining = nextQuantity === null
+      ? null
+      : Math.max(0, Number(previousRemaining || 0) + (nextQuantity - Number(previousQuantity || 0)));
+
+    await adapter.executeAsync(`
+      UPDATE entitlement_grants
+      SET account_id = ?,
+          source = ?,
+          meter = ?,
+          feature_key = ?,
+          quantity = ?,
+          remaining_quantity = ?,
+          reset_behavior = ?,
+          starts_at = ?,
+          ends_at = ?,
+          metadata = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [
+      accountId,
+      source,
+      meter,
+      featureKey,
+      nextQuantity,
+      nextRemaining,
+      resetBehavior,
+      startsAt ? toSqlTimestamp(startsAt) : null,
+      endsAt ? toSqlTimestamp(endsAt) : null,
+      metadata ? JSON.stringify(metadata) : null,
+      existing.id,
+    ]);
+    return {
+      grant: await adapter.queryOneAsync('SELECT * FROM entitlement_grants WHERE id = ?', [existing.id]),
+      created: false,
+    };
+  }
+
+  try {
+    const grant = await createEntitlementGrantAsync({
+      accountId,
+      source,
+      externalRef: normalizedExternalRef,
+      meter,
+      featureKey,
+      quantity,
+      resetBehavior,
+      startsAt,
+      endsAt,
+      metadata,
+      createdByUserId,
+    });
+    return { grant, created: true };
+  } catch (error) {
+    const raced = await adapter.queryOneAsync(
+      'SELECT * FROM entitlement_grants WHERE external_ref = ?',
+      [normalizedExternalRef]
+    );
+    if (raced) return { grant: raced, created: false };
+    throw error;
+  }
+}
+
 async function listEntitlementGrantsForAccountAsync({ accountId, limit = 25, offset = 0 }) {
   await ensureBillingSchemaAsync();
   const safeLimit = Math.min(Math.max(Number(limit || 25), 1), 100);
@@ -1066,6 +1192,7 @@ module.exports = {
   startTrialAsync,
   countActiveProjectsForAccountAsync,
   countBillableSeatsForAccountAsync,
+  countBillableEditorsForAccountAsync,
   countSeatRolesForAccountAsync,
   upsertInvitedMembershipAsync,
   markMembershipAcceptedAsync,
@@ -1076,6 +1203,7 @@ module.exports = {
   insertLedgerEntryAsync,
   createEntitlementGrantAsync,
   upsertEntitlementGrantByExternalRefAsync,
+  upsertAdjustableEntitlementGrantByExternalRefAsync,
   listEntitlementGrantsForAccountAsync,
   consumeMeterGrantQuantityAsync,
   startStripeWebhookEventAsync,

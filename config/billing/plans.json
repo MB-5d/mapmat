@@ -17,9 +17,12 @@
     "lightweightDataRetentionMonths": 12
   },
   "meters": {
-    "crawl_pages": "Crawl pages",
+    "active_pages": "Pages",
+    "crawl_pages": "Pages",
     "screenshot_credits": "Screenshot credits",
-    "organized_exports": "Organized screenshot exports"
+    "organized_exports": "Downloads",
+    "downloads": "Downloads",
+    "editors": "Editors"
   },
   "screenshotCreditCosts": {
     "desktop_viewport": 1,
@@ -73,14 +76,6 @@
       }
     },
     "addOns": {
-      "crawl_pages_1000": {
-        "name": "1,000 crawl pages",
-        "priceEnv": "STRIPE_PRICE_CRAWL_PAGES_1000",
-        "mode": "payment",
-        "meter": "crawl_pages",
-        "quantity": 1000,
-        "resetBehavior": "rollover"
-      },
       "screenshot_pack_1": {
         "name": "10 screenshot credits",
         "priceEnv": "STRIPE_PRICE_SCREENSHOT_PACK_1",
@@ -133,20 +128,32 @@
         "resetBehavior": "rollover"
       },
       "organized_exports_10": {
-        "name": "10 organized exports",
+        "name": "10 downloads",
         "priceEnv": "STRIPE_PRICE_ORGANIZED_EXPORTS_10",
         "mode": "payment",
-        "meter": "organized_exports",
+        "meter": "downloads",
         "quantity": 10,
         "resetBehavior": "rollover"
-      },
-      "seat_1": {
-        "name": "1 extra seat",
-        "priceEnv": "STRIPE_PRICE_EXTRA_SEAT_1",
-        "mode": "payment",
-        "meter": "seats",
-        "quantity": 1,
-        "resetBehavior": "rollover"
+      }
+    },
+    "recurringAddOns": {
+      "extra_editor": {
+        "name": "Extra editor",
+        "prices": {
+          "monthly": {
+            "priceEnv": "STRIPE_PRICE_EXTRA_EDITOR_MONTHLY",
+            "interval": "month"
+          },
+          "yearly": {
+            "priceEnv": "STRIPE_PRICE_EXTRA_EDITOR_YEARLY",
+            "interval": "year"
+          }
+        },
+        "entitlements": {
+          "editors": 1,
+          "activePages": 10000,
+          "screenshotCredits": 300
+        }
       }
     },
     "addOnAliases": {
@@ -183,11 +190,11 @@
       },
       "limits": {
         "activeProjects": 1,
-        "crawlPages": 100,
+        "activePages": 1000,
         "scanPagesPerRun": 100,
-        "screenshotCredits": 0,
-        "organizedScreenshotExports": 0,
-        "seats": 1
+        "screenshotCredits": 25,
+        "downloads": 5,
+        "editors": 1
       },
       "features": {
         "limitedExports": true,
@@ -225,15 +232,15 @@
       },
       "limits": {
         "activeProjects": 5,
-        "crawlPages": 1000,
-        "screenshotCredits": 100,
-        "organizedScreenshotExports": 2,
-        "seats": 1
+        "activePages": 10000,
+        "screenshotCredits": 300,
+        "downloads": null,
+        "editors": 1
       },
       "features": {
         "limitedExports": false,
         "standardExports": true,
-        "advancedExports": false,
+        "advancedExports": true,
         "clientShareLinks": false,
         "brandedReports": false,
         "scheduledRescans": false,
@@ -265,11 +272,11 @@
         }
       },
       "limits": {
-        "activeProjects": 50,
-        "crawlPages": 50000,
-        "screenshotCredits": 3000,
-        "organizedScreenshotExports": null,
-        "seats": 5
+        "activeProjects": 15,
+        "activePages": 50000,
+        "screenshotCredits": 1000,
+        "downloads": null,
+        "editors": 3
       },
       "features": {
         "limitedExports": false,
@@ -307,10 +314,10 @@
       },
       "limits": {
         "activeProjects": null,
-        "crawlPages": 200000,
-        "screenshotCredits": 10000,
-        "organizedScreenshotExports": null,
-        "seats": 15
+        "activePages": 200000,
+        "screenshotCredits": 5000,
+        "downloads": null,
+        "editors": 10
       },
       "features": {
         "limitedExports": false,
@@ -330,11 +337,11 @@
       "internal": true,
       "limits": {
         "activeProjects": null,
-        "crawlPages": null,
+        "activePages": null,
         "scanPagesPerRun": null,
         "screenshotCredits": null,
-        "organizedScreenshotExports": null,
-        "seats": null
+        "downloads": null,
+        "editors": null
       },
       "features": {
         "limitedExports": false,

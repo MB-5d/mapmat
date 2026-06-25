@@ -337,9 +337,16 @@ function getArchiveRetentionDates(now = new Date()) {
 }
 
 function getPlanLimitForMeter(plan, meter) {
-  if (meter === ENTITLEMENT_METERS.crawlPages) return plan?.limits?.crawlPages;
+  if (meter === ENTITLEMENT_METERS.activePages || meter === ENTITLEMENT_METERS.crawlPages) {
+    return plan?.limits?.activePages ?? plan?.limits?.crawlPages;
+  }
   if (meter === ENTITLEMENT_METERS.screenshotCredits) return plan?.limits?.screenshotCredits;
-  if (meter === ENTITLEMENT_METERS.organizedExports) return plan?.limits?.organizedScreenshotExports;
+  if (meter === ENTITLEMENT_METERS.downloads || meter === ENTITLEMENT_METERS.organizedExports) {
+    return plan?.limits?.downloads ?? plan?.limits?.organizedScreenshotExports;
+  }
+  if (meter === ENTITLEMENT_METERS.editors || meter === ENTITLEMENT_METERS.seats) {
+    return plan?.limits?.editors ?? plan?.limits?.seats;
+  }
   return 0;
 }
 

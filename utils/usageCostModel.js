@@ -99,6 +99,7 @@ function estimateUsageCosts({
     'export_json',
     'export_pdf',
     'export_png',
+    'export_svg',
     'export_site_index',
     'export_report_pdf',
   ]);
@@ -141,7 +142,7 @@ function estimateUsageCosts({
       clientExports * Number(rates.clientExport || 0)
       + imageDownloads * Number(rates.imageDownloadPackage || 0)
     ), { clientExports, imageDownloads }),
-    buildCostCategory('collaboration', 'Comments, sharing, seats', (
+    buildCostCategory('collaboration', 'Comments, sharing, editors', (
       comments * Number(rates.comment || 0)
       + shares * Number(rates.share || 0)
       + additionalSeats * Number(rates.additionalUserSeatMonth || 0) * (windowDays / 30)

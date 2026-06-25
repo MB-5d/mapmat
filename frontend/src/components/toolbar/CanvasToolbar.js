@@ -1,7 +1,5 @@
 import React from 'react';
 import {
-  ArrowDownFromLine,
-  ArrowRightFromLine,
   Bookmark,
   Copy,
   Download,
@@ -18,7 +16,6 @@ import {
   MessageSquare,
   MousePointer2,
   Palette,
-  Ratio,
   RefreshCcw,
   Redo2,
   Share2,
@@ -33,7 +30,6 @@ import {
   MenuDivider,
   MenuItem,
   MenuPanel,
-  MenuRadioItem,
   MenuSection,
   MenuSectionHeader,
   MenuTitle,
@@ -108,11 +104,6 @@ const CanvasToolbar = ({
   onToggleLegendMenu,
   legendMenuRef,
   legendPanel,
-  mapOrientation = 'vertical',
-  showOrientationMenu,
-  onToggleOrientationMenu,
-  orientationMenuRef,
-  onMapOrientationChange,
   onToggleImageMenu,
   onGetThumbnailsAll,
   onGetThumbnailsSelected,
@@ -166,8 +157,6 @@ const CanvasToolbar = ({
   const undoBlockedByLive = !canUndo && !!undoRedoDisabledReason;
   const redoBlockedByLive = !canRedo && !!undoRedoDisabledReason;
   const shareUnavailable = !hasSavedMap;
-  const isHorizontalOrientation = mapOrientation === 'horizontal';
-  const orientationLabel = `Orientation: ${isHorizontalOrientation ? 'horizontal' : 'vertical'}`;
   const imageCaptureRequiresSave = hasMap && !hasSavedMap;
   const imageCaptureDisabled = !hasMap || imageCaptureRequiresSave;
   const imageCaptureDisabledReason = imageCaptureRequiresSave ? IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE : undefined;
@@ -525,46 +514,6 @@ const CanvasToolbar = ({
     </div>
   );
 
-  const orientationButton = (
-    <div key="orientation-menu" className="canvas-tool-menu-wrapper" ref={orientationMenuRef}>
-      <ToolButton
-        active={showOrientationMenu}
-        onClick={onToggleOrientationMenu}
-        icon={<Ratio />}
-        label="Orientation"
-        title={orientationLabel}
-        disabled={!hasMap}
-        aria-expanded={showOrientationMenu}
-        aria-haspopup="menu"
-      />
-      {showOrientationMenu && (
-        <MenuPanel className="canvas-tool-menu canvas-tool-menu-panel" role="menu">
-          <MenuTitle>Map orientation</MenuTitle>
-          <MenuSection role="radiogroup" aria-label="Map orientation">
-            <MenuRadioItem
-              className="canvas-tool-menu-radio-item"
-              name="map-orientation"
-              value="vertical"
-              label="Vertical"
-              checked={!isHorizontalOrientation}
-              onChange={() => onMapOrientationChange?.('vertical')}
-              endSlot={<ArrowDownFromLine size={16} />}
-            />
-            <MenuRadioItem
-              className="canvas-tool-menu-radio-item"
-              name="map-orientation"
-              value="horizontal"
-              label="Horizontal"
-              checked={isHorizontalOrientation}
-              onChange={() => onMapOrientationChange?.('horizontal')}
-              endSlot={<ArrowRightFromLine size={16} />}
-            />
-          </MenuSection>
-        </MenuPanel>
-      )}
-    </div>
-  );
-
   const saveButton = canEdit && !hasSavedMap ? (
     <ToolButton
       key="save-map"
@@ -630,7 +579,7 @@ const CanvasToolbar = ({
     canEdit ? [addPageButton, duplicateButton].filter(Boolean) : [],
     canEdit ? [undoButton, redoButton].filter(Boolean) : [],
     [commentsButton, reportButton, historyButton].filter(Boolean),
-    [imageMenuButton, layersButton, legendButton, orientationButton].filter(Boolean),
+    [imageMenuButton, layersButton, legendButton].filter(Boolean),
     [saveButton, clearCanvasButton, exportButton, shareButton, collaborateButton].filter(Boolean),
   ].filter((section) => section.length > 0);
 

@@ -1,4 +1,5 @@
 const adapter = require('./dbAdapter');
+const { countMapNodes } = require('../utils/mapScene');
 let ensureMapInsightsSchemaPromise = null;
 let ensureMapVersionBookmarkSchemaPromise = null;
 let ensureMapBillingSchemaPromise = null;
@@ -56,6 +57,7 @@ async function ensureMapBillingSchemaAsync() {
     await ensureColumnAsync('maps', 'account_id', 'TEXT');
     await ensureColumnAsync('maps', 'status', "TEXT NOT NULL DEFAULT 'active'");
     await ensureColumnAsync('maps', 'archived_at', 'TIMESTAMP');
+    await ensureColumnAsync('maps', 'page_count', 'INTEGER');
   })();
   try {
     await ensureMapBillingSchemaPromise;
@@ -65,6 +67,14 @@ async function ensureMapBillingSchemaAsync() {
   }
 }
 
+function safeParseJson(value, fallback = null) {
+  if (value === null || value === undefined || value === '') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
 
 function listMapsByUserAsync({ userId, projectId, limit, offset }) {
   let query = `
@@ -136,6 +146,26 @@ async function countMapsAccessibleToUserAsync({ userId, projectId }) {
   }
 
   return (await adapter.queryOneAsync(query, params))?.count || 0;
+}
+
+async function sumActivePagesForAccountAsync(accountId, ownerUserId = null) {
+  await ensureMapBillingSchemaAsync();
+  const rows = await adapter.queryAllAsync(`
+    SELECT page_count, root_data, orphans_data
+    FROM maps
+    WHERE (account_id = ? OR (account_id IS NULL AND user_id = ?))
+      AND COALESCE(status, 'active') != 'archived'
+  `, [accountId, ownerUserId || '']);
+
+  return rows.reduce((total, row) => {
+    if (Number.isFinite(Number(row.page_count))) {
+      return total + Math.max(0, Math.floor(Number(row.page_count || 0)));
+    }
+    return total + countMapNodes(
+      safeParseJson(row.root_data, null),
+      safeParseJson(row.orphans_data, [])
+    );
+  }, 0);
 }
 
 function normalizeMapNameForCompare(value) {
@@ -225,11 +255,12 @@ async function createMapAsync({
   connectionsData,
   colors,
   connectionColors,
+  pageCount = null,
 }) {
   await ensureMapBillingSchemaAsync();
   return adapter.executeAsync(`
-    INSERT INTO maps (id, user_id, account_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO maps (id, user_id, account_id, project_id, name, notes, url, root_data, orphans_data, connections_data, colors, connection_colors, page_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     id,
     userId,
@@ -243,6 +274,7 @@ async function createMapAsync({
     connectionsData,
     colors,
     connectionColors,
+    pageCount === null || pageCount === undefined ? null : Math.max(0, Math.floor(Number(pageCount || 0))),
   ]);
 }
 
@@ -285,6 +317,10 @@ async function updateMapByIdAsync(mapId, patch) {
   if (Object.prototype.hasOwnProperty.call(patch, 'projectId')) {
     updates.push('project_id = ?');
     params.push(patch.projectId);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'pageCount')) {
+    updates.push('page_count = ?');
+    params.push(patch.pageCount === null || patch.pageCount === undefined ? null : Math.max(0, Math.floor(Number(patch.pageCount || 0))));
   }
   if (updates.length === 0) return false;
 
@@ -489,6 +525,7 @@ module.exports = {
   listMapsAccessibleToUserAsync,
   countMapsByUserAsync,
   countMapsAccessibleToUserAsync,
+  sumActivePagesForAccountAsync,
   getMapNameConflictAsync,
   getMapWithProjectForUserAsync,
   getMapWithProjectAccessibleToUserAsync,

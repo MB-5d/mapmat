@@ -18,7 +18,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For trying Vellic on a small site or one-off audit.',
     marketingCta: 'Get started',
     marketingAction: 'signup',
-    features: ['1 active project', '100 crawl pages', '100 pages per run', 'No screenshot credits', 'No organized exports', '1 editor'],
+    features: ['1 active project', '1,000 active pages total on account', '100 pages per scan', '25 screenshot credits', '5 PNG downloads', '1 editor'],
     prices: {
       monthly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 0, currency: 'usd', formatted: '$0', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -33,7 +33,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For solo audits with screenshots and saved work.',
     marketingCta: 'Subscribe',
     marketingAction: 'checkout',
-    features: ['5 active projects', '1,000 crawl pages', '100 screenshot credits', '2 organized exports', '1 editor'],
+    features: ['5 active projects', '10,000 active pages total on account', '300 screenshot credits', 'Unlimited downloads', '1 editor'],
     prices: {
       monthly: { amount: 800, currency: 'usd', formatted: '$8', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 7200, currency: 'usd', formatted: '$72', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -48,7 +48,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For small teams handling recurring site work.',
     marketingCta: 'Subscribe',
     marketingAction: 'checkout',
-    features: ['50 active projects', '50,000 crawl pages', '3,000 screenshot credits', 'Unlimited organized exports', '5 seats'],
+    features: ['15 active projects', '50,000 active pages total on account', '1,000 screenshot credits', 'Unlimited downloads', '3 editors'],
     prices: {
       monthly: { amount: 1800, currency: 'usd', formatted: '$18', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 14400, currency: 'usd', formatted: '$144', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -63,7 +63,7 @@ const FALLBACK_PLAN_CARDS = [
     appNote: 'For heavier client audits and shared delivery.',
     marketingCta: 'Subscribe',
     marketingAction: 'checkout',
-    features: ['Unlimited projects', '200,000 crawl pages', '10,000 screenshot credits', 'Unlimited organized exports', '15 seats'],
+    features: ['Unlimited projects', '200,000 active pages total on account', '5,000 screenshot credits', 'Unlimited downloads', '10 editors'],
     prices: {
       monthly: { amount: 8800, currency: 'usd', formatted: '$88', suffix: '/mo', intervalLabel: 'Monthly', configured: true },
       yearly: { amount: 96000, currency: 'usd', formatted: '$960', suffix: '/yr', intervalLabel: 'Yearly', configured: true },
@@ -198,7 +198,7 @@ export function buildScreenshotCreditPackCards(catalog) {
         ...entry,
         quantity,
         label: entry.name || `${formatBillingCount(quantity)} screenshot credits`,
-        priceLabel: entry.formatted || entry.price || (entry.configured ? 'Stripe checkout' : 'Not configured'),
+        priceLabel: entry.formatted || entry.price || (entry.configured ? 'Stripe checkout' : ''),
       };
     })
     .sort((left, right) => (left.quantity - right.quantity) || String(left.key).localeCompare(String(right.key)));

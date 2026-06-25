@@ -3,6 +3,7 @@ const billingStore = require('../stores/billingStore');
 const {
   getBillingPlanConfig,
   getCanonicalBillingPlanKey,
+  METERS,
 } = require('./entitlements');
 
 class BillingError extends Error {
@@ -132,6 +133,26 @@ function getCanonicalAddOnKey(addonKey) {
   return String(aliases[normalizedKey] || normalizedKey).trim().toLowerCase();
 }
 
+function getCanonicalRecurringAddOnKey(addonKey) {
+  const normalizedKey = String(addonKey || '').trim().toLowerCase();
+  const aliases = getStripeConfig().recurringAddOnAliases || {};
+  return String(aliases[normalizedKey] || normalizedKey).trim().toLowerCase();
+}
+
+function normalizeMeterKey(value) {
+  const key = String(value || '').trim();
+  const aliases = {
+    activePages: METERS.activePages,
+    crawlPages: METERS.activePages,
+    screenshotCredits: METERS.screenshotCredits,
+    organizedExports: METERS.organizedExports,
+    downloads: METERS.downloads,
+    editors: METERS.editors,
+    seats: METERS.editors,
+  };
+  return aliases[key] || key || null;
+}
+
 function getStripePlanPriceEntries(planKey, entry) {
   if (entry?.prices && typeof entry.prices === 'object') {
     return Object.entries(entry.prices).map(([cycle, priceEntry]) => ({
@@ -242,21 +263,24 @@ function buildPlanFeatureHighlights(plan) {
     formatPlanLimitValue(limits.activeProjects, 'active project', 'active projects', {
       unlimitedLabel: 'Unlimited projects',
     }),
-    formatPlanLimitValue(limits.crawlPages, 'crawl page', 'crawl pages'),
+    `${formatPlanLimitValue(limits.activePages ?? limits.crawlPages, 'active page', 'active pages')} total on account`,
   ];
 
   if (limits.scanPagesPerRun !== undefined && limits.scanPagesPerRun !== null) {
-    highlights.push(formatPlanLimitValue(limits.scanPagesPerRun, 'page per run', 'pages per run'));
+    highlights.push(formatPlanLimitValue(limits.scanPagesPerRun, 'page per scan', 'pages per scan'));
   }
 
   highlights.push(formatPlanLimitValue(limits.screenshotCredits, 'screenshot credit', 'screenshot credits', {
     zeroLabel: 'No screenshot credits',
   }));
-  highlights.push(formatPlanLimitValue(limits.organizedScreenshotExports, 'organized export', 'organized exports', {
-    zeroLabel: 'No organized exports',
-    unlimitedLabel: 'Unlimited organized exports',
+  const downloadsLimit = Object.prototype.hasOwnProperty.call(limits, 'downloads')
+    ? limits.downloads
+    : limits.organizedScreenshotExports;
+  highlights.push(formatPlanLimitValue(downloadsLimit, 'download', 'downloads', {
+    zeroLabel: 'No downloads',
+    unlimitedLabel: 'Unlimited downloads',
   }));
-  highlights.push(formatPlanLimitValue(limits.seats, 'editor', 'seats'));
+  highlights.push(formatPlanLimitValue(limits.editors ?? limits.seats, 'editor', 'editors'));
 
   return highlights.filter(Boolean);
 }
@@ -377,6 +401,7 @@ async function getLiveStripePriceDisplaysAsync() {
   const entries = [
     ...listConfiguredPlanPrices(),
     ...listConfiguredAddOnPrices(),
+    ...listConfiguredRecurringAddOnPrices(),
   ].filter((entry) => entry.priceId);
   if (!isStripeBillingEnabled() || entries.length === 0) return new Map();
   const cacheKey = entries.map((entry) => entry.priceId).sort().join('|');
@@ -444,6 +469,22 @@ function buildBillingCatalog(liveDisplayByPriceId = new Map()) {
         source: liveDisplay ? 'stripe' : null,
       };
     }),
+    recurringAddOns: listConfiguredRecurringAddOnPrices().map(({ priceId, ...entry }) => {
+      const liveDisplay = priceId ? liveDisplayByPriceId.get(priceId) : null;
+      return {
+        ...entry,
+        configured: !!priceId,
+        amount: liveDisplay?.amount ?? null,
+        unitAmount: liveDisplay?.unitAmount ?? null,
+        currency: liveDisplay?.currency || 'usd',
+        formatted: liveDisplay?.formatted || null,
+        price: liveDisplay?.formatted || null,
+        suffix: liveDisplay?.suffix || getBillingCyclePriceSuffix(entry.billingCycle),
+        intervalLabel: liveDisplay?.intervalLabel || getBillingCycleIntervalLabel(entry.billingCycle),
+        productName: liveDisplay?.productName || null,
+        source: liveDisplay ? 'stripe' : null,
+      };
+    }),
   };
 }
 
@@ -483,7 +524,7 @@ function listConfiguredAddOnPrices() {
       priceEnvFallbacks: priceEnvCandidates.slice(1),
       priceId,
       mode: entry.mode || 'payment',
-      meter: entry.meter || null,
+      meter: normalizeMeterKey(entry.meter) || null,
       featureKey: entry.featureKey || null,
       quantity: Math.max(0, Math.floor(Number(entry.quantity || 0))),
       resetBehavior: entry.resetBehavior || 'rollover',
@@ -493,6 +534,46 @@ function listConfiguredAddOnPrices() {
       enabled: !!priceId,
     };
   });
+}
+
+function getRecurringAddOnPriceEntries(addonKey, entry) {
+  if (entry?.prices && typeof entry.prices === 'object') {
+    return Object.entries(entry.prices).map(([cycle, priceEntry]) => ({
+      addonKey,
+      billingCycle: normalizeBillingCycle(cycle),
+      entry: priceEntry || {},
+    }));
+  }
+  const billingCycle = normalizeBillingCycle(entry?.billingCycle || entry?.cycle || entry?.interval);
+  return [{
+    addonKey,
+    billingCycle,
+    entry: entry || {},
+  }];
+}
+
+function listConfiguredRecurringAddOnPrices() {
+  const stripeConfig = getStripeConfig();
+  return Object.entries(stripeConfig.recurringAddOns || {}).flatMap(([addonKey, entry]) => (
+    getRecurringAddOnPriceEntries(addonKey, entry).map((priceEntry) => {
+      const priceEnvCandidates = getPriceEnvCandidates(priceEntry.entry);
+      const priceId = resolveConfiguredPrice(priceEnvCandidates);
+      const interval = priceEntry.entry.interval
+        || (priceEntry.billingCycle === 'yearly' ? 'year' : 'month');
+      return {
+        key: addonKey,
+        name: entry.name || addonKey,
+        billingCycle: priceEntry.billingCycle,
+        priceEnv: priceEnvCandidates[0] || null,
+        priceEnvFallbacks: priceEnvCandidates.slice(1),
+        priceId,
+        interval,
+        mode: 'subscription',
+        entitlements: entry.entitlements || {},
+        enabled: !!priceId,
+      };
+    })
+  ));
 }
 
 function getAddOnPriceConfig(addonKey) {
@@ -510,6 +591,21 @@ function getAddOnPriceConfig(addonKey) {
   return entry;
 }
 
+function getRecurringAddOnPriceConfig(addonKey, billingCycle = 'monthly') {
+  const normalizedKey = getCanonicalRecurringAddOnKey(addonKey);
+  const normalizedCycle = normalizeBillingCycle(billingCycle);
+  const entry = listConfiguredRecurringAddOnPrices().find((item) => (
+    item.key === normalizedKey && item.billingCycle === normalizedCycle
+  ));
+  if (!entry) {
+    throw new BillingError('Choose a valid recurring add-on.', 400, 'INVALID_RECURRING_ADDON');
+  }
+  if (!entry.priceId) {
+    throw new BillingError('This recurring add-on is not configured for checkout yet.', 503, 'BILLING_PRICE_NOT_CONFIGURED');
+  }
+  return entry;
+}
+
 function getPlanPriceConfigByStripePrice(priceId) {
   const normalizedPriceId = normalizeText(priceId);
   if (!normalizedPriceId) return null;
@@ -520,6 +616,12 @@ function getAddOnPriceConfigByStripePrice(priceId) {
   const normalizedPriceId = normalizeText(priceId);
   if (!normalizedPriceId) return null;
   return listConfiguredAddOnPrices().find((entry) => entry.priceId === normalizedPriceId) || null;
+}
+
+function getRecurringAddOnPriceConfigByStripePrice(priceId) {
+  const normalizedPriceId = normalizeText(priceId);
+  if (!normalizedPriceId) return null;
+  return listConfiguredRecurringAddOnPrices().find((entry) => entry.priceId === normalizedPriceId) || null;
 }
 
 function getStripeObjectId(value) {
@@ -550,6 +652,60 @@ function getSubscriptionPrice(subscription) {
     productId: getStripeObjectId(price?.product),
     planPrice: getPlanPriceConfigByStripePrice(price?.id),
   };
+}
+
+function getRecurringAddOnGrantEntries({ addOn, item, subscription, account }) {
+  const entitlements = addOn?.entitlements || {};
+  const itemQuantity = Math.max(0, Math.floor(Number(item?.quantity || 0)));
+  if (itemQuantity <= 0) return [];
+  const subscriptionId = subscription?.id || 'unknown';
+  const priceId = item?.price?.id || 'unknown';
+  const period = getSubscriptionPeriod(subscription);
+  const periodStart = period.start || new Date();
+  const periodEnd = period.end || null;
+  const periodKey = periodStart.toISOString();
+
+  return Object.entries(entitlements).flatMap(([key, value]) => {
+    const meter = normalizeMeterKey(key);
+    const baseQuantity = Math.max(0, Math.floor(Number(value || 0)));
+    const quantity = baseQuantity * itemQuantity;
+    if (!meter || quantity <= 0) return [];
+    return [{
+      accountId: account.id,
+      source: 'subscription_addon',
+      externalRef: `stripe:subscription:${subscriptionId}:${addOn.key}:${priceId}:${periodKey}:${meter}`,
+      meter,
+      featureKey: null,
+      quantity,
+      resetBehavior: 'period',
+      startsAt: periodStart,
+      endsAt: periodEnd,
+      metadata: {
+        provider: 'stripe',
+        subscriptionId,
+        customerId: getStripeObjectId(subscription.customer),
+        priceId,
+        addonKey: addOn.key,
+        billingCycle: addOn.billingCycle,
+        itemQuantity,
+        entitlementKey: key,
+      },
+    }];
+  });
+}
+
+async function syncRecurringAddOnGrantsForSubscriptionAsync(subscription, account) {
+  const items = Array.isArray(subscription?.items?.data) ? subscription.items.data : [];
+  const grants = [];
+  for (const item of items) {
+    const addOn = getRecurringAddOnPriceConfigByStripePrice(item?.price?.id);
+    if (!addOn) continue;
+    const grantEntries = getRecurringAddOnGrantEntries({ addOn, item, subscription, account });
+    for (const entry of grantEntries) {
+      grants.push(await billingStore.upsertAdjustableEntitlementGrantByExternalRefAsync(entry));
+    }
+  }
+  return grants;
 }
 
 function getLatestInvoiceId(subscription) {
@@ -595,17 +751,32 @@ async function getOrCreateStripeCustomerAsync({ stripe, account, user }) {
   return customer.id;
 }
 
-async function createPlanCheckoutSessionAsync({ user, account, planKey, billingCycle = 'monthly', returnPath = '/app' }) {
+async function createPlanCheckoutSessionAsync({
+  user,
+  account,
+  planKey,
+  billingCycle = 'monthly',
+  returnPath = '/app',
+  extraEditorQuantity = 0,
+}) {
   const stripe = getStripeClient();
   const plan = getPlanPriceConfig(planKey, billingCycle);
+  const safeExtraEditorQuantity = Math.min(Math.max(0, Math.floor(Number(extraEditorQuantity || 0))), 100);
+  const extraEditorAddOn = safeExtraEditorQuantity > 0
+    ? getRecurringAddOnPriceConfig('extra_editor', plan.billingCycle)
+    : null;
   if (account?.stripe_subscription_id && ['active', 'trialing', 'past_due', 'unpaid'].includes(String(account.stripe_subscription_status || '').toLowerCase())) {
     throw new BillingError('Use the billing portal to change this subscription.', 409, 'BILLING_PORTAL_REQUIRED');
   }
   const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
+  const lineItems = [{ price: plan.priceId, quantity: 1 }];
+  if (extraEditorAddOn) {
+    lineItems.push({ price: extraEditorAddOn.priceId, quantity: safeExtraEditorQuantity });
+  }
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: customerId,
-    line_items: [{ price: plan.priceId, quantity: 1 }],
+    line_items: lineItems,
     success_url: buildReturnUrl(returnPath, 'success', {
       billingSessionId: '{CHECKOUT_SESSION_ID}',
     }),
@@ -614,6 +785,7 @@ async function createPlanCheckoutSessionAsync({ user, account, planKey, billingC
       checkoutType: 'plan',
       planKey: plan.key,
       billingCycle: plan.billingCycle,
+      extraEditorQuantity: String(safeExtraEditorQuantity),
       vellicAccountId: account.id,
       vellicOwnerUserId: account.owner_user_id,
     },
@@ -621,6 +793,7 @@ async function createPlanCheckoutSessionAsync({ user, account, planKey, billingC
       metadata: {
         planKey: plan.key,
         billingCycle: plan.billingCycle,
+        extraEditorQuantity: String(safeExtraEditorQuantity),
         vellicAccountId: account.id,
         vellicOwnerUserId: account.owner_user_id,
       },
@@ -705,7 +878,7 @@ async function applyStripeSubscriptionToAccountAsync(subscription, accountIdOver
   }
 
   const period = getSubscriptionPeriod(subscription);
-  return billingStore.updateBillingAccountFromStripeSubscriptionAsync({
+  const updatedAccount = await billingStore.updateBillingAccountFromStripeSubscriptionAsync({
     accountId: account.id,
     planKey: planPrice?.key,
     accountState: getSubscriptionAccountState(status),
@@ -722,6 +895,8 @@ async function applyStripeSubscriptionToAccountAsync(subscription, accountIdOver
     stripeLatestInvoiceId: getLatestInvoiceId(subscription),
     clearTrial: true,
   });
+  await syncRecurringAddOnGrantsForSubscriptionAsync(subscription, updatedAccount || account);
+  return updatedAccount;
 }
 
 function getGrantEndDate(addOn) {
@@ -959,6 +1134,8 @@ module.exports = {
   getPlanPriceConfigByStripePrice,
   getAddOnPriceConfig,
   getAddOnPriceConfigByStripePrice,
+  getRecurringAddOnPriceConfig,
+  getRecurringAddOnPriceConfigByStripePrice,
   createPlanCheckoutSessionAsync,
   createAddOnCheckoutSessionAsync,
   createPortalSessionAsync,

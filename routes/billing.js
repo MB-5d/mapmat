@@ -30,6 +30,15 @@ function handleBillingError(res, error, label) {
   });
 }
 
+function requirePrimaryAccountOwner(req, account) {
+  if (!account?.owner_user_id || account.owner_user_id === req.user?.id) return;
+  throw new BillingError(
+    'Only the primary account owner can manage billing.',
+    403,
+    'BILLING_PRIMARY_OWNER_REQUIRED'
+  );
+}
+
 function isActiveStripeSubscriptionStatus(status) {
   return ['active', 'trialing', 'past_due', 'unpaid'].includes(String(status || '').trim().toLowerCase());
 }
@@ -70,6 +79,7 @@ router.post('/checkout/sessions', async (req, res) => {
     if (!account) {
       throw new BillingError('Billing account is not available.', 404, 'BILLING_ACCOUNT_NOT_FOUND');
     }
+    requirePrimaryAccountOwner(req, account);
 
     let session = null;
     if (type === 'plan') {
@@ -78,6 +88,7 @@ router.post('/checkout/sessions', async (req, res) => {
         account,
         planKey: req.body?.planKey,
         billingCycle: req.body?.billingCycle,
+        extraEditorQuantity: req.body?.extraEditorQuantity,
         returnPath: getReturnPath(req),
       });
     } else if (type === 'addon') {
@@ -107,6 +118,7 @@ router.post('/portal/sessions', async (req, res) => {
     if (!account) {
       throw new BillingError('Billing account is not available.', 404, 'BILLING_ACCOUNT_NOT_FOUND');
     }
+    requirePrimaryAccountOwner(req, account);
     const session = await createPortalSessionAsync({
       user: req.user,
       account,
@@ -127,6 +139,7 @@ router.post('/trials', async (req, res) => {
     if (!account) {
       throw new BillingError('Billing account is not available.', 404, 'BILLING_ACCOUNT_NOT_FOUND');
     }
+    requirePrimaryAccountOwner(req, account);
     if (account.stripe_subscription_id && isActiveStripeSubscriptionStatus(account.stripe_subscription_status)) {
       throw new BillingError('This account already has an active subscription.', 409, 'BILLING_SUBSCRIPTION_ACTIVE');
     }
@@ -165,6 +178,7 @@ router.post('/account/refresh', async (req, res) => {
     if (!account) {
       throw new BillingError('Billing account is not available.', 404, 'BILLING_ACCOUNT_NOT_FOUND');
     }
+    requirePrimaryAccountOwner(req, account);
     const result = await refreshBillingAccountFromStripeAsync({
       account,
       checkoutSessionId: req.body?.checkoutSessionId,

@@ -59,11 +59,11 @@ const GRANT_SOURCE_OPTIONS = Object.freeze([
 ]);
 
 const GRANT_METER_OPTIONS = Object.freeze([
-  { value: 'crawl_pages', label: 'Crawl pages' },
+  { value: 'active_pages', label: 'Pages' },
   { value: 'screenshot_credits', label: 'Screenshot credits' },
-  { value: 'organized_exports', label: 'Organized exports' },
+  { value: 'organized_exports', label: 'Downloads' },
   { value: 'active_projects', label: 'Active projects' },
-  { value: 'seats', label: 'Seats' },
+  { value: 'editors', label: 'Editors' },
 ]);
 
 const GRANT_FEATURE_OPTIONS = Object.freeze([
@@ -78,7 +78,7 @@ const GRANT_FEATURE_OPTIONS = Object.freeze([
 const DEFAULT_GRANT_FORM = Object.freeze({
   source: 'manual',
   grantType: 'meter',
-  meter: 'crawl_pages',
+  meter: 'active_pages',
   featureKey: 'clientShareLinks',
   quantity: '100',
   durationDays: '30',
@@ -89,11 +89,11 @@ const BILLING_TEST_SCENARIO_OPTIONS = Object.freeze([
   { value: 'active_free', label: 'Active Free', description: 'Free plan with a fresh usage period.' },
   { value: 'active_pro', label: 'Active Pro', description: 'Paid Pro plan with no trial.' },
   { value: 'test_unlimited', label: 'Test Unlimited', description: 'Internal unlimited access for non-tier testing accounts.' },
-  { value: 'team_trial', label: 'Team Trial', description: '7-day no-card team trial with four seats.' },
+  { value: 'team_trial', label: 'Team Trial', description: '7-day no-card team trial with four editors.' },
   { value: 'trial_ended', label: 'Trial Ended', description: 'Expired trial state for upgrade prompts.' },
   { value: 'archived', label: 'Archived', description: 'Cancelled account after access window starts.' },
-  { value: 'scan_limit_prompt', label: 'Scan Limit Prompt', description: 'Pro plan nearly out of crawl pages.' },
-  { value: 'usage_exhausted', label: 'Usage Exhausted', description: 'Free plan with crawl and screenshot usage spent.' },
+  { value: 'scan_limit_prompt', label: 'Scan Limit Prompt', description: 'Pro plan nearly out of pages.' },
+  { value: 'usage_exhausted', label: 'Usage Exhausted', description: 'Free plan with page and screenshot usage spent.' },
 ]);
 
 function getDefaultSortDirection(sortBy) {
@@ -138,7 +138,7 @@ function formatLimit(value) {
 
 function formatUsageMeter(meter) {
   if (!meter) return 'Not available';
-  return `${formatNumber(meter.used)} / ${formatLimit(meter.included)}`;
+  return `${formatNumber(meter.used)} / ${formatLimit(meter.included ?? meter.limit)}`;
 }
 
 function formatBytes(value) {
@@ -511,27 +511,27 @@ function AdminUserDrawer({
                   </div>
                 </div>
 
-                <div className="admin-billing-usage-grid">
-                  <div>
-                    <span>Crawl pages</span>
-                    <strong>{formatUsageMeter(meters.crawlPages)}</strong>
-                  </div>
+	                <div className="admin-billing-usage-grid">
+	                  <div>
+	                    <span>Pages</span>
+	                    <strong>{formatUsageMeter(meters.activePages || meters.crawlPages)}</strong>
+	                  </div>
                   <div>
                     <span>Screenshot credits</span>
                     <strong>{formatUsageMeter(meters.screenshotCredits)}</strong>
                   </div>
-                  <div>
-                    <span>Organized exports</span>
-                    <strong>{formatUsageMeter(meters.organizedExports)}</strong>
-                  </div>
+	                  <div>
+	                    <span>Downloads</span>
+	                    <strong>{formatUsageMeter(meters.downloads || meters.organizedExports)}</strong>
+	                  </div>
                   <div>
                     <span>Projects</span>
                     <strong>{formatNumber(limits.activeProjects?.used)} / {formatLimit(limits.activeProjects?.limit)}</strong>
                   </div>
-                  <div>
-                    <span>Seats</span>
-                    <strong>{formatNumber(limits.seats?.used)} / {formatLimit(limits.seats?.limit)}</strong>
-                  </div>
+	                  <div>
+	                    <span>Editors</span>
+	                    <strong>{formatNumber((limits.editors || limits.seats)?.used)} / {formatLimit((limits.editors || limits.seats)?.limit)}</strong>
+	                  </div>
                 </div>
               </>
             ) : (

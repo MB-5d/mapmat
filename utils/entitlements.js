@@ -1,15 +1,19 @@
 const fs = require('fs');
 const path = require('path');
 const billingStore = require('../stores/billingStore');
+const mapStore = require('../stores/mapStore');
 
 const PLAN_CONFIG_PATH = path.join(__dirname, '..', 'config', 'billing', 'plans.json');
 
 const METERS = Object.freeze({
+  activePages: 'active_pages',
   crawlPages: 'crawl_pages',
   screenshotCredits: 'screenshot_credits',
   organizedExports: 'organized_exports',
+  downloads: 'organized_exports',
   activeProjects: 'active_projects',
   seats: 'seats',
+  editors: 'editors',
 });
 
 const ACTIONS = Object.freeze({
@@ -48,11 +52,11 @@ function loadPlanConfig() {
           paid: false,
           limits: {
             activeProjects: 1,
-            crawlPages: 100,
+            activePages: 1000,
             scanPagesPerRun: 100,
-            screenshotCredits: 0,
-            organizedScreenshotExports: 0,
-            seats: 1,
+            screenshotCredits: 25,
+            downloads: 5,
+            editors: 1,
           },
           features: {},
         },
@@ -87,6 +91,13 @@ function normalizeLimit(value) {
 
 function isUnlimited(value) {
   return value === null;
+}
+
+function getLimitValue(limits, primaryKey, fallbackKey = null) {
+  if (!limits) return undefined;
+  if (Object.prototype.hasOwnProperty.call(limits, primaryKey)) return limits[primaryKey];
+  if (fallbackKey && Object.prototype.hasOwnProperty.call(limits, fallbackKey)) return limits[fallbackKey];
+  return undefined;
 }
 
 function isTrialActive(account) {
@@ -188,11 +199,20 @@ async function buildMeterSummary({ account, meter, included, grace = 0 }) {
   };
 }
 
-async function buildCountLimitSummary({ account, meter, baseLimit, currentCount }) {
-  const grantExtra = await billingStore.sumActiveMeterGrantsAsync({
-    accountId: account.id,
-    meter,
-  });
+async function buildCountLimitSummary({
+  account,
+  meter,
+  baseLimit,
+  currentCount,
+  grantMeters = [meter],
+}) {
+  const grantTotals = await Promise.all((grantMeters || [meter]).map((grantMeter) => (
+    billingStore.sumActiveMeterGrantsAsync({
+      accountId: account.id,
+      meter: grantMeter,
+    })
+  )));
+  const grantExtra = grantTotals.reduce((total, value) => total + Number(value || 0), 0);
   if (isUnlimited(baseLimit)) {
     return {
       limit: null,
@@ -233,33 +253,35 @@ async function resolveAccountEntitlementsAsync(user) {
     features[featureKey] = true;
   });
 
-  const [activeProjectCount, seatCount] = await Promise.all([
+  const [activeProjectCount, activePageCount, editorCount] = await Promise.all([
     billingStore.countActiveProjectsForAccountAsync(account.id, account.owner_user_id),
-    billingStore.countBillableSeatsForAccountAsync(account.id),
+    mapStore.sumActivePagesForAccountAsync(account.id, account.owner_user_id),
+    billingStore.countBillableEditorsForAccountAsync(account.id),
   ]);
 
   const trialKind = String(account.trial_kind || 'personal').trim().toLowerCase() === 'team'
     ? 'team'
     : 'personal';
-  const seatBaseLimit = trialActive && trialKind === 'team'
+  const editorBaseLimit = trialActive && trialKind === 'team'
     ? Math.max(
-      normalizeLimit(entitlementPlan.limits?.seats ?? 1),
+      normalizeLimit(getLimitValue(entitlementPlan.limits, 'editors', 'seats') ?? 1),
       normalizeLimit(config.trialDefaults?.teamSeatCap ?? 4)
     )
-    : entitlementPlan.limits?.seats;
-  const organizedExportLimit = trialActive
+    : getLimitValue(entitlementPlan.limits, 'editors', 'seats');
+  const downloadLimit = trialActive
     ? normalizeLimit(config.trialDefaults?.organizedScreenshotExports ?? 0)
-    : entitlementPlan.limits?.organizedScreenshotExports;
+    : getLimitValue(entitlementPlan.limits, 'downloads', 'organizedScreenshotExports');
   const screenshotCreditLimit = trialActive
     ? normalizeLimit(config.trialDefaults?.screenshotCredits ?? 15)
-    : entitlementPlan.limits?.screenshotCredits;
+    : getLimitValue(entitlementPlan.limits, 'screenshotCredits');
 
-  const [crawlPages, screenshotCredits, organizedExports, activeProjects, seats] = await Promise.all([
-    buildMeterSummary({
+  const [activePages, screenshotCredits, downloads, activeProjects, editors] = await Promise.all([
+    buildCountLimitSummary({
       account,
-      meter: METERS.crawlPages,
-      included: entitlementPlan.limits?.crawlPages,
-      grace: trialActive ? 0 : calculatePaidGrace(entitlementPlan, entitlementPlan.limits?.crawlPages),
+      meter: METERS.activePages,
+      baseLimit: getLimitValue(entitlementPlan.limits, 'activePages', 'crawlPages'),
+      currentCount: activePageCount,
+      grantMeters: [METERS.activePages, METERS.crawlPages],
     }),
     buildMeterSummary({
       account,
@@ -268,20 +290,21 @@ async function resolveAccountEntitlementsAsync(user) {
     }),
     buildMeterSummary({
       account,
-      meter: METERS.organizedExports,
-      included: organizedExportLimit,
+      meter: METERS.downloads,
+      included: downloadLimit,
     }),
     buildCountLimitSummary({
       account,
       meter: METERS.activeProjects,
-      baseLimit: entitlementPlan.limits?.activeProjects,
+      baseLimit: getLimitValue(entitlementPlan.limits, 'activeProjects'),
       currentCount: activeProjectCount,
     }),
     buildCountLimitSummary({
       account,
-      meter: METERS.seats,
-      baseLimit: seatBaseLimit,
-      currentCount: seatCount,
+      meter: METERS.editors,
+      baseLimit: editorBaseLimit,
+      currentCount: editorCount,
+      grantMeters: [METERS.editors, METERS.seats],
     }),
   ]);
 
@@ -321,23 +344,27 @@ async function resolveAccountEntitlementsAsync(user) {
       kind: trialKind,
       effectivePlanKey: trialBasePlan?.key || null,
       teamSeatCap: normalizeLimit(config.trialDefaults?.teamSeatCap ?? 4),
-      organizedDownloadsAllowed: organizedExportLimit !== 0,
+      organizedDownloadsAllowed: downloadLimit !== 0,
     },
     features,
     meters: {
-      crawlPages,
+      activePages,
+      crawlPages: activePages,
       screenshotCredits,
-      organizedExports,
+      downloads,
+      organizedExports: downloads,
     },
     limits: {
       activeProjects,
-      seats,
-      scanPagesPerRun: isUnlimited(entitlementPlan.limits?.scanPagesPerRun)
+      activePages,
+      editors,
+      seats: editors,
+      scanPagesPerRun: isUnlimited(getLimitValue(entitlementPlan.limits, 'scanPagesPerRun'))
         ? { limit: null, remaining: null, unlimited: true }
         : {
-          limit: normalizeLimit(entitlementPlan.limits?.scanPagesPerRun),
-          remaining: normalizeLimit(entitlementPlan.limits?.scanPagesPerRun),
-          unlimited: !entitlementPlan.limits?.scanPagesPerRun,
+          limit: normalizeLimit(getLimitValue(entitlementPlan.limits, 'scanPagesPerRun')),
+          remaining: normalizeLimit(getLimitValue(entitlementPlan.limits, 'scanPagesPerRun')),
+          unlimited: !getLimitValue(entitlementPlan.limits, 'scanPagesPerRun'),
         },
     },
     retention: config.retentionDefaults || {},
@@ -413,24 +440,40 @@ async function checkAccountActionAsync(user, action, options = {}) {
     return buildAllowed(action, summary);
   }
 
+  if (action === ACTIONS.mapWrite) {
+    const requestedPageDelta = Math.max(0, Math.floor(Number(options.pageDelta || 0)));
+    const limit = summary.limits.activePages;
+    if (requestedPageDelta > 0 && !limit.unlimited && limit.remaining < requestedPageDelta) {
+      return buildDenied(action, summary, 'Your account has reached its active page limit.', {
+        entitlement: limit,
+        requestedQuantity: requestedPageDelta,
+        allowedQuantity: Math.max(0, Number(limit.remaining || 0)),
+      });
+    }
+    return buildAllowed(action, summary, {
+      allowedQuantity: requestedPageDelta,
+      entitlement: limit,
+    });
+  }
+
   if (action === ACTIONS.scanStart) {
     const requestedPages = Math.max(1, Math.floor(Number(options.requestedPages || 1)));
-    const meter = summary.meters.crawlPages;
-    if (!meter.unlimited && meter.remaining <= 0) {
-      return buildDenied(action, summary, 'Your plan has no crawl pages remaining for this billing period.', {
-        entitlement: meter,
+    const limit = summary.limits.activePages;
+    if (!limit.unlimited && limit.remaining <= 0) {
+      return buildDenied(action, summary, 'Your plan has no active pages remaining.', {
+        entitlement: limit,
       });
     }
     const perScanLimit = summary.limits?.scanPagesPerRun;
-    const allowedByMeter = meter.unlimited ? requestedPages : Math.min(requestedPages, meter.remaining);
+    const allowedByActivePages = limit.unlimited ? requestedPages : Math.min(requestedPages, limit.remaining);
     const allowedQuantity = perScanLimit?.unlimited
-      ? allowedByMeter
-      : Math.min(allowedByMeter, Math.max(1, normalizeLimit(perScanLimit?.limit || allowedByMeter)));
+      ? allowedByActivePages
+      : Math.min(allowedByActivePages, Math.max(1, normalizeLimit(perScanLimit?.limit || allowedByActivePages)));
     return buildAllowed(action, summary, {
       allowedQuantity,
       capped: allowedQuantity < requestedPages,
       requestedQuantity: requestedPages,
-      entitlement: meter,
+      entitlement: limit,
     });
   }
 
@@ -449,11 +492,11 @@ async function checkAccountActionAsync(user, action, options = {}) {
   }
 
   if (action === ACTIONS.organizedExportCreate) {
-    const meter = summary.meters.organizedExports;
+    const meter = summary.meters.downloads || summary.meters.organizedExports;
     if (!meter.unlimited && meter.remaining <= 0) {
       const message = summary.trial?.active
-        ? 'This trial has no screenshot downloads remaining.'
-        : 'Your plan has reached its screenshot download limit.';
+        ? 'This trial has no downloads remaining.'
+        : 'Your plan has reached its download limit.';
       return buildDenied(action, summary, message, {
         entitlement: meter,
       });
@@ -474,9 +517,9 @@ async function checkAccountActionAsync(user, action, options = {}) {
   }
 
   if (action === ACTIONS.seatInvite) {
-    const limit = summary.limits.seats;
+    const limit = summary.limits.editors || summary.limits.seats;
     if (!limit.unlimited && limit.remaining <= 0) {
-      return buildDenied(action, summary, 'Your account has reached its seat limit.', {
+      return buildDenied(action, summary, 'Your account has reached its editor limit.', {
         entitlement: limit,
       });
     }

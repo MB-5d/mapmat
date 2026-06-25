@@ -36,6 +36,10 @@ const NODE_BADGE_PAD_X = 12;
 const CONNECTION_STROKE_WIDTH = 3;
 const TREE_CONNECTOR_STROKE_WIDTH = 1.25;
 const LAYOUT_CONNECTOR_ENDPOINT_EPSILON = 0.5;
+const SVG_COMPONENTS_SECTION_GAP = 160;
+const SVG_COMPONENTS_SECTION_HEIGHT = 560;
+const SVG_COMPONENTS_SECTION_MIN_WIDTH = 1120;
+const SVG_EXPORT_VERSION = 1;
 export const PNG_EXPORT_PIXEL_RATIO = 4;
 export const PNG_EXPORT_UNAVAILABLE_REASON = 'Image export is unavailable for maps this large. Use PDF for full-size export.';
 const MAX_PNG_DIMENSION = 32767;
@@ -725,17 +729,29 @@ const renderHeaderSvg = (scene) => {
     parts.push(`<text x="${statX}" y="${statY}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="12" font-weight="500">${escapeXml(position.text)}</text>`);
   });
 
-  return parts.join('');
+  return [
+    '<g id="vellic-header" data-vellic-layer="header">',
+    '<title>Header</title>',
+    '<desc>Map title, share URL, export statistics, and Vellic branding.</desc>',
+    parts.join(''),
+    '</g>',
+  ].join('');
 };
 
-const renderTreeConnectorsSvg = (scene) => scene.treeConnectors.map((connector) => svgLine({
+const renderTreeConnectorsSvg = (scene) => [
+  '<g id="vellic-tree-connectors" data-vellic-layer="tree-connectors">',
+  '<title>Tree Connectors</title>',
+  '<desc>Parent and child sitemap hierarchy connector lines.</desc>',
+  scene.treeConnectors.map((connector) => svgLine({
   x1: toSceneX(scene, connector.x1),
   y1: toSceneY(scene, connector.y1),
   x2: toSceneX(scene, connector.x2),
   y2: toSceneY(scene, connector.y2),
   color: DESIGN_COLORS.subtle,
   width: TREE_CONNECTOR_STROKE_WIDTH,
-})).join('');
+  })).join(''),
+  '</g>',
+].join('');
 
 const getArrowHeadPoints = (end, previous, size) => {
   const angle = Math.atan2(end.y - previous.y, end.x - previous.x);
@@ -751,27 +767,34 @@ const getArrowHeadPoints = (end, previous, size) => {
   };
 };
 
-const renderRelationshipConnectorsSvg = (scene) => scene.relationshipConnectors.map((connector) => {
-  const geometry = connector.geometry;
-  const start = offsetPoint(geometry.startPos, scene.mapOffset);
-  const ctrl1 = offsetPoint(geometry.ctrl1, scene.mapOffset);
-  const ctrl2 = offsetPoint(geometry.ctrl2, scene.mapOffset);
-  const pathEnd = offsetPoint(geometry.pathEnd, scene.mapOffset);
-  const end = offsetPoint(geometry.endPos, scene.mapOffset);
-  const path = `M ${start.x} ${start.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${pathEnd.x} ${pathEnd.y}${geometry.terminalDistance ? ` L ${end.x} ${end.y}` : ''}`;
-  const parts = [
-    `<path d="${path}" fill="none" stroke="${escapeAttr(connector.color)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"${connector.dashed ? ' stroke-dasharray="9 7"' : ''}/>`,
-  ];
-  if (connector.arrow) {
-    const arrow = getArrowHeadPoints(end, geometry.terminalDistance ? pathEnd : ctrl2, 10);
-    parts.push(`<path d="M ${arrow.left.x} ${arrow.left.y} L ${end.x} ${end.y} L ${arrow.right.x} ${arrow.right.y}" fill="none" stroke="${escapeAttr(connector.color)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>`);
-  }
-  return parts.join('');
-}).join('');
+const renderRelationshipConnectorsSvg = (scene) => [
+  '<g id="vellic-relationship-connectors" data-vellic-layer="relationship-connectors">',
+  '<title>Relationship Connectors</title>',
+  '<desc>User flow and crosslink connectors between sitemap nodes.</desc>',
+  scene.relationshipConnectors.map((connector) => {
+    const geometry = connector.geometry;
+    const start = offsetPoint(geometry.startPos, scene.mapOffset);
+    const ctrl1 = offsetPoint(geometry.ctrl1, scene.mapOffset);
+    const ctrl2 = offsetPoint(geometry.ctrl2, scene.mapOffset);
+    const pathEnd = offsetPoint(geometry.pathEnd, scene.mapOffset);
+    const end = offsetPoint(geometry.endPos, scene.mapOffset);
+    const path = `M ${start.x} ${start.y} C ${ctrl1.x} ${ctrl1.y}, ${ctrl2.x} ${ctrl2.y}, ${pathEnd.x} ${pathEnd.y}${geometry.terminalDistance ? ` L ${end.x} ${end.y}` : ''}`;
+    const parts = [
+      `<path d="${path}" fill="none" stroke="${escapeAttr(connector.color)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"${connector.dashed ? ' stroke-dasharray="9 7"' : ''}/>`,
+    ];
+    if (connector.arrow) {
+      const arrow = getArrowHeadPoints(end, geometry.terminalDistance ? pathEnd : ctrl2, 10);
+      parts.push(`<path d="M ${arrow.left.x} ${arrow.left.y} L ${end.x} ${end.y} L ${arrow.right.x} ${arrow.right.y}" fill="none" stroke="${escapeAttr(connector.color)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>`);
+    }
+    return parts.join('');
+  }).join(''),
+  '</g>',
+].join('');
 
 const makeSvgId = (value) => String(value || 'node')
   .replace(/[^a-zA-Z0-9_-]/g, '-')
-  .replace(/^-+/, 'node-');
+  .replace(/^-+/, 'node-')
+  .replace(/^([^a-zA-Z_])/, 'node-$1');
 
 const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
   const { node } = item;
@@ -784,19 +807,23 @@ const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
   const number = textValue(item.number || node?.number || node?.pageNumber);
   const thumbDataUrl = scene.showThumbnails ? thumbnailDataUrls?.get(node?.id) : null;
   const badges = getNodeBadges(node);
-  const cardClipId = `export-card-${index}-${makeSvgId(node?.id)}`;
+  const safeNodeId = makeSvgId(node?.id || `node-${index}`);
+  const nodeTitle = textValue(node?.title || node?.url || 'Untitled');
+  const cardClipId = `export-card-${safeNodeId}`;
   const parts = [
-    `<g data-export-node="${escapeAttr(node?.id || '')}">`,
+    `<g id="vellic-node-${safeNodeId}" data-export-node="${escapeAttr(node?.id || '')}" data-vellic-layer="node" data-vellic-node-id="${escapeAttr(node?.id || '')}" data-vellic-node-title="${escapeAttr(nodeTitle)}" data-vellic-page-number="${escapeAttr(number)}">`,
+    `<title>Node: ${escapeXml(nodeTitle)}</title>`,
+    `<desc>Editable sitemap node card${scene.showThumbnails ? ' with thumbnail area' : ''}.</desc>`,
     `<clipPath id="${cardClipId}"><rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" rx="${NODE_RADIUS}"/></clipPath>`,
-    `<g clip-path="url(#${cardClipId})">`,
+    `<g id="vellic-node-${safeNodeId}-card" data-vellic-layer="node-card" clip-path="url(#${cardClipId})">`,
     `<rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" fill="${DESIGN_COLORS.surface}"/>`,
     `<rect x="${x}" y="${y}" width="${item.w}" height="${NODE_TOP_BAR_HEIGHT}" fill="${escapeAttr(depthColor)}"/>`,
   ];
 
   if (thumbDataUrl) {
-    parts.push(`<image href="${escapeAttr(thumbDataUrl)}" x="${x}" y="${y + NODE_THUMB_TOP}" width="${item.w}" height="${NODE_THUMB_HEIGHT}" preserveAspectRatio="xMidYMin slice"/>`);
+    parts.push(`<image data-vellic-layer="thumbnail" href="${escapeAttr(thumbDataUrl)}" x="${x}" y="${y + NODE_THUMB_TOP}" width="${item.w}" height="${NODE_THUMB_HEIGHT}" preserveAspectRatio="xMidYMin slice"/>`);
   } else if (scene.showThumbnails) {
-    parts.push(`<rect x="${x}" y="${y + NODE_THUMB_TOP}" width="${item.w}" height="${NODE_THUMB_HEIGHT}" fill="${DESIGN_COLORS.surfaceMuted}"/>`);
+    parts.push(`<rect data-vellic-layer="thumbnail-placeholder" x="${x}" y="${y + NODE_THUMB_TOP}" width="${item.w}" height="${NODE_THUMB_HEIGHT}" fill="${DESIGN_COLORS.surfaceMuted}"/>`);
   }
   if (scene.showThumbnails) {
     const dividerY = y + NODE_THUMB_TOP + NODE_THUMB_HEIGHT;
@@ -806,16 +833,19 @@ const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
   parts.push('</g>');
   parts.push(`<rect x="${x}" y="${y}" width="${item.w}" height="${item.h}" rx="${NODE_RADIUS}" fill="none" stroke="${DESIGN_COLORS.border}" stroke-width="1"/>`);
 
+  parts.push(`<g id="vellic-node-${safeNodeId}-title" data-vellic-layer="node-title">`);
   titleLines.forEach((line, index) => {
     parts.push(`<text x="${x + NODE_INSET}" y="${titleY + index * NODE_TITLE_LINE_HEIGHT}" fill="${DESIGN_COLORS.text}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_TITLE_FONT_SIZE}" font-weight="${NODE_TITLE_WEIGHT}">${escapeXml(line)}</text>`);
   });
+  parts.push('</g>');
 
   if (number) {
-    parts.push(`<text x="${x + NODE_INSET}" y="${y + item.h - 20}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_NUMBER_FONT_SIZE}" font-weight="${NODE_NUMBER_WEIGHT}">${escapeXml(number)}</text>`);
+    parts.push(`<g id="vellic-node-${safeNodeId}-page-number" data-vellic-layer="page-number"><text x="${x + NODE_INSET}" y="${y + item.h - 20}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_NUMBER_FONT_SIZE}" font-weight="${NODE_NUMBER_WEIGHT}">${escapeXml(number)}</text></g>`);
   }
 
   let badgeX = x + item.w - NODE_INSET;
-  badges.reverse().forEach((badge) => {
+  parts.push(`<g id="vellic-node-${safeNodeId}-badges" data-vellic-layer="badges">`);
+  badges.slice().reverse().forEach((badge) => {
     const badgeWidth = clamp(badge.label.length * 7 + NODE_BADGE_PAD_X * 2, 62, 98);
     badgeX -= badgeWidth;
     const badgeY = y + item.h - 36;
@@ -823,25 +853,139 @@ const renderNodeSvg = (scene, item, thumbnailDataUrls, index = 0) => {
     parts.push(`<text x="${badgeX + badgeWidth / 2}" y="${badgeY + NODE_BADGE_HEIGHT / 2}" text-anchor="middle" dominant-baseline="middle" fill="${escapeAttr(badge.text)}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_BADGE_FONT_SIZE}" font-weight="700">${escapeXml(badge.label.toUpperCase())}</text>`);
     badgeX -= 6;
   });
+  parts.push('</g>');
 
   parts.push('</g>');
   return parts.join('');
 };
 
-export const renderExportSvg = (scene, thumbnailDataUrls = new Map()) => {
-  if (!scene) return '';
+const renderNodesSvg = (scene, thumbnailDataUrls) => [
+  '<g id="vellic-nodes" data-vellic-layer="nodes">',
+  '<title>Nodes</title>',
+  '<desc>Editable sitemap page cards.</desc>',
+  scene.nodes.map((node, index) => renderNodeSvg(scene, node, thumbnailDataUrls, index)).join(''),
+  '</g>',
+].join('');
+
+const renderComponentBadgeSvg = ({ x, y, label, bg, border, text }) => {
+  const width = clamp(label.length * 7 + NODE_BADGE_PAD_X * 2, 62, 116);
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${scene.width}" height="${scene.height}" viewBox="0 0 ${scene.width} ${scene.height}">`,
+    `<g data-vellic-component="Status Badge" data-vellic-label="${escapeAttr(label)}">`,
+    `<rect x="${x}" y="${y}" width="${width}" height="${NODE_BADGE_HEIGHT}" rx="${NODE_BADGE_HEIGHT / 2}" fill="${escapeAttr(bg)}" stroke="${escapeAttr(border)}" stroke-width="1"/>`,
+    `<text x="${x + width / 2}" y="${y + NODE_BADGE_HEIGHT / 2}" text-anchor="middle" dominant-baseline="middle" fill="${escapeAttr(text)}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_BADGE_FONT_SIZE}" font-weight="700">${escapeXml(label.toUpperCase())}</text>`,
+    '</g>',
+  ].join('');
+};
+
+const renderComponentNodeCardSvg = ({ x, y, title, number, depthColor, showThumbnail = false }) => {
+  const h = showThumbnail ? LAYOUT.NODE_H_THUMB : LAYOUT.NODE_H_COLLAPSED;
+  const contentTop = y + (showThumbnail ? NODE_THUMB_TOP + NODE_THUMB_HEIGHT : NODE_TOP_BAR_HEIGHT) + NODE_INSET;
+  const titleY = contentTop + NODE_TITLE_FONT_SIZE;
+  return [
+    `<g data-vellic-component="Node Card" data-vellic-variant="${showThumbnail ? 'Thumbnail' : 'No Thumbnail'}">`,
+    `<title>Node Card ${showThumbnail ? 'with Thumbnail' : 'without Thumbnail'}</title>`,
+    `<rect x="${x}" y="${y}" width="${LAYOUT.NODE_W}" height="${h}" rx="${NODE_RADIUS}" fill="${DESIGN_COLORS.surface}" stroke="${DESIGN_COLORS.border}" stroke-width="1"/>`,
+    `<rect x="${x}" y="${y}" width="${LAYOUT.NODE_W}" height="${NODE_TOP_BAR_HEIGHT}" fill="${escapeAttr(depthColor)}"/>`,
+    showThumbnail ? `<rect data-vellic-component-part="Thumbnail Area" x="${x}" y="${y + NODE_THUMB_TOP}" width="${LAYOUT.NODE_W}" height="${NODE_THUMB_HEIGHT}" fill="${DESIGN_COLORS.surfaceMuted}"/>` : '',
+    showThumbnail ? `<rect x="${x}" y="${y + NODE_THUMB_TOP + NODE_THUMB_HEIGHT}" width="${LAYOUT.NODE_W}" height="1" fill="${DESIGN_COLORS.border}"/>` : '',
+    `<text data-vellic-component-part="Title" x="${x + NODE_INSET}" y="${titleY}" fill="${DESIGN_COLORS.text}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_TITLE_FONT_SIZE}" font-weight="${NODE_TITLE_WEIGHT}">${escapeXml(title)}</text>`,
+    `<text data-vellic-component-part="Page Number" x="${x + NODE_INSET}" y="${y + h - 20}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="${NODE_NUMBER_FONT_SIZE}" font-weight="${NODE_NUMBER_WEIGHT}">${escapeXml(number)}</text>`,
+    '</g>',
+  ].join('');
+};
+
+const renderComponentsSectionSvg = (scene, documentWidth) => {
+  const sectionY = scene.height + SVG_COMPONENTS_SECTION_GAP / 2;
+  const x = Math.min(scene.padding, HEADER_SIDE_MARGIN);
+  const sampleY = sectionY + 112;
+  const depthColors = Array.from({ length: 6 }, (_, index) => normalizeHexColor(getDepthColor(scene.colors, index), '#14B8A6'));
+  const badgeSamples = [
+    { label: 'Missing', bg: DESIGN_COLORS.warningBg, border: DESIGN_COLORS.warningBorder, text: DESIGN_COLORS.warningText },
+    { label: 'Duplicate', bg: DESIGN_COLORS.warningBg, border: DESIGN_COLORS.warningBorder, text: DESIGN_COLORS.warningText },
+    { label: 'Error', bg: DESIGN_COLORS.dangerBg, border: DESIGN_COLORS.dangerBorder, text: DESIGN_COLORS.dangerText },
+    { label: 'Auth', bg: DESIGN_COLORS.brandSoft, border: DESIGN_COLORS.brandSoftBorder, text: DESIGN_COLORS.brand },
+  ];
+  const connectorX = x + 720;
+  const connectorY = sampleY + 18;
+
+  return [
+    `<g id="vellic-local-components" data-vellic-page="Local Components" data-vellic-layer="local-components">`,
+    '<title>Local Components</title>',
+    '<desc>Reusable sitemap component specimens for editing in Figma and other design tools.</desc>',
+    `<rect x="0" y="${sectionY - 48}" width="${documentWidth}" height="${SVG_COMPONENTS_SECTION_HEIGHT}" fill="${DESIGN_COLORS.surfaceMuted}"/>`,
+    `<text x="${x}" y="${sectionY}" fill="${DESIGN_COLORS.text}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="28" font-weight="500">Local Components</text>`,
+    `<text x="${x}" y="${sectionY + 34}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="13" font-weight="400">Editable node, badge, connector, thumbnail, text, and color style specimens used by this sitemap.</text>`,
+    renderComponentNodeCardSvg({
+      x,
+      y: sampleY,
+      title: 'Node card',
+      number: '0',
+      depthColor: depthColors[0],
+      showThumbnail: false,
+    }),
+    renderComponentNodeCardSvg({
+      x: x + 360,
+      y: sampleY,
+      title: 'Node card with thumbnail',
+      number: '1',
+      depthColor: depthColors[1],
+      showThumbnail: true,
+    }),
+    `<g id="vellic-component-badges" data-vellic-layer="component-badges"><title>Badges</title>${badgeSamples.map((badge, index) => renderComponentBadgeSvg({
+      ...badge,
+      x: x + index * 126,
+      y: sampleY + 320,
+    })).join('')}</g>`,
+    `<g id="vellic-component-connectors" data-vellic-layer="component-connectors"><title>Connector Styles</title>`,
+    `<line x1="${connectorX}" y1="${connectorY}" x2="${connectorX + 220}" y2="${connectorY}" stroke="${DESIGN_COLORS.subtle}" stroke-width="${TREE_CONNECTOR_STROKE_WIDTH}" stroke-linecap="round"/>`,
+    `<text x="${connectorX}" y="${connectorY + 28}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="12">Tree connector</text>`,
+    `<path d="M ${connectorX} ${connectorY + 68} C ${connectorX + 60} ${connectorY + 28}, ${connectorX + 160} ${connectorY + 108}, ${connectorX + 220} ${connectorY + 68}" fill="none" stroke="${escapeAttr(DEFAULT_CONNECTION_COLORS.userFlows)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round"/>`,
+    `<text x="${connectorX}" y="${connectorY + 98}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="12">User flow</text>`,
+    `<path d="M ${connectorX} ${connectorY + 138} C ${connectorX + 60} ${connectorY + 98}, ${connectorX + 160} ${connectorY + 178}, ${connectorX + 220} ${connectorY + 138}" fill="none" stroke="${escapeAttr(DEFAULT_CONNECTION_COLORS.crossLinks)}" stroke-width="${CONNECTION_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="9 7"/>`,
+    `<text x="${connectorX}" y="${connectorY + 168}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="12">Crosslink</text>`,
+    '</g>',
+    `<g id="vellic-component-color-styles" data-vellic-layer="component-color-styles"><title>Page Depth Colors</title>${depthColors.map((color, index) => {
+      const swatchX = connectorX + (index % 3) * 78;
+      const swatchY = sampleY + 250 + Math.floor(index / 3) * 58;
+      return [
+        `<rect x="${swatchX}" y="${swatchY}" width="44" height="32" rx="6" fill="${escapeAttr(color)}"/>`,
+        `<text x="${swatchX}" y="${swatchY + 50}" fill="${DESIGN_COLORS.muted}" font-family="${escapeAttr(EXPORT_SVG_FONT_STACK)}" font-size="11">Level ${index + 1}</text>`,
+      ].join('');
+    }).join('')}</g>`,
+    '</g>',
+  ].join('');
+};
+
+export const renderExportSvg = (scene, thumbnailDataUrls = new Map(), options = {}) => {
+  if (!scene) return '';
+  const includeComponents = Boolean(options.includeComponents);
+  const documentWidth = includeComponents ? Math.max(scene.width, SVG_COMPONENTS_SECTION_MIN_WIDTH) : scene.width;
+  const documentHeight = includeComponents
+    ? scene.height + SVG_COMPONENTS_SECTION_GAP + SVG_COMPONENTS_SECTION_HEIGHT
+    : scene.height;
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${documentWidth}" height="${documentHeight}" viewBox="0 0 ${documentWidth} ${documentHeight}" role="img" data-vellic-export="editable-sitemap-svg" data-vellic-version="${SVG_EXPORT_VERSION}">`,
+    '<title>Vellic editable sitemap export</title>',
+    '<desc>Structured SVG export with grouped sitemap layers and local component specimens for Figma and other design tools.</desc>',
     '<defs>',
     `<style><![CDATA[text{font-family:${EXPORT_SVG_FONT_STACK};}]]></style>`,
     '</defs>',
+    '<g id="vellic-sitemap" data-vellic-page="Sitemap" data-vellic-layer="sitemap">',
+    '<title>Sitemap</title>',
+    '<desc>Full editable sitemap generated from the Vellic PDF export scene.</desc>',
     renderHeaderSvg(scene),
     renderTreeConnectorsSvg(scene),
     renderRelationshipConnectorsSvg(scene),
-    scene.nodes.map((node, index) => renderNodeSvg(scene, node, thumbnailDataUrls, index)).join(''),
+    renderNodesSvg(scene, thumbnailDataUrls),
+    '</g>',
+    includeComponents ? renderComponentsSectionSvg(scene, documentWidth) : '',
     '</svg>',
   ].join('');
 };
+
+export const renderEditableExportSvg = (scene, thumbnailDataUrls = new Map()) => (
+  renderExportSvg(scene, thumbnailDataUrls, { includeComponents: true })
+);
 
 const renderPdfTextLines = (pdf, lines, x, y, lineHeight, options = {}) => {
   lines.forEach((line, index) => {

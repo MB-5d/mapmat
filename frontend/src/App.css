@@ -10305,6 +10305,253 @@ body {
   }
 }
 
+.modal-card.plans-modal {
+  width: min(1040px, calc(100vw - 48px));
+  max-width: min(1040px, calc(100vw - 48px));
+  max-height: min(600px, calc(100vh - 48px));
+}
+
+.modal-card.plans-modal .modal-header {
+  padding: 18px 22px 14px;
+}
+
+.modal-card.plans-modal .modal-body {
+  padding: 16px 22px;
+}
+
+.modal-card.plans-modal .modal-footer {
+  padding: 12px 22px 16px;
+}
+
+.plans-modal-body {
+  gap: 12px;
+}
+
+.plans-modal-cycle-control {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.plans-modal-cycle-label {
+  color: var(--ui-color-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.plans-modal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 220px);
+  gap: 12px;
+  align-items: start;
+}
+
+.plans-modal-layout .plans-modal-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.plans-modal-layout .plans-modal-card {
+  gap: 8px;
+  min-height: 318px;
+  padding: 12px;
+  text-align: left;
+}
+
+.plans-modal-layout .plans-modal-card-header,
+.plans-modal-layout .plans-modal-card-price-row {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.plans-modal-layout .plans-modal-card-header {
+  min-height: 24px;
+}
+
+.plans-modal-layout .plans-modal-card-header strong {
+  font-size: 15px;
+}
+
+.plans-modal-layout .plans-modal-current-badge {
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.plans-modal-layout .plans-modal-card-price-row {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.plans-modal-layout .plans-modal-card-price-row .plans-modal-card-price {
+  font-size: 26px;
+}
+
+.plans-modal-layout .plans-modal-card-price-row span {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.plans-modal-layout .plans-modal-card p {
+  font-size: 12px;
+  line-height: 1.35;
+  min-height: 48px;
+}
+
+.plans-modal-layout .plans-modal-card-features {
+  grid-template-columns: 1fr;
+  gap: 5px;
+  padding-left: 16px;
+  font-size: 11.5px;
+  line-height: 1.25;
+}
+
+.plans-modal-card.is-selected,
+.plans-modal-pack-card.is-selected {
+  border-color: var(--ui-color-primary);
+  box-shadow: 0 0 0 1px var(--ui-color-primary), var(--shadow-raised);
+}
+
+.plans-modal-card.is-current {
+  background: var(--ui-color-surface-muted);
+}
+
+.plans-modal-pack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plans-modal-packs > .plans-modal-pack-list {
+  display: flex;
+  grid-template-columns: none;
+}
+
+.plans-modal-pack-card {
+  cursor: pointer;
+  grid-template-columns: minmax(0, 1fr) 74px;
+  grid-template-areas:
+    "main quantity"
+    "action quantity";
+  gap: 6px 8px;
+  min-height: 62px;
+  padding: 8px;
+}
+
+.plans-modal-pack-main {
+  grid-area: main;
+}
+
+.plans-modal-pack-main strong {
+  font-size: 13px;
+}
+
+.plans-modal-pack-main small {
+  font-size: 11px;
+}
+
+.plans-modal-pack-quantity {
+  display: flex;
+  grid-area: quantity;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plans-modal-pack-quantity small {
+  color: var(--ui-color-muted);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
+
+.plans-modal-pack-quantity .field,
+.plans-modal-pack-quantity .ui-input-shell,
+.plans-modal-pack-quantity .ui-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.plans-modal-pack-card .plans-modal-card-action {
+  grid-area: action;
+  font-size: 11px;
+}
+
+.plans-modal-pack-card[aria-disabled="true"] {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.plans-modal-footer {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 100%;
+  gap: 8px;
+}
+
+.plans-modal-subtotal {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+}
+
+.plans-modal-subtotal span,
+.plans-modal-subtotal small {
+  color: var(--ui-color-muted);
+  font-size: 12px;
+}
+
+.plans-modal-subtotal strong {
+  color: var(--ui-color-text);
+  font-size: 14px;
+}
+
+.plans-modal-footer-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 940px) {
+  .plans-modal-layout,
+  .plans-modal-layout .plans-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .plans-modal-packs > .plans-modal-pack-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .modal-card.plans-modal {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+  }
+
+  .plans-modal-packs > .plans-modal-pack-list,
+  .plans-modal-pack-card {
+    grid-template-columns: 1fr;
+  }
+
+  .plans-modal-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plans-modal-footer-actions {
+    width: 100%;
+  }
+
+  .plans-modal-footer-actions > * {
+    flex: 1 1 0;
+  }
+}
+
 /* Auth Modal */
 .auth-modal {
   overflow: hidden;

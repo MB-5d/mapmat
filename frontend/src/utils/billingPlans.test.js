@@ -13,10 +13,10 @@ describe('buildScreenshotCreditPackCards', () => {
           configured: true,
         },
         {
-          key: 'crawl_pages_1000',
-          name: '1,000 crawl pages',
-          meter: 'crawl_pages',
-          quantity: 1000,
+          key: 'downloads_10',
+          name: '10 downloads',
+          meter: 'organized_exports',
+          quantity: 10,
           formatted: '$5',
           configured: true,
         },
@@ -33,7 +33,7 @@ describe('buildScreenshotCreditPackCards', () => {
     expect(packs.map((pack) => pack.key)).toEqual(['screenshot_pack_1', 'screenshot_pack_4']);
     expect(packs[0]).toEqual(expect.objectContaining({
       label: '10 screenshot credits',
-      priceLabel: 'Not configured',
+      priceLabel: '',
       quantity: 10,
     }));
     expect(packs[1]).toEqual(expect.objectContaining({

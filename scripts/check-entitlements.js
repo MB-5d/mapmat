@@ -8,6 +8,7 @@ process.env.TEST_AUTH_ENABLED = 'false';
 
 const authStore = require('../stores/authStore');
 const billingStore = require('../stores/billingStore');
+const mapStore = require('../stores/mapStore');
 const projectStore = require('../stores/projectStore');
 const {
   ACTIONS,
@@ -34,8 +35,9 @@ async function main() {
   const summary = await resolveAccountEntitlementsAsync(user);
   assert.equal(summary.plan.key, 'free');
   assert.equal(summary.account.state, 'active');
-  assert.equal(summary.meters.crawlPages.included, 100);
-  assert.equal(summary.meters.screenshotCredits.included, 0);
+  assert.equal(summary.meters.activePages.limit, 1000);
+  assert.equal(summary.meters.screenshotCredits.included, 25);
+  assert.equal(summary.meters.downloads.included, 5);
   assert.equal(summary.limits.activeProjects.limit, 1);
   assert.equal(summary.limits.scanPagesPerRun.limit, 100);
   assert.equal(summary.screenshotCreditCosts.desktop_full_page, 3);
@@ -46,7 +48,7 @@ async function main() {
   assert.equal(freeScanCheck.allowedQuantity, 100);
   assert.equal(freeScanCheck.capped, true);
 
-  const freeScreenshotCheck = await checkAccountActionAsync(user, ACTIONS.screenshotCapture, { credits: 1 });
+  const freeScreenshotCheck = await checkAccountActionAsync(user, ACTIONS.screenshotCapture, { credits: 26 });
   assert.equal(freeScreenshotCheck.allowed, false);
   assert.equal(freeScreenshotCheck.code, 'ENTITLEMENT_REQUIRED');
 
@@ -59,10 +61,10 @@ async function main() {
   const tierAccount = (await resolveAccountEntitlementsAsync(tierUser)).account;
   for (const [planKey, expectedAllowedQuantity, expectedResolvedPlanKey = planKey] of [
     ['free', 100],
-    ['pro', 1050],
-    ['studio', 52500],
-    ['agency', 210000],
-    ['solo', 1050, 'pro'],
+    ['pro', 10000],
+    ['studio', 50000],
+    ['agency', 200000],
+    ['solo', 10000, 'pro'],
   ]) {
     await billingStore.updateBillingAccountForAdminAsync({
       accountId: tierAccount.id,
@@ -93,11 +95,11 @@ async function main() {
   const testUnlimited = await resolveAccountEntitlementsAsync(tierUser);
   assert.equal(testUnlimited.plan.key, 'test_unlimited');
   assert.equal(testUnlimited.plan.name, 'Test Unlimited');
-  assert.equal(testUnlimited.meters.crawlPages.unlimited, true);
+  assert.equal(testUnlimited.meters.activePages.unlimited, true);
   assert.equal(testUnlimited.meters.screenshotCredits.unlimited, true);
-  assert.equal(testUnlimited.meters.organizedExports.unlimited, true);
+  assert.equal(testUnlimited.meters.downloads.unlimited, true);
   assert.equal(testUnlimited.limits.activeProjects.unlimited, true);
-  assert.equal(testUnlimited.limits.seats.unlimited, true);
+  assert.equal(testUnlimited.limits.editors.unlimited, true);
   assert.equal(testUnlimited.limits.scanPagesPerRun.unlimited, true);
   assert.equal(testUnlimited.features.clientShareLinks, true);
   assert.equal(testUnlimited.features.scheduledRescans, true);
@@ -113,23 +115,45 @@ async function main() {
   await recordMeterDebitAsync({
     user,
     accountSummary: summary,
-    meter: METERS.crawlPages,
+    meter: METERS.screenshotCredits,
     quantity: 3,
-    idempotencyKey: 'entitlements-test:crawl',
+    idempotencyKey: 'entitlements-test:screenshot',
     metadata: { test: true },
   });
   await recordMeterDebitAsync({
     user,
     accountSummary: summary,
-    meter: METERS.crawlPages,
+    meter: METERS.screenshotCredits,
     quantity: 3,
-    idempotencyKey: 'entitlements-test:crawl',
+    idempotencyKey: 'entitlements-test:screenshot',
     metadata: { test: true },
   });
 
   const afterDebit = await resolveAccountEntitlementsAsync(user);
-  assert.equal(afterDebit.meters.crawlPages.used, 3);
-  assert.equal(afterDebit.meters.crawlPages.remaining, 97);
+  assert.equal(afterDebit.meters.screenshotCredits.used, 3);
+  assert.equal(afterDebit.meters.screenshotCredits.remaining, 22);
+
+  await mapStore.createMapAsync({
+    id: randomUUID(),
+    userId: user.id,
+    accountId: summary.account.id,
+    projectId: null,
+    name: 'Full free page allowance',
+    notes: null,
+    url: 'https://example.test',
+    rootData: JSON.stringify({ id: 'root', url: 'https://example.test' }),
+    orphansData: null,
+    connectionsData: null,
+    colors: null,
+    connectionColors: null,
+    pageCount: 1000,
+  });
+  const afterPageUse = await resolveAccountEntitlementsAsync(user);
+  assert.equal(afterPageUse.meters.activePages.used, 1000);
+  assert.equal(afterPageUse.meters.activePages.remaining, 0);
+  const pageLimitCheck = await checkAccountActionAsync(user, ACTIONS.mapWrite, { pageDelta: 1 });
+  assert.equal(pageLimitCheck.allowed, false);
+  assert.equal(pageLimitCheck.code, 'ENTITLEMENT_REQUIRED');
 
   await projectStore.createProjectAsync({
     id: randomUUID(),
@@ -150,12 +174,11 @@ async function main() {
   assert.equal(personalTrial.trial.active, true);
   assert.equal(personalTrial.trial.kind, 'personal');
   assert.equal(personalTrial.trial.effectivePlanKey, 'pro');
-  assert.equal(personalTrial.meters.crawlPages.included, 1000);
-  assert.equal(personalTrial.meters.crawlPages.graceLimit, 0);
+  assert.equal(personalTrial.meters.activePages.limit, 10000);
   assert.equal(personalTrial.meters.screenshotCredits.included, 15);
-  assert.equal(personalTrial.meters.organizedExports.included, 15);
+  assert.equal(personalTrial.meters.downloads.included, 15);
   assert.equal(personalTrial.trial.organizedDownloadsAllowed, true);
-  assert.equal(personalTrial.limits.seats.limit, 1);
+  assert.equal(personalTrial.limits.editors.limit, 1);
   const personalTrialEndsAt = parseSqlUtcTimestamp(personalTrial.trial.endsAt);
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   assert.ok(personalTrialEndsAt - Date.now() > sevenDaysMs - 60 * 1000);
@@ -166,14 +189,14 @@ async function main() {
   await recordMeterDebitAsync({
     user,
     accountSummary: personalTrial,
-    meter: METERS.organizedExports,
+    meter: METERS.downloads,
     quantity: 1,
     idempotencyKey: 'entitlements-test:trial-download',
     metadata: { test: true },
   });
   const afterTrialDownload = await resolveAccountEntitlementsAsync(user);
-  assert.equal(afterTrialDownload.meters.organizedExports.used, 1);
-  assert.equal(afterTrialDownload.meters.organizedExports.remaining, 14);
+  assert.equal(afterTrialDownload.meters.downloads.used, 1);
+  assert.equal(afterTrialDownload.meters.downloads.remaining, 14);
 
   await billingStore.startTrialAsync({
     accountId: summary.account.id,
@@ -183,8 +206,8 @@ async function main() {
   const teamTrial = await resolveAccountEntitlementsAsync(user);
   assert.equal(teamTrial.trial.active, true);
   assert.equal(teamTrial.trial.kind, 'team');
-  assert.equal(teamTrial.limits.seats.limit, 4);
-  assert.equal(teamTrial.limits.seats.remaining, 3);
+  assert.equal(teamTrial.limits.editors.limit, 4);
+  assert.equal(teamTrial.limits.editors.remaining, 4);
 
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);

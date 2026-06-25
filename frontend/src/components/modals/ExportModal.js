@@ -5,10 +5,11 @@ import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import OptionCard from '../ui/OptionCard';
 
+const IMAGE_EXPORT_DISABLED_REASON = 'PNG download is temporarily unavailable.';
+
 const INDEX_FORMAT_OPTIONS = [
   { format: 'doc', label: 'Doc', icon: File },
-  { format: 'txt', label: 'Text index', icon: FileText },
-  { format: 'sitemapTxt', label: 'TXT sitemap', icon: FileText },
+  { format: 'txt', label: 'TXT sitemap', icon: FileText },
   { format: 'html', label: 'HTML', icon: FileCode },
   { format: 'md', label: 'Markdown', icon: FileType },
 ];
@@ -18,6 +19,7 @@ const ExportModal = ({
   onClose,
   onExportPng,
   onExportPdf,
+  onExportSvg,
   onExportCsv,
   onExportJson,
   onExportXml,
@@ -27,6 +29,11 @@ const ExportModal = ({
   imageExportDisabledReason = '',
 }) => {
   if (!show) return null;
+  const imageExportTemporarilyDisabled = true;
+  const isImageExportDisabled = imageExportTemporarilyDisabled || imageExportDisabled;
+  const imageExportDescription = imageExportTemporarilyDisabled
+    ? IMAGE_EXPORT_DISABLED_REASON
+    : (imageExportDisabled ? imageExportDisabledReason : 'High resolution snapshot with transparency');
 
   return (
     <Modal
@@ -54,11 +61,18 @@ const ExportModal = ({
         />
         <OptionCard
           className="export-btn"
+          icon={<FileCode size={24} />}
+          title="SVG"
+          description="Editable sitemap for Figma and design tools"
+          onClick={onExportSvg}
+        />
+        <OptionCard
+          className="export-btn"
           icon={<FileImage size={24} />}
           title="Image"
-          description={imageExportDisabled ? imageExportDisabledReason : 'High resolution snapshot with transparency'}
+          description={imageExportDescription}
           onClick={onExportPng}
-          disabled={imageExportDisabled}
+          disabled={isImageExportDisabled}
         />
         <OptionCard
           className="export-btn"

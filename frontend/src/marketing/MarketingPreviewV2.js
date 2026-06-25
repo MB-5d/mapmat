@@ -603,6 +603,7 @@ const comparisonGroups = [
 
 const comparisonRowCount = Math.max(...comparisonGroups.map((group) => group.rows.length));
 const comparisonSummary = 'How we compare in main categories and features.';
+const featureComparisonEnabled = false;
 
 const exampleCards = [
   {
@@ -1860,10 +1861,12 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
               );
             })}
           </div>
-          <MarketingV2Comparison
-            activeGroupId={activeComparisonGroupId}
-            onActiveGroupChange={setActiveComparisonGroupId}
-          />
+          {featureComparisonEnabled ? (
+            <MarketingV2Comparison
+              activeGroupId={activeComparisonGroupId}
+              onActiveGroupChange={setActiveComparisonGroupId}
+            />
+          ) : null}
           <MarketingV2UpdateCta onJoinList={openMailingModal} />
         </SectionShell>
 

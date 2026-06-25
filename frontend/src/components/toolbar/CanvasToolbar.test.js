@@ -116,10 +116,6 @@ describe('CanvasToolbar', () => {
           onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          showOrientationMenu={false}
-          onToggleOrientationMenu={jest.fn()}
-          orientationMenuRef={{ current: null }}
-          onMapOrientationChange={jest.fn()}
           onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
@@ -161,7 +157,6 @@ describe('CanvasToolbar', () => {
       'Images',
       'Layers',
       'Legend',
-      'Orientation',
       'Clear canvas',
       'Download',
       'Share',
@@ -203,10 +198,6 @@ describe('CanvasToolbar', () => {
           onToggleLegendMenu={jest.fn()}
           legendMenuRef={{ current: null }}
           legendPanel={null}
-          showOrientationMenu={false}
-          onToggleOrientationMenu={jest.fn()}
-          orientationMenuRef={{ current: null }}
-          onMapOrientationChange={jest.fn()}
           onToggleImageMenu={jest.fn()}
           showImageMenu={false}
           imageMenuRef={{ current: null }}
@@ -245,7 +236,6 @@ describe('CanvasToolbar', () => {
       'Images',
       'Layers',
       'Legend',
-      'Orientation',
       'Save map',
       'Clear canvas',
       'Download',
@@ -307,10 +297,7 @@ describe('CanvasToolbar', () => {
     expect(saveButton.disabled).toBe(true);
   });
 
-  test('shows orientation as a top-level toolbar menu next to legend', () => {
-    const onToggleOrientationMenu = jest.fn();
-    const onMapOrientationChange = jest.fn();
-
+  test('does not include map orientation in the bottom toolbar', () => {
     act(() => {
       root.render(
         <CanvasToolbar
@@ -334,40 +321,13 @@ describe('CanvasToolbar', () => {
           hasMap
           hasSavedMap
           showVersionHistory={false}
-          mapOrientation="horizontal"
-          showOrientationMenu
-          onToggleOrientationMenu={onToggleOrientationMenu}
-          orientationMenuRef={{ current: null }}
-          onMapOrientationChange={onMapOrientationChange}
         />
       );
     });
 
-    const buttons = Array.from(container.querySelectorAll('button'));
-    const legendButton = container.querySelector('button[aria-label="Legend"]');
     const orientationButton = container.querySelector('button[aria-label="Orientation"]');
-    const verticalRadio = container.querySelector('input[type="radio"][value="vertical"]');
-    const horizontalRadio = container.querySelector('input[type="radio"][value="horizontal"]');
-    const radioGroup = container.querySelector('[role="radiogroup"]');
-
-    expect(orientationButton).not.toBeNull();
-    expect(orientationButton.className).toContain('active');
-    expect(orientationButton.getAttribute('aria-expanded')).toBe('true');
-    expect(buttons.indexOf(orientationButton)).toBe(buttons.indexOf(legendButton) + 1);
-    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Map orientation');
-    expect(radioGroup?.getAttribute('aria-label')).toBe('Map orientation');
-    expect(verticalRadio).not.toBeNull();
-    expect(horizontalRadio).not.toBeNull();
-    expect(verticalRadio.checked).toBe(false);
-    expect(horizontalRadio.checked).toBe(true);
-
-    act(() => {
-      orientationButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      verticalRadio.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onToggleOrientationMenu).toHaveBeenCalledTimes(1);
-    expect(onMapOrientationChange).toHaveBeenCalledWith('vertical');
+    expect(orientationButton).toBeNull();
+    expect(container.textContent).not.toContain('Map orientation');
   });
 
   test('uses combined image download actions', () => {

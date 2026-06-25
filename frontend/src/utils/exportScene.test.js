@@ -8,6 +8,7 @@ import {
   getPngExportPixelRatio,
   getPdfSceneScale,
   registerExportPdfFonts,
+  renderEditableExportSvg,
   renderExportSvg,
 } from './exportScene';
 import { REPORT_TYPE_OPTIONS } from './constants';
@@ -82,6 +83,38 @@ describe('export scene helpers', () => {
     expect(svg).toContain('Created with');
     expect(svg).toContain(VELLIC_LOGO_MARK_PATH);
     expect(svg).toMatch(/y="88" fill="#1e293b"[^>]*>app\.vellic\.io\/share\/example<\/text>/);
+    expect(svg).toContain('id="vellic-sitemap"');
+    expect(svg).toContain('id="vellic-nodes"');
+    expect(svg).not.toContain('id="vellic-local-components"');
+  });
+
+  test('renderEditableExportSvg adds structured groups and local component specimens', () => {
+    const scene = buildExportScene({
+      root: makeNode('home', [
+        { ...makeNode('missing'), isMissing: true },
+        { ...makeNode('duplicate'), isDuplicate: true },
+      ]),
+      title: 'Example Map',
+      shareUrl: 'https://app.vellic.io/share/example',
+      reportStats: { total: 3, missing: 1, duplicates: 1 },
+      reportTypeOptions: REPORT_TYPE_OPTIONS,
+    });
+    const svg = renderEditableExportSvg(scene, new Map());
+
+    expect(svg).toContain('data-vellic-export="editable-sitemap-svg"');
+    expect(svg).toContain('data-vellic-page="Sitemap"');
+    expect(svg).toContain('data-vellic-page="Local Components"');
+    expect(svg).toContain('data-vellic-layer="tree-connectors"');
+    expect(svg).toContain('data-vellic-layer="relationship-connectors"');
+    expect(svg).toContain('data-vellic-layer="node-title"');
+    expect(svg).toContain('data-vellic-layer="page-number"');
+    expect(svg).toContain('data-vellic-component="Node Card"');
+    expect(svg).toContain('data-vellic-component="Status Badge"');
+    expect(svg).toContain('Page Depth Colors');
+    expect(svg).not.toContain('<script');
+    expect(svg).not.toContain('<foreignObject');
+    expect(svg).not.toContain('<symbol');
+    expect(svg).not.toContain('<use');
   });
 
   test('renderExportSvg clips level bars inside the node and centers badge labels', () => {

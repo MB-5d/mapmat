@@ -7,6 +7,8 @@ process.env.TEST_AUTH_ENABLED = 'false';
 process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_pro_test';
 process.env.STRIPE_PRICE_PRO_YEARLY = 'price_pro_yearly_test';
 process.env.STRIPE_PRICE_STUDIO_ANNUAL = 'price_studio_annual_test';
+process.env.STRIPE_PRICE_EXTRA_EDITOR_MONTHLY = 'price_extra_editor_test';
+process.env.STRIPE_PRICE_EXTRA_EDITOR_YEARLY = 'price_extra_editor_yearly_test';
 process.env.STRIPE_PRICE_SCREENSHOT_PACK_1 = 'price_screenshot_pack_1_test';
 process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_25 = 'price_screenshot_pack_2_test';
 process.env.STRIPE_PRICE_SCREENSHOT_CREDITS_50 = 'price_screenshot_pack_3_test';
@@ -28,6 +30,7 @@ const {
   getPlanPriceConfigByStripePrice,
   getAddOnPriceConfig,
   getAddOnPriceConfigByStripePrice,
+  getRecurringAddOnPriceConfigByStripePrice,
   applyStripeSubscriptionToAccountAsync,
   createAddOnCheckoutSessionAsync,
   refreshBillingAccountFromStripeAsync,
@@ -42,8 +45,25 @@ async function createTestUser(label) {
   });
 }
 
-function buildSubscription({ accountId, status = 'active' }) {
+function buildSubscription({ accountId, status = 'active', extraEditors = 0 }) {
   const now = Math.floor(Date.now() / 1000);
+  const items = [
+    {
+      price: {
+        id: 'price_pro_test',
+        product: 'prod_test_pro',
+      },
+    },
+  ];
+  if (extraEditors > 0) {
+    items.push({
+      quantity: extraEditors,
+      price: {
+        id: 'price_extra_editor_test',
+        product: 'prod_test_extra_editor',
+      },
+    });
+  }
   return {
     id: 'sub_test_pro',
     status,
@@ -58,14 +78,7 @@ function buildSubscription({ accountId, status = 'active' }) {
       vellicAccountId: accountId,
     },
     items: {
-      data: [
-        {
-          price: {
-            id: 'price_pro_test',
-            product: 'prod_test_pro',
-          },
-        },
-      ],
+      data: items,
     },
   };
 }
@@ -84,13 +97,19 @@ async function main() {
   const billingCatalog = getBillingCatalogForClient();
   const freeCatalog = billingCatalog.plans.find((entry) => entry.key === 'free');
   assert.equal(freeCatalog.prices.monthly.formatted, '$0');
-  assert.equal(freeCatalog.featureHighlights.includes('100 pages per run'), true);
+  assert.equal(freeCatalog.featureHighlights.includes('100 pages per scan'), true);
   const proCatalog = billingCatalog.plans.find((entry) => entry.key === 'pro');
   assert.equal(proCatalog.prices.monthly.configured, true);
   assert.equal(proCatalog.prices.yearly.configured, true);
   assert.equal(proCatalog.prices.monthly.formatted, '$8');
-  assert.equal(proCatalog.limits.crawlPages, 1000);
-  assert.equal(proCatalog.featureHighlights.includes('1,000 crawl pages'), true);
+  assert.equal(proCatalog.limits.activePages, 10000);
+  assert.equal(proCatalog.featureHighlights.includes('10,000 active pages total on account'), true);
+  const recurringExtraEditor = billingCatalog.recurringAddOns.find((entry) => entry.key === 'extra_editor' && entry.billingCycle === 'monthly');
+  assert.equal(recurringExtraEditor.configured, true);
+  assert.equal(recurringExtraEditor.priceEnv, 'STRIPE_PRICE_EXTRA_EDITOR_MONTHLY');
+  const extraEditorPrice = getRecurringAddOnPriceConfigByStripePrice('price_extra_editor_test');
+  assert.equal(extraEditorPrice.key, 'extra_editor');
+  assert.equal(extraEditorPrice.entitlements.editors, 1);
   const screenshotPacks = billingCatalog.addOns.filter((entry) => entry.meter === METERS.screenshotCredits);
   assert.deepEqual(screenshotPacks.map((entry) => entry.key), [
     'screenshot_pack_1',
@@ -153,14 +172,25 @@ async function main() {
   const proSummary = await resolveAccountEntitlementsAsync(subscriber);
   assert.equal(proSummary.plan.key, 'pro');
   assert.equal(proSummary.trial.active, false);
-  assert.equal(proSummary.meters.crawlPages.included, 1000);
-  assert.equal(proSummary.meters.screenshotCredits.included, 100);
+  assert.equal(proSummary.meters.activePages.limit, 10000);
+  assert.equal(proSummary.meters.screenshotCredits.included, 300);
   assert.equal(proSummary.account.stripeCustomerId, 'cus_test_pro');
   assert.equal(proSummary.account.stripeSubscriptionId, 'sub_test_pro');
   assert.equal(proSummary.account.stripeSubscriptionStatus, 'active');
   assert.equal(proSummary.account.stripePriceId, 'price_pro_test');
   assert.equal(proSummary.account.stripeProductId, 'prod_test_pro');
   assert.equal(proSummary.account.stripeLatestInvoiceId, 'in_test_pro');
+
+  await applyStripeSubscriptionToAccountAsync(buildSubscription({
+    accountId: proSummary.account.id,
+    extraEditors: 2,
+  }));
+  const proWithExtraEditors = await resolveAccountEntitlementsAsync(subscriber);
+  assert.equal(proWithExtraEditors.limits.editors.grantExtra, 2);
+  assert.equal(proWithExtraEditors.limits.editors.limit, 3);
+  assert.equal(proWithExtraEditors.meters.activePages.grantExtra, 20000);
+  assert.equal(proWithExtraEditors.meters.activePages.limit, 30000);
+  assert.equal(proWithExtraEditors.meters.screenshotCredits.grantRemaining, 600);
 
   await applyStripeSubscriptionToAccountAsync(
     buildSubscription({ accountId: proSummary.account.id, status: 'canceled' }),
@@ -174,7 +204,7 @@ async function main() {
 
   const creditsUser = await createTestUser('credits');
   const creditsSummary = await resolveAccountEntitlementsAsync(creditsUser);
-  const deniedScreenshot = await checkAccountActionAsync(creditsUser, ACTIONS.screenshotCapture, { credits: 1 });
+  const deniedScreenshot = await checkAccountActionAsync(creditsUser, ACTIONS.screenshotCapture, { credits: 26 });
   assert.equal(deniedScreenshot.allowed, false);
 
   const firstGrant = await billingStore.upsertEntitlementGrantByExternalRefAsync({
@@ -204,17 +234,17 @@ async function main() {
   assert.equal(duplicateGrant.grant.id, firstGrant.grant.id);
 
   const withCredits = await resolveAccountEntitlementsAsync(creditsUser);
-  assert.equal(withCredits.meters.screenshotCredits.included, 0);
+  assert.equal(withCredits.meters.screenshotCredits.included, 25);
   assert.equal(withCredits.meters.screenshotCredits.grantRemaining, 100);
-  assert.equal(withCredits.meters.screenshotCredits.remaining, 100);
+  assert.equal(withCredits.meters.screenshotCredits.remaining, 125);
 
-  const allowedScreenshot = await checkAccountActionAsync(creditsUser, ACTIONS.screenshotCapture, { credits: 5 });
+  const allowedScreenshot = await checkAccountActionAsync(creditsUser, ACTIONS.screenshotCapture, { credits: 30 });
   assert.equal(allowedScreenshot.allowed, true);
   await recordMeterDebitAsync({
     user: creditsUser,
     accountSummary: withCredits,
     meter: METERS.screenshotCredits,
-    quantity: 5,
+    quantity: 30,
     idempotencyKey: 'stripe-billing-test:screenshot',
     metadata: { test: true },
   });
@@ -222,12 +252,12 @@ async function main() {
     user: creditsUser,
     accountSummary: withCredits,
     meter: METERS.screenshotCredits,
-    quantity: 5,
+    quantity: 30,
     idempotencyKey: 'stripe-billing-test:screenshot',
     metadata: { test: true },
   });
   const afterCreditUse = await resolveAccountEntitlementsAsync(creditsUser);
-  assert.equal(afterCreditUse.meters.screenshotCredits.used, 5);
+  assert.equal(afterCreditUse.meters.screenshotCredits.used, 30);
   assert.equal(afterCreditUse.meters.screenshotCredits.addonUsed, 5);
   assert.equal(afterCreditUse.meters.screenshotCredits.grantRemaining, 95);
   assert.equal(afterCreditUse.meters.screenshotCredits.remaining, 95);

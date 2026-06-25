@@ -61,10 +61,10 @@ async function upsertTestUser({ email, name, planKey }, passwordHash) {
     email,
     password: PASSWORD,
     plan: entitlements?.plan?.name || planKey,
-    crawlPages: entitlements?.meters?.crawlPages?.included,
+    activePages: entitlements?.meters?.activePages?.limit,
     screenshotCredits: entitlements?.meters?.screenshotCredits?.included,
     activeProjects: entitlements?.limits?.activeProjects?.limit,
-    seats: entitlements?.limits?.seats?.limit,
+    editors: entitlements?.limits?.editors?.limit,
   };
 }
 
@@ -79,10 +79,10 @@ async function main() {
   seeded.forEach((account) => {
     console.log(
       `- ${account.email} / ${account.password} (${account.plan}: `
-      + `${account.crawlPages ?? 'unlimited'} pages, `
+      + `${account.activePages ?? 'unlimited'} pages, `
       + `${account.screenshotCredits ?? 'unlimited'} screenshot credits, `
       + `${account.activeProjects ?? 'unlimited'} projects, `
-      + `${account.seats ?? 'unlimited'} seats)`
+      + `${account.editors ?? 'unlimited'} editors)`
     );
   });
 }

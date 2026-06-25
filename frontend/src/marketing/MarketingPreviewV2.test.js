@@ -135,14 +135,13 @@ describe('MarketingPreviewV2', () => {
     expect(container.textContent).toContain('Bulk screenshots');
     expect(container.textContent).toContain('Flows & crosslinks');
     expect(container.textContent).toContain('Exports and handoff');
-    expect(container.textContent).toContain('Sitemap tools');
-    expect(container.textContent).toContain('FlowMapp');
-    expect(container.textContent).toContain('Slickplan');
-    expect(container.textContent).toContain('Octopus.do');
-    expect(container.textContent).toContain('DYNO Mapper');
-    expect(container.textContent).toContain('mySitemapGenerator');
-    expect(container.textContent).toContain('AI-ready handoff package');
-    expect(container.querySelector('#marketing-v2-features')?.textContent).toContain('AI-ready handoff packageYes');
+    expect(container.querySelector('.marketing-v2-comparison')).toBeNull();
+    expect(container.textContent).not.toContain('Features comparison');
+    expect(container.textContent).not.toContain('FlowMapp');
+    expect(container.textContent).not.toContain('Slickplan');
+    expect(container.textContent).not.toContain('Octopus.do');
+    expect(container.textContent).not.toContain('DYNO Mapper');
+    expect(container.textContent).not.toContain('mySitemapGenerator');
     expect(container.textContent).toContain('Collaboration');
     expect(container.querySelector('#marketing-v2-features')?.textContent).toContain('This is just the start!');
     expect(container.querySelector('.marketing-v2-feature-upcoming')).toBeNull();
@@ -358,21 +357,12 @@ describe('MarketingPreviewV2', () => {
     expect(container.querySelector('.marketing-v2-final-cta .marketing-scan-bar input')?.getAttribute('placeholder')).toBe('Enter a URL to start');
   });
 
-  test('switches competitor comparison groups', () => {
+  test('keeps competitor comparison groups hidden when disabled', () => {
     renderAt('/features');
 
-    expect(container.textContent).toContain('AI-ready handoff package');
+    expect(container.querySelector('.marketing-v2-comparison')).toBeNull();
+    expect(container.querySelector('.marketing-v2-comparison__panel')).toBeNull();
     expect(container.textContent).not.toContain('Organized screenshot downloads');
-
-    const screenshotTab = Array.from(container.querySelectorAll('.marketing-v2-comparison-tabs button'))
-      .find((button) => button.textContent === 'Bulk screenshot');
-
-    act(() => {
-      screenshotTab.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
-    });
-
-    expect(screenshotTab.getAttribute('aria-selected')).toBe('true');
-    expect(container.textContent).toContain('Organized screenshot downloads');
   });
 
   test('renders supplied product screenshot examples', () => {
@@ -398,11 +388,11 @@ describe('MarketingPreviewV2', () => {
     ['$96/year', '$216/year', '$1,056/year'].forEach((price) => {
       expect(container.textContent).toContain(`(${price})`);
     });
-    expect(container.textContent).toContain('2 organized exports');
-    expect(container.textContent).toContain('No screenshot credits*');
-    expect(container.textContent).toContain('100 screenshot credits*');
-    expect(container.textContent).toContain('3,000 screenshot credits*');
-    expect(container.textContent).toContain('10,000 screenshot credits*');
+    expect(container.textContent).toContain('5 PNG downloads');
+    expect(container.textContent).toContain('25 screenshot credits*');
+    expect(container.textContent).toContain('300 screenshot credits*');
+    expect(container.textContent).toContain('1,000 screenshot credits*');
+    expect(container.textContent).toContain('5,000 screenshot credits*');
     expect(container.querySelectorAll('.marketing-v2-pricing-card__cta')).toHaveLength(4);
     expect(container.querySelectorAll('.marketing-v2-pricing-card__actions')).toHaveLength(4);
     expect(container.querySelectorAll('.marketing-v2-pricing-card__screenshot-note')).toHaveLength(4);
@@ -440,7 +430,7 @@ describe('MarketingPreviewV2', () => {
           description: 'Catalog free plan.',
           marketingCta: 'Get started',
           marketingAction: 'signup',
-          featureHighlights: ['1 active project', '100 crawl pages'],
+          featureHighlights: ['1 active project', '1,000 active pages total on account'],
           prices: {
             monthly: { formatted: '$0', suffix: '/mo', configured: true },
             yearly: { formatted: '$0', suffix: '/yr', configured: true },
@@ -454,7 +444,7 @@ describe('MarketingPreviewV2', () => {
           description: 'Catalog pro plan.',
           marketingCta: 'Subscribe',
           marketingAction: 'checkout',
-          featureHighlights: ['9 active projects', '9,000 crawl pages'],
+          featureHighlights: ['9 active projects', '9,000 active pages total on account'],
           prices: {
             monthly: { formatted: '$9', suffix: '/mo', configured: true },
             yearly: { formatted: '$90', suffix: '/yr', configured: true },
