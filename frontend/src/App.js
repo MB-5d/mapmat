@@ -8,6 +8,7 @@ import {
 } from '@dnd-kit/core';
 import {
   ExternalLink,
+  Check,
   Loader2,
   MessageSquare,
   RefreshCw,
@@ -57,6 +58,7 @@ import ScanProgressModal from './components/scan/ScanProgressModal';
 import VersionEditPromptModal from './components/modals/VersionEditPromptModal';
 import Button from './components/ui/Button';
 import Avatar from './components/ui/Avatar';
+import SegmentedControl from './components/ui/SegmentedControl';
 import { MenuDivider, MenuItem, MenuPanel, MenuSectionHeader } from './components/ui/Menu';
 import Modal from './components/ui/Modal';
 import StatusAlert from './components/ui/StatusAlert';
@@ -230,6 +232,14 @@ const GUEST_SCAN_PAGE_LIMIT = 25;
 const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
 const ADD_ON_QUANTITY_MAX = 100;
+const BILLING_MODAL_TABS = {
+  PLANS: 'plans',
+  UPGRADES: 'upgrades',
+};
+const BILLING_MODAL_TAB_OPTIONS = [
+  { value: BILLING_MODAL_TABS.PLANS, label: 'Plans' },
+  { value: BILLING_MODAL_TABS.UPGRADES, label: 'Upgrades' },
+];
 const COMMENT_POPOVER_WIDTH = 384;
 const COMMENT_POPOVER_MAX_HEIGHT = 400;
 const COMMENT_POPOVER_EDGE_GAP = 8;
@@ -358,8 +368,9 @@ function limitImportedMapToPageCount(imported, pageLimit) {
 
 function normalizeBillingCycle(value) {
   const normalized = String(value || '').trim().toLowerCase();
+  if (['month', 'monthly'].includes(normalized)) return 'monthly';
   if (['year', 'yearly', 'annual', 'annually'].includes(normalized)) return 'yearly';
-  return 'monthly';
+  return 'yearly';
 }
 
 function isEntitlementLockedNode(node) {
@@ -2966,7 +2977,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [billingCatalogLoading, setBillingCatalogLoading] = useState(false);
   const [billingCatalogError, setBillingCatalogError] = useState('');
   const [billingActionKey, setBillingActionKey] = useState('');
-  const [billingCycle, setBillingCycle] = useState('monthly');
+  const [billingCycle, setBillingCycle] = useState('yearly');
+  const [billingModalTab, setBillingModalTab] = useState(BILLING_MODAL_TABS.PLANS);
   const [billingSelectedPlanKey, setBillingSelectedPlanKey] = useState('');
   const [selectedAddOnKeys, setSelectedAddOnKeys] = useState({});
   const [addOnQuantities, setAddOnQuantities] = useState({});
@@ -4183,25 +4195,28 @@ export default function App({ currentRoute, navigateToRoute }) {
     [pageCreditPacks, screenshotCreditPacks]
   );
 
-	  useEffect(() => {
-	    if (!plansModal) {
-	      setBillingSelectedPlanKey('');
-	      setSelectedAddOnKeys({});
-	      return;
-	    }
-      if (plansModal.context === 'page-credits' || plansModal.context === 'import-page-limit') {
-        const firstPagePack = pageCreditPacks[0];
-        if (firstPagePack) {
-          setSelectedAddOnKeys((current) => ({ ...current, [firstPagePack.key]: true }));
-        }
+  useEffect(() => {
+    if (!plansModal) {
+      setBillingModalTab(BILLING_MODAL_TABS.PLANS);
+      setBillingSelectedPlanKey('');
+      setSelectedAddOnKeys({});
+      return;
+    }
+    const opensUpgradesTab = ['page-credits', 'import-page-limit', 'screenshot-credits', 'screenshot-download'].includes(plansModal.context);
+    setBillingModalTab(opensUpgradesTab ? BILLING_MODAL_TABS.UPGRADES : BILLING_MODAL_TABS.PLANS);
+    if (plansModal.context === 'page-credits' || plansModal.context === 'import-page-limit') {
+      const firstPagePack = pageCreditPacks[0];
+      if (firstPagePack) {
+        setSelectedAddOnKeys((current) => ({ ...current, [firstPagePack.key]: true }));
       }
-      if (plansModal.context === 'screenshot-credits') {
-        const firstScreenshotPack = screenshotCreditPacks[0];
-        if (firstScreenshotPack) {
-          setSelectedAddOnKeys((current) => ({ ...current, [firstScreenshotPack.key]: true }));
-        }
+    }
+    if (plansModal.context === 'screenshot-credits') {
+      const firstScreenshotPack = screenshotCreditPacks[0];
+      if (firstScreenshotPack) {
+        setSelectedAddOnKeys((current) => ({ ...current, [firstScreenshotPack.key]: true }));
       }
-	  }, [pageCreditPacks, plansModal, screenshotCreditPacks]);
+    }
+  }, [pageCreditPacks, plansModal, screenshotCreditPacks]);
 
   const getAddOnQuantity = useCallback((packKey) => (
     normalizeAddOnQuantity(addOnQuantities[packKey])
@@ -4321,6 +4336,56 @@ export default function App({ currentRoute, navigateToRoute }) {
 	    planOptionCards,
     selectedAddOnKeys,
   ]);
+
+  const renderBillingPackCard = (pack, unitLabel) => {
+    const unavailableReason = getBillingCheckoutUnavailableReason(pack);
+    const packQuantity = getAddOnQuantity(pack.key);
+    const totalQuantity = Math.max(0, pack.quantity * packQuantity);
+    const isSelected = Boolean(selectedAddOnKeys[pack.key]);
+    const displayUnit = totalQuantity === 1 ? unitLabel.singular : unitLabel.plural;
+
+    return (
+      <div
+        className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
+        key={pack.key}
+        aria-disabled={!!billingActionKey}
+        onClick={() => toggleAddOnSelection(pack.key)}
+      >
+        <input
+          type="checkbox"
+          className="plans-modal-pack-checkbox"
+          checked={isSelected}
+          disabled={!!billingActionKey}
+          aria-label={`Select ${formatEntitlementCount(pack.quantity)} ${unitLabel.plural}`}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => toggleAddOnSelection(pack.key, event.target.checked)}
+        />
+        <div className="plans-modal-pack-main">
+          <strong>{formatEntitlementCount(pack.quantity)} {unitLabel.plural}</strong>
+          {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
+        </div>
+        <div className="plans-modal-pack-quantity">
+          <TextInput
+            type="number"
+            min="1"
+            max={ADD_ON_QUANTITY_MAX}
+            step="1"
+            size="sm"
+            label="Quantity"
+            labelHidden
+            value={packQuantity}
+            disabled={!!billingActionKey || !!unavailableReason}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              updateAddOnQuantity(pack.key, event.target.value);
+              toggleAddOnSelection(pack.key, true);
+            }}
+          />
+          <small>{formatEntitlementCount(totalQuantity)} {displayUnit}</small>
+        </div>
+      </div>
+    );
+  };
 
   const showEntitlementLock = useCallback(({
     title = 'Plan limit reached',
@@ -19303,176 +19368,129 @@ export default function App({ currentRoute, navigateToRoute }) {
             {billingCatalogError ? (
               <StatusAlert tone="warning">{billingCatalogError}</StatusAlert>
             ) : null}
-            <div className="plans-modal-cycle-control">
-              <span className="plans-modal-cycle-label">Billing cycle</span>
-              <div className="plans-modal-cycle" role="group" aria-label="Billing cycle">
-                {BILLING_CYCLE_OPTIONS.map((option) => (
-                  <button
-                    type="button"
-                    key={option.key}
-                    className={billingCycle === option.key ? 'active' : ''}
-                    aria-pressed={billingCycle === option.key}
-                    disabled={!!billingActionKey}
-                    onClick={() => setBillingCycle(option.key)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-	            <div className="plans-modal-layout">
-	              <div className="plans-modal-grid" aria-label="Plan options">
-	                {planOptionCards.map((plan) => {
-	                  const isCurrentPlan = currentBillingPlanKey === plan.key;
-	                  const isSelected = isCurrentPlan || billingSelectedPlanKey === plan.key;
-	                  return (
-	                    <button
-	                      type="button"
-	                      className={classNames(
-	                        'plans-modal-card',
-	                        isSelected && 'is-selected',
-	                        isCurrentPlan && 'is-current'
-	                      )}
-	                      key={plan.key}
-	                      disabled={!!billingActionKey}
-	                      onClick={() => handlePlanSelection(plan.key)}
-	                    >
-	                      <div className="plans-modal-card-header">
-	                        <strong>{plan.name}</strong>
-	                        {isCurrentPlan ? <span className="plans-modal-current-badge">Current plan</span> : null}
-	                      </div>
-	                      <div className="plans-modal-card-price-row">
-	                        <strong className="plans-modal-card-price">{plan.price}</strong>
-	                        <span>{plan.priceSuffix} · {plan.priceIntervalLabel}</span>
-	                      </div>
-	                      <p>{plan.note}</p>
-	                      <ul className="plans-modal-card-features">
-	                        {plan.features.map((feature) => (
-	                          <li key={feature}>{feature}</li>
-	                        ))}
-	                      </ul>
-	                      <small className="plans-modal-card-action">
-	                        {isCurrentPlan ? 'Current plan' : billingSelectedPlanKey === plan.key ? 'Selected' : 'Select'}
-	                      </small>
-	                    </button>
-	                  );
-	                })}
-	              </div>
-	              <div className="plans-modal-packs">
-	                <div className="plans-modal-pack-section">
-	                  <span>Page packs</span>
-	                  {pageCreditPacks.length ? (
-	                    <div className="plans-modal-pack-list">
-	                      {pageCreditPacks.map((pack) => {
-	                        const unavailableReason = getBillingCheckoutUnavailableReason(pack);
-	                        const packQuantity = getAddOnQuantity(pack.key);
-	                        const totalPages = Math.max(0, pack.quantity * packQuantity);
-	                        const isSelected = Boolean(selectedAddOnKeys[pack.key]);
-	                        return (
-	                          <div
-	                            role="button"
-	                            tabIndex={billingActionKey ? -1 : 0}
-	                            className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
-	                            key={pack.key}
-	                            aria-disabled={!!billingActionKey}
-	                            onClick={() => toggleAddOnSelection(pack.key)}
-	                            onKeyDown={(event) => {
-	                              if (event.key === 'Enter' || event.key === ' ') {
-	                                event.preventDefault();
-	                                toggleAddOnSelection(pack.key);
-	                              }
-	                            }}
-	                          >
-	                            <div className="plans-modal-pack-main">
-	                              <strong>{formatEntitlementCount(pack.quantity)} pages</strong>
-	                              {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
-	                            </div>
-	                            <div className="plans-modal-pack-quantity">
-	                              <TextInput
-	                                type="number"
-	                                min="1"
-	                                max={ADD_ON_QUANTITY_MAX}
-	                                step="1"
-	                                size="sm"
-	                                label="Quantity"
-	                                labelHidden
-	                                value={packQuantity}
-	                                disabled={!!billingActionKey || !!unavailableReason}
-	                                onClick={(event) => event.stopPropagation()}
-	                                onChange={(event) => {
-	                                  updateAddOnQuantity(pack.key, event.target.value);
-	                                  toggleAddOnSelection(pack.key, true);
-	                                }}
-	                              />
-	                              <small>{formatEntitlementCount(totalPages)} pages</small>
-	                            </div>
-	                            <small className="plans-modal-card-action">{isSelected ? 'Selected' : 'Select'}</small>
-	                          </div>
-	                        );
-	                      })}
-	                    </div>
-	                  ) : null}
-	                </div>
-	                <div className="plans-modal-pack-section">
-	                  <span>Screenshot credit packs</span>
-	                  {screenshotCreditPacks.length ? (
-	                    <div className="plans-modal-pack-list">
-	                      {screenshotCreditPacks.map((pack) => {
-	                        const unavailableReason = getBillingCheckoutUnavailableReason(pack);
-	                        const packQuantity = getAddOnQuantity(pack.key);
-	                        const totalCredits = Math.max(0, pack.quantity * packQuantity);
-	                        const isSelected = Boolean(selectedAddOnKeys[pack.key]);
-	                        return (
-	                          <div
-	                            role="button"
-	                            tabIndex={billingActionKey ? -1 : 0}
-	                            className={classNames('plans-modal-pack-card', isSelected && 'is-selected')}
-	                            key={pack.key}
-	                            aria-disabled={!!billingActionKey}
-	                            onClick={() => toggleAddOnSelection(pack.key)}
-	                            onKeyDown={(event) => {
-	                              if (event.key === 'Enter' || event.key === ' ') {
-	                                event.preventDefault();
-	                                toggleAddOnSelection(pack.key);
-	                              }
-	                            }}
-	                          >
-	                            <div className="plans-modal-pack-main">
-	                              <strong>{formatEntitlementCount(pack.quantity)} credits*</strong>
-	                              {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
-	                            </div>
-	                            <div className="plans-modal-pack-quantity">
-	                              <TextInput
-	                                type="number"
-	                                min="1"
-	                                max={ADD_ON_QUANTITY_MAX}
-	                                step="1"
-	                                size="sm"
-	                                label="Quantity"
-	                                labelHidden
-	                                value={packQuantity}
-	                                disabled={!!billingActionKey || !!unavailableReason}
-	                                onClick={(event) => event.stopPropagation()}
-	                                onChange={(event) => {
-	                                  updateAddOnQuantity(pack.key, event.target.value);
-	                                  toggleAddOnSelection(pack.key, true);
-	                                }}
-	                              />
-	                              <small>{formatEntitlementCount(totalCredits)} credits*</small>
-	                            </div>
-	                            <small className="plans-modal-card-action">{isSelected ? 'Selected' : 'Select'}</small>
-	                          </div>
-	                        );
-	                      })}
-	                    </div>
-	                  ) : null}
-	                  <small className="plans-modal-pack-caption">*1 credit = 1 screenshot of any size</small>
-	                </div>
-	                {billingCatalog && !billingCatalogLoading && !pageCreditPacks.length && !screenshotCreditPacks.length ? (
-	                  <StatusAlert tone="warning">Credit packs are unavailable.</StatusAlert>
-	                ) : null}
-	              </div>
-	            </div>
+            <SegmentedControl
+              className="plans-modal-tabs"
+              variant="tabs"
+              size="sm"
+              fullWidth
+              ariaLabel="Billing options"
+              value={billingModalTab}
+              onChange={setBillingModalTab}
+              options={BILLING_MODAL_TAB_OPTIONS}
+              optionRole="tab"
+            />
+            {billingModalTab === BILLING_MODAL_TABS.PLANS ? (
+              <section className="plans-modal-tab-panel plans-modal-tab-panel--plans" role="tabpanel" aria-label="Plans">
+                <div className="plans-modal-cycle-control">
+                  <span className="plans-modal-cycle-label">Billing cycle</span>
+                  <div className="plans-modal-cycle" role="group" aria-label="Billing cycle">
+                    {BILLING_CYCLE_OPTIONS.map((option) => (
+                      <button
+                        type="button"
+                        key={option.key}
+                        className={billingCycle === option.key ? 'active' : ''}
+                        aria-pressed={billingCycle === option.key}
+                        disabled={!!billingActionKey}
+                        onClick={() => setBillingCycle(option.key)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="plans-modal-pricing-grid" aria-label="Plan options">
+                  {planOptionCards.map((plan) => {
+                    const isCurrentPlan = currentBillingPlanKey === plan.key;
+                    const isSelected = isCurrentPlan || billingSelectedPlanKey === plan.key;
+                    return (
+                      <article
+                        className={classNames(
+                          'plans-modal-pricing-card',
+                          `plans-modal-pricing-card--${plan.accent || 'brand'}`,
+                          isSelected && 'is-selected',
+                          isCurrentPlan && 'is-current'
+                        )}
+                        key={plan.key}
+                      >
+                        <div className="plans-modal-pricing-card__top">
+                          <h3>{plan.name}</h3>
+                          <div className="plans-modal-pricing-card__price">
+                            <div className="plans-modal-pricing-card__price-main">
+                              <strong>{plan.price}</strong>
+                              <span>{plan.priceSuffix}</span>
+                            </div>
+                            {plan.priceComparison ? (
+                              <span className="plans-modal-pricing-card__price-compare">
+                                ({plan.priceComparison.price}{plan.priceComparison.suffix})
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <p>{plan.note}</p>
+                        <ul>
+                          {plan.features.map((feature) => (
+                            <li key={feature}>
+                              <Check size={14} aria-hidden="true" />
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="plans-modal-pricing-card__actions">
+                          {isCurrentPlan ? (
+                            <span className="plans-modal-pricing-card__current">Current plan</span>
+                          ) : (
+                            <Button
+                              className="plans-modal-pricing-card__cta"
+                              type="button"
+                              variant="secondary"
+                              buttonStyle="brand"
+                              disabled={!!billingActionKey}
+                              onClick={() => handlePlanSelection(plan.key)}
+                            >
+                              {billingSelectedPlanKey === plan.key ? 'Selected' : 'Select'}
+                            </Button>
+                          )}
+                          <p className="plans-modal-pricing-card__screenshot-note">
+                            *additional screenshot credits can be purchased anytime
+                          </p>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : (
+              <section className="plans-modal-tab-panel plans-modal-tab-panel--upgrades" role="tabpanel" aria-label="Upgrades">
+                <div className="plans-modal-upgrades-grid">
+                  <section className="plans-modal-pack-section">
+                    <h3>Page packs</h3>
+                    {pageCreditPacks.length ? (
+                      <div className="plans-modal-pack-list">
+                        {pageCreditPacks.map((pack) => renderBillingPackCard(pack, {
+                          singular: 'page',
+                          plural: 'pages',
+                        }))}
+                      </div>
+                    ) : null}
+                  </section>
+                  <section className="plans-modal-pack-section">
+                    <h3>Screenshot credit packs</h3>
+                    {screenshotCreditPacks.length ? (
+                      <div className="plans-modal-pack-list">
+                        {screenshotCreditPacks.map((pack) => renderBillingPackCard(pack, {
+                          singular: 'credit*',
+                          plural: 'credits*',
+                        }))}
+                      </div>
+                    ) : null}
+                    <small className="plans-modal-pack-caption">*1 credit = 1 screenshot of any size</small>
+                  </section>
+                </div>
+                {billingCatalog && !billingCatalogLoading && !pageCreditPacks.length && !screenshotCreditPacks.length ? (
+                  <StatusAlert tone="warning">Credit packs are unavailable.</StatusAlert>
+                ) : null}
+              </section>
+            )}
 	          </div>
 	        </Modal>
       )}
