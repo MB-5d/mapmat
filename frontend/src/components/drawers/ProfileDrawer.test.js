@@ -486,6 +486,47 @@ describe('ProfileDrawer', () => {
     expect(container.querySelector('input[placeholder="Confirm new password"]')).not.toBeNull();
   });
 
+  test('lets password fields be shown and hidden independently', () => {
+    act(() => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={baseUser}
+          onClose={jest.fn()}
+          onUpdate={jest.fn()}
+          onLogout={jest.fn()}
+          showToast={jest.fn()}
+        />
+      );
+    });
+
+    const passwordSummary = container.querySelector('button[aria-controls="profile-password-details"]');
+    act(() => {
+      passwordSummary.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const inputs = Array.from(container.querySelectorAll('.profile-password-details input'));
+    const toggles = Array.from(container.querySelectorAll('.profile-password-toggle'));
+    expect(inputs).toHaveLength(3);
+    expect(toggles).toHaveLength(3);
+    expect(inputs.map((input) => input.type)).toEqual(['password', 'password', 'password']);
+
+    act(() => {
+      toggles[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(inputs[0].type).toBe('text');
+    expect(inputs[1].type).toBe('password');
+    expect(toggles[0].getAttribute('aria-label')).toBe('Hide password');
+
+    act(() => {
+      toggles[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(inputs[0].type).toBe('password');
+    expect(toggles[0].getAttribute('aria-label')).toBe('Show password');
+  });
+
   test('keeps save disabled until profile fields change', () => {
     act(() => {
       root.render(

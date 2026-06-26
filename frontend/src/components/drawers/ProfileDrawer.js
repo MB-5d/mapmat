@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ExternalLink, ImagePlus, Infinity as InfinityIcon, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Eye, EyeOff, ImagePlus, Infinity as InfinityIcon, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
@@ -98,6 +98,7 @@ const ProfileDrawer = ({
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [visiblePasswordFields, setVisiblePasswordFields] = useState({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -185,6 +186,20 @@ const ProfileDrawer = ({
   const hasNameChange = Boolean(user) && name.trim() !== String(user?.name || '').trim();
   const hasEmailChange = Boolean(user) && email.trim().toLowerCase() !== String(user?.email || '').trim().toLowerCase();
   const hasPasswordDraft = Boolean(currentPassword || newPassword || confirmPassword);
+  const renderPasswordToggle = (field, visible) => (
+    <button
+      type="button"
+      className="auth-password-toggle profile-password-toggle"
+      onClick={() => setVisiblePasswordFields((current) => ({
+        ...current,
+        [field]: !current[field],
+      }))}
+      disabled={!user || loading}
+      aria-label={visible ? 'Hide password' : 'Show password'}
+    >
+      {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+    </button>
+  );
   const hasProfileChanges = hasNameChange || hasEmailChange || hasPasswordDraft || hasPendingAvatarChange;
   const canSaveChanges = Boolean(user && !loading && hasProfileChanges);
 
@@ -629,31 +644,34 @@ const ProfileDrawer = ({
             {hasPassword ? (
               <Field label="Current password">
                 <TextInput
-                  type="password"
+                  type={visiblePasswordFields.current ? 'text' : 'password'}
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   placeholder="Enter current password"
                   disabled={!user || loading}
+                  rightElement={renderPasswordToggle('current', visiblePasswordFields.current)}
                 />
               </Field>
             ) : null}
             <Field label="New password">
               <TextInput
-                type="password"
+                type={visiblePasswordFields.new ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder={`Must be at least ${MIN_PASSWORD_LENGTH} characters`}
                 minLength={MIN_PASSWORD_LENGTH}
                 disabled={!user || loading}
+                rightElement={renderPasswordToggle('new', visiblePasswordFields.new)}
               />
             </Field>
             <Field label="Confirm new password">
               <TextInput
-                type="password"
+                type={visiblePasswordFields.confirm ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm new password"
                 disabled={!user || loading}
+                rightElement={renderPasswordToggle('confirm', visiblePasswordFields.confirm)}
               />
             </Field>
           </Accordion>

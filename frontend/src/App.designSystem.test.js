@@ -253,11 +253,16 @@ describe('UI design-system contract', () => {
     expect(generatedCss).toContain('--shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 12px rgba(255, 255, 255, 0.06);');
     expect(generatedCss).toContain('--ui-connection-map-stroke-width: 1.25px;');
     expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-neutral-500);');
-    expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-300);');
+    expect(generatedCss).toContain('--ui-control-disabled-content: var(--color-plum-400);');
     expect(generatedCss).toContain('--ui-button-brand-fill-disabled: var(--color-brand-300);');
     expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-neutral-white);');
-    expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-brand-950);');
-    expect(generatedCss).toContain('--ui-button-brand-quiet-disabled: var(--color-brand-300);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled: var(--color-brand-900);');
+    expect(generatedCss).toContain('--ui-button-brand-fill-disabled-contrast: var(--color-brand-200);');
+    expect(generatedCss).toContain('--ui-button-brand-quiet-disabled: var(--color-brand-400);');
+    expect(generatedCss).toContain('--ui-button-mono-fill-disabled: var(--color-plum-700);');
+    expect(generatedCss).toContain('--ui-button-mono-fill-disabled-contrast: var(--color-plum-200);');
+    expect(generatedCss).toContain('--ui-button-danger-fill-disabled: var(--color-red-900);');
+    expect(generatedCss).toContain('--ui-button-danger-fill-disabled-contrast: var(--color-red-200);');
 
     expect(appCss).toContain('font-size: var(--type-size-4xl);');
     expect(appCss).toContain('line-height: var(--type-line-height-48);');
@@ -325,6 +330,44 @@ describe('UI design-system contract', () => {
   test('danger confirm modal uses mono companion action', () => {
     expect(appJs).toContain("buttonStyle={confirmModal.danger ? 'mono' : undefined}");
     expect(appJs).toContain("variant={confirmModal.danger ? 'danger' : 'primary'}");
+  });
+
+  test('billing checkout return messages include exact applied upgrades when available', () => {
+    expect(__testing.formatBillingUpgradeSuccessMessage({
+      purchaseSummary: {
+        meters: [
+          { meter: 'screenshot_credits', quantity: 450 },
+        ],
+      },
+    })).toBe('Upgrade successful! 450 screenshot credits added and ready to use.');
+    expect(__testing.formatBillingUpgradeSuccessMessage({
+      purchaseSummary: {
+        meters: [
+          { meter: 'active_pages', quantity: 2000 },
+          { meter: 'screenshot_credits', quantity: 10 },
+        ],
+      },
+    })).toBe('Upgrade successful! 2,000 active pages and 10 screenshot credits added and ready to use.');
+    expect(__testing.formatBillingUpgradeSuccessMessage({})).toBe('Upgrade successful and applied to your account');
+  });
+
+  test('account-menu inbox actions open modals without changing the canvas route', () => {
+    const inviteHandlerStart = appJs.indexOf('const handleShowInviteInbox = useCallback(async () => {');
+    const inviteHandlerEnd = appJs.indexOf('const handleShowAccessRequestsInbox', inviteHandlerStart);
+    const accessHandlerStart = inviteHandlerEnd;
+    const accessHandlerEnd = appJs.indexOf("useEffect(() => {\n    if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invites') return;", accessHandlerStart);
+    const inviteHandler = appJs.slice(inviteHandlerStart, inviteHandlerEnd);
+    const accessHandler = appJs.slice(accessHandlerStart, accessHandlerEnd);
+
+    expect(inviteHandlerStart).toBeGreaterThan(-1);
+    expect(accessHandlerStart).toBeGreaterThan(inviteHandlerStart);
+    expect(accessHandlerEnd).toBeGreaterThan(accessHandlerStart);
+    expect(inviteHandler).toContain('setShowInviteInboxModal(true);');
+    expect(inviteHandler).toContain('await loadPendingMapInvites();');
+    expect(inviteHandler).not.toContain('navigateToRoute');
+    expect(accessHandler).toContain('setShowAccessRequestsInboxModal(true);');
+    expect(accessHandler).toContain('await loadPendingAccessRequests();');
+    expect(accessHandler).not.toContain('navigateToRoute');
   });
 
   test('toolbar panels use compact mono menu states without changing toolbar icon states', () => {
@@ -970,15 +1013,22 @@ describe('map image asset persistence', () => {
 
   test('upgrade modal keeps stable height and aligned purchase columns', () => {
     expect(appJs).toContain('*additional screenshot credits and page limits can be purchased anytime');
-    expect(appJs).toContain("<strong>{selectedBillingPurchase?.label || '--'}</strong>");
+    expect(appJs).toContain("{selectedBillingPurchase?.itemCount ?? '--'}");
+    expect(appJs).toContain('className="plans-modal-pack-multiplier"');
+    expect(appJs).toContain("singular: 'credit'");
+    expect(appJs).toContain("plural: 'credits'");
     expect(appJs).toContain('className="plans-modal-pack-price"');
     expect(appCss).toMatch(/\.modal-card\.plans-modal \{[\s\S]*height: min\(640px, calc\(100vh - 48px\)\);/);
     expect(appCss).toMatch(/\.plans-modal-tab-panel--upgrades \{[\s\S]*padding-top: 32px;/);
-    expect(appCss).toMatch(/\.plans-modal-pack-card \{[\s\S]*grid-template-columns: 18px minmax\(0, 1fr\) 56px 46px minmax\(96px, auto\);[\s\S]*"check main price quantity total";/);
+    expect(appCss).toMatch(/\.plans-modal-pack-card \{[\s\S]*grid-template-columns: 18px minmax\(0, 1fr\) 64px 12px 54px 136px;[\s\S]*"check main price multiplier quantity total";/);
     expect(appCss).toMatch(/\.plans-modal-pack-price \{[\s\S]*justify-self: end;[\s\S]*font-size: var\(--type-body-sm-size\);/);
+    expect(appCss).toMatch(/\.plans-modal-pack-multiplier \{[\s\S]*grid-area: multiplier;[\s\S]*justify-self: center;/);
     expect(appCss).toMatch(/\.plans-modal-pack-quantity \{[\s\S]*justify-self: center;/);
-    expect(appCss).toMatch(/\.plans-modal-pack-total \{[\s\S]*justify-self: start;[\s\S]*text-align: left;/);
-    expect(appCss).toMatch(/\.plans-modal-subtotal \{[\s\S]*margin-right: 80px;[\s\S]*text-align: right;/);
+    expect(appCss).toMatch(/\.plans-modal-pack-total \{[\s\S]*width: 136px;[\s\S]*text-align: left;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal \{[\s\S]*margin-right: 48px;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-row \{[\s\S]*grid-template-columns: 72px 76px;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-row span \{[\s\S]*text-align: right;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-row strong \{[\s\S]*text-align: left;/);
     expect(appCss).toMatch(/\.plans-modal-subtotal-amount \{[\s\S]*font-size: 14px;[\s\S]*font-weight: 800;/);
   });
 

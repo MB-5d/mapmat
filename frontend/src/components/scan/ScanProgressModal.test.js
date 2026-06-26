@@ -99,6 +99,8 @@ describe('ScanProgressModal', () => {
     const findingsSection = container.querySelector('.scan-chart-section--findings');
     expect(pagesSection.querySelector('.scan-queue-note').textContent).toContain('23in queue');
     expect(findingsSection.querySelector('.scan-queue-note')).toBeNull();
+    expect(findingsSection.querySelector('.scan-findings-bar')).not.toBeNull();
+    expect(findingsSection.querySelector('.scan-findings-empty').textContent).toBe('No findings yet');
     expect(pagesSection.querySelector('.scan-inline-note').textContent).toBe('(94%)');
     expect(container.textContent).not.toContain('1357Scanned');
   });

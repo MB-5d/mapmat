@@ -707,13 +707,51 @@ function getRecurringAddOnGrantEntries({ addOn, item, subscription, account }) {
   });
 }
 
+function getSubscriptionModeAddOnGrantEntries({ addOn, item, subscription, account }) {
+  const itemQuantity = Math.max(0, Math.floor(Number(item?.quantity || 0)));
+  if (itemQuantity <= 0) return [];
+  const subscriptionId = subscription?.id || 'unknown';
+  const priceId = item?.price?.id || 'unknown';
+  const period = getSubscriptionPeriod(subscription);
+  const periodStart = period.start || new Date();
+  const periodEnd = period.end || null;
+  const periodKey = periodStart.toISOString();
+  const quantity = addOn.quantity ? addOn.quantity * itemQuantity : null;
+  if (!addOn.meter && !addOn.featureKey) return [];
+  if (addOn.meter && (!quantity || quantity <= 0)) return [];
+  return [{
+    accountId: account.id,
+    source: 'subscription_addon',
+    externalRef: `stripe:subscription:${subscriptionId}:${addOn.key}:${priceId}:${periodKey}:${addOn.meter || addOn.featureKey}`,
+    meter: addOn.meter || null,
+    featureKey: addOn.featureKey || null,
+    quantity,
+    resetBehavior: addOn.resetBehavior || 'period',
+    startsAt: periodStart,
+    endsAt: periodEnd,
+    metadata: {
+      provider: 'stripe',
+      subscriptionId,
+      customerId: getStripeObjectId(subscription.customer),
+      priceId,
+      addonKey: addOn.key,
+      itemQuantity,
+    },
+  }];
+}
+
 async function syncRecurringAddOnGrantsForSubscriptionAsync(subscription, account) {
   const items = Array.isArray(subscription?.items?.data) ? subscription.items.data : [];
   const grants = [];
   for (const item of items) {
     const addOn = getRecurringAddOnPriceConfigByStripePrice(item?.price?.id);
-    if (!addOn) continue;
-    const grantEntries = getRecurringAddOnGrantEntries({ addOn, item, subscription, account });
+    const subscriptionModeAddOn = addOn
+      ? null
+      : getAddOnPriceConfigByStripePrice(item?.price?.id);
+    if (!addOn && String(subscriptionModeAddOn?.mode || '').trim().toLowerCase() !== 'subscription') continue;
+    const grantEntries = addOn
+      ? getRecurringAddOnGrantEntries({ addOn, item, subscription, account })
+      : getSubscriptionModeAddOnGrantEntries({ addOn: subscriptionModeAddOn, item, subscription, account });
     for (const entry of grantEntries) {
       grants.push(await billingStore.upsertAdjustableEntitlementGrantByExternalRefAsync(entry));
     }
@@ -847,6 +885,10 @@ async function createAddOnCheckoutSessionAsync({ user, account, addonKey, quanti
         metadata: sessionPayload.metadata,
       },
     };
+  } else if (sessionPayload.mode === 'subscription') {
+    sessionPayload.subscription_data = {
+      metadata: sessionPayload.metadata,
+    };
   }
   const session = await stripe.checkout.sessions.create(sessionPayload);
   return session;
@@ -889,7 +931,10 @@ async function createBundleCheckoutSessionAsync({
     throw new BillingError('Use the billing portal to change this subscription.', 409, 'BILLING_PORTAL_REQUIRED');
   }
   const customerId = await getOrCreateStripeCustomerAsync({ stripe, account, user });
-  const mode = plan ? 'subscription' : 'payment';
+  const hasSubscriptionAddOns = normalizedAddOns.some(({ addOn }) => (
+    String(addOn?.mode || '').trim().toLowerCase() === 'subscription'
+  ));
+  const mode = plan || hasSubscriptionAddOns ? 'subscription' : 'payment';
   const lineItems = [
     ...(plan ? [{ price: plan.priceId, quantity: 1 }] : []),
     ...normalizedAddOns.map(({ addOn, quantity }) => ({ price: addOn.priceId, quantity })),
@@ -923,8 +968,8 @@ async function createBundleCheckoutSessionAsync({
     sessionPayload.subscription_data = {
       metadata: {
         ...metadata,
-        planKey: plan.key,
-        billingCycle: plan.billingCycle,
+        planKey: plan?.key || '',
+        billingCycle: plan?.billingCycle || '',
       },
     };
   }
@@ -958,6 +1003,18 @@ async function applyStripeSubscriptionToAccountAsync(subscription, accountIdOver
 
   const { priceId, productId, planPrice } = getSubscriptionPrice(subscription);
   const status = String(subscription?.status || '').trim().toLowerCase() || null;
+  if (!planPrice) {
+    if (customerId && !account.stripe_customer_id) {
+      await billingStore.updateBillingAccountStripeCustomerAsync({
+        accountId: account.id,
+        stripeCustomerId: customerId,
+      });
+    }
+    if (status !== 'canceled' && status !== 'incomplete_expired') {
+      await syncRecurringAddOnGrantsForSubscriptionAsync(subscription, account);
+    }
+    return billingStore.getBillingAccountByIdAsync(account.id);
+  }
   if (status === 'canceled' || status === 'incomplete_expired') {
     return billingStore.archiveBillingAccountFromStripeAsync({
       accountId: account.id,
@@ -996,15 +1053,61 @@ function getGrantEndDate(addOn) {
   return new Date(Date.now() + addOn.durationDays * 24 * 60 * 60 * 1000);
 }
 
-async function grantAddOnsForCheckoutSessionAsync({ stripe, session, account }) {
+async function getCheckoutSessionLineItemsAsync({ stripe, session }) {
   const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
     limit: 100,
     expand: ['data.price.product'],
   });
+  return Array.isArray(lineItems.data) ? lineItems.data : [];
+}
+
+function summarizeCheckoutLineItems(lineItems = []) {
+  const metersByKey = new Map();
+  let plan = null;
+
+  for (const item of lineItems) {
+    const priceId = item?.price?.id || null;
+    const purchasedQuantity = Math.max(1, Math.floor(Number(item?.quantity || 1)));
+    const planPrice = getPlanPriceConfigByStripePrice(priceId);
+    if (planPrice && !plan) {
+      plan = {
+        key: planPrice.key,
+        name: planPrice.name,
+        billingCycle: planPrice.billingCycle,
+      };
+      continue;
+    }
+
+    const addOn = getAddOnPriceConfigByStripePrice(priceId);
+    if (!addOn?.meter || !addOn?.quantity) continue;
+    const quantity = Math.max(0, Math.floor(Number(addOn.quantity || 0))) * purchasedQuantity;
+    if (quantity <= 0) continue;
+    const current = metersByKey.get(addOn.meter) || {
+      meter: addOn.meter,
+      quantity: 0,
+    };
+    current.quantity += quantity;
+    metersByKey.set(addOn.meter, current);
+  }
+
+  return {
+    plan,
+    meters: Array.from(metersByKey.values()),
+  };
+}
+
+async function grantAddOnsForCheckoutSessionAsync({
+  stripe,
+  session,
+  account,
+  lineItems = null,
+}) {
+  const checkoutLineItems = lineItems || await getCheckoutSessionLineItemsAsync({ stripe, session });
   const grants = [];
-  for (const item of lineItems.data || []) {
+  for (const item of checkoutLineItems) {
     const addOn = getAddOnPriceConfigByStripePrice(item?.price?.id);
     if (!addOn) continue;
+    if (String(addOn.mode || '').trim().toLowerCase() === 'subscription') continue;
     const purchasedQuantity = Math.max(1, Math.floor(Number(item.quantity || 1)));
     const quantity = addOn.quantity ? addOn.quantity * purchasedQuantity : null;
     const externalRef = `stripe:checkout:${session.id}:${addOn.key}:${item.price.id}`;
@@ -1049,20 +1152,32 @@ async function handleCheckoutSessionCompletedAsync({ stripe, session }) {
       stripeCustomerId: customerId,
     });
   }
+  const lineItems = await getCheckoutSessionLineItemsAsync({ stripe, session });
+  const purchaseSummary = summarizeCheckoutLineItems(lineItems);
 
   if (session.mode === 'subscription' && session.subscription) {
     const subscription = await stripe.subscriptions.retrieve(getStripeObjectId(session.subscription));
     await applyStripeSubscriptionToAccountAsync(subscription, account.id);
-    const grants = await grantAddOnsForCheckoutSessionAsync({ stripe, session, account });
-    return { accountId: account.id, grants };
+    const grants = await grantAddOnsForCheckoutSessionAsync({
+      stripe,
+      session,
+      account,
+      lineItems,
+    });
+    return { accountId: account.id, grants, purchaseSummary };
   }
 
   if (session.mode === 'payment') {
-    const grants = await grantAddOnsForCheckoutSessionAsync({ stripe, session, account });
-    return { accountId: account.id, grants };
+    const grants = await grantAddOnsForCheckoutSessionAsync({
+      stripe,
+      session,
+      account,
+      lineItems,
+    });
+    return { accountId: account.id, grants, purchaseSummary };
   }
 
-  return { accountId: account.id, grants: [] };
+  return { accountId: account.id, grants: [], purchaseSummary };
 }
 
 function assertCheckoutSessionBelongsToAccount({ session, account }) {

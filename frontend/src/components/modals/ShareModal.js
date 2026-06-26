@@ -13,8 +13,8 @@ import {
 
 import classNames from '../../utils/classNames';
 import Accordion from '../ui/Accordion';
+import Avatar from '../ui/Avatar';
 import Button from '../ui/Button';
-import Badge from '../ui/Badge';
 import CheckboxField from '../ui/CheckboxField';
 import { EditIcon } from '../ui/icons';
 import { MenuItem, MenuPanel } from '../ui/Menu';
@@ -30,7 +30,6 @@ const ROLE_OPTIONS = [
   { value: 'owner', label: 'Owner' },
 ];
 
-const APPROVAL_ROLE_OPTIONS = ROLE_OPTIONS.filter((option) => option.value !== 'owner');
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const hasValidShareEmailInput = (value = '') => {
@@ -51,6 +50,15 @@ const renderRoleIcon = (role, size = 16) => {
 const sameId = (left, right) => {
   if (left === undefined || left === null || right === undefined || right === null) return false;
   return String(left) === String(right);
+};
+
+const getAvatarLabel = (member = {}) => {
+  const label = String(member.userName || member.userEmail || 'Member').trim();
+  if (!label) return 'M';
+  const emailName = label.includes('@') ? label.split('@')[0] : label;
+  const parts = emailName.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return emailName.slice(0, 2).toUpperCase();
 };
 
 const ShareModal = ({
@@ -172,19 +180,29 @@ const ShareModal = ({
 
   const isOwner = currentCollaborationRole === 'owner';
   const canGrantOwner = isOwner;
-  const inviteRoleOptions = isOwner ? ROLE_OPTIONS : APPROVAL_ROLE_OPTIONS;
-  const inviteRoleOptionValues = Array.isArray(collaborationInviteRoleOptions) && collaborationInviteRoleOptions.length > 0
-    ? collaborationInviteRoleOptions
-    : inviteRoleOptions.map((option) => option.value);
-  const visibleInviteRoleOptions = inviteRoleOptions.filter((option) => inviteRoleOptionValues.includes(option.value));
-  const memberRoleOptions = canGrantOwner ? ROLE_OPTIONS : APPROVAL_ROLE_OPTIONS;
+  const inviteRoleOptionValues = new Set(
+    (Array.isArray(collaborationInviteRoleOptions) ? collaborationInviteRoleOptions : [])
+      .map((role) => String(role || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const visibleInviteRoleOptions = ROLE_OPTIONS.filter((option) => (
+    option.value !== 'owner' && inviteRoleOptionValues.has(option.value)
+  ));
+  const accessRequestRoleOptions = visibleInviteRoleOptions.length
+    ? visibleInviteRoleOptions
+    : ROLE_OPTIONS.filter((option) => option.value === 'viewer');
+  const memberGrantRoleValues = new Set(visibleInviteRoleOptions.map((option) => option.value));
+  if (canGrantOwner && inviteRoleOptionValues.has('owner')) {
+    memberGrantRoleValues.add('owner');
+  }
+  const memberRoleOptions = ROLE_OPTIONS.filter((option) => memberGrantRoleValues.has(option.value));
   const canViewManagementSurfaces = canManageCollaborationMembers || canManageCollaborationSettings || canViewAccessRequests;
   const viewerInvitesOpen = collaborationCapabilities?.accessPolicy === 'viewer_invites_open';
   const showInviteComposer = collaborationAvailable && canSendCollaborationInvites && visibleInviteRoleOptions.length > 0;
   const showSelfServeSummary = collaborationAvailable && !canViewManagementSurfaces;
   const selectedInviteRoleOption = visibleInviteRoleOptions.find((option) => option.value === collaborationInviteRole)
     || visibleInviteRoleOptions[0]
-    || inviteRoleOptions[0];
+    || ROLE_OPTIONS[0];
   const selectedInviteRequiresAccount = selectedInviteRoleOption?.value === 'commenter'
     || selectedInviteRoleOption?.value === 'editor';
   const hasValidCollaborationInviteEmail = hasValidShareEmailInput(collaborationInviteEmail);
@@ -253,18 +271,22 @@ const ShareModal = ({
     const canEditMember = canManageCollaborationMembers
       && !isSelf
       && !isImplicitOwner
-      && (!isOwnerMember || isOwner);
+      && (!isOwnerMember || isOwner)
+      && memberRoleOptions.some((option) => option.value === member.role);
 
     const canRemoveMember = canEditMember;
 
     return (
       <div className="share-collab-member-row" key={member.id || `${member.userId}-${member.role}`}>
+        <Avatar
+          className="share-collab-avatar"
+          src={member.avatarUrl || member.userAvatarUrl || null}
+          label={getAvatarLabel(member)}
+          size="sm"
+          aria-hidden="true"
+        />
         <div className="share-collab-main">
-          <div className="share-collab-name">
-            {member.userName || member.userEmail || 'Member'}
-            {isSelf ? <Badge className="share-collab-inline-badge" label="You" /> : null}
-            {isImplicitOwner ? <Badge className="share-collab-inline-badge" label="Primary owner" /> : null}
-          </div>
+          <div className="share-collab-name">{member.userName || member.userEmail || 'Member'}</div>
           <div className="share-collab-meta">{member.userEmail || ''}</div>
         </div>
         <div className="share-collab-controls">
@@ -316,7 +338,19 @@ const ShareModal = ({
     </div>
   );
 
-  const renderAccessRequestRow = (request) => (
+  const getAccessRequestSelectedRole = (request) => {
+    if (accessRequestRoleOptions.some((option) => option.value === requestRoleSelections[request.id])) {
+      return requestRoleSelections[request.id];
+    }
+    if (accessRequestRoleOptions.some((option) => option.value === request.requestedRole)) {
+      return request.requestedRole;
+    }
+    return accessRequestRoleOptions[0]?.value || 'viewer';
+  };
+
+  const renderAccessRequestRow = (request) => {
+    const selectedRole = getAccessRequestSelectedRole(request);
+    return (
     <div className="share-collab-item share-collab-item-stack" key={request.id}>
       <div className="share-collab-main">
         <div className="share-collab-name">
@@ -330,14 +364,14 @@ const ShareModal = ({
       <div className="share-collab-request-actions">
         <SelectInput
           className="share-collab-role-select"
-          value={requestRoleSelections[request.id] || request.requestedRole || 'viewer'}
+          value={selectedRole}
           onChange={(event) => setRequestRoleSelections((prev) => ({
             ...prev,
             [request.id]: event.target.value,
           }))}
           disabled={collaborationLoading}
         >
-          {APPROVAL_ROLE_OPTIONS.map((option) => (
+          {accessRequestRoleOptions.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -349,7 +383,7 @@ const ShareModal = ({
           onClick={() => onReviewCollaborationAccessRequest?.(
             request.id,
             'approved',
-            requestRoleSelections[request.id] || request.requestedRole || 'viewer'
+            selectedRole
           )}
           disabled={collaborationLoading}
         >
@@ -366,7 +400,8 @@ const ShareModal = ({
         </Button>
       </div>
     </div>
-  );
+    );
+  };
 
   const renderAccordionTitle = (icon, label) => (
     <span className="share-collab-accordion-title">
@@ -633,7 +668,7 @@ const ShareModal = ({
                         checked={!!settings.accessRequestsEnabled}
                         disabled={!canManageCollaborationSettings || collaborationLoading}
                         onChange={(event) => handleSettingToggle('access_requests_enabled', event.target.checked)}
-                        label="Allow access requests from removed or outside users"
+                        label="Allow access requests from outside users"
                       />
                       {!canManageCollaborationSettings ? (
                         <div className="share-collab-empty">Only owners can change collaboration settings.</div>

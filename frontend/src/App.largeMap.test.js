@@ -293,6 +293,22 @@ describe('large map viewport behavior', () => {
     expect(hydrated.root.children.some((node) => node.isEntitlementLocked)).toBe(true);
   });
 
+  test('duplicating the home node defaults the copy under Home', () => {
+    const root = { id: 'root', title: 'Home' };
+
+    expect(__testing.getDuplicateNodeDefaultParentId({
+      node: root,
+      parent: null,
+      rootNode: root,
+    })).toBe('root');
+
+    expect(__testing.getDuplicateNodeDefaultParentId({
+      node: { id: 'top-level', title: 'Top level' },
+      parent: null,
+      rootNode: root,
+    })).toBe('__orphan_root__');
+  });
+
   test('capped scans do not add locked previews when the site finishes under the limit', () => {
     const root = {
       id: 'root',

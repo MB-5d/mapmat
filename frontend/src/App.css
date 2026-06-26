@@ -355,14 +355,14 @@ body {
 .ui-btn--type-primary.ui-btn--style-mono:disabled {
   background: var(--ui-button-mono-fill-disabled);
   border-color: var(--ui-button-mono-fill-disabled);
-  color: var(--ui-button-mono-contrast);
+  color: var(--ui-button-mono-fill-disabled-contrast);
 }
 
 .ui-btn--type-primary.ui-btn--style-danger:disabled,
 .ui-btn--danger:disabled {
   background: var(--ui-button-danger-fill-disabled);
   border-color: var(--ui-button-danger-fill-disabled);
-  color: var(--ui-button-danger-contrast);
+  color: var(--ui-button-danger-fill-disabled-contrast);
 }
 
 .ui-btn--type-secondary.ui-btn--style-brand:disabled {
@@ -655,14 +655,14 @@ body {
 .ui-icon-btn--type-primary.ui-icon-btn--style-mono:disabled {
   background: var(--ui-button-mono-fill-disabled);
   border-color: var(--ui-button-mono-fill-disabled);
-  color: var(--ui-button-mono-contrast);
+  color: var(--ui-button-mono-fill-disabled-contrast);
 }
 
 .ui-icon-btn--type-primary.ui-icon-btn--style-danger:disabled,
 .ui-icon-btn--danger:disabled {
   background: var(--ui-button-danger-fill-disabled);
   border-color: var(--ui-button-danger-fill-disabled);
-  color: var(--ui-button-danger-contrast);
+  color: var(--ui-button-danger-fill-disabled-contrast);
 }
 
 .ui-icon-btn--type-secondary.ui-icon-btn--style-brand:disabled {
@@ -7736,8 +7736,26 @@ body {
   box-shadow: var(--shadow-raised);
   z-index: 9999;
   animation: slideDown 0.3s ease;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-sm);
+}
+
+.toast .ui-status-alert__content {
+  justify-content: center;
+}
+
+.toast .ui-status-alert__icon {
+  align-self: center;
+}
+
+.toast:has(.ui-status-alert__summary:nth-child(2)),
+.toast:has(.ui-status-alert__summary br) {
+  align-items: flex-start;
+}
+
+.toast:has(.ui-status-alert__summary:nth-child(2)) .ui-status-alert__icon,
+.toast:has(.ui-status-alert__summary br) .ui-status-alert__icon {
+  align-self: flex-start;
 }
 
 .toast .ui-status-alert__summary {
@@ -7752,6 +7770,7 @@ body {
 
 .toast .ui-status-alert__actions {
   align-self: center;
+  pointer-events: auto;
 }
 
 .toast-close.ui-icon-btn {
@@ -10609,9 +10628,9 @@ body {
 .plans-modal-pack-card {
   cursor: pointer;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 56px 46px minmax(96px, auto);
+  grid-template-columns: 18px minmax(0, 1fr) 64px 12px 54px 136px;
   grid-template-areas:
-    "check main price quantity total";
+    "check main price multiplier quantity total";
   align-items: center;
   gap: 8px;
   min-height: 0;
@@ -10677,10 +10696,18 @@ body {
   white-space: nowrap;
 }
 
+.plans-modal-pack-multiplier {
+  grid-area: multiplier;
+  justify-self: center;
+  color: var(--ui-color-muted);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+}
+
 .plans-modal-pack-quantity {
   display: flex;
   grid-area: quantity;
-  width: 46px;
+  width: 54px;
   min-width: 0;
   flex-direction: column;
   gap: 4px;
@@ -10690,6 +10717,7 @@ body {
 .plans-modal-pack-total {
   grid-area: total;
   justify-self: start;
+  width: 136px;
   color: var(--ui-color-muted);
   line-height: 1.2;
   text-align: left;
@@ -10727,22 +10755,29 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 150px;
-  margin-right: 80px;
+  min-width: 156px;
+  margin-right: 48px;
+}
+
+.plans-modal-subtotal-row {
+  display: grid;
+  grid-template-columns: 72px 76px;
+  column-gap: 8px;
+  align-items: baseline;
+}
+
+.plans-modal-subtotal-row span {
+  color: var(--ui-color-muted);
+  font-size: 12px;
   text-align: right;
 }
 
-.plans-modal-subtotal span,
-.plans-modal-subtotal small {
-  color: var(--ui-color-muted);
-  font-size: 12px;
-}
-
-.plans-modal-subtotal strong {
+.plans-modal-subtotal-row strong {
   color: var(--ui-color-text);
   font-size: 14px;
   font-weight: 800;
   line-height: 1.15;
+  text-align: left;
 }
 
 .plans-modal-subtotal-amount {
@@ -10781,6 +10816,7 @@ body {
     grid-template-areas:
       "check main"
       ". price"
+      ". multiplier"
       ". quantity"
       ". total";
   }
@@ -12641,7 +12677,7 @@ body {
   margin-bottom: var(--unit-24);
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
-  background: var(--ui-color-surface-muted);
+  background: var(--ui-color-surface);
 }
 
 .share-collab-settings-grid {
@@ -12758,10 +12794,13 @@ body {
 .share-collab-member-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--unit-12);
   padding: var(--unit-12) 0;
   border-bottom: 1px solid var(--ui-color-border);
+}
+
+.share-collab-avatar {
+  flex: 0 0 auto;
 }
 
 .share-collab-member-row:first-child {
@@ -12778,6 +12817,10 @@ body {
 }
 
 .share-collab-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-4);
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -12804,6 +12847,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -13753,8 +13797,7 @@ body {
 
 [data-theme="dark"] .canvas-map-pill,
 [data-theme="dark"] .topbar--app-home .brand,
-[data-theme="dark"] .topbar-account-trigger,
-[data-theme="dark"] .topbar-login-btn {
+[data-theme="dark"] .topbar-account-trigger {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);
@@ -13772,8 +13815,7 @@ body {
   border-color: var(--color-brand-300);
 }
 
-[data-theme="dark"] .topbar-account-trigger:hover,
-[data-theme="dark"] .topbar-login-btn:hover {
+[data-theme="dark"] .topbar-account-trigger:hover {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: var(--ui-color-text);
@@ -14271,7 +14313,7 @@ body {
 }
 
 [data-theme="dark"] .share-collab-settings {
-  background: var(--ui-color-surface-muted);
+  background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
 }
 

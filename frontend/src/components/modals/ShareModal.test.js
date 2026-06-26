@@ -219,6 +219,8 @@ describe('ShareModal', () => {
     expect(container.textContent).toContain('Controls who can invite viewer-only collaborators');
     expect(container.textContent).not.toContain('Controls who can invite viewer-only collaborators.');
     expect(container.textContent).toContain('Controls how live collaborators appear to others');
+    expect(container.textContent).toContain('Allow access requests from outside users');
+    expect(container.textContent).not.toContain('removed or outside users');
     expect(invitesAccordion).toBeTruthy();
     expect(membersAccordion).toBeTruthy();
     expect(accessRequestsAccordion).toBeTruthy();
@@ -261,6 +263,7 @@ describe('ShareModal', () => {
           collaborationInviteRole="viewer"
           onCollaborationInviteRoleChange={onCollaborationInviteRoleChange}
           onSendCollaborationInvite={onSendCollaborationInvite}
+          collaborationInviteRoleOptions={['viewer', 'commenter']}
           collaborationMemberships={[]}
           collaborationInvites={[]}
           collaborationAccessRequests={[]}
@@ -306,6 +309,116 @@ describe('ShareModal', () => {
 
     inviteButton = getInviteButton();
     expect(inviteButton.disabled).toBe(false);
+  });
+
+  test('hides unavailable collaboration roles and owner invite options', () => {
+    act(() => {
+      root.render(
+        <ShareModal
+          show
+          mode="collaboration"
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="view"
+          onChangePermission={jest.fn()}
+          linkCopied={false}
+          onCopyLink={jest.fn()}
+          shareEmails=""
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={jest.fn()}
+          collaborationEnabled
+          collaborationAvailable
+          collaborationInviteEmail="person@example.com"
+          onCollaborationInviteEmailChange={jest.fn()}
+          collaborationInviteRole="viewer"
+          onCollaborationInviteRoleChange={jest.fn()}
+          onSendCollaborationInvite={jest.fn()}
+          collaborationInviteRoleOptions={['viewer', 'commenter']}
+          collaborationMemberships={[]}
+          collaborationInvites={[]}
+          collaborationAccessRequests={[
+            {
+              id: 'request-1',
+              requesterName: 'Pat',
+              requesterEmail: 'pat@example.com',
+              requestedRole: 'editor',
+            },
+          ]}
+          canViewAccessRequests
+          canManageCollaborationSettings
+        />
+      );
+    });
+
+    const roleTrigger = container.querySelector('.share-collab-role-trigger');
+    act(() => {
+      roleTrigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const inviteRoleLabels = Array.from(container.querySelectorAll('.share-collab-role-menu-item'))
+      .map((item) => item.textContent.trim());
+    expect(inviteRoleLabels).toEqual(['Viewer', 'Commenter']);
+    expect(inviteRoleLabels).not.toContain('Editor');
+    expect(inviteRoleLabels).not.toContain('Owner');
+
+    const accessRequestsTrigger = Array.from(container.querySelectorAll('.share-collab-accordion .ui-accordion__trigger')).find(
+      (button) => button.textContent.includes('Access requests')
+    );
+    act(() => {
+      accessRequestsTrigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const requestRoleOptions = Array.from(container.querySelectorAll('.share-collab-request-actions option'))
+      .map((option) => option.textContent.trim());
+    expect(requestRoleOptions).toEqual(['Viewer', 'Commenter']);
+  });
+
+  test('shows member avatars without redundant owner or self badges', () => {
+    act(() => {
+      root.render(
+        <ShareModal
+          show
+          mode="collaboration"
+          onClose={jest.fn()}
+          accessLevels={{ VIEW: 'view', COMMENT: 'comment', EDIT: 'edit' }}
+          sharePermission="view"
+          onChangePermission={jest.fn()}
+          linkCopied={false}
+          onCopyLink={jest.fn()}
+          shareEmails=""
+          onShareEmailsChange={jest.fn()}
+          onSendEmail={jest.fn()}
+          collaborationEnabled
+          collaborationAvailable
+          collaborationMemberships={[
+            {
+              id: 'owner-row',
+              userId: 'u1',
+              userName: 'Free QA',
+              userEmail: 'free@test.vellic.local',
+              role: 'owner',
+              implicitOwner: true,
+            },
+          ]}
+          currentUserId="u1"
+          collaborationInvites={[]}
+          collaborationAccessRequests={[]}
+        />
+      );
+    });
+
+    const membersAccordion = Array.from(container.querySelectorAll('.share-collab-accordion .ui-accordion__trigger')).find(
+      (button) => button.textContent.includes('Members')
+    );
+    act(() => {
+      membersAccordion.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.share-collab-avatar')).not.toBeNull();
+    expect(container.textContent).toContain('Free QA');
+    expect(container.textContent).toContain('free@test.vellic.local');
+    expect(container.textContent).not.toContain('YOU');
+    expect(container.textContent).not.toContain('PRIMARY OWNER');
   });
 
   test('email send action uses shared brand filled button styling and requires a valid email', () => {

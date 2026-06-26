@@ -157,18 +157,18 @@ const ScanProgressModal = ({
                 <span className="scan-inline-note">issues</span>
               </span>
             </div>
+            <div className="scan-findings-bar" role="img" aria-label={`${formatCount(totalFindings)} issues found`}>
+              {findingItems.map((item) => (
+                <span
+                  key={item.key}
+                  className={`scan-findings-segment scan-findings-segment--${item.key} ui-tone--${getFindingTone(item.key)}`}
+                  style={{ width: `${(item.count / totalFindings) * 100}%` }}
+                  aria-hidden="true"
+                />
+              ))}
+            </div>
             {findingItems.length ? (
               <>
-                <div className="scan-findings-bar" role="img" aria-label={`${formatCount(totalFindings)} issues found`}>
-                  {findingItems.map((item) => (
-                    <span
-                      key={item.key}
-                      className={`scan-findings-segment scan-findings-segment--${item.key} ui-tone--${getFindingTone(item.key)}`}
-                      style={{ width: `${(item.count / totalFindings) * 100}%` }}
-                      aria-hidden="true"
-                    />
-                  ))}
-                </div>
                 <div className="scan-findings-list">
                   {findingItems.map((item) => (
                     <div key={item.key} className="scan-finding-item">

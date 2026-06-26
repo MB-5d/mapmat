@@ -65,6 +65,15 @@ async function main() {
   const freePdfDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_report_pdf' });
   assert.equal(freePdfDownloadCheck.allowed, false);
   assert.equal(freePdfDownloadCheck.code, 'DOWNLOAD_FORMAT_PLAN_REQUIRED');
+  const freeViewerShareCheck = await checkAccountActionAsync(user, ACTIONS.shareCreate, { accessLevel: 'view' });
+  assert.equal(freeViewerShareCheck.allowed, true);
+  const freeCommentShareCheck = await checkAccountActionAsync(user, ACTIONS.shareCreate, { accessLevel: 'comment' });
+  assert.equal(freeCommentShareCheck.allowed, true);
+  const freeEditShareCheck = await checkAccountActionAsync(user, ACTIONS.shareCreate, { accessLevel: 'edit' });
+  assert.equal(freeEditShareCheck.allowed, false);
+  assert.equal(freeEditShareCheck.code, 'ENTITLEMENT_REQUIRED');
+  const exactPageLimitMapWriteCheck = await checkAccountActionAsync(user, ACTIONS.mapWrite, { pageDelta: 1000 });
+  assert.equal(exactPageLimitMapWriteCheck.allowed, true);
 
   const tierUser = await authStore.createUserAsync({
     email: `entitlements-tier-${Date.now()}@example.test`,
@@ -166,6 +175,8 @@ async function main() {
   assert.equal(afterPageUse.meters.activePages.used, 1000);
   assert.equal(afterPageUse.meters.activePages.remaining, 0);
   assert.equal(afterPageUse.limits.activeMaps.used, 1);
+  const noGrowthPageLimitCheck = await checkAccountActionAsync(user, ACTIONS.mapWrite, { pageDelta: 0 });
+  assert.equal(noGrowthPageLimitCheck.allowed, true);
   const pageLimitCheck = await checkAccountActionAsync(user, ACTIONS.mapWrite, { pageDelta: 1 });
   assert.equal(pageLimitCheck.allowed, false);
   assert.equal(pageLimitCheck.code, 'ENTITLEMENT_REQUIRED');

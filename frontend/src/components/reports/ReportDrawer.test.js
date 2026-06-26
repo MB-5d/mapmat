@@ -666,6 +666,7 @@ describe('ReportDrawer', () => {
 
     expect(container.textContent).toContain('Full map locked.');
     expect(container.textContent).toContain('Showing 3 visible pages.');
+    expect(container.textContent).toContain('20 more pages are locked.');
   });
 
 });

@@ -65,9 +65,24 @@ describe('importParsers', () => {
         id: 'root',
         title: 'Home',
         url: 'https://example.com',
-        children: [],
+        thumbnailUrl: '/screenshots/missing-thumb.webp',
+        thumbnailCaptureFailed: true,
+        thumbnailCaptureError: 'Image failed to load',
+        children: [{
+          id: 'child',
+          title: 'Child',
+          url: 'https://example.com/child',
+          fullScreenshotUrl: '/screenshots/missing-full.webp',
+          children: [],
+        }],
       },
-      orphans: [{ id: 'orphan', title: 'Orphan', url: 'https://example.com/orphan', children: [] }],
+      orphans: [{
+        id: 'orphan',
+        title: 'Orphan',
+        url: 'https://example.com/orphan',
+        thumbnailFullUrl: '/screenshots/missing-preview.webp',
+        children: [],
+      }],
       connections: [{ id: 'c1', from: 'root', to: 'orphan' }],
       colors: ['#ffffff'],
       connectionColors: { crossLinks: '#111111' },
@@ -79,7 +94,11 @@ describe('importParsers', () => {
 
     expect(result.parseType).toBe('Vellic JSON');
     expect(result.root.id).toBe('root');
+    expect(result.root.thumbnailUrl).toBeUndefined();
+    expect(result.root.thumbnailCaptureFailed).toBeUndefined();
+    expect(result.root.children[0].fullScreenshotUrl).toBeUndefined();
     expect(result.orphans[0].id).toBe('orphan');
+    expect(result.orphans[0].thumbnailFullUrl).toBeUndefined();
     expect(result.connections).toEqual([{ id: 'c1', from: 'root', to: 'orphan' }]);
     expect(result.colors).toEqual(['#ffffff']);
     expect(result.connectionColors).toEqual({ crossLinks: '#111111' });

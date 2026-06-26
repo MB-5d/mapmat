@@ -532,7 +532,8 @@ async function checkAccountActionAsync(user, action, options = {}) {
   }
 
   if (action === ACTIONS.shareCreate) {
-    if (!summary.features.clientShareLinks) {
+    const accessLevel = String(options.accessLevel || 'view').trim().toLowerCase();
+    if (!summary.features.clientShareLinks && accessLevel === 'edit') {
       return buildDenied(action, summary, 'Client share links are not available on this plan.', {
         entitlement: { feature: 'clientShareLinks' },
       });

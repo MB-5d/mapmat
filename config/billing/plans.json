@@ -131,26 +131,26 @@
       "page_pack_1": {
         "name": "1,000 pages",
         "priceEnv": "STRIPE_PRICE_PAGE_PACK_1",
-        "mode": "payment",
+        "mode": "subscription",
         "meter": "active_pages",
         "quantity": 1000,
-        "resetBehavior": "rollover"
+        "resetBehavior": "period"
       },
       "page_pack_2": {
         "name": "10,000 pages",
         "priceEnv": "STRIPE_PRICE_PAGE_PACK_2",
-        "mode": "payment",
+        "mode": "subscription",
         "meter": "active_pages",
         "quantity": 10000,
-        "resetBehavior": "rollover"
+        "resetBehavior": "period"
       },
       "page_pack_3": {
         "name": "50,000 pages",
         "priceEnv": "STRIPE_PRICE_PAGE_PACK_3",
-        "mode": "payment",
+        "mode": "subscription",
         "meter": "active_pages",
         "quantity": 50000,
-        "resetBehavior": "rollover"
+        "resetBehavior": "period"
       },
       "organized_exports_10": {
         "name": "10 downloads",

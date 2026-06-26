@@ -114,6 +114,67 @@ describe('SaveMapModal', () => {
     });
   });
 
+  test('disables inline project creation when the project limit is reached', () => {
+    act(() => {
+      root.render(
+        <SaveMapModal
+          show
+          onClose={jest.fn()}
+          isLoggedIn
+          onRequireLogin={jest.fn()}
+          projects={[]}
+          currentMap={{ name: 'Current map', notes: '' }}
+          rootUrl="https://example.com"
+          defaultProjectId=""
+          onSave={jest.fn()}
+          onCreateProject={jest.fn()}
+          projectCreateDisabledReason="project limit reached"
+        />
+      );
+    });
+
+    const newProjectButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes('project limit reached')
+    );
+
+    expect(newProjectButton).toBeTruthy();
+    expect(newProjectButton.disabled).toBe(true);
+    expect(container.querySelector('.new-project-inline')).toBeNull();
+  });
+
+  test('supports contextual cancel labels and actions', () => {
+    const onCancel = jest.fn();
+
+    act(() => {
+      root.render(
+        <SaveMapModal
+          show
+          onClose={jest.fn()}
+          onCancel={onCancel}
+          cancelLabel="Don't save"
+          isLoggedIn
+          onRequireLogin={jest.fn()}
+          projects={[]}
+          currentMap={{ name: 'Unsaved map', notes: '' }}
+          rootUrl="https://example.com"
+          defaultProjectId=""
+          onSave={jest.fn()}
+          onCreateProject={jest.fn()}
+        />
+      );
+    });
+
+    const cancelButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.includes("Don't save")
+    );
+
+    act(() => {
+      cancelButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   test('shows saving state while save is in progress', async () => {
     let resolveSave;
     const onSave = jest.fn(() => new Promise((resolve) => {

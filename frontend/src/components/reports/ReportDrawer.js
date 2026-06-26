@@ -270,6 +270,19 @@ const ReportDrawer = ({
     )
     ? scanMeta.entitlement
     : null;
+  const entitlementVisiblePageCount = Number(
+    entitlementNotice?.visiblePageCount
+      || entitlementNotice?.visiblePageLimit
+      || entitlementNotice?.allowedPages
+      || realReportEntryCount
+      || 0
+  );
+  const knownLockedPageCount = Math.max(
+    0,
+    Number(entitlementNotice?.lockedPageEstimate || 0)
+      || Number(entitlementNotice?.sourcePageCount || entitlementNotice?.requestedPages || 0) - entitlementVisiblePageCount
+      || 0
+  );
 
   const activeFilterKeys = useMemo(
     () => visibleFilterOptions.filter(option => filters[option.key]).map(option => option.key),
@@ -520,7 +533,10 @@ const ReportDrawer = ({
                 <>
                   <strong>Full map locked.</strong>
                   <span>
-                    Showing {entitlementNotice.visiblePageLimit || entitlementNotice.allowedPages || 25} visible pages.
+                    Showing {formatReportCount(entitlementVisiblePageCount || 25)} visible pages.
+                    {knownLockedPageCount > 0
+                      ? ` ${formatReportCount(knownLockedPageCount)} more pages are locked.`
+                      : ''}
                     Upgrade to see the full map.
                   </span>
                 </>

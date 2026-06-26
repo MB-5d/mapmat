@@ -3,6 +3,16 @@ export const generateId = () => `import_${Math.random().toString(36).slice(2, 10
 const isHttpUrl = (value) => /^https?:\/\//i.test(String(value || '').trim());
 
 const uniqueUrls = (urls = []) => [...new Set(urls.filter((url) => isHttpUrl(url)))];
+const IMPORTED_IMAGE_STATE_FIELDS = [
+  'thumbnailUrl',
+  'thumbnailFullUrl',
+  'fullScreenshotUrl',
+  'fullScreenshotTruncated',
+  'authRequired',
+  'thumbnailCaptureFailed',
+  'thumbnailCaptureError',
+  'thumbnailCaptureFailedAt',
+];
 
 const normalizeHeader = (value) => String(value || '')
   .trim()
@@ -113,6 +123,18 @@ const rowToNode = (row = {}) => {
   }
 
   return node;
+};
+
+export const stripImportedImageState = (node) => {
+  if (!node || typeof node !== 'object') return node;
+  const next = { ...node };
+  IMPORTED_IMAGE_STATE_FIELDS.forEach((field) => {
+    delete next[field];
+  });
+  if (Array.isArray(node.children)) {
+    next.children = node.children.map(stripImportedImageState);
+  }
+  return next;
 };
 
 const getParentNumber = (number, section) => {
@@ -368,8 +390,8 @@ export const parseVellicJson = (text) => {
   return {
     parseType: 'Vellic JSON',
     count: Array.isArray(parsed.pages) ? parsed.pages.length : 1,
-    root: parsed.root,
-    orphans: Array.isArray(parsed.orphans) ? parsed.orphans : [],
+    root: stripImportedImageState(parsed.root),
+    orphans: Array.isArray(parsed.orphans) ? parsed.orphans.map(stripImportedImageState) : [],
     connections: Array.isArray(parsed.connections) ? parsed.connections : [],
     colors: Array.isArray(parsed.colors) ? parsed.colors : null,
     connectionColors: parsed.connectionColors && typeof parsed.connectionColors === 'object'

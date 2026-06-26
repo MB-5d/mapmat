@@ -28,7 +28,9 @@ const SaveMapForm = ({
   defaultNotes,
   onSave,
   onCreateProject,
+  projectCreateDisabledReason = '',
   onCancel,
+  cancelLabel = 'Cancel',
   submitLabel,
   submitLoadingLabel,
   saving = false,
@@ -79,7 +81,7 @@ const SaveMapForm = ({
   };
 
   const handleCreateProject = async () => {
-    if (!newProjectName.trim()) return;
+    if (!newProjectName.trim() || projectCreateDisabledReason) return;
     const project = await onCreateProject(newProjectName);
     if (project?.id) {
       setSelectedProject(project.id);
@@ -122,8 +124,9 @@ const SaveMapForm = ({
           className="new-project-link"
           startIcon={<FolderPlus />}
           onClick={() => setShowNewProject(true)}
+          disabled={Boolean(projectCreateDisabledReason)}
         >
-          Create new project
+          {projectCreateDisabledReason || 'Create new project'}
         </Button>
       ) : (
         <div className="new-project-inline">
@@ -137,7 +140,7 @@ const SaveMapForm = ({
               if (e.key === 'Escape') setShowNewProject(false);
             }}
           />
-          <Button size="sm" onClick={handleCreateProject}>Create</Button>
+          <Button size="sm" onClick={handleCreateProject} disabled={Boolean(projectCreateDisabledReason)}>Create</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowNewProject(false)}>Cancel</Button>
         </div>
       )}
@@ -151,7 +154,7 @@ const SaveMapForm = ({
       </Field>
       <div className="modal-footer">
         <Button variant="secondary" onClick={onCancel} disabled={isSubmitting || saving}>
-          Cancel
+          {cancelLabel}
         </Button>
         <Button variant="primary" onClick={handleSave} disabled={!mapName.trim() || isSubmitting || saving} loading={isSubmitting || saving}>
           {(isSubmitting || saving) ? (submitLoadingLabel || 'Saving') : submitLabel}
@@ -174,6 +177,9 @@ const SaveMapModal = ({
   defaultNotes,
   onSave,
   onCreateProject,
+  projectCreateDisabledReason = '',
+  onCancel,
+  cancelLabel = 'Cancel',
   title = 'Save map',
   submitLabel = 'Save map',
   submitLoadingLabel = 'Saving',
@@ -200,7 +206,9 @@ const SaveMapModal = ({
           defaultNotes={defaultNotes}
           onSave={onSave}
           onCreateProject={onCreateProject}
-          onCancel={onClose}
+          projectCreateDisabledReason={projectCreateDisabledReason}
+          onCancel={onCancel || onClose}
+          cancelLabel={cancelLabel}
           submitLabel={submitLabel}
           submitLoadingLabel={submitLoadingLabel}
           saving={saving}

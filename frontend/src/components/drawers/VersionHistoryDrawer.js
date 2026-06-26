@@ -101,6 +101,15 @@ function groupTimelineItems(items = [], getDateValue) {
     }));
 }
 
+function getLatestTimelineGroupKeys(groups = []) {
+  const latestMonth = groups[0];
+  const latestDate = latestMonth?.dates?.[0];
+  return {
+    monthKey: latestMonth?.key || '',
+    dateKey: latestDate?.key || '',
+  };
+}
+
 function formatActorLabel(actor) {
   const name = String(actor?.name || '').trim();
   if (name) return name;
@@ -234,6 +243,19 @@ const VersionHistoryDrawer = ({
       current[currentMonthKey] ? current : { ...current, [currentMonthKey]: true }
     ));
   }, [isOpen]);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const groups = activeView === VIEW_TABS.ACTIVITY ? groupedActivity : groupedVersions;
+    const { monthKey, dateKey } = getLatestTimelineGroupKeys(groups);
+    if (!monthKey || !dateKey) return;
+    setExpandedMonths((current) => (
+      current[monthKey] ? current : { ...current, [monthKey]: true }
+    ));
+    setExpandedDates((current) => (
+      current[dateKey] ? current : { ...current, [dateKey]: true }
+    ));
+  }, [activeView, groupedActivity, groupedVersions, isOpen]);
 
   const toggleMonth = (monthKey) => {
     setExpandedMonths((current) => ({

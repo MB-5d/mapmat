@@ -87,6 +87,32 @@ function buildSubscription({ accountId, status = 'active', extraEditors = 0 }) {
   };
 }
 
+function buildPagePackSubscription({ accountId, quantity = 1, status = 'active' }) {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    id: 'sub_test_page_pack',
+    status,
+    customer: 'cus_test_page_pack',
+    metadata: { vellicAccountId: accountId },
+    current_period_start: now,
+    current_period_end: now + 30 * 24 * 60 * 60,
+    latest_invoice: 'in_test_page_pack',
+    items: {
+      data: [
+        {
+          quantity,
+          current_period_start: now,
+          current_period_end: now + 30 * 24 * 60 * 60,
+          price: {
+            id: 'price_page_pack_1_test',
+            product: 'prod_test_page_pack',
+          },
+        },
+      ],
+    },
+  };
+}
+
 async function main() {
   const planPrice = getPlanPriceConfigByStripePrice('price_pro_test');
   assert.equal(planPrice.key, 'pro');
@@ -137,6 +163,7 @@ async function main() {
   assert.deepEqual(pagePacks.map((entry) => entry.key), ['page_pack_1', 'page_pack_2', 'page_pack_3']);
   assert.deepEqual(pagePacks.map((entry) => entry.quantity), [1000, 10000, 50000]);
   assert.equal(pagePacks.every((entry) => entry.configured), true);
+  assert.equal(pagePacks.every((entry) => entry.mode === 'subscription'), true);
   const addOnPrice = getAddOnPriceConfigByStripePrice('price_screenshot_pack_4_test');
   assert.equal(addOnPrice.key, 'screenshot_pack_4');
   assert.equal(addOnPrice.meter, METERS.screenshotCredits);
@@ -208,6 +235,33 @@ async function main() {
   ]);
   assert.equal(bundlePayload.metadata.checkoutType, 'bundle');
   assert.equal(bundlePayload.metadata.addonKeys, 'page_pack_1,screenshot_pack_1');
+
+  let pagePackOnlyPayload = null;
+  await createBundleCheckoutSessionAsync({
+    user: checkoutUser,
+    account: checkoutAccountWithCustomer,
+    addOns: [
+      { addonKey: 'page_pack_1', quantity: 2 },
+    ],
+    returnPath: '/app/profile',
+    stripeClient: {
+      checkout: {
+        sessions: {
+          create: async (payload) => {
+            pagePackOnlyPayload = payload;
+            return { id: 'cs_checkout_page_pack', url: 'https://checkout.stripe.test/page-pack' };
+          },
+        },
+      },
+    },
+  });
+  assert.equal(pagePackOnlyPayload.mode, 'subscription');
+  assert.deepEqual(pagePackOnlyPayload.line_items, [
+    { price: 'price_page_pack_1_test', quantity: 2 },
+  ]);
+  assert.equal(pagePackOnlyPayload.metadata.checkoutType, 'addon_bundle');
+  assert.equal(pagePackOnlyPayload.subscription_data.metadata.addonKeys, 'page_pack_1');
+  assert.equal(pagePackOnlyPayload.payment_intent_data, undefined);
 
   const subscriber = await createTestUser('subscriber');
   await billingStore.startTrialAsync({
@@ -371,8 +425,65 @@ async function main() {
     stripeClient: fakeStripe,
   });
   assert.equal(refreshResult.refreshed, true);
+  assert.deepEqual(refreshResult.purchaseSummary, {
+    plan: null,
+    meters: [
+      { meter: METERS.screenshotCredits, quantity: 100 },
+    ],
+  });
   const refreshedCredits = await resolveAccountEntitlementsAsync(refreshUser);
   assert.equal(refreshedCredits.meters.screenshotCredits.grantRemaining, 100);
+
+  const refreshPagePackUser = await createTestUser('refresh-page-pack');
+  const refreshPagePackAccount = (await resolveAccountEntitlementsAsync(refreshPagePackUser)).account;
+  const refreshPagePackResult = await refreshBillingAccountFromStripeAsync({
+    account: refreshPagePackAccount,
+    checkoutSessionId: 'cs_refresh_page_pack',
+    stripeClient: {
+      checkout: {
+        sessions: {
+          retrieve: async () => ({
+            id: 'cs_refresh_page_pack',
+            mode: 'subscription',
+            status: 'complete',
+            customer: 'cus_refresh_page_pack',
+            subscription: 'sub_test_page_pack',
+            metadata: {
+              vellicAccountId: refreshPagePackAccount.id,
+              checkoutType: 'addon_bundle',
+              addonKeys: 'page_pack_1',
+            },
+          }),
+          listLineItems: async () => ({
+            data: [
+              {
+                quantity: 2,
+                price: {
+                  id: 'price_page_pack_1_test',
+                },
+              },
+            ],
+          }),
+        },
+      },
+      subscriptions: {
+        retrieve: async () => buildPagePackSubscription({
+          accountId: refreshPagePackAccount.id,
+          quantity: 2,
+        }),
+      },
+    },
+  });
+  assert.equal(refreshPagePackResult.refreshed, true);
+  assert.deepEqual(refreshPagePackResult.purchaseSummary, {
+    plan: null,
+    meters: [
+      { meter: METERS.activePages, quantity: 2000 },
+    ],
+  });
+  const refreshedPages = await resolveAccountEntitlementsAsync(refreshPagePackUser);
+  assert.equal(refreshedPages.plan.key, 'free');
+  assert.equal(refreshedPages.meters.activePages.grantExtra, 2000);
   await assert.rejects(
     refreshBillingAccountFromStripeAsync({
       account: refreshAccount,

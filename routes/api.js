@@ -75,6 +75,7 @@ const CLIENT_USAGE_EVENT_TYPES = new Set([
   'export_ai_site_brief',
   'export_csv',
   'export_json',
+  'export_xml',
   'export_pdf',
   'export_png',
   'export_svg',
@@ -396,6 +397,26 @@ function stripNodeForStorage(node) {
   return next;
 }
 
+const SAVED_SCAN_META_KEY = 'vellicScanMeta';
+
+function normalizeStoredScanMeta(scanMeta) {
+  if (!scanMeta || typeof scanMeta !== 'object') return null;
+  const entitlement = scanMeta.entitlement;
+  if (!entitlement || typeof entitlement !== 'object' || entitlement.capped !== true) return null;
+  return {
+    brokenLinks: Array.isArray(scanMeta.brokenLinks) ? scanMeta.brokenLinks : [],
+    partial: scanMeta.partial !== false,
+    partialReason: scanMeta.partialReason || 'entitlement_cap',
+    scanDiagnostics: scanMeta.scanDiagnostics || null,
+    entitlement,
+  };
+}
+
+function getStoredScanMetaFromRoot(root) {
+  if (!root || typeof root !== 'object') return null;
+  return normalizeStoredScanMeta(root[SAVED_SCAN_META_KEY]);
+}
+
 function sanitizeMapTreeForStorage({ root, orphans } = {}) {
   return {
     root: root ? stripNodeForStorage(root) : root,
@@ -406,12 +427,14 @@ function sanitizeMapTreeForStorage({ root, orphans } = {}) {
 // Shared parser for map/history/share rows that store JSON in *_data columns.
 function parseMapFields(row) {
   const storedInsights = parseStoredInsights(row.insights_data);
+  const root = safeParse(row.root_data, 'root_data');
   return {
-    root: safeParse(row.root_data, 'root_data'),
+    root,
     orphans: safeParse(row.orphans_data, 'orphans_data', []),
     connections: safeParse(row.connections_data, 'connections_data', []),
     colors: safeParse(row.colors, 'colors', null),
     connectionColors: safeParse(row.connection_colors, 'connection_colors', null),
+    scanMeta: getStoredScanMetaFromRoot(root),
     insights: storedInsights.insights,
     insights_generated_at: storedInsights.insights ? (row.insights_generated_at || null) : null,
     insights_stale: storedInsights.stale,
@@ -550,6 +573,7 @@ function summarizeMapRow(row, options = {}) {
   const colors = safeParse(row.colors, 'colors', null);
   const connectionColors = safeParse(row.connection_colors, 'connection_colors', null);
   const hasThumbnails = hasThumbnailAsset(root, orphans);
+  const scanMeta = getStoredScanMetaFromRoot(root);
   const summary = {
     ...row,
     rootSummary: root ? {
@@ -560,6 +584,7 @@ function summarizeMapRow(row, options = {}) {
     nodeCount: countMapNodes(root, orphans),
     displaySummary: buildMapDisplaySummary(root, orphans),
     hasThumbnails,
+    scanMeta,
     colors,
     connectionColors,
     root_data: undefined,
@@ -3677,7 +3702,10 @@ router.post('/shares', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
-    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.shareCreate);
+    const normalizedAccessLevel = normalizeShareAccessLevel(access_level || accessLevel);
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.shareCreate, {
+      accessLevel: normalizedAccessLevel,
+    });
     if (!entitlement) return;
 
     let map = null;
@@ -3701,7 +3729,6 @@ router.post('/shares', requireAuth, async (req, res) => {
     const expiresAt = expires_in_days
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
-    const normalizedAccessLevel = normalizeShareAccessLevel(access_level || accessLevel);
     const normalizedOrientation = normalizeShareOrientation(orientation);
     const sharePayload = {
       rootData: JSON.stringify(sanitizedTree.root),

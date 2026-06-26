@@ -204,6 +204,19 @@ describe('ProjectsModal', () => {
     expect(confirmMoveButton.className).toContain('ui-btn');
   });
 
+  test('disables project creation when the project limit is reached', () => {
+    renderModal({
+      projectCreateDisabledReason: 'project limit reached',
+    });
+
+    const newProjectButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent.replace(/\s+/g, ' ').trim() === 'project limit reached'
+    );
+
+    expect(newProjectButton).toBeTruthy();
+    expect(newProjectButton.disabled).toBe(true);
+  });
+
   test('keeps drawer header strokes on shared drawer families', () => {
     expect(getCssRule('.account-drawer-header')).toContain('border-bottom: var(--border-width-subtle) solid var(--ui-color-border);');
     expect(getCssRule('.report-drawer-header')).toContain('border-bottom: var(--border-width-subtle) solid var(--ui-color-border);');

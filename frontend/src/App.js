@@ -141,6 +141,7 @@ import {
 } from './utils/fileExports';
 import {
   parseImportFileContent,
+  stripImportedImageState,
 } from './utils/importParsers';
 import { computeLayout, getNodeH } from './layout/computeLayout';
 import { AuthProvider } from './contexts/AuthContext';
@@ -151,7 +152,6 @@ import {
   MAP_ORIENTATIONS,
   buildRouteUrl,
   createAppHomeRoute,
-  createAccessRequestsRoute,
   createInviteInboxRoute,
   createMapRoute,
   createShareRoute,
@@ -357,6 +357,38 @@ function formatCurrencyMinorAmount(amount, currency = 'usd') {
   } catch {
     return `$${(safeAmount / 100).toLocaleString('en-US')}`;
   }
+}
+
+function formatListParts(parts) {
+  if (parts.length <= 1) return parts[0] || '';
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+}
+
+function getBillingPurchaseMeterLabel(meter, quantity) {
+  const singular = quantity === 1;
+  if (meter === 'screenshot_credits') return singular ? 'screenshot credit' : 'screenshot credits';
+  if (meter === 'active_pages' || meter === 'crawl_pages') return singular ? 'active page' : 'active pages';
+  if (meter === 'organized_exports') return singular ? 'download' : 'downloads';
+  return singular ? 'credit' : 'credits';
+}
+
+function formatBillingUpgradeSuccessMessage(refreshResult) {
+  const summary = refreshResult?.purchaseSummary || null;
+  const meterParts = (summary?.meters || [])
+    .map((entry) => {
+      const quantity = Math.max(0, Math.floor(Number(entry?.quantity || 0)));
+      if (quantity <= 0) return '';
+      return `${formatEntitlementCount(quantity)} ${getBillingPurchaseMeterLabel(entry?.meter, quantity)}`;
+    })
+    .filter(Boolean);
+  if (meterParts.length > 0) {
+    return `Upgrade successful! ${formatListParts(meterParts)} added and ready to use.`;
+  }
+  if (summary?.plan?.name) {
+    return `Upgrade successful! ${summary.plan.name} plan applied to your account.`;
+  }
+  return 'Upgrade successful and applied to your account';
 }
 
 function normalizeAddOnQuantity(value) {
@@ -567,6 +599,15 @@ function getGuestScanPromptSubtitle() {
 
 function getGuestScanPromptBody() {
   return 'Sign up or choose Upgrade to select a plan before scanning larger maps.';
+}
+
+function deriveImportedMapNameFromFileName(fileName = '') {
+  const baseName = String(fileName || '')
+    .split(/[\\/]/)
+    .pop()
+    ?.trim() || '';
+  const withoutExtension = baseName.replace(/\.[^.]+$/, '').trim();
+  return withoutExtension || baseName || '';
 }
 
 const GUEST_SCAN_SIGNIN_CONTEXT_MESSAGE = 'Sign in to save this scan to your account. Vellic will start it after you sign in.';
@@ -1715,6 +1756,10 @@ const hydratePersistedScanLimitMap = (rootNode = null, orphanNodes = []) => {
   };
 };
 
+const getDuplicateNodeDefaultParentId = ({ node = null, parent = null, rootNode = null } = {}) => (
+  node?.parentId || parent?.id || (rootNode?.id && rootNode.id === node?.id ? rootNode.id : ORPHAN_PARENT_ID)
+);
+
 const stripNodeForMapSave = (node) => {
   if (!node || typeof node !== 'object') return node;
   if (node.isEntitlementLocked || node.entitlementLocked) return null;
@@ -2803,6 +2848,7 @@ export const __testing = {
   serializeMapAutosaveSnapshot,
   getPersistedScanMetaFromRoot,
   hydratePersistedScanLimitMap,
+  getDuplicateNodeDefaultParentId,
   applyNodeAssetUpdatesToMap,
   isStoredScreenshotAsset,
   getImageCaptureStats,
@@ -2819,6 +2865,7 @@ export const __testing = {
   getCommentPopoverPosition,
   getCommentPopoverDrawerPosition,
   getCommentDrawerNodeFocusTarget,
+  formatBillingUpgradeSuccessMessage,
 };
 
 export default function App({ currentRoute, navigateToRoute }) {
@@ -4192,23 +4239,42 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!billingResult) return;
     if (billingResult === 'success' || billingResult === 'portal_return') {
       let refreshedUser = null;
+      let refreshResult = null;
       if (isLoggedIn) {
         try {
-          await api.refreshBillingAccount({
+          refreshResult = await api.refreshBillingAccount({
             checkoutSessionId: checkoutSessionId || undefined,
           });
         } catch (error) {
           console.warn('Failed to refresh billing account from Stripe', error);
+          showToast('Checkout completed, but your account update is still syncing. Try refreshing in a moment.', 'warning');
+          return;
         }
-        refreshedUser = await refreshCurrentUser();
+        if (billingResult === 'success' && !refreshResult?.refreshed) {
+          showToast('Checkout is still processing. Vellic will apply it as soon as Stripe confirms payment.', 'warning');
+          return;
+        }
+        if (refreshResult?.entitlements) {
+          setCurrentUser((current) => current ? ({
+            ...current,
+            account: refreshResult.entitlements.account || current.account || null,
+            entitlements: refreshResult.entitlements,
+          }) : current);
+        }
+        try {
+          refreshedUser = await refreshCurrentUser();
+        } catch (error) {
+          console.warn('Failed to refresh current user after billing update', error);
+        }
       }
+      setPlansModal(null);
       const resumedScan = billingResult === 'success'
         ? startPendingPlanScan(refreshedUser)
         : false;
       showToast(
         billingResult === 'portal_return'
           ? 'Billing settings updated'
-          : resumedScan ? 'Plan updated. Starting scan...' : 'Plan updated',
+          : resumedScan ? 'Upgrade successful and applied to your account. Starting scan...' : formatBillingUpgradeSuccessMessage(refreshResult),
         'success'
       );
     } else if (billingResult === 'cancelled') {
@@ -4452,6 +4518,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       planKey: includePlan ? selectedPlan.key : null,
       addOns,
       label,
+      itemCount: items.length,
       subtotal: subtotalAmount === null ? '--' : formatCurrencyMinorAmount(subtotalAmount, currency),
       checkoutLabel: 'Checkout',
       disabled: !!unavailableReason,
@@ -4499,6 +4566,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           </div>
         </div>
         {pack.configured && pack.priceLabel ? <small className="plans-modal-pack-price">{pack.priceLabel}</small> : null}
+        <span className="plans-modal-pack-multiplier" aria-hidden="true">✕</span>
         <div className="plans-modal-pack-quantity">
           <TextInput
             type="number"
@@ -4526,8 +4594,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     title = 'Plan limit reached',
     message = 'Your current account does not allow this action.',
     actionLabel = 'View plan options',
+    actionContext = 'entitlement-lock',
   } = {}) => {
-    setEntitlementLockModal({ title, message, actionLabel });
+    setEntitlementLockModal({ title, message, actionLabel, actionContext });
   }, []);
 
   const handleEntitlementError = useCallback((error, fallbackMessage = 'Your current account does not allow this action.') => {
@@ -5217,11 +5286,28 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canSendCollaborationInvitesValue = !!effectiveFeatureGates.collabInviteSend;
   const collaborationCapabilities = mapPermissions?.collaboration || null;
   const collaborationInviteRoleOptionsValue = useMemo(() => {
+    const planKey = String(currentUser?.entitlements?.plan?.key || '').trim().toLowerCase();
+    const editorGrantExtra = Number(currentUser?.entitlements?.limits?.editors?.grantExtra || 0);
+    const isTeamTrial = currentUser?.entitlements?.trial?.active
+      && String(currentUser?.entitlements?.trial?.kind || '').trim().toLowerCase() === 'team';
+    const canInviteEditor = isTeamTrial || editorGrantExtra > 0 || !['free', 'pro'].includes(planKey);
     const roles = Array.isArray(collaborationCapabilities?.inviteRoles)
       ? collaborationCapabilities.inviteRoles
       : [];
-    return roles.filter((role) => ['viewer', 'commenter', 'editor'].includes(String(role || '').trim().toLowerCase()));
-  }, [collaborationCapabilities?.inviteRoles]);
+    return roles
+      .map((role) => String(role || '').trim().toLowerCase())
+      .filter((role) => (
+        role === 'viewer'
+        || role === 'commenter'
+        || (role === 'editor' && canInviteEditor)
+      ));
+  }, [
+    collaborationCapabilities?.inviteRoles,
+    currentUser?.entitlements?.limits?.editors?.grantExtra,
+    currentUser?.entitlements?.plan?.key,
+    currentUser?.entitlements?.trial?.active,
+    currentUser?.entitlements?.trial?.kind,
+  ]);
   const canSelfServeCollaborationInviteValue = collaborationInviteRoleOptionsValue.length > 0;
   const canSelfServeCollaborationValue = canSelfServeCollaborationInviteValue || !!collaborationCapabilities?.canRequestAccess;
   const canManageCollaborationSettingsValue = !!effectiveFeatureGates.collabSettingsManage;
@@ -5255,10 +5341,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canViewAccessRequestsResolvedValue = canViewAccessRequestsValue || currentCollaborationRole === 'owner';
   const canOpenShareModalValue = canManageSharesValue;
   const clientShareLinksPlanAllowedValue = currentUser?.entitlements?.features?.clientShareLinks !== false;
-  const canUseShareLinksValue = canManageSharesValue && clientShareLinksPlanAllowedValue;
-  const shareLinksDisabledReasonValue = !clientShareLinksPlanAllowedValue
-    ? 'Client share links are not available on this plan.'
-    : 'Your account does not have permission to create share links for this map.';
+  const canUseShareLinksValue = canManageSharesValue;
+  const shareLinksDisabledReasonValue = 'Your account does not have permission to create share links for this map.';
   const canOpenCollaborationModalValue = COLLABORATION_UI_ENABLED && isLoggedIn && (
     canViewCollaborationPanelValue
     || canSelfServeCollaborationValue
@@ -5273,8 +5357,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     const maxRank = SHARE_ACCESS_RANK[maxGrantableSharePermissionValue] || SHARE_ACCESS_RANK[ACCESS_LEVELS.VIEW];
     return Object.values(ACCESS_LEVELS).filter((permission) => (
       (SHARE_ACCESS_RANK[permission] || 0) <= maxRank
+      && (clientShareLinksPlanAllowedValue || permission !== ACCESS_LEVELS.EDIT)
     ));
-  }, [maxGrantableSharePermissionValue]);
+  }, [clientShareLinksPlanAllowedValue, maxGrantableSharePermissionValue]);
+  const sharePermissionDisabledReasonValue = clientShareLinksPlanAllowedValue
+    ? 'Your account does not have permission to grant others that level on this map.'
+    : 'Can edit share links require a paid plan.';
+  const activeProjectsLimitValue = currentUser?.entitlements?.limits?.activeProjects || null;
+  const projectLimitReachedValue = useMemo(() => {
+    if (!activeProjectsLimitValue || activeProjectsLimitValue.unlimited) return false;
+    const remaining = Number(activeProjectsLimitValue.remaining);
+    if (Number.isFinite(remaining)) return remaining <= 0;
+    const used = Number(activeProjectsLimitValue.used);
+    const limit = Number(activeProjectsLimitValue.limit);
+    return Number.isFinite(used) && Number.isFinite(limit) && used >= limit;
+  }, [activeProjectsLimitValue]);
+  const projectCreateDisabledReasonValue = projectLimitReachedValue ? 'project limit reached' : '';
 
   // Permission helper functions
   const canEdit = useCallback(() => canEditValue, [canEditValue]);
@@ -5371,7 +5469,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (preview.insufficient) {
       showEntitlementLock({
         title: 'Not enough screenshot credits',
-        message: `This capture can use up to ${formatEntitlementCount(preview.credits)} credit${preview.credits === 1 ? '' : 's'}, but this account has ${formatEntitlementCount(preview.remaining)} remaining.`,
+        message: `This capture can use up to ${formatEntitlementCount(preview.credits)} credit${preview.credits === 1 ? '' : 's'}, but this account has ${formatEntitlementCount(preview.remaining)} remaining. Select only the images you want with Shift+click or Shift+drag, buy credits, or change plans to capture and download all visible area or full page screenshots.`,
+        actionLabel: 'Upgrade',
+        actionContext: 'screenshot-credits',
       });
       return false;
     }
@@ -7947,16 +8047,14 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [currentMap?.id]);
 
   const handleShowInviteInbox = useCallback(async () => {
-    navigateToRoute(createInviteInboxRoute());
     setShowInviteInboxModal(true);
     await loadPendingMapInvites();
-  }, [loadPendingMapInvites, navigateToRoute]);
+  }, [loadPendingMapInvites]);
 
   const handleShowAccessRequestsInbox = useCallback(async () => {
-    navigateToRoute(createAccessRequestsRoute());
     setShowAccessRequestsInboxModal(true);
     await loadPendingAccessRequests();
-  }, [loadPendingAccessRequests, navigateToRoute]);
+  }, [loadPendingAccessRequests]);
 
   useEffect(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.APP || currentRoute?.section !== 'invites') return;
@@ -10373,6 +10471,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const createProject = useCallback(async (name) => {
     if (!name?.trim()) return;
     if (!guardAccountCanCreateWork('Project creation')) return null;
+    if (projectLimitReachedValue) {
+      showEntitlementLock({
+        title: 'Plan limit reached',
+        message: 'Your plan has reached its active project limit.',
+      });
+      return null;
+    }
     try {
       const { project } = await api.createProject(name.trim());
       await loadAuthenticatedWorkspace();
@@ -10393,7 +10498,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       showToast(e.message || 'Failed to create project', 'error');
       return null;
     }
-  }, [guardAccountCanCreateWork, handleEntitlementError, loadAuthenticatedWorkspace, root, showToast]);
+  }, [guardAccountCanCreateWork, handleEntitlementError, loadAuthenticatedWorkspace, projectLimitReachedValue, root, showEntitlementLock, showToast]);
 
   const renameProject = async (projectId, newName) => {
     if (projectId === UNCATEGORIZED_PROJECT_ID || projectId === SHARED_PROJECT_ID) {
@@ -10734,6 +10839,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const normalizedVersionOrphans = normalizeOrphans(version.orphans);
     const hydratedVersion = hydratePersistedScanLimitMap(version.root, normalizedVersionOrphans);
     const hydratedVersionScanMeta = hydratedVersion.scanMeta || { brokenLinks: [] };
+    const versionScanLayerAvailability = getDisplayScanLayerAvailability(hydratedVersion.root, hydratedVersion.orphans || []);
     const versionHasThumbnails = collectAllNodesWithOrphans(hydratedVersion.root, hydratedVersion.orphans || []).some((node) => !!node.thumbnailUrl);
     scanMetaRef.current = hydratedVersionScanMeta;
     setRoot(hydratedVersion.root);
@@ -10741,8 +10847,10 @@ export default function App({ currentRoute, navigateToRoute }) {
     setConnections(version.connections || []);
     setColors(version.colors || DEFAULT_COLORS);
     setConnectionColors(version.connectionColors || DEFAULT_CONNECTION_COLORS);
-    setUrlInput(hydratedVersion.root?.url || '');
     setScanMeta(hydratedVersionScanMeta);
+    setScanLayerAvailability(versionScanLayerAvailability);
+    setScanLayerVisibility(versionScanLayerAvailability);
+    setUrlInput(hydratedVersion.root?.url || '');
     setActiveVersionId(version.id);
     setShowVersionEditPrompt(false);
     setShowVersionHistoryDrawer(false);
@@ -10963,6 +11071,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
 
       setCurrentMap(savedMap);
+      setMapName(savedMap?.name || trimmedName);
+      setIsImportedMap(false);
       largeMapHomeSceneKeyRef.current = '';
       navigateToRoute(createMapRoute(savedMap.id));
       resetAutosaveTracking({
@@ -11166,6 +11276,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     pendingInitialCenterRef.current = false;
     pendingInitialLargeMapCenterRef.current = false;
     const mapHasThumbnails = mapHasThumbnailAsset(hydratedMap.root, hydratedMap.orphans || []);
+    const displayScanLayerAvailability = getDisplayScanLayerAvailability(hydratedMap.root, hydratedMap.orphans || []);
     scanMetaRef.current = hydratedScanMeta;
     setRoot(hydratedMap.root);
     setOrphans(hydratedMap.orphans);
@@ -11173,6 +11284,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
     setScanMeta(hydratedScanMeta);
+    setScanLayerAvailability(displayScanLayerAvailability);
+    setScanLayerVisibility(displayScanLayerAvailability);
     setCurrentMap({
       ...map,
       root: hydratedMap.root,
@@ -13451,7 +13564,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         rows: rows.length,
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.json`, content);
-      showToast('Downloaded JSON');
+      showToast('Downloaded JSON', 'success');
     });
   };
 
@@ -13531,7 +13644,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         rows: rows.length,
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.xml`, content);
-      showToast('Downloaded XML');
+      showToast('Downloaded XML', 'success');
     });
   };
 
@@ -13617,7 +13730,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         packageFiles: 8,
       })) return;
       downloadBlob(`${baseFilename}.zip`, zipBlob);
-      showToast('Downloaded AI Site Brief package');
+      showToast('Downloaded AI Site Brief package', 'success');
     });
   };
 
@@ -13642,7 +13755,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         rows: rows.length,
       })) return;
       downloadText(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.csv`, content);
-      showToast('Downloaded CSV');
+      showToast('Downloaded CSV', 'success');
     });
   };
 
@@ -14219,20 +14332,36 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   };
 
-  const sendShareEmail = () => {
+  const sendShareEmail = async () => {
     if (!shareEmails.trim()) {
-      showToast('Please enter email addresses');
+      showToast('Please enter email addresses', 'warning');
       return;
     }
-    const subject = encodeURIComponent('Check out this sitemap');
-    const body = encodeURIComponent(`I wanted to share this sitemap with you.\n\nView it here: ${window.location.origin}`);
+    if (!guardAccountCanCreateWork('Share link creation')) return;
+    if (!canCreateShareLinksForCurrentMap()) return;
 
-    // Open mailto in NEW window - don't navigate away from app
-    window.open(`mailto:${shareEmails}?subject=${subject}&body=${body}`, '_blank');
+    const mailWindow = window.open('', '_blank');
+    try {
+      const shareUrl = await createShareLinkUrl(sharePermission);
+      const subject = encodeURIComponent('Check out this sitemap');
+      const body = encodeURIComponent(`I wanted to share this sitemap with you.\n\nView it here: ${shareUrl}`);
 
-    showToast('Email client opened!');
-    setShowShareModal(false);
-    setShareEmails('');
+      const mailtoUrl = `mailto:${shareEmails}?subject=${subject}&body=${body}`;
+      if (mailWindow) {
+        mailWindow.location.href = mailtoUrl;
+      } else {
+        window.location.href = mailtoUrl;
+      }
+      setHasCreatedShareLink(true);
+      setCurrentShareAccess(sharePermission);
+      showToast('Email client opened', 'success');
+      setShowShareModal(false);
+      setShareEmails('');
+    } catch (e) {
+      if (mailWindow) mailWindow.close();
+      if (handleShareLinkError(e)) return;
+      showToast(e.message || 'Failed to create share link', 'error');
+    }
   };
 
   const exportPng = async () => {
@@ -16361,7 +16490,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       ...node,
       id: undefined, // Will get a new ID
       title: `${node.title} (Copy)`,
-      parentId: node.parentId || parent?.id || ORPHAN_PARENT_ID,
+      parentId: getDuplicateNodeDefaultParentId({ node, parent, rootNode: root }),
     });
     setEditModalMode('duplicate');
   };
@@ -16882,6 +17011,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           .then(async ({ map, initialVersion }) => {
             setRoot(newRoot);
             setCurrentMap(map);
+            navigateToRoute(createMapRoute(map.id));
             setMapName(map.name);
             resetAutosaveTracking({
               snapshot: serializeMapAutosaveSnapshot({
@@ -17456,18 +17586,20 @@ export default function App({ currentRoute, navigateToRoute }) {
   const applyImportedMap = (imported, {
     originalPageCount = null,
     partial = false,
+    defaultName = '',
   } = {}) => {
     if (!imported?.root) {
       showToast('Could not build sitemap from URLs', 'error');
       return false;
     }
 
-    const importedOrphans = imported.orphans || [];
+    const importedRoot = stripImportedImageState(imported.root);
+    const importedOrphans = (imported.orphans || []).map(stripImportedImageState);
     const importedConnections = imported.connections || [];
     const importedColors = imported.colors || DEFAULT_COLORS;
     const importedConnectionColors = imported.connectionColors || DEFAULT_CONNECTION_COLORS;
     const importedPageCount = Math.max(1,
-      countNodes(imported.root)
+      countNodes(importedRoot)
       + importedOrphans.reduce((total, orphan) => total + countNodes(orphan), 0)
     );
     const sourceCount = Math.max(importedPageCount, Math.floor(Number(originalPageCount || importedPageCount)));
@@ -17484,8 +17616,8 @@ export default function App({ currentRoute, navigateToRoute }) {
       lockedPageEstimate: Math.max(0, sourceCount - importedPageCount),
     } : null;
     const displayImported = partial
-      ? addScanLimitGhosts(imported.root, importedOrphans, entitlementMeta)
-      : { root: imported.root, orphans: importedOrphans };
+      ? addScanLimitGhosts(importedRoot, importedOrphans, entitlementMeta)
+      : { root: importedRoot, orphans: importedOrphans };
     const nextRoot = displayImported.root;
     const nextOrphans = displayImported.orphans || [];
 
@@ -17519,7 +17651,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       attempts: 20,
     });
     setUrlInput(nextRoot.url || '');
-    setMapName('');
+    setMapName(defaultName || imported.defaultMapName || '');
     setShowImportModal(false);
     showToast(
       partial
@@ -17563,6 +17695,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       // Use file extension - don't rely on file.type which is often empty for XML
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       const imported = parseImportFileContent(text, ext);
+      const defaultMapName = deriveImportedMapNameFromFileName(file.name);
 
       if (!imported?.root) {
         showToast(`No URLs found in ${imported?.parseType || 'file'}`, 'error');
@@ -17580,15 +17713,16 @@ export default function App({ currentRoute, navigateToRoute }) {
         setImportPageLimitModal({
           ...importLimitBlock,
           fileName: file.name || 'Imported file',
+          defaultMapName,
           parseType: imported.parseType || 'file',
-          imported,
+          imported: { ...imported, defaultMapName },
         });
         setShowImportModal(false);
         setImportLoading(false);
         return;
       }
 
-      applyImportedMap(imported);
+      applyImportedMap({ ...imported, defaultMapName }, { defaultName: defaultMapName });
     } catch (err) {
       console.error('Import error:', err);
       showToast(`Import failed: ${err.message || 'Unknown error'}`, 'error');
@@ -17667,6 +17801,54 @@ export default function App({ currentRoute, navigateToRoute }) {
     setWelcomeModalDismissedForSession(true);
     setWelcomeDontShowAgain(false);
   }, [isLoggedIn, welcomeDontShowAgain]);
+
+  const closeSaveMapModal = useCallback(() => {
+    setShowSaveMapModal(false);
+    setCreateMapMode(false);
+    setCreateMapDefaults(null);
+    setPendingCreateAfterSave(null);
+    setPendingLogoutAfterSave(false);
+    setDuplicateMapConfig(null);
+    setPendingLoadMap(null);
+  }, []);
+
+  const discardUnsavedMapAndLoadPending = useCallback(async () => {
+    const mapToLoad = pendingLoadMap;
+    if (!mapToLoad) {
+      closeSaveMapModal();
+      return;
+    }
+
+    setShowSaveMapModal(false);
+    setCreateMapMode(false);
+    setCreateMapDefaults(null);
+    setPendingCreateAfterSave(null);
+    setPendingLogoutAfterSave(false);
+    setDuplicateMapConfig(null);
+    setPendingLoadMap(null);
+    clearLoadedMapView();
+
+    try {
+      if (mapToLoad.root) {
+        loadMap(mapToLoad);
+      } else if (mapToLoad.id) {
+        await loadSavedMapById(mapToLoad.id);
+      }
+    } catch (error) {
+      showToast(error.message || 'Failed to load map', 'error');
+    }
+  }, [clearLoadedMapView, closeSaveMapModal, loadMap, loadSavedMapById, pendingLoadMap, showToast]);
+
+  const handleSaveMapModalCancel = useCallback(() => {
+    if (pendingLoadMap && hasMap && !currentMap?.id) {
+      discardUnsavedMapAndLoadPending();
+      return;
+    }
+    closeSaveMapModal();
+  }, [closeSaveMapModal, currentMap?.id, discardUnsavedMapAndLoadPending, hasMap, pendingLoadMap]);
+
+  const saveMapModalCancelLabel = pendingLoadMap && hasMap && !currentMap?.id ? "Don't save" : 'Cancel';
+
   const saveMapModalProjectId = createMapMode
     ? createMapDefaults?.projectId || null
     : duplicateMapConfig?.projectId || null;
@@ -19261,6 +19443,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         canShareLinks={canUseShareLinksValue}
         allowedSharePermissions={allowedSharePermissionsValue}
         shareLinksDisabledReason={shareLinksDisabledReasonValue}
+        sharePermissionDisabledReason={sharePermissionDisabledReasonValue}
         onUpgradePlan={() => openPlansModal('share')}
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
@@ -19286,6 +19469,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         canShareLinks={canUseShareLinksValue}
         allowedSharePermissions={allowedSharePermissionsValue}
         shareLinksDisabledReason={shareLinksDisabledReasonValue}
+        sharePermissionDisabledReason={sharePermissionDisabledReasonValue}
         onUpgradePlan={() => openPlansModal('share')}
         shareEmails={shareEmails}
         onShareEmailsChange={setShareEmails}
@@ -19358,24 +19542,10 @@ export default function App({ currentRoute, navigateToRoute }) {
       <SaveMapModal
         key={saveMapModalKey}
         show={showSaveMapModal}
-        onClose={() => {
-          setShowSaveMapModal(false);
-          setCreateMapMode(false);
-          setCreateMapDefaults(null);
-          setPendingCreateAfterSave(null);
-          setPendingLogoutAfterSave(false);
-          setDuplicateMapConfig(null);
-          setPendingLoadMap(null);
-        }}
+        onClose={closeSaveMapModal}
         isLoggedIn={isLoggedIn}
         onRequireLogin={() => {
-          setShowSaveMapModal(false);
-          setCreateMapMode(false);
-          setCreateMapDefaults(null);
-          setPendingCreateAfterSave(null);
-          setPendingLogoutAfterSave(false);
-          setDuplicateMapConfig(null);
-          setPendingLoadMap(null);
+          closeSaveMapModal();
           openAuthModal();
         }}
         projects={projects}
@@ -19386,6 +19556,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         defaultNotes={saveMapModalNotes}
         onSave={createMapMode ? startBlankMapCreation : (duplicateMapConfig ? handleDuplicateMapSave : saveMap)}
         onCreateProject={createProject}
+        projectCreateDisabledReason={projectCreateDisabledReasonValue}
+        onCancel={handleSaveMapModalCancel}
+        cancelLabel={saveMapModalCancelLabel}
         title={createMapMode ? 'Create map' : (duplicateMapConfig ? 'Duplicate map' : 'Save map')}
         submitLabel={createMapMode ? 'Create' : (duplicateMapConfig ? 'Duplicate map' : 'Save map')}
         submitLoadingLabel={createMapMode ? 'Creating' : (duplicateMapConfig ? 'Duplicating' : 'Saving')}
@@ -19428,7 +19601,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         onDeleteMap={deleteMap}
         onMoveMap={moveMapToProject}
         onAddMap={(projectId) => openCreateMapFlow({ defaultProjectId: projectId })}
+        projectCreateDisabledReason={projectCreateDisabledReasonValue}
         onAddProject={async () => {
+          if (projectCreateDisabledReasonValue) return;
           const name = await showPrompt({
             title: 'New project',
             message: 'Enter a name for the new project:',
@@ -19583,7 +19758,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   variant="primary"
                   onClick={() => {
                     setEntitlementLockModal(null);
-                    openPlansModal('entitlement-lock');
+                    openPlansModal(entitlementLockModal.actionContext || 'entitlement-lock');
                   }}
                 >
                   {entitlementLockModal.actionLabel || 'View plan options'}
@@ -19609,9 +19784,14 @@ export default function App({ currentRoute, navigateToRoute }) {
 	          footer={(
 	            <div className="plans-modal-footer">
 	              <div className="plans-modal-subtotal" aria-live="polite">
-	                <span>Selected</span>
-	                <strong>{selectedBillingPurchase?.label || '--'}</strong>
-	                <small>Subtotal: <span className="plans-modal-subtotal-amount">{selectedBillingPurchase?.subtotal || '--'}</span></small>
+	                <div className="plans-modal-subtotal-row">
+	                  <span>Selected:</span>
+	                  <strong>{selectedBillingPurchase?.itemCount ?? '--'}</strong>
+	                </div>
+	                <div className="plans-modal-subtotal-row">
+	                  <span>Subtotal:</span>
+	                  <strong className="plans-modal-subtotal-amount">{selectedBillingPurchase?.subtotal || '--'}</strong>
+	                </div>
 	              </div>
 	              <div className="plans-modal-footer-actions">
 	                <Button variant="secondary" onClick={dismissPlansModal}>
@@ -19670,7 +19850,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 <div className="plans-modal-pricing-grid" aria-label="Plan options">
                   {planOptionCards.map((plan) => {
                     const isCurrentPlan = currentBillingPlanKey === plan.key;
-                    const isSelected = isCurrentPlan || billingSelectedPlanKey === plan.key;
+                    const isSelected = !isCurrentPlan && billingSelectedPlanKey === plan.key;
                     return (
                       <article
                         className={classNames(
@@ -19706,15 +19886,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                         </ul>
                         <div className="plans-modal-pricing-card__actions">
                           {isCurrentPlan ? (
-                            <Button
-                              className="plans-modal-pricing-card__cta"
-                              type="button"
-                              variant="secondary"
-                              buttonStyle="brand"
-                              disabled
-                            >
+                            <span className="plans-modal-pricing-card__current">
                               Current plan
-                            </Button>
+                            </span>
                           ) : (
                             <Button
                               className="plans-modal-pricing-card__cta"
@@ -19755,8 +19929,8 @@ export default function App({ currentRoute, navigateToRoute }) {
                     {screenshotCreditPacks.length ? (
                       <div className="plans-modal-pack-list">
                         {screenshotCreditPacks.map((pack) => renderBillingPackCard(pack, {
-                          singular: 'credit*',
-                          plural: 'credits*',
+                          singular: 'credit',
+                          plural: 'credits',
                         }))}
                       </div>
                     ) : null}
@@ -19939,7 +20113,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   openPlansModal('screenshot-download');
                 }}
               >
-                View plan options
+                Upgrade
               </Button>
             </>
           )}
@@ -20104,6 +20278,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                       applyImportedMap(partialImport, {
                         originalPageCount: importPageLimitModal.pageCount,
                         partial: true,
+                        defaultName: importPageLimitModal.defaultMapName || '',
                       });
                     }
                     setImportPageLimitModal(null);

@@ -100,7 +100,7 @@ describe('VersionHistoryDrawer', () => {
     jest.clearAllMocks();
   });
 
-  test('groups versions by month and date with current month open and dates collapsed', async () => {
+  test('groups versions by month and date with the latest day open', async () => {
     const currentDate = isoDateForOffset(0, 12);
     const previousDate = isoDateForOffset(-1, 12);
     await renderDrawer({
@@ -116,10 +116,6 @@ describe('VersionHistoryDrawer', () => {
     expect(container.textContent).toContain(dateLabel(currentDate));
     expect(container.textContent).toContain(monthLabel(previousDate));
     expect(container.textContent).not.toContain(dateLabelWithYear(currentDate));
-    expect(container.textContent).not.toContain('Client review');
-
-    await clickByText(dateLabel(currentDate));
-
     expect(container.textContent).toContain('Client review');
     expect(container.textContent).toContain('Version 3');
     expect(container.textContent).not.toContain('Current');
@@ -144,8 +140,6 @@ describe('VersionHistoryDrawer', () => {
         },
       ],
     });
-
-    await clickByText(dateLabel(currentDate));
 
     expect(container.textContent).toContain('Thumbnails captured');
     expect(container.textContent).not.toContain('Only got ~450 in the first try');
@@ -191,10 +185,6 @@ describe('VersionHistoryDrawer', () => {
 
     expect(container.textContent).toContain(monthLabel(currentDate));
     expect(container.textContent).toContain(dateLabel(currentDate));
-    expect(container.textContent).not.toContain('Updated node');
-
-    await clickByText(dateLabel(currentDate));
-
     expect(container.textContent).toContain('Updated node');
     expect(container.textContent).toContain('Maya');
     expect(container.textContent).toContain('Edit');
@@ -210,8 +200,6 @@ describe('VersionHistoryDrawer', () => {
         { id: 'v-auto', version_number: 3, name: 'Autosaved', created_at: currentDate },
       ],
     });
-
-    await clickByText(dateLabel(currentDate));
 
     const bookmarkButton = container.querySelector('button[aria-label="Bookmark version"]');
     expect(bookmarkButton.className).toContain('ui-icon-btn');

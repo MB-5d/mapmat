@@ -50,6 +50,7 @@ const ProjectsModal = ({
   onMoveMap,
   onAddMap,
   onAddProject,
+  projectCreateDisabledReason = '',
 }) => {
   const [movingMapId, setMovingMapId] = useState(null);
   const [moveTarget, setMoveTarget] = useState('');
@@ -297,8 +298,9 @@ const ProjectsModal = ({
                   variant="secondary"
                   startIcon={<FolderPlus />}
                   onClick={onAddProject}
+                  disabled={Boolean(projectCreateDisabledReason)}
                 >
-                  New project
+                  {projectCreateDisabledReason || 'New project'}
                 </Button>
               </div>
             </>
