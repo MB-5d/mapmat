@@ -313,6 +313,17 @@ async function markInviteExpiredAsync(inviteId) {
   `, [inviteId])).changes || 0;
 }
 
+async function clearInviteExpirationAsync(inviteId) {
+  if (!inviteId) return null;
+  await adapter.executeAsync(`
+    UPDATE map_invites
+    SET expires_at = NULL,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status = 'pending'
+  `, [inviteId]);
+  return getInviteByIdAsync(inviteId);
+}
+
 async function getCollaborationSettingsByMapAsync(mapId) {
   const row = await adapter.queryOneAsync(
     'SELECT * FROM map_collaboration_settings WHERE map_id = ?',
@@ -504,6 +515,7 @@ module.exports = {
   markInviteDeclinedAsync,
   revokeInviteAsync,
   markInviteExpiredAsync,
+  clearInviteExpirationAsync,
   getCollaborationSettingsByMapAsync,
   upsertCollaborationSettingsAsync,
   listAccessRequestsByMapAsync,

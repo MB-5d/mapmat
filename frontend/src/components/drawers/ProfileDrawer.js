@@ -113,6 +113,10 @@ const ProfileDrawer = ({
   const [activeProfileField, setActiveProfileField] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [accountEditors, setAccountEditors] = useState([]);
+  const [accountEditorsLoading, setAccountEditorsLoading] = useState(false);
+  const [accountEditorsError, setAccountEditorsError] = useState('');
+  const [removingEditorId, setRemovingEditorId] = useState('');
 
   const wasOpenRef = useRef(false);
   const initializedUserIdRef = useRef(null);
@@ -142,6 +146,9 @@ const ProfileDrawer = ({
       setPendingAvatarRemoved(false);
       setOpenProfileAccordion('plan');
       setActiveProfileField(null);
+      setAccountEditors([]);
+      setAccountEditorsError('');
+      setRemovingEditorId('');
       initializedUserIdRef.current = userId;
     }
     if (!isOpen) {
@@ -171,6 +178,7 @@ const ProfileDrawer = ({
     || entitlements.account.ownerUserId === user?.id;
   const accountRole = String(entitlements?.account?.membershipRole || '').trim().toLowerCase();
   const canViewPlanDetails = isPrimaryBillingOwner || accountRole === 'owner' || accountRole === 'editor';
+  const canManageAccountEditors = isPrimaryBillingOwner || accountRole === 'owner';
   const planDetailsOpen = openProfileAccordion === 'plan';
   const profileDetailsOpen = openProfileAccordion === 'profile';
   const passwordDetailsOpen = openProfileAccordion === 'password';
@@ -202,6 +210,61 @@ const ProfileDrawer = ({
   );
   const hasProfileChanges = hasNameChange || hasEmailChange || hasPasswordDraft || hasPendingAvatarChange;
   const canSaveChanges = Boolean(user && !loading && hasProfileChanges);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isOpen || !canManageAccountEditors) {
+      setAccountEditors([]);
+      setAccountEditorsError('');
+      setAccountEditorsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setAccountEditorsLoading(true);
+    setAccountEditorsError('');
+    api.getAccountEditors()
+      .then((response) => {
+        if (cancelled) return;
+        setAccountEditors(Array.isArray(response?.editors) ? response.editors : []);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setAccountEditorsError(err.message || 'Failed to load editors');
+      })
+      .finally(() => {
+        if (!cancelled) setAccountEditorsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageAccountEditors, isOpen, user?.id]);
+
+  const handleRemoveAccountEditor = async (editor) => {
+    if (!editor?.id) return;
+    const confirmed = window.confirm(`Remove ${editor.name || editor.email || 'this editor'} from this account?`);
+    if (!confirmed) return;
+    setRemovingEditorId(editor.id);
+    setAccountEditorsError('');
+    try {
+      const response = await api.removeAccountEditor(editor.id);
+      setAccountEditors((current) => current.filter((item) => item.id !== editor.id));
+      if (response?.entitlements) {
+        onUpdate?.({
+          ...user,
+          account: response.entitlements.account || user?.account || null,
+          entitlements: response.entitlements,
+        });
+      }
+      showToast?.('Editor removed', 'success');
+    } catch (err) {
+      setAccountEditorsError(err.message || 'Failed to remove editor');
+    } finally {
+      setRemovingEditorId('');
+    }
+  };
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
@@ -514,6 +577,55 @@ const ProfileDrawer = ({
                   </tbody>
                 </table>
               </div>
+              {canManageAccountEditors ? (
+                <div className="account-editors-section">
+                  <div className="account-editors-header">
+                    <span>Editors</span>
+                    {accountEditorsLoading ? <small>Loading...</small> : null}
+                  </div>
+                  {accountEditorsError ? (
+                    <div className="account-editors-error">{accountEditorsError}</div>
+                  ) : null}
+                  <div className="account-editors-list">
+                    {!accountEditorsLoading && accountEditors.length === 0 ? (
+                      <div className="account-editors-empty">No editors on this account.</div>
+                    ) : accountEditors.map((editor) => {
+                      const isOwnerEditor = editor.role === 'owner';
+                      return (
+                        <div className="account-editor-row" key={editor.id}>
+                          <Avatar
+                            className="account-editor-avatar"
+                            src={resolveApiAssetUrl(editor.avatarUrl)}
+                            label={String(editor.name || editor.email || 'E').trim().slice(0, 2).toUpperCase()}
+                            icon={<User size={14} />}
+                            size="xs"
+                            aria-hidden="true"
+                          />
+                          <div className="account-editor-main">
+                            <div className="account-editor-name">{editor.name || editor.email || 'Editor'}</div>
+                            {editor.email ? <div className="account-editor-email">{editor.email}</div> : null}
+                          </div>
+                          <div className="account-editor-role">{formatStatusLabel(editor.role)}</div>
+                          {!isOwnerEditor ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              buttonStyle="danger"
+                              size="sm"
+                              iconOnly
+                              startIcon={<Trash2 size={14} />}
+                              aria-label={`Remove ${editor.name || editor.email || 'editor'}`}
+                              onClick={() => handleRemoveAccountEditor(editor)}
+                              loading={removingEditorId === editor.id}
+                              disabled={loading || accountEditorsLoading}
+                            />
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
               {isPrimaryBillingOwner ? (
                 <div className="account-plan-actions">
 	                <Button

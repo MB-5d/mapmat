@@ -39,6 +39,8 @@
 ## Realtime Rollout Checks
 - `npm run verify:realtime:rollout-state` requires `COEDITING_STAGING_ADMIN_KEY` and `COEDITING_PRODUCTION_ADMIN_KEY` in the local terminal.
 - `npm run verify:realtime:*:preflight` requires `COEDITING_ADMIN_KEY` plus the exact target rollout variables, including `COEDITING_PREFLIGHT_CHANGE_TYPE`.
+- Before editing Railway `Variables`, run `npm run verify:realtime:staging:preflight` or `npm run verify:realtime:production:preflight` against the exact target environment.
+- Use `COEDITING_PREFLIGHT_CHANGE_TYPE=scope` for scoped canary enablement or scope changes. Use `COEDITING_PREFLIGHT_CHANGE_TYPE=broad` only for explicitly approved global rollout, with `COEDITING_ROLLOUT_ALLOW_GLOBAL=true`, `COEDITING_ROLLOUT_GLOBAL_APPROVED=true`, and empty rollout scope lists.
 - Before scope or broad-rollout changes, compare staging vs production policy with `npm run verify:realtime:rollout-state`.
 - For staged canary rollout checks, run `npm run verify:realtime:staging:canary` and `npm run verify:realtime:staging:canary:window`.
 - For production canary rollout checks, run `npm run verify:realtime:production:canary` and `npm run verify:realtime:production:canary:window`.

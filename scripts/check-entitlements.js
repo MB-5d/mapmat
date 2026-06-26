@@ -63,8 +63,8 @@ async function main() {
   const freeIndexDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_site_index' });
   assert.equal(freeIndexDownloadCheck.allowed, true);
   const freePdfDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_report_pdf' });
-  assert.equal(freePdfDownloadCheck.allowed, false);
-  assert.equal(freePdfDownloadCheck.code, 'DOWNLOAD_FORMAT_PLAN_REQUIRED');
+  assert.equal(freePdfDownloadCheck.allowed, true);
+  assert.equal(freePdfDownloadCheck.unmetered, true);
   const freeViewerShareCheck = await checkAccountActionAsync(user, ACTIONS.shareCreate, { accessLevel: 'view' });
   assert.equal(freeViewerShareCheck.allowed, true);
   const freeCommentShareCheck = await checkAccountActionAsync(user, ACTIONS.shareCreate, { accessLevel: 'comment' });

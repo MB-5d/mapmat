@@ -20,6 +20,8 @@ jest.mock('../../api', () => ({
   uploadMyAvatar: jest.fn(),
   removeMyAvatar: jest.fn(),
   deleteAccount: jest.fn(),
+  getAccountEditors: jest.fn(() => Promise.resolve({ editors: [] })),
+  removeAccountEditor: jest.fn(() => Promise.resolve({ entitlements: null })),
 }));
 
 jest.mock('../../utils/avatarCrop', () => ({
@@ -48,6 +50,8 @@ describe('ProfileDrawer', () => {
   };
 
   beforeEach(() => {
+    api.getAccountEditors.mockImplementation(() => new Promise(() => {}));
+    api.removeAccountEditor.mockResolvedValue({ entitlements: null });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -329,6 +333,74 @@ describe('ProfileDrawer', () => {
     expect(cellText(rowFor('Downloads'), 1)).toBe('1');
     expect(rowFor('Screenshots').querySelector('[aria-label="Unlimited"]')).not.toBeNull();
     expect(cellText(rowFor('Screenshots'), 1)).toBe('1,035');
+  });
+
+  test('shows and removes account editors for owners', async () => {
+    api.getAccountEditors.mockResolvedValueOnce({
+      editors: [
+        { id: 'membership-owner', role: 'owner', name: 'Maya', email: 'maya@example.com' },
+        { id: 'membership-editor', role: 'editor', name: 'Eli', email: 'eli@example.com' },
+      ],
+    });
+    api.removeAccountEditor.mockResolvedValueOnce({
+      entitlements: {
+        account: { state: 'active', ownerUserId: 'u1', membershipRole: 'owner' },
+        plan: { name: 'Studio' },
+        meters: {},
+        limits: {},
+      },
+    });
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    const onUpdate = jest.fn();
+    const showToast = jest.fn();
+
+    await act(async () => {
+      root.render(
+        <ProfileDrawer
+          isOpen
+          user={{
+            ...baseUser,
+            entitlements: {
+              account: { state: 'active', ownerUserId: 'u1', membershipRole: 'owner' },
+              plan: { name: 'Studio' },
+              meters: {},
+              limits: {},
+            },
+          }}
+          onClose={jest.fn()}
+          onUpdate={onUpdate}
+          onLogout={jest.fn()}
+          showToast={showToast}
+        />
+      );
+    });
+
+    expect(api.getAccountEditors).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Editors');
+    expect(container.textContent).toContain('Eli');
+    expect(container.textContent).toContain('eli@example.com');
+    expect(container.querySelector('button[aria-label="Remove Maya"]')).toBeNull();
+
+    const removeButton = container.querySelector('button[aria-label="Remove Eli"]');
+    expect(removeButton).not.toBeNull();
+    expect(removeButton.className).toContain('ui-btn--type-ghost');
+    expect(removeButton.className).toContain('ui-btn--style-danger');
+
+    await act(async () => {
+      removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith('Remove Eli from this account?');
+    expect(api.removeAccountEditor).toHaveBeenCalledWith('membership-editor');
+    expect(container.textContent).not.toContain('Eli');
+    expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      entitlements: expect.objectContaining({
+        plan: expect.objectContaining({ name: 'Studio' }),
+      }),
+    }));
+    expect(showToast).toHaveBeenCalledWith('Editor removed', 'success');
+
+    confirmSpy.mockRestore();
   });
 
   test('hides plan details from commenters', () => {

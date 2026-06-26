@@ -979,14 +979,23 @@ export async function updateMapCollaborationSettings(mapId, payload = {}) {
   });
 }
 
-export async function createMapInvite(mapId, { email, role, expiresInDays } = {}) {
+export async function createMapInvite(mapId, { email, role } = {}) {
   return fetchApi(`/api/maps/${mapId}/invites`, {
     method: 'POST',
     body: JSON.stringify({
       email,
       role,
-      expires_in_days: expiresInDays,
     }),
+  });
+}
+
+export async function getAccountEditors() {
+  return fetchApi('/api/account/editors');
+}
+
+export async function removeAccountEditor(membershipId) {
+  return fetchApi(`/api/account/editors/${membershipId}`, {
+    method: 'DELETE',
   });
 }
 

@@ -54,15 +54,16 @@ if (!publicRoles.includes(policy.ROLES.ANONYMOUS)) {
 }
 
 const activityRoles = policy.ACTION_ROLE_MATRIX[policy.ACTIONS.MAP_ACTIVITY_LIST] || [];
-for (const requiredRole of [
-  policy.ROLES.OWNER,
-  policy.ROLES.EDITOR,
-  policy.ROLES.COMMENTER,
-  policy.ROLES.VIEWER,
-]) {
+for (const requiredRole of [policy.ROLES.OWNER, policy.ROLES.EDITOR]) {
   if (!activityRoles.includes(requiredRole)) {
     hasError = true;
     console.error(`[permission-policy] mapActivity.list must include ${requiredRole}.`);
+  }
+}
+for (const blockedRole of [policy.ROLES.COMMENTER, policy.ROLES.VIEWER]) {
+  if (activityRoles.includes(blockedRole)) {
+    hasError = true;
+    console.error(`[permission-policy] mapActivity.list must not include ${blockedRole}.`);
   }
 }
 

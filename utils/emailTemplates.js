@@ -202,7 +202,6 @@ function renderCollaborationInviteEmail(payload = {}) {
   const inviterLabel = formatInviterLabel(payload);
   const mapName = trimText(payload.mapName, 120) || 'Untitled map';
   const roleLabel = formatRoleLabel(payload.role);
-  const expiresLabel = formatDateLabel(payload.expiresAt);
   const appBaseUrl = normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl();
   const mapUrlLabel = trimText(payload.mapUrl, 160);
   const inviteeEmail = trimText(payload.inviteeEmail, 160);
@@ -215,9 +214,6 @@ function renderCollaborationInviteEmail(payload = {}) {
 
   if (mapUrlLabel) {
     textLines.push(`Map URL: ${mapUrlLabel}`);
-  }
-  if (expiresLabel) {
-    textLines.push(`Invite expires: ${expiresLabel}`);
   }
   if (inviteeEmail) {
     textLines.push(`This invite is tied to: ${inviteeEmail}`);
@@ -234,7 +230,6 @@ function renderCollaborationInviteEmail(payload = {}) {
     intro: `${inviterLabel} invited you to collaborate on "${mapName}" as ${roleLabel} in Vellic.`,
     detailPairs: [
       mapUrlLabel ? { label: 'Map URL', value: mapUrlLabel } : null,
-      expiresLabel ? { label: 'Invite expires', value: expiresLabel } : null,
       inviteeEmail ? { label: 'Invite email', value: inviteeEmail } : null,
     ],
     instructions: 'Use the button below to sign in and accept or review this invite.',

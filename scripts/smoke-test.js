@@ -111,28 +111,36 @@ async function testSaveLoadShare() {
   const mapId = save.data?.map?.id;
   if (!mapId) throw new Error('save map: missing map.id');
 
-  const getMap = await fetchWithCookie(`${API_BASE}/api/maps/${mapId}`, {}, cookieJar);
-  assertOk(getMap, 'get map');
+  try {
+    const getMap = await fetchWithCookie(`${API_BASE}/api/maps/${mapId}`, {}, cookieJar);
+    assertOk(getMap, 'get map');
 
-  const map = getMap.data?.map;
-  if (!map?.root) throw new Error('get map: missing root');
-  if (!Array.isArray(map.orphans)) throw new Error('get map: missing orphans');
-  if (!Array.isArray(map.connections)) throw new Error('get map: missing connections');
+    const map = getMap.data?.map;
+    if (!map?.root) throw new Error('get map: missing root');
+    if (!Array.isArray(map.orphans)) throw new Error('get map: missing orphans');
+    if (!Array.isArray(map.connections)) throw new Error('get map: missing connections');
 
-  const share = await fetchWithCookie(`${API_BASE}/api/shares`, {
-    method: 'POST',
-    body: JSON.stringify({ root: map.root, orphans: map.orphans, connections: map.connections, colors: map.colors }),
-  }, cookieJar);
-  assertOk(share, 'create share');
-  const shareId = share.data?.share?.id;
-  if (!shareId) throw new Error('share: missing id');
+    const share = await fetchWithCookie(`${API_BASE}/api/shares`, {
+      method: 'POST',
+      body: JSON.stringify({ root: map.root, orphans: map.orphans, connections: map.connections, colors: map.colors }),
+    }, cookieJar);
+    assertOk(share, 'create share');
+    const shareId = share.data?.share?.id;
+    if (!shareId) throw new Error('share: missing id');
 
-  const getShare = await fetch(`${API_BASE}/api/shares/${shareId}`);
-  const shareData = await getShare.json();
-  if (!getShare.ok) throw new Error(`get share failed: ${shareData?.error || getShare.status}`);
-  if (!shareData?.share?.root) throw new Error('get share: missing root');
-  if (!Array.isArray(shareData?.share?.orphans)) throw new Error('get share: missing orphans');
-  if (!Array.isArray(shareData?.share?.connections)) throw new Error('get share: missing connections');
+    const getShare = await fetch(`${API_BASE}/api/shares/${shareId}`);
+    const shareData = await getShare.json();
+    if (!getShare.ok) throw new Error(`get share failed: ${shareData?.error || getShare.status}`);
+    if (!shareData?.share?.root) throw new Error('get share: missing root');
+    if (!Array.isArray(shareData?.share?.orphans)) throw new Error('get share: missing orphans');
+    if (!Array.isArray(shareData?.share?.connections)) throw new Error('get share: missing connections');
+  } finally {
+    try {
+      await fetchWithCookie(`${API_BASE}/api/maps/${mapId}`, { method: 'DELETE' }, cookieJar);
+    } catch (error) {
+      console.warn(`smoke cleanup failed for map ${mapId}: ${error.message}`);
+    }
+  }
 
   return true;
 }

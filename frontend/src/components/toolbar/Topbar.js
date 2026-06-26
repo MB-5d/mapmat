@@ -113,6 +113,7 @@ const Topbar = ({
       aria-hidden="true"
     />
   );
+  const hasPendingAccountNotifications = pendingInviteCount > 0 || pendingAccessRequestCount > 0;
 
   const isFloatingTopbar = hasMap || appHome;
   const topbarClassName = [
@@ -192,6 +193,9 @@ const Topbar = ({
               startIcon={accountTriggerIcon}
               label={currentUser?.name || 'Account'}
             />
+            {hasPendingAccountNotifications ? (
+              <span className="topbar-account-notification-dot" aria-hidden="true" />
+            ) : null}
             {showAccountMenu && (
               <MenuPanel className="account-menu" role="menu">
                 <div className="ui-menu-section" role="group" aria-label="Collaboration">

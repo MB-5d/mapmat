@@ -324,11 +324,16 @@ const ShareModal = ({
   const renderPendingInviteRow = (invite) => (
     <div className="share-collab-item" key={invite.id}>
       <div className="share-collab-main">
-        <div className="share-collab-name">{invite.inviteeEmail}</div>
-        <div className="share-collab-meta">{formatRole(invite.role)}</div>
+        <div className="share-collab-name share-collab-name-inline">
+          <span>{invite.inviteeEmail}</span>
+          <span className="share-collab-role-inline">
+            {renderRoleIcon(invite.role, 14)}
+            <span>{formatRole(invite.role)}</span>
+          </span>
+        </div>
       </div>
       <button
-        className="share-collab-revoke"
+        className="share-collab-revoke share-collab-revoke--ghost"
         onClick={() => onRevokeCollaborationInvite?.(invite.id)}
         aria-label="Revoke invite"
         disabled={collaborationLoading || !canSendCollaborationInvites}
@@ -564,6 +569,7 @@ const ShareModal = ({
                             </div>
                             <Button
                               className="share-collab-send"
+                              size="md"
                               startIcon={<Send size={14} />}
                               onClick={onSendCollaborationInvite}
                               disabled={collaborationInviteSendDisabled}

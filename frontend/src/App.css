@@ -9261,24 +9261,8 @@ body {
   background: var(--color-bg-secondary);
 }
 
-.project-delete-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: rgba(239, 68, 68, 0.06);
-  color: #dc2626;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.18s ease, border-color 0.18s ease;
-}
-
-.project-delete-btn:hover {
-  background: rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.28);
+.project-delete-btn.ui-btn {
+  white-space: nowrap;
 }
 
 .projects-modal-actions {
@@ -11215,6 +11199,86 @@ body {
   color: currentColor;
 }
 
+.account-editors-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-8);
+  padding-top: var(--unit-12);
+  border-top: 1px solid var(--ui-color-border);
+}
+
+.account-editors-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--unit-8);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ui-color-text);
+}
+
+.account-editors-header small {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ui-color-muted);
+}
+
+.account-editors-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--unit-8);
+}
+
+.account-editor-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--unit-8);
+  padding: var(--unit-8);
+  border: 1px solid var(--ui-color-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface-muted);
+}
+
+.account-editor-avatar {
+  flex: 0 0 auto;
+}
+
+.account-editor-main {
+  min-width: 0;
+}
+
+.account-editor-name,
+.account-editor-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-editor-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ui-color-text);
+}
+
+.account-editor-email,
+.account-editor-role,
+.account-editors-empty,
+.account-editors-error {
+  font-size: 11px;
+  color: var(--ui-color-muted);
+}
+
+.account-editor-role {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.account-editors-error {
+  color: var(--ui-status-danger-text);
+}
+
 .form-section.danger-zone {
   margin-top: 0;
   padding-top: var(--modal-gap);
@@ -11367,6 +11431,18 @@ body {
 
 .account-menu-wrapper {
   position: relative;
+}
+
+.topbar-account-notification-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--ui-status-danger-icon);
+  box-shadow: 0 0 0 2px var(--modal-bg);
+  pointer-events: none;
 }
 
 .account-menu {
@@ -12599,13 +12675,14 @@ body {
 .share-collab-invite-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--unit-12);
+  gap: var(--unit-8);
   align-items: center;
   margin-bottom: 0;
 }
 
-.share-collab-send {
-  min-width: 104px;
+.share-collab-send.ui-btn {
+  min-width: 88px;
+  padding-inline: 14px;
   white-space: nowrap;
 }
 
@@ -12677,7 +12754,7 @@ body {
   margin-bottom: var(--unit-24);
   border: 1px solid var(--ui-color-border);
   border-radius: var(--ui-radius-md);
-  background: var(--ui-color-surface);
+  background: var(--modal-bg);
 }
 
 .share-collab-settings-grid {
@@ -12833,6 +12910,34 @@ body {
   text-overflow: ellipsis;
 }
 
+.share-collab-name-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--unit-8);
+  max-width: 100%;
+}
+
+.share-collab-name-inline > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-collab-role-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  color: var(--ui-color-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.share-collab-role-inline svg {
+  color: currentColor;
+}
+
 .share-collab-inline-badge {
   margin-left: 6px;
   text-transform: uppercase;
@@ -12870,6 +12975,11 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+
+.share-collab-revoke--ghost {
+  background: transparent;
+  border-color: transparent;
 }
 
 .share-collab-deny {
@@ -12942,8 +13052,8 @@ body {
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--ui-color-border);
-  border-radius: 10px;
-  background: var(--ui-color-surface-muted);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-color-surface);
 }
 
 .invite-inbox-item-main {
@@ -12963,7 +13073,21 @@ body {
 }
 
 .invite-inbox-item-title svg {
-  color: var(--ui-color-primary);
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.invite-inbox-item-role {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--unit-6);
+  color: var(--ui-color-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.invite-inbox-item-role svg {
+  color: currentColor;
   flex-shrink: 0;
 }
 
@@ -14101,17 +14225,6 @@ body {
   border-top-color: #301E3F;
 }
 
-[data-theme="dark"] .project-delete-btn {
-  background: rgba(248, 113, 113, 0.1);
-  border-color: rgba(248, 113, 113, 0.2);
-  color: #fca5a5;
-}
-
-[data-theme="dark"] .project-delete-btn:hover {
-  background: rgba(248, 113, 113, 0.16);
-  border-color: rgba(248, 113, 113, 0.3);
-}
-
 /* History Modal - Dark Mode */
 [data-theme="dark"] .history-modal {
   background: var(--ui-color-surface);
@@ -14313,7 +14426,7 @@ body {
 }
 
 [data-theme="dark"] .share-collab-settings {
-  background: var(--ui-color-surface);
+  background: var(--modal-bg);
   border-color: var(--ui-color-border);
 }
 
@@ -14349,7 +14462,7 @@ body {
 }
 
 [data-theme="dark"] .invite-inbox-item {
-  background: var(--ui-color-surface-muted);
+  background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
 }
 
@@ -14358,7 +14471,7 @@ body {
 }
 
 [data-theme="dark"] .invite-inbox-item-title svg {
-  color: #a78bfa;
+  color: currentColor;
 }
 
 [data-theme="dark"] .share-collab-role {
@@ -14369,6 +14482,11 @@ body {
   background: var(--ui-color-surface);
   border-color: var(--ui-color-border);
   color: #fda4af;
+}
+
+[data-theme="dark"] .share-collab-revoke--ghost {
+  background: transparent;
+  border-color: transparent;
 }
 
 [data-theme="dark"] .share-collab-revoke:hover {

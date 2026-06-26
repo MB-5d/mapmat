@@ -16,6 +16,7 @@ const historyStore = require('../stores/historyStore');
 const shareStore = require('../stores/shareStore');
 const usageStore = require('../stores/usageStore');
 const emailDeliveryStore = require('../stores/emailDeliveryStore');
+const billingStore = require('../stores/billingStore');
 const { authMiddleware, requireAuth } = require('./auth');
 const permissionPolicy = require('../policies/permissionPolicy');
 const {
@@ -80,6 +81,9 @@ const CLIENT_USAGE_EVENT_TYPES = new Set([
   'export_png',
   'export_svg',
   'export_site_index',
+  'export_report_pdf',
+]);
+const UNMETERED_CLIENT_USAGE_EVENT_TYPES = new Set([
   'export_report_pdf',
 ]);
 
@@ -1877,28 +1881,33 @@ router.post('/usage-events', requireAuth, async (req, res) => {
     const meta = req.body?.meta && typeof req.body.meta === 'object' && !Array.isArray(req.body.meta)
       ? req.body.meta
       : null;
-    const downloadEntitlement = await requireAccountActionAsync(
-      req,
-      res,
-      ENTITLEMENT_ACTIONS.organizedExportCreate,
-      { eventType }
-    );
-    if (!downloadEntitlement) return;
+    let downloadEntitlement = null;
+    if (!UNMETERED_CLIENT_USAGE_EVENT_TYPES.has(eventType)) {
+      downloadEntitlement = await requireAccountActionAsync(
+        req,
+        res,
+        ENTITLEMENT_ACTIONS.organizedExportCreate,
+        { eventType }
+      );
+      if (!downloadEntitlement) return;
+    }
 
     const idempotencyKey = req.get('Idempotency-Key')
       || req.body?.idempotencyKey
       || `client-download:${eventType}:${req.user?.id || 'user'}:${uuidv4()}`;
-    await recordMeterDebitAsync({
-      user: req.user,
-      accountSummary: downloadEntitlement.summary,
-      meter: ENTITLEMENT_METERS.downloads,
-      quantity,
-      idempotencyKey,
-      metadata: {
-        ...(meta || {}),
-        eventType,
-      },
-    });
+    if (downloadEntitlement) {
+      await recordMeterDebitAsync({
+        user: req.user,
+        accountSummary: downloadEntitlement.summary,
+        meter: ENTITLEMENT_METERS.downloads,
+        quantity,
+        idempotencyKey,
+        metadata: {
+          ...(meta || {}),
+          eventType,
+        },
+      });
+    }
 
     recordUsageEvent(req, eventType, quantity, meta);
     const entitlements = await resolveAccountEntitlementsAsync(req.user);
@@ -1915,6 +1924,44 @@ router.post('/usage-events', requireAuth, async (req, res) => {
       });
     }
     return res.status(500).json({ error: 'Failed to record usage event.' });
+  }
+});
+
+// GET /api/account/editors - list account editor seats for the current owner
+router.get('/account/editors', requireAuth, async (req, res) => {
+  try {
+    const entitlements = await resolveAccountEntitlementsAsync(req.user);
+    if (entitlements?.account?.membershipRole !== 'owner') {
+      return res.status(403).json({ error: 'Only account owners can manage editors.' });
+    }
+    const editors = await billingStore.listAccountEditorMembershipsAsync(entitlements.account.id);
+    return res.json({ editors });
+  } catch (error) {
+    console.error('List account editors error:', error);
+    return res.status(500).json({ error: 'Failed to list account editors.' });
+  }
+});
+
+// DELETE /api/account/editors/:membershipId - remove an account editor seat
+router.delete('/account/editors/:membershipId', requireAuth, async (req, res) => {
+  try {
+    const entitlements = await resolveAccountEntitlementsAsync(req.user);
+    if (entitlements?.account?.membershipRole !== 'owner') {
+      return res.status(403).json({ error: 'Only account owners can manage editors.' });
+    }
+    const removed = await billingStore.removeAccountEditorMembershipAsync({
+      accountId: entitlements.account.id,
+      membershipId: req.params.membershipId,
+      ownerUserId: req.user.id,
+    });
+    if (!removed) {
+      return res.status(404).json({ error: 'Editor not found.' });
+    }
+    const updatedEntitlements = await resolveAccountEntitlementsAsync(req.user);
+    return res.json({ ok: true, entitlements: updatedEntitlements });
+  } catch (error) {
+    console.error('Remove account editor error:', error);
+    return res.status(500).json({ error: 'Failed to remove account editor.' });
   }
 });
 
@@ -3702,28 +3749,55 @@ router.post('/shares', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Map data is required' });
     }
 
-    const normalizedAccessLevel = normalizeShareAccessLevel(access_level || accessLevel);
-    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.shareCreate, {
-      accessLevel: normalizedAccessLevel,
-    });
-    if (!entitlement) return;
-
     let map = null;
+    let role = permissionPolicy.ROLES.OWNER;
+    let settings = null;
+    const normalizedAccessLevel = normalizeShareAccessLevel(access_level || accessLevel);
     // If map_id provided, verify ownership
     if (map_id) {
       const collaborationEnabled = await ensureCollaborationSchemaIfEnabledAsync();
       map = collaborationEnabled
         ? await mapStore.getMapAccessibleToUserAsync(map_id, req.user.id)
         : await mapStore.getMapForUserAsync(map_id, req.user.id);
-      if (!ensureResourceAction({
-        req,
-        res,
-        resource: map,
-        action: permissionPolicy.ACTIONS.SHARE_CREATE,
-        failureStatus: 400,
-        failureError: 'Map not found',
-      })) return;
+      if (!map) return res.status(400).json({ error: 'Map not found' });
+      role = permissionPolicy.resolveResourceRole({
+        actorUserId: req.user?.id || null,
+        resourceOwnerUserId: map.user_id || null,
+        membershipRole: map.membership_role || map.membershipRole || null,
+      });
+      settings = collaborationEnabled
+        ? await collaborationStore.getCollaborationSettingsByMapAsync(map_id)
+        : null;
+      const isOwnerOrEditor = [
+        permissionPolicy.ROLES.OWNER,
+        permissionPolicy.ROLES.EDITOR,
+      ].includes(role);
+      const isViewerOrCommenter = [
+        permissionPolicy.ROLES.VIEWER,
+        permissionPolicy.ROLES.COMMENTER,
+      ].includes(role);
+      const accessPolicy = String(settings?.access_policy || 'private').trim().toLowerCase();
+      const requestedRank = normalizedAccessLevel === 'edit' ? 3 : normalizedAccessLevel === 'comment' ? 2 : 1;
+      const actorRank = role === permissionPolicy.ROLES.EDITOR || role === permissionPolicy.ROLES.OWNER
+        ? 3
+        : role === permissionPolicy.ROLES.COMMENTER
+          ? 2
+          : role === permissionPolicy.ROLES.VIEWER
+            ? 1
+            : 0;
+      const canSelfServeReaderShare = isViewerOrCommenter
+        && accessPolicy === 'viewer_invites_open'
+        && normalizedAccessLevel !== 'edit'
+        && requestedRank <= actorRank;
+      if (!isOwnerOrEditor && !canSelfServeReaderShare) {
+        return res.status(404).json({ error: 'Map not found' });
+      }
     }
+
+    const entitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.shareCreate, {
+      accessLevel: normalizedAccessLevel,
+    });
+    if (!entitlement) return;
 
     const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
     const expiresAt = expires_in_days

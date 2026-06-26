@@ -27,7 +27,6 @@ async function main() {
         mapName: 'Email QA Map',
         mapUrl: 'https://example.com',
         role: 'viewer',
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       },
     },
     {

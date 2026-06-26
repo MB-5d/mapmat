@@ -1,7 +1,8 @@
 import React from 'react';
-import { Check, Mail, RefreshCw } from 'lucide-react';
+import { Eye, MessageSquare, Network, RefreshCw } from 'lucide-react';
 
 import Button from '../ui/Button';
+import { EditIcon } from '../ui/icons';
 import Modal from '../ui/Modal';
 
 const formatRoleLabel = (role) => {
@@ -10,11 +11,11 @@ const formatRoleLabel = (role) => {
   return value.charAt(0).toUpperCase() + value.slice(1);
 };
 
-const formatTimestamp = (value) => {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toLocaleString();
+const renderRoleIcon = (role) => {
+  const normalizedRole = String(role || '').trim().toLowerCase();
+  if (normalizedRole === 'commenter') return <MessageSquare size={14} aria-hidden="true" />;
+  if (normalizedRole === 'editor') return <EditIcon size={14} aria-hidden="true" />;
+  return <Eye size={14} aria-hidden="true" />;
 };
 
 const InviteInboxModal = ({
@@ -44,13 +45,13 @@ const InviteInboxModal = ({
             </div>
             <Button
               type="button"
-              className="share-email-btn"
+              variant="secondary"
               size="sm"
               onClick={onRefresh}
               loading={loading}
+              startIcon={!loading ? <RefreshCw size={14} /> : null}
             >
-              {!loading ? <RefreshCw size={14} /> : null}
-              <span>Refresh</span>
+              Refresh
             </Button>
           </div>
 
@@ -66,22 +67,22 @@ const InviteInboxModal = ({
                 <div className="invite-inbox-item" key={invite.id}>
                   <div className="invite-inbox-item-main">
                     <div className="invite-inbox-item-title">
-                      <Mail size={16} />
+                      <Network size={16} />
                       <span>{invite.mapName || 'Shared map'}</span>
                     </div>
-                    <div className="invite-inbox-item-meta">
-                      {formatRoleLabel(invite.role)} access
-                      {invite.inviterName || invite.inviterEmail ? ` • invited by ${invite.inviterName || invite.inviterEmail}` : ''}
+                    <div className="invite-inbox-item-role">
+                      {renderRoleIcon(invite.role)}
+                      <span>{formatRoleLabel(invite.role)} access</span>
                     </div>
-                    <div className="invite-inbox-item-meta">
-                      {formatTimestamp(invite.createdAt) ? `Sent ${formatTimestamp(invite.createdAt)}` : 'Sent recently'}
-                      {formatTimestamp(invite.expiresAt) ? ` • Expires ${formatTimestamp(invite.expiresAt)}` : ''}
-                    </div>
+                    {invite.inviterName || invite.inviterEmail ? (
+                      <div className="invite-inbox-item-meta">{invite.inviterName || invite.inviterEmail}</div>
+                    ) : null}
                   </div>
                   <div className="invite-inbox-item-actions">
                     <Button
                       type="button"
                       variant="secondary"
+                      size="sm"
                       onClick={() => onDecline?.(invite)}
                       disabled={loading}
                     >
@@ -90,11 +91,11 @@ const InviteInboxModal = ({
                     <Button
                       type="button"
                       variant="primary"
+                      size="sm"
                       onClick={() => onAccept?.(invite)}
                       disabled={loading}
                     >
-                      <Check size={16} />
-                      <span>Accept</span>
+                      Accept
                     </Button>
                   </div>
                 </div>

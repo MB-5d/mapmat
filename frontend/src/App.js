@@ -1896,14 +1896,12 @@ function organizeProjectsWithMaps(projectRows = [], mapRows = []) {
     });
   }
 
-  if (uncategorizedMaps.length > 0) {
-    orderedProjects.push({
-      id: UNCATEGORIZED_PROJECT_ID,
-      name: 'Uncategorized',
-      maps: uncategorizedMaps,
-      isVirtual: true,
-    });
-  }
+  orderedProjects.push({
+    id: UNCATEGORIZED_PROJECT_ID,
+    name: 'Uncategorized',
+    maps: uncategorizedMaps,
+    isVirtual: true,
+  });
 
   return orderedProjects;
 }
@@ -5245,7 +5243,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const isComment = accessLevel === ACCESS_LEVELS.COMMENT;
     return {
       mapView: true,
-      activityView: true,
+      activityView: isEdit,
       mapComment: isEdit || isComment,
       mapEdit: isEdit,
       versionSave: isEdit,
@@ -5277,7 +5275,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canCommentValue = canEditValue || !!effectiveFeatureGates.mapComment;
   const canViewCommentsValue = (!!currentMap?.id && !!effectiveFeatureGates.mapView) || canCommentValue;
   const canViewVersionHistoryValue = currentMap?.id
-    ? !!effectiveFeatureGates.mapView
+    ? !!effectiveFeatureGates.activityView
     : (!!root && canEditValue);
   const canSaveVersionValue = !!effectiveFeatureGates.versionSave && !isCoeditingReadOnlyMode;
   const canViewActivityValue = !!currentMap?.id && !!effectiveFeatureGates.activityView;
@@ -5339,27 +5337,53 @@ export default function App({ currentRoute, navigateToRoute }) {
   );
   const canManageCollaborationSettingsResolvedValue = canManageCollaborationSettingsValue || currentCollaborationRole === 'owner';
   const canViewAccessRequestsResolvedValue = canViewAccessRequestsValue || currentCollaborationRole === 'owner';
-  const canOpenShareModalValue = canManageSharesValue;
+  const isReaderOnlyMapRoleValue = !!currentMap?.id && ['viewer', 'commenter'].includes(currentCollaborationRole);
+  const canSelfServeReaderShareLinksValue = isReaderOnlyMapRoleValue
+    && collaborationCapabilities?.accessPolicy === 'viewer_invites_open';
+  const canOpenShareModalValue = canManageSharesValue || canSelfServeReaderShareLinksValue;
   const clientShareLinksPlanAllowedValue = currentUser?.entitlements?.features?.clientShareLinks !== false;
-  const canUseShareLinksValue = canManageSharesValue;
-  const shareLinksDisabledReasonValue = 'Your account does not have permission to create share links for this map.';
+  const canUseShareLinksValue = canOpenShareModalValue;
+  const shareLinksDisabledReasonValue = canSelfServeReaderShareLinksValue
+    ? ''
+    : 'Your account does not have permission to create share links for this map.';
   const canOpenCollaborationModalValue = COLLABORATION_UI_ENABLED && isLoggedIn && (
     canViewCollaborationPanelValue
     || canSelfServeCollaborationValue
     || canSendCollaborationInvitesResolvedValue
   );
+
+  useEffect(() => {
+    if (isReaderOnlyMapRoleValue && showImageMenu) {
+      setShowImageMenu(false);
+    }
+  }, [isReaderOnlyMapRoleValue, showImageMenu]);
+
+  useEffect(() => {
+    if (showVersionHistoryDrawer && !canViewVersionHistoryValue) {
+      setShowVersionHistoryDrawer(false);
+    }
+  }, [canViewVersionHistoryValue, showVersionHistoryDrawer]);
+
   const maxGrantableSharePermissionValue = canEditValue
     ? ACCESS_LEVELS.EDIT
     : canCommentValue
       ? ACCESS_LEVELS.COMMENT
       : ACCESS_LEVELS.VIEW;
   const allowedSharePermissionsValue = useMemo(() => {
+    if (!canOpenShareModalValue) return [];
     const maxRank = SHARE_ACCESS_RANK[maxGrantableSharePermissionValue] || SHARE_ACCESS_RANK[ACCESS_LEVELS.VIEW];
     return Object.values(ACCESS_LEVELS).filter((permission) => (
       (SHARE_ACCESS_RANK[permission] || 0) <= maxRank
       && (clientShareLinksPlanAllowedValue || permission !== ACCESS_LEVELS.EDIT)
     ));
-  }, [clientShareLinksPlanAllowedValue, maxGrantableSharePermissionValue]);
+  }, [canOpenShareModalValue, clientShareLinksPlanAllowedValue, maxGrantableSharePermissionValue]);
+
+  useEffect(() => {
+    if (!allowedSharePermissionsValue.length) return;
+    if (allowedSharePermissionsValue.includes(sharePermission)) return;
+    setSharePermission(allowedSharePermissionsValue[0]);
+  }, [allowedSharePermissionsValue, sharePermission]);
+
   const sharePermissionDisabledReasonValue = clientShareLinksPlanAllowedValue
     ? 'Your account does not have permission to grant others that level on this map.'
     : 'Can edit share links require a paid plan.';
@@ -5381,7 +5405,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const canViewVersionHistory = useCallback(() => canViewVersionHistoryValue, [canViewVersionHistoryValue]);
   const canSaveVersion = useCallback(() => canSaveVersionValue, [canSaveVersionValue]);
   const canViewActivity = useCallback(() => canViewActivityValue, [canViewActivityValue]);
-  const canManageShares = useCallback(() => canManageSharesValue, [canManageSharesValue]);
   const canViewCollaborationPanel = useCallback(() => canViewCollaborationPanelValue, [canViewCollaborationPanelValue]);
   const canSendCollaborationInvites = useCallback(
     () => canSendCollaborationInvitesResolvedValue,
@@ -5588,6 +5611,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
       setUrlInput('');
       resetScanLayers();
+    } else if (hasMap) {
+      const cleared = await clearCanvas();
+      if (!cleared) return;
     }
 
     setDuplicateMapConfig(null);
@@ -8047,11 +8073,29 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [currentMap?.id]);
 
   const handleShowInviteInbox = useCallback(async () => {
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
+    setShowVersionHistoryDrawer(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowShareModal(false);
+    setShowCollaborationModal(false);
     setShowInviteInboxModal(true);
     await loadPendingMapInvites();
   }, [loadPendingMapInvites]);
 
   const handleShowAccessRequestsInbox = useCallback(async () => {
+    setShowProfileDrawer(false);
+    setShowSettingsDrawer(false);
+    setShowProjectsModal(false);
+    setShowHistoryModal(false);
+    setShowVersionHistoryDrawer(false);
+    setShowReportDrawer(false);
+    setShowImageReportDrawer(false);
+    setShowShareModal(false);
+    setShowCollaborationModal(false);
     setShowAccessRequestsInboxModal(true);
     await loadPendingAccessRequests();
   }, [loadPendingAccessRequests]);
@@ -8065,12 +8109,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     setShowInviteInboxModal(true);
     loadPendingMapInvites();
+    navigateToRoute(getActiveAppRoute(), { replace: true });
   }, [
     authLoading,
     currentRoute?.section,
     currentRoute?.surface,
+    getActiveAppRoute,
     isLoggedIn,
     loadPendingMapInvites,
+    navigateToRoute,
     openAuthModal,
   ]);
 
@@ -8083,12 +8130,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
     setShowAccessRequestsInboxModal(true);
     loadPendingAccessRequests();
+    navigateToRoute(getActiveAppRoute(), { replace: true });
   }, [
     authLoading,
     currentRoute?.section,
     currentRoute?.surface,
+    getActiveAppRoute,
     isLoggedIn,
     loadPendingAccessRequests,
+    navigateToRoute,
     openAuthModal,
   ]);
 
@@ -10481,7 +10531,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     try {
       const { project } = await api.createProject(name.trim());
       await loadAuthenticatedWorkspace();
-      setExpandedProjects((prev) => ({ ...prev, [project.id]: true }));
+      setExpandedProjects({ [project.id]: true });
       trackEvent('project_created', {
         project_id: String(project?.id || ''),
         project_name: project?.name || name.trim(),
@@ -13599,13 +13649,22 @@ export default function App({ currentRoute, navigateToRoute }) {
     sharePermission,
   ]);
 
+  const createExportShareLinkUrl = useCallback(async () => {
+    try {
+      return await createShareLinkUrl(ACCESS_LEVELS.VIEW);
+    } catch (error) {
+      console.warn('Export share link skipped:', error?.message || error);
+      return '';
+    }
+  }, [createShareLinkUrl]);
+
   const canCreateShareLinksForCurrentMap = useCallback(() => {
-    if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canManageShares()) {
-      showToast('You do not have permission to create share links for this map.', 'warning');
+    if (PERMISSION_GATING_UI_ENABLED && isLoggedIn && currentMap?.id && !canOpenShareModalValue) {
+      showToast(shareLinksDisabledReasonValue || 'You do not have permission to create share links for this map.', 'warning');
       return false;
     }
     return true;
-  }, [canManageShares, currentMap?.id, isLoggedIn, showToast]);
+  }, [canOpenShareModalValue, currentMap?.id, isLoggedIn, shareLinksDisabledReasonValue, showToast]);
 
   const handleShareLinkError = useCallback((error) => {
     if (
@@ -13762,14 +13821,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const exportPdf = async () => {
     if (!hasMap || !root) return;
     if (!guardAccountCanCreateWork('Downloading')) return;
-    if (!canCreateShareLinksForCurrentMap()) return;
 
     showToast('Generating PDF...', 'info', true);
 
     try {
       const [{ jsPDF }, shareUrl] = await Promise.all([
         import('jspdf'),
-        createShareLinkUrl(sharePermission),
+        createExportShareLinkUrl(),
       ]);
       const exportTitle = getCurrentExportTitle();
       const generatedAt = new Date();
@@ -13811,11 +13869,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         width: scene.width,
         height: scene.height,
         thumbnails: thumbnailDataUrls.size,
-      })) return;
+      })) {
+        dismissToast();
+        return;
+      }
       pdf.save(`${filenameBase}.pdf`);
       showToast('PDF downloaded successfully', 'success');
     } catch (e) {
-      if (handleShareLinkError(e)) return;
       console.error('PDF export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
       showToast(`PDF download failed: ${errorMsg}`, 'error');
@@ -13825,14 +13885,13 @@ export default function App({ currentRoute, navigateToRoute }) {
   const exportSvg = async () => {
     if (!hasMap || !root) return;
     if (!guardAccountCanCreateWork('Downloading')) return;
-    if (!canCreateShareLinksForCurrentMap()) return;
 
     showToast('Generating SVG...', 'info', true);
 
     try {
       const exportTitle = getCurrentExportTitle();
       const generatedAt = new Date();
-      const shareUrl = await createShareLinkUrl(sharePermission);
+      const shareUrl = await createExportShareLinkUrl();
       const scene = buildExportScene({
         root,
         orphans,
@@ -13863,11 +13922,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         bytes: blob.size,
         thumbnails: thumbnailDataUrls.size,
         components: true,
-      })) return;
+      })) {
+        dismissToast();
+        return;
+      }
       downloadBlob(`${filenameBase}.svg`, blob);
       showToast('SVG downloaded successfully', 'success');
     } catch (e) {
-      if (handleShareLinkError(e)) return;
       console.error('SVG export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
       showToast(`SVG download failed: ${errorMsg}`, 'error');
@@ -14236,11 +14297,15 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
       });
 
-      if (!await reserveDownloadUsage('export_report_pdf', {
-        format: 'pdf',
-        rows: reportRows.length,
-        reportPages: reportStats.total,
-      })) return;
+      try {
+        await recordDownloadUsage('export_report_pdf', {
+          format: 'pdf',
+          rows: reportRows.length,
+          reportPages: reportStats.total,
+        });
+      } catch (usageError) {
+        console.warn('Report download usage record skipped:', usageError?.message || usageError);
+      }
       pdf.save(`${getSitemapExportFilenameBase(exportTitle, generatedAt)}.pdf`);
       showToast('Report downloaded', 'success');
     } catch (error) {
@@ -14367,7 +14432,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   const exportPng = async () => {
     if (!hasMap || !root) return;
     if (!guardAccountCanCreateWork('Downloading')) return;
-    if (!canCreateShareLinksForCurrentMap()) return;
 
     try {
       const exportTitle = getCurrentExportTitle();
@@ -14398,7 +14462,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
 
       showToast('Generating PNG...', 'info', true);
-      const shareUrl = await createShareLinkUrl(sharePermission);
+      const shareUrl = await createExportShareLinkUrl();
       const scene = buildExportScene({
         root,
         orphans,
@@ -14425,11 +14489,13 @@ export default function App({ currentRoute, navigateToRoute }) {
         bytes: pngExport.blob.size,
         pixelRatio: pngExport.pixelRatio,
         thumbnails: thumbnailDataUrls.size,
-      })) return;
+      })) {
+        dismissToast();
+        return;
+      }
       downloadBlob(`${filenameBase}.png`, pngExport.blob);
       showToast('PNG downloaded successfully', 'success');
     } catch (e) {
-      if (handleShareLinkError(e)) return;
       console.error('PNG export error:', e);
       const errorMsg = e?.message || e?.toString() || 'Unknown error';
       showToast(`PNG download failed: ${errorMsg}`, 'error');
@@ -19054,6 +19120,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   />
                 ),
                 onToggleImageMenu: () => {
+                  if (isReaderOnlyMapRoleValue) return;
                   if (showImageMenu) {
                     setShowImageMenu(false);
                     return;
@@ -19122,6 +19189,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 },
                 showImageMenu,
                 imageMenuRef,
+                canUseImageTools: !isReaderOnlyMapRoleValue,
                 hasSelection: selectedNodeIds.size > 0,
                 canUndo,
                 canRedo,
@@ -19168,7 +19236,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowCollaborationModal(true);
                 },
                 canOpenShare: canOpenShareModalValue,
-                canOpenCollaborate: canOpenCollaborationModalValue,
+                canOpenCollaborate: canOpenCollaborationModalValue && !isReaderOnlyMapRoleValue,
                 hasMap,
                 hasSavedMap: !!currentMap?.id,
                 showVersionHistory: showVersionHistoryDrawer,
@@ -19423,7 +19491,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onExportJson={() => { exportJson(); setShowExportModal(false); }}
         onExportXml={() => { exportXml(); setShowExportModal(false); }}
         onExportSiteIndex={(format) => { exportSiteIndex(format); setShowExportModal(false); }}
-        limitedFormatsOnly={currentUser?.entitlements?.features?.standardExports === false}
+        limitedFormatsOnly={currentUser?.entitlements?.features?.standardExports === false || isReaderOnlyMapRoleValue}
       />
 
       <ShareModal

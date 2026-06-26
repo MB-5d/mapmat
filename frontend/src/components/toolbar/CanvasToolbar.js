@@ -148,6 +148,7 @@ const CanvasToolbar = ({
   onCollaborate,
   canOpenShare = false,
   canOpenCollaborate = false,
+  canUseImageTools = true,
   hasMap,
   hasSavedMap,
   showVersionHistory,
@@ -420,7 +421,7 @@ const CanvasToolbar = ({
     />
   ) : null;
 
-  const imageMenuButton = (
+  const imageMenuButton = canUseImageTools ? (
     <div key="images-menu" className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
       <ToolButton
         active={showImageMenu}
@@ -476,7 +477,7 @@ const CanvasToolbar = ({
         </MenuPanel>
       )}
     </div>
-  );
+  ) : null;
 
   const layersButton = (
     <div key="layers-menu" className="canvas-tool-menu-wrapper" ref={layersMenuRef}>

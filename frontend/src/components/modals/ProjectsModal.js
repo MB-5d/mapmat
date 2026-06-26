@@ -268,10 +268,11 @@ const ProjectsModal = ({
                               type="button"
                               className="project-delete-btn"
                               size="sm"
-                              variant="danger"
+                              variant="ghost"
+                              buttonStyle="danger"
+                              startIcon={<Trash2 size={14} />}
                               onClick={() => onDeleteProject(project.id)}
                             >
-                              <Trash2 size={14} />
                               Delete project
                             </Button>
                           </div>

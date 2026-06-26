@@ -633,6 +633,70 @@ async function countSeatRolesForAccountAsync(accountId) {
   }, {});
 }
 
+function normalizeAccountEditorMembership(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    userId: row.user_id || null,
+    email: row.user_email || row.email || null,
+    name: row.user_name || row.email || null,
+    avatarUrl: row.user_google_picture_url || row.user_avatar_path || null,
+    role: String(row.role || 'editor').trim().toLowerCase(),
+    seatStatus: String(row.seat_status || 'accepted').trim().toLowerCase(),
+    invitedAt: row.invited_at || null,
+    acceptedAt: row.accepted_at || null,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+async function listAccountEditorMembershipsAsync(accountId) {
+  await ensureBillingSchemaAsync();
+  if (!accountId) return [];
+  const rows = await adapter.queryAllAsync(`
+    SELECT
+      am.*,
+      u.email AS user_email,
+      u.name AS user_name,
+      u.avatar_path AS user_avatar_path,
+      u.google_picture_url AS user_google_picture_url
+    FROM account_memberships am
+    LEFT JOIN users u ON u.id = am.user_id
+    WHERE am.account_id = ?
+      AND am.role IN ('owner', 'editor')
+      AND am.seat_status IN ('accepted', 'invited', 'pending')
+    ORDER BY
+      CASE am.role WHEN 'owner' THEN 0 WHEN 'editor' THEN 1 ELSE 2 END,
+      CASE am.seat_status WHEN 'accepted' THEN 0 WHEN 'pending' THEN 1 WHEN 'invited' THEN 2 ELSE 3 END,
+      LOWER(COALESCE(u.name, u.email, am.email, ''))
+  `, [accountId]);
+  return rows.map(normalizeAccountEditorMembership).filter(Boolean);
+}
+
+async function removeAccountEditorMembershipAsync({ accountId, membershipId, ownerUserId }) {
+  await ensureBillingSchemaAsync();
+  if (!accountId || !membershipId) return null;
+  const existing = await adapter.queryOneAsync(`
+    SELECT *
+    FROM account_memberships
+    WHERE account_id = ?
+      AND id = ?
+      AND role = 'editor'
+      AND seat_status IN ('accepted', 'invited', 'pending')
+    LIMIT 1
+  `, [accountId, membershipId]);
+  if (!existing) return null;
+  if (ownerUserId && existing.user_id && existing.user_id === ownerUserId) return null;
+  await adapter.executeAsync(`
+    UPDATE account_memberships
+    SET seat_status = 'removed',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `, [membershipId]);
+  return { ...existing, seat_status: 'removed' };
+}
+
 async function upsertInvitedMembershipAsync({
   accountId,
   userId = null,
@@ -1210,6 +1274,8 @@ module.exports = {
   countBillableEditorsForAccountAsync,
   getAccountMembershipForUserAsync,
   countSeatRolesForAccountAsync,
+  listAccountEditorMembershipsAsync,
+  removeAccountEditorMembershipAsync,
   upsertInvitedMembershipAsync,
   markMembershipAcceptedAsync,
   sumLedgerUsageForPeriodAsync,

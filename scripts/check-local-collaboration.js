@@ -4,10 +4,15 @@
 
 const assert = require('assert');
 
+const billingStore = require('../stores/billingStore');
+
 const API_BASE = String(process.env.API_BASE || 'http://localhost:4002').replace(/\/$/, '');
 const WS_BASE = API_BASE.replace(/^http/i, 'ws');
 const REQUEST_TIMEOUT_MS = clampInt(process.env.COLLAB_CHECK_TIMEOUT_MS, 10000, { min: 1000, max: 60000 });
 const CLEANUP = parseEnvBool(process.env.COLLAB_CHECK_CLEANUP, true);
+const LOCAL_API_PATTERN = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::|\/|$)/i;
+const OWNER_PLAN_KEY = process.env.COLLAB_CHECK_OWNER_PLAN
+  || (LOCAL_API_PATTERN.test(API_BASE) ? 'studio' : '');
 
 function clampInt(value, fallback, { min, max }) {
   const parsed = Number.parseInt(value, 10);
@@ -96,6 +101,30 @@ async function requestJson(url, { method = 'GET', headers = {}, body } = {}) {
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+async function prepareOwnerPlanForEditorCoverage(session) {
+  if (!OWNER_PLAN_KEY || !session?.user?.id) return;
+  const account = await billingStore.getOrCreateBillingAccountForUserAsync(session.user);
+  const period = billingStore.getCurrentMonthPeriod();
+  await billingStore.updateBillingAccountForAdminAsync({
+    accountId: account.id,
+    planKey: OWNER_PLAN_KEY,
+    accountState: 'active',
+    trialState: 'none',
+    trialKind: null,
+    trialStartedAt: null,
+    trialEndsAt: null,
+    currentPeriodStartedAt: period.start,
+    currentPeriodEndsAt: period.end,
+    cancelAtPeriodEnd: false,
+    cancelledAt: null,
+    archiveStartedAt: null,
+    downloadAccessEndsAt: null,
+    assetRetentionEndsAt: null,
+    lightweightRetentionEndsAt: null,
+  });
+  logStep('Prepared owner account plan for editor coverage', { planKey: OWNER_PLAN_KEY });
 }
 
 class ApiSession {
@@ -315,6 +344,7 @@ async function main() {
   try {
     logStep('Creating test accounts');
     await owner.signup();
+    await prepareOwnerPlanForEditorCoverage(owner);
     await editor.signup();
     await viewer.signup();
     await commenter.signup();
@@ -435,11 +465,11 @@ async function main() {
     assert.strictEqual(editorFeatureGates.permissions.features.activityView, true);
     assert.strictEqual(viewerFeatureGates.permissions.role, 'viewer');
     assert.strictEqual(viewerFeatureGates.permissions.features.mapEdit, false);
-    assert.strictEqual(viewerFeatureGates.permissions.features.activityView, true);
+    assert.strictEqual(viewerFeatureGates.permissions.features.activityView, false);
     assert.strictEqual(viewerFeatureGates.permissions.features.mapComment, false);
     assert.strictEqual(commenterFeatureGates.permissions.role, 'commenter');
     assert.strictEqual(commenterFeatureGates.permissions.features.mapEdit, false);
-    assert.strictEqual(commenterFeatureGates.permissions.features.activityView, true);
+    assert.strictEqual(commenterFeatureGates.permissions.features.activityView, false);
     assert.strictEqual(commenterFeatureGates.permissions.features.mapComment, true);
     logStep('Verified role-based feature gates', {
       editor: editorFeatureGates.permissions.coediting.mode,
@@ -769,15 +799,13 @@ async function main() {
     const { data: ownerActivityInitial } = await owner.request(`/api/maps/${mapId}/activity?limit=100`, {
       expectedStatus: 200,
     });
-    const { data: viewerActivityInitial } = await viewer.request(`/api/maps/${mapId}/activity?limit=100`, {
-      expectedStatus: 200,
+    await viewer.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 404,
     });
-    const { data: commenterActivityInitial } = await commenter.request(`/api/maps/${mapId}/activity?limit=100`, {
-      expectedStatus: 200,
+    await commenter.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 404,
     });
     assert.ok(ownerActivityInitial.pagination.total >= 10, 'owner activity feed should contain recorded events');
-    assert.ok(viewerActivityInitial.activity.length > 0, 'viewer should be able to read activity');
-    assert.ok(commenterActivityInitial.activity.length > 0, 'commenter should be able to read activity');
     const initialEventTypes = new Set(ownerActivityInitial.activity.map((event) => event.eventType));
     for (const eventType of [
       'collab.invite.created',
@@ -793,7 +821,7 @@ async function main() {
     ]) {
       assert.ok(initialEventTypes.has(eventType), `activity feed should include ${eventType}`);
     }
-    logStep('Verified activity feed read access and initial event coverage');
+    logStep('Verified owner/editor activity access, reader denial, and initial event coverage');
 
     const { data: updatedViewerMembership } = await owner.request(`/api/maps/${mapId}/members/${viewer.user.id}`, {
       method: 'PATCH',
@@ -870,8 +898,8 @@ async function main() {
     const { data: ownerActivityFinal } = await owner.request(`/api/maps/${mapId}/activity?limit=100`, {
       expectedStatus: 200,
     });
-    const { data: viewerActivityFinal } = await viewer.request(`/api/maps/${mapId}/activity?limit=100`, {
-      expectedStatus: 200,
+    await viewer.request(`/api/maps/${mapId}/activity?limit=100`, {
+      expectedStatus: 404,
     });
     const finalEventTypes = new Set(ownerActivityFinal.activity.map((event) => event.eventType));
     for (const eventType of [
@@ -881,7 +909,7 @@ async function main() {
     ]) {
       assert.ok(finalEventTypes.has(eventType), `final activity feed should include ${eventType}`);
     }
-    assert.ok(viewerActivityFinal.activity.length > 0, 'restored viewer should regain activity access');
+    logStep('Verified restored viewer keeps reader-only activity restrictions');
     logStep('Verified owner-only access request review and re-approval flow');
 
     await owner.request(`/api/maps/${mapId}`, { expectedStatus: 200 });

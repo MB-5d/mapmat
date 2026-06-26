@@ -30,6 +30,7 @@ const ACTIONS = Object.freeze({
 
 const ARCHIVE_BLOCKED_ACTIONS = new Set(Object.values(ACTIONS));
 const FREE_LIMITED_DOWNLOAD_EVENT_TYPES = new Set(['export_xml', 'export_site_index']);
+const UNMETERED_DOWNLOAD_EVENT_TYPES = new Set(['export_report_pdf']);
 
 function loadPlanConfig() {
   try {
@@ -506,6 +507,13 @@ async function checkAccountActionAsync(user, action, options = {}) {
 
   if (action === ACTIONS.organizedExportCreate) {
     const eventType = String(options.eventType || '').trim();
+    if (UNMETERED_DOWNLOAD_EVENT_TYPES.has(eventType)) {
+      return buildAllowed(action, summary, {
+        allowedQuantity: 1,
+        entitlement: summary.meters.downloads || summary.meters.organizedExports || null,
+        unmetered: true,
+      });
+    }
     if (
       eventType
       && summary.features?.standardExports === false

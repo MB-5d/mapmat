@@ -35,8 +35,6 @@ const COLLABORATION_BACKEND_ENABLED = parseEnvBool(
   process.env.COLLABORATION_BACKEND_ENABLED,
   false
 );
-const COLLAB_INVITE_DEFAULT_DAYS = Number(process.env.COLLAB_INVITE_DEFAULT_DAYS ?? 7);
-const COLLAB_INVITE_MAX_DAYS = Number(process.env.COLLAB_INVITE_MAX_DAYS ?? 30);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ACCESS_POLICIES = new Set(['private', 'viewer_invites_open']);
 const PRESENCE_IDENTITY_MODES = new Set(['named', 'anonymous']);
@@ -133,20 +131,6 @@ function parseActivityPagination(query) {
   const limit = Number.isInteger(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 50;
   const offset = Number.isInteger(offsetRaw) && offsetRaw > 0 ? offsetRaw : 0;
   return { limit, offset };
-}
-
-function parseInviteExpiration(daysRaw) {
-  const parsed = Number.parseInt(daysRaw, 10);
-  const fallbackDays = Number.isFinite(COLLAB_INVITE_DEFAULT_DAYS) && COLLAB_INVITE_DEFAULT_DAYS > 0
-    ? COLLAB_INVITE_DEFAULT_DAYS
-    : 7;
-  const maxDays = Number.isFinite(COLLAB_INVITE_MAX_DAYS) && COLLAB_INVITE_MAX_DAYS > 0
-    ? COLLAB_INVITE_MAX_DAYS
-    : 30;
-  const days = Number.isFinite(parsed)
-    ? Math.min(Math.max(parsed, 1), maxDays)
-    : Math.min(fallbackDays, maxDays);
-  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function serializeMembership(row) {
@@ -1030,7 +1014,7 @@ router.get('/maps/:id/collaboration', async (req, res) => {
 router.post('/maps/:id/invites', async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, role, expires_in_days } = req.body || {};
+    const { email, role } = req.body || {};
     const map = await mapStore.getMapByIdAsync(id);
     if (!map) return res.status(404).json({ error: 'Map not found' });
 
@@ -1101,8 +1085,11 @@ router.post('/maps/:id/invites', async (req, res) => {
           email: inviteeEmail,
           role: inviteRole,
         });
+        const reusableInvite = existingPendingInvite.expires_at
+          ? await collaborationStore.clearInviteExpirationAsync(existingPendingInvite.id)
+          : existingPendingInvite;
         return res.json({
-          invite: serializeInvite(existingPendingInvite, { includeToken: true }),
+          invite: serializeInvite(reusableInvite, { includeToken: true }),
           reused: true,
         });
       }
@@ -1118,19 +1105,15 @@ router.post('/maps/:id/invites', async (req, res) => {
     if (!editorLimit.allowed) return;
     const ownerAccount = editorLimit.ownerAccount
       || (await getOwnerBillingContextForMapAsync(map, req)).ownerAccount;
-    if (editorLimit.entitlement?.summary?.trial?.active && editorLimit.entitlement.summary.trial.kind === 'team') {
-      const trialInviteRoles = new Set([
-        permissionPolicy.ROLES.EDITOR,
-        permissionPolicy.ROLES.COMMENTER,
-        permissionPolicy.ROLES.VIEWER,
-      ]);
-      if (!trialInviteRoles.has(inviteRole)) {
-        return res.status(400).json({ error: 'Team trials support one editor, one commenter, and one viewer.' });
-      }
+    if (
+      inviteRole === permissionPolicy.ROLES.EDITOR
+      && editorLimit.entitlement?.summary?.trial?.active
+      && editorLimit.entitlement.summary.trial.kind === 'team'
+    ) {
       const roleCounts = await billingStore.countSeatRolesForAccountAsync(editorLimit.entitlement.summary.account.id);
       if (Number(roleCounts[inviteRole] || 0) >= 1) {
         return res.status(402).json({
-          error: `Team trials include one ${inviteRole}. Upgrade to add more collaborators for this role.`,
+          error: 'Team trials include one editor. Upgrade to add more editors.',
           code: 'TRIAL_ROLE_LIMIT',
           role: inviteRole,
         });
@@ -1145,7 +1128,7 @@ router.post('/maps/:id/invites', async (req, res) => {
       inviteeEmail,
       role: inviteRole,
       token,
-      expiresAt: parseInviteExpiration(expires_in_days),
+      expiresAt: null,
     });
     await billingStore.upsertInvitedMembershipAsync({
       accountId: ownerAccount?.id,
