@@ -272,6 +272,10 @@ const SCAN_LIMITS = {
   maxPagesDefault: Math.max(1, Number(process.env.SCAN_JOB_MAX_PAGES_DEFAULT ?? 5000)),
   guestPages: Math.max(1, Number(process.env.GUEST_SCAN_PAGE_LIMIT ?? 25)),
 };
+const SCAN_DISCOVERY_MANIFEST_ENTRY_LIMIT = Math.min(
+  5000,
+  Math.max(0, Number(process.env.SCAN_DISCOVERY_MANIFEST_ENTRY_LIMIT ?? 1000) || 0)
+);
 const toPositiveInt = (value, fallback) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
@@ -1614,7 +1618,11 @@ function applyScanEntitlementMetadata(result, entitlement = null) {
   const visitedCount = Math.max(0, Number(result.scanDiagnostics?.visitedCount || 0) || 0);
   const queuedCount = Math.max(0, Number(result.scanDiagnostics?.queuedCount || 0) || 0);
   const unvisitedQueued = Math.max(0, queuedCount - visitedCount);
-  const lockedPageEstimate = Math.max(queueRemaining, unvisitedQueued);
+  const manifestHiddenPageCount = Math.max(
+    0,
+    Number(result.discoveryManifest?.hiddenPageCount || result.scanDiagnostics?.discoveryManifest?.hiddenPageCount || 0) || 0
+  );
+  const lockedPageEstimate = Math.max(queueRemaining, unvisitedQueued, manifestHiddenPageCount);
   const limitReached = lockedPageEstimate > 0;
   if (!limitReached) {
     result.entitlement = {
@@ -5515,13 +5523,73 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   scanDiagnostics.rootChildCount = root?.children?.length || 0;
   scanDiagnostics.treeNodeCount = countScanTreeNodes(root);
 
+  const buildDiscoveryManifest = () => {
+    const hiddenEntries = [];
+    const seenHiddenUrls = new Set();
+    let hiddenPageCount = 0;
+    for (let index = queueIndex; index < queue.length; index += 1) {
+      const item = queue[index];
+      const normalized = normalizeUrl(item?.url);
+      if (!normalized || seenHiddenUrls.has(normalized) || pageMap.has(normalized)) continue;
+      if (!allowPageUrl(normalized)) continue;
+      seenHiddenUrls.add(normalized);
+      hiddenPageCount += 1;
+      if (hiddenEntries.length >= SCAN_DISCOVERY_MANIFEST_ENTRY_LIMIT) continue;
+      const rawParentUrl = referrerMap.get(normalized) || getParentUrl(normalized) || seed;
+      const parentUrl = normalizeUrl(rawParentUrl);
+      hiddenEntries.push({
+        url: normalized,
+        parentUrl: parentUrl && parentUrl !== normalized ? parentUrl : seed,
+        source: String(item.source || discoverySourceByUrl.get(normalized) || 'crawl').slice(0, 80),
+        depth: Math.max(0, Math.floor(Number(item.depth || 0) || 0)),
+        order: index,
+      });
+    }
+    const estimatedHiddenPageCount = Math.max(
+      hiddenPageCount,
+      scanDiagnostics.queueRemaining,
+      Math.max(0, scanDiagnostics.queuedCount - scanDiagnostics.visitedCount)
+    );
+    if (estimatedHiddenPageCount <= 0) return null;
+    return {
+      version: 1,
+      seedUrl: seed,
+      capturedPageCount: pageMap.size,
+      totalDiscoveredPageCount: Math.max(
+        scanDiagnostics.queuedCount,
+        scanDiagnostics.visitedCount + estimatedHiddenPageCount
+      ),
+      hiddenPageCount: estimatedHiddenPageCount,
+      storedHiddenPageCount: hiddenEntries.length,
+      truncated: hiddenEntries.length < estimatedHiddenPageCount,
+      maxStoredEntries: SCAN_DISCOVERY_MANIFEST_ENTRY_LIMIT,
+      entries: hiddenEntries,
+    };
+  };
+  const discoveryManifest = buildDiscoveryManifest();
+  if (discoveryManifest) {
+    scanDiagnostics.discoveryManifest = {
+      version: discoveryManifest.version,
+      capturedPageCount: discoveryManifest.capturedPageCount,
+      totalDiscoveredPageCount: discoveryManifest.totalDiscoveredPageCount,
+      hiddenPageCount: discoveryManifest.hiddenPageCount,
+      storedHiddenPageCount: discoveryManifest.storedHiddenPageCount,
+      truncated: discoveryManifest.truncated,
+      maxStoredEntries: discoveryManifest.maxStoredEntries,
+    };
+  }
+
+  const canOverrideRootOnlyPartialReason = (reason) => (
+    !reason || reason === 'stopped_by_user' || reason === 'entitlement_cap'
+  );
   const hasRootOnlyCollapseSignal = scanDiagnostics.rootAllowedLinks > 0
     || scanDiagnostics.sitemapUrlsQueued > 0
     || scanDiagnostics.commonPathActive > 0
     || scanDiagnostics.renderedLinksQueued > 0
     || scanDiagnostics.queueRemaining > 0
     || pageMap.size > 1;
-  if (!partialReason && scanDiagnostics.treeNodeCount <= 1 && hasRootOnlyCollapseSignal) {
+  if (canOverrideRootOnlyPartialReason(partialReason) && scanDiagnostics.treeNodeCount <= 1 && hasRootOnlyCollapseSignal) {
+    const previousPartialReason = partialReason;
     partialReason = 'scan_collapsed';
     const reasons = [];
     if (scanDiagnostics.rootAllowedLinks > 0) reasons.push('root_links_found');
@@ -5531,6 +5599,9 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     if (scanDiagnostics.queueRemaining > 0) reasons.push('queue_had_discovered_pages');
     if (pageMap.size > 1) reasons.push('page_map_has_pages');
     scanDiagnostics.collapseReason = reasons.join(',') || 'root_only_with_discovery_signals';
+    if (previousPartialReason && previousPartialReason !== partialReason) {
+      scanDiagnostics.previousPartialReason = previousPartialReason;
+    }
     console.warn('[scan] Root-only scan collapse detected:', {
       seed,
       collapseReason: scanDiagnostics.collapseReason,
@@ -5552,9 +5623,13 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
   const rootOnlyFailureReason = scanDiagnostics.treeNodeCount <= 1
     ? getRootOnlyFailureReason()
     : null;
-  if (!partialReason && rootOnlyFailureReason) {
+  if (canOverrideRootOnlyPartialReason(partialReason) && rootOnlyFailureReason) {
+    const previousPartialReason = partialReason;
     partialReason = 'root_discovery_failed';
     scanDiagnostics.collapseReason = rootOnlyFailureReason;
+    if (previousPartialReason && previousPartialReason !== partialReason) {
+      scanDiagnostics.previousPartialReason = previousPartialReason;
+    }
     console.warn('[scan] Root discovery failed because the root page was not crawlable:', {
       seed,
       collapseReason: scanDiagnostics.collapseReason,
@@ -5575,13 +5650,17 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       || scanDiagnostics.robotsSitemapUrlsFound > 0
     )
   );
-  if (!partialReason && scanDiagnostics.treeNodeCount <= 1 && hasDiscoveryFailureSignal) {
+  if (canOverrideRootOnlyPartialReason(partialReason) && scanDiagnostics.treeNodeCount <= 1 && hasDiscoveryFailureSignal) {
+    const previousPartialReason = partialReason;
     partialReason = 'root_discovery_failed';
     scanDiagnostics.collapseReason = [
       scanDiagnostics.sitemapFetchFailures > 0 ? 'sitemap_fetch_failed' : null,
       scanDiagnostics.robotsFetchFailed ? 'robots_fetch_failed' : null,
       scanDiagnostics.renderedDiscoveryError ? 'rendered_discovery_failed' : null,
     ].filter(Boolean).join(',') || 'root_discovery_failed';
+    if (previousPartialReason && previousPartialReason !== partialReason) {
+      scanDiagnostics.previousPartialReason = previousPartialReason;
+    }
     console.warn('[scan] Root discovery failed with one-node result:', {
       seed,
       collapseReason: scanDiagnostics.collapseReason,
@@ -5661,6 +5740,7 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
       exactOnly: scanScope.exactOnly,
     },
     scanDiagnostics,
+    discoveryManifest,
     crosslinks,
   };
 

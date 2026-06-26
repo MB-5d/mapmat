@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-06-26
+
+### Highlights
+
+- Expanded scan limits and billing gates with updated free-page caps, entitlement-session hardening, pricing and upgrade modal changes, and follow-on QA permission fixes.
+- Improved PDF, PNG, and sitemap exports with better visual fidelity, rendering limits, metadata handling, and repeated report-download layout fixes.
+- Hardened sharing and collaboration flows with coediting link fixes, stable share lookup on Postgres, tighter share access gates, and collaboration modal updates.
+- Polished report, history, account, auth, project, and import UI across drawers, tables, modals, filters, spacing, and password-policy details.
+
+### Key PR Links
+
+- No merged PR links were found in repo history for 2026-06-19 through 2026-06-26.
+
 ## 2026-06-19
 
 ### Highlights

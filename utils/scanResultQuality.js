@@ -29,8 +29,17 @@ function normalizeProgress(progress = {}) {
   };
 }
 
+const ROOT_ONLY_RECLASSIFIABLE_PARTIAL_REASONS = new Set([
+  'entitlement_cap',
+  'stopped_by_user',
+]);
+
+function canReclassifyRootOnlyPartialReason(partialReason) {
+  return !partialReason || ROOT_ONLY_RECLASSIFIABLE_PARTIAL_REASONS.has(partialReason);
+}
+
 function getRootOnlyCollapseReasons(result, context = {}) {
-  if (!result?.root || result.partialReason) return [];
+  if (!result?.root || !canReclassifyRootOnlyPartialReason(result.partialReason)) return [];
   const rootTreeNodeCount = countScanTreeNodes(result.root);
   if (rootTreeNodeCount > 1) return [];
 
@@ -63,12 +72,16 @@ function hardenCollapsedScanResult(result, context = {}) {
   const existingDiagnostics = result.scanDiagnostics && typeof result.scanDiagnostics === 'object'
     ? result.scanDiagnostics
     : {};
+  const previousPartialReason = result.partialReason || null;
   const nextDiagnostics = {
     ...existingDiagnostics,
     treeNodeCount: toNonNegativeInteger(existingDiagnostics.treeNodeCount) || rootTreeNodeCount,
     rootChildCount: toNonNegativeInteger(existingDiagnostics.rootChildCount) || rootChildCount,
     collapseReason: reasons.join(','),
   };
+  if (previousPartialReason && previousPartialReason !== 'scan_collapsed') {
+    nextDiagnostics.previousPartialReason = previousPartialReason;
+  }
 
   if (progress.scanned > 0 && !toNonNegativeInteger(nextDiagnostics.visitedCount)) {
     nextDiagnostics.visitedCount = progress.scanned;

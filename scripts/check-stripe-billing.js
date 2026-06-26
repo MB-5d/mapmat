@@ -35,6 +35,7 @@ const {
   getAddOnPriceConfigByStripePrice,
   getRecurringAddOnPriceConfigByStripePrice,
   applyStripeSubscriptionToAccountAsync,
+  createPlanCheckoutSessionAsync,
   createAddOnCheckoutSessionAsync,
   createBundleCheckoutSessionAsync,
   refreshBillingAccountFromStripeAsync,
@@ -202,8 +203,34 @@ async function main() {
   });
   assert.equal(checkoutPayload.mode, 'payment');
   assert.equal(checkoutPayload.line_items[0].quantity, 2);
+  assert.equal(checkoutPayload.payment_method_collection, undefined);
   assert.equal(checkoutPayload.invoice_creation.enabled, true);
   assert.deepEqual(checkoutPayload.invoice_creation.invoice_data.metadata, checkoutPayload.metadata);
+
+  let planPayload = null;
+  await createPlanCheckoutSessionAsync({
+    user: checkoutUser,
+    account: checkoutAccountWithCustomer,
+    planKey: 'pro',
+    billingCycle: 'monthly',
+    returnPath: '/app/profile',
+    stripeClient: {
+      checkout: {
+        sessions: {
+          create: async (payload) => {
+            planPayload = payload;
+            return { id: 'cs_checkout_plan', url: 'https://checkout.stripe.test/plan' };
+          },
+        },
+      },
+    },
+  });
+  assert.equal(planPayload.mode, 'subscription');
+  assert.equal(planPayload.allow_promotion_codes, true);
+  assert.equal(planPayload.payment_method_collection, 'if_required');
+  assert.deepEqual(planPayload.line_items, [
+    { price: 'price_pro_test', quantity: 1 },
+  ]);
 
   let bundlePayload = null;
   await createBundleCheckoutSessionAsync({
@@ -235,6 +262,7 @@ async function main() {
   ]);
   assert.equal(bundlePayload.metadata.checkoutType, 'bundle');
   assert.equal(bundlePayload.metadata.addonKeys, 'page_pack_1,screenshot_pack_1');
+  assert.equal(bundlePayload.payment_method_collection, 'if_required');
 
   let pagePackOnlyPayload = null;
   await createBundleCheckoutSessionAsync({
@@ -261,6 +289,7 @@ async function main() {
   ]);
   assert.equal(pagePackOnlyPayload.metadata.checkoutType, 'addon_bundle');
   assert.equal(pagePackOnlyPayload.subscription_data.metadata.addonKeys, 'page_pack_1');
+  assert.equal(pagePackOnlyPayload.payment_method_collection, 'if_required');
   assert.equal(pagePackOnlyPayload.payment_intent_data, undefined);
 
   const subscriber = await createTestUser('subscriber');

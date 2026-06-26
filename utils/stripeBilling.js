@@ -24,6 +24,7 @@ let stripePriceDisplayCache = {
 };
 
 const STRIPE_PRICE_DISPLAY_CACHE_MS = 5 * 60 * 1000;
+const ZERO_TOTAL_PAYMENT_METHOD_COLLECTION = 'if_required';
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -809,8 +810,9 @@ async function createPlanCheckoutSessionAsync({
   billingCycle = 'monthly',
   returnPath = '/app',
   extraEditorQuantity = 0,
+  stripeClient: providedStripeClient = null,
 }) {
-  const stripe = getStripeClient();
+  const stripe = providedStripeClient || getStripeClient();
   const plan = getPlanPriceConfig(planKey, billingCycle);
   const safeExtraEditorQuantity = Math.min(Math.max(0, Math.floor(Number(extraEditorQuantity || 0))), 100);
   const extraEditorAddOn = safeExtraEditorQuantity > 0
@@ -850,6 +852,7 @@ async function createPlanCheckoutSessionAsync({
       },
     },
     allow_promotion_codes: true,
+    payment_method_collection: ZERO_TOTAL_PAYMENT_METHOD_COLLECTION,
   });
   return session;
 }
@@ -886,6 +889,7 @@ async function createAddOnCheckoutSessionAsync({ user, account, addonKey, quanti
       },
     };
   } else if (sessionPayload.mode === 'subscription') {
+    sessionPayload.payment_method_collection = ZERO_TOTAL_PAYMENT_METHOD_COLLECTION;
     sessionPayload.subscription_data = {
       metadata: sessionPayload.metadata,
     };
@@ -965,6 +969,7 @@ async function createBundleCheckoutSessionAsync({
       invoice_data: { metadata },
     };
   } else {
+    sessionPayload.payment_method_collection = ZERO_TOTAL_PAYMENT_METHOD_COLLECTION;
     sessionPayload.subscription_data = {
       metadata: {
         ...metadata,

@@ -116,6 +116,26 @@ assert.deepStrictEqual(
   'already-partial scans should not be reclassified'
 );
 
+const stoppedRootOnlyWithQueue = makeRootOnlyResult();
+stoppedRootOnlyWithQueue.partial = true;
+stoppedRootOnlyWithQueue.partialReason = 'stopped_by_user';
+hardenCollapsedScanResult(stoppedRootOnlyWithQueue, {
+  progress: {
+    scanned: 1,
+    queued: 38,
+  },
+});
+assert.strictEqual(
+  stoppedRootOnlyWithQueue.partialReason,
+  'scan_collapsed',
+  'stopped root-only scan with discovered pages should not become a fake one-page map'
+);
+assert.strictEqual(
+  stoppedRootOnlyWithQueue.scanDiagnostics?.previousPartialReason,
+  'stopped_by_user',
+  'collapse diagnostics should preserve the original stop reason'
+);
+
 const mappedProgressCollapse = makeRootOnlyResult();
 hardenCollapsedScanResult(mappedProgressCollapse, {
   progress: {

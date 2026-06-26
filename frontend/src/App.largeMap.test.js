@@ -282,14 +282,43 @@ describe('large map viewport behavior', () => {
         partial: true,
         partialReason: 'entitlement_cap',
         entitlement,
+        discoveryManifest: {
+          version: 1,
+          seedUrl: 'https://example.com/',
+          capturedPageCount: 1,
+          totalDiscoveredPageCount: 3,
+          hiddenPageCount: 2,
+          storedHiddenPageCount: 2,
+          truncated: false,
+          maxStoredEntries: 1000,
+          entries: [
+            {
+              url: 'https://example.com/a',
+              parentUrl: 'https://example.com/',
+              source: 'crawl',
+              depth: 1,
+              order: 1,
+            },
+            {
+              url: 'https://example.com/b',
+              parentUrl: 'https://example.com/',
+              source: 'sitemap',
+              depth: 1,
+              order: 2,
+            },
+          ],
+        },
       },
     });
 
     expect(payload.root.children).toHaveLength(0);
     expect(payload.root.vellicScanMeta.entitlement.lockedPageEstimate).toBe(2);
+    expect(payload.root.vellicScanMeta.discoveryManifest.hiddenPageCount).toBe(2);
+    expect(payload.root.vellicScanMeta.discoveryManifest.entries).toHaveLength(2);
 
     const hydrated = __testing.hydratePersistedScanLimitMap(payload.root, payload.orphans);
     expect(hydrated.scanMeta.partialReason).toBe('entitlement_cap');
+    expect(hydrated.scanMeta.discoveryManifest.hiddenPageCount).toBe(2);
     expect(hydrated.root.children.some((node) => node.isEntitlementLocked)).toBe(true);
   });
 

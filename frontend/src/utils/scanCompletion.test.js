@@ -106,6 +106,36 @@ test('allows true one-node scans when there is no degraded partial signal', () =
 test('allows stopped scans to show current results', () => {
   expect(shouldRejectFreshRootOnlyScan({
     result: { partial: true, partialReason: 'stopped_by_user' },
+    nextRoot: multiNode,
+    existingRoot: rootOnly,
+  })).toBe(false);
+});
+
+test('rejects stopped root-only scans when discovery proves more pages exist', () => {
+  expect(shouldRejectFreshRootOnlyScan({
+    result: {
+      partial: true,
+      partialReason: 'stopped_by_user',
+      scanDiagnostics: {
+        queueRemaining: 38,
+        pageMapCount: 1,
+      },
+    },
+    nextRoot: rootOnly,
+    existingRoot: rootOnly,
+  })).toBe(true);
+});
+
+test('allows stopped true one-page scans when there is no discovery signal', () => {
+  expect(shouldRejectFreshRootOnlyScan({
+    result: {
+      partial: true,
+      partialReason: 'stopped_by_user',
+      scanDiagnostics: {
+        queueRemaining: 0,
+        pageMapCount: 1,
+      },
+    },
     nextRoot: rootOnly,
     existingRoot: rootOnly,
   })).toBe(false);

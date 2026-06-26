@@ -1707,6 +1707,40 @@ const PresenceChipList = ({ collaborators = [] }) => {
 };
 
 const SAVED_SCAN_META_KEY = 'vellicScanMeta';
+const MAX_PERSISTED_DISCOVERY_MANIFEST_ENTRIES = 1000;
+
+const trimPersistedUrl = (value) => String(value || '').trim().slice(0, 2048);
+
+const normalizePersistedDiscoveryManifest = (manifest = null) => {
+  if (!manifest || typeof manifest !== 'object') return null;
+  const rawEntries = Array.isArray(manifest.entries) ? manifest.entries : [];
+  const entries = rawEntries
+    .slice(0, MAX_PERSISTED_DISCOVERY_MANIFEST_ENTRIES)
+    .map((entry, index) => ({
+      url: trimPersistedUrl(entry?.url),
+      parentUrl: trimPersistedUrl(entry?.parentUrl),
+      source: String(entry?.source || 'crawl').trim().slice(0, 80),
+      depth: Math.max(0, Math.floor(Number(entry?.depth || 0) || 0)),
+      order: Math.max(0, Math.floor(Number(entry?.order ?? index) || 0)),
+    }))
+    .filter((entry) => entry.url);
+  const hiddenPageCount = Math.max(
+    entries.length,
+    Math.floor(Number(manifest.hiddenPageCount || 0) || 0)
+  );
+  if (hiddenPageCount <= 0) return null;
+  return {
+    version: 1,
+    seedUrl: trimPersistedUrl(manifest.seedUrl),
+    capturedPageCount: Math.max(0, Math.floor(Number(manifest.capturedPageCount || 0) || 0)),
+    totalDiscoveredPageCount: Math.max(0, Math.floor(Number(manifest.totalDiscoveredPageCount || 0) || 0)),
+    hiddenPageCount,
+    storedHiddenPageCount: entries.length,
+    truncated: Boolean(manifest.truncated || entries.length < hiddenPageCount),
+    maxStoredEntries: Math.max(entries.length, Math.floor(Number(manifest.maxStoredEntries || entries.length) || 0)),
+    entries,
+  };
+};
 
 const normalizePersistedScanMeta = (scanMeta = null) => {
   const entitlement = scanMeta?.entitlement || null;
@@ -1717,6 +1751,7 @@ const normalizePersistedScanMeta = (scanMeta = null) => {
     partialReason: scanMeta?.partialReason || 'entitlement_cap',
     scanDiagnostics: scanMeta?.scanDiagnostics || null,
     entitlement,
+    discoveryManifest: normalizePersistedDiscoveryManifest(scanMeta?.discoveryManifest),
   };
 };
 
@@ -12273,6 +12308,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           partialReason: normalizedPartialReason,
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
+          discoveryManifest: data.discoveryManifest || null,
         });
         trackEvent('scan_completed', {
           hostname,
@@ -12299,6 +12335,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           partialReason: normalizedPartialReason,
           scanDiagnostics: data.scanDiagnostics || null,
           entitlement: data.entitlement || null,
+          discoveryManifest: data.discoveryManifest || null,
         });
         trackEvent('scan_failed', {
           phase: 'quality_gate',
@@ -12356,6 +12393,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         partialReason: normalizedPartialReason,
         scanDiagnostics: data.scanDiagnostics || null,
         entitlement: data.entitlement || null,
+        discoveryManifest: data.discoveryManifest || null,
       });
       setScanLayerAvailability(displayScanLayerAvailability);
       setScanLayerVisibility(displayScanLayerAvailability);
