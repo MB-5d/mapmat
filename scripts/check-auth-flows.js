@@ -15,6 +15,7 @@ const bcrypt = require('bcryptjs');
 const authStore = require('../stores/authStore');
 const START_TIMEOUT_MS = 30000;
 const WAIT_STEP_MS = 150;
+const SHORT_PASSWORD = 'short77';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -229,6 +230,23 @@ async function run() {
       'google auth should stay disabled when Google env vars are missing'
     );
 
+    let shortSignupPasswordError = null;
+    try {
+      await fetchJson(`${API_BASE}/auth/signup`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email: randomEmail(),
+          password: SHORT_PASSWORD,
+          name: 'Short Password Check',
+        }),
+      });
+    } catch (error) {
+      shortSignupPasswordError = error;
+    }
+    assert(shortSignupPasswordError, 'signup should reject passwords shorter than 8 characters');
+    assert.strictEqual(shortSignupPasswordError.status, 400, 'short signup password should return 400');
+    assert.match(shortSignupPasswordError.message, /at least 8 characters/i, 'short signup password should mention 8 characters');
+
     const bypassEmail = `auth_bypass_${Date.now()}_${Math.random().toString(36).slice(2, 8)}@example.com`;
     const bypassPassword = randomPassword();
     const bypassSignup = await fetchJson(`${API_BASE}/auth/signup`, {
@@ -387,6 +405,23 @@ async function run() {
     assert.strictEqual(me.user?.emailVerified, true, '/auth/me should show verified email');
     assert.strictEqual(me.user?.hasPassword, true, '/auth/me should show password login enabled');
 
+    let shortProfilePasswordError = null;
+    try {
+      await fetchJson(`${API_BASE}/auth/me`, {
+        method: 'PUT',
+        token: verified.token,
+        body: JSON.stringify({
+          currentPassword: originalPassword,
+          newPassword: SHORT_PASSWORD,
+        }),
+      });
+    } catch (error) {
+      shortProfilePasswordError = error;
+    }
+    assert(shortProfilePasswordError, 'profile update should reject passwords shorter than 8 characters');
+    assert.strictEqual(shortProfilePasswordError.status, 400, 'short profile password should return 400');
+    assert.match(shortProfilePasswordError.message, /at least 8 characters/i, 'short profile password should mention 8 characters');
+
     const resetStartedAt = Date.now();
     const forgot = await fetchJson(`${API_BASE}/auth/forgot-password`, {
       method: 'POST',
@@ -416,6 +451,23 @@ async function run() {
     }
     assert(resetError, 'wrong reset code should fail');
     assert.strictEqual(resetError.code, 'AUTH_CODE_INVALID', 'wrong reset code should expose AUTH_CODE_INVALID');
+
+    let shortResetPasswordError = null;
+    try {
+      await fetchJson(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          code: resetEmail.code,
+          newPassword: SHORT_PASSWORD,
+        }),
+      });
+    } catch (error) {
+      shortResetPasswordError = error;
+    }
+    assert(shortResetPasswordError, 'reset password should reject passwords shorter than 8 characters');
+    assert.strictEqual(shortResetPasswordError.status, 400, 'short reset password should return 400');
+    assert.match(shortResetPasswordError.message, /at least 8 characters/i, 'short reset password should mention 8 characters');
 
     const reset = await fetchJson(`${API_BASE}/auth/reset-password`, {
       method: 'POST',

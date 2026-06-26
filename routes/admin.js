@@ -22,6 +22,7 @@ const {
   isR2Selected,
   statScreenshotObject,
 } = require('../utils/screenshotStorage');
+const { MIN_PASSWORD_LENGTH, getPasswordMinLengthError } = require('../utils/passwordPolicy');
 
 const router = express.Router();
 
@@ -1502,8 +1503,8 @@ router.post('/users/:id/reset-password', async (req, res) => {
     }
 
     const newPassword = String(req.body?.newPassword || '');
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'Temporary password must be at least 6 characters.' });
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: `${getPasswordMinLengthError('Temporary password')}.` });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);

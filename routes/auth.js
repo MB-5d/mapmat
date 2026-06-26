@@ -12,6 +12,7 @@ const { queueTemplatedEmailAsync } = require('../utils/emailDelivery');
 const { EMAIL_TEMPLATE_KEYS, getDefaultAppBaseUrl } = require('../utils/emailTemplates');
 const { saveAvatarFromDataUrl, removeAvatarFile } = require('../utils/avatarStorage');
 const { resolveAccountEntitlementsAsync } = require('../utils/entitlements');
+const { MIN_PASSWORD_LENGTH, getPasswordMinLengthError } = require('../utils/passwordPolicy');
 
 const router = express.Router();
 
@@ -1063,8 +1064,8 @@ router.post('/signup', signupLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: getPasswordMinLengthError('Password') });
     }
 
     const existingUser = await authStore.getUserByEmailAsync(emailNormalized);
@@ -1245,8 +1246,8 @@ router.post('/login', loginLimiter, async (req, res) => {
     let user = await authStore.getUserByLoginIdentifierAsync(identifier);
 
     if (!user && TEST_AUTH_ENABLED && isEmailIdentifier(identifier)) {
-      if (password.length < 6) {
-        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: getPasswordMinLengthError('Password') });
       }
 
       const displayName = emailNormalized.split('@')[0];
@@ -1350,8 +1351,8 @@ router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email, code, and new password are required.' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: `${getPasswordMinLengthError('New password')}.` });
     }
 
     const user = await authStore.getUserByEmailAsync(email);
@@ -1587,8 +1588,8 @@ router.put('/me', authMiddleware, requireAuth, profileMutationLimiter, async (re
         }
       }
 
-      if (newPassword.length < 6) {
-        return res.status(400).json({ error: 'New password must be at least 6 characters' });
+      if (newPassword.length < MIN_PASSWORD_LENGTH) {
+        return res.status(400).json({ error: getPasswordMinLengthError('New password') });
       }
 
       const passwordHash = await bcrypt.hash(newPassword, 10);

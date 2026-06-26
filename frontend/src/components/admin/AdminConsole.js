@@ -38,7 +38,7 @@ import {
   getAdminUser,
   getAdminUsers,
 } from '../../api';
-import { ENABLE_ADMIN_CONSOLE } from '../../utils/constants';
+import { ENABLE_ADMIN_CONSOLE, MIN_PASSWORD_LENGTH } from '../../utils/constants';
 import { createAdminHomeRoute, createAdminUserRoute } from '../../utils/appRoutes';
 
 const DEFAULT_SORT_BY = 'updatedAt';
@@ -707,13 +707,13 @@ function AdminUserDrawer({
               value={newPassword}
               onChange={(event) => onNewPasswordChange(event.target.value)}
               placeholder="Temporary password"
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               disabled={actionLoading}
             />
             <button
               type="submit"
               className="admin-console-primary-btn"
-              disabled={actionLoading || newPassword.length < 6}
+              disabled={actionLoading || newPassword.length < MIN_PASSWORD_LENGTH}
             >
               {actionLoading ? <Loader2 size={16} className="admin-console-spinner" /> : <KeyRound size={16} />}
               Reset password

@@ -7,7 +7,7 @@ import Field, { FieldHint } from '../ui/Field';
 import Modal from '../ui/Modal';
 import SegmentedControl from '../ui/SegmentedControl';
 import TextInput from '../ui/TextInput';
-import { GOOGLE_AUTH_ENABLED } from '../../utils/constants';
+import { GOOGLE_AUTH_ENABLED, MIN_PASSWORD_LENGTH } from '../../utils/constants';
 import { trackEvent } from '../../utils/analytics';
 
 const AUTH_VIEWS = Object.freeze({
@@ -343,7 +343,7 @@ const AuthModal = ({
   const passwordAutoComplete = view === AUTH_VIEWS.LOGIN ? 'current-password' : 'new-password';
   const passwordFieldId = view === AUTH_VIEWS.LOGIN ? 'auth-login-password' : 'auth-new-password';
   const passwordFieldName = view === AUTH_VIEWS.LOGIN ? 'password' : 'new-password';
-  const passwordHelperText = requiresNewPassword ? 'Must be at least 8 characters' : '';
+  const passwordHelperText = requiresNewPassword ? `Must be at least ${MIN_PASSWORD_LENGTH} characters` : '';
 
   return (
     <Modal
@@ -447,7 +447,7 @@ const AuthModal = ({
               onChange={(event) => setPassword(event.target.value)}
               placeholder={passwordPlaceholder}
               required
-              minLength={requiresNewPassword ? 8 : undefined}
+              minLength={requiresNewPassword ? MIN_PASSWORD_LENGTH : undefined}
               autoComplete={passwordAutoComplete}
               disabled={loading}
               rightElement={(

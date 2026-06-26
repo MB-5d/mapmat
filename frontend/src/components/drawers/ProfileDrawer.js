@@ -15,6 +15,7 @@ import TextInput from '../ui/TextInput';
 import { createCroppedAvatarDataUrl } from '../../utils/avatarCrop';
 import { resolveApiAssetUrl } from '../../utils/assets';
 import classNames from '../../utils/classNames';
+import { MIN_PASSWORD_LENGTH } from '../../utils/constants';
 
 const AVATAR_SOURCE_MAX_BYTES = 8 * 1024 * 1024;
 
@@ -205,6 +206,11 @@ const ProfileDrawer = ({
         updateData.email = trimmedEmail;
       }
       if (newPassword) {
+        if (newPassword.length < MIN_PASSWORD_LENGTH) {
+          setError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+          setLoading(false);
+          return;
+        }
         if (newPassword !== confirmPassword) {
           setError('New passwords do not match');
           setLoading(false);
@@ -636,8 +642,8 @@ const ProfileDrawer = ({
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Must be at least 8 characters"
-                minLength={8}
+                placeholder={`Must be at least ${MIN_PASSWORD_LENGTH} characters`}
+                minLength={MIN_PASSWORD_LENGTH}
                 disabled={!user || loading}
               />
             </Field>
