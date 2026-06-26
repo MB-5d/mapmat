@@ -30,7 +30,7 @@ const ACTIONS = Object.freeze({
 
 const ARCHIVE_BLOCKED_ACTIONS = new Set(Object.values(ACTIONS));
 const FREE_LIMITED_DOWNLOAD_EVENT_TYPES = new Set(['export_xml', 'export_site_index']);
-const UNMETERED_DOWNLOAD_EVENT_TYPES = new Set(['export_report_pdf']);
+const UNMETERED_DOWNLOAD_EVENT_TYPES = new Set(['export_xml', 'export_site_index', 'export_report_pdf']);
 
 function loadPlanConfig() {
   try {

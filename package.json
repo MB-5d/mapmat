@@ -17,7 +17,7 @@
     "check:coediting:soak": "node scripts/check-coediting-soak.js",
     "check:auth-flows": "node scripts/check-auth-flows.js",
     "check:entitlements": "node --check stores/billingStore.js && node --check utils/entitlements.js && node --check scripts/check-entitlements.js && node --check scripts/seed-entitlement-test-accounts.js && node --check scripts/backfill-test-unlimited-accounts.js && node scripts/check-entitlements.js",
-    "check:stripe-billing": "node --check routes/billing.js && node --check routes/stripeWebhooks.js && node --check utils/stripeBilling.js && node --check scripts/check-stripe-billing.js && node scripts/check-stripe-billing.js",
+    "check:stripe-billing": "node --check routes/admin.js && node --check routes/billing.js && node --check routes/stripeWebhooks.js && node --check stores/promoCodeStore.js && node --check utils/stripeBilling.js && node --check scripts/check-stripe-billing.js && node scripts/check-stripe-billing.js",
     "check:backend:postgres": "DB_PROVIDER=postgres npm run check:backend",
     "check:frontend-build": "cd frontend && CI=false npm run build",
     "check:scan-job-tree": "node scripts/check-scan-job-tree.js",

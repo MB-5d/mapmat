@@ -26,7 +26,12 @@ describe('InviteInboxModal', () => {
   test('refreshes and accepts invites', () => {
     const onRefresh = jest.fn();
     const onAccept = jest.fn();
-    const invite = { id: 'inv-1', mapName: 'Alpha Map', role: 'viewer' };
+    const invite = {
+      id: 'inv-1',
+      mapName: 'Alpha Map',
+      role: 'viewer',
+      inviterName: 'Jordan',
+    };
 
     act(() => {
       root.render(
@@ -53,6 +58,7 @@ describe('InviteInboxModal', () => {
       acceptButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
+    expect(container.textContent).toContain('Invited by: Jordan');
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(onAccept).toHaveBeenCalledWith(invite);
   });

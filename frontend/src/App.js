@@ -228,6 +228,7 @@ const GOOGLE_AUTH_MESSAGE_TYPE = 'vellic:google-auth';
 const GOOGLE_AUTH_STORAGE_KEY = 'vellic:google-auth:result';
 const DEFAULT_SCAN_REQUESTED_PAGES = 5000;
 const GUEST_SCAN_PAGE_LIMIT = 25;
+const SCAN_JOB_CREATE_RETRY_DELAYS_MS = [0, 600, 1400];
 const BILLING_PLAN_KEYS = new Set(PAID_BILLING_PLAN_KEYS);
 const TRIAL_PLAN_KEYS = new Set(['pro']);
 const ADD_ON_QUANTITY_MAX = 100;
@@ -3363,6 +3364,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   const pendingCreatedNodeViewRef = useRef(null);
   const viewDropdownRef = useRef(null);
   const colorKeyRef = useRef(null);
+  const drawingConnectionRef = useRef(null);
+  const draggingEndpointRef = useRef(null);
+  const handleEndpointDragMoveDoc = useRef(null);
+  const handleEndpointDragEndDoc = useRef(null);
   const imageMenuRef = useRef(null);
   const scanOptionsRef = useRef(null);
   const blankUploadInputRef = useRef(null);
@@ -3435,6 +3440,45 @@ export default function App({ currentRoute, navigateToRoute }) {
     stopped: false,
   });
   const [captureIssues, setCaptureIssues] = useState([]);
+
+  useEffect(() => {
+    drawingConnectionRef.current = drawingConnection;
+  }, [drawingConnection]);
+
+  useEffect(() => {
+    draggingEndpointRef.current = draggingEndpoint;
+  }, [draggingEndpoint]);
+
+  const resetConnectionInteractionStyles = useCallback(() => {
+    document.body.style.userSelect = '';
+    document.body.style.webkitUserSelect = '';
+    document.body.style.cursor = '';
+  }, []);
+
+  const detachEndpointDragListeners = useCallback(() => {
+    if (handleEndpointDragMoveDoc.current) {
+      document.removeEventListener('mousemove', handleEndpointDragMoveDoc.current);
+    }
+    if (handleEndpointDragEndDoc.current) {
+      document.removeEventListener('mouseup', handleEndpointDragEndDoc.current);
+    }
+    handleEndpointDragMoveDoc.current = null;
+    handleEndpointDragEndDoc.current = null;
+  }, []);
+
+  const cancelActiveConnectionInteraction = useCallback((options = {}) => {
+    const { clearTool = false } = options;
+    if (!drawingConnectionRef.current && !draggingEndpointRef.current && !clearTool) return;
+    detachEndpointDragListeners();
+    resetConnectionInteractionStyles();
+    drawingConnectionRef.current = null;
+    draggingEndpointRef.current = null;
+    setDrawingConnection(null);
+    setDraggingEndpoint(null);
+    if (clearTool) {
+      setConnectionTool(null);
+    }
+  }, [detachEndpointDragListeners, resetConnectionInteractionStyles]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -6427,6 +6471,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setUrlInput(share.root.url || '');
     setCurrentMap(null);
     setMapName(share.mapName || share.name || share.root.title || '');
+    setShowThumbnails(true);
     setHasCreatedShareLink(true);
     setAccessLevel(nextAccess);
     setSharePermission(nextAccess);
@@ -6819,8 +6864,27 @@ export default function App({ currentRoute, navigateToRoute }) {
     return Array.from(grouped.values());
   }, [mapLayout, remoteSelections]);
 
-  const loadMapVersions = useCallback(async (mapId) => {
-    if (!mapId) return;
+  const resetVersionHistoryState = useCallback(() => {
+    setMapVersions([]);
+    setActiveVersionId(null);
+    setLatestVersionId(null);
+    versionBaselineRef.current = null;
+    lastVersionSnapshotRef.current = '';
+  }, []);
+
+  const loadMapVersions = useCallback(async (mapId, options = {}) => {
+    const { silent = false } = options;
+    if (!mapId) return [];
+    const isCurrentMap = currentMap?.id && sameId(currentMap.id, mapId);
+    const waitingForCurrentMapPermissions = featureGatesEnabled
+      && isLoggedIn
+      && isCurrentMap
+      && !mapPermissions;
+    if (waitingForCurrentMapPermissions || (isCurrentMap && !canViewVersionHistoryValue)) {
+      resetVersionHistoryState();
+      setIsLoadingVersions(false);
+      return [];
+    }
     setIsLoadingVersions(true);
     try {
       const { versions } = await api.getMapVersions(mapId);
@@ -6847,12 +6911,24 @@ export default function App({ currentRoute, navigateToRoute }) {
       return list;
     } catch (error) {
       console.error('Failed to load map versions', error);
-      showToast('Failed to load versions', 'error');
+      if (!silent) {
+        showToast('Failed to load versions', 'error');
+      }
       return [];
     } finally {
       setIsLoadingVersions(false);
     }
-  }, [activeVersionId, showToast, serializeVersionSnapshot]);
+  }, [
+    activeVersionId,
+    canViewVersionHistoryValue,
+    currentMap?.id,
+    featureGatesEnabled,
+    isLoggedIn,
+    mapPermissions,
+    resetVersionHistoryState,
+    showToast,
+    serializeVersionSnapshot,
+  ]);
 
   const loadMapPermissions = useCallback(async () => {
     if (!featureGatesEnabled || !isLoggedIn || !currentMap?.id) {
@@ -6967,7 +7043,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         role: collaborationInviteRole,
       });
       setCollaborationInviteEmail('');
-      showToast('Invite created', 'success');
+      showToast('Invite sent', 'success');
       await loadCollaborationData();
     } catch (error) {
       if (handleEntitlementError(error, 'This account has reached its editor limit.')) {
@@ -7294,16 +7370,22 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
     if (currentMap?.largeMapShell) {
-      setMapVersions([]);
-      setActiveVersionId(null);
-      setLatestVersionId(null);
-      versionBaselineRef.current = null;
-      lastVersionSnapshotRef.current = '';
+      resetVersionHistoryState();
+      return;
+    }
+    if (!canViewVersionHistoryValue) {
+      resetVersionHistoryState();
       return;
     }
     loadMapVersions(currentMap.id);
     lastAutosaveVersionAtRef.current = 0;
-  }, [currentMap?.id, currentMap?.largeMapShell, loadMapVersions]);
+  }, [
+    canViewVersionHistoryValue,
+    currentMap?.id,
+    currentMap?.largeMapShell,
+    loadMapVersions,
+    resetVersionHistoryState,
+  ]);
 
   useEffect(() => {
     if (currentMap?.id) {
@@ -7320,7 +7402,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [root, draftVersions.length, draftLatestVersionId]);
 
   useEffect(() => {
-    if (!showVersionHistoryDrawer || !currentMap?.id) return;
+    if (!showVersionHistoryDrawer || !currentMap?.id || !canViewVersionHistoryValue) return;
     let canceled = false;
     (async () => {
       await loadMapVersions(currentMap.id);
@@ -7331,7 +7413,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       canceled = true;
     };
-  }, [canViewActivityValue, currentMap?.id, loadMapActivity, loadMapVersions, showVersionHistoryDrawer]);
+  }, [
+    canViewActivityValue,
+    canViewVersionHistoryValue,
+    currentMap?.id,
+    loadMapActivity,
+    loadMapVersions,
+    showVersionHistoryDrawer,
+  ]);
 
   const createVersionFromSnapshot = useCallback(async ({ mapId, name, notes, snapshot, allowDuplicate = false } = {}) => {
     const targetMapId = mapId || currentMap?.id;
@@ -7419,7 +7508,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (version) {
         lastAutosaveVersionAtRef.current = Date.now();
       }
-      if (showVersionHistoryDrawer) {
+      if (showVersionHistoryDrawer && canViewVersionHistoryValue) {
         await loadMapVersions(currentMap.id);
       }
       if (canViewActivityValue) {
@@ -7430,6 +7519,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, [
     canViewActivityValue,
+    canViewVersionHistoryValue,
     createVersionFromSnapshot,
     currentMap?.id,
     loadMapActivity,
@@ -12196,12 +12286,30 @@ export default function App({ currentRoute, navigateToRoute }) {
     let jobId;
     let jobAccessToken = null;
     try {
-      const jobResponse = await api.createScanJob({
-        url,
-        maxPages: maxPagesForRequest,
-        options: scanConfig,
-        ...(authFlow.authSessionId ? { authSessionId: authFlow.authSessionId } : {}),
-      });
+      let jobResponse = null;
+      let lastCreateError = null;
+      for (let attempt = 0; attempt < SCAN_JOB_CREATE_RETRY_DELAYS_MS.length; attempt += 1) {
+        if (SCAN_JOB_CREATE_RETRY_DELAYS_MS[attempt] > 0) {
+          await new Promise((resolve) => setTimeout(resolve, SCAN_JOB_CREATE_RETRY_DELAYS_MS[attempt]));
+        }
+        try {
+          jobResponse = await api.createScanJob({
+            url,
+            maxPages: maxPagesForRequest,
+            options: scanConfig,
+            ...(authFlow.authSessionId ? { authSessionId: authFlow.authSessionId } : {}),
+          });
+          break;
+        } catch (error) {
+          lastCreateError = error;
+          if (error?.status && error.status < 500) {
+            throw error;
+          }
+        }
+      }
+      if (!jobResponse && lastCreateError) {
+        throw lastCreateError;
+      }
       jobId = jobResponse?.jobId;
       jobAccessToken = jobResponse?.jobAccessToken || null;
       if (!jobId) {
@@ -12243,6 +12351,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     eventSourceRef.current = eventSource;
     let streamHandled = false;
     let streamErrorCount = 0;
+    const maxStreamErrorCount = 8;
 
     const handleCompletedJob = (job) => {
       if (streamHandled) return;
@@ -12541,15 +12650,17 @@ export default function App({ currentRoute, navigateToRoute }) {
           handleCompletedJob(job);
           return;
         }
-        streamErrorCount = 0;
-        if (job?.progress) setScanProgress(job.progress);
-        if (job?.status === 'running' || job?.status === 'queued' || job?.status === 'stopping') {
-          if (job.status === 'stopping') setIsStoppingScan(true);
+        if (job) {
+          streamErrorCount = 0;
+          if (job.progress) setScanProgress(job.progress);
+          if (job.status === 'stopping') {
+            setIsStoppingScan(true);
+          }
           return;
         }
       } catch (err) {
         streamErrorCount += 1;
-        if (streamErrorCount < 3) return;
+        if (streamErrorCount < maxStreamErrorCount) return;
         const message = err?.message || 'Connection error';
         streamHandled = true;
         trackEvent('scan_failed', {
@@ -13227,6 +13338,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   ]);
 
   const handleUndo = useCallback(() => {
+    cancelActiveConnectionInteraction();
     if (isCollaborativeLiveEditingRestricted) {
       warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
@@ -13265,6 +13377,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     colors,
     connectionColors,
     connections,
+    cancelActiveConnectionInteraction,
     isCollaborativeLiveEditingRestricted,
     liveUndoRedoDisabledReason,
     orphans,
@@ -13274,6 +13387,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   ]);
 
   const handleRedo = useCallback(() => {
+    cancelActiveConnectionInteraction();
     if (isCollaborativeLiveEditingRestricted) {
       warnLiveModeUnsupported(liveUndoRedoDisabledReason);
       return;
@@ -13312,6 +13426,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     colors,
     connectionColors,
     connections,
+    cancelActiveConnectionInteraction,
     isCollaborativeLiveEditingRestricted,
     liveUndoRedoDisabledReason,
     orphans,
@@ -13423,12 +13538,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
       // Select tool with "V"
       if (e.key === 'v' || e.key === 'V') {
+        cancelActiveConnectionInteraction();
         setActiveTool('select');
         setConnectionTool(null);
       }
       // User flow tool with "F"
       if (e.key === 'f' || e.key === 'F') {
         if (canEdit()) {
+          cancelActiveConnectionInteraction();
           setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
           setActiveTool('select');
         }
@@ -13436,16 +13553,14 @@ export default function App({ currentRoute, navigateToRoute }) {
       // Crosslink tool with "L"
       if (e.key === 'l' || e.key === 'L') {
         if (canEdit()) {
+          cancelActiveConnectionInteraction();
           setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
           setActiveTool('select');
         }
       }
       // Escape cancels connection tool and closes menus
       if (e.key === 'Escape') {
-        if (connectionTool) {
-          setConnectionTool(null);
-          setDrawingConnection(null);
-        }
+        cancelActiveConnectionInteraction({ clearTool: true });
         if (connectionMenu) {
           setConnectionMenu(null);
         }
@@ -13491,7 +13606,60 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, zoomAtClientPoint, getZoomBounds]);
+  }, [undoStack, redoStack, root, activeTool, connectionTool, connectionMenu, nodeMenu, showCommentsPanel, showReportDrawer, showImageReportDrawer, showProfileDrawer, showSettingsDrawer, showVersionHistoryDrawer, showProjectsModal, showHistoryModal, showViewDropdown, showColorKey, handleRedo, handleUndo, canEdit, cancelActiveConnectionInteraction, zoomAtClientPoint, getZoomBounds]);
+
+  useEffect(() => {
+    const handleWindowBlur = () => cancelActiveConnectionInteraction();
+    window.addEventListener('blur', handleWindowBlur);
+    return () => window.removeEventListener('blur', handleWindowBlur);
+  }, [cancelActiveConnectionInteraction]);
+
+  useEffect(() => {
+    if (
+      showCommentsPanel
+      || showReportDrawer
+      || showImageReportDrawer
+      || showProfileDrawer
+      || showSettingsDrawer
+      || showVersionHistoryDrawer
+      || showProjectsModal
+      || showHistoryModal
+      || showShareModal
+      || showCollaborationModal
+      || showExportModal
+      || showCreateMapModal
+      || showSaveMapModal
+      || showImportModal
+      || showAuthModal
+      || showInviteInboxModal
+      || showAccessRequestsInboxModal
+      || showViewDropdown
+      || showImageMenu
+    ) {
+      cancelActiveConnectionInteraction();
+    }
+  }, [
+    cancelActiveConnectionInteraction,
+    showAccessRequestsInboxModal,
+    showAuthModal,
+    showCollaborationModal,
+    showCommentsPanel,
+    showCreateMapModal,
+    showExportModal,
+    showHistoryModal,
+    showImageMenu,
+    showImageReportDrawer,
+    showImportModal,
+    showInviteInboxModal,
+    showProfileDrawer,
+    showProjectsModal,
+    showReportDrawer,
+    showSaveMapModal,
+    showSettingsDrawer,
+    showShareModal,
+    showVersionHistoryDrawer,
+    showViewDropdown,
+  ]);
 
   // Smooth wheel handling for canvas zoom. Press-drag remains the pan control.
   const wheelStateRef = useRef({
@@ -14443,25 +14611,18 @@ export default function App({ currentRoute, navigateToRoute }) {
     if (!guardAccountCanCreateWork('Share link creation')) return;
     if (!canCreateShareLinksForCurrentMap()) return;
 
-    const mailWindow = window.open('', '_blank');
     try {
       const shareUrl = await createShareLinkUrl(sharePermission);
       const subject = encodeURIComponent('Check out this sitemap');
       const body = encodeURIComponent(`I wanted to share this sitemap with you.\n\nView it here: ${shareUrl}`);
 
       const mailtoUrl = `mailto:${shareEmails}?subject=${subject}&body=${body}`;
-      if (mailWindow) {
-        mailWindow.location.href = mailtoUrl;
-      } else {
-        window.location.href = mailtoUrl;
-      }
+      window.location.href = mailtoUrl;
       setHasCreatedShareLink(true);
       setCurrentShareAccess(sharePermission);
-      showToast('Email client opened', 'success');
-      setShowShareModal(false);
+      showToast('Invite email ready', 'success');
       setShareEmails('');
     } catch (e) {
-      if (mailWindow) mailWindow.close();
       if (handleShareLinkError(e)) return;
       showToast(e.message || 'Failed to create share link', 'error');
     }
@@ -15363,6 +15524,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const handleAnchorMouseDown = (nodeId, anchor, e) => {
     e.preventDefault();
     if (!connectionTool) return;
+    cancelActiveConnectionInteraction();
 
     const pos = getAnchorPosition(nodeId, anchor);
     if (!pos) return;
@@ -15371,7 +15533,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     document.body.style.userSelect = 'none';
     document.body.style.webkitUserSelect = 'none';
 
-    setDrawingConnection({
+    const nextDrawingConnection = {
       type: connectionTool,
       sourceNodeId: nodeId,
       sourceAnchor: anchor,
@@ -15379,12 +15541,15 @@ export default function App({ currentRoute, navigateToRoute }) {
       startY: pos.y,
       currentX: pos.x,
       currentY: pos.y,
-    });
+    };
+    drawingConnectionRef.current = nextDrawingConnection;
+    setDrawingConnection(nextDrawingConnection);
   };
 
   // Handle mousemove while drawing a connection
   const handleConnectionMouseMove = (e) => {
-    if (!drawingConnection || !contentRef.current) return;
+    const activeDrawingConnection = drawingConnectionRef.current || drawingConnection;
+    if (!activeDrawingConnection || !contentRef.current) return;
 
     // Convert screen coordinates to canvas coordinates
     const contentRect = contentRef.current.getBoundingClientRect();
@@ -15397,30 +15562,36 @@ export default function App({ currentRoute, navigateToRoute }) {
     const snapTarget = findNearestAnchor(
       mouseX,
       mouseY,
-      drawingConnection.sourceNodeId,
-      drawingConnection.type
+      activeDrawingConnection.sourceNodeId,
+      activeDrawingConnection.type
     );
 
-    setDrawingConnection(prev => ({
-      ...prev,
-      currentX: snapTarget ? snapTarget.x : mouseX,
-      currentY: snapTarget ? snapTarget.y : mouseY,
-      snapTarget, // { nodeId, anchor, x, y } or null
-    }));
+    setDrawingConnection(prev => {
+      if (!prev) return null;
+      const nextDrawingConnection = {
+        ...prev,
+        currentX: snapTarget ? snapTarget.x : mouseX,
+        currentY: snapTarget ? snapTarget.y : mouseY,
+        snapTarget, // { nodeId, anchor, x, y } or null
+      };
+      drawingConnectionRef.current = nextDrawingConnection;
+      return nextDrawingConnection;
+    });
   };
 
   // Handle mouseup - finish or cancel drawing
   const handleConnectionMouseUp = (e) => {
-    if (!drawingConnection) return;
+    const activeDrawingConnection = drawingConnectionRef.current || drawingConnection;
+    if (!activeDrawingConnection) return;
 
     // Use snapTarget if available (magnetic snap), otherwise check DOM element
     let targetNodeId = null;
     let targetAnchorType = null;
 
-    if (drawingConnection.snapTarget) {
+    if (activeDrawingConnection.snapTarget) {
       // Use the magnetically snapped target
-      targetNodeId = drawingConnection.snapTarget.nodeId;
-      targetAnchorType = drawingConnection.snapTarget.anchor;
+      targetNodeId = activeDrawingConnection.snapTarget.nodeId;
+      targetAnchorType = activeDrawingConnection.snapTarget.anchor;
     } else {
       // Fallback: check if mouse is directly over an anchor element
       const targetAnchor = e.target.closest('.anchor-point');
@@ -15433,16 +15604,16 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
 
     if (targetNodeId && targetAnchorType && canCreateConnection(
-      drawingConnection.type,
-      drawingConnection.sourceNodeId,
+      activeDrawingConnection.type,
+      activeDrawingConnection.sourceNodeId,
       targetNodeId
     )) {
       // Create the connection
       const newConnection = {
         id: 'conn_' + Math.random().toString(36).slice(2, 9),
-        type: drawingConnection.type,
-        sourceNodeId: drawingConnection.sourceNodeId,
-        sourceAnchor: drawingConnection.sourceAnchor,
+        type: activeDrawingConnection.type,
+        sourceNodeId: activeDrawingConnection.sourceNodeId,
+        sourceAnchor: activeDrawingConnection.sourceAnchor,
         targetNodeId: targetNodeId,
         targetAnchor: targetAnchorType,
         comments: [],
@@ -15462,7 +15633,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         if (!result.ok) {
           showToast(result.error || 'Failed to queue connection', 'error');
         } else {
-          showToast(`${drawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} queued`, 'success');
+          showToast(`${activeDrawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} queued`, 'success');
         }
       } else {
         saveStateForUndo();
@@ -15476,14 +15647,30 @@ export default function App({ currentRoute, navigateToRoute }) {
             ? [...prev, newConnection]
             : prev
         ));
-        showToast(`${drawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} created`, 'success');
+        showToast(`${activeDrawingConnection.type === 'userflow' ? 'User flow' : 'Crosslink'} created`, 'success');
       }
     }
 
     // Re-enable text selection
-    document.body.style.userSelect = '';
+    resetConnectionInteractionStyles();
+    drawingConnectionRef.current = null;
     setDrawingConnection(null);
   };
+
+  const isDrawingConnectionActive = !!drawingConnection;
+  useEffect(() => {
+    if (!isDrawingConnectionActive) return undefined;
+    const handleDocumentMouseMove = (event) => handleConnectionMouseMove(event);
+    const handleDocumentMouseUp = (event) => handleConnectionMouseUp(event);
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  // Handlers read the active draft from refs; the listed values cover snap/layout changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections, isDrawingConnectionActive, mapLayout, scale, showThumbnails]);
 
   // Delete a connection
   const deleteConnection = (connectionId) => {
@@ -15971,14 +16158,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     root,
   ]);
 
-  // Start dragging a connection endpoint to reconnect
-  const handleEndpointDragMoveDoc = useRef(null);
-  const handleEndpointDragEndDoc = useRef(null);
-
   const handleEndpointDragStart = (e, conn, endpoint) => {
     e.preventDefault();
     e.stopPropagation();
     if (!contentRef.current) return;
+    cancelActiveConnectionInteraction();
 
     // Set styles immediately
     document.body.style.userSelect = 'none';
@@ -15995,9 +16179,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     const fixedPos = getAnchorPosition(fixedNodeId, fixedAnchor);
 
     if (!fixedPos) {
-      document.body.style.userSelect = '';
-      document.body.style.webkitUserSelect = '';
-      document.body.style.cursor = '';
+      resetConnectionInteractionStyles();
       return;
     }
 
@@ -16023,21 +16205,22 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       const snap = findNearestAnchor(mx, my, fixedNodeId, conn.type);
 
-      setDraggingEndpoint(prev => prev ? {
-        ...prev,
-        currentX: snap ? snap.x : mx,
-        currentY: snap ? snap.y : my,
-        snapTarget: snap,
-      } : null);
+      setDraggingEndpoint(prev => {
+        if (!prev) return null;
+        const nextDraggingEndpoint = {
+          ...prev,
+          currentX: snap ? snap.x : mx,
+          currentY: snap ? snap.y : my,
+          snapTarget: snap,
+        };
+        draggingEndpointRef.current = nextDraggingEndpoint;
+        return nextDraggingEndpoint;
+      });
     };
 
     handleEndpointDragEndDoc.current = () => {
-      document.removeEventListener('mousemove', handleEndpointDragMoveDoc.current);
-      document.removeEventListener('mouseup', handleEndpointDragEndDoc.current);
-
-      document.body.style.userSelect = '';
-      document.body.style.webkitUserSelect = '';
-      document.body.style.cursor = '';
+      detachEndpointDragListeners();
+      resetConnectionInteractionStyles();
 
       setDraggingEndpoint(prev => {
         if (!prev) return null;
@@ -16099,18 +16282,21 @@ export default function App({ currentRoute, navigateToRoute }) {
 
         return null;
       });
+      draggingEndpointRef.current = null;
     };
 
     // Attach listeners BEFORE setting state
     document.addEventListener('mousemove', handleEndpointDragMoveDoc.current);
     document.addEventListener('mouseup', handleEndpointDragEndDoc.current);
 
+    draggingEndpointRef.current = newDraggingState;
     setDraggingEndpoint(newDraggingState);
   };
 
   // Keep these for the content div fallback
   const handleEndpointDragMove = (e) => {
-    if (!draggingEndpoint || !contentRef.current) return;
+    const activeDraggingEndpoint = draggingEndpointRef.current || draggingEndpoint;
+    if (!activeDraggingEndpoint || !contentRef.current) return;
 
     const contentRect = contentRef.current.getBoundingClientRect();
     const mouseX = (e.clientX - contentRect.left) / scale;
@@ -16119,22 +16305,28 @@ export default function App({ currentRoute, navigateToRoute }) {
     const snapTarget = findNearestAnchor(
       mouseX,
       mouseY,
-      draggingEndpoint.fixedNodeId,
-      draggingEndpoint.type
+      activeDraggingEndpoint.fixedNodeId,
+      activeDraggingEndpoint.type
     );
 
-    setDraggingEndpoint(prev => ({
-      ...prev,
-      currentX: snapTarget ? snapTarget.x : mouseX,
-      currentY: snapTarget ? snapTarget.y : mouseY,
-      snapTarget,
-    }));
+    setDraggingEndpoint(prev => {
+      if (!prev) return null;
+      const nextDraggingEndpoint = {
+        ...prev,
+        currentX: snapTarget ? snapTarget.x : mouseX,
+        currentY: snapTarget ? snapTarget.y : mouseY,
+        snapTarget,
+      };
+      draggingEndpointRef.current = nextDraggingEndpoint;
+      return nextDraggingEndpoint;
+    });
   };
 
   const handleEndpointDragEnd = () => {
-    if (!draggingEndpoint) return;
+    const activeDraggingEndpoint = draggingEndpointRef.current || draggingEndpoint;
+    if (!activeDraggingEndpoint) return;
 
-    const { connectionId, endpoint, snapTarget } = draggingEndpoint;
+    const { connectionId, endpoint, snapTarget } = activeDraggingEndpoint;
 
     if (snapTarget) {
       if (isLiveActive && currentMap?.id) {
@@ -16197,9 +16389,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       }
     }
 
-    document.body.style.userSelect = '';
-    document.body.style.webkitUserSelect = '';
-    document.body.style.cursor = '';
+    detachEndpointDragListeners();
+    resetConnectionInteractionStyles();
+    draggingEndpointRef.current = null;
     setDraggingEndpoint(null);
   };
 
@@ -17979,6 +18171,11 @@ export default function App({ currentRoute, navigateToRoute }) {
   const showAppHomeGrid = !hasMap
     && currentRoute?.surface === ROUTE_SURFACES.APP
     && currentRoute?.section === 'home';
+  const showInviteAcceptCanvas = !hasMap && showInviteAcceptGate;
+  const showShareLoadingCanvas = !hasMap
+    && currentRoute?.surface === ROUTE_SURFACES.SHARE
+    && !showMapAccessGate;
+  const showBlankHome = !hasMap && currentRoute?.surface !== ROUTE_SURFACES.SHARE && !showInviteAcceptGate;
   const isDefaultWorkspaceScanModalVisible = showAppHomeGrid && (loading || !!scanErrorMessage);
   const showTopbarScanBar = !showInviteAcceptGate
     && !showMapAccessGate
@@ -18165,6 +18362,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onUrlKeyDown={onKeyDownUrl}
         hasMap={hasMap}
         appHome={showAppHomeGrid}
+        floating={showShareLoadingCanvas || showInviteAcceptCanvas}
         showScanBar={showTopbarScanBar}
         scanOptions={scanOptions}
         showScanOptions={showScanOptions}
@@ -18209,7 +18407,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       />
 
       <div
-        className={`canvas ${hasMap ? 'has-map' : ''} ${showAppHomeGrid ? 'app-home' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
+        className={`canvas ${hasMap ? 'has-map' : ''} ${showAppHomeGrid || showInviteAcceptCanvas ? 'app-home' : ''} ${isPanning ? 'panning' : ''} ${activeTool === 'comments' ? 'comments-mode' : ''} ${connectionTool ? 'connection-mode' : ''} ${isShiftPressed ? 'shift-selecting' : ''}`}
         ref={canvasRef}
         style={{
           '--canvas-pan-x': `${canvasRenderPan.x || 0}px`,
@@ -18223,7 +18421,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         onScroll={resetCanvasNativeScroll}
        
       >
-        {showInviteAcceptGate && (
+        {showInviteAcceptGate && inviteAcceptState?.status !== 'auth_required' && (
           <InviteAcceptGate
             status={inviteAcceptState?.status || (authLoading ? 'processing' : 'auth_required')}
             error={inviteAcceptState?.error || ''}
@@ -18323,7 +18521,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           </StatusAlert>
         )}
 
-        {!hasMap && (
+        {showBlankHome && (
           <div className={`blank ${isDefaultWorkspaceScanModalVisible ? 'blank--scan-active' : ''}`}>
             <div className="blank-shell" aria-hidden={isDefaultWorkspaceScanModalVisible ? 'true' : undefined}>
               <div className="blank-heading">
@@ -19005,6 +19203,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 activeTool,
                 connectionTool,
                 onSelectTool: () => {
+                  cancelActiveConnectionInteraction();
                   setActiveTool('select');
                   setConnectionTool(null);
                 },
@@ -19013,10 +19212,12 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setEditModalMode('add');
                 },
                 onToggleUserFlow: () => {
+                  cancelActiveConnectionInteraction();
                   setConnectionTool(connectionTool === 'userflow' ? null : 'userflow');
                   setActiveTool('select');
                 },
                 onToggleCrosslink: () => {
+                  cancelActiveConnectionInteraction();
                   setConnectionTool(connectionTool === 'crosslink' ? null : 'crosslink');
                   setActiveTool('select');
                 },

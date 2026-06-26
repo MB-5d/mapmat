@@ -71,15 +71,29 @@ function serializeStoredMentions(mentions) {
 
 function listCommentsByMapAsync(mapId) {
   return adapter.queryAllAsync(`
-    SELECT *
-    FROM map_comments
-    WHERE map_id = ?
-    ORDER BY created_at ASC, id ASC
+    SELECT
+      c.*,
+      COALESCE(author_user.avatar_path, author_user.google_picture_url) AS author_avatar_url,
+      COALESCE(completed_user.avatar_path, completed_user.google_picture_url) AS completed_by_avatar_url
+    FROM map_comments c
+    LEFT JOIN users author_user ON author_user.id = c.author_user_id
+    LEFT JOIN users completed_user ON completed_user.id = c.completed_by_user_id
+    WHERE c.map_id = ?
+    ORDER BY c.created_at ASC, c.id ASC
   `, [mapId]);
 }
 
 function getCommentByIdAsync(commentId) {
-  return adapter.queryOneAsync('SELECT * FROM map_comments WHERE id = ?', [commentId]);
+  return adapter.queryOneAsync(`
+    SELECT
+      c.*,
+      COALESCE(author_user.avatar_path, author_user.google_picture_url) AS author_avatar_url,
+      COALESCE(completed_user.avatar_path, completed_user.google_picture_url) AS completed_by_avatar_url
+    FROM map_comments c
+    LEFT JOIN users author_user ON author_user.id = c.author_user_id
+    LEFT JOIN users completed_user ON completed_user.id = c.completed_by_user_id
+    WHERE c.id = ?
+  `, [commentId]);
 }
 
 async function countCommentsByMapAsync(mapId) {

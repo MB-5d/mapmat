@@ -1,5 +1,7 @@
 const Stripe = require('stripe');
+const crypto = require('crypto');
 const billingStore = require('../stores/billingStore');
+const promoCodeStore = require('../stores/promoCodeStore');
 const {
   getBillingPlanConfig,
   getCanonicalBillingPlanKey,
@@ -25,6 +27,83 @@ let stripePriceDisplayCache = {
 
 const STRIPE_PRICE_DISPLAY_CACHE_MS = 5 * 60 * 1000;
 const ZERO_TOTAL_PAYMENT_METHOD_COLLECTION = 'if_required';
+const ADMIN_PROMOTION_OFFERS = Object.freeze([
+  {
+    key: 'pro_free_month',
+    label: 'Pro free month',
+    description: '$8 off the first Pro monthly invoice.',
+    provider: 'stripe',
+    kind: 'subscription',
+    planKey: 'pro',
+    billingCycle: 'monthly',
+    couponId: 'vellic_pro_free_month',
+    discountType: 'amount',
+    firstTimeOrderOnly: true,
+    maxRedemptions: 1,
+  },
+  {
+    key: 'studio_free_month',
+    label: 'Studio free month',
+    description: '$18 off the first Studio monthly invoice.',
+    provider: 'stripe',
+    kind: 'subscription',
+    planKey: 'studio',
+    billingCycle: 'monthly',
+    couponId: 'vellic_studio_free_month',
+    discountType: 'amount',
+    firstTimeOrderOnly: true,
+    maxRedemptions: 1,
+  },
+  {
+    key: 'agency_free_month',
+    label: 'Agency free month',
+    description: '$88 off the first Agency monthly invoice.',
+    provider: 'stripe',
+    kind: 'subscription',
+    planKey: 'agency',
+    billingCycle: 'monthly',
+    couponId: 'vellic_agency_free_month',
+    discountType: 'amount',
+    firstTimeOrderOnly: true,
+    maxRedemptions: 1,
+  },
+  {
+    key: 'screenshots_100',
+    label: '100 screenshot credits',
+    description: '100% off the 100 screenshot credit pack.',
+    provider: 'stripe',
+    kind: 'addon',
+    addonKey: 'screenshot_pack_4',
+    couponId: 'vellic_screenshots_100_free',
+    discountType: 'percent',
+    percentOff: 100,
+    firstTimeOrderOnly: false,
+    maxRedemptions: 1,
+  },
+  {
+    key: 'screenshots_1000',
+    label: '1,000 screenshot credits',
+    description: '100% off the 1,000 screenshot credit pack.',
+    provider: 'stripe',
+    kind: 'addon',
+    addonKey: 'screenshot_pack_5',
+    couponId: 'vellic_screenshots_1000_free',
+    discountType: 'percent',
+    percentOff: 100,
+    firstTimeOrderOnly: false,
+    maxRedemptions: 1,
+  },
+  {
+    key: 'unlimited_manual',
+    label: 'Unlimited usage',
+    description: 'Internal code record for manual unlimited access grants.',
+    provider: 'internal',
+    kind: 'manual_grant',
+    planKey: 'test_unlimited',
+    firstTimeOrderOnly: false,
+    maxRedemptions: 1,
+  },
+]);
 
 function parseEnvBool(value, fallback = false) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -642,6 +721,361 @@ function getStripeObjectId(value) {
   if (!value) return null;
   if (typeof value === 'string') return value;
   return value.id || null;
+}
+
+function isStripeResourceMissing(error) {
+  return error?.code === 'resource_missing' || error?.statusCode === 404 || error?.status === 404;
+}
+
+function getAdminPromotionOfferByKey(offerKey) {
+  const normalizedKey = String(offerKey || '').trim().toLowerCase();
+  const offer = ADMIN_PROMOTION_OFFERS.find((entry) => entry.key === normalizedKey);
+  if (!offer) {
+    throw new BillingError('Choose a valid promo offer.', 400, 'INVALID_PROMO_OFFER');
+  }
+  return offer;
+}
+
+function isAdminPromotionOfferConfigured(offer) {
+  if (offer.provider === 'internal') return true;
+  if (!isStripeBillingEnabled()) return false;
+  try {
+    if (offer.kind === 'subscription') {
+      getPlanPriceConfig(offer.planKey, offer.billingCycle);
+      return true;
+    }
+    if (offer.kind === 'addon') {
+      getAddOnPriceConfig(offer.addonKey);
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function serializeAdminPromotionOffer(offer) {
+  return {
+    key: offer.key,
+    label: offer.label,
+    description: offer.description,
+    provider: offer.provider,
+    kind: offer.kind,
+    planKey: offer.planKey || null,
+    billingCycle: offer.billingCycle || null,
+    addonKey: offer.addonKey || null,
+    firstTimeOrderOnly: !!offer.firstTimeOrderOnly,
+    maxRedemptions: offer.maxRedemptions || null,
+    configured: isAdminPromotionOfferConfigured(offer),
+  };
+}
+
+function getAdminPromotionOffers() {
+  return ADMIN_PROMOTION_OFFERS.map(serializeAdminPromotionOffer);
+}
+
+function serializeAdminPromotionCodeRecord(record) {
+  if (!record) return null;
+  return {
+    id: record.id,
+    offerKey: record.offer_key,
+    offerLabel: record.offer_label,
+    provider: record.provider || 'stripe',
+    code: record.code,
+    status: record.status || 'active',
+    stripeCouponId: record.stripe_coupon_id || null,
+    stripePromotionCodeId: record.stripe_promotion_code_id || null,
+    maxRedemptions: record.max_redemptions === null || record.max_redemptions === undefined
+      ? null
+      : Number(record.max_redemptions),
+    timesRedeemed: Number(record.times_redeemed || 0),
+    firstTimeOrderOnly: Number(record.first_time_order_only || 0) > 0,
+    campaignKey: record.campaign_key || null,
+    recipientEmail: record.recipient_email || null,
+    metadata: record.metadata || null,
+    createdByUserId: record.created_by_user_id || null,
+    createdAt: record.created_at || null,
+    updatedAt: record.updated_at || null,
+  };
+}
+
+function buildStripeMetadata(values = {}) {
+  return Object.fromEntries(
+    Object.entries(values)
+      .map(([key, value]) => [key, String(value || '').trim()])
+      .filter(([, value]) => value)
+  );
+}
+
+async function retrieveOfferStripePriceDetailsAsync({ stripe, offer }) {
+  let priceConfig = null;
+  if (offer.kind === 'subscription') {
+    priceConfig = getPlanPriceConfig(offer.planKey, offer.billingCycle);
+  } else if (offer.kind === 'addon') {
+    priceConfig = getAddOnPriceConfig(offer.addonKey);
+  }
+
+  if (!priceConfig?.priceId) {
+    throw new BillingError('This promo offer is missing a Stripe price.', 503, 'PROMO_PRICE_NOT_CONFIGURED');
+  }
+
+  const price = await stripe.prices.retrieve(priceConfig.priceId, { expand: ['product'] });
+  const productId = getStripeObjectId(price?.product);
+  if (!productId) {
+    throw new BillingError('This promo offer is missing a Stripe product.', 503, 'PROMO_PRODUCT_NOT_CONFIGURED');
+  }
+
+  return {
+    priceId: priceConfig.priceId,
+    productId,
+    unitAmount: Math.max(0, Math.floor(Number(price?.unit_amount || priceConfig.amount || 0))),
+    currency: String(price?.currency || priceConfig.currency || 'usd').trim().toLowerCase() || 'usd',
+  };
+}
+
+function getStaticPlanAmountForOffer(offer) {
+  const config = getBillingPlanConfig();
+  const plan = config.plans?.[getCanonicalBillingPlanKey(config, offer.planKey)];
+  const display = getStaticPlanPriceDisplay(plan, offer.billingCycle);
+  return {
+    amount: Number(display?.amount || 0),
+    currency: String(display?.currency || 'usd').trim().toLowerCase() || 'usd',
+  };
+}
+
+async function buildAdminPromotionCouponPayloadAsync({ stripe, offer }) {
+  const priceDetails = await retrieveOfferStripePriceDetailsAsync({ stripe, offer });
+  const payload = {
+    id: offer.couponId,
+    name: offer.label,
+    duration: 'once',
+    applies_to: {
+      products: [priceDetails.productId],
+    },
+    metadata: buildStripeMetadata({
+      vellicOfferKey: offer.key,
+      vellicOfferLabel: offer.label,
+      vellicPromoCenter: 'true',
+    }),
+  };
+
+  if (offer.discountType === 'percent') {
+    payload.percent_off = Math.max(0, Math.min(Number(offer.percentOff || 100), 100));
+  } else {
+    const staticAmount = getStaticPlanAmountForOffer(offer);
+    payload.amount_off = priceDetails.unitAmount || staticAmount.amount;
+    payload.currency = priceDetails.currency || staticAmount.currency;
+  }
+
+  return payload;
+}
+
+async function getOrCreateAdminPromotionCouponAsync({ stripe, offer }) {
+  if (!offer.couponId) {
+    throw new BillingError('This promo offer is missing a coupon ID.', 500, 'PROMO_COUPON_ID_MISSING');
+  }
+  try {
+    const coupon = await stripe.coupons.retrieve(offer.couponId);
+    if (coupon?.deleted) {
+      throw new BillingError('The Stripe coupon for this offer was deleted.', 409, 'PROMO_COUPON_DELETED');
+    }
+    return coupon;
+  } catch (error) {
+    if (!isStripeResourceMissing(error)) throw error;
+  }
+
+  const payload = await buildAdminPromotionCouponPayloadAsync({ stripe, offer });
+  return stripe.coupons.create(payload);
+}
+
+function generateInternalPromotionCode() {
+  return `VEL-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+}
+
+async function createInternalAdminPromotionCodesAsync({
+  offer,
+  quantity,
+  campaignKey = '',
+  recipientEmail = '',
+  note = '',
+  createdByUserId = null,
+}) {
+  const created = [];
+  for (let index = 0; index < quantity; index += 1) {
+    const record = await promoCodeStore.createPromoCodeRecordAsync({
+      offerKey: offer.key,
+      offerLabel: offer.label,
+      provider: 'internal',
+      code: generateInternalPromotionCode(),
+      status: 'active',
+      maxRedemptions: offer.maxRedemptions || 1,
+      firstTimeOrderOnly: !!offer.firstTimeOrderOnly,
+      campaignKey,
+      recipientEmail,
+      metadata: {
+        note: String(note || '').trim() || null,
+        planKey: offer.planKey || null,
+        generatedBy: 'admin_promo_center',
+      },
+      createdByUserId,
+    });
+    created.push(serializeAdminPromotionCodeRecord(record));
+  }
+  return created;
+}
+
+async function createStripeAdminPromotionCodesAsync({
+  offer,
+  quantity,
+  campaignKey = '',
+  recipientEmail = '',
+  note = '',
+  createdByUserId = null,
+  stripeClient = null,
+}) {
+  const stripe = stripeClient || getStripeClient();
+  const coupon = await getOrCreateAdminPromotionCouponAsync({ stripe, offer });
+  const created = [];
+  for (let index = 0; index < quantity; index += 1) {
+    const promotionCode = await stripe.promotionCodes.create({
+      promotion: {
+        type: 'coupon',
+        coupon: coupon.id,
+      },
+      active: true,
+      max_redemptions: Math.max(1, Math.floor(Number(offer.maxRedemptions || 1))),
+      restrictions: {
+        first_time_transaction: !!offer.firstTimeOrderOnly,
+      },
+      metadata: buildStripeMetadata({
+        vellicOfferKey: offer.key,
+        vellicOfferLabel: offer.label,
+        campaignKey,
+        recipientEmail,
+        note,
+        createdByUserId,
+        generatedBy: 'admin_promo_center',
+      }),
+    });
+
+    const record = await promoCodeStore.createPromoCodeRecordAsync({
+      offerKey: offer.key,
+      offerLabel: offer.label,
+      provider: 'stripe',
+      code: promotionCode.code,
+      status: promotionCode.active ? 'active' : 'archived',
+      stripeCouponId: coupon.id,
+      stripePromotionCodeId: promotionCode.id,
+      maxRedemptions: promotionCode.max_redemptions || offer.maxRedemptions || 1,
+      timesRedeemed: promotionCode.times_redeemed || 0,
+      firstTimeOrderOnly: !!promotionCode.restrictions?.first_time_transaction,
+      campaignKey,
+      recipientEmail,
+      metadata: {
+        note: String(note || '').trim() || null,
+        stripeCreatedAt: promotionCode.created || null,
+        generatedBy: 'admin_promo_center',
+      },
+      createdByUserId,
+    });
+    created.push(serializeAdminPromotionCodeRecord(record));
+  }
+  return created;
+}
+
+async function createAdminPromotionCodesAsync({
+  offerKey,
+  quantity = 1,
+  campaignKey = '',
+  recipientEmail = '',
+  note = '',
+  createdByUserId = null,
+  stripeClient = null,
+} = {}) {
+  const offer = getAdminPromotionOfferByKey(offerKey);
+  const safeQuantity = Math.max(1, Math.floor(Number(quantity || 1)));
+  if (offer.provider === 'internal') {
+    return createInternalAdminPromotionCodesAsync({
+      offer,
+      quantity: safeQuantity,
+      campaignKey,
+      recipientEmail,
+      note,
+      createdByUserId,
+    });
+  }
+
+  return createStripeAdminPromotionCodesAsync({
+    offer,
+    quantity: safeQuantity,
+    campaignKey,
+    recipientEmail,
+    note,
+    createdByUserId,
+    stripeClient,
+  });
+}
+
+async function refreshAdminPromotionCodeRecordFromStripeAsync(record, stripe) {
+  if (!record || record.provider !== 'stripe' || !record.stripe_promotion_code_id || !stripe) {
+    return record;
+  }
+  try {
+    const promotionCode = await stripe.promotionCodes.retrieve(record.stripe_promotion_code_id);
+    return promoCodeStore.updatePromoCodeRecordAsync(record.id, {
+      status: promotionCode.active ? 'active' : 'archived',
+      timesRedeemed: promotionCode.times_redeemed || 0,
+      maxRedemptions: promotionCode.max_redemptions || null,
+    });
+  } catch (error) {
+    if (isStripeResourceMissing(error)) {
+      return promoCodeStore.updatePromoCodeRecordAsync(record.id, { status: 'missing' });
+    }
+    return record;
+  }
+}
+
+async function listAdminPromotionCodesAsync({
+  limit = 50,
+  offset = 0,
+  refreshFromStripe = true,
+  stripeClient = null,
+} = {}) {
+  let records = await promoCodeStore.listPromoCodeRecordsAsync({ limit, offset });
+  const stripe = stripeClient || (isStripeBillingEnabled() ? getStripeClient() : null);
+  if (refreshFromStripe && stripe) {
+    const refreshed = [];
+    for (const record of records) {
+      refreshed.push(await refreshAdminPromotionCodeRecordFromStripeAsync(record, stripe));
+    }
+    records = refreshed;
+  }
+  return records.map(serializeAdminPromotionCodeRecord);
+}
+
+async function archiveAdminPromotionCodeAsync({ id, stripeClient = null } = {}) {
+  const record = await promoCodeStore.getPromoCodeRecordByIdAsync(id);
+  if (!record) {
+    throw new BillingError('Promo code not found.', 404, 'PROMO_CODE_NOT_FOUND');
+  }
+
+  if (record.provider === 'stripe' && record.stripe_promotion_code_id) {
+    const stripe = stripeClient || getStripeClient();
+    const promotionCode = await stripe.promotionCodes.update(record.stripe_promotion_code_id, {
+      active: false,
+    });
+    const updated = await promoCodeStore.updatePromoCodeRecordAsync(record.id, {
+      status: 'archived',
+      timesRedeemed: promotionCode.times_redeemed || record.times_redeemed || 0,
+      maxRedemptions: promotionCode.max_redemptions || record.max_redemptions || null,
+    });
+    return serializeAdminPromotionCodeRecord(updated);
+  }
+
+  const updated = await promoCodeStore.updatePromoCodeRecordAsync(record.id, {
+    status: 'archived',
+  });
+  return serializeAdminPromotionCodeRecord(updated);
 }
 
 function stripeTimestampToDate(value) {
@@ -1344,6 +1778,10 @@ module.exports = {
   isStripeBillingEnabled,
   getBillingCatalogForClient,
   getBillingCatalogForClientAsync,
+  getAdminPromotionOffers,
+  createAdminPromotionCodesAsync,
+  listAdminPromotionCodesAsync,
+  archiveAdminPromotionCodeAsync,
   getPlanPriceConfigByStripePrice,
   getAddOnPriceConfig,
   getAddOnPriceConfigByStripePrice,

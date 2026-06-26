@@ -17,6 +17,7 @@ import TextareaInput from '../ui/TextareaInput';
 
 const sameCommentId = (a, b) => String(a ?? '') === String(b ?? '');
 const COMMENT_EMOJI_PICKER_WIDTH = 320;
+const COMMENT_EMOJI_PICKER_ENABLED = false;
 
 const MessageSquareOffIcon = ({ size = 24, color = 'currentColor', ...props }) => (
   <svg
@@ -159,6 +160,7 @@ function CommentComposer({
   showCancel = false,
   showMentions = false,
   showEmojiPicker = false,
+  emojiPickerEnabled = COMMENT_EMOJI_PICKER_ENABLED,
   collaborators = [],
   onFocus,
   onChange,
@@ -195,17 +197,19 @@ function CommentComposer({
         }}
       />
       <div className="comment-input-actions">
-        <IconButton
-          size="xs"
-          variant="ghost"
-          className="comment-emoji-toggle"
-          onClick={(event) => onToggleEmoji?.(event)}
-          aria-label="Insert emoji"
-          aria-expanded={showEmojiPicker ? 'true' : 'false'}
-          title="Insert emoji"
-        >
-          <Smile />
-        </IconButton>
+        {emojiPickerEnabled ? (
+          <IconButton
+            size="xs"
+            variant="ghost"
+            className="comment-emoji-toggle"
+            onClick={(event) => onToggleEmoji?.(event)}
+            aria-label="Insert emoji"
+            aria-expanded={showEmojiPicker ? 'true' : 'false'}
+            title="Insert emoji"
+          >
+            <Smile />
+          </IconButton>
+        ) : null}
         {showCancel ? (
           <IconButton
             size="xs"
@@ -307,6 +311,7 @@ function CommentItem({
       <div className="comment-row">
         <Avatar
           className="comment-avatar"
+          src={comment.authorAvatarUrl}
           label={getCommentInitial(comment)}
           size="lg"
           tone={getCommentTone(comment)}
@@ -611,6 +616,10 @@ const CommentPopover = ({
   );
 
   const toggleEmojiPicker = (composerId, event) => {
+    if (!COMMENT_EMOJI_PICKER_ENABLED) {
+      setShowEmojiPicker(null);
+      return;
+    }
     setActiveComposer(composerId);
     const buttonRect = event?.currentTarget?.getBoundingClientRect?.();
     const popoverRect = popoverRef.current?.getBoundingClientRect?.();
@@ -899,7 +908,7 @@ const CommentPopover = ({
         </IconButton>
       ) : null}
     </div>
-    {showEmojiPicker ? (
+    {COMMENT_EMOJI_PICKER_ENABLED && showEmojiPicker ? (
       <EmojiPickerPopover anchor={emojiAnchor} onSelect={insertEmoji} />
     ) : null}
     </>

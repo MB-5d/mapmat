@@ -39,6 +39,10 @@ const {
   createAddOnCheckoutSessionAsync,
   createBundleCheckoutSessionAsync,
   refreshBillingAccountFromStripeAsync,
+  getAdminPromotionOffers,
+  createAdminPromotionCodesAsync,
+  listAdminPromotionCodesAsync,
+  archiveAdminPromotionCodeAsync,
 } = require('../utils/stripeBilling');
 
 async function createTestUser(label) {
@@ -533,6 +537,123 @@ async function main() {
     }),
     (error) => error?.code === 'BILLING_ACCOUNT_MISMATCH'
   );
+
+  const promotionOffers = getAdminPromotionOffers();
+  assert(promotionOffers.some((offer) => offer.key === 'pro_free_month'));
+  assert(promotionOffers.some((offer) => offer.key === 'unlimited_manual' && offer.provider === 'internal'));
+
+  const promoStripeState = {
+    coupons: [],
+    promotionCodes: [],
+  };
+  const promoStripe = {
+    prices: {
+      retrieve: async (priceId) => ({
+        id: priceId,
+        unit_amount: priceId === 'price_pro_test' ? 800 : 1600,
+        currency: 'usd',
+        product: {
+          id: priceId === 'price_pro_test' ? 'prod_test_pro' : 'prod_test_screenshot_pack',
+        },
+      }),
+    },
+    coupons: {
+      retrieve: async (couponId) => {
+        const coupon = promoStripeState.coupons.find((entry) => entry.id === couponId);
+        if (!coupon) {
+          const error = new Error('No such coupon');
+          error.code = 'resource_missing';
+          error.statusCode = 404;
+          throw error;
+        }
+        return coupon;
+      },
+      create: async (payload) => {
+        const coupon = { ...payload, object: 'coupon', valid: true };
+        promoStripeState.coupons.push(coupon);
+        return coupon;
+      },
+    },
+    promotionCodes: {
+      create: async (payload) => {
+        const promotionCode = {
+          id: `promo_test_${promoStripeState.promotionCodes.length + 1}`,
+          object: 'promotion_code',
+          active: true,
+          code: `AUTO${promoStripeState.promotionCodes.length + 1}`,
+          max_redemptions: payload.max_redemptions,
+          times_redeemed: 0,
+          restrictions: payload.restrictions || {},
+          metadata: payload.metadata || {},
+          created: Math.floor(Date.now() / 1000),
+        };
+        promoStripeState.promotionCodes.push({ payload, promotionCode });
+        return promotionCode;
+      },
+      retrieve: async (promotionCodeId) => {
+        const entry = promoStripeState.promotionCodes.find((item) => item.promotionCode.id === promotionCodeId);
+        if (!entry) {
+          const error = new Error('No such promotion code');
+          error.code = 'resource_missing';
+          error.statusCode = 404;
+          throw error;
+        }
+        return entry.promotionCode;
+      },
+      update: async (promotionCodeId, payload) => {
+        const entry = promoStripeState.promotionCodes.find((item) => item.promotionCode.id === promotionCodeId);
+        if (!entry) throw new Error('Missing promotion code update target');
+        entry.promotionCode = {
+          ...entry.promotionCode,
+          active: payload.active !== undefined ? payload.active : entry.promotionCode.active,
+        };
+        return entry.promotionCode;
+      },
+    },
+  };
+
+  const createdPromos = await createAdminPromotionCodesAsync({
+    offerKey: 'pro_free_month',
+    quantity: 2,
+    campaignKey: 'friends',
+    recipientEmail: 'person@example.com',
+    note: 'manual share',
+    createdByUserId: 'admin_test',
+    stripeClient: promoStripe,
+  });
+  assert.equal(createdPromos.length, 2);
+  assert.deepEqual(createdPromos.map((entry) => entry.code), ['AUTO1', 'AUTO2']);
+  assert.equal(promoStripeState.coupons.length, 1);
+  assert.equal(promoStripeState.coupons[0].id, 'vellic_pro_free_month');
+  assert.equal(promoStripeState.coupons[0].amount_off, 800);
+  assert.equal(promoStripeState.coupons[0].currency, 'usd');
+  assert.deepEqual(promoStripeState.coupons[0].applies_to.products, ['prod_test_pro']);
+  assert.equal(promoStripeState.promotionCodes.length, 2);
+  assert.equal(promoStripeState.promotionCodes[0].payload.max_redemptions, 1);
+  assert.equal(promoStripeState.promotionCodes[0].payload.restrictions.first_time_transaction, true);
+  assert.equal(promoStripeState.promotionCodes[0].payload.metadata.campaignKey, 'friends');
+
+  const listedPromos = await listAdminPromotionCodesAsync({
+    limit: 10,
+    refreshFromStripe: false,
+  });
+  assert(listedPromos.some((entry) => entry.code === 'AUTO1' && entry.status === 'active'));
+
+  const archivedPromo = await archiveAdminPromotionCodeAsync({
+    id: createdPromos[0].id,
+    stripeClient: promoStripe,
+  });
+  assert.equal(archivedPromo.status, 'archived');
+
+  const internalPromos = await createAdminPromotionCodesAsync({
+    offerKey: 'unlimited_manual',
+    quantity: 1,
+    campaignKey: 'vip',
+    createdByUserId: 'admin_test',
+  });
+  assert.equal(internalPromos.length, 1);
+  assert.equal(internalPromos[0].provider, 'internal');
+  assert.match(internalPromos[0].code, /^VEL-[A-F0-9]+$/);
 
   console.log('Stripe billing checks passed');
 }

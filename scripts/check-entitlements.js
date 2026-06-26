@@ -60,8 +60,10 @@ async function main() {
   assert.equal(freeEditorInviteCheck.code, 'ENTITLEMENT_REQUIRED');
   const freeXmlDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_xml' });
   assert.equal(freeXmlDownloadCheck.allowed, true);
+  assert.equal(freeXmlDownloadCheck.unmetered, true);
   const freeIndexDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_site_index' });
   assert.equal(freeIndexDownloadCheck.allowed, true);
+  assert.equal(freeIndexDownloadCheck.unmetered, true);
   const freePdfDownloadCheck = await checkAccountActionAsync(user, ACTIONS.organizedExportCreate, { eventType: 'export_report_pdf' });
   assert.equal(freePdfDownloadCheck.allowed, true);
   assert.equal(freePdfDownloadCheck.unmetered, true);

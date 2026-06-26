@@ -58,6 +58,7 @@ const Topbar = ({
   showScanBar = true,
   scanPlaceholder,
   appHome = false,
+  floating = false,
   onShowProjects,
   onShowHistory,
   onShowInvites,
@@ -115,7 +116,7 @@ const Topbar = ({
   );
   const hasPendingAccountNotifications = pendingInviteCount > 0 || pendingAccessRequestCount > 0;
 
-  const isFloatingTopbar = hasMap || appHome;
+  const isFloatingTopbar = hasMap || appHome || floating;
   const topbarClassName = [
     'topbar',
     isFloatingTopbar ? 'topbar--floating' : '',

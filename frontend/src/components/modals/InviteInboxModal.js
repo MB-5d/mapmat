@@ -75,7 +75,9 @@ const InviteInboxModal = ({
                       <span>{formatRoleLabel(invite.role)} access</span>
                     </div>
                     {invite.inviterName || invite.inviterEmail ? (
-                      <div className="invite-inbox-item-meta">{invite.inviterName || invite.inviterEmail}</div>
+                      <div className="invite-inbox-item-meta">
+                        Invited by: {invite.inviterName || invite.inviterEmail}
+                      </div>
                     ) : null}
                   </div>
                   <div className="invite-inbox-item-actions">

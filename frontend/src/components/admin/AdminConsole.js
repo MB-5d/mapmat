@@ -1,8 +1,10 @@
 import React, { useCallback, useDeferredValue, useEffect, useState } from 'react';
 import {
+  Archive,
   ChevronDown,
   ChevronUp,
   ChevronsUpDown,
+  Copy,
   DollarSign,
   HardDrive,
   KeyRound,
@@ -26,6 +28,8 @@ import SearchInput from '../ui/SearchInput';
 import UsageCostConsole from './UsageCostConsole';
 import {
   adminApplyUserBillingScenario,
+  adminArchivePromoCode,
+  adminCreatePromoCodes,
   adminDisableUser,
   adminCreateUserEntitlementGrant,
   adminReactivateUser,
@@ -34,6 +38,7 @@ import {
   createAdminSession,
   destroyAdminSession,
   getAdminImageAssetsDiagnostics,
+  getAdminPromoCodes,
   getAdminSession,
   getAdminUser,
   getAdminUsers,
@@ -96,6 +101,14 @@ const BILLING_TEST_SCENARIO_OPTIONS = Object.freeze([
   { value: 'usage_exhausted', label: 'Usage Exhausted', description: 'Free plan with page and screenshot usage spent.' },
 ]);
 
+const DEFAULT_PROMO_FORM = Object.freeze({
+  offerKey: 'pro_free_month',
+  quantity: '1',
+  campaignKey: '',
+  recipientEmail: '',
+  note: '',
+});
+
 function getDefaultSortDirection(sortBy) {
   return sortBy === 'createdAt' || sortBy === 'updatedAt' ? 'desc' : 'asc';
 }
@@ -152,6 +165,338 @@ function formatBytes(value) {
 function SortIcon({ active, direction }) {
   if (!active) return <ChevronsUpDown size={14} />;
   return direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />;
+}
+
+function PromoCodesPanel({ onSessionExpired }) {
+  const [offers, setOffers] = useState([]);
+  const [codes, setCodes] = useState([]);
+  const [form, setForm] = useState({ ...DEFAULT_PROMO_FORM });
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [archivingId, setArchivingId] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [createdCodes, setCreatedCodes] = useState([]);
+
+  const selectedOffer = offers.find((offer) => offer.key === form.offerKey) || offers[0] || null;
+  const quantity = Math.max(0, Math.floor(Number(form.quantity || 0)));
+
+  const loadPromoCodes = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await getAdminPromoCodes({ limit: 100, refreshStripe: true });
+      const nextOffers = Array.isArray(data?.offers) ? data.offers : [];
+      setOffers(nextOffers);
+      setCodes(Array.isArray(data?.codes) ? data.codes : []);
+      if (nextOffers.length > 0 && !nextOffers.some((offer) => offer.key === form.offerKey)) {
+        setForm((current) => ({
+          ...current,
+          offerKey: nextOffers[0].key,
+        }));
+      }
+    } catch (err) {
+      if (err?.status === 401) {
+        onSessionExpired();
+        return;
+      }
+      setError(err.message || 'Failed to load promo codes.');
+    } finally {
+      setLoading(false);
+    }
+  }, [form.offerKey, onSessionExpired]);
+
+  useEffect(() => {
+    loadPromoCodes();
+  }, [loadPromoCodes]);
+
+  function handleFormChange(patch) {
+    setForm((current) => ({
+      ...current,
+      ...patch,
+    }));
+    setSuccess('');
+    setError('');
+  }
+
+  async function handleCreatePromoCodes(event) {
+    event.preventDefault();
+    if (!selectedOffer || quantity <= 0) return;
+
+    setCreating(true);
+    setError('');
+    setSuccess('');
+    setCreatedCodes([]);
+    try {
+      const data = await adminCreatePromoCodes({
+        offerKey: form.offerKey,
+        quantity,
+        campaignKey: form.campaignKey,
+        recipientEmail: form.recipientEmail,
+        note: form.note,
+      });
+      const nextCodes = Array.isArray(data?.codes) ? data.codes : [];
+      setCreatedCodes(nextCodes);
+      setSuccess(`Created ${formatNumber(nextCodes.length)} promo code${nextCodes.length === 1 ? '' : 's'}.`);
+      setForm((current) => ({
+        ...DEFAULT_PROMO_FORM,
+        offerKey: current.offerKey,
+      }));
+      await loadPromoCodes();
+    } catch (err) {
+      if (err?.status === 401) {
+        onSessionExpired();
+        return;
+      }
+      setError(err.message || 'Failed to create promo codes.');
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleArchivePromoCode(code) {
+    if (!code?.id) return;
+    setArchivingId(code.id);
+    setError('');
+    setSuccess('');
+    try {
+      const data = await adminArchivePromoCode(code.id);
+      const archivedCode = data?.code || null;
+      setCodes((current) => current.map((entry) => (
+        entry.id === code.id && archivedCode ? archivedCode : entry
+      )));
+      setSuccess(`Archived ${code.code}.`);
+    } catch (err) {
+      if (err?.status === 401) {
+        onSessionExpired();
+        return;
+      }
+      setError(err.message || 'Failed to archive promo code.');
+    } finally {
+      setArchivingId('');
+    }
+  }
+
+  async function handleCopyCode(code) {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setSuccess(`Copied ${code}.`);
+    } catch {
+      setSuccess(code);
+    }
+  }
+
+  return (
+    <section className="admin-console-panel admin-promo-panel">
+      <div className="admin-promo-header">
+        <div>
+          <h2>Promo Codes</h2>
+          <p>Create Stripe promo codes and internal unlimited records from Admin.</p>
+        </div>
+        <button
+          type="button"
+          className="admin-console-secondary-btn"
+          onClick={loadPromoCodes}
+          disabled={loading || creating}
+        >
+          {loading ? <Loader2 size={16} className="admin-console-spinner" /> : <RefreshCw size={16} />}
+          Refresh
+        </button>
+      </div>
+
+      {error ? <div className="admin-console-error">{error}</div> : null}
+      {success ? <div className="admin-console-success">{success}</div> : null}
+
+      <form className="admin-promo-form" onSubmit={handleCreatePromoCodes}>
+        <label>
+          <span>Offer</span>
+          <select
+            value={form.offerKey}
+            onChange={(event) => handleFormChange({ offerKey: event.target.value })}
+            disabled={creating || offers.length === 0}
+          >
+            {offers.map((offer) => (
+              <option key={offer.key} value={offer.key}>
+                {offer.label}{offer.configured ? '' : ' (setup needed)'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Quantity</span>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={form.quantity}
+            onChange={(event) => handleFormChange({ quantity: event.target.value })}
+            disabled={creating}
+          />
+        </label>
+        <label>
+          <span>Campaign</span>
+          <input
+            type="text"
+            value={form.campaignKey}
+            onChange={(event) => handleFormChange({ campaignKey: event.target.value })}
+            placeholder="Optional"
+            disabled={creating}
+          />
+        </label>
+        <label>
+          <span>Recipient email</span>
+          <input
+            type="email"
+            value={form.recipientEmail}
+            onChange={(event) => handleFormChange({ recipientEmail: event.target.value })}
+            placeholder="Optional"
+            disabled={creating}
+          />
+        </label>
+        <label className="admin-promo-form-note">
+          <span>Note</span>
+          <textarea
+            value={form.note}
+            onChange={(event) => handleFormChange({ note: event.target.value })}
+            placeholder="Optional"
+            rows={2}
+            disabled={creating}
+          />
+        </label>
+        <button
+          type="submit"
+          className="admin-console-primary-btn"
+          disabled={creating || loading || !selectedOffer?.configured || quantity <= 0}
+        >
+          {creating ? <Loader2 size={16} className="admin-console-spinner" /> : <KeyRound size={16} />}
+          Create
+        </button>
+      </form>
+
+      {selectedOffer ? (
+        <div className="admin-promo-offer-summary">
+          <strong>{selectedOffer.label}</strong>
+          <span>{selectedOffer.description}</span>
+          <small>
+            {selectedOffer.provider === 'stripe' ? 'Stripe code' : 'Internal record'}
+            {selectedOffer.firstTimeOrderOnly ? ' · first-time order only' : ''}
+            {selectedOffer.maxRedemptions ? ` · ${selectedOffer.maxRedemptions} redemption` : ''}
+          </small>
+        </div>
+      ) : null}
+
+      {createdCodes.length > 0 ? (
+        <div className="admin-promo-created">
+          {createdCodes.map((code) => (
+            <button
+              type="button"
+              key={code.id}
+              className="admin-promo-code-chip"
+              onClick={() => handleCopyCode(code.code)}
+            >
+              <Copy size={14} />
+              {code.code}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="admin-console-table-frame admin-promo-table-frame">
+        {loading && codes.length === 0 ? (
+          <div className="admin-console-empty admin-console-table-state">
+            <div className="admin-console-empty-icon">
+              <Loader2 size={18} className="admin-console-spinner" />
+            </div>
+            <div className="admin-console-empty-copy">
+              <div className="admin-console-empty-title">Loading promo codes</div>
+              <div className="admin-console-empty-subtitle">Checking current code status.</div>
+            </div>
+          </div>
+        ) : null}
+
+        {!loading && codes.length === 0 ? (
+          <div className="admin-console-empty admin-console-table-state">
+            <div className="admin-console-empty-icon">
+              <KeyRound size={18} />
+            </div>
+            <div className="admin-console-empty-copy">
+              <div className="admin-console-empty-title">No promo codes yet</div>
+              <div className="admin-console-empty-subtitle">Generated codes will appear here.</div>
+            </div>
+          </div>
+        ) : null}
+
+        {codes.length > 0 ? (
+          <div className="admin-console-table-scroll">
+            <table className="admin-console-table admin-promo-table">
+              <thead>
+                <tr>
+                  <th scope="col">Code</th>
+                  <th scope="col">Offer</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Usage</th>
+                  <th scope="col">Campaign</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {codes.map((code) => (
+                  <tr key={code.id}>
+                    <td>
+                      <button
+                        type="button"
+                        className="admin-promo-inline-code"
+                        onClick={() => handleCopyCode(code.code)}
+                      >
+                        <Copy size={14} />
+                        <span>{code.code}</span>
+                      </button>
+                      <span className="admin-console-cell-secondary">{code.provider}</span>
+                    </td>
+                    <td>
+                      <span className="admin-console-cell-primary">{code.offerLabel}</span>
+                      <span className="admin-console-cell-secondary">{code.recipientEmail || 'No recipient'}</span>
+                    </td>
+                    <td>
+                      <span className={`admin-console-status-pill is-${code.status === 'active' ? 'active' : 'disabled'}`}>
+                        {code.status}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="admin-console-cell-secondary">
+                        {formatNumber(code.timesRedeemed)} / {code.maxRedemptions ? formatNumber(code.maxRedemptions) : 'Unlimited'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="admin-console-cell-secondary">{code.campaignKey || 'None'}</span>
+                    </td>
+                    <td>
+                      <span className="admin-console-cell-secondary">{formatTableTimestamp(code.createdAt)}</span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="admin-console-secondary-btn admin-promo-table-action"
+                        disabled={archivingId === code.id || code.status !== 'active'}
+                        onClick={() => handleArchivePromoCode(code)}
+                      >
+                        {archivingId === code.id
+                          ? <Loader2 size={14} className="admin-console-spinner" />
+                          : <Archive size={14} />}
+                        Archive
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
 function StorageDiagnosticsPanel({ onSessionExpired }) {
@@ -1236,6 +1581,13 @@ function AdminConsole({ route, navigateToRoute }) {
     }
   }
 
+  function handleShowPromoCodes() {
+    setActivePanel('promo');
+    if (route?.section === 'user') {
+      navigateToRoute(createAdminHomeRoute(), { replace: true });
+    }
+  }
+
   function handleShowStorage() {
     setActivePanel('storage');
     if (route?.section === 'user') {
@@ -1364,6 +1716,16 @@ function AdminConsole({ route, navigateToRoute }) {
               >
                 <DollarSign size={16} />
                 Usage and costs
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activePanel === 'promo'}
+                className={`admin-console-surface-tab ${activePanel === 'promo' ? 'is-active' : ''}`}
+                onClick={handleShowPromoCodes}
+              >
+                <KeyRound size={16} />
+                Promo codes
               </button>
               <button
                 type="button"
@@ -1550,6 +1912,8 @@ function AdminConsole({ route, navigateToRoute }) {
           <FeedbackConsole onSessionExpired={handleSessionExpired} />
         ) : activePanel === 'usage' ? (
           <UsageCostConsole onSessionExpired={handleSessionExpired} />
+        ) : activePanel === 'promo' ? (
+          <PromoCodesPanel onSessionExpired={handleSessionExpired} />
         ) : (
           <StorageDiagnosticsPanel onSessionExpired={handleSessionExpired} />
         )}

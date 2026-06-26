@@ -3,6 +3,7 @@ import { ArrowUpDown, ArrowUpToLine, CheckCircle2, Trash2 } from 'lucide-react';
 
 import AccountDrawer from '../drawers/AccountDrawer';
 import Button from '../ui/Button';
+import Avatar from '../ui/Avatar';
 import CheckboxField from '../ui/CheckboxField';
 import IconButton from '../ui/IconButton';
 import { MenuItem, MenuPanel, MenuSection } from '../ui/Menu';
@@ -324,6 +325,12 @@ const CommentsPanel = ({
                   <div className="comments-panel-text">{comment.text}</div>
                   <div className="comments-panel-meta-row">
                     <div className="comments-panel-item-meta">
+                      <Avatar
+                        className="comments-panel-avatar"
+                        src={comment.authorAvatarUrl}
+                        label={comment.author || '?'}
+                        size="xs"
+                      />
                       <span className="comments-panel-author">{comment.author}</span>
                       <span className="comments-panel-time">{formatTimeAgo(comment.createdAt)}</span>
                     </div>

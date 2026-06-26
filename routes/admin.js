@@ -8,12 +8,19 @@ const billingStore = require('../stores/billingStore');
 const feedbackStore = require('../stores/feedbackStore');
 const imageAssetStore = require('../stores/imageAssetStore');
 const mapStore = require('../stores/mapStore');
+const promoCodeStore = require('../stores/promoCodeStore');
 const { estimateUsageCosts } = require('../utils/usageCostModel');
 const {
   METERS: ENTITLEMENT_METERS,
   getBillingPlanConfig,
   resolveAccountEntitlementsAsync,
 } = require('../utils/entitlements');
+const {
+  getAdminPromotionOffers,
+  createAdminPromotionCodesAsync,
+  listAdminPromotionCodesAsync,
+  archiveAdminPromotionCodeAsync,
+} = require('../utils/stripeBilling');
 const {
   SCREENSHOT_PUBLIC_BASE,
   extractScreenshotStorageKey,
@@ -157,6 +164,7 @@ async function ensureAdminSupportSchemaAsync() {
   await adminAuditStore.ensureAdminAuditSchemaAsync();
   await billingStore.ensureBillingSchemaAsync();
   await feedbackStore.ensureFeedbackSchemaAsync();
+  await promoCodeStore.ensurePromoCodeSchemaAsync();
 }
 
 function isAccountDisabled(user) {
@@ -598,6 +606,19 @@ function serializeFeedbackTheme(row) {
   };
 }
 
+function handleAdminBillingError(res, error, label) {
+  const status = Number.isFinite(error?.status) ? error.status : 500;
+  if (status >= 500) {
+    console.error(`${label} error:`, error);
+  } else {
+    console.warn(`${label} rejected:`, error?.message || error);
+  }
+  return res.status(status).json({
+    error: error?.message || 'Admin billing request failed.',
+    code: error?.code || 'ADMIN_BILLING_ERROR',
+  });
+}
+
 function parseFeedbackItemFilters(query = {}) {
   const unassigned = String(query?.unassigned || '').trim().toLowerCase();
   const hasTheme = unassigned === 'true'
@@ -886,6 +907,86 @@ router.delete('/session', authenticateAdminSession, async (req, res) => {
 
 router.use(authenticateAdminSession);
 router.use(requireAdminSession);
+
+router.get('/promo-codes', async (req, res) => {
+  try {
+    const parsedPagination = parsePagination(req.query);
+    const limit = parsedPagination.limit ?? 100;
+    const offset = parsedPagination.offset || 0;
+    const refreshFromStripe = parseEnvBool(req.query?.refreshStripe, true);
+    const codes = await listAdminPromotionCodesAsync({
+      limit,
+      offset,
+      refreshFromStripe,
+    });
+    return res.json({
+      offers: getAdminPromotionOffers(),
+      codes,
+      pagination: {
+        limit,
+        offset,
+        returned: codes.length,
+      },
+    });
+  } catch (error) {
+    return handleAdminBillingError(res, error, 'Admin list promo codes');
+  }
+});
+
+router.post('/promo-codes', async (req, res) => {
+  try {
+    const quantity = Math.max(1, Math.floor(Number(req.body?.quantity || 1)));
+    const created = await createAdminPromotionCodesAsync({
+      offerKey: req.body?.offerKey,
+      quantity,
+      campaignKey: String(req.body?.campaignKey || '').trim(),
+      recipientEmail: normalizeEmail(req.body?.recipientEmail),
+      note: String(req.body?.note || '').trim(),
+      createdByUserId: req.adminSession.id,
+    });
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.actorLabel,
+      actorIp: getClientIp(req),
+      action: 'promo_codes_created',
+      metadata: {
+        offerKey: String(req.body?.offerKey || '').trim().toLowerCase(),
+        count: created.length,
+        campaignKey: String(req.body?.campaignKey || '').trim() || null,
+        recipientEmail: normalizeEmail(req.body?.recipientEmail) || null,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      codes: created,
+    });
+  } catch (error) {
+    return handleAdminBillingError(res, error, 'Admin create promo codes');
+  }
+});
+
+router.post('/promo-codes/:id/archive', async (req, res) => {
+  try {
+    const code = await archiveAdminPromotionCodeAsync({ id: req.params.id });
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.actorLabel,
+      actorIp: getClientIp(req),
+      action: 'promo_code_archived',
+      metadata: {
+        promoCodeId: code.id,
+        offerKey: code.offerKey,
+        code: code.code,
+      },
+    });
+    return res.json({
+      success: true,
+      code,
+    });
+  } catch (error) {
+    return handleAdminBillingError(res, error, 'Admin archive promo code');
+  }
+});
 
 router.get('/image-assets', async (req, res) => {
   try {

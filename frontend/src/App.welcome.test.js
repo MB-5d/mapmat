@@ -378,6 +378,41 @@ describe('App blank home and welcome modal', () => {
     expect(container.textContent).not.toContain('Welcome to Vellic');
   });
 
+  test('keeps share links on a blank canvas shell while the map loads', async () => {
+    let resolveShare;
+    api.getShare.mockImplementation(() => new Promise((resolve) => {
+      resolveShare = resolve;
+    }));
+
+    await renderApp({
+      surface: ROUTE_SURFACES.SHARE,
+      shareId: 'share-1',
+      accessLevel: 'view',
+    });
+
+    expect(container.querySelector('.blank')).toBeNull();
+    expect(container.textContent).not.toContain('Start from one of these');
+    expect(container.querySelector('.canvas')).not.toBeNull();
+    expect(container.querySelector('.topbar.topbar--floating')).not.toBeNull();
+    expect(container.querySelector('.topbar.topbar--app-home')).toBeNull();
+
+    await act(async () => {
+      resolveShare({
+        share: {
+          root: {
+            id: 'root',
+            title: 'Shared map',
+            url: 'https://example.com',
+            children: [],
+          },
+        },
+      });
+      await flushAsync(8);
+    });
+
+    expect(container.textContent).toContain('Shared map');
+  });
+
   test('localStorage failures do not crash the app', async () => {
     const setItemSpy = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('storage blocked');

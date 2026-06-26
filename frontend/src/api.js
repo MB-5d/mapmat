@@ -398,6 +398,27 @@ export async function adminCreateUserEntitlementGrant(userId, payload = {}) {
   });
 }
 
+export async function getAdminPromoCodes({ limit = 100, offset = 0, refreshStripe = true } = {}) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  params.set('offset', String(offset));
+  params.set('refreshStripe', refreshStripe ? 'true' : 'false');
+  return fetchAdminApi(`/api/admin/promo-codes?${params.toString()}`);
+}
+
+export async function adminCreatePromoCodes(payload = {}) {
+  return fetchAdminApi('/api/admin/promo-codes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminArchivePromoCode(promoCodeId) {
+  return fetchAdminApi(`/api/admin/promo-codes/${encodeURIComponent(promoCodeId)}/archive`, {
+    method: 'POST',
+  });
+}
+
 export async function getAdminImageAssetsDiagnostics({
   mapId = '',
   limit = 100,

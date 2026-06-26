@@ -726,7 +726,11 @@ const missionStatements = [
   'Improve constantly with and for the people doing the work, shipping small and large updates to make Vellic their own.',
 ];
 
-const defaultOpenApp = (url) => {
+const defaultOpenApp = (url, options = {}) => {
+  if (options.target === '_blank') {
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
   window.location.assign(url);
 };
 
@@ -1679,7 +1683,7 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
 
   const handleShowExample = (example) => {
     if (example.linkUrl) {
-      onOpenApp(example.linkUrl);
+      onOpenApp(example.linkUrl, { target: '_blank' });
       return;
     }
     if (isMarketingPhoneViewport()) {

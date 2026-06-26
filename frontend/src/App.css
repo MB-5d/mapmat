@@ -12280,6 +12280,10 @@ body {
   margin-top: 0;
 }
 
+.comments-panel-avatar.ui-avatar {
+  flex: 0 0 auto;
+}
+
 .comments-panel-author {
   font-size: 12px;
   font-weight: 600;
@@ -13047,7 +13051,7 @@ body {
 
 .invite-inbox-item {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   justify-content: space-between;
   gap: 12px;
   padding: 12px;
@@ -13057,6 +13061,7 @@ body {
 }
 
 .invite-inbox-item-main {
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -13104,8 +13109,10 @@ body {
 .invite-inbox-item-actions {
   display: flex;
   align-items: center;
+  align-self: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  margin-top: auto;
 }
 
 .invite-inbox-item-actions-stacked {

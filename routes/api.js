@@ -84,6 +84,8 @@ const CLIENT_USAGE_EVENT_TYPES = new Set([
   'export_report_pdf',
 ]);
 const UNMETERED_CLIENT_USAGE_EVENT_TYPES = new Set([
+  'export_xml',
+  'export_site_index',
   'export_report_pdf',
 ]);
 
@@ -1260,11 +1262,13 @@ function serializeMapComment(row) {
     author: row.author_name || row.author_email || 'Anonymous',
     authorUserId: row.author_user_id || null,
     authorEmail: row.author_email || null,
+    authorAvatarUrl: row.author_avatar_url || null,
     text: row.text,
     mentions: parseJsonArray(row.mentions, []),
     completed: !!row.completed,
     completedBy: row.completed_by_name || null,
     completedByUserId: row.completed_by_user_id || null,
+    completedByAvatarUrl: row.completed_by_avatar_url || null,
     completedAt: row.completed_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

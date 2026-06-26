@@ -384,8 +384,8 @@ describe('MarketingPreviewV2', () => {
       exampleButtons[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
     });
 
-    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/wd5bpg');
-    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/amh6jd');
+    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/wd5bpg', { target: '_blank' });
+    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/amh6jd', { target: '_blank' });
   });
 
   test('renders public pricing plans without the internal Solo plan', () => {

@@ -22,6 +22,7 @@ describe('CommentsPanel', () => {
         id: 'c1',
         author: 'Alex',
         authorUserId: 'user-1',
+        authorAvatarUrl: 'https://cdn.example.com/alex-avatar.png',
         text: 'Keep this open',
         createdAt: '2026-04-15T12:00:00.000Z',
         completed: false,
@@ -88,6 +89,9 @@ describe('CommentsPanel', () => {
     expect(container.querySelector('button[aria-label="Sort comments: Newest"]')).not.toBeNull();
     expect(container.querySelector('.comments-filter-toggle')).toBeNull();
     expect(container.querySelector('select')).toBeNull();
+    const avatarImage = container.querySelector('.comments-panel-avatar .ui-avatar__image');
+    expect(avatarImage).not.toBeNull();
+    expect(avatarImage.getAttribute('src')).toBe('https://cdn.example.com/alex-avatar.png');
   });
 
   test('uses the compact ghost sort menu and only shows Resolved when resolved comments are visible', () => {
