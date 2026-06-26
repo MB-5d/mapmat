@@ -366,14 +366,26 @@ describe('MarketingPreviewV2', () => {
   });
 
   test('renders supplied product screenshot examples', () => {
-    renderAt('/examples');
+    const openApp = jest.fn();
+    renderAt('/examples', jest.fn(), { onOpenApp: openApp });
 
-    expect(container.textContent).toContain('Raycast main site');
-    expect(container.textContent).toContain('Anthropic full site');
+    expect(container.textContent).toContain('Large site audit');
+    expect(container.textContent).toContain('Nearly 5k page site scan with thumbnails captured.');
+    expect(container.textContent).toContain('Medium site audit');
+    expect(container.textContent).toContain('Over 1,100 page scan including subdomains, orphan pages, and full-page screenshots');
     expect(container.querySelector('.marketing-v2-example__stats')).toBeNull();
     expect(container.querySelectorAll('.marketing-v2-example__actions .ui-btn--type-link')).toHaveLength(2);
     expect(container.textContent).toContain('Show me');
     expect(container.querySelectorAll('.marketing-v2-example img')).toHaveLength(2);
+
+    const exampleButtons = container.querySelectorAll('.marketing-v2-example__actions .ui-btn--type-link');
+    act(() => {
+      exampleButtons[0].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+      exampleButtons[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    });
+
+    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/wd5bpg');
+    expect(openApp).toHaveBeenCalledWith('https://staging.vellic.io/share/amh6jd');
   });
 
   test('renders public pricing plans without the internal Solo plan', () => {

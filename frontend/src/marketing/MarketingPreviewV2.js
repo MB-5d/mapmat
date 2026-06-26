@@ -607,20 +607,20 @@ const featureComparisonEnabled = false;
 
 const exampleCards = [
   {
-    title: 'Raycast main site',
-    text: 'A main-site map with nearly 5,000 pages and full-page screenshots.',
+    title: 'Large site audit',
+    text: 'Nearly 5k page site scan with thumbnails captured.',
     mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleRaycastImage,
-    alt: 'Vellic example map showing the Raycast main site with many page cards and screenshots',
-    sourceUrl: 'https://www.raycast.com',
+    alt: 'Vellic example map showing a large site audit with thousands of page cards and captured thumbnails',
+    linkUrl: 'https://staging.vellic.io/share/wd5bpg',
   },
   {
-    title: 'Anthropic full site',
-    text: 'A 600+ page map with subdomains, orphans, and screenshots in the same workspace.',
+    title: 'Medium site audit',
+    text: 'Over 1,100 page scan including subdomains, orphan pages, and full-page screenshots',
     mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleAnthropicImage,
-    alt: 'Vellic example map showing the Anthropic full site with subdomains, orphans, and screenshots',
-    sourceUrl: 'https://www.anthropic.com',
+    alt: 'Vellic example map showing a medium site audit with subdomains, orphan pages, and full-page screenshots',
+    linkUrl: 'https://staging.vellic.io/share/amh6jd',
   },
 ];
 
@@ -1678,6 +1678,10 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
   };
 
   const handleShowExample = (example) => {
+    if (example.linkUrl) {
+      onOpenApp(example.linkUrl);
+      return;
+    }
     if (isMarketingPhoneViewport()) {
       handleMobileScan({ url: example.sourceUrl });
       return;
