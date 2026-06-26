@@ -1018,27 +1018,27 @@ async function authenticateRequestAsync(req) {
     ? (extractBearerToken(req) || extractWebSocketProtocolToken(req))
     : null;
   const cookieToken = getCookieToken(req);
-  const token = bearerToken || cookieToken;
+  const tokens = [cookieToken, bearerToken].filter(Boolean);
+  const seenTokens = new Set();
 
-  if (!token) {
-    return null;
-  }
+  for (const token of tokens) {
+    if (seenTokens.has(token)) continue;
+    seenTokens.add(token);
+    const decoded = verifyToken(token);
+    if (!decoded) continue;
 
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return null;
-  }
-
-  try {
-    const user = await authStore.getPublicUserByIdAsync(decoded.userId);
-    if (!user || isAccountDisabled(user)) {
+    try {
+      const user = await authStore.getPublicUserByIdAsync(decoded.userId);
+      if (user && !isAccountDisabled(user)) {
+        return user;
+      }
+    } catch (error) {
+      console.error('Authenticate request error:', error);
       return null;
     }
-    return user;
-  } catch (error) {
-    console.error('Authenticate request error:', error);
-    return null;
   }
+
+  return null;
 }
 
 async function authMiddleware(req, res, next) {

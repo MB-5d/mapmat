@@ -260,6 +260,39 @@ describe('large map viewport behavior', () => {
     expect(payload.orphans).toEqual([]);
   });
 
+  test('map save payload preserves partial-scan metadata for reloads', () => {
+    const entitlement = {
+      capped: true,
+      limitReached: true,
+      visiblePageLimit: 1,
+      lockedPageEstimate: 2,
+    };
+    const display = __testing.addScanLimitGhosts({
+      id: 'root',
+      url: 'https://example.com/',
+      title: 'Example',
+      children: [],
+    }, [], entitlement);
+
+    const payload = __testing.buildMapSavePayload({
+      root: display.root,
+      orphans: display.orphans,
+      scanMeta: {
+        brokenLinks: [],
+        partial: true,
+        partialReason: 'entitlement_cap',
+        entitlement,
+      },
+    });
+
+    expect(payload.root.children).toHaveLength(0);
+    expect(payload.root.vellicScanMeta.entitlement.lockedPageEstimate).toBe(2);
+
+    const hydrated = __testing.hydratePersistedScanLimitMap(payload.root, payload.orphans);
+    expect(hydrated.scanMeta.partialReason).toBe('entitlement_cap');
+    expect(hydrated.root.children.some((node) => node.isEntitlementLocked)).toBe(true);
+  });
+
   test('capped scans do not add locked previews when the site finishes under the limit', () => {
     const root = {
       id: 'root',
@@ -319,7 +352,8 @@ describe('large map viewport behavior', () => {
       capReason: 'per_scan_limit',
     };
 
-    expect(__testing.getScanLimitPromptSubtitle(prompt)).toContain('Free scans can include up to 100 pages');
+    expect(__testing.getScanLimitPromptSubtitle(prompt)).toBe('');
+    expect(__testing.getScanLimitPromptBody(prompt)).toContain('Free scans can include up to 100 pages');
     expect(__testing.getScanLimitPromptBody(prompt)).toContain('Continue to scan up to 100 pages');
     expect(__testing.getScanLimitPromptBody(prompt)).toContain('upgrade');
   });
@@ -329,6 +363,81 @@ describe('large map viewport behavior', () => {
     expect(__testing.getGuestScanPromptSubtitle()).toContain('sign in');
     expect(__testing.getGuestScanPromptBody()).toContain('select a plan');
     expect(__testing.getGuestScanPromptBody()).not.toContain('limit reached');
+  });
+
+  test('scan entitlement preview keeps backend caps as the source of truth', () => {
+    expect(__testing.normalizeScanEntitlementPreview({
+      mode: 'account',
+      planName: 'Free',
+      requestedPages: 5000,
+      allowedPages: 100,
+      remaining: 1000,
+      capped: true,
+      capReason: 'per_scan_limit',
+    })).toMatchObject({
+      mode: 'account',
+      planName: 'Free',
+      requestedPages: 5000,
+      allowedPages: 100,
+      remaining: 1000,
+      capped: true,
+      capReason: 'per_scan_limit',
+    });
+
+    expect(__testing.normalizeScanEntitlementPreview({
+      mode: 'guest',
+      requestedPages: 5000,
+      allowedPages: 25,
+      capped: true,
+      capReason: 'guest_limit',
+    })).toMatchObject({
+      mode: 'guest',
+      planName: 'Guest',
+      requestedPages: 5000,
+      allowedPages: 25,
+      capped: true,
+      capReason: 'guest_limit',
+    });
+  });
+
+  test('scan entitlement session guard rejects logged-in downgrade to guest', () => {
+    const accountPreview = {
+      mode: 'account',
+      requestedPages: 5000,
+      allowedPages: 100,
+      capped: true,
+      capReason: 'per_scan_limit',
+    };
+
+    expect(__testing.hasScanEntitlementSessionMismatch({
+      isLoggedIn: true,
+      preview: accountPreview,
+      jobEntitlement: {
+        mode: 'guest',
+        requestedPages: 5000,
+        allowedPages: 25,
+        capped: true,
+        capReason: 'guest_limit',
+      },
+    })).toBe(true);
+
+    expect(__testing.hasScanEntitlementSessionMismatch({
+      isLoggedIn: true,
+      preview: accountPreview,
+      jobEntitlement: {
+        mode: 'account',
+        requestedPages: 5000,
+        allowedPages: 100,
+        capped: true,
+        capReason: 'per_scan_limit',
+      },
+    })).toBe(false);
+
+    expect(__testing.hasScanEntitlementSessionMismatch({
+      isLoggedIn: false,
+      preview: { mode: 'guest' },
+      jobEntitlement: { mode: 'guest' },
+    })).toBe(false);
   });
 
   test('capped scans can be rerun after the current account has a higher allowance', () => {

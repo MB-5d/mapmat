@@ -300,6 +300,51 @@ function formatEntitlementCount(value) {
   return Number(value || 0).toLocaleString();
 }
 
+function toNonNegativeScanCount(value, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.floor(parsed));
+}
+
+function normalizeScanEntitlementPreview(preview = null, fallback = {}) {
+  const requestedPages = Math.max(1, toNonNegativeScanCount(
+    preview?.requestedPages
+      ?? fallback.requestedPages
+      ?? DEFAULT_SCAN_REQUESTED_PAGES
+  ));
+  const mode = preview?.mode || fallback.mode || 'account';
+  const allowedFallback = mode === 'guest'
+    ? Math.min(requestedPages, GUEST_SCAN_PAGE_LIMIT)
+    : requestedPages;
+  const allowedPages = toNonNegativeScanCount(
+    preview?.allowedPages
+      ?? fallback.allowedPages
+      ?? allowedFallback
+  );
+  const capped = preview?.capped !== undefined
+    ? Boolean(preview.capped)
+    : allowedPages < requestedPages;
+
+  return {
+    ...fallback,
+    ...(preview || {}),
+    mode,
+    planName: preview?.planName || fallback.planName || (mode === 'guest' ? 'Guest' : 'Free'),
+    requestedPages,
+    allowedPages,
+    remaining: preview?.remaining ?? fallback.remaining ?? allowedPages,
+    capped,
+    capReason: preview?.capReason || fallback.capReason || (capped ? 'account_limit' : null),
+  };
+}
+
+function hasScanEntitlementSessionMismatch({ isLoggedIn = false, preview = null, jobEntitlement = null } = {}) {
+  if (!isLoggedIn || !jobEntitlement) return false;
+  const previewMode = normalizeScanEntitlementPreview(preview).mode;
+  const jobMode = normalizeScanEntitlementPreview(jobEntitlement, preview || {}).mode;
+  return previewMode === 'account' && jobMode !== 'account';
+}
+
 function formatCurrencyMinorAmount(amount, currency = 'usd') {
   const safeAmount = Math.max(0, Math.floor(Number(amount || 0)));
   try {
@@ -505,13 +550,15 @@ function getScanLimitProgressNote(prompt = null) {
 }
 
 function getScanLimitPromptSubtitle(prompt = null) {
-  return getScanLimitProgressNote(prompt);
+  return '';
 }
 
 function getScanLimitPromptBody(prompt = null) {
   if (!prompt?.capped) return '';
   const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
-  return `Continue to scan up to ${allowed} pages, or upgrade before scanning a larger map.`;
+  const progressNote = getScanLimitProgressNote(prompt);
+  const actionNote = `Continue to scan up to ${allowed} pages, or upgrade before scanning a larger map.`;
+  return progressNote ? `${progressNote} ${actionNote}` : actionNote;
 }
 
 function getGuestScanPromptSubtitle() {
@@ -1618,6 +1665,56 @@ const PresenceChipList = ({ collaborators = [] }) => {
   );
 };
 
+const SAVED_SCAN_META_KEY = 'vellicScanMeta';
+
+const normalizePersistedScanMeta = (scanMeta = null) => {
+  const entitlement = scanMeta?.entitlement || null;
+  if (!shouldShowScanLimitPreview(entitlement)) return null;
+  return {
+    brokenLinks: Array.isArray(scanMeta?.brokenLinks) ? scanMeta.brokenLinks : [],
+    partial: scanMeta?.partial !== false,
+    partialReason: scanMeta?.partialReason || 'entitlement_cap',
+    scanDiagnostics: scanMeta?.scanDiagnostics || null,
+    entitlement,
+  };
+};
+
+const getPersistedScanMetaFromRoot = (rootNode = null) => {
+  if (!rootNode || typeof rootNode !== 'object') return null;
+  return normalizePersistedScanMeta(rootNode[SAVED_SCAN_META_KEY]);
+};
+
+const attachPersistedScanMetaToRoot = (rootNode = null, scanMeta = undefined, hasExplicitScanMeta = false) => {
+  if (!rootNode || typeof rootNode !== 'object') return rootNode;
+  const persistedScanMeta = hasExplicitScanMeta
+    ? normalizePersistedScanMeta(scanMeta)
+    : getPersistedScanMetaFromRoot(rootNode);
+  const next = { ...rootNode };
+  if (persistedScanMeta) {
+    next[SAVED_SCAN_META_KEY] = persistedScanMeta;
+  } else if (Object.prototype.hasOwnProperty.call(next, SAVED_SCAN_META_KEY)) {
+    delete next[SAVED_SCAN_META_KEY];
+  }
+  return next;
+};
+
+const hydratePersistedScanLimitMap = (rootNode = null, orphanNodes = []) => {
+  const scanMeta = getPersistedScanMetaFromRoot(rootNode);
+  if (!scanMeta) {
+    return {
+      root: rootNode,
+      orphans: Array.isArray(orphanNodes) ? orphanNodes : [],
+      scanMeta: { brokenLinks: [] },
+    };
+  }
+  const display = addScanLimitGhosts(rootNode, orphanNodes, scanMeta.entitlement);
+  return {
+    root: display.root,
+    orphans: display.orphans,
+    scanMeta,
+  };
+};
+
 const stripNodeForMapSave = (node) => {
   if (!node || typeof node !== 'object') return node;
   if (node.isEntitlementLocked || node.entitlementLocked) return null;
@@ -1637,17 +1734,26 @@ const stripNodeForMapSave = (node) => {
   return next;
 };
 
-const prepareMapTreeForSave = ({ root, orphans } = {}) => ({
-  root: root ? stripNodeForMapSave(root) : root,
-  orphans: Array.isArray(orphans) ? orphans.map(stripNodeForMapSave).filter(Boolean) : [],
-});
+const prepareMapTreeForSave = (payload = {}) => {
+  const { root, orphans, scanMeta } = payload;
+  const hasExplicitScanMeta = Object.prototype.hasOwnProperty.call(payload, 'scanMeta');
+  const strippedRoot = root ? stripNodeForMapSave(root) : root;
+  return {
+    root: strippedRoot
+      ? attachPersistedScanMetaToRoot(strippedRoot, scanMeta, hasExplicitScanMeta)
+      : strippedRoot,
+    orphans: Array.isArray(orphans) ? orphans.map(stripNodeForMapSave).filter(Boolean) : [],
+  };
+};
 
 const buildMapSavePayload = (payload = {}) => {
   const tree = prepareMapTreeForSave({
     root: payload.root,
     orphans: payload.orphans,
+    ...(Object.prototype.hasOwnProperty.call(payload, 'scanMeta') ? { scanMeta: payload.scanMeta } : {}),
   });
   const next = { ...payload };
+  delete next.scanMeta;
   if (Object.prototype.hasOwnProperty.call(payload, 'root')) next.root = tree.root || null;
   if (Object.prototype.hasOwnProperty.call(payload, 'orphans')) next.orphans = tree.orphans;
   return next;
@@ -1701,8 +1807,9 @@ const serializeMapAutosaveSnapshot = ({
   connections,
   colors,
   connectionColors,
+  scanMeta,
 } = {}) => {
-  const payload = buildMapSavePayload({ root, orphans });
+  const payload = buildMapSavePayload({ root, orphans, scanMeta });
   return JSON.stringify({
     root: payload.root || null,
     orphans: Array.isArray(payload.orphans) ? payload.orphans : [],
@@ -2675,6 +2782,8 @@ const mergeRescanResults = ({
 
 export const __testing = {
   normalizeScanConfig,
+  normalizeScanEntitlementPreview,
+  hasScanEntitlementSessionMismatch,
   scanConfigsHaveOptionChanges,
   addScanLimitGhosts,
   getScanLimitGhostCounts,
@@ -2692,6 +2801,8 @@ export const __testing = {
   mergeRescanResults,
   buildMapSavePayload,
   serializeMapAutosaveSnapshot,
+  getPersistedScanMetaFromRoot,
+  hydratePersistedScanLimitMap,
   applyNodeAssetUpdatesToMap,
   isStoredScreenshotAsset,
   getImageCaptureStats,
@@ -2731,6 +2842,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [scanMeta, setScanMeta] = useState({
     brokenLinks: [],
   });
+  const scanMetaRef = useRef(scanMeta);
   const [scanLayerAvailability, setScanLayerAvailability] = useState({ ...DEFAULT_SCAN_LAYER_AVAILABILITY });
   const [scanLayerVisibility, setScanLayerVisibility] = useState({ ...DEFAULT_SCAN_LAYER_VISIBILITY });
   const [mapName, setMapName] = useState('');
@@ -3080,6 +3192,10 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     orphansRef.current = orphans;
   }, [orphans]);
+
+  useEffect(() => {
+    scanMetaRef.current = scanMeta;
+  }, [scanMeta]);
   const [lastScanAt, setLastScanAt] = useState(null);
   const [expandedStacks, setExpandedStacks] = useState({});
   const [commentingNodeId, setCommentingNodeId] = useState(null); // Node currently showing comment popover
@@ -3645,7 +3761,12 @@ export default function App({ currentRoute, navigateToRoute }) {
   const getVersionSnapshot = useCallback(() => {
     const latestRoot = rootRef.current || root;
     const latestOrphans = orphansRef.current || orphans;
-    const tree = prepareMapTreeForSave({ root: latestRoot, orphans: latestOrphans });
+    const latestScanMeta = scanMetaRef.current || scanMeta;
+    const tree = prepareMapTreeForSave({
+      root: latestRoot,
+      orphans: latestOrphans,
+      scanMeta: latestScanMeta,
+    });
     return {
       root: tree.root,
       orphans: tree.orphans,
@@ -3653,7 +3774,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       colors,
       connectionColors,
     };
-  }, [root, orphans, connections, colors, connectionColors]);
+  }, [root, orphans, scanMeta, connections, colors, connectionColors]);
 
   const serializeVersionSnapshot = useCallback((snapshot) => {
     try {
@@ -4438,7 +4559,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return false;
   }, [currentUser?.entitlements, showEntitlementLock]);
 
-  const getScanEntitlementPreview = useCallback((requestedPages = DEFAULT_SCAN_REQUESTED_PAGES, context = {}) => {
+  const getClientScanEntitlementPreview = useCallback((requestedPages = DEFAULT_SCAN_REQUESTED_PAGES, context = {}) => {
     const effectiveUser = context.user || currentUser || null;
     const effectiveIsLoggedIn = context.isLoggedIn ?? isLoggedIn;
     const entitlements = context.entitlements || effectiveUser?.entitlements || null;
@@ -6444,6 +6565,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       connections,
       colors,
       connectionColors,
+      scanMeta,
       project_id: currentMap?.project_id || null,
     });
     const snapshot = serializeMapAutosaveSnapshot(payload);
@@ -6480,6 +6602,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           connections,
           colors,
           connectionColors,
+          scanMeta,
           project_id: currentMap?.project_id || null,
         }),
         snapshot,
@@ -6490,7 +6613,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [activeImageCaptureJob, areMapPermissionsPending, currentMap?.id, currentMap?.largeMapShell, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
+  }, [activeImageCaptureJob, areMapPermissionsPending, currentMap?.id, currentMap?.largeMapShell, currentMap?.name, currentMap?.project_id, currentMap?.updated_at, root, orphans, connections, colors, connectionColors, scanMeta, mapName, isImportedMap, isViewingHistoricalVersion, flushAutosave, isLiveEditingModeActive, isCollaborativeLiveEditingRestricted, isCoeditingReadOnlyMode, thumbnailStats.completed, thumbnailStats.finalizing, thumbnailStats.mode, thumbnailStats.stopped, thumbnailStats.total]);
 
   useEffect(() => {
     if (!isCollaborativeLiveEditingRestricted) return;
@@ -8249,6 +8372,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const flushThumbnailAutosave = useCallback(({ createVersionCheckpoint = false, forceVersionCheckpoint = false } = {}) => {
     const latestRoot = rootRef.current || root;
     const latestOrphans = orphansRef.current || orphans;
+    const latestScanMeta = scanMetaRef.current || scanMeta;
     if (!currentMap?.id || !latestRoot || isImportedMap || isViewingHistoricalVersion || isCoeditingReadOnlyMode) {
       return Promise.resolve(false);
     }
@@ -8259,6 +8383,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       connections,
       colors,
       connectionColors,
+      scanMeta: latestScanMeta,
       project_id: currentMap?.project_id || null,
     });
     const snapshot = serializeMapAutosaveSnapshot(payload);
@@ -8380,6 +8505,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     mapName,
     orphans,
     root,
+    scanMeta,
     setAutosaveCheckpointRequest,
     setProjects,
   ]);
@@ -10605,13 +10731,18 @@ export default function App({ currentRoute, navigateToRoute }) {
 
   const restoreVersion = (version) => {
     if (!version?.root) return;
-    const versionHasThumbnails = collectAllNodesWithOrphans(version.root, version.orphans || []).some((node) => !!node.thumbnailUrl);
-    setRoot(version.root);
-    setOrphans(normalizeOrphans(version.orphans));
+    const normalizedVersionOrphans = normalizeOrphans(version.orphans);
+    const hydratedVersion = hydratePersistedScanLimitMap(version.root, normalizedVersionOrphans);
+    const hydratedVersionScanMeta = hydratedVersion.scanMeta || { brokenLinks: [] };
+    const versionHasThumbnails = collectAllNodesWithOrphans(hydratedVersion.root, hydratedVersion.orphans || []).some((node) => !!node.thumbnailUrl);
+    scanMetaRef.current = hydratedVersionScanMeta;
+    setRoot(hydratedVersion.root);
+    setOrphans(hydratedVersion.orphans);
     setConnections(version.connections || []);
     setColors(version.colors || DEFAULT_COLORS);
     setConnectionColors(version.connectionColors || DEFAULT_CONNECTION_COLORS);
-    setUrlInput(version.root?.url || '');
+    setUrlInput(hydratedVersion.root?.url || '');
+    setScanMeta(hydratedVersionScanMeta);
     setActiveVersionId(version.id);
     setShowVersionEditPrompt(false);
     setShowVersionHistoryDrawer(false);
@@ -10620,10 +10751,11 @@ export default function App({ currentRoute, navigateToRoute }) {
     setShowThumbnails(versionHasThumbnails);
     const snapshot = serializeVersionSnapshot({
       root: version.root,
-      orphans: version.orphans,
+      orphans: normalizedVersionOrphans,
       connections: version.connections || [],
       colors: version.colors || DEFAULT_COLORS,
       connectionColors: version.connectionColors || DEFAULT_CONNECTION_COLORS,
+      scanMeta: hydratedVersionScanMeta,
     });
     versionBaselineRef.current = snapshot;
     showToast(canSaveVersion() ? 'Version restored' : 'Version preview loaded', 'success');
@@ -10743,6 +10875,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const saveMap = async (projectId, mapName, notes) => {
     const latestRoot = rootRef.current || root;
     const latestOrphans = orphansRef.current || orphans;
+    const latestScanMeta = scanMetaRef.current || scanMeta;
     if (!latestRoot) return showToast('No sitemap to save', 'warning');
     if (!mapName?.trim()) return;
     if (currentMap?.id && warnCoeditingReadOnly('This map')) {
@@ -10778,6 +10911,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             connections,
             colors,
             connectionColors,
+            scanMeta: latestScanMeta,
             notes: notes?.trim() || null,
             project_id: targetProjectId,
           }),
@@ -10794,6 +10928,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           connections,
           colors,
           connectionColors,
+          scanMeta: latestScanMeta,
           notes: notes?.trim() || null,
           project_id: targetProjectId,
         }));
@@ -10838,6 +10973,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           connections,
           colors,
           connectionColors,
+          scanMeta: latestScanMeta,
           project_id: savedMap?.project_id || null,
         }),
       });
@@ -10930,6 +11066,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
+    setScanMeta({ brokenLinks: [] });
+    scanMetaRef.current = { brokenLinks: [] };
     setHasCreatedShareLink(false);
     setCurrentShareAccess(null);
     largeMapHomeNodeRef.current = null;
@@ -10966,6 +11104,8 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(null);
     setOrphans([]);
     setConnections([]);
+    setScanMeta({ brokenLinks: [] });
+    scanMetaRef.current = { brokenLinks: [] };
     setColors(DEFAULT_COLORS);
     setConnectionColors(DEFAULT_CONNECTION_COLORS);
     setCurrentMap(null);
@@ -10999,14 +11139,18 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [clearLoadedMapView]);
 
   const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
+    const normalizedOrphans = normalizeOrphans(map?.orphans);
+    const hydratedMap = hydratePersistedScanLimitMap(map?.root, normalizedOrphans);
+    const hydratedScanMeta = hydratedMap.scanMeta || { brokenLinks: [] };
     resetAutosaveTracking({
       snapshot: serializeMapAutosaveSnapshot({
         name: map?.name || '',
-        root: map?.root,
-        orphans: map?.orphans,
+        root: hydratedMap.root,
+        orphans: hydratedMap.orphans,
         connections: map?.connections,
         colors: map?.colors,
         connectionColors: map?.connectionColors,
+        scanMeta: hydratedScanMeta,
         project_id: map?.project_id || null,
       }),
     });
@@ -11021,13 +11165,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     largeMapVisibleNodesRef.current = [];
     pendingInitialCenterRef.current = false;
     pendingInitialLargeMapCenterRef.current = false;
-    const mapHasThumbnails = mapHasThumbnailAsset(map.root, map.orphans || []);
-    setRoot(map.root);
-    setOrphans(normalizeOrphans(map.orphans));
+    const mapHasThumbnails = mapHasThumbnailAsset(hydratedMap.root, hydratedMap.orphans || []);
+    scanMetaRef.current = hydratedScanMeta;
+    setRoot(hydratedMap.root);
+    setOrphans(hydratedMap.orphans);
     setConnections(map.connections || []);
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
-    setCurrentMap(map);
+    setScanMeta(hydratedScanMeta);
+    setCurrentMap({
+      ...map,
+      root: hydratedMap.root,
+      orphans: hydratedMap.orphans,
+    });
     if (!skipNavigation) {
       navigateToRoute(createMapRoute(map.id));
     }
@@ -11050,7 +11200,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     setEditingProjectId(null);
     setEditingMapId(null);
     applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
-    setUrlInput(map.root?.url || '');
+    setUrlInput(hydratedMap.root?.url || '');
     if (!silent) {
       showToast(`Loaded "${map.name}"`, 'success');
     }
@@ -11065,7 +11215,9 @@ export default function App({ currentRoute, navigateToRoute }) {
       title: rootSummary.title || map.name || 'Untitled Map',
       url: rootSummary.url || map.url || '',
       children: [],
+      ...(map?.scanMeta ? { [SAVED_SCAN_META_KEY]: map.scanMeta } : {}),
     };
+    const shellScanMeta = getPersistedScanMetaFromRoot(shellRoot) || { brokenLinks: [] };
     resetAutosaveTracking({
       snapshot: serializeMapAutosaveSnapshot({
         name: map?.name || '',
@@ -11074,6 +11226,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         connections: [],
         colors: map?.colors || DEFAULT_COLORS,
         connectionColors: map?.connectionColors || DEFAULT_CONNECTION_COLORS,
+        scanMeta: shellScanMeta,
         project_id: map?.project_id || null,
       }),
     });
@@ -11088,11 +11241,13 @@ export default function App({ currentRoute, navigateToRoute }) {
     largeMapVisibleNodesRef.current = [];
     pendingInitialCenterRef.current = false;
     pendingInitialLargeMapCenterRef.current = true;
+    scanMetaRef.current = shellScanMeta;
     setRoot(shellRoot);
     setOrphans([]);
     setConnections([]);
     setColors(map.colors || DEFAULT_COLORS);
     setConnectionColors(map.connectionColors || DEFAULT_CONNECTION_COLORS);
+    setScanMeta(shellScanMeta);
     setCurrentMap({
       ...map,
       root: shellRoot,
@@ -11757,10 +11912,23 @@ export default function App({ currentRoute, navigateToRoute }) {
       && scanConfigsHaveOptionChanges(requestedScanConfig, lastCompletedScanConfig)
       && !shouldReplaceEntitlementLimitedMap;
     const requestedPages = DEFAULT_SCAN_REQUESTED_PAGES;
-    const scanEntitlementPreview = getScanEntitlementPreview(requestedPages, {
+    const fallbackScanEntitlementPreview = getClientScanEntitlementPreview(requestedPages, {
       user: effectiveCurrentUser,
       isLoggedIn: effectiveIsLoggedIn,
     });
+    let scanEntitlementPreview = fallbackScanEntitlementPreview;
+    try {
+      const previewResponse = await api.getScanEntitlementPreview({ maxPages: requestedPages });
+      scanEntitlementPreview = normalizeScanEntitlementPreview(
+        previewResponse?.entitlement,
+        fallbackScanEntitlementPreview
+      );
+    } catch (err) {
+      if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) return;
+      console.warn('Scan entitlement preview failed:', err);
+      showToast('Could not verify your scan limit. Please try again.', 'error');
+      return;
+    }
     if (scanEntitlementPreview.blocked) {
       showEntitlementLock({
         title: scanEntitlementPreview.title || 'Scan locked',
@@ -11841,6 +12009,19 @@ export default function App({ currentRoute, navigateToRoute }) {
       if (!jobId) {
         throw new Error('Failed to start scan');
       }
+      if (hasScanEntitlementSessionMismatch({
+        isLoggedIn: effectiveIsLoggedIn,
+        preview: scanEntitlementPreview,
+        jobEntitlement: jobResponse?.entitlement,
+      })) {
+        api.cancelScanJob(jobId, { accessToken: jobAccessToken }).catch(() => {});
+        throw new Error('Your login session changed. Refresh or sign in again before scanning.');
+      }
+      scanEntitlementPreview = normalizeScanEntitlementPreview(
+        jobResponse?.entitlement,
+        scanEntitlementPreview
+      );
+      setScanLimitProgressNote(getScanLimitProgressNote(scanEntitlementPreview));
     } catch (err) {
       console.error('Scan job creation failed:', err);
       if (handleEntitlementError(err, 'Your plan has no active pages remaining.')) {
@@ -19345,17 +19526,10 @@ export default function App({ currentRoute, navigateToRoute }) {
         <Modal
           show
           onClose={() => setScanLimitPrompt(null)}
-          title="Scan this URL"
-          subtitle={getScanLimitPromptSubtitle(scanLimitPrompt.prompt)}
+          title="Scan limits"
           className="scan-limit-modal"
           footer={(
             <>
-              <Button
-                variant="secondary"
-                onClick={() => setScanLimitPrompt(null)}
-              >
-                Cancel
-              </Button>
               {isPrimaryBillingOwner ? (
                 <Button
                   variant="secondary"

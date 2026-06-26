@@ -405,6 +405,51 @@ async function run() {
     assert.strictEqual(me.user?.emailVerified, true, '/auth/me should show verified email');
     assert.strictEqual(me.user?.hasPassword, true, '/auth/me should show password login enabled');
 
+    const staleBearerMe = await fetchJson(`${API_BASE}/auth/me`, {
+      headers: {
+        Authorization: 'Bearer stale.local-storage-token',
+        Cookie: `auth_token=${verified.token}`,
+      },
+    });
+    assert.strictEqual(
+      staleBearerMe.user?.email,
+      email,
+      '/auth/me should fall back to a valid session cookie when a stale Authorization token is present'
+    );
+
+    const cookiePreferredMe = await fetchJson(`${API_BASE}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${bypassSignup.token}`,
+        Cookie: `auth_token=${verified.token}`,
+      },
+    });
+    assert.strictEqual(
+      cookiePreferredMe.user?.email,
+      email,
+      '/auth/me should prefer the HttpOnly session cookie over a different valid Authorization token'
+    );
+
+    const staleBearerScanPreview = await fetchJson(`${API_BASE}/scan-preview`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer stale.local-storage-token',
+        Cookie: `auth_token=${verified.token}`,
+      },
+      body: JSON.stringify({
+        maxPages: 5000,
+      }),
+    });
+    assert.strictEqual(
+      staleBearerScanPreview.entitlement?.mode,
+      'account',
+      'scan preview should use the valid session cookie instead of downgrading to guest'
+    );
+    assert.notStrictEqual(
+      staleBearerScanPreview.entitlement?.capReason,
+      'guest_limit',
+      'scan preview should not apply guest limits to a valid logged-in session'
+    );
+
     let shortProfilePasswordError = null;
     try {
       await fetchJson(`${API_BASE}/auth/me`, {

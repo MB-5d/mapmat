@@ -826,6 +826,13 @@ export async function createScanJob(payload) {
   });
 }
 
+export async function getScanEntitlementPreview(payload) {
+  return fetchApi('/scan-preview', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function precheckScanAuth(payload) {
   return fetchApi('/scan-auth/precheck', {
     method: 'POST',

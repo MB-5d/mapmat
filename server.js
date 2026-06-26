@@ -111,7 +111,9 @@ const { attachCoeditingTransport } = require('./utils/coeditingTransport');
 const {
   ACTIONS: ENTITLEMENT_ACTIONS,
   METERS: ENTITLEMENT_METERS,
+  checkAccountActionAsync,
   requireAccountActionAsync,
+  sendEntitlementError,
   recordMeterDebitAsync,
   getScreenshotCreditCost,
 } = require('./utils/entitlements');
@@ -804,6 +806,11 @@ const enforceUsageLimit = (eventType) => async (req, res, next) => {
 };
 
 const scanLimiter = createRateLimiter({ windowMs: SCAN_RATE_WINDOW_MS, max: SCAN_RATE_LIMIT, name: 'scan' });
+const scanPreviewLimiter = createRateLimiter({
+  windowMs: SCAN_RATE_WINDOW_MS,
+  max: Math.max(SCAN_RATE_LIMIT, 240),
+  name: 'scan_preview',
+});
 const processScreenshotQueue = () => {
   while (screenshotActive < SCREENSHOT_MAX_CONCURRENCY && screenshotQueue.length) {
     const next = screenshotQueue.shift();
@@ -1497,6 +1504,93 @@ async function debitScanPagesForJobAsync({ jobId, jobUserId, result }) {
     idempotencyKey: `scan-job:${jobId}:crawl-pages`,
     metadata: { jobId, pageCount },
   });
+}
+
+function getFiniteNonNegativeInteger(value, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.floor(parsed));
+}
+
+function buildGuestScanEntitlementPayload(requestedPages) {
+  const allowedPages = Math.min(requestedPages, SCAN_LIMITS.guestPages);
+  return {
+    mode: 'guest',
+    planName: 'Guest',
+    requestedPages,
+    allowedPages,
+    remaining: SCAN_LIMITS.guestPages,
+    capped: allowedPages < requestedPages,
+    capReason: allowedPages < requestedPages ? 'guest_limit' : null,
+  };
+}
+
+function getAccountScanCapReason({ summary, requestedPages, allowedPages }) {
+  if (allowedPages >= requestedPages) return null;
+  const activePageLimit = summary?.limits?.activePages || summary?.meters?.activePages || summary?.meters?.crawlPages || {};
+  const perScanLimit = summary?.limits?.scanPagesPerRun || {};
+  const activeRemaining = activePageLimit.unlimited
+    ? requestedPages
+    : getFiniteNonNegativeInteger(activePageLimit.remaining, 0);
+  const perScanAllowed = perScanLimit.unlimited
+    ? requestedPages
+    : Math.max(1, getFiniteNonNegativeInteger(perScanLimit.limit, requestedPages));
+
+  if (!activePageLimit.unlimited && activeRemaining <= allowedPages) {
+    return 'monthly_remaining';
+  }
+  if (!perScanLimit.unlimited && perScanAllowed <= activeRemaining && perScanAllowed <= allowedPages) {
+    return 'per_scan_limit';
+  }
+  return 'account_limit';
+}
+
+function buildAccountScanEntitlementPayload(entitlement, requestedPages) {
+  const summary = entitlement?.summary || null;
+  const allowedPages = Math.max(1, getFiniteNonNegativeInteger(entitlement?.allowedQuantity, requestedPages));
+  const activePageLimit = summary?.limits?.activePages || summary?.meters?.activePages || summary?.meters?.crawlPages || {};
+  const remaining = activePageLimit.unlimited
+    ? null
+    : getFiniteNonNegativeInteger(activePageLimit.remaining, allowedPages);
+  const capped = allowedPages < requestedPages;
+
+  return {
+    mode: 'account',
+    accountId: summary?.account?.id || null,
+    planName: summary?.plan?.name || 'Free',
+    requestedPages,
+    allowedPages,
+    remaining,
+    capped,
+    capReason: getAccountScanCapReason({ summary, requestedPages, allowedPages }),
+  };
+}
+
+async function resolveScanEntitlementForRequestAsync(req, requestedPages) {
+  if (!req.user) {
+    const entitlementPayload = buildGuestScanEntitlementPayload(requestedPages);
+    return {
+      allowed: true,
+      entitledMaxPages: entitlementPayload.allowedPages,
+      entitlementPayload,
+      entitlement: null,
+    };
+  }
+
+  const entitlement = await checkAccountActionAsync(req.user, ENTITLEMENT_ACTIONS.scanStart, {
+    requestedPages,
+  });
+  if (!entitlement.allowed) {
+    return { allowed: false, entitlement };
+  }
+
+  const entitlementPayload = buildAccountScanEntitlementPayload(entitlement, requestedPages);
+  return {
+    allowed: true,
+    entitledMaxPages: entitlementPayload.allowedPages,
+    entitlementPayload,
+    entitlement,
+  };
 }
 
 function applyScanEntitlementMetadata(result, entitlement = null) {
@@ -6668,6 +6762,22 @@ app.post('/scan-auth/sessions/:id/complete', authMiddleware, requireAuth, requir
   }
 });
 
+app.post('/scan-preview', authMiddleware, scanPreviewLimiter, requireApiKey, async (req, res) => {
+  const { maxPages } = req.body || {};
+
+  try {
+    const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
+    const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
+    if (!scanEntitlement.allowed) {
+      return sendEntitlementError(res, scanEntitlement.entitlement);
+    }
+
+    return res.json({ entitlement: scanEntitlement.entitlementPayload });
+  } catch (e) {
+    return res.status(500).json({ error: e.message || 'Failed to preview scan limits' });
+  }
+});
+
 app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enforceUsageLimit('scan'), async (req, res) => {
   const { url, maxPages, maxDepth, options, authSessionId } = req.body || {};
   if (!url) return res.status(400).json({ error: 'Missing url' });
@@ -6677,17 +6787,17 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
     const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
     const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
     const authSessionStorageState = getReadyScanAuthStorageState(req, authSessionId || options?.authSessionId, safeUrl);
-    const scanEntitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.scanStart, {
-      requestedPages: maxPagesSafe,
-    });
-    if (!scanEntitlement) return;
-    const entitledMaxPages = scanEntitlement.allowedQuantity || maxPagesSafe;
+    const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
+    if (!scanEntitlement.allowed) {
+      return sendEntitlementError(res, scanEntitlement.entitlement);
+    }
+    const entitledMaxPages = scanEntitlement.entitledMaxPages;
 
     recordUsage(req, 'scan', 1, {
       host: new URL(safeUrl).hostname,
       maxPages: entitledMaxPages,
       maxDepth: maxDepthSafe,
-      entitlementCapped: Boolean(scanEntitlement.capped),
+      entitlementCapped: Boolean(scanEntitlement.entitlementPayload.capped),
     });
 
     const result = await crawlSite(
@@ -6697,15 +6807,15 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
       {
         ...(options || {}),
         ...(authSessionStorageState ? { authSessionStorageState } : {}),
-        _entitlementCappedScan: Boolean(scanEntitlement.capped),
+        _entitlementCappedScan: Boolean(scanEntitlement.entitlementPayload.capped),
       }
     );
     hardenCollapsedScanResult(result, {
-      entitlementCapped: Boolean(scanEntitlement.capped),
+      entitlementCapped: Boolean(scanEntitlement.entitlementPayload.capped),
     });
     await recordMeterDebitAsync({
       user: req.user,
-      accountSummary: scanEntitlement.summary,
+      accountSummary: scanEntitlement.entitlement?.summary,
       meter: ENTITLEMENT_METERS.crawlPages,
       quantity: countScanResultPages(result),
       idempotencyKey: req.get('Idempotency-Key') || `scan:${crypto.randomUUID()}`,
@@ -6713,15 +6823,10 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
         host: new URL(safeUrl).hostname,
         requestedPages: maxPagesSafe,
         allowedPages: entitledMaxPages,
-        capped: Boolean(scanEntitlement.capped),
+        capped: Boolean(scanEntitlement.entitlementPayload.capped),
       },
     });
-    applyScanEntitlementMetadata(result, {
-      mode: 'account',
-      requestedPages: maxPagesSafe,
-      allowedPages: entitledMaxPages,
-      capped: Boolean(scanEntitlement.capped),
-    });
+    applyScanEntitlementMetadata(result, scanEntitlement.entitlementPayload);
     res.json(result);
   } catch (e) {
     const message = e.message || 'Scan failed';
@@ -6758,11 +6863,16 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
 
   const maxPagesSafe = normalizeMaxPagesLimit(maxPages, SCAN_LIMITS.maxPagesDefault);
   const maxDepthSafe = normalizeScanDepthLimit(maxDepth);
-  const scanEntitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.scanStart, {
-    requestedPages: maxPagesSafe,
-  });
-  if (!scanEntitlement) return;
-  const entitledMaxPages = scanEntitlement.allowedQuantity || maxPagesSafe;
+  let scanEntitlement;
+  try {
+    scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
+    if (!scanEntitlement.allowed) {
+      return sendEntitlementError(res, scanEntitlement.entitlement);
+    }
+  } catch (e) {
+    return res.status(500).json({ error: e.message || 'Failed to verify scan limits' });
+  }
+  const entitledMaxPages = scanEntitlement.entitledMaxPages;
 
   // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -6807,7 +6917,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
       host: new URL(safeUrl).hostname,
       maxPages: entitledMaxPages,
       maxDepth: maxDepthSafe,
-      entitlementCapped: Boolean(scanEntitlement.capped),
+      entitlementCapped: Boolean(scanEntitlement.entitlementPayload.capped),
     });
 
     const result = await crawlSite(
@@ -6817,7 +6927,7 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
       {
         ...parsedOptions,
         ...(authSessionStorageState ? { authSessionStorageState } : {}),
-        _entitlementCappedScan: Boolean(scanEntitlement.capped),
+        _entitlementCappedScan: Boolean(scanEntitlement.entitlementPayload.capped),
       },
       (progress) => {
         lastScanProgress = progress;
@@ -6827,11 +6937,11 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
     );
     hardenCollapsedScanResult(result, {
       progress: lastScanProgress,
-      entitlementCapped: Boolean(scanEntitlement.capped),
+      entitlementCapped: Boolean(scanEntitlement.entitlementPayload.capped),
     });
     await recordMeterDebitAsync({
       user: req.user,
-      accountSummary: scanEntitlement.summary,
+      accountSummary: scanEntitlement.entitlement?.summary,
       meter: ENTITLEMENT_METERS.crawlPages,
       quantity: countScanResultPages(result),
       idempotencyKey: req.get('Idempotency-Key') || `scan-stream:${crypto.randomUUID()}`,
@@ -6839,15 +6949,10 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
         host: new URL(safeUrl).hostname,
         requestedPages: maxPagesSafe,
         allowedPages: entitledMaxPages,
-        capped: Boolean(scanEntitlement.capped),
+        capped: Boolean(scanEntitlement.entitlementPayload.capped),
       },
     });
-    applyScanEntitlementMetadata(result, {
-      mode: 'account',
-      requestedPages: maxPagesSafe,
-      allowedPages: entitledMaxPages,
-      capped: Boolean(scanEntitlement.capped),
-    });
+    applyScanEntitlementMetadata(result, scanEntitlement.entitlementPayload);
 
     try {
       const payload = JSON.stringify(result);
@@ -6880,28 +6985,12 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
     if ((authSessionId || options?.authSessionId) && (!readyAuthSession || readyAuthSession.status !== 'ready')) {
       return res.status(400).json({ error: 'Authenticated scan session is missing or expired' });
     }
-    let scanEntitlement = null;
-    let entitledMaxPages = Math.min(maxPagesSafe, SCAN_LIMITS.guestPages);
-    let entitlementPayload = {
-      mode: 'guest',
-      requestedPages: maxPagesSafe,
-      allowedPages: entitledMaxPages,
-      capped: entitledMaxPages < maxPagesSafe,
-    };
-    if (req.user) {
-      scanEntitlement = await requireAccountActionAsync(req, res, ENTITLEMENT_ACTIONS.scanStart, {
-        requestedPages: maxPagesSafe,
-      });
-      if (!scanEntitlement) return;
-      entitledMaxPages = scanEntitlement.allowedQuantity || maxPagesSafe;
-      entitlementPayload = {
-        mode: 'account',
-        accountId: scanEntitlement.summary.account.id,
-        requestedPages: maxPagesSafe,
-        allowedPages: entitledMaxPages,
-        capped: Boolean(scanEntitlement.capped),
-      };
+    const scanEntitlement = await resolveScanEntitlementForRequestAsync(req, maxPagesSafe);
+    if (!scanEntitlement.allowed) {
+      return sendEntitlementError(res, scanEntitlement.entitlement);
     }
+    const entitledMaxPages = scanEntitlement.entitledMaxPages;
+    const entitlementPayload = scanEntitlement.entitlementPayload;
     const jobAccessToken = crypto.randomBytes(24).toString('hex');
 
     const jobId = await createJob({
@@ -6937,6 +7026,9 @@ app.post('/scan-jobs', authMiddleware, scanLimiter, requireApiKey, enforceUsageL
         capped: Boolean(entitlementPayload.capped),
         requestedPages: maxPagesSafe,
         allowedPages: entitledMaxPages,
+        remaining: entitlementPayload.remaining ?? null,
+        capReason: entitlementPayload.capReason || null,
+        planName: entitlementPayload.planName || null,
       },
     });
   } catch (e) {
