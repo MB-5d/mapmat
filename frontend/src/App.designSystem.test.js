@@ -968,6 +968,20 @@ describe('map image asset persistence', () => {
     expect(appCss).toMatch(/\.image-upload-zone \{[\s\S]*border: var\(--border-width-subtle\) dashed var\(--ui-color-border-strong\);/);
   });
 
+  test('upgrade modal keeps stable height and aligned purchase columns', () => {
+    expect(appJs).toContain('*additional screenshot credits and page limits can be purchased anytime');
+    expect(appJs).toContain("<strong>{selectedBillingPurchase?.label || '--'}</strong>");
+    expect(appJs).toContain('className="plans-modal-pack-price"');
+    expect(appCss).toMatch(/\.modal-card\.plans-modal \{[\s\S]*height: min\(640px, calc\(100vh - 48px\)\);/);
+    expect(appCss).toMatch(/\.plans-modal-tab-panel--upgrades \{[\s\S]*padding-top: 32px;/);
+    expect(appCss).toMatch(/\.plans-modal-pack-card \{[\s\S]*grid-template-columns: 18px minmax\(0, 1fr\) 56px 46px minmax\(96px, auto\);[\s\S]*"check main price quantity total";/);
+    expect(appCss).toMatch(/\.plans-modal-pack-price \{[\s\S]*justify-self: end;[\s\S]*font-size: var\(--type-body-sm-size\);/);
+    expect(appCss).toMatch(/\.plans-modal-pack-quantity \{[\s\S]*justify-self: center;/);
+    expect(appCss).toMatch(/\.plans-modal-pack-total \{[\s\S]*justify-self: start;[\s\S]*text-align: left;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal \{[\s\S]*margin-right: 80px;[\s\S]*text-align: right;/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal-amount \{[\s\S]*font-size: 14px;[\s\S]*font-weight: 800;/);
+  });
+
   test('back-to-top scroll areas reserve bottom clearance', () => {
     expect(appCss).toMatch(/\.report-drawer:not\(\.image-report-drawer\) \.report-drawer-body \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);
     expect(appCss).toMatch(/\.image-report-list-shell \{[\s\S]*padding-bottom: var\(--unit-88\);[\s\S]*scroll-padding-bottom: var\(--unit-88\);/);

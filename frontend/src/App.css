@@ -10319,6 +10319,7 @@ body {
 .modal-card.plans-modal {
   width: min(1040px, calc(100vw - 48px));
   max-width: min(1040px, calc(100vw - 48px));
+  height: min(640px, calc(100vh - 48px));
   max-height: min(640px, calc(100vh - 48px));
   overflow: hidden;
 }
@@ -10328,6 +10329,7 @@ body {
 }
 
 .modal-card.plans-modal .modal-body {
+  flex: 1 1 auto;
   padding: 10px 20px 12px;
   overflow-y: auto;
 }
@@ -10341,6 +10343,9 @@ body {
 }
 
 .plans-modal-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 10px;
   min-height: 0;
 }
@@ -10361,7 +10366,7 @@ body {
 }
 
 .plans-modal-tab-panel--upgrades {
-  padding-top: 40px;
+  padding-top: 32px;
 }
 
 .plans-modal-cycle-control {
@@ -10604,9 +10609,9 @@ body {
 .plans-modal-pack-card {
   cursor: pointer;
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 46px minmax(86px, auto);
+  grid-template-columns: 18px minmax(0, 1fr) 56px 46px minmax(96px, auto);
   grid-template-areas:
-    "check main quantity total";
+    "check main price quantity total";
   align-items: center;
   gap: 8px;
   min-height: 0;
@@ -10661,6 +10666,17 @@ body {
   white-space: nowrap;
 }
 
+.plans-modal-pack-price {
+  grid-area: price;
+  justify-self: end;
+  color: var(--ui-color-text);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-weight-regular);
+  line-height: var(--type-body-sm-line-height);
+  text-align: right;
+  white-space: nowrap;
+}
+
 .plans-modal-pack-quantity {
   display: flex;
   grid-area: quantity;
@@ -10668,13 +10684,15 @@ body {
   min-width: 0;
   flex-direction: column;
   gap: 4px;
+  justify-self: center;
 }
 
 .plans-modal-pack-total {
   grid-area: total;
-  justify-self: end;
+  justify-self: start;
   color: var(--ui-color-muted);
   line-height: 1.2;
+  text-align: left;
 }
 
 .plans-modal-pack-quantity .field,
@@ -10710,6 +10728,7 @@ body {
   flex-direction: column;
   gap: 2px;
   min-width: 150px;
+  margin-right: 80px;
   text-align: right;
 }
 
@@ -10722,6 +10741,15 @@ body {
 .plans-modal-subtotal strong {
   color: var(--ui-color-text);
   font-size: 14px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.plans-modal-subtotal-amount {
+  color: var(--ui-color-text);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.15;
 }
 
 .plans-modal-footer-actions {
@@ -10752,6 +10780,7 @@ body {
     grid-template-columns: 18px minmax(0, 1fr);
     grid-template-areas:
       "check main"
+      ". price"
       ". quantity"
       ". total";
   }
@@ -10759,6 +10788,10 @@ body {
   .plans-modal-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .plans-modal-subtotal {
+    margin-right: 0;
   }
 
   .plans-modal-footer-actions {

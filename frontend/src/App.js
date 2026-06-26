@@ -4363,9 +4363,9 @@ export default function App({ currentRoute, navigateToRoute }) {
         <div className="plans-modal-pack-main">
           <div className="plans-modal-pack-title-row">
             <strong>{formatEntitlementCount(pack.quantity)} {unitLabel.plural}</strong>
-            {pack.configured && pack.priceLabel ? <small>{pack.priceLabel}</small> : null}
           </div>
         </div>
+        {pack.configured && pack.priceLabel ? <small className="plans-modal-pack-price">{pack.priceLabel}</small> : null}
         <div className="plans-modal-pack-quantity">
           <TextInput
             type="number"
@@ -19343,8 +19343,8 @@ export default function App({ currentRoute, navigateToRoute }) {
 	            <div className="plans-modal-footer">
 	              <div className="plans-modal-subtotal" aria-live="polite">
 	                <span>Selected</span>
-	                <strong>{selectedBillingPurchase?.label || 'None'}</strong>
-	                <small>Subtotal: {selectedBillingPurchase?.subtotal || '--'}</small>
+	                <strong>{selectedBillingPurchase?.label || '--'}</strong>
+	                <small>Subtotal: <span className="plans-modal-subtotal-amount">{selectedBillingPurchase?.subtotal || '--'}</span></small>
 	              </div>
 	              <div className="plans-modal-footer-actions">
 	                <Button variant="secondary" onClick={dismissPlansModal}>
@@ -19461,7 +19461,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                             </Button>
                           )}
                           <p className="plans-modal-pricing-card__screenshot-note">
-                            *additional screenshot credits can be purchased anytime
+                            *additional screenshot credits and page limits can be purchased anytime
                           </p>
                         </div>
                       </article>
