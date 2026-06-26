@@ -32,7 +32,6 @@ export const shouldPreserveExistingMapForCollapsedScan = ({ result, nextRoot, ex
 
 export const shouldRejectFreshRootOnlyScan = ({ result, nextRoot }) => (
   isRootOnlyDegradedScanResult(result)
-  && !isEntitlementLimitedScanResult(result)
   && countScanResultNodes(nextRoot) <= 1
 );
 

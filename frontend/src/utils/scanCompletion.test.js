@@ -66,7 +66,7 @@ test('rejects a fresh collapsed scan instead of showing one node as success', ()
   })).toBe(true);
 });
 
-test('allows capped one-node scans to show a scan-limit preview', () => {
+test('rejects capped degraded one-node scans instead of showing a scan-limit preview', () => {
   expect(shouldRejectFreshRootOnlyScan({
     result: {
       partial: true,
@@ -75,7 +75,10 @@ test('allows capped one-node scans to show a scan-limit preview', () => {
     },
     nextRoot: rootOnly,
     existingRoot: rootOnly,
-  })).toBe(false);
+  })).toBe(true);
+});
+
+test('allows pure entitlement-cap one-node scans when there is no degraded signal', () => {
   expect(shouldRejectFreshRootOnlyScan({
     result: { partial: true, partialReason: 'entitlement_cap' },
     nextRoot: rootOnly,

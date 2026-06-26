@@ -38,8 +38,8 @@ assert.strictEqual(countScanTreeNodes(badStagingShape.root), 1, 'fixture should 
 assert.strictEqual(badStagingShape.partial, true, 'root-only discovered scan should be partial');
 assert.strictEqual(
   badStagingShape.partialReason,
-  'entitlement_cap',
-  'capped root-only discovered scan should be marked as scan-limited'
+  'scan_collapsed',
+  'capped root-only discovered scan should preserve the collapse reason'
 );
 assert.strictEqual(
   badStagingShape.scanDiagnostics?.collapseReason,

@@ -310,6 +310,20 @@ describe('large map viewport behavior', () => {
     expect(__testing.getScanLimitProgressNote({ capped: false })).toBe('');
   });
 
+  test('scan limit prompt warns capped account users before scanning', () => {
+    const prompt = {
+      mode: 'account',
+      planName: 'Free',
+      allowedPages: 100,
+      capped: true,
+      capReason: 'per_scan_limit',
+    };
+
+    expect(__testing.getScanLimitPromptSubtitle(prompt)).toContain('Free scans can include up to 100 pages');
+    expect(__testing.getScanLimitPromptBody(prompt)).toContain('Continue to scan up to 100 pages');
+    expect(__testing.getScanLimitPromptBody(prompt)).toContain('upgrade');
+  });
+
   test('guest scan prompt asks for auth or upgrade before scanning', () => {
     expect(__testing.getGuestScanPromptSubtitle()).toContain('Continue as a guest');
     expect(__testing.getGuestScanPromptSubtitle()).toContain('sign in');

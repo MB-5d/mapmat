@@ -252,7 +252,22 @@ const ReportDrawer = ({
     ? (scanMeta?.scanDiagnostics?.collapseReason || 'Root-only scan returned after discovery signals were found')
     : '';
   const isPartialImport = scanMeta?.partialReason === 'import_page_limit';
-  const entitlementNotice = scanMeta?.entitlement?.capped && scanMeta.entitlement.limitReached !== false
+  const entitlementVisibleLimit = Number(
+    scanMeta?.entitlement?.visiblePageLimit
+      || scanMeta?.entitlement?.allowedPages
+      || scanMeta?.entitlement?.visiblePageCount
+      || 0
+  );
+  const realReportEntryCount = entries.filter((entry) => !(entry.isEntitlementLocked || entry.entitlementLocked)).length;
+  const hasLockedReportEntries = entries.some((entry) => entry.isEntitlementLocked || entry.entitlementLocked);
+  const entitlementNotice = scanMeta?.entitlement?.capped
+    && scanMeta.entitlement.limitReached !== false
+    && (
+      isPartialImport
+      || hasLockedReportEntries
+      || !entitlementVisibleLimit
+      || realReportEntryCount >= entitlementVisibleLimit
+    )
     ? scanMeta.entitlement
     : null;
 

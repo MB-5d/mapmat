@@ -621,4 +621,51 @@ describe('ReportDrawer', () => {
     expect(container.textContent).toContain('root_links_found');
   });
 
+  test('hides stale scan-limit warning when a saved map only has one real page', () => {
+    renderDrawer({
+      entries: [entries[0]],
+      stats: {
+        total: 1,
+        duplicates: 0,
+        brokenLinks: 0,
+        errorPages: 0,
+        inactivePages: 0,
+        orphanPages: 0,
+        files: 0,
+        subdomains: 0,
+        missing: 0,
+      },
+      scanMeta: {
+        entitlement: {
+          capped: true,
+          limitReached: true,
+          visiblePageLimit: 100,
+          allowedPages: 100,
+          lockedPageEstimate: 99,
+        },
+      },
+    });
+
+    expect(container.textContent).not.toContain('Full map locked.');
+    expect(container.textContent).toContain('1');
+  });
+
+  test('shows scan-limit warning when visible pages reached the account limit', () => {
+    renderDrawer({
+      entries,
+      scanMeta: {
+        entitlement: {
+          capped: true,
+          limitReached: true,
+          visiblePageLimit: 3,
+          allowedPages: 3,
+          lockedPageEstimate: 20,
+        },
+      },
+    });
+
+    expect(container.textContent).toContain('Full map locked.');
+    expect(container.textContent).toContain('Showing 3 visible pages.');
+  });
+
 });

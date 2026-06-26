@@ -28,6 +28,7 @@ jest.mock('../../api', () => ({
 jest.mock('../../utils/constants', () => ({
   API_BASE: 'http://localhost:4002',
   GOOGLE_AUTH_ENABLED: true,
+  MIN_PASSWORD_LENGTH: 8,
 }));
 
 jest.mock('../../utils/analytics', () => ({

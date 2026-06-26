@@ -160,7 +160,6 @@ import {
 import {
   getCollapsedScanMessage,
   getRootOnlyScanFailureMessage,
-  isEntitlementLimitedScanResult,
   shouldPreserveExistingMapForCollapsedScan,
   shouldRejectFreshRootOnlyScan,
 } from './utils/scanCompletion';
@@ -503,6 +502,16 @@ function getScanLimitProgressNote(prompt = null) {
     return `${planName} scans can include up to ${allowed} pages. If Vellic finds more, it will show a partial map.`;
   }
   return `This scan can include up to ${allowed} pages on your current plan. If Vellic finds more, it will show a partial map.`;
+}
+
+function getScanLimitPromptSubtitle(prompt = null) {
+  return getScanLimitProgressNote(prompt);
+}
+
+function getScanLimitPromptBody(prompt = null) {
+  if (!prompt?.capped) return '';
+  const allowed = formatEntitlementCount(prompt.allowedPages || prompt.remaining || 0);
+  return `Continue to scan up to ${allowed} pages, or upgrade before scanning a larger map.`;
 }
 
 function getGuestScanPromptSubtitle() {
@@ -2670,6 +2679,8 @@ export const __testing = {
   addScanLimitGhosts,
   getScanLimitGhostCounts,
   getScanLimitProgressNote,
+  getScanLimitPromptSubtitle,
+  getScanLimitPromptBody,
   getGuestScanPromptSubtitle,
   getGuestScanPromptBody,
   limitImportedMapToPageCount,
@@ -2969,6 +2980,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const [authInitialView, setAuthInitialView] = useState('login');
   const [pendingAuthPostSuccessAction, setPendingAuthPostSuccessAction] = useState(null);
   const [guestScanPrompt, setGuestScanPrompt] = useState(null);
+  const [scanLimitPrompt, setScanLimitPrompt] = useState(null);
   const [scanAuthPrompt, setScanAuthPrompt] = useState(null);
   const [screenshotDownloadUpsell, setScreenshotDownloadUpsell] = useState(null);
   const [entitlementLockModal, setEntitlementLockModal] = useState(null);
@@ -7197,6 +7209,22 @@ export default function App({ currentRoute, navigateToRoute }) {
       );
     }, 0);
   }, [guestScanPrompt]);
+
+  const continueScanLimitPrompt = useCallback(() => {
+    const pendingScan = scanLimitPrompt;
+    if (!pendingScan?.url) return;
+    setScanLimitPrompt(null);
+    window.setTimeout(() => {
+      scanRef.current?.(
+        pendingScan.url,
+        pendingScan.preserveName,
+        {
+          ...(pendingScan.authFlow || {}),
+          skipScanLimitPrompt: true,
+        }
+      );
+    }, 0);
+  }, [scanLimitPrompt]);
 
   const openGuestScanAuthFlow = useCallback(({
     contextMessage,
@@ -11740,6 +11768,19 @@ export default function App({ currentRoute, navigateToRoute }) {
       });
       return;
     }
+    if (effectiveIsLoggedIn && scanEntitlementPreview.capped && !authFlow.skipScanLimitPrompt) {
+      setUrlInput(url);
+      setScanLimitPrompt({
+        url,
+        preserveName,
+        prompt: scanEntitlementPreview,
+        authFlow: {
+          ...authFlow,
+          scanOptionsOverride: activeScanOptions,
+        },
+      });
+      return;
+    }
     const maxPagesForRequest = requestedPages;
 
     if (effectiveIsLoggedIn && AUTHENTICATED_SCAN_ENABLED && !authFlow.skipAuthPrecheck) {
@@ -11857,9 +11898,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         return;
       }
 
-      const normalizedPartialReason = data.partialReason === 'scan_collapsed' && isEntitlementLimitedScanResult(data)
-        ? 'entitlement_cap'
-        : (data.partialReason || null);
+      const normalizedPartialReason = data.partialReason || null;
       const isStoppedPartial = data.partial === true && normalizedPartialReason === 'stopped_by_user';
       const isPartialResult = data.partial === true;
       const hostname = (() => {
@@ -15098,6 +15137,7 @@ export default function App({ currentRoute, navigateToRoute }) {
       setPromptModal(null);
       setPlansModal(null);
       setGuestScanPrompt(null);
+      setScanLimitPrompt(null);
       setScanAuthPrompt(null);
       setEntitlementLockModal(null);
       setScreenshotDownloadUpsell(null);
@@ -15413,15 +15453,19 @@ export default function App({ currentRoute, navigateToRoute }) {
 
     if (figmaCaptureState === 'scan-limit-modal') {
       appliedFigmaCaptureStateRef.current = figmaCaptureKey;
-      applyScanProgressState({
-        limitNote: getScanLimitProgressNote({
+      clearCaptureModals();
+      setScanLimitPrompt({
+        url: currentMap?.url || root?.url || 'https://example.com',
+        preserveName: false,
+        prompt: {
           mode: 'guest',
           requestedPages: 60,
           allowedPages: 15,
           remaining: 15,
           capped: true,
           capReason: 'guest_limit',
-        }),
+        },
+        authFlow: {},
       });
       return;
     }
@@ -19293,6 +19337,55 @@ export default function App({ currentRoute, navigateToRoute }) {
         >
           <div className="guest-scan-modal-body">
             <p>{getGuestScanPromptBody()}</p>
+          </div>
+        </Modal>
+      )}
+
+      {scanLimitPrompt && (
+        <Modal
+          show
+          onClose={() => setScanLimitPrompt(null)}
+          title="Scan this URL"
+          subtitle={getScanLimitPromptSubtitle(scanLimitPrompt.prompt)}
+          className="scan-limit-modal"
+          footer={(
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setScanLimitPrompt(null)}
+              >
+                Cancel
+              </Button>
+              {isPrimaryBillingOwner ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    pendingPlanScanRef.current = {
+                      url: scanLimitPrompt.url,
+                      preserveName: scanLimitPrompt.preserveName,
+                      authFlow: {
+                        ...(scanLimitPrompt.authFlow || {}),
+                        skipScanLimitPrompt: true,
+                      },
+                    };
+                    setScanLimitPrompt(null);
+                    openPlansModal('scan-limit', { resumeScanAfterPlan: true });
+                  }}
+                >
+                  Upgrade
+                </Button>
+              ) : null}
+              <Button
+                variant="primary"
+                onClick={continueScanLimitPrompt}
+              >
+                Continue
+              </Button>
+            </>
+          )}
+        >
+          <div className="guest-scan-modal-body">
+            <p>{getScanLimitPromptBody(scanLimitPrompt.prompt)}</p>
           </div>
         </Modal>
       )}
