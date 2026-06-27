@@ -370,7 +370,7 @@ describe('MarketingPreviewV2', () => {
     renderAt('/examples', jest.fn(), { onOpenApp: openApp });
 
     expect(container.textContent).toContain('Large site audit');
-    expect(container.textContent).toContain('Nearly 5k page site scan with thumbnails captured.');
+    expect(container.textContent).toContain('Nearly 5k page site scan, 7 levels deep with top-of-page screenshots.');
     expect(container.textContent).toContain('Medium site audit');
     expect(container.textContent).toContain('Over 1,100 page scan including subdomains, orphan pages, and full-page screenshots');
     expect(container.querySelector('.marketing-v2-example__stats')).toBeNull();

@@ -221,4 +221,11 @@ describe('ProjectsModal', () => {
     expect(getCssRule('.account-drawer-header')).toContain('border-bottom: var(--border-width-subtle) solid var(--ui-color-border);');
     expect(getCssRule('.report-drawer-header')).toContain('border-bottom: var(--border-width-subtle) solid var(--ui-color-border);');
   });
+
+  test('keeps project accordion fills tied to the shared accordion surface', () => {
+    expect(getCssRule('.project-maps')).toContain('background: transparent;');
+    expect(getCssRule('.project-folder-footer')).toContain('background: transparent;');
+    expect(appCss).not.toContain('[data-theme="dark"] .project-maps {\n  background:');
+    expect(appCss).not.toContain('[data-theme="dark"] .project-folder-footer {\n  background:');
+  });
 });

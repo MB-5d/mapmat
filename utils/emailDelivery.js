@@ -241,6 +241,51 @@ async function queueMembershipRemovedEmailAsync({
   });
 }
 
+function serializePromoCodesForEmail(codes) {
+  return (Array.isArray(codes) ? codes : [])
+    .map((code) => {
+      const value = String(code?.code || '').trim();
+      if (!value) return null;
+      return {
+        code: value,
+        offerLabel: String(code?.offerLabel || code?.offer_label || '').trim() || 'Vellic promo',
+        provider: String(code?.provider || '').trim().toLowerCase() || 'stripe',
+        firstTimeOrderOnly: Boolean(code?.firstTimeOrderOnly || Number(code?.first_time_order_only || 0) > 0),
+        maxRedemptions: code?.maxRedemptions ?? code?.max_redemptions ?? null,
+      };
+    })
+    .filter(Boolean);
+}
+
+async function queuePromoCodeSharedEmailAsync({
+  recipientEmail,
+  codes,
+  actorUser = null,
+  campaignKey = '',
+}) {
+  const normalizedRecipientEmail = String(recipientEmail || '').trim().toLowerCase();
+  const emailCodes = serializePromoCodesForEmail(codes);
+  if (!normalizedRecipientEmail || emailCodes.length === 0) {
+    throw new Error('Recipient email and at least one promo code are required.');
+  }
+
+  return queueTemplatedEmailAsync({
+    templateKey: EMAIL_TEMPLATE_KEYS.PROMO_CODE_SHARED,
+    toEmail: normalizedRecipientEmail,
+    payload: {
+      appBaseUrl: getDefaultAppBaseUrl(),
+      offerLabel: emailCodes[0]?.offerLabel || 'Vellic promo',
+      codes: emailCodes,
+      campaignKey: String(campaignKey || '').trim() || null,
+      actorEmail: actorUser?.email || null,
+      actorName: actorUser?.name || null,
+    },
+    userId: actorUser?.id || actorUser?.userId || null,
+    mapId: null,
+    inviteId: null,
+  });
+}
+
 async function processEmailDeliveryJobAsync(job) {
   const payload = parseJsonSafe(job?.payload) || {};
   const deliveryId = String(payload.deliveryId || '').trim();
@@ -325,5 +370,6 @@ module.exports = {
   queueAccessRequestDecisionEmailAsync,
   queueMembershipRoleChangedEmailAsync,
   queueMembershipRemovedEmailAsync,
+  queuePromoCodeSharedEmailAsync,
   processEmailDeliveryJobAsync,
 };

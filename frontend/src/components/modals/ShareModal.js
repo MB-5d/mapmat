@@ -579,7 +579,7 @@ const ShareModal = ({
                             </Button>
                           </div>
                           {selectedInviteRequiresAccount ? (
-                            <div className="share-collab-empty">Commenters and editors need an account before they can comment or edit.</div>
+                            <div className="share-collab-empty">Invite anyone by email. They can sign up or sign in before accepting commenter or editor access.</div>
                           ) : null}
                         </>
                       ) : null}

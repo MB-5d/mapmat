@@ -56,9 +56,9 @@ function parseEnvBool(value, fallback = false) {
 }
 
 const TEST_AUTH_ENABLED = parseEnvBool(process.env.TEST_AUTH_ENABLED, !isProd);
-const TEST_AUTH_SEED_EMAIL = (process.env.TEST_AUTH_SEED_EMAIL || 'matt@email.com').trim().toLowerCase();
+const TEST_AUTH_SEED_EMAIL = (process.env.TEST_AUTH_SEED_EMAIL || 'admin@vellic.io').trim().toLowerCase();
 const TEST_AUTH_SEED_PASSWORD = process.env.TEST_AUTH_SEED_PASSWORD || 'Admin123';
-const TEST_AUTH_SEED_NAME = process.env.TEST_AUTH_SEED_NAME || 'Matt Test';
+const TEST_AUTH_SEED_NAME = process.env.TEST_AUTH_SEED_NAME || 'Vellic Admin';
 const AUTH_HEADER_FALLBACK = parseEnvBool(process.env.AUTH_HEADER_FALLBACK, TEST_AUTH_ENABLED);
 const AUTH_RATE_WINDOW_MS = Number(process.env.AUTH_RATE_WINDOW_MS ?? 15 * 60 * 1000);
 const AUTH_LOGIN_RATE_LIMIT = Number(

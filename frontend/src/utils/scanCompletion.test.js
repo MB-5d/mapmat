@@ -126,7 +126,7 @@ test('rejects stopped root-only scans when discovery proves more pages exist', (
   })).toBe(true);
 });
 
-test('allows stopped true one-page scans when there is no discovery signal', () => {
+test('rejects stopped one-page scans even when there is no discovery signal', () => {
   expect(shouldRejectFreshRootOnlyScan({
     result: {
       partial: true,
@@ -138,7 +138,7 @@ test('allows stopped true one-page scans when there is no discovery signal', () 
     },
     nextRoot: rootOnly,
     existingRoot: rootOnly,
-  })).toBe(false);
+  })).toBe(true);
 });
 
 test('rejects fresh degraded root-only scans', () => {

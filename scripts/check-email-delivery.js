@@ -106,6 +106,20 @@ async function main() {
         submittedAt: new Date().toISOString(),
       },
     },
+    {
+      templateKey: EMAIL_TEMPLATE_KEYS.PROMO_CODE_SHARED,
+      payload: {
+        offerLabel: 'Pro free month',
+        campaignKey: 'qa',
+        codes: [{
+          code: 'VELLICQA',
+          offerLabel: 'Pro free month',
+          provider: 'stripe',
+          firstTimeOrderOnly: true,
+          maxRedemptions: 1,
+        }],
+      },
+    },
   ];
 
   const results = [];

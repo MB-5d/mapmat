@@ -15,6 +15,15 @@ const ADMIN_CONSOLE_ROLES = new Set([
 ]);
 
 const AUTH_PROVIDERS = new Set(['password', 'google', 'password+google']);
+const DEFAULT_TEST_AUTH_SEED_EMAIL = 'admin@vellic.io';
+
+function parseEnvBool(value, fallback = false) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -44,7 +53,18 @@ function hasAdminConsoleAccess(userOrRole) {
   return ADMIN_CONSOLE_ROLES.has(normalizeAdminRole(role));
 }
 
-function parseAdminBootstrapEmails(rawValue = process.env.ADMIN_BOOTSTRAP_EMAILS || '') {
+function getAdminBootstrapEmailsRaw() {
+  if (Object.prototype.hasOwnProperty.call(process.env, 'ADMIN_BOOTSTRAP_EMAILS')) {
+    return process.env.ADMIN_BOOTSTRAP_EMAILS || '';
+  }
+
+  const testAuthEnabled = parseEnvBool(process.env.TEST_AUTH_ENABLED, process.env.NODE_ENV !== 'production');
+  if (!testAuthEnabled) return '';
+
+  return process.env.TEST_AUTH_SEED_EMAIL || DEFAULT_TEST_AUTH_SEED_EMAIL;
+}
+
+function parseAdminBootstrapEmails(rawValue = getAdminBootstrapEmailsRaw()) {
   return Array.from(new Set(
     String(rawValue || '')
       .split(/[,\n]/)

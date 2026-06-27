@@ -10,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Mail,
   MessageSquare,
   PanelRightOpen,
   RefreshCw,
@@ -31,6 +32,7 @@ import {
   adminArchivePromoCode,
   adminCreatePromoCodes,
   adminDisableUser,
+  adminEmailPromoCode,
   adminCreateUserEntitlementGrant,
   adminReactivateUser,
   adminResetUserPassword,
@@ -174,6 +176,7 @@ function PromoCodesPanel({ onSessionExpired }) {
   const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [archivingId, setArchivingId] = useState('');
+  const [emailingId, setEmailingId] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [createdCodes, setCreatedCodes] = useState([]);
@@ -236,8 +239,15 @@ function PromoCodesPanel({ onSessionExpired }) {
         note: form.note,
       });
       const nextCodes = Array.isArray(data?.codes) ? data.codes : [];
+      const emailDelivery = data?.emailDelivery || null;
+      const emailError = String(data?.emailError || '').trim();
+      const recipientEmail = String(emailDelivery?.toEmail || form.recipientEmail || '').trim();
       setCreatedCodes(nextCodes);
-      setSuccess(`Created ${formatNumber(nextCodes.length)} promo code${nextCodes.length === 1 ? '' : 's'}.`);
+      setSuccess([
+        `Created ${formatNumber(nextCodes.length)} promo code${nextCodes.length === 1 ? '' : 's'}.`,
+        emailDelivery && recipientEmail ? `Email queued to ${recipientEmail}.` : '',
+        emailError ? `Email was not queued: ${emailError}` : '',
+      ].filter(Boolean).join(' '));
       setForm((current) => ({
         ...DEFAULT_PROMO_FORM,
         offerKey: current.offerKey,
@@ -251,6 +261,26 @@ function PromoCodesPanel({ onSessionExpired }) {
       setError(err.message || 'Failed to create promo codes.');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleEmailPromoCode(code) {
+    if (!code?.id || !code.recipientEmail) return;
+    setEmailingId(code.id);
+    setError('');
+    setSuccess('');
+    try {
+      const data = await adminEmailPromoCode(code.id);
+      const recipientEmail = data?.emailDelivery?.toEmail || code.recipientEmail;
+      setSuccess(`Email queued to ${recipientEmail}.`);
+    } catch (err) {
+      if (err?.status === 401) {
+        onSessionExpired();
+        return;
+      }
+      setError(err.message || 'Failed to email promo code.');
+    } finally {
+      setEmailingId('');
     }
   }
 
@@ -292,7 +322,7 @@ function PromoCodesPanel({ onSessionExpired }) {
       <div className="admin-promo-header">
         <div>
           <h2>Promo Codes</h2>
-          <p>Create Stripe promo codes and internal unlimited records from Admin.</p>
+          <p>Create Stripe promo codes, internal unlimited records, and optional recipient emails from Admin.</p>
         </div>
         <button
           type="button"
@@ -345,12 +375,12 @@ function PromoCodesPanel({ onSessionExpired }) {
           />
         </label>
         <label>
-          <span>Recipient email</span>
+          <span>Email to</span>
           <input
             type="email"
             value={form.recipientEmail}
             onChange={(event) => handleFormChange({ recipientEmail: event.target.value })}
-            placeholder="Optional"
+            placeholder="Optional recipient"
             disabled={creating}
           />
         </label>
@@ -476,17 +506,31 @@ function PromoCodesPanel({ onSessionExpired }) {
                       <span className="admin-console-cell-secondary">{formatTableTimestamp(code.createdAt)}</span>
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        className="admin-console-secondary-btn admin-promo-table-action"
-                        disabled={archivingId === code.id || code.status !== 'active'}
-                        onClick={() => handleArchivePromoCode(code)}
-                      >
-                        {archivingId === code.id
-                          ? <Loader2 size={14} className="admin-console-spinner" />
-                          : <Archive size={14} />}
-                        Archive
-                      </button>
+                      <div className="admin-promo-row-actions">
+                        <button
+                          type="button"
+                          className="admin-console-secondary-btn admin-promo-table-action"
+                          disabled={emailingId === code.id || !code.recipientEmail}
+                          onClick={() => handleEmailPromoCode(code)}
+                          title={code.recipientEmail ? `Email ${code.recipientEmail}` : 'Add a recipient email to send'}
+                        >
+                          {emailingId === code.id
+                            ? <Loader2 size={14} className="admin-console-spinner" />
+                            : <Mail size={14} />}
+                          Email
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-console-secondary-btn admin-promo-table-action"
+                          disabled={archivingId === code.id || code.status !== 'active'}
+                          onClick={() => handleArchivePromoCode(code)}
+                        >
+                          {archivingId === code.id
+                            ? <Loader2 size={14} className="admin-console-spinner" />
+                            : <Archive size={14} />}
+                          Archive
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1146,6 +1190,7 @@ function AdminConsole({ route, navigateToRoute }) {
 
   const activeUserId = activePanel === 'users' && route?.section === 'user' ? route.userId : null;
   const activeSearchQuery = deferredSearchInput.trim();
+  const isLoginSubmitDisabled = loginLoading || !loginEmail.trim() || !loginPassword;
 
   const handleSessionExpired = useCallback((message = 'Admin session expired. Sign in again.') => {
     setIsAuthenticated(false);
@@ -1313,11 +1358,17 @@ function AdminConsole({ route, navigateToRoute }) {
 
   async function handleLoginSubmit(event) {
     event.preventDefault();
-    setLoginLoading(true);
     setSessionError('');
 
+    const normalizedEmail = loginEmail.trim().toLowerCase();
+    if (!normalizedEmail || !loginPassword) {
+      setSessionError('Enter an email and password.');
+      return;
+    }
+
+    setLoginLoading(true);
+
     try {
-      const normalizedEmail = loginEmail.trim().toLowerCase();
       const data = await createAdminSession({
         email: normalizedEmail,
         password: loginPassword,
@@ -1329,7 +1380,7 @@ function AdminConsole({ route, navigateToRoute }) {
       setShowLoginPassword(false);
       setLoginEmail(normalizedEmail);
     } catch (error) {
-      setSessionError(error.message || 'Failed to start support session.');
+      setSessionError(error.message || 'Failed to sign in to Admin.');
       setIsAuthenticated(false);
       setSessionUser(null);
     } finally {
@@ -1600,7 +1651,7 @@ function AdminConsole({ route, navigateToRoute }) {
       <div className="admin-console-page">
         <div className="admin-console-disabled">
           <div className="admin-console-badge">Private Surface</div>
-          <h1>Support Console Disabled</h1>
+          <h1>Admin Console Disabled</h1>
           <p>This environment is not exposing the private admin console.</p>
         </div>
       </div>
@@ -1612,7 +1663,7 @@ function AdminConsole({ route, navigateToRoute }) {
       <div className="admin-console-page">
         <div className="admin-console-loading">
           <Loader2 size={18} className="admin-console-spinner" />
-          <span>Loading support console…</span>
+          <span>Loading Admin Console...</span>
         </div>
       </div>
     );
@@ -1622,19 +1673,19 @@ function AdminConsole({ route, navigateToRoute }) {
     return (
       <div className="admin-console-page">
         <div className="admin-console-auth-card">
-          <div className="admin-console-badge">Private Surface</div>
-          <h1>Support Console</h1>
+          <div className="admin-console-badge">Private Admin</div>
+          <h1>Admin Console</h1>
           <p>
-            Use an existing app account that has support console access.
+            Use an existing app account that has Admin access.
           </p>
-          <form className="admin-console-auth-form" onSubmit={handleLoginSubmit}>
+          <form className="admin-console-auth-form" onSubmit={handleLoginSubmit} aria-busy={loginLoading}>
             <label>
               <span>Email</span>
               <input
                 type="email"
                 value={loginEmail}
                 onChange={(event) => setLoginEmail(event.target.value)}
-                placeholder="support@example.com"
+                placeholder="admin@vellic.io"
                 autoComplete="username"
                 disabled={loginLoading}
               />
@@ -1661,16 +1712,16 @@ function AdminConsole({ route, navigateToRoute }) {
               </div>
             </label>
             <div className="admin-console-field-note">
-              This uses your normal app credentials, but creates a separate support session.
+              This creates a private Admin session for this browser.
             </div>
             {sessionError ? <div className="admin-console-error">{sessionError}</div> : null}
             <button
               type="submit"
-              className="admin-console-primary-btn"
-              disabled={loginLoading || !loginEmail.trim() || !loginPassword}
+              className="admin-console-primary-btn admin-console-login-submit"
+              disabled={isLoginSubmitDisabled}
             >
               {loginLoading ? <Loader2 size={16} className="admin-console-spinner" /> : <KeyRound size={16} />}
-              Start support session
+              {loginLoading ? 'Signing in...' : 'Sign in to Admin'}
             </button>
           </form>
         </div>
@@ -1683,10 +1734,10 @@ function AdminConsole({ route, navigateToRoute }) {
       <div className="admin-console-shell">
         <header className="admin-console-header">
           <div>
-            <div className="admin-console-badge">Private Surface</div>
-            <h1>Support Console</h1>
-            <p>Support-only access for user support operations and feedback triage.</p>
-            <div className="admin-console-surface-nav" role="tablist" aria-label="Support console sections">
+            <div className="admin-console-badge">Private Admin</div>
+            <h1>Admin Console</h1>
+            <p>Private tools for users, billing, promo codes, feedback, and storage.</p>
+            <div className="admin-console-surface-nav" role="tablist" aria-label="Admin console sections">
               <button
                 type="button"
                 role="tab"

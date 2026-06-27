@@ -242,7 +242,7 @@ describe('ShareModal', () => {
   test('collaboration invite row uses an icon role menu and requires a valid invite email', () => {
     const onCollaborationInviteRoleChange = jest.fn();
     const onSendCollaborationInvite = jest.fn();
-    const renderCollaborationModal = (collaborationInviteEmail) => {
+    const renderCollaborationModal = (collaborationInviteEmail, collaborationInviteRole = 'viewer') => {
       root.render(
         <ShareModal
           show
@@ -260,7 +260,7 @@ describe('ShareModal', () => {
           collaborationAvailable
           collaborationInviteEmail={collaborationInviteEmail}
           onCollaborationInviteEmailChange={jest.fn()}
-          collaborationInviteRole="viewer"
+          collaborationInviteRole={collaborationInviteRole}
           onCollaborationInviteRoleChange={onCollaborationInviteRoleChange}
           onSendCollaborationInvite={onSendCollaborationInvite}
           collaborationInviteRoleOptions={['viewer', 'commenter']}
@@ -309,6 +309,13 @@ describe('ShareModal', () => {
 
     inviteButton = getInviteButton();
     expect(inviteButton.disabled).toBe(false);
+
+    act(() => {
+      renderCollaborationModal('outside@example.com', 'commenter');
+    });
+
+    expect(container.textContent).toContain('Invite anyone by email.');
+    expect(container.textContent).not.toContain('before they can be invited');
   });
 
   test('hides unavailable collaboration roles and owner invite options', () => {

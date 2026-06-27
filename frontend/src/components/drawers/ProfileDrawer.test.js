@@ -206,13 +206,13 @@ describe('ProfileDrawer', () => {
       button.textContent.trim() === 'Switch'
     );
     const billingButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Manage'
+      button.textContent.trim() === 'Manage billing'
     );
     const addPagesButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Add pages'
+      button.textContent.trim() === 'Pages'
     );
     const addScreenshotsButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent.trim() === 'Add screenshots'
+      button.textContent.trim() === 'Screenshots'
     );
 
     expect(planButton).not.toBeNull();
@@ -222,7 +222,9 @@ describe('ProfileDrawer', () => {
     expect(planButton.className).toContain('ui-btn--type-secondary');
     expect(planButton.className).toContain('ui-btn--style-mono');
     expect(planButton.className).not.toContain('ui-btn--style-brand');
-    expect(billingButton.className).toContain('ui-btn--type-ghost');
+    expect(addPagesButton.querySelector('.ui-btn__icon--start')).not.toBeNull();
+    expect(addScreenshotsButton.querySelector('.ui-btn__icon--start')).not.toBeNull();
+    expect(billingButton.className).toContain('ui-btn--type-link');
     expect(billingButton.className).toContain('ui-btn--style-mono');
     expect(billingButton.className).not.toContain('ui-btn--style-brand');
     expect(billingButton.querySelector('.ui-btn__icon--end')).not.toBeNull();

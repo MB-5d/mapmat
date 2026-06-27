@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper from 'react-easy-crop';
-import { AlertTriangle, ExternalLink, Eye, EyeOff, ImagePlus, Infinity as InfinityIcon, Trash2, User } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Eye, EyeOff, ImagePlus, Infinity as InfinityIcon, Plus, Trash2, User } from 'lucide-react';
 
 import * as api from '../../api';
 import AccountDrawer from './AccountDrawer';
@@ -645,8 +645,9 @@ const ProfileDrawer = ({
                     size="sm"
                     onClick={() => onOpenPlans?.('page-credits')}
                     disabled={!user}
+                    startIcon={<Plus size={14} />}
                   >
-                    Add pages
+                    Pages
                   </Button>
                   <Button
                     type="button"
@@ -655,19 +656,21 @@ const ProfileDrawer = ({
                     size="sm"
                     onClick={() => onOpenPlans?.('screenshot-credits')}
                     disabled={!user}
+                    startIcon={<Plus size={14} />}
                   >
-                    Add screenshots
+                    Screenshots
                   </Button>
 	                <Button
-	                  type="button"
-	                  variant="ghost"
+	                  type="link"
+	                  htmlType="button"
+	                  buttonStyle="mono"
 	                  size="sm"
 	                  onClick={onOpenBilling}
 	                  disabled={!user || !onOpenBilling}
 	                  loading={billingLoading}
 	                  endIcon={<ExternalLink size={14} />}
 	                >
-	                  Manage
+	                  Manage billing
 	                </Button>
 	              </div>
               ) : null}

@@ -21,6 +21,7 @@ const {
   listAdminPromotionCodesAsync,
   archiveAdminPromotionCodeAsync,
 } = require('../utils/stripeBilling');
+const { queuePromoCodeSharedEmailAsync } = require('../utils/emailDelivery');
 const {
   SCREENSHOT_PUBLIC_BASE,
   extractScreenshotStorageKey,
@@ -936,14 +937,39 @@ router.get('/promo-codes', async (req, res) => {
 router.post('/promo-codes', async (req, res) => {
   try {
     const quantity = Math.max(1, Math.floor(Number(req.body?.quantity || 1)));
+    const campaignKey = String(req.body?.campaignKey || '').trim();
+    const recipientEmail = normalizeEmail(req.body?.recipientEmail);
+    const note = String(req.body?.note || '').trim();
     const created = await createAdminPromotionCodesAsync({
       offerKey: req.body?.offerKey,
       quantity,
-      campaignKey: String(req.body?.campaignKey || '').trim(),
-      recipientEmail: normalizeEmail(req.body?.recipientEmail),
-      note: String(req.body?.note || '').trim(),
+      campaignKey,
+      recipientEmail,
+      note,
       createdByUserId: req.adminSession.id,
     });
+
+    let emailDelivery = null;
+    let emailError = null;
+    if (recipientEmail && created.length > 0) {
+      try {
+        const queued = await queuePromoCodeSharedEmailAsync({
+          recipientEmail,
+          codes: created,
+          actorUser: req.adminSession,
+          campaignKey,
+        });
+        emailDelivery = {
+          id: queued.delivery?.id || null,
+          jobId: queued.jobId || null,
+          status: queued.delivery?.status || 'queued',
+          toEmail: queued.delivery?.to_email || recipientEmail,
+        };
+      } catch (error) {
+        console.error('Admin promo email queue error:', error);
+        emailError = error?.message || 'Failed to queue promo email.';
+      }
+    }
 
     await adminAuditStore.logAdminActionAsync({
       actorLabel: req.adminSession.actorLabel,
@@ -952,17 +978,67 @@ router.post('/promo-codes', async (req, res) => {
       metadata: {
         offerKey: String(req.body?.offerKey || '').trim().toLowerCase(),
         count: created.length,
-        campaignKey: String(req.body?.campaignKey || '').trim() || null,
-        recipientEmail: normalizeEmail(req.body?.recipientEmail) || null,
+        campaignKey: campaignKey || null,
+        recipientEmail: recipientEmail || null,
+        emailDeliveryId: emailDelivery?.id || null,
+        emailError: emailError || null,
       },
     });
 
     return res.status(201).json({
       success: true,
       codes: created,
+      emailDelivery,
+      emailError,
     });
   } catch (error) {
     return handleAdminBillingError(res, error, 'Admin create promo codes');
+  }
+});
+
+router.post('/promo-codes/:id/email', async (req, res) => {
+  try {
+    const record = await promoCodeStore.getPromoCodeRecordByIdAsync(req.params.id);
+    if (!record) {
+      return res.status(404).json({ error: 'Promo code not found.' });
+    }
+    const recipientEmail = normalizeEmail(req.body?.recipientEmail || record.recipient_email);
+    if (!recipientEmail) {
+      return res.status(400).json({ error: 'This promo code does not have a recipient email.' });
+    }
+
+    const queued = await queuePromoCodeSharedEmailAsync({
+      recipientEmail,
+      codes: [record],
+      actorUser: req.adminSession,
+      campaignKey: record.campaign_key || '',
+    });
+    const emailDelivery = {
+      id: queued.delivery?.id || null,
+      jobId: queued.jobId || null,
+      status: queued.delivery?.status || 'queued',
+      toEmail: queued.delivery?.to_email || recipientEmail,
+    };
+
+    await adminAuditStore.logAdminActionAsync({
+      actorLabel: req.adminSession.actorLabel,
+      actorIp: getClientIp(req),
+      action: 'promo_code_email_queued',
+      metadata: {
+        promoCodeId: record.id,
+        offerKey: record.offer_key,
+        code: record.code,
+        recipientEmail,
+        emailDeliveryId: emailDelivery.id,
+      },
+    });
+
+    return res.json({
+      success: true,
+      emailDelivery,
+    });
+  } catch (error) {
+    return handleAdminBillingError(res, error, 'Admin email promo code');
   }
 });
 

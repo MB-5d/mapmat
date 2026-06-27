@@ -608,7 +608,7 @@ const featureComparisonEnabled = false;
 const exampleCards = [
   {
     title: 'Large site audit',
-    text: 'Nearly 5k page site scan with thumbnails captured.',
+    text: 'Nearly 5k page site scan, 7 levels deep with top-of-page screenshots.',
     mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleRaycastImage,
     alt: 'Vellic example map showing a large site audit with thousands of page cards and captured thumbnails',

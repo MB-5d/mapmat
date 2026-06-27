@@ -413,6 +413,13 @@ export async function adminCreatePromoCodes(payload = {}) {
   });
 }
 
+export async function adminEmailPromoCode(promoCodeId, payload = {}) {
+  return fetchAdminApi(`/api/admin/promo-codes/${encodeURIComponent(promoCodeId)}/email`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function adminArchivePromoCode(promoCodeId) {
   return fetchAdminApi(`/api/admin/promo-codes/${encodeURIComponent(promoCodeId)}/archive`, {
     method: 'POST',

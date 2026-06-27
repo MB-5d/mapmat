@@ -53,13 +53,14 @@ async function waitForHealth() {
   throw new Error('Timed out waiting for local backend health');
 }
 
-async function waitForScanJob(jobId, accessToken) {
+async function waitForScanJob(jobId, accessToken, { allowFailure = false } = {}) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < TIMEOUT_MS) {
     const data = await fetchJson(`${API_BASE}/scan-jobs/${jobId}?access_token=${accessToken}`);
     const job = data?.job;
     if (job?.status === 'complete') return job;
     if (job?.status === 'failed' || job?.status === 'canceled') {
+      if (allowFailure) return job;
       throw new Error(`Scan job ended with ${job.status}: ${job.error || 'no error'}`);
     }
     await sleep(500);
@@ -138,6 +139,9 @@ function createFixtureServer(mode) {
     if (url.pathname === '/one-page') {
       return send(200, '<title>One Page</title>');
     }
+    if (url.pathname === '/slow-root') {
+      return setTimeout(() => send(200, '<title>Slow Root</title>'), 1200);
+    }
     if (url.pathname === '/access-denied') {
       return send(403, '<title>Access Denied</title><h1>Access Denied</h1>');
     }
@@ -150,7 +154,7 @@ function createFixtureServer(mode) {
   });
 }
 
-async function scan(url) {
+async function scan(url, options = {}) {
   const created = await fetchJson(`${API_BASE}/scan-jobs`, {
     method: 'POST',
     body: JSON.stringify({
@@ -159,8 +163,47 @@ async function scan(url) {
       options: {},
     }),
   });
-  const job = await waitForScanJob(created.jobId, created.jobAccessToken);
+  const job = await waitForScanJob(created.jobId, created.jobAccessToken, options);
   return job.result || {};
+}
+
+async function scanExpectingFailure(url) {
+  const created = await fetchJson(`${API_BASE}/scan-jobs`, {
+    method: 'POST',
+    body: JSON.stringify({
+      url,
+      maxPages: 80,
+      options: {},
+    }),
+  });
+  return waitForScanJob(created.jobId, created.jobAccessToken, { allowFailure: true });
+}
+
+async function createScanJob(url) {
+  const created = await fetchJson(`${API_BASE}/scan-jobs`, {
+    method: 'POST',
+    body: JSON.stringify({
+      url,
+      maxPages: 80,
+      options: {},
+    }),
+  });
+  if (!created?.jobId || !created?.jobAccessToken) {
+    throw new Error('Scan job creation did not return jobId and access token');
+  }
+  return created;
+}
+
+async function waitForJobStatus(jobId, accessToken, expectedStatus) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 10000) {
+    const data = await fetchJson(`${API_BASE}/scan-jobs/${jobId}?include_result=false&access_token=${accessToken}`);
+    const status = data?.job?.status;
+    if (status === expectedStatus) return data.job;
+    if (status === 'failed' || status === 'canceled' || status === 'complete') return data.job;
+    await sleep(100);
+  }
+  throw new Error(`Timed out waiting for job status ${expectedStatus}`);
 }
 
 async function runCheck() {
@@ -194,12 +237,9 @@ async function runCheck() {
   });
 
   await withFixture('broken-robots-sitemap', async (base) => {
-    const brokenResult = await scan(`${base}/broken-robots-sitemap`);
-    assert.strictEqual(countTree(brokenResult.root), 1, 'broken sitemap should not invent child nodes');
-    assert.strictEqual(brokenResult.partialReason, 'root_discovery_failed', 'broken declared sitemap should degrade the scan');
-    assert(brokenResult.scanDiagnostics?.sitemapFetchFailures > 0, 'broken sitemap should be counted');
-    assert(brokenResult.scanDiagnostics?.discoveryErrors?.length > 0, 'broken sitemap should expose diagnostics');
-    assert.strictEqual(brokenResult.scanDiagnostics?.renderedDiscoveryTried, true, 'broken sitemap should trigger rendered fallback');
+    const brokenJob = await scanExpectingFailure(`${base}/broken-robots-sitemap`);
+    assert.strictEqual(brokenJob.status, 'failed', 'broken declared sitemap should fail instead of creating a one-node map');
+    assert(/No map was created/.test(brokenJob.error || ''), 'broken sitemap failure should explain that no map was created');
   });
 
   await withFixture('rendered', async (base) => {
@@ -210,12 +250,9 @@ async function runCheck() {
   });
 
   await withFixture('broken-robots-sitemap', async (base) => {
-    const brokenResult = await scan(`${base}/broken-robots-sitemap`);
-    assert.strictEqual(countTree(brokenResult.root), 1, 'broken discovery fixture should remain one node');
-    assert.strictEqual(brokenResult.partialReason, 'root_discovery_failed', 'broken robots sitemap should be marked degraded');
-    assert(brokenResult.scanDiagnostics?.sitemapFetchFailures > 0, 'sitemap failure should be counted');
-    assert(brokenResult.scanDiagnostics?.discoveryErrors?.length > 0, 'discovery errors should be reported');
-    assert.strictEqual(brokenResult.scanDiagnostics?.renderedDiscoveryTried, true, 'rendered fallback should still be attempted');
+    const brokenJob = await scanExpectingFailure(`${base}/broken-robots-sitemap`);
+    assert.strictEqual(brokenJob.status, 'failed', 'broken discovery fixture should fail instead of creating a one-node map');
+    assert(/No map was created/.test(brokenJob.error || ''), 'broken discovery failure should explain that no map was created');
   });
 
   await withFixture('one-page', async (base) => {
@@ -225,14 +262,24 @@ async function runCheck() {
     assert.notStrictEqual(onePageResult.partialReason, 'root_discovery_failed', 'true one-page scan should not be marked discovery failed');
   });
 
+  await withFixture('slow-root', async (base) => {
+    const created = await createScanJob(`${base}/slow-root`);
+    const runningJob = await waitForJobStatus(created.jobId, created.jobAccessToken, 'running');
+    assert.strictEqual(runningJob.status, 'running', 'slow-root scan should be running before Stop is requested');
+    const stopped = await fetchJson(`${API_BASE}/scan-jobs/${created.jobId}/stop`, {
+      method: 'POST',
+      body: JSON.stringify({ access_token: created.jobAccessToken }),
+    });
+    assert.strictEqual(stopped.canceled, undefined, 'Stop on a running scan should not be canceled from stale zero-page progress');
+    const stoppedJob = await waitForScanJob(created.jobId, created.jobAccessToken, { allowFailure: true });
+    assert.strictEqual(stoppedJob.status, 'failed', 'root-only stopped scan should fail instead of creating a one-node map');
+    assert(/No map was created/.test(stoppedJob.error || ''), 'stopped root-only failure should explain that no map was created');
+  });
+
   await withFixture('access-denied', async (base) => {
-    const deniedResult = await scan(`${base}/access-denied`);
-    assert.strictEqual(countTree(deniedResult.root), 1, 'blocked root should not invent child nodes');
-    assert.strictEqual(deniedResult.partialReason, 'root_discovery_failed', 'blocked root-only scan should be marked degraded');
-    assert(
-      ['auth_required', 'crawler_limited', 'scan_limited'].includes(deniedResult.scanDiagnostics?.collapseReason),
-      'blocked root should expose the access reason'
-    );
+    const deniedJob = await scanExpectingFailure(`${base}/access-denied`);
+    assert.strictEqual(deniedJob.status, 'failed', 'blocked root should fail instead of creating a one-node map');
+    assert(/No map was created/.test(deniedJob.error || ''), 'blocked root failure should explain that no map was created');
   });
   console.log('scan collapse fixture ok');
 }

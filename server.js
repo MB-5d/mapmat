@@ -63,6 +63,8 @@ const {
   isCloudflareChallengeResponse,
 } = require('./utils/scanPageClassification');
 const {
+  getInvalidScanResultMessage,
+  getInvalidScanResultReason,
   hardenCollapsedScanResult,
 } = require('./utils/scanResultQuality');
 const {
@@ -280,6 +282,14 @@ const toPositiveInt = (value, fallback) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 };
+const SCAN_HTML_RESPONSE_MAX_BYTES = toPositiveInt(
+  process.env.SCAN_HTML_RESPONSE_MAX_BYTES,
+  5 * 1024 * 1024
+);
+const SCAN_SITEMAP_RESPONSE_MAX_BYTES = toPositiveInt(
+  process.env.SCAN_SITEMAP_RESPONSE_MAX_BYTES,
+  10 * 1024 * 1024
+);
 const toBoundedNumber = (value, { min, max, fallback }) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -1657,6 +1667,56 @@ function applyScanEntitlementMetadata(result, entitlement = null) {
   return result;
 }
 
+function getScanResultFailureError(result) {
+  const reason = getInvalidScanResultReason(result);
+  if (!reason) return null;
+  const error = new Error(getInvalidScanResultMessage(reason));
+  error.status = 422;
+  error.scanFailureReason = reason;
+  return error;
+}
+
+function getScanOutcomeLabel(result, failureReason = null) {
+  if (failureReason) return 'failed';
+  if (result?.partialReason === 'entitlement_cap') return 'limited';
+  if (result?.partialReason === 'stopped_by_user') return 'stopped';
+  if (result?.partial) return result.partialReason || 'partial';
+  return 'complete';
+}
+
+function logScanOutcome({ jobId = null, result = null, payload = null, failureReason = null }) {
+  const diagnostics = result?.scanDiagnostics || {};
+  const manifest = result?.discoveryManifest || diagnostics.discoveryManifest || {};
+  const capturedCount = Math.max(
+    Number(diagnostics.pageMapCount || 0) || 0,
+    Number(manifest.capturedPageCount || 0) || 0,
+    result ? countScanResultPages(result) : 0
+  );
+  const hiddenCount = Math.max(
+    Number(manifest.hiddenPageCount || 0) || 0,
+    Number(diagnostics.entitlementLockedPageEstimate || 0) || 0,
+    Number(result?.entitlement?.lockedPageEstimate || 0) || 0
+  );
+  const discoveredCount = Math.max(
+    Number(manifest.totalDiscoveredPageCount || 0) || 0,
+    Number(diagnostics.queuedCount || 0) || 0,
+    capturedCount + hiddenCount
+  );
+
+  console.info('[scan] Outcome:', {
+    jobId,
+    outcome: getScanOutcomeLabel(result, failureReason),
+    partialReason: result?.partialReason || null,
+    failureReason,
+    discoveredCount,
+    capturedCount,
+    hiddenCount,
+    stopped: result?.partialReason === 'stopped_by_user' || diagnostics.previousPartialReason === 'stopped_by_user',
+    capped: Boolean(result?.entitlement?.capped || payload?.entitlement?.capped),
+    collapseReason: diagnostics.collapseReason || null,
+  });
+}
+
 async function debitScreenshotCreditsForJobAsync({ jobId, jobUserId, type, result }) {
   if (!jobUserId || result?.cached) return;
   const credits = getScreenshotCreditCost({ type });
@@ -1732,6 +1792,24 @@ const markJobPaused = async (id) => {
 
 const markJobResumed = async (id) => {
   await jobStore.updateJobStatusAsync(id, JOB_STATUS.running, [JOB_STATUS.paused]);
+};
+
+const recoverInterruptedScanJobs = async () => {
+  if (!JOB_WORKER_TYPES.includes(JOB_TYPES.scan)) return;
+  const interrupted = await jobStore.listJobPayloadsByTypeAndStatusesAsync(
+    JOB_TYPES.scan,
+    [JOB_STATUS.running, JOB_STATUS.stopping]
+  );
+  if (!interrupted.length) return;
+
+  const error = new Error('Scan was interrupted before it could finish. No map was created.');
+  for (const row of interrupted) {
+    await markJobFailed(row.id, error);
+  }
+  console.warn('[scan] Marked interrupted scan jobs as failed on startup:', {
+    count: interrupted.length,
+    jobIds: interrupted.map((row) => row.id),
+  });
 };
 
 const createJobStatusReader = (id, throttleMs = 1000) => {
@@ -3766,6 +3844,8 @@ async function fetchPage(url, extraHeaders = {}) {
   const res = await axios.get(url, {
     timeout: 20000,
     maxRedirects: 5,
+    maxContentLength: SCAN_HTML_RESPONSE_MAX_BYTES,
+    maxBodyLength: SCAN_HTML_RESPONSE_MAX_BYTES,
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -3800,6 +3880,9 @@ async function fetchPageWithBrowserContext(context, url) {
     });
     await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
     const html = await page.content();
+    if (Buffer.byteLength(String(html || ''), 'utf8') > SCAN_HTML_RESPONSE_MAX_BYTES) {
+      throw new Error('Scan page response too large');
+    }
     const finalUrl = normalizeUrl(response?.url?.() || page.url() || url);
     return {
       html,
@@ -3844,6 +3927,8 @@ async function checkLinkStatus(url, extraHeaders = {}) {
     const getRes = await axios.get(url, {
       timeout: 10000,
       maxRedirects: 5,
+      maxContentLength: SCAN_HTML_RESPONSE_MAX_BYTES,
+      maxBodyLength: SCAN_HTML_RESPONSE_MAX_BYTES,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; VellicBot/1.0)',
         Accept: '*/*',
@@ -3952,6 +4037,8 @@ const collectSitemapUrls = async (origin, hostNormalized, protocol, abortCheck =
     try {
       const sitemapRes = await axios.get(sitemapUrl, {
         timeout: 10000,
+        maxContentLength: SCAN_SITEMAP_RESPONSE_MAX_BYTES,
+        maxBodyLength: SCAN_SITEMAP_RESPONSE_MAX_BYTES,
         headers: { 'User-Agent': 'VellicBot/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
@@ -4521,6 +4608,8 @@ async function crawlSite(startUrl, maxPages, maxDepth, options = {}, onProgress 
     try {
       const robotsRes = await axios.get(`${origin}/robots.txt`, {
         timeout: 8000,
+        maxContentLength: SCAN_HTML_RESPONSE_MAX_BYTES,
+        maxBodyLength: SCAN_HTML_RESPONSE_MAX_BYTES,
         headers: { 'User-Agent': 'VellicBot/1.0' },
         validateStatus: (s) => s >= 200 && s < 400,
       });
@@ -6354,6 +6443,13 @@ async function processJob(job) {
   const payload = parseJsonSafe(job.payload) || {};
   try {
     if (jobType === JOB_TYPES.scan) {
+      if (job.status === JOB_STATUS.stopping) {
+        const interruptedStop = new Error('Scan stopped before a usable partial map was ready. No map was created.');
+        interruptedStop.scanFailureReason = 'stale_stopping_job';
+        console.warn('[scan] Refusing to restart stale stopping scan job:', { jobId });
+        await markJobFailed(jobId, interruptedStop);
+        return;
+      }
       const progressState = {
         lastUpdate: 0,
         lastScanned: 0,
@@ -6412,6 +6508,17 @@ async function processJob(job) {
         entitlementCapped: Boolean(payload.entitlement?.capped),
       });
       applyScanEntitlementMetadata(result, payload.entitlement || null);
+      const failureError = getScanResultFailureError(result);
+      logScanOutcome({
+        jobId,
+        result,
+        payload,
+        failureReason: failureError?.scanFailureReason || null,
+      });
+      if (failureError) {
+        await markJobFailed(jobId, failureError);
+        return;
+      }
       await debitScanPagesForJobAsync({
         jobId,
         jobUserId: job.user_id,
@@ -6518,7 +6625,11 @@ if (JOB_WORKER_TYPES.length > 0) {
     runJobLoop().catch((err) => console.error('Job loop error:', err));
   }, JOB_POLL_INTERVAL_MS);
   setTimeout(() => {
-    runJobLoop().catch((err) => console.error('Job loop error:', err));
+    recoverInterruptedScanJobs()
+      .catch((err) => console.error('Interrupted scan recovery error:', err))
+      .finally(() => {
+        runJobLoop().catch((err) => console.error('Job loop error:', err));
+      });
   }, 0);
 } else {
   console.log('[jobs] processor disabled');
@@ -6893,6 +7004,11 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
     hardenCollapsedScanResult(result, {
       entitlementCapped: Boolean(scanEntitlement.entitlementPayload.capped),
     });
+    applyScanEntitlementMetadata(result, scanEntitlement.entitlementPayload);
+    const failureError = getScanResultFailureError(result);
+    if (failureError) {
+      throw failureError;
+    }
     await recordMeterDebitAsync({
       user: req.user,
       accountSummary: scanEntitlement.entitlement?.summary,
@@ -6906,16 +7022,15 @@ app.post('/scan', authMiddleware, requireAuth, scanLimiter, requireApiKey, enfor
         capped: Boolean(scanEntitlement.entitlementPayload.capped),
       },
     });
-    applyScanEntitlementMetadata(result, scanEntitlement.entitlementPayload);
     res.json(result);
   } catch (e) {
     const message = e.message || 'Scan failed';
     if (e.code === 'ENTITLEMENT_REQUIRED') {
       return res.status(e.status || 402).json({ error: message, code: e.code });
     }
-    const status = message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
+    const status = e.status || (message.includes('Invalid URL') || message.includes('Blocked host') || message.includes('Unable to resolve')
       ? 400
-      : 500;
+      : 500);
     res.status(status).json({ error: message });
   }
 });
@@ -7019,6 +7134,11 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
       progress: lastScanProgress,
       entitlementCapped: Boolean(scanEntitlement.entitlementPayload.capped),
     });
+    applyScanEntitlementMetadata(result, scanEntitlement.entitlementPayload);
+    const failureError = getScanResultFailureError(result);
+    if (failureError) {
+      throw failureError;
+    }
     await recordMeterDebitAsync({
       user: req.user,
       accountSummary: scanEntitlement.entitlement?.summary,
@@ -7032,7 +7152,6 @@ app.get('/scan-stream', authMiddleware, requireAuth, scanLimiter, requireApiKey,
         capped: Boolean(scanEntitlement.entitlementPayload.capped),
       },
     });
-    applyScanEntitlementMetadata(result, scanEntitlement.entitlementPayload);
 
     try {
       const payload = JSON.stringify(result);
@@ -7158,14 +7277,18 @@ app.post('/scan-jobs/:id/stop', authMiddleware, requireApiKey, async (req, res) 
   if (!isJobVisibleToRequest(row, req)) {
     return res.status(403).json({ error: 'This scan is no longer available in this browser session' });
   }
-  const progress = parseJsonSafe(row.progress) || {};
-  const scanned = Math.max(0, Number(progress.scanned || 0) || 0);
-  if (scanned <= 0) {
+  if (row.status === JOB_STATUS.queued) {
     await markJobCanceled(id);
     return res.json({
       success: true,
       canceled: true,
       reason: 'no_results_ready',
+    });
+  }
+  if ([JOB_STATUS.complete, JOB_STATUS.failed, JOB_STATUS.canceled].includes(row.status)) {
+    return res.json({
+      success: true,
+      status: row.status,
     });
   }
   await markJobStopping(id);

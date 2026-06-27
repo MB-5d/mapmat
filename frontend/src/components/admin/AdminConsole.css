@@ -249,6 +249,14 @@
   cursor: not-allowed;
 }
 
+.admin-console-login-submit:disabled {
+  opacity: 1;
+  background: var(--ui-button-brand-fill-disabled, #c7d2fe);
+  border-color: var(--ui-button-brand-fill-disabled, #c7d2fe);
+  color: var(--ui-button-brand-fill-disabled-contrast, #ffffff);
+  box-shadow: none;
+}
+
 .admin-console-header {
   display: flex;
   align-items: flex-start;
@@ -1283,6 +1291,12 @@
 
 .admin-promo-table td {
   vertical-align: middle;
+}
+
+.admin-promo-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .admin-promo-table-action {

@@ -135,6 +135,31 @@ assert.strictEqual(
   'stopped_by_user',
   'collapse diagnostics should preserve the original stop reason'
 );
+assert(
+  stoppedRootOnlyWithQueue.scanDiagnostics?.collapseReason.includes('stopped_before_valid_partial'),
+  'stopped root-only collapse should explain that no usable partial map was ready'
+);
+
+const stoppedRootOnlyWithoutDiscovery = makeRootOnlyResult();
+stoppedRootOnlyWithoutDiscovery.partial = true;
+stoppedRootOnlyWithoutDiscovery.partialReason = 'stopped_by_user';
+hardenCollapsedScanResult(stoppedRootOnlyWithoutDiscovery, {
+  progress: {
+    scanned: 1,
+    mapped: 1,
+    queued: 0,
+  },
+});
+assert.strictEqual(
+  stoppedRootOnlyWithoutDiscovery.partialReason,
+  'scan_collapsed',
+  'stopped root-only scan without discovery proof should not become a fake one-page map'
+);
+assert.strictEqual(
+  stoppedRootOnlyWithoutDiscovery.scanDiagnostics?.collapseReason,
+  'stopped_before_valid_partial',
+  'stopped root-only scan should use the stopped-before-valid-partial reason'
+);
 
 const mappedProgressCollapse = makeRootOnlyResult();
 hardenCollapsedScanResult(mappedProgressCollapse, {

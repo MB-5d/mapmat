@@ -8,6 +8,7 @@ const EMAIL_TEMPLATE_KEYS = Object.freeze({
   AUTH_EMAIL_VERIFICATION: 'auth.email_verification',
   AUTH_PASSWORD_RESET: 'auth.password_reset',
   MARKETING_CONTACT: 'marketing.contact',
+  PROMO_CODE_SHARED: 'promo_code.shared',
 });
 
 function normalizeBaseUrl(value) {
@@ -419,6 +420,48 @@ function renderMarketingContactEmail(payload = {}) {
   };
 }
 
+function renderPromoCodeSharedEmail(payload = {}) {
+  const appBaseUrl = normalizeBaseUrl(payload.appBaseUrl) || getDefaultAppBaseUrl();
+  const codes = Array.isArray(payload.codes) ? payload.codes : [];
+  const codeLabels = codes
+    .map((entry) => trimText(entry?.code, 80))
+    .filter(Boolean);
+  const offerLabel = trimText(payload.offerLabel, 120)
+    || trimText(codes[0]?.offerLabel, 120)
+    || 'Vellic promo';
+  const campaignKey = trimText(payload.campaignKey, 120);
+  const firstTimeOrderOnly = codes.some((entry) => Boolean(entry?.firstTimeOrderOnly));
+  const maxRedemptions = codes
+    .map((entry) => Number(entry?.maxRedemptions || 0))
+    .filter((value) => Number.isFinite(value) && value > 0)[0] || null;
+  const codeWord = codeLabels.length === 1 ? 'code' : 'codes';
+  const subject = codeLabels.length === 1
+    ? `Your Vellic promo code: ${codeLabels[0]}`
+    : `Your Vellic promo codes`;
+  const intro = `Here ${codeLabels.length === 1 ? 'is' : 'are'} your ${offerLabel} ${codeWord}.`;
+  const instructions = codes.some((entry) => entry?.provider === 'stripe')
+    ? 'Choose your plan in Vellic, then enter the promo code at Stripe checkout.'
+    : 'Open Vellic and contact us if you need help applying this promo to your account.';
+  const detailPairs = [
+    { label: codeLabels.length === 1 ? 'Promo code' : 'Promo codes', value: codeLabels.join(', ') || 'Unavailable' },
+    { label: 'Offer', value: offerLabel },
+    campaignKey ? { label: 'Campaign', value: campaignKey } : null,
+    firstTimeOrderOnly ? { label: 'First-time order only', value: 'Yes' } : null,
+    maxRedemptions ? { label: 'Redemptions', value: String(maxRedemptions) } : null,
+  ].filter(Boolean);
+
+  return renderActionEmail({
+    subject,
+    intro,
+    detailPairs,
+    instructions,
+    appBaseUrl,
+    actionUrl: buildAppUrl(appBaseUrl, '/app'),
+    actionLabel: 'Open Vellic',
+    footer: 'If you were not expecting this promo code, you can safely ignore this email.',
+  });
+}
+
 function renderTemplatedEmail({ templateKey, payload }) {
   switch (String(templateKey || '').trim()) {
     case EMAIL_TEMPLATE_KEYS.COLLABORATION_INVITE:
@@ -439,6 +482,8 @@ function renderTemplatedEmail({ templateKey, payload }) {
       return renderAuthPasswordResetEmail(payload);
     case EMAIL_TEMPLATE_KEYS.MARKETING_CONTACT:
       return renderMarketingContactEmail(payload);
+    case EMAIL_TEMPLATE_KEYS.PROMO_CODE_SHARED:
+      return renderPromoCodeSharedEmail(payload);
     default:
       throw new Error(`Unknown email template: ${templateKey}`);
   }

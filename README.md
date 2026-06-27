@@ -192,9 +192,10 @@ Optional:
 | `DB_PROVIDER` | Active runtime provider (`sqlite` or `postgres`) | `sqlite` |
 | `DB_PATH` | SQLite database file path (local/dev fallback) | `./data/vellic.db` |
 | `TEST_AUTH_ENABLED` | Enables temporary test-account mode | true locally, false in production |
-| `TEST_AUTH_SEED_EMAIL` | Seed account email when test mode is enabled | matt@email.com |
+| `TEST_AUTH_SEED_EMAIL` | Seed account email when test mode is enabled | admin@vellic.io |
 | `TEST_AUTH_SEED_PASSWORD` | Seed account password when test mode is enabled | Admin123 |
-| `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Matt Test |
+| `TEST_AUTH_SEED_NAME` | Seed account display name when test mode is enabled | Vellic Admin |
+| `ADMIN_BOOTSTRAP_EMAILS` | Comma-separated emails granted Admin console owner access | seed email in test auth mode; unset in production |
 | `AUTH_HEADER_FALLBACK` | Allows bearer token auth header fallback when cross-site cookies fail | same default as `TEST_AUTH_ENABLED` |
 | `AUTH_EMAIL_VERIFICATION_TTL_MINUTES` | Minutes before a signup verification code expires | 10 |
 | `AUTH_PASSWORD_RESET_TTL_MINUTES` | Minutes before a password reset code expires | 15 |

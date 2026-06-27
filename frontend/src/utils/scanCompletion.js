@@ -25,20 +25,6 @@ export const isEntitlementLimitedScanResult = (result) => (
   || Boolean(result?.entitlement?.capped && result.entitlement.limitReached !== false)
 );
 
-const toCount = (value) => Math.max(0, Number(value || 0) || 0);
-
-const hasRootOnlyDiscoverySignal = (result) => {
-  const diagnostics = result?.scanDiagnostics || {};
-  return toCount(diagnostics.rootAllowedLinks) > 0
-    || toCount(diagnostics.sitemapUrlsQueued) > 0
-    || toCount(diagnostics.commonPathActive) > 0
-    || toCount(diagnostics.renderedLinksQueued) > 0
-    || toCount(diagnostics.pageMapCount) > 1
-    || toCount(diagnostics.queueRemaining) > 0
-    || toCount(diagnostics.discoveryManifest?.hiddenPageCount) > 0
-    || toCount(result?.discoveryManifest?.hiddenPageCount) > 0;
-};
-
 export const shouldPreserveExistingMapForCollapsedScan = ({ result, nextRoot, existingRoot }) => (
   isRootOnlyDegradedScanResult(result)
   && countScanResultNodes(existingRoot) > 1
@@ -49,8 +35,7 @@ export const shouldRejectFreshRootOnlyScan = ({ result, nextRoot }) => {
   if (countScanResultNodes(nextRoot) > 1) return false;
   if (isRootOnlyDegradedScanResult(result)) return true;
   return result?.partial === true
-    && result?.partialReason === STOPPED_BY_USER_PARTIAL_REASON
-    && hasRootOnlyDiscoverySignal(result);
+    && result?.partialReason === STOPPED_BY_USER_PARTIAL_REASON;
 };
 
 export const getCollapsedScanMessage = (hostname = '') => {
