@@ -1329,6 +1329,7 @@ const findCommentInThread = (comments, commentId) => {
 };
 
 const ACTIVITY_POLL_INTERVAL_MS = 5000;
+const SHARE_STATUS_POLL_INTERVAL_MS = 2500;
 const MAX_TRACKED_ACTIVITY_IDS = 80;
 const AUTOSAVE_CHECKPOINT_MIN_INTERVAL_MS = 15000;
 const ASSET_AUTOSAVE_SUPPRESSION_MS = 2500;
@@ -2760,6 +2761,148 @@ const collectNodesDeep = (rootNode, orphanNodes = []) => {
   return result;
 };
 
+const getShareRefreshVersionKey = (share = {}) => {
+  const mapId = share?.mapId || '';
+  const updatedAt = share?.mapUpdatedAt || share?.updatedAt || '';
+  const createdAt = share?.shareCreatedAt || share?.createdAt || '';
+  if (!mapId && !updatedAt && !createdAt) return '';
+  return [mapId, updatedAt, createdAt].join(':');
+};
+
+const LIVE_RESTORE_NODE_SKIP_FIELDS = new Set([
+  'id',
+  'children',
+  'parentId',
+  'afterNodeId',
+  'subdomainRoot',
+  'orphanType',
+  'comments',
+]);
+
+const normalizeUndoSnapshot = (snapshot = {}) => {
+  if (snapshot?.root !== undefined) {
+    return {
+      root: snapshot.root,
+      orphans: Array.isArray(snapshot.orphans) ? snapshot.orphans : [],
+      connections: Array.isArray(snapshot.connections) ? snapshot.connections : [],
+      colors: Array.isArray(snapshot.colors) ? snapshot.colors : DEFAULT_COLORS,
+      connectionColors: snapshot.connectionColors || DEFAULT_CONNECTION_COLORS,
+    };
+  }
+
+  return {
+    root: snapshot || null,
+    orphans: [],
+    connections: [],
+    colors: DEFAULT_COLORS,
+    connectionColors: DEFAULT_CONNECTION_COLORS,
+  };
+};
+
+const indexNodesById = (rootNode, orphanNodes = []) => {
+  const nodesById = new Map();
+  collectNodesDeep(rootNode, orphanNodes).forEach((node) => {
+    if (node?.id) nodesById.set(node.id, node);
+  });
+  return nodesById;
+};
+
+const valuesAreEqual = (left, right) => JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+
+const buildLiveRestoreDrafts = ({ currentState, targetState } = {}) => {
+  const current = normalizeUndoSnapshot(currentState);
+  const target = normalizeUndoSnapshot(targetState);
+  const drafts = [];
+  const currentNodes = indexNodesById(current.root, current.orphans);
+  const targetNodes = indexNodesById(target.root, target.orphans);
+
+  if (currentNodes.size !== targetNodes.size) {
+    return {
+      ok: false,
+      reason: 'Undo for live add/delete/move changes is not supported yet.',
+      drafts: [],
+    };
+  }
+
+  for (const nodeId of currentNodes.keys()) {
+    if (!targetNodes.has(nodeId)) {
+      return {
+        ok: false,
+        reason: 'Undo for live add/delete/move changes is not supported yet.',
+        drafts: [],
+      };
+    }
+  }
+
+  targetNodes.forEach((targetNode, nodeId) => {
+    const currentNode = currentNodes.get(nodeId);
+    const changes = {};
+    Object.keys(targetNode || {}).forEach((field) => {
+      if (LIVE_RESTORE_NODE_SKIP_FIELDS.has(field)) return;
+      if (!valuesAreEqual(currentNode?.[field], targetNode?.[field])) {
+        changes[field] = targetNode[field];
+      }
+    });
+    if (Object.keys(changes).length > 0) {
+      drafts.push({
+        type: 'node.update',
+        payload: { nodeId, changes },
+      });
+    }
+  });
+
+  const currentConnections = new Map((current.connections || []).map((connection) => [connection.id, connection]));
+  const targetConnections = new Map((target.connections || []).map((connection) => [connection.id, connection]));
+  currentConnections.forEach((connection, connectionId) => {
+    if (!targetConnections.has(connectionId)) {
+      drafts.push({
+        type: 'link.delete',
+        payload: { linkId: connectionId },
+      });
+    }
+  });
+  targetConnections.forEach((targetConnection, connectionId) => {
+    const currentConnection = currentConnections.get(connectionId);
+    if (!currentConnection) {
+      drafts.push({
+        type: 'link.add',
+        payload: {
+          linkId: targetConnection.id,
+          sourceId: targetConnection.sourceNodeId,
+          targetId: targetConnection.targetNodeId,
+          link: targetConnection,
+        },
+      });
+      return;
+    }
+    if (!valuesAreEqual(currentConnection, targetConnection)) {
+      drafts.push({
+        type: 'link.update',
+        payload: {
+          linkId: connectionId,
+          changes: targetConnection,
+        },
+      });
+    }
+  });
+
+  const metadataChanges = {};
+  if (!valuesAreEqual(current.colors, target.colors)) {
+    metadataChanges.colors = target.colors;
+  }
+  if (!valuesAreEqual(current.connectionColors, target.connectionColors)) {
+    metadataChanges.connectionColors = target.connectionColors;
+  }
+  if (Object.keys(metadataChanges).length > 0) {
+    drafts.push({
+      type: 'metadata.update',
+      payload: { changes: metadataChanges },
+    });
+  }
+
+  return { ok: true, drafts };
+};
+
 const nodeKey = (node) => {
   if (!node) return '';
   if (node.url) return `url:${normalizeUrlForCompare(node.url)}`;
@@ -2882,6 +3025,9 @@ export const __testing = {
   serializeMapAutosaveSnapshot,
   getPersistedScanMetaFromRoot,
   hydratePersistedScanLimitMap,
+  getShareRefreshVersionKey,
+  normalizeUndoSnapshot,
+  buildLiveRestoreDrafts,
   getDuplicateNodeDefaultParentId,
   applyNodeAssetUpdatesToMap,
   isStoredScreenshotAsset,
@@ -3075,6 +3221,8 @@ export default function App({ currentRoute, navigateToRoute }) {
   const centerKnownLargeMapHomeRef = useRef(null);
   const pendingInitialCenterRef = useRef(false);
   const loadedShareRouteKeyRef = useRef('');
+  const loadedShareVersionKeyRef = useRef('');
+  const shareRefreshInFlightRef = useRef(false);
   const pendingInitialLargeMapCenterRef = useRef(false);
   const pendingUnsavedRoutePromptRef = useRef('');
   const largeMapHomeSceneKeyRef = useRef('');
@@ -6441,8 +6589,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, []);
 
-  const applySharedMapPayload = useCallback((share) => {
+  const applySharedMapPayload = useCallback((share, options = {}) => {
     if (!share?.root) return;
+    const resetView = options.resetView !== false;
     const routeAccess = currentRoute?.surface === ROUTE_SURFACES.SHARE
       && Object.values(ACCESS_LEVELS).includes(currentRoute?.accessLevel)
       ? currentRoute.accessLevel
@@ -6459,7 +6608,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     setRoot(share.root);
     setOrphans(normalizeOrphans(share.orphans));
     setConnections(share.connections || []);
-    applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    if (resetView) {
+      applyTransform({ scale: 1, x: 0, y: 0 }, { skipPanClamp: true });
+    }
     setColors(share.colors || DEFAULT_COLORS);
     setConnectionColors(share.connectionColors || DEFAULT_CONNECTION_COLORS);
     setUrlInput(share.root.url || '');
@@ -6474,10 +6625,12 @@ export default function App({ currentRoute, navigateToRoute }) {
       setMapOrientation(routeOrientation || payloadOrientation);
     }
     setIsImportedMap(false);
-    setSelectedNodeIds(new Set());
-    setSelectionBox(null);
-    pendingInitialCenterRef.current = true;
-    scheduleResetViewRef.current?.();
+    if (resetView) {
+      setSelectedNodeIds(new Set());
+      setSelectionBox(null);
+      pendingInitialCenterRef.current = true;
+      scheduleResetViewRef.current?.();
+    }
   }, [
     applyTransform,
     currentRoute?.accessLevel,
@@ -6520,6 +6673,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   useEffect(() => {
     if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) {
       loadedShareRouteKeyRef.current = '';
+      loadedShareVersionKeyRef.current = '';
       return undefined;
     }
     if (authLoading) return undefined;
@@ -6570,6 +6724,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
 
         loadedShareRouteKeyRef.current = shareRouteKey;
+        loadedShareVersionKeyRef.current = getShareRefreshVersionKey(share);
         applySharedMapPayload({
           ...share,
           accessLevel: requestedAccess,
@@ -6582,6 +6737,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           try {
             const parsed = JSON.parse(sharedData);
             loadedShareRouteKeyRef.current = shareRouteKey;
+            loadedShareVersionKeyRef.current = getShareRefreshVersionKey(parsed);
             applySharedMapPayload({
               ...parsed,
               name: parsed?.name || null,
@@ -6609,6 +6765,60 @@ export default function App({ currentRoute, navigateToRoute }) {
     isLoggedIn,
     navigateToRoute,
     showToast,
+  ]);
+
+  useEffect(() => {
+    if (currentRoute?.surface !== ROUTE_SURFACES.SHARE || !currentRoute?.shareId) return undefined;
+    if (authLoading || isLoggedIn) return undefined;
+
+    const shareId = currentRoute.shareId;
+    const shareRouteKey = `${shareId}:${currentRoute.search || ''}`;
+    let cancelled = false;
+
+    const refreshShareIfChanged = async () => {
+      if (cancelled || shareRefreshInFlightRef.current) return;
+      if (loadedShareRouteKeyRef.current !== shareRouteKey) return;
+      shareRefreshInFlightRef.current = true;
+      try {
+        const { share: status } = await api.getShareStatus(shareId);
+        if (cancelled) return;
+        const nextVersionKey = getShareRefreshVersionKey(status);
+        if (!nextVersionKey || nextVersionKey === loadedShareVersionKeyRef.current) return;
+
+        const { share } = await api.getShare(shareId);
+        if (cancelled || !share?.root) return;
+        const routeAccess = currentRoute?.surface === ROUTE_SURFACES.SHARE
+          && Object.values(ACCESS_LEVELS).includes(currentRoute?.accessLevel)
+          ? currentRoute.accessLevel
+          : null;
+        const requestedAccess = routeAccess || normalizeShareAccessForApp(share.accessLevel);
+        loadedShareVersionKeyRef.current = getShareRefreshVersionKey(share) || nextVersionKey;
+        applySharedMapPayload({
+          ...share,
+          accessLevel: requestedAccess,
+        }, { resetView: false });
+      } catch (error) {
+        if (!cancelled && error?.status && ![404, 410].includes(error.status)) {
+          console.warn('Shared map refresh failed:', error);
+        }
+      } finally {
+        shareRefreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshShareIfChanged, SHARE_STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [
+    applySharedMapPayload,
+    authLoading,
+    currentRoute?.accessLevel,
+    currentRoute?.search,
+    currentRoute?.shareId,
+    currentRoute?.surface,
+    isLoggedIn,
   ]);
 
   // (gesture handlers removed; zoom handled via wheel listener on canvas)
@@ -13341,15 +13551,38 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
+    const currentSnapshot = { root, orphans, connections, colors, connectionColors };
+    const lastState = undoStack[undoStack.length - 1];
+    const parsed = normalizeUndoSnapshot(JSON.parse(lastState));
+
+    if (isLiveActive && currentMap?.id) {
+      const restore = buildLiveRestoreDrafts({
+        currentState: currentSnapshot,
+        targetState: parsed,
+      });
+      if (!restore.ok) {
+        warnLiveModeUnsupported(restore.reason || 'Undo is not available for this live change yet.');
+        return;
+      }
+      for (const draft of restore.drafts) {
+        const result = submitLiveDraft(draft);
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue undo', 'error');
+          return;
+        }
+      }
+      setRedoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
+      setUndoStack(prev => prev.slice(0, -1));
+      return;
+    }
+
     // Save current state to redo stack
-    setRedoStack(prev => [...prev, JSON.stringify({ root, orphans, connections, colors, connectionColors })]);
+    setRedoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
 
     // Get last state from undo stack
-    const lastState = undoStack[undoStack.length - 1];
     setUndoStack(prev => prev.slice(0, -1));
 
     // Restore it
-    const parsed = JSON.parse(lastState);
     if (parsed.root !== undefined) {
       setRoot(parsed.root);
     } else {
@@ -13372,10 +13605,14 @@ export default function App({ currentRoute, navigateToRoute }) {
     connectionColors,
     connections,
     cancelActiveConnectionInteraction,
+    currentMap?.id,
     isCollaborativeLiveEditingRestricted,
+    isLiveActive,
     liveUndoRedoDisabledReason,
     orphans,
     root,
+    showToast,
+    submitLiveDraft,
     undoStack,
     warnLiveModeUnsupported,
   ]);
@@ -13390,15 +13627,38 @@ export default function App({ currentRoute, navigateToRoute }) {
       return;
     }
 
+    const currentSnapshot = { root, orphans, connections, colors, connectionColors };
+    const lastState = redoStack[redoStack.length - 1];
+    const parsed = normalizeUndoSnapshot(JSON.parse(lastState));
+
+    if (isLiveActive && currentMap?.id) {
+      const restore = buildLiveRestoreDrafts({
+        currentState: currentSnapshot,
+        targetState: parsed,
+      });
+      if (!restore.ok) {
+        warnLiveModeUnsupported(restore.reason || 'Redo is not available for this live change yet.');
+        return;
+      }
+      for (const draft of restore.drafts) {
+        const result = submitLiveDraft(draft);
+        if (!result.ok) {
+          showToast(result.error || 'Failed to queue redo', 'error');
+          return;
+        }
+      }
+      setUndoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
+      setRedoStack(prev => prev.slice(0, -1));
+      return;
+    }
+
     // Save current state to undo stack
-    setUndoStack(prev => [...prev, JSON.stringify({ root, orphans, connections, colors, connectionColors })]);
+    setUndoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
 
     // Get last state from redo stack
-    const lastState = redoStack[redoStack.length - 1];
     setRedoStack(prev => prev.slice(0, -1));
 
     // Restore it
-    const parsed = JSON.parse(lastState);
     if (parsed.root !== undefined) {
       setRoot(parsed.root);
     } else {
@@ -13421,11 +13681,15 @@ export default function App({ currentRoute, navigateToRoute }) {
     connectionColors,
     connections,
     cancelActiveConnectionInteraction,
+    currentMap?.id,
     isCollaborativeLiveEditingRestricted,
+    isLiveActive,
     liveUndoRedoDisabledReason,
     orphans,
     redoStack,
     root,
+    showToast,
+    submitLiveDraft,
     warnLiveModeUnsupported,
   ]);
 

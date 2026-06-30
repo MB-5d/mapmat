@@ -3947,6 +3947,45 @@ router.post('/shares', requireAuth, async (req, res) => {
 });
 
 // GET /api/shares/:id - Get a shared map (public, no auth required)
+router.get('/shares/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const share = await shareStore.getShareWithUserByIdAsync(id);
+
+    if (!share) {
+      return res.status(404).json({ error: 'Share not found' });
+    }
+
+    if (share.expires_at && new Date(share.expires_at) < new Date()) {
+      return res.status(410).json({ error: 'This share link has expired' });
+    }
+
+    let sharedMap = null;
+    if (share.map_id) {
+      sharedMap = await mapStore.getMapByIdAsync(share.map_id);
+      if (share.project_id && (!sharedMap || (sharedMap.project_id || null) !== share.project_id)) {
+        return res.status(410).json({
+          error: 'This map has moved. Ask the map owner for the new share link.',
+          code: 'SHARE_MAP_MOVED',
+        });
+      }
+    }
+
+    res.json({
+      share: {
+        id: share.id,
+        mapId: share.map_id || null,
+        updatedAt: sharedMap?.updated_at || share.created_at || null,
+        mapUpdatedAt: sharedMap?.updated_at || null,
+        shareCreatedAt: share.created_at || null,
+      },
+    });
+  } catch (error) {
+    console.error('Get share status error:', error);
+    res.status(500).json({ error: 'Failed to get shared map status' });
+  }
+});
+
 router.get('/shares/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -3997,6 +4036,8 @@ router.get('/shares/:id', async (req, res) => {
         orientation: normalizeShareOrientation(share.orientation),
         sharedBy: share.shared_by_name,
         createdAt: share.created_at,
+        updatedAt: sharedMap?.updated_at || share.created_at || null,
+        mapUpdatedAt: sharedMap?.updated_at || null,
         viewCount: share.view_count + 1,
       },
     });

@@ -1137,6 +1137,10 @@ export async function getShare(id) {
   return fetchApi(`/api/shares/${id}`);
 }
 
+export async function getShareStatus(id) {
+  return fetchApi(`/api/shares/${id}/status`);
+}
+
 export async function getMyShares() {
   return fetchApi('/api/shares');
 }

@@ -932,6 +932,12 @@ async function run() {
       publicShareTitle,
       'public share should read current saved map changes'
     );
+    const freshPublicShareStatus = await fetchJson(`${apiBase}/api/shares/${shareId}/status`);
+    assert.strictEqual(
+      freshPublicShareStatus.share?.updatedAt,
+      freshPublicShare.share?.updatedAt,
+      'public share status should expose the current map version'
+    );
 
     const latestMap = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
     const rootWithChangedUrl = {

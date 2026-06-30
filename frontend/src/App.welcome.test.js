@@ -8,6 +8,7 @@ import { ROUTE_SURFACES } from './utils/appRoutes';
 jest.mock('./api', () => ({
   getMe: jest.fn(),
   getShare: jest.fn(),
+  getShareStatus: jest.fn(),
   getProjects: jest.fn(),
   getMaps: jest.fn(),
   getHistory: jest.fn(),
@@ -102,6 +103,7 @@ describe('App blank home and welcome modal', () => {
 
     api.getMe.mockRejectedValue(new Error('Not authenticated'));
     api.getShare.mockResolvedValue({ share: {} });
+    api.getShareStatus.mockResolvedValue({ share: {} });
     api.getProjects.mockResolvedValue({ projects: [] });
     api.getMaps.mockResolvedValue({ maps: [] });
     api.getHistory.mockResolvedValue({ history: [] });
