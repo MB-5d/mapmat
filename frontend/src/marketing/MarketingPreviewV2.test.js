@@ -2,8 +2,20 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { getBillingConfig, submitMarketingContact, submitMarketingMailingListSignup } from '../api';
-import MarketingPreviewV2 from './MarketingPreviewV2';
+import MarketingPreviewV2, {
+  applyMarketingPreviewV2Metadata,
+  buildMarketingPreviewV2JsonLd,
+  getMarketingPreviewV2RobotsContent,
+} from './MarketingPreviewV2';
+import {
+  MARKETING_PREVIEW_V2_META_DESCRIPTION,
+  MARKETING_PREVIEW_V2_META_TITLE,
+  MARKETING_PREVIEW_V2_SOCIAL_IMAGE_ALT,
+  MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL,
+  getMarketingPreviewV2SectionById,
+} from './marketingPreviewV2Config';
 import { parseCurrentRoute, ROUTE_SURFACES } from '../utils/appRoutes';
+import vercelConfig from '../../vercel.json';
 
 jest.mock('../api', () => ({
   getBillingConfig: jest.fn(),
@@ -27,6 +39,10 @@ function setSelectValue(select, value) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
   setter.call(select, value);
   select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function getHeadContent(selector) {
+  return document.head.querySelector(selector)?.getAttribute('content');
 }
 
 describe('MarketingPreviewV2', () => {
@@ -146,9 +162,102 @@ describe('MarketingPreviewV2', () => {
     expect(container.querySelector('#marketing-v2-features')?.textContent).toContain('This is just the start!');
     expect(container.querySelector('.marketing-v2-feature-upcoming')).toBeNull();
     expect(container.querySelector('.marketing-v2-header__nav a[aria-current="page"]')?.textContent).toBe('Features');
-    expect(document.title).toBe('Features | Vellic Marketing Preview V2');
+    expect(document.title).toBe('Features | Vellic Website Audit Tool');
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://vellic.io/features');
     expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ top: expect.any(Number) }));
+  });
+
+  test('keeps visible copy intact while applying SEO metadata and schema', () => {
+    renderAt('/');
+
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    expect(container.querySelector('h1')?.textContent).toBe('Be the architect of your next build.');
+    expect(container.textContent).toContain('Nearly 5k page site scan, 7 levels deep with top-of-page screenshots.');
+    expect(container.textContent).toContain('What is Vellic?');
+    expect(document.title).toBe(MARKETING_PREVIEW_V2_META_TITLE);
+    expect(getHeadContent('meta[name="description"]')).toBe(MARKETING_PREVIEW_V2_META_DESCRIPTION);
+    expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe('https://vellic.io/');
+    expect(getHeadContent('meta[property="og:title"]')).toBe(MARKETING_PREVIEW_V2_META_TITLE);
+    expect(getHeadContent('meta[property="og:description"]')).toBe(MARKETING_PREVIEW_V2_META_DESCRIPTION);
+    expect(getHeadContent('meta[property="og:url"]')).toBe('https://vellic.io/');
+    expect(getHeadContent('meta[property="og:type"]')).toBe('website');
+    expect(getHeadContent('meta[property="og:site_name"]')).toBe('Vellic');
+    expect(getHeadContent('meta[property="og:image"]')).toBe(MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL);
+    expect(getHeadContent('meta[property="og:image:alt"]')).toBe(MARKETING_PREVIEW_V2_SOCIAL_IMAGE_ALT);
+    expect(getHeadContent('meta[name="twitter:card"]')).toBe('summary_large_image');
+    expect(getHeadContent('meta[name="twitter:title"]')).toBe(MARKETING_PREVIEW_V2_META_TITLE);
+    expect(getHeadContent('meta[name="twitter:description"]')).toBe(MARKETING_PREVIEW_V2_META_DESCRIPTION);
+    expect(getHeadContent('meta[name="twitter:image"]')).toBe(MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL);
+    expect(getHeadContent('meta[name="twitter:image:alt"]')).toBe(MARKETING_PREVIEW_V2_SOCIAL_IMAGE_ALT);
+
+    const jsonLdScript = document.head.querySelector('#marketing-v2-jsonld[type="application/ld+json"]');
+    const jsonLd = JSON.parse(jsonLdScript.textContent);
+    const graphTypes = jsonLd['@graph'].map((entry) => entry['@type']);
+    expect(graphTypes).toEqual(expect.arrayContaining([
+      'Organization',
+      'WebSite',
+      'SoftwareApplication',
+      'FAQPage',
+    ]));
+    expect(jsonLd['@graph'].find((entry) => entry['@type'] === 'SoftwareApplication').featureList).toEqual(
+      expect.arrayContaining(['Visual sitemap generator', 'Website screenshot crawler'])
+    );
+    expect(jsonLd['@graph'].find((entry) => entry['@type'] === 'FAQPage').mainEntity).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'What is Vellic?',
+          acceptedAnswer: expect.objectContaining({
+            text: expect.stringContaining('visual sitemap workspace'),
+          }),
+        }),
+      ])
+    );
+  });
+
+  test('applies staging noindex without blocking production metadata', () => {
+    const homeSection = getMarketingPreviewV2SectionById('home');
+
+    expect(getMarketingPreviewV2RobotsContent('staging.vellic.io')).toBe('noindex, nofollow');
+    expect(getMarketingPreviewV2RobotsContent('mapmat-staging.vercel.app')).toBe('noindex, nofollow');
+    expect(getMarketingPreviewV2RobotsContent('preview-123.vercel.app')).toBe('noindex, nofollow');
+    expect(getMarketingPreviewV2RobotsContent('vellic.io')).toBe('');
+    expect(getMarketingPreviewV2RobotsContent('www.vellic.io')).toBe('');
+
+    applyMarketingPreviewV2Metadata(homeSection, { hostname: 'staging.vellic.io' });
+    expect(getHeadContent('meta[name="robots"]')).toBe('noindex, nofollow');
+
+    applyMarketingPreviewV2Metadata(homeSection, { hostname: 'vellic.io' });
+    expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
+  });
+
+  test('builds valid route-aware JSON-LD', () => {
+    const schema = buildMarketingPreviewV2JsonLd(getMarketingPreviewV2SectionById('examples'));
+    const software = schema['@graph'].find((entry) => entry['@type'] === 'SoftwareApplication');
+
+    expect(schema['@context']).toBe('https://schema.org');
+    expect(software.url).toBe('https://vellic.io/examples');
+    expect(software.description).toBe(MARKETING_PREVIEW_V2_META_DESCRIPTION);
+    expect(software.offers).toEqual(expect.objectContaining({
+      '@type': 'AggregateOffer',
+      lowPrice: '0',
+      priceCurrency: 'USD',
+      url: 'https://vellic.io/pricing',
+    }));
+  });
+
+  test('sets a staging-only X-Robots-Tag header rule', () => {
+    const robotsRule = vercelConfig.headers.find((rule) => (
+      rule.headers.some((header) => header.key === 'X-Robots-Tag')
+    ));
+    const hostCondition = robotsRule.has.find((condition) => condition.type === 'host');
+    const hostMatcher = new RegExp(hostCondition.value);
+
+    expect(robotsRule.headers).toContainEqual({ key: 'X-Robots-Tag', value: 'noindex, nofollow' });
+    expect(hostMatcher.test('staging.vellic.io')).toBe(true);
+    expect(hostMatcher.test('mapmat-staging.vercel.app')).toBe(true);
+    expect(hostMatcher.test('preview-123.vercel.app')).toBe(true);
+    expect(hostMatcher.test('vellic.io')).toBe(false);
+    expect(hostMatcher.test('www.vellic.io')).toBe(false);
   });
 
   test('uses real nav links and intercepts V2 routing for SPA navigation', () => {

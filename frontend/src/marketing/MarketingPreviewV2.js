@@ -44,7 +44,10 @@ import MarketingScanBar, { isMarketingPhoneViewport } from './MarketingScanBar';
 import { buildAppBillingUrl, buildAppScanUrl, buildAppSignupUrl, buildAppTrialUrl } from './marketingConfig';
 import {
   MARKETING_PREVIEW_V2_BASE_PATH,
+  MARKETING_PREVIEW_V2_META_DESCRIPTION,
   MARKETING_PREVIEW_V2_NAV_SECTION_IDS,
+  MARKETING_PREVIEW_V2_SOCIAL_IMAGE_ALT,
+  MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL,
   buildMarketingPreviewV2CanonicalUrl,
   buildMarketingPreviewV2Path,
   getMarketingPreviewV2SectionById,
@@ -604,6 +607,22 @@ const comparisonGroups = [
 const comparisonRowCount = Math.max(...comparisonGroups.map((group) => group.rows.length));
 const comparisonSummary = 'How we compare in main categories and features.';
 const featureComparisonEnabled = false;
+const MARKETING_V2_JSON_LD_ID = 'marketing-v2-jsonld';
+const MARKETING_V2_SCHEMA_ORGANIZATION_ID = 'https://vellic.io/#organization';
+const MARKETING_V2_SCHEMA_WEBSITE_ID = 'https://vellic.io/#website';
+const MARKETING_V2_SCHEMA_SOFTWARE_ID = 'https://vellic.io/#software';
+const MARKETING_V2_PRODUCTION_HOSTS = new Set(['vellic.io', 'www.vellic.io']);
+const MARKETING_V2_LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1']);
+const marketingV2SoftwareFeatures = [
+  'Visual sitemap generator',
+  'Website audit tool',
+  'Website screenshot crawler',
+  'Website redesign planning tool',
+  'Sitemap generator from URL',
+  'AI website brief generator',
+  'Content inventory tool',
+  'Information architecture audit',
+];
 
 const exampleCards = [
   {
@@ -611,7 +630,7 @@ const exampleCards = [
     text: 'Nearly 5k page site scan, 7 levels deep with top-of-page screenshots.',
     mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleRaycastImage,
-    alt: 'Vellic example map showing a large site audit with thousands of page cards and captured thumbnails',
+    alt: 'Vellic canvas showing a large visual sitemap audit with thousands of page cards and top-of-page screenshots',
     linkUrl: 'https://staging.vellic.io/share/wd5bpg',
   },
   {
@@ -619,7 +638,7 @@ const exampleCards = [
     text: 'Over 1,100 page scan including subdomains, orphan pages, and full-page screenshots',
     mobileNote: '(Go to desktop for the canvas experience)',
     image: exampleAnthropicImage,
-    alt: 'Vellic example map showing a medium site audit with subdomains, orphan pages, and full-page screenshots',
+    alt: 'Vellic canvas showing a medium website audit with subdomains, orphan pages, and full-page screenshots',
     linkUrl: 'https://staging.vellic.io/share/amh6jd',
   },
 ];
@@ -773,8 +792,11 @@ function getMarketingV2ScrollTop(element, sectionId = '') {
 }
 
 function setMetaTag(selector, createAttrs, content) {
-  if (!content) return;
   let element = document.head.querySelector(selector);
+  if (!content) {
+    element?.remove();
+    return;
+  }
   if (!element) {
     element = document.createElement('meta');
     Object.entries(createAttrs).forEach(([key, value]) => element.setAttribute(key, value));
@@ -793,15 +815,115 @@ function setCanonical(url) {
   element.setAttribute('href', url);
 }
 
-function applyMarketingPreviewV2Metadata(section) {
+function setJsonLd(id, payload) {
+  let element = document.head.querySelector(`script#${id}[type="application/ld+json"]`);
+  if (!payload) {
+    element?.remove();
+    return;
+  }
+  if (!element) {
+    element = document.createElement('script');
+    element.setAttribute('id', id);
+    element.setAttribute('type', 'application/ld+json');
+    document.head.appendChild(element);
+  }
+  element.textContent = JSON.stringify(payload);
+}
+
+function normalizeMarketingV2Hostname(hostname = '') {
+  return String(hostname || '').trim().toLowerCase();
+}
+
+function getMarketingPreviewV2RobotsContent(hostname = '') {
+  const normalized = normalizeMarketingV2Hostname(hostname);
+  if (!normalized || MARKETING_V2_LOCAL_HOSTS.has(normalized) || MARKETING_V2_PRODUCTION_HOSTS.has(normalized)) {
+    return '';
+  }
+  if (normalized === 'staging.vellic.io' || normalized.endsWith('.vercel.app')) {
+    return 'noindex, nofollow';
+  }
+  return '';
+}
+
+function buildMarketingPreviewV2JsonLd(section) {
   const canonicalUrl = buildMarketingPreviewV2CanonicalUrl(section.id);
+  const faqUrl = buildMarketingPreviewV2CanonicalUrl('faq');
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': MARKETING_V2_SCHEMA_ORGANIZATION_ID,
+        name: 'Vellic',
+        url: 'https://vellic.io/',
+        logo: MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL,
+      },
+      {
+        '@type': 'WebSite',
+        '@id': MARKETING_V2_SCHEMA_WEBSITE_ID,
+        name: 'Vellic',
+        url: 'https://vellic.io/',
+        description: MARKETING_PREVIEW_V2_META_DESCRIPTION,
+        publisher: { '@id': MARKETING_V2_SCHEMA_ORGANIZATION_ID },
+        inLanguage: 'en-US',
+      },
+      {
+        '@type': 'SoftwareApplication',
+        '@id': MARKETING_V2_SCHEMA_SOFTWARE_ID,
+        name: 'Vellic',
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web',
+        url: canonicalUrl,
+        description: MARKETING_PREVIEW_V2_META_DESCRIPTION,
+        image: MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL,
+        publisher: { '@id': MARKETING_V2_SCHEMA_ORGANIZATION_ID },
+        featureList: marketingV2SoftwareFeatures,
+        offers: {
+          '@type': 'AggregateOffer',
+          lowPrice: '0',
+          priceCurrency: 'USD',
+          url: buildMarketingPreviewV2CanonicalUrl('pricing'),
+        },
+      },
+      {
+        '@type': 'FAQPage',
+        '@id': `${faqUrl}#faq`,
+        url: faqUrl,
+        name: 'Vellic FAQ',
+        mainEntity: faqItems.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      },
+    ],
+  };
+}
+
+function applyMarketingPreviewV2Metadata(section, options = {}) {
+  const canonicalUrl = buildMarketingPreviewV2CanonicalUrl(section.id);
+  const hostname = options.hostname ?? (typeof window !== 'undefined' ? window.location.hostname : '');
+  const robotsContent = getMarketingPreviewV2RobotsContent(hostname);
   document.title = section.metaTitle;
   setMetaTag('meta[name="description"]', { name: 'description' }, section.metaDescription);
+  setMetaTag('meta[name="robots"]', { name: 'robots' }, robotsContent);
   setMetaTag('meta[property="og:title"]', { property: 'og:title' }, section.metaTitle);
   setMetaTag('meta[property="og:description"]', { property: 'og:description' }, section.metaDescription);
   setMetaTag('meta[property="og:url"]', { property: 'og:url' }, canonicalUrl);
   setMetaTag('meta[property="og:type"]', { property: 'og:type' }, 'website');
+  setMetaTag('meta[property="og:site_name"]', { property: 'og:site_name' }, 'Vellic');
+  setMetaTag('meta[property="og:image"]', { property: 'og:image' }, MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL);
+  setMetaTag('meta[property="og:image:alt"]', { property: 'og:image:alt' }, MARKETING_PREVIEW_V2_SOCIAL_IMAGE_ALT);
+  setMetaTag('meta[name="twitter:card"]', { name: 'twitter:card' }, 'summary_large_image');
+  setMetaTag('meta[name="twitter:title"]', { name: 'twitter:title' }, section.metaTitle);
+  setMetaTag('meta[name="twitter:description"]', { name: 'twitter:description' }, section.metaDescription);
+  setMetaTag('meta[name="twitter:image"]', { name: 'twitter:image' }, MARKETING_PREVIEW_V2_SOCIAL_IMAGE_URL);
+  setMetaTag('meta[name="twitter:image:alt"]', { name: 'twitter:image:alt' }, MARKETING_PREVIEW_V2_SOCIAL_IMAGE_ALT);
   setCanonical(canonicalUrl);
+  setJsonLd(MARKETING_V2_JSON_LD_ID, buildMarketingPreviewV2JsonLd(section));
 }
 
 function getRevealDelayStyle(index) {
@@ -894,7 +1016,7 @@ function HeroProductImage() {
       <figure className="marketing-v2-hero-product" aria-label="Vellic canvas preview">
         <img
           src={vellicCanvasImage}
-          alt="Vellic canvas showing a visual sitemap with page screenshot cards connected across a large site map"
+          alt="Vellic canvas showing a visual sitemap generator workspace with page screenshot cards connected across a large website audit map"
           loading="eager"
           decoding="async"
         />
@@ -2051,5 +2173,9 @@ function MarketingPreviewV2({ route, navigateToRoute, onOpenApp = defaultOpenApp
   );
 }
 
-export { applyMarketingPreviewV2Metadata };
+export {
+  applyMarketingPreviewV2Metadata,
+  buildMarketingPreviewV2JsonLd,
+  getMarketingPreviewV2RobotsContent,
+};
 export default MarketingPreviewV2;
