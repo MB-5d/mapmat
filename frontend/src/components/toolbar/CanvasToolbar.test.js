@@ -90,6 +90,38 @@ describe('CanvasToolbar', () => {
     expect(undoButton.disabled).toBe(false);
   });
 
+  test('hides the comments button when comments are unavailable', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit={false}
+          canViewComments={false}
+          canViewVersionHistory={false}
+          activeTool="select"
+          connectionTool={null}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          showLayersMenu={false}
+          layersMenuRef={{ current: null }}
+          showLegendMenu={false}
+          legendMenuRef={{ current: null }}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu={false}
+          imageMenuRef={{ current: null }}
+          hasSelection={false}
+          canUndo={false}
+          canRedo={false}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Comments"]')).toBeNull();
+  });
+
   test('matches the requested toolbar order for a saved map', () => {
     act(() => {
       root.render(
@@ -498,6 +530,83 @@ describe('CanvasToolbar', () => {
     expect(container.textContent).not.toContain('Review');
     expect(container.textContent).not.toContain('Download');
     expect(container.querySelector('.canvas-tool-menu-credits-copy')?.textContent).toBe('Screenshot credits remaining: 0');
+  });
+
+  test('keeps the images menu available but read-only when image tools are disabled', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          canEdit={false}
+          canViewComments
+          canViewVersionHistory
+          activeTool="select"
+          connectionTool={null}
+          onSelectTool={jest.fn()}
+          onAddPage={jest.fn()}
+          onToggleUserFlow={jest.fn()}
+          onToggleCrosslink={jest.fn()}
+          showCommentsPanel={false}
+          onToggleCommentsPanel={jest.fn()}
+          showReportDrawer={false}
+          onToggleReportDrawer={jest.fn()}
+          showLayersMenu={false}
+          onToggleLayersMenu={jest.fn()}
+          layersMenuRef={{ current: null }}
+          layersPanel={null}
+          showLegendMenu={false}
+          onToggleLegendMenu={jest.fn()}
+          legendMenuRef={{ current: null }}
+          legendPanel={null}
+          onToggleImageMenu={jest.fn()}
+          showImageMenu
+          imageMenuRef={{ current: null }}
+          canUseImageTools={false}
+          hasAnyThumbnails
+          showThumbnails
+          onToggleThumbnails={jest.fn()}
+          onGetThumbnailsAll={jest.fn()}
+          onGetThumbnailsSelected={jest.fn()}
+          onUpdateCapturedThumbnails={jest.fn()}
+          onGetFullScreenshotsAll={jest.fn()}
+          onGetFullScreenshotsSelected={jest.fn()}
+          onUpdateCapturedFullScreenshots={jest.fn()}
+          hasDownloadableThumbnails
+          hasFullScreenshotAssets
+          hasDownloadableImages
+          hasSelection
+          captureIssues={[{ id: 'missing:n1', nodeId: 'n1', label: 'Missing' }]}
+          onOpenImageReport={jest.fn()}
+          onAddScreenshotCredits={jest.fn()}
+          canUndo={false}
+          canRedo={false}
+          onUndo={jest.fn()}
+          onRedo={jest.fn()}
+          onClearCanvas={jest.fn()}
+          onSaveMap={jest.fn()}
+          onDuplicateMap={jest.fn()}
+          onShowVersionHistory={jest.fn()}
+          onExport={jest.fn()}
+          onShare={jest.fn()}
+          hasMap
+          hasSavedMap
+          showVersionHistory={false}
+        />
+      );
+    });
+
+    expect(container.querySelector('button[aria-label="Images"]')).not.toBeNull();
+    expect(container.querySelector('.ui-menu-title')?.textContent).toBe('Images');
+    expect(container.textContent).toContain('Visibility');
+    expect(container.textContent).toContain('Node thumbnails');
+    expect(container.textContent).not.toContain('Capture visible area');
+    expect(container.textContent).not.toContain('Capture full page');
+    expect(container.textContent).not.toContain('Get thumbnails');
+    expect(container.textContent).not.toContain('Get full page');
+    expect(container.textContent).not.toContain('Update captured');
+    expect(container.textContent).not.toContain('Image report');
+    expect(container.textContent).not.toContain('Screenshot credits remaining');
+    expect(container.textContent).not.toContain('Add credits');
+    expect(container.querySelector('.canvas-tool-menu-credits')).toBeNull();
   });
 
   test('requires a saved map before image capture actions are available', () => {

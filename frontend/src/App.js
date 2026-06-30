@@ -5432,12 +5432,6 @@ export default function App({ currentRoute, navigateToRoute }) {
   );
 
   useEffect(() => {
-    if (isReaderOnlyMapRoleValue && showImageMenu) {
-      setShowImageMenu(false);
-    }
-  }, [isReaderOnlyMapRoleValue, showImageMenu]);
-
-  useEffect(() => {
     if (showVersionHistoryDrawer && !canViewVersionHistoryValue) {
       setShowVersionHistoryDrawer(false);
     }
@@ -19198,7 +19192,7 @@ export default function App({ currentRoute, navigateToRoute }) {
             <RightRail
               toolbarProps={{
                 canEdit: canEdit(),
-                canViewComments: canViewComments(),
+                canViewComments: canComment(),
                 canViewVersionHistory: canViewVersionHistory(),
                 activeTool,
                 connectionTool,
@@ -19359,7 +19353,6 @@ export default function App({ currentRoute, navigateToRoute }) {
                   />
                 ),
                 onToggleImageMenu: () => {
-                  if (isReaderOnlyMapRoleValue) return;
                   if (showImageMenu) {
                     setShowImageMenu(false);
                     return;
@@ -19368,7 +19361,9 @@ export default function App({ currentRoute, navigateToRoute }) {
                   setShowColorKey(false);
                   setShowImageReportDrawer(false);
                   setShowImageMenu(true);
-                  validateCurrentMapImageAssets();
+                  if (canEditValue) {
+                    validateCurrentMapImageAssets();
+                  }
                 },
                 onGetThumbnailsAll: () => handleThumbnailCapture('all'),
                 onGetThumbnailsSelected: () => handleThumbnailCapture('selected'),
@@ -19428,7 +19423,7 @@ export default function App({ currentRoute, navigateToRoute }) {
                 },
                 showImageMenu,
                 imageMenuRef,
-                canUseImageTools: !isReaderOnlyMapRoleValue,
+                canUseImageTools: canEditValue,
                 hasSelection: selectedNodeIds.size > 0,
                 canUndo,
                 canRedo,

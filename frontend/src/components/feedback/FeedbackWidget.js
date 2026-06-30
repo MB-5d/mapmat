@@ -73,7 +73,8 @@ export default function FeedbackWidget({
   const [selectedTarget, setSelectedTarget] = useState(null);
   const widgetRootRef = useRef(null);
   const selectedElementRef = useRef(null);
-  const isVisible = currentRoute?.surface === ROUTE_SURFACES.APP;
+  const isVisible = currentRoute?.surface === ROUTE_SURFACES.APP
+    || currentRoute?.surface === ROUTE_SURFACES.SHARE;
   const figmaFeedbackAppliedRef = useRef('');
   const isLocalFigmaCaptureHost = FIGMA_CAPTURE_TOOLS_ENABLED && typeof window !== 'undefined' && (
     window.location.hostname === 'localhost'

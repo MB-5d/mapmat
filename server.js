@@ -911,8 +911,15 @@ const refreshProtectedScreenshotFilenames = async ({ force = false } = {}) => {
     return screenshotProtectedFilenames;
   }
   try {
-    const filenames = await mapStore.listPersistedScreenshotFilenamesAsync();
+    const [filenames, manifestRows] = await Promise.all([
+      mapStore.listPersistedScreenshotFilenamesAsync(),
+      imageAssetStore.listSavedImageAssetStorageKeysAsync(),
+    ]);
     screenshotProtectedFilenames = new Set(filenames || []);
+    (manifestRows || []).forEach((row) => {
+      const key = extractScreenshotStorageKey(row.storage_key || row.url || '');
+      if (key) screenshotProtectedFilenames.add(key);
+    });
     screenshotProtectedFilenamesLoadedAt = now;
   } catch (error) {
     console.warn('Screenshot reference refresh error:', error.message);

@@ -676,7 +676,7 @@ function mergePreservedNodeAssets(node, assetsById, currentNodesById, result) {
 
 function preserveExistingImageAssets({ root, orphans, currentRoot, currentOrphans }) {
   const assetsById = collectNodeAssetFields(currentRoot, currentOrphans);
-  if (assetsById.size === 0) return { root, orphans, staleNodeIds: [] };
+  if (assetsById.size === 0) return { root, orphans, staleNodeIds: [], changed: false };
 
   const currentNodesById = collectNodesById(currentRoot, currentOrphans);
   const result = { changed: false, staleNodeIds: new Set() };
@@ -686,6 +686,7 @@ function preserveExistingImageAssets({ root, orphans, currentRoot, currentOrphan
       ? orphans.map((orphan) => mergePreservedNodeAssets(orphan, assetsById, currentNodesById, result))
       : orphans,
     staleNodeIds: Array.from(result.staleNodeIds),
+    changed: result.changed,
   };
 }
 
@@ -863,6 +864,65 @@ async function repairMapImageAssetsFromManifest(mapRow, { persist = false } = {}
       orphans: nextParsed.orphans || sanitizedTree.orphans || [],
     },
     changed: true,
+  };
+}
+
+async function repairShareImageAssetsFromMap({ share, mapRow, persist = false } = {}) {
+  const parsed = parseMapFields(share);
+  if (!share?.map_id || !mapRow) {
+    return { parsed, changed: false, mapRow };
+  }
+
+  const repairedMap = await repairMapImageAssetsFromManifest(mapRow, { persist: true });
+  const preservedTree = preserveExistingImageAssets({
+    root: parsed.root,
+    orphans: parsed.orphans,
+    currentRoot: repairedMap.parsed.root,
+    currentOrphans: repairedMap.parsed.orphans || [],
+  });
+
+  if (!preservedTree.changed) {
+    return { parsed, changed: false, mapRow: repairedMap.row };
+  }
+
+  const sanitizedTree = sanitizeMapTreeForStorage({
+    root: preservedTree.root,
+    orphans: preservedTree.orphans,
+  });
+  const nextParsed = {
+    ...parsed,
+    root: sanitizedTree.root,
+    orphans: sanitizedTree.orphans || [],
+  };
+
+  if (persist) {
+    await shareStore.updateShareSnapshotAsync(share.id, {
+      rootData: JSON.stringify(sanitizedTree.root),
+      orphansData: sanitizedTree.orphans ? JSON.stringify(sanitizedTree.orphans) : null,
+      connectionsData: share.connections_data || null,
+      colors: share.colors || null,
+      connectionColors: share.connection_colors || null,
+      accessLevel: share.access_level || null,
+      orientation: share.orientation || null,
+      expiresAt: share.expires_at || null,
+    });
+  }
+
+  return { parsed: nextParsed, changed: true, mapRow: repairedMap.row };
+}
+
+async function getSharePayloadForCurrentMap({ share, mapRow } = {}) {
+  if (!share?.map_id || !mapRow) {
+    return {
+      parsed: parseMapFields(share),
+      mapRow,
+    };
+  }
+
+  const repairedMap = await repairMapImageAssetsFromManifest(mapRow, { persist: true });
+  return {
+    parsed: parseMapFields(repairedMap.row),
+    mapRow: repairedMap.row,
   };
 }
 
@@ -3803,7 +3863,28 @@ router.post('/shares', requireAuth, async (req, res) => {
     });
     if (!entitlement) return;
 
-    const sanitizedTree = sanitizeMapTreeForStorage({ root, orphans });
+    let shareRoot = root;
+    let shareOrphans = orphans;
+    if (map?.id) {
+      const repairedShareSource = await repairShareImageAssetsFromMap({
+        share: {
+          id: 'draft-share',
+          map_id: map.id,
+          root_data: JSON.stringify(root),
+          orphans_data: orphans ? JSON.stringify(orphans) : null,
+          connections_data: connections ? JSON.stringify(connections) : null,
+          colors: colors ? JSON.stringify(colors) : null,
+          connection_colors: connectionColors ? JSON.stringify(connectionColors) : null,
+        },
+        mapRow: map,
+        persist: false,
+      });
+      map = repairedShareSource.mapRow || map;
+      shareRoot = repairedShareSource.parsed.root;
+      shareOrphans = repairedShareSource.parsed.orphans;
+    }
+
+    const sanitizedTree = sanitizeMapTreeForStorage({ root: shareRoot, orphans: shareOrphans });
     const expiresAt = expires_in_days
       ? new Date(Date.now() + expires_in_days * 24 * 60 * 60 * 1000).toISOString()
       : null;
@@ -3882,6 +3963,7 @@ router.get('/shares/:id', async (req, res) => {
     }
 
     let sharedMap = null;
+    let parsedShare = parseMapFields(share);
     if (share.map_id) {
       sharedMap = await mapStore.getMapByIdAsync(share.map_id);
       if (share.project_id && (!sharedMap || (sharedMap.project_id || null) !== share.project_id)) {
@@ -3889,6 +3971,11 @@ router.get('/shares/:id', async (req, res) => {
           error: 'This map has moved. Ask the map owner for the new share link.',
           code: 'SHARE_MAP_MOVED',
         });
+      }
+      if (sharedMap) {
+        const currentPayload = await getSharePayloadForCurrentMap({ share, mapRow: sharedMap });
+        parsedShare = currentPayload.parsed;
+        sharedMap = currentPayload.mapRow || sharedMap;
       }
     }
 
@@ -3902,7 +3989,7 @@ router.get('/shares/:id', async (req, res) => {
     res.json({
       share: {
         id: share.id,
-        ...parseMapFields(share),
+        ...parsedShare,
         mapId: share.map_id || null,
         mapName: sharedMap?.name || null,
         projectId: sharedMap?.project_id || share.project_id || null,

@@ -318,6 +318,20 @@ function getPersistedMapNode(dbPath, mapId, nodeId) {
   }
 }
 
+function stripPersistedShareImageAssetFields(dbPath, shareId) {
+  const db = new Database(dbPath, { fileMustExist: true });
+  try {
+    const row = db.prepare('SELECT root_data, orphans_data FROM shares WHERE id = ?').get(shareId);
+    assert(row, 'share row missing before image asset strip');
+    const root = stripNodeImageAssets(JSON.parse(row.root_data));
+    const orphans = row.orphans_data ? JSON.parse(row.orphans_data).map(stripNodeImageAssets) : [];
+    db.prepare('UPDATE shares SET root_data = ?, orphans_data = ? WHERE id = ?')
+      .run(JSON.stringify(root), orphans.length ? JSON.stringify(orphans) : null, shareId);
+  } finally {
+    db.close();
+  }
+}
+
 async function assertAssetLoads(apiBase, assetUrl) {
   assert(assetUrl, 'missing asset url');
   const absoluteUrl = new URL(assetUrl, apiBase).toString();
@@ -770,6 +784,41 @@ async function run() {
     assert(getSavedManifestCount(dbPath, mapId) > 0, 'manifest rows should exist before reload repair checks');
 
     stripPersistedMapImageAssetFields(dbPath, mapId);
+    const strippedShareRoot = stripNodeImageAssets(withThumbs.map.root);
+    const strippedShareOrphans = (withThumbs.map.orphans || []).map(stripNodeImageAssets);
+    const shareCreate = await fetchJson(`${apiBase}/api/shares`, {
+      method: 'POST',
+      body: JSON.stringify({
+        map_id: mapId,
+        root: strippedShareRoot,
+        orphans: strippedShareOrphans,
+        connections: withThumbs.map.connections || [],
+        colors: withThumbs.map.colors || ['#111111', '#222222', '#333333'],
+        connectionColors: withThumbs.map.connectionColors || [],
+        access_level: 'view',
+      }),
+    }, cookieJar);
+    const shareId = shareCreate.share?.id;
+    assert(shareId, 'missing share id');
+    const repairedShareCreate = await fetchJson(`${apiBase}/api/shares/${shareId}`);
+    const shareCreateMain = collectNodes(repairedShareCreate.share.root, repairedShareCreate.share.orphans)
+      .find((page) => page.id === 'main-0');
+    assert(shareCreateMain?.thumbnailUrl, 'share creation should restore thumbnailUrl from manifest');
+    assert(shareCreateMain?.fullScreenshotUrl, 'share creation should restore fullScreenshotUrl from manifest');
+    await assertAssetLoads(apiBase, shareCreateMain.thumbnailUrl);
+    await assertAssetLoads(apiBase, shareCreateMain.fullScreenshotUrl);
+
+    stripPersistedMapImageAssetFields(dbPath, mapId);
+    stripPersistedShareImageAssetFields(dbPath, shareId);
+    const repairedShareReload = await fetchJson(`${apiBase}/api/shares/${shareId}`);
+    const shareReloadMain = collectNodes(repairedShareReload.share.root, repairedShareReload.share.orphans)
+      .find((page) => page.id === 'main-0');
+    assert(shareReloadMain?.thumbnailUrl, 'public share read should restore thumbnailUrl from manifest');
+    assert(shareReloadMain?.fullScreenshotUrl, 'public share read should restore fullScreenshotUrl from manifest');
+    await assertAssetLoads(apiBase, shareReloadMain.thumbnailUrl);
+    await assertAssetLoads(apiBase, shareReloadMain.fullScreenshotUrl);
+
+    stripPersistedMapImageAssetFields(dbPath, mapId);
     const repairedReload = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
     const repairedReloadMain = collectNodes(repairedReload.map.root, repairedReload.map.orphans)
       .find((page) => page.id === 'main-0');
@@ -856,6 +905,32 @@ async function run() {
     assert(
       getSavedManifestCount(dbPath, mapId) >= storedThumbnailCount,
       'legacy map download should backfill missing manifest rows'
+    );
+
+    const latestMapBeforeShareUpdate = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);
+    const publicShareTitle = 'Main public share title update';
+    const rootWithChangedTitle = {
+      ...latestMapBeforeShareUpdate.map.root,
+      title: publicShareTitle,
+    };
+    await fetchJson(`${apiBase}/api/maps/${mapId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: latestMapBeforeShareUpdate.map.name,
+        root: rootWithChangedTitle,
+        orphans: latestMapBeforeShareUpdate.map.orphans,
+        connections: latestMapBeforeShareUpdate.map.connections,
+        colors: latestMapBeforeShareUpdate.map.colors,
+        connectionColors: latestMapBeforeShareUpdate.map.connectionColors,
+      }),
+    }, cookieJar);
+    const freshPublicShare = await fetchJson(`${apiBase}/api/shares/${shareId}`);
+    const freshPublicShareMain = collectNodes(freshPublicShare.share.root, freshPublicShare.share.orphans)
+      .find((page) => page.id === 'main-0');
+    assert.strictEqual(
+      freshPublicShareMain?.title,
+      publicShareTitle,
+      'public share should read current saved map changes'
     );
 
     const latestMap = await fetchJson(`${apiBase}/api/maps/${mapId}`, {}, cookieJar);

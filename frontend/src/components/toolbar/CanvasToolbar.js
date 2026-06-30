@@ -162,22 +162,23 @@ const CanvasToolbar = ({
   const imageCaptureDisabled = !hasMap || imageCaptureRequiresSave;
   const imageCaptureDisabledReason = imageCaptureRequiresSave ? IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE : undefined;
   const selectionRequiredReason = imageCaptureDisabledReason || (!hasSelection ? 'Select pages first' : undefined);
+  const canUseImageCaptureTools = !!canUseImageTools;
   const showVisibilitySection = hasAnyThumbnails && !!onToggleThumbnails;
-  const showVisibleAreaAllAction = !!onGetThumbnailsAll;
-  const showVisibleAreaSelectedAction = !!onGetThumbnailsSelected;
-  const showVisibleAreaUpdateAction = hasDownloadableThumbnails && !!onUpdateCapturedThumbnails;
+  const showVisibleAreaAllAction = canUseImageCaptureTools && !!onGetThumbnailsAll;
+  const showVisibleAreaSelectedAction = canUseImageCaptureTools && !!onGetThumbnailsSelected;
+  const showVisibleAreaUpdateAction = canUseImageCaptureTools && hasDownloadableThumbnails && !!onUpdateCapturedThumbnails;
   const showVisibleAreaSection = showVisibleAreaAllAction
     || showVisibleAreaSelectedAction
     || showVisibleAreaUpdateAction;
-  const showFullPageAllAction = !!onGetFullScreenshotsAll;
-  const showFullPageSelectedAction = !!onGetFullScreenshotsSelected;
-  const showFullPageUpdateAction = hasFullScreenshotAssets && !!onUpdateCapturedFullScreenshots;
+  const showFullPageAllAction = canUseImageCaptureTools && !!onGetFullScreenshotsAll;
+  const showFullPageSelectedAction = canUseImageCaptureTools && !!onGetFullScreenshotsSelected;
+  const showFullPageUpdateAction = canUseImageCaptureTools && hasFullScreenshotAssets && !!onUpdateCapturedFullScreenshots;
   const showFullPageSection = showFullPageAllAction
     || showFullPageSelectedAction
     || showFullPageUpdateAction;
-  const showImageReportSection = captureIssues.length > 0 && !!onOpenImageReport;
-  const showDownloadAllAction = hasDownloadableImages && !!onDownloadImagesAll;
-  const showDownloadSelectedAction = hasSelection && hasDownloadableSelectedImages && !!onDownloadImagesSelected;
+  const showImageReportSection = canUseImageCaptureTools && captureIssues.length > 0 && !!onOpenImageReport;
+  const showDownloadAllAction = canUseImageCaptureTools && hasDownloadableImages && !!onDownloadImagesAll;
+  const showDownloadSelectedAction = canUseImageCaptureTools && hasSelection && hasDownloadableSelectedImages && !!onDownloadImagesSelected;
   const showDownloadSection = showDownloadAllAction || showDownloadSelectedAction;
   const imageMenuSections = [
     showVisibilitySection ? {
@@ -385,7 +386,7 @@ const CanvasToolbar = ({
     />
   ) : null;
 
-  const commentsButton = (
+  const commentsButton = canViewComments ? (
     <ToolButton
       key="comments"
       active={showCommentsPanel}
@@ -393,11 +394,10 @@ const CanvasToolbar = ({
       icon={<MessageSquare />}
       label="Comments"
       title="Comments (C)"
-      disabled={!canViewComments}
     >
-      {hasUnreadCommentMentions && canViewComments && <span className="notification-dot" />}
+      {hasUnreadCommentMentions && <span className="notification-dot" />}
     </ToolButton>
-  );
+  ) : null;
 
   const reportButton = (
     <ToolButton
@@ -421,7 +421,7 @@ const CanvasToolbar = ({
     />
   ) : null;
 
-  const imageMenuButton = canUseImageTools ? (
+  const imageMenuButton = (
     <div key="images-menu" className="canvas-tool-menu-wrapper" ref={imageMenuRef}>
       <ToolButton
         active={showImageMenu}
@@ -448,7 +448,7 @@ const CanvasToolbar = ({
             onTouchMoveCapture={containMenuScroll}
           >
             <MenuTitle>Images</MenuTitle>
-            {imageCaptureRequiresSave && (
+            {canUseImageCaptureTools && imageCaptureRequiresSave && (
               <div className="canvas-tool-menu-hint" role="note">
                 {IMAGE_CAPTURE_SAVE_REQUIRED_MESSAGE}
               </div>
@@ -459,25 +459,29 @@ const CanvasToolbar = ({
               </React.Fragment>
             ))}
           </div>
-          <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />
-          <div className="canvas-tool-menu-credits" role="note">
-            <span className="canvas-tool-menu-credits-copy">
-              Screenshot credits remaining: <strong>{screenshotCreditsLabel}</strong>
-            </span>
-            <Button
-              type="link"
-              size="sm"
-              className="canvas-tool-menu-credits-button"
-              startIcon={<ImagePlus />}
-              onClick={() => onAddScreenshotCredits?.()}
-            >
-              Add credits
-            </Button>
-          </div>
+          {canUseImageCaptureTools ? (
+            <>
+              <MenuDivider className="canvas-tool-menu-divider canvas-tool-menu-credits-divider" />
+              <div className="canvas-tool-menu-credits" role="note">
+                <span className="canvas-tool-menu-credits-copy">
+                  Screenshot credits remaining: <strong>{screenshotCreditsLabel}</strong>
+                </span>
+                <Button
+                  type="link"
+                  size="sm"
+                  className="canvas-tool-menu-credits-button"
+                  startIcon={<ImagePlus />}
+                  onClick={() => onAddScreenshotCredits?.()}
+                >
+                  Add credits
+                </Button>
+              </div>
+            </>
+          ) : null}
         </MenuPanel>
       )}
     </div>
-  ) : null;
+  );
 
   const layersButton = (
     <div key="layers-menu" className="canvas-tool-menu-wrapper" ref={layersMenuRef}>
