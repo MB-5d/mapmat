@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Check, RefreshCw, ShieldCheck } from 'lucide-react';
 
+import AccountDrawer from '../drawers/AccountDrawer';
 import Button from '../ui/Button';
-import Modal from '../ui/Modal';
 import SelectInput from '../ui/SelectInput';
 
 const ROLE_OPTIONS = [
@@ -44,33 +44,26 @@ const AccessRequestInboxModal = ({
     setRoleSelections(next);
   }, [requests]);
 
-  if (!show) return null;
-
   return (
-    <Modal
-      show={show}
+    <AccountDrawer
+      isOpen={show}
       onClose={onClose}
-      title="Access requests"
-      size="md"
-      scrollable
-      className="invite-inbox-modal"
+      title="Requests"
+      subtitle="Review pending map access requests that require an owner decision."
+      className="invite-inbox-drawer"
+      actions={(
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={onRefresh}
+          loading={loading}
+          startIcon={!loading ? <RefreshCw size={14} /> : null}
+        >
+          Refresh
+        </Button>
+      )}
     >
-          <div className="invite-inbox-actions">
-            <div className="invite-inbox-subtitle">
-              Review pending map access requests that require an owner decision.
-            </div>
-            <Button
-              type="button"
-              className="share-email-btn"
-              size="sm"
-              onClick={onRefresh}
-              loading={loading}
-            >
-              {!loading ? <RefreshCw size={14} /> : null}
-              <span>Refresh</span>
-            </Button>
-          </div>
-
           {error ? (
             <div className="share-collab-error">{error}</div>
           ) : null}
@@ -138,7 +131,7 @@ const AccessRequestInboxModal = ({
               ))
             )}
           </div>
-    </Modal>
+    </AccountDrawer>
   );
 };
 

@@ -6,6 +6,8 @@ import {
   ChevronsUpDown,
   Copy,
   DollarSign,
+  Eye,
+  EyeOff,
   HardDrive,
   KeyRound,
   Loader2,
@@ -1703,11 +1705,12 @@ function AdminConsole({ route, navigateToRoute }) {
                 />
                 <button
                   type="button"
-                  className="admin-console-password-toggle"
+                  className="admin-console-password-toggle auth-password-toggle"
                   onClick={() => setShowLoginPassword((current) => !current)}
                   disabled={loginLoading}
+                  aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showLoginPassword ? 'Hide' : 'Show'}
+                  {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </label>

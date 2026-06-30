@@ -10,6 +10,7 @@ const commentPopoverJs = fs.readFileSync(path.join(__dirname, 'components/commen
 const landingCss = fs.readFileSync(path.join(__dirname, 'LandingPage.css'), 'utf8');
 const minimapCss = fs.readFileSync(path.join(__dirname, 'components/minimap/minimapNavigator.css'), 'utf8');
 const adminCss = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.css'), 'utf8');
+const adminJs = fs.readFileSync(path.join(__dirname, 'components/admin/AdminConsole.js'), 'utf8');
 const marketingPreviewCss = fs.readFileSync(path.join(__dirname, 'marketing/MarketingPreviewV2.css'), 'utf8');
 
 const listFiles = (dir, extensions, results = []) => {
@@ -430,6 +431,11 @@ describe('UI design-system contract', () => {
     expect(appCss).not.toContain('.share-collab-setting-help');
     expect(appCss).toMatch(/\.feedback-field-group \{[\s\S]*gap: var\(--space-sm\);/);
     expect(adminCss).toMatch(/\.admin-console-auth-form span \{[\s\S]*margin-bottom: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
+    expect(adminJs).toContain('className="admin-console-password-toggle auth-password-toggle"');
+    expect(adminJs).toContain("aria-label={showLoginPassword ? 'Hide password' : 'Show password'}");
+    expect(adminJs).not.toContain("{showLoginPassword ? 'Hide' : 'Show'}");
+    expect(adminCss).toMatch(/\.admin-console-password-field \{[\s\S]*position: relative;[\s\S]*\}/);
+    expect(adminCss).toMatch(/\.admin-console-password-toggle \{[\s\S]*position: absolute;[\s\S]*right: 8px;[\s\S]*width: 32px;[\s\S]*height: 32px;[\s\S]*background: transparent;[\s\S]*color: var\(--ui-color-input-placeholder\);/);
     expect(adminCss).toMatch(/\.admin-feedback-item-controls label,[\s\S]*gap: var\(--space-xs\);/);
     expect(adminCss).toMatch(/\.admin-feedback-item-controls span,[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
     expect(adminCss).toMatch(/\.admin-storage-form label \{[\s\S]*gap: var\(--space-xs\);[\s\S]*font-size: var\(--type-label-sm-size\);[\s\S]*line-height: var\(--type-label-sm-line-height\);[\s\S]*font-weight: var\(--type-label-sm-weight\);/);
@@ -1034,7 +1040,8 @@ describe('map image asset persistence', () => {
     expect(appCss).toMatch(/\.plans-modal-pack-multiplier \{[\s\S]*grid-area: multiplier;[\s\S]*justify-self: center;/);
     expect(appCss).toMatch(/\.plans-modal-pack-quantity \{[\s\S]*justify-self: center;/);
     expect(appCss).toMatch(/\.plans-modal-pack-total \{[\s\S]*width: 136px;[\s\S]*text-align: left;/);
-    expect(appCss).toMatch(/\.plans-modal-subtotal \{[\s\S]*margin-right: 48px;/);
+    expect(appCss).toMatch(/\.modal-card\.plans-modal \.modal-subtitle \{[\s\S]*color: var\(--ui-color-text\);/);
+    expect(appCss).toMatch(/\.plans-modal-subtotal \{[\s\S]*margin-right: 8px;/);
     expect(appCss).toMatch(/\.plans-modal-subtotal-row \{[\s\S]*grid-template-columns: 72px 76px;/);
     expect(appCss).toMatch(/\.plans-modal-subtotal-row span \{[\s\S]*text-align: right;/);
     expect(appCss).toMatch(/\.plans-modal-subtotal-row strong \{[\s\S]*text-align: left;/);

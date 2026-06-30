@@ -1,9 +1,9 @@
 import React from 'react';
 import { Eye, MessageSquare, Network, RefreshCw } from 'lucide-react';
 
+import AccountDrawer from '../drawers/AccountDrawer';
 import Button from '../ui/Button';
 import { EditIcon } from '../ui/icons';
-import Modal from '../ui/Modal';
 
 const formatRoleLabel = (role) => {
   const value = String(role || '').trim();
@@ -28,33 +28,26 @@ const InviteInboxModal = ({
   onAccept,
   onDecline,
 }) => {
-  if (!show) return null;
-
   return (
-    <Modal
-      show={show}
+    <AccountDrawer
+      isOpen={show}
       onClose={onClose}
-      title="Pending invites"
-      size="md"
-      scrollable
-      className="invite-inbox-modal"
+      title="Invites"
+      subtitle="Review collaboration invites linked to your account."
+      className="invite-inbox-drawer"
+      actions={(
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={onRefresh}
+          loading={loading}
+          startIcon={!loading ? <RefreshCw size={14} /> : null}
+        >
+          Refresh
+        </Button>
+      )}
     >
-          <div className="invite-inbox-actions">
-            <div className="invite-inbox-subtitle">
-              Review collaboration invites linked to your account.
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={onRefresh}
-              loading={loading}
-              startIcon={!loading ? <RefreshCw size={14} /> : null}
-            >
-              Refresh
-            </Button>
-          </div>
-
           {error ? (
             <div className="share-collab-error">{error}</div>
           ) : null}
@@ -104,7 +97,7 @@ const InviteInboxModal = ({
               ))
             )}
           </div>
-    </Modal>
+    </AccountDrawer>
   );
 };
 

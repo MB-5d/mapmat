@@ -142,30 +142,35 @@
 }
 
 .admin-console-password-field {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
+  position: relative;
+}
+
+.admin-console-password-field input {
+  padding-right: 50px;
 }
 
 .admin-console-password-toggle {
-  display: inline-flex;
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 72px;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  padding: 11px 14px;
-  font-size: 13px;
-  font-weight: 600;
+  border: none;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--ui-color-input-placeholder);
+  padding: 0;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .admin-console-password-toggle:hover:not(:disabled) {
-  background: var(--color-bg-hover);
+  color: var(--ui-color-primary);
+  background: var(--ui-color-icon-hover);
 }
 
 .admin-console-field-note {

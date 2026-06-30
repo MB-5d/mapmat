@@ -45,6 +45,9 @@ describe('AccessRequestInboxModal', () => {
       );
     });
 
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Requests');
+    expect(container.textContent).toContain('Review pending map access requests that require an owner decision.');
+
     const select = container.querySelector('select');
     const descriptor = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
 

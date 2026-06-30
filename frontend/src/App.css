@@ -10332,6 +10332,10 @@ body {
   padding: 12px 20px 10px;
 }
 
+.modal-card.plans-modal .modal-subtitle {
+  color: var(--ui-color-text);
+}
+
 .modal-card.plans-modal .modal-body {
   flex: 1 1 auto;
   padding: 10px 20px 12px;
@@ -10741,7 +10745,7 @@ body {
   flex-direction: column;
   gap: 2px;
   min-width: 156px;
-  margin-right: 48px;
+  margin-right: 8px;
 }
 
 .plans-modal-subtotal-row {

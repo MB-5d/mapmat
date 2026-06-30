@@ -46,6 +46,9 @@ describe('InviteInboxModal', () => {
       );
     });
 
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Invites');
+    expect(container.textContent).toContain('Review collaboration invites linked to your account.');
+
     const refreshButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent.includes('Refresh')
     );
