@@ -1440,6 +1440,29 @@ const mergeLargeMapNodeSnapshot = (
   delete next.children;
   return next;
 };
+const mergeLargeMapDocumentNodesIntoCache = (
+  cache,
+  rootNode,
+  orphanNodes = [],
+  { preserveExistingAssetsOnEmpty = true } = {},
+) => {
+  if (!(cache instanceof Map)) return false;
+  const nodes = collectAllNodesWithOrphans(rootNode, orphanNodes).filter((node) => node?.id);
+  if (!nodes.length) return false;
+
+  let changed = false;
+  nodes.forEach((node) => {
+    const id = String(node?.id || '').trim();
+    if (!id) return;
+    const existing = cache.get(id);
+    const merged = mergeLargeMapNodeSnapshot(existing, node, { preserveExistingAssetsOnEmpty });
+    if (JSON.stringify(existing || null) !== JSON.stringify(merged || null)) {
+      cache.set(id, merged);
+      changed = true;
+    }
+  });
+  return changed;
+};
 const getLargeMapStackSelectionIdsFromNode = (node, fallbackId = null) => {
   const fallback = String(fallbackId || node?.id || '').trim();
   const rawIds = Array.isArray(node?.stackInfo?.selectionIds) ? node.stackInfo.selectionIds : [];
@@ -3038,6 +3061,7 @@ export const __testing = {
   getInitialLargeMapHomeTransform,
   queueNormalMapInitialCenter,
   mergeLargeMapNodeSnapshot,
+  mergeLargeMapDocumentNodesIntoCache,
   getLargeMapStackSelectionIdsFromNode,
   getLargeMapEditParentId,
   getPanToRevealLayoutNode,
@@ -4056,13 +4080,56 @@ export default function App({ currentRoute, navigateToRoute }) {
     }
   }, []);
 
+  const syncLargeMapDocumentNodeCache = useCallback((rootNode, orphanNodes = []) => {
+    const normalizedOrphans = normalizeOrphans(orphanNodes);
+    const nodeCount = currentMap?.largeMapShell
+      ? Number(currentMap.nodeCount || 0)
+      : countLargeMapNodes(rootNode, normalizedOrphans);
+    const shouldSync = shouldUseLargeMapSurface({
+      nodeCount,
+      hasSavedMap: !!currentMap?.id,
+    }) || largeMapNodeCacheRef.current.size > 0 || largeMapVisibleNodesRef.current.length > 0;
+
+    if (!shouldSync) return false;
+    const changed = mergeLargeMapDocumentNodesIntoCache(
+      largeMapNodeCacheRef.current,
+      rootNode,
+      normalizedOrphans,
+      { preserveExistingAssetsOnEmpty: true },
+    );
+    if (changed) {
+      setLargeMapNodeCacheVersion((version) => version + 1);
+    }
+    return changed;
+  }, [currentMap?.id, currentMap?.largeMapShell, currentMap?.nodeCount]);
+
+  const applyCanvasSnapshot = useCallback((snapshot) => {
+    const normalized = normalizeUndoSnapshot(snapshot);
+    const nextRoot = normalized.root || null;
+    const nextOrphans = normalizeOrphans(normalized.orphans);
+
+    rootRef.current = nextRoot;
+    orphansRef.current = nextOrphans;
+    setRoot(nextRoot);
+    setOrphans(nextOrphans);
+    setConnections(normalized.connections || []);
+    setColors(normalized.colors || DEFAULT_COLORS);
+    setConnectionColors(normalized.connectionColors || DEFAULT_CONNECTION_COLORS);
+    syncLargeMapDocumentNodeCache(nextRoot, nextOrphans);
+  }, [syncLargeMapDocumentNodeCache]);
+
   const applyLiveDocumentToCanvas = useCallback((document) => {
     if (!document) return;
-    setRoot(document.root || null);
-    setOrphans(normalizeOrphans(document.orphans));
+    const nextRoot = document.root || null;
+    const nextOrphans = normalizeOrphans(document.orphans);
+    rootRef.current = nextRoot;
+    orphansRef.current = nextOrphans;
+    setRoot(nextRoot);
+    setOrphans(nextOrphans);
     setConnections(document.connections || []);
     setColors(document.colors || DEFAULT_COLORS);
     setConnectionColors(document.connectionColors || DEFAULT_CONNECTION_COLORS);
+    syncLargeMapDocumentNodeCache(nextRoot, nextOrphans);
     setMapName(document.name || 'Untitled Map');
     setProjects((prev) => prev.map((project) => ({
       ...project,
@@ -4088,7 +4155,7 @@ export default function App({ currentRoute, navigateToRoute }) {
         }
         : prev
     ));
-  }, []);
+  }, [syncLargeMapDocumentNodeCache]);
 
   const getLocalLiveDocument = useCallback(() => ({
     mapId: currentMap?.id || null,
@@ -13571,6 +13638,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           return;
         }
       }
+      applyCanvasSnapshot(parsed);
       setRedoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
       setUndoStack(prev => prev.slice(0, -1));
       return;
@@ -13582,25 +13650,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     // Get last state from undo stack
     setUndoStack(prev => prev.slice(0, -1));
 
-    // Restore it
-    if (parsed.root !== undefined) {
-      setRoot(parsed.root);
-    } else {
-      setRoot(parsed);
-    }
-    if (parsed.orphans !== undefined) {
-      setOrphans(parsed.orphans);
-    }
-    if (parsed.connections !== undefined) {
-      setConnections(parsed.connections);
-    }
-    if (parsed.colors !== undefined) {
-      setColors(parsed.colors || DEFAULT_COLORS);
-    }
-    if (parsed.connectionColors !== undefined) {
-      setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
-    }
+    applyCanvasSnapshot(parsed);
   }, [
+    applyCanvasSnapshot,
     colors,
     connectionColors,
     connections,
@@ -13647,6 +13699,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           return;
         }
       }
+      applyCanvasSnapshot(parsed);
       setUndoStack(prev => [...prev, JSON.stringify(currentSnapshot)]);
       setRedoStack(prev => prev.slice(0, -1));
       return;
@@ -13658,25 +13711,9 @@ export default function App({ currentRoute, navigateToRoute }) {
     // Get last state from redo stack
     setRedoStack(prev => prev.slice(0, -1));
 
-    // Restore it
-    if (parsed.root !== undefined) {
-      setRoot(parsed.root);
-    } else {
-      setRoot(parsed);
-    }
-    if (parsed.orphans !== undefined) {
-      setOrphans(parsed.orphans);
-    }
-    if (parsed.connections !== undefined) {
-      setConnections(parsed.connections);
-    }
-    if (parsed.colors !== undefined) {
-      setColors(parsed.colors || DEFAULT_COLORS);
-    }
-    if (parsed.connectionColors !== undefined) {
-      setConnectionColors(parsed.connectionColors || DEFAULT_CONNECTION_COLORS);
-    }
+    applyCanvasSnapshot(parsed);
   }, [
+    applyCanvasSnapshot,
     colors,
     connectionColors,
     connections,

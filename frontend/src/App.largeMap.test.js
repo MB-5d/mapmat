@@ -118,6 +118,39 @@ describe('large map viewport behavior', () => {
     });
   });
 
+  test('large-map document cache sync updates restored node details without dropping screenshots', () => {
+    const cache = new Map([[
+      'node-1',
+      {
+        id: 'node-1',
+        title: 'Edited title',
+        thumbnailUrl: '/screenshots/node-1_thumb_v1.jpg',
+        fullScreenshotUrl: '/screenshots/node-1_full_v1.jpg',
+        hasThumbnail: true,
+      },
+    ]]);
+    const root = {
+      id: 'root',
+      title: 'Home',
+      children: [{
+        id: 'node-1',
+        title: 'Original title',
+        thumbnailUrl: '',
+        children: [],
+      }],
+    };
+
+    expect(__testing.mergeLargeMapDocumentNodesIntoCache(cache, root, [])).toBe(true);
+    expect(cache.get('node-1')).toMatchObject({
+      id: 'node-1',
+      title: 'Original title',
+      thumbnailUrl: '/screenshots/node-1_thumb_v1.jpg',
+      fullScreenshotUrl: '/screenshots/node-1_full_v1.jpg',
+      hasThumbnail: true,
+    });
+    expect(cache.get('node-1').children).toBeUndefined();
+  });
+
   test('large-map collapsed stack selection uses backend selection ids', () => {
     const node = {
       id: 'visible-stack-card',
