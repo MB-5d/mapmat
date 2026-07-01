@@ -26,7 +26,8 @@
       "source": "/",
       "has": [
         {
-          "type": "host",
+          "type": "header",
+          "key": "host",
           "value": "^app\\.vellic\\.io$"
         }
       ],
