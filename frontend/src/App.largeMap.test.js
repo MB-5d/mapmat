@@ -151,6 +151,27 @@ describe('large map viewport behavior', () => {
     expect(cache.get('node-1').children).toBeUndefined();
   });
 
+  test('large-map edit modal nodes keep parent selection from scene metadata', () => {
+    expect(__testing.buildLargeMapEditModalNode({
+      id: 'child-1',
+      title: 'Child',
+      parentId: 'root',
+    })).toMatchObject({
+      id: 'child-1',
+      parentId: 'root',
+    });
+
+    expect(__testing.buildLargeMapEditModalNode({
+      id: 'orphan-1',
+      title: 'Orphan',
+      isOrphan: true,
+      orphanType: 'orphan',
+    })).toMatchObject({
+      id: 'orphan-1',
+      parentId: '__orphan_root__',
+    });
+  });
+
   test('large-map collapsed stack selection uses backend selection ids', () => {
     const node = {
       id: 'visible-stack-card',

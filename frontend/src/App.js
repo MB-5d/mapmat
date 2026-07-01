@@ -2306,6 +2306,14 @@ const getLargeMapEditParentId = (node) => {
     ? SUBDOMAIN_PARENT_ID
     : ORPHAN_PARENT_ID;
 };
+const buildLargeMapEditModalNode = (node, { detailsVersion = '' } = {}) => {
+  if (!node) return null;
+  return {
+    ...node,
+    parentId: getLargeMapEditParentId(node),
+    ...(detailsVersion ? { __detailsVersion: detailsVersion } : {}),
+  };
+};
 
 // Build a unified index for root + orphan + subdomain trees
 const buildForestIndex = (rootNode, orphanNodes = []) => {
@@ -3064,6 +3072,7 @@ export const __testing = {
   mergeLargeMapDocumentNodesIntoCache,
   getLargeMapStackSelectionIdsFromNode,
   getLargeMapEditParentId,
+  buildLargeMapEditModalNode,
   getPanToRevealLayoutNode,
   normalizeCanvasWorldBounds,
   getCommentPopoverPosition,
@@ -3253,6 +3262,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   const largeMapHomeNodeRef = useRef(null);
   const largeMapVisibleNodesRef = useRef([]);
   const largeMapNodeCacheRef = useRef(new Map());
+  const largeMapEditFetchTokenRef = useRef(0);
   const largeMapThumbnailInfoToastKeyRef = useRef('');
   const [largeMapNodeCacheVersion, setLargeMapNodeCacheVersion] = useState(0);
   const [largeMapSceneRefreshKey, setLargeMapSceneRefreshKey] = useState(0);
@@ -3987,6 +3997,7 @@ export default function App({ currentRoute, navigateToRoute }) {
   }, [captureIssues, invalidFullScreenshotAssetIds, invalidThumbnailAssetIds, orphans, reportNumberMap, root]);
 
   const parentOptions = useMemo(() => {
+    if (currentMap?.largeMapShell) return [];
     if (!root) return [];
     const result = [];
     const seen = new Set();
@@ -4008,7 +4019,7 @@ export default function App({ currentRoute, navigateToRoute }) {
     walk(root);
     (orphans || []).forEach(walk);
     return result;
-  }, [root, orphans, reportNumberMap, reportLayout]);
+  }, [currentMap?.largeMapShell, root, orphans, reportNumberMap, reportLayout]);
 
   const specialParentOptions = useMemo(() => {
     const showHomeOption = editModalMode === 'add' && !root;
@@ -17012,29 +17023,31 @@ export default function App({ currentRoute, navigateToRoute }) {
   const openEditModal = async (node) => {
     duplicateSourceNodeIdRef.current = null;
     if (useLargeMapSurface && currentMap?.id && node?.id) {
+      const fetchToken = largeMapEditFetchTokenRef.current + 1;
+      largeMapEditFetchTokenRef.current = fetchToken;
       const cachedNode = largeMapNodeCacheRef.current.get(String(node.id));
       const fallbackNode = mergeLargeMapNodeSnapshot(cachedNode, node, {
         preserveExistingAssetsOnEmpty: true,
       }) || node;
+      setEditModalMode('edit');
+      setEditModalNode(buildLargeMapEditModalNode(fallbackNode, { detailsVersion: 'cached' }));
       try {
         const response = await api.getMapNode(currentMap.id, node.id);
+        if (largeMapEditFetchTokenRef.current !== fetchToken) return;
         const fetchedNode = mergeLargeMapNodeSnapshot(fallbackNode, response?.node, {
           preserveExistingAssetsOnEmpty: false,
         }) || fallbackNode;
         mergeLargeMapNodeCache(fetchedNode, { preserveExistingAssetsOnEmpty: false });
-        setEditModalNode({
-          ...fetchedNode,
-          parentId: getLargeMapEditParentId(fetchedNode),
+        setEditModalNode((current) => {
+          if (!current || !sameId(current.id, node.id)) return current;
+          return buildLargeMapEditModalNode(fetchedNode, { detailsVersion: 'loaded' });
         });
       } catch (error) {
         console.warn('Failed to load large-map node details', error);
-        setEditModalNode({
-          ...fallbackNode,
-          parentId: getLargeMapEditParentId(fallbackNode),
-        });
-        showToast(error?.message || 'Some page details could not be loaded', 'warning');
+        if (largeMapEditFetchTokenRef.current === fetchToken) {
+          showToast(error?.message || 'Some page details could not be loaded', 'warning');
+        }
       }
-      setEditModalMode('edit');
       return;
     }
 
@@ -20811,6 +20824,7 @@ export default function App({ currentRoute, navigateToRoute }) {
 
       {editModalNode && (
         <EditNodeModal
+          key={`${editModalMode}:${editModalNode.id || 'new'}:${editModalNode.__detailsVersion || 'base'}`}
           node={editModalNode}
           allNodes={parentOptions}
           rootTree={root}
@@ -20830,6 +20844,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           onAddCustomType={(type) => setCustomPageTypes(prev => [...prev, type])}
           specialParentOptions={specialParentOptions}
           isHomePageCreation={editModalMode === 'add' && !root}
+          showParentSelector={!useLargeMapSurface}
         />
       )}
 

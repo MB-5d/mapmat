@@ -645,4 +645,35 @@ describe('EditNodeModal', () => {
       parentId: '__home__',
     }));
   });
+
+  test('can hide parent selection for large-map page detail edits', () => {
+    act(() => {
+      root.render(
+        <EditNodeModal
+          node={{
+            id: '1',
+            title: 'Large map page',
+            url: 'https://example.com/page',
+            parentId: 'root',
+            pageType: 'Page',
+            annotations: { status: 'none', tags: [], note: '' },
+          }}
+          allNodes={[
+            { id: 'root', title: 'Home', pageNumber: '0', depth: 0 },
+            { id: '2', title: 'Second page', pageNumber: '1', depth: 1 },
+          ]}
+          rootTree={null}
+          onClose={jest.fn()}
+          onSave={jest.fn()}
+          mode="edit"
+          customPageTypes={[]}
+          onAddCustomType={jest.fn()}
+          specialParentOptions={[{ value: '__orphan_root__', label: 'No Parent (Orphan)' }]}
+          showParentSelector={false}
+        />
+      );
+    });
+
+    expect(container.textContent).not.toContain('Parent page');
+  });
 });

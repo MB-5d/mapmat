@@ -68,6 +68,7 @@ const EditNodeModal = ({
   onAddCustomType,
   specialParentOptions = [],
   isHomePageCreation = false,
+  showParentSelector = true,
 }) => {
   const rawPageType = node?.pageType || PAGE_TYPE_PAGE;
   const initialPageType = isHomePageCreation
@@ -524,7 +525,7 @@ const EditNodeModal = ({
           )}
         </Field>
 
-        {!isHomePageCreation ? (
+        {showParentSelector && !isHomePageCreation ? (
           <Field
             label="Parent page"
             hint={disableSubdomainOption ? 'Subdomain parent requires the URL to be blank.' : ''}

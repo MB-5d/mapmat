@@ -174,6 +174,19 @@ async function listSavedImageAssetsByMapAsync(mapId) {
   `, [mapId]);
 }
 
+async function listSavedImageAssetsByMapNodeAsync(mapId, nodeId) {
+  await ensureImageAssetSchemaAsync();
+  return adapter.queryAllAsync(`
+    SELECT *
+    FROM map_image_assets
+    WHERE map_id = ?
+      AND node_id = ?
+      AND status = 'saved'
+      AND url IS NOT NULL
+    ORDER BY asset_field ASC
+  `, [mapId, nodeId]);
+}
+
 async function listSavedImageAssetStorageKeysAsync() {
   await ensureImageAssetSchemaAsync();
   return adapter.queryAllAsync(`
@@ -230,6 +243,7 @@ module.exports = {
   upsertImageAssetsAsync,
   listImageAssetsByMapAsync,
   listSavedImageAssetsByMapAsync,
+  listSavedImageAssetsByMapNodeAsync,
   listSavedImageAssetStorageKeysAsync,
   markImageAssetsMissingAsync,
   markImageAssetsStaleByNodeIdsAsync,

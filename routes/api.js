@@ -754,6 +754,67 @@ async function getVerifiedManifestAssetUpdatesById(mapId) {
   return updatesById;
 }
 
+async function getVerifiedManifestAssetUpdatesForNode(mapId, nodeId) {
+  const safeNodeId = String(nodeId || '').trim();
+  if (!safeNodeId) return {};
+
+  let rows = [];
+  try {
+    rows = await imageAssetStore.listSavedImageAssetsByMapNodeAsync(mapId, safeNodeId);
+  } catch (error) {
+    console.warn('Image asset manifest node read error:', error.message);
+    return {};
+  }
+
+  const updates = {};
+  const missingEntries = [];
+  const validationConcurrency = 3;
+  for (let start = 0; start < (rows || []).length; start += validationConcurrency) {
+    const batch = rows.slice(start, start + validationConcurrency);
+    const results = await Promise.all(batch.map(async (row) => {
+      const field = String(row.asset_field || '').trim();
+      const url = String(row.url || '').trim();
+      if (!NODE_ASSET_STRING_FIELDS.has(field) || !url) return null;
+
+      const storageKey = String(row.storage_key || '').trim() || extractScreenshotStorageKey(url);
+      const stats = storageKey ? await statScreenshotObject(storageKey) : null;
+      if (!stats || Number(stats.size || 0) <= 0) {
+        return {
+          missing: {
+            mapId,
+            nodeId: safeNodeId,
+            assetField: field,
+            assetType: row.asset_type || field,
+            storageKey: storageKey || null,
+            url,
+            provider: row.provider || getScreenshotStorageProvider(),
+            contentType: storageKey ? getContentTypeForKey(storageKey) : null,
+            status: 'missing',
+            error: 'Missing saved asset',
+          },
+        };
+      }
+      return { field, url };
+    }));
+
+    results.filter(Boolean).forEach((result) => {
+      if (result.missing) {
+        missingEntries.push(result.missing);
+        return;
+      }
+      updates[result.field] = result.url;
+    });
+  }
+
+  if (missingEntries.length > 0) {
+    imageAssetStore.markImageAssetsMissingAsync(missingEntries).catch((error) => {
+      console.warn('Image asset manifest node missing mark error:', error.message);
+    });
+  }
+
+  return updates;
+}
+
 async function backfillMapImageAssetManifestFromTree(mapId, parsedMap) {
   const safeMapId = String(mapId || '').trim();
   if (!safeMapId) return 0;
@@ -2404,11 +2465,14 @@ router.get('/maps/:id/nodes/:nodeId', requireAuth, async (req, res) => {
       failureError: 'Map not found',
     })) return;
 
-    const repaired = await repairMapImageAssetsFromManifest(map, { persist: true });
-    const parsed = repaired.parsed;
+    const parsed = parseMapFields(map);
     const context = findNodeContext(parsed.root, parsed.orphans || [], nodeId);
-    const node = context?.node || null;
+    let node = context?.node || null;
     if (!node) return res.status(404).json({ error: 'Node not found' });
+    const manifestUpdates = await getVerifiedManifestAssetUpdatesForNode(id, node.id);
+    if (Object.keys(manifestUpdates).length > 0) {
+      node = { ...node, ...manifestUpdates };
+    }
 
     const orphanType = context?.isOrphan
       ? (context.treeRoot?.subdomainRoot ? 'subdomain' : (context.treeRoot?.orphanType || node.orphanType || 'orphan'))
