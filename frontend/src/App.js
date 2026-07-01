@@ -11705,6 +11705,19 @@ export default function App({ currentRoute, navigateToRoute }) {
     clearLoadedMapViewRef.current = clearLoadedMapView;
   }, [clearLoadedMapView]);
 
+  const leaveSharedMap = useCallback(async () => {
+    const confirmed = await showConfirm({
+      title: 'Leave shared map',
+      message: 'Leave this shared map and go to the Vellic start screen?',
+      confirmText: 'Exit',
+      cancelText: 'Cancel',
+    });
+    if (!confirmed) return false;
+    clearLoadedMapView();
+    navigateToRoute(createAppHomeRoute());
+    return true;
+  }, [clearLoadedMapView, navigateToRoute, showConfirm]);
+
   const loadMap = useCallback((map, { skipNavigation = false, silent = false } = {}) => {
     const normalizedOrphans = normalizeOrphans(map?.orphans);
     const hydratedMap = hydratePersistedScanLimitMap(map?.root, normalizedOrphans);
@@ -18701,7 +18714,7 @@ export default function App({ currentRoute, navigateToRoute }) {
           }
         }}
         onMapNameClick={startMapNameEdit}
-        onMapLogoClick={currentMap?.id ? clearCanvas : undefined}
+        onMapLogoClick={currentRoute?.surface === ROUTE_SURFACES.SHARE ? leaveSharedMap : (currentMap?.id ? clearCanvas : undefined)}
         collaborators={titleCollaborators}
         sharedTitle={root?.title || 'Shared sitemap'}
         onCreateMap={() => openCreateMapFlow()}

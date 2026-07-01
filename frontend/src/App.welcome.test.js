@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import App, { WELCOME_MODAL_STORAGE_KEY } from './App';
 import * as api from './api';
-import { ROUTE_SURFACES } from './utils/appRoutes';
+import { ROUTE_SURFACES, createAppHomeRoute } from './utils/appRoutes';
 
 jest.mock('./api', () => ({
   getMe: jest.fn(),
@@ -35,10 +35,12 @@ describe('App blank home and welcome modal', () => {
   };
 
   const renderApp = async (currentRoute = baseRoute) => {
+    const navigateToRoute = jest.fn();
     await act(async () => {
-      root.render(<App currentRoute={currentRoute} navigateToRoute={jest.fn()} />);
+      root.render(<App currentRoute={currentRoute} navigateToRoute={navigateToRoute} />);
       await flushAsync();
     });
+    return { navigateToRoute };
   };
 
   const click = async (element) => {
@@ -413,6 +415,39 @@ describe('App blank home and welcome modal', () => {
     });
 
     expect(container.textContent).toContain('Shared map');
+  });
+
+  test('lets public share viewers leave from the map logo without using editor clear', async () => {
+    api.getShare.mockResolvedValue({
+      share: {
+        root: {
+          id: 'root',
+          title: 'Shared map',
+          url: 'https://example.com',
+          children: [],
+        },
+      },
+    });
+
+    const { navigateToRoute } = await renderApp({
+      surface: ROUTE_SURFACES.SHARE,
+      shareId: 'share-1',
+      accessLevel: 'view',
+    });
+    await flushAsync(8);
+
+    const logoButton = container.querySelector('button.canvas-map-brand-mark');
+    expect(logoButton).not.toBeNull();
+
+    await click(logoButton);
+
+    expect(container.textContent).toContain('Leave shared map');
+    expect(container.textContent).toContain('Leave this shared map and go to the Vellic start screen?');
+
+    await click(getButton('Exit'));
+
+    expect(navigateToRoute).toHaveBeenCalledWith(createAppHomeRoute());
+    expect(container.textContent).not.toContain('Shared map');
   });
 
   test('localStorage failures do not crash the app', async () => {

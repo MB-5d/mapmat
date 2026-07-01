@@ -1034,6 +1034,10 @@ describe('map image asset persistence', () => {
     expect(appJs).toContain("plural: 'credits'");
     expect(appJs).toContain('className="plans-modal-pack-price"');
     expect(appCss).toMatch(/\.modal-card\.plans-modal \{[\s\S]*height: min\(640px, calc\(100vh - 48px\)\);/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card \{[\s\S]*--plans-modal-pricing-card-copy-color: #475569;/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card > p \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card li \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
+    expect(appCss).toMatch(/\.plans-modal-pricing-card__screenshot-note \{[\s\S]*color: var\(--plans-modal-pricing-card-copy-color\);/);
     expect(appCss).toMatch(/\.plans-modal-tab-panel--upgrades \{[\s\S]*padding-top: 32px;/);
     expect(appCss).toMatch(/\.plans-modal-pack-card \{[\s\S]*grid-template-columns: 18px minmax\(0, 1fr\) 64px 12px 54px 136px;[\s\S]*"check main price multiplier quantity total";/);
     expect(appCss).toMatch(/\.plans-modal-pack-price \{[\s\S]*justify-self: end;[\s\S]*font-size: var\(--type-body-sm-size\);/);
