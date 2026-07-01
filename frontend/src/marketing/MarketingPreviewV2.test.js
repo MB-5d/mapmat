@@ -260,6 +260,21 @@ describe('MarketingPreviewV2', () => {
     expect(hostMatcher.test('www.vellic.io')).toBe(false);
   });
 
+  test('redirects the app subdomain root to the app surface', () => {
+    const appRootRedirect = vercelConfig.redirects.find((rule) => (
+      rule.source === '/'
+      && rule.destination === '/app'
+    ));
+    const hostCondition = appRootRedirect.has.find((condition) => condition.type === 'host');
+    const hostMatcher = new RegExp(hostCondition.value);
+
+    expect(appRootRedirect.permanent).toBe(false);
+    expect(hostMatcher.test('app.vellic.io')).toBe(true);
+    expect(hostMatcher.test('vellic.io')).toBe(false);
+    expect(hostMatcher.test('www.vellic.io')).toBe(false);
+    expect(hostMatcher.test('staging.vellic.io')).toBe(false);
+  });
+
   test('uses real nav links and intercepts V2 routing for SPA navigation', () => {
     const navigateToRoute = jest.fn();
     renderAt('/', navigateToRoute);
