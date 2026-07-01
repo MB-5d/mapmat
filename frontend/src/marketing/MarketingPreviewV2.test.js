@@ -265,7 +265,10 @@ describe('MarketingPreviewV2', () => {
       rule.source === '/'
       && rule.destination === '/app'
     ));
-    const hostCondition = appRootRedirect.has.find((condition) => condition.type === 'host');
+    const hostCondition = appRootRedirect.has.find((condition) => (
+      condition.type === 'header'
+      && condition.key === 'host'
+    ));
     const hostMatcher = new RegExp(hostCondition.value);
 
     expect(appRootRedirect.permanent).toBe(false);
